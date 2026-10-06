@@ -1,0 +1,11 @@
+{
+  "name": "stage12-editor-probe",
+  "version": "0.0.1",
+  "description": "Stage 12 editor extension trace for Creator 2.4.15",
+  "main": "main.js",
+  "main-menu": {
+    "Packages/Stage 12 Probe": {
+      "message": "stage12-editor-probe:ping"
+    }
+  }
+}

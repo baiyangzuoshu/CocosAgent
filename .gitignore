@@ -15,6 +15,13 @@ __pycache__/
 *.py[cod]
 .DS_Store
 
+# Local upstream 3.8 engine reference copy and separately versioned demo
+/3.8.7engine/
+/3.8,7NewProject/
+
+# Creator build settings contain machine-specific options and an XXTEA key
+/2.4.15NewProject/settings/builder*.json
+
 # Other files and folders
 .settings/
 
