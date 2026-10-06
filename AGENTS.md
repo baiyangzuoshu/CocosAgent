@@ -1,248 +1,84 @@
-# CocosAgent — AI Development Instructions
+# 仓库工作指引
 
-This repository implements a local, permission-controlled AI development agent for Cocos Creator
-2.4.15. It combines an Agent runtime, a desktop client, Cocos project services, and a project-local
-Creator extension.
+## 项目结构
 
-## Product Baseline
+本目录并列放置两套 Cocos Creator 引擎源码及各自的示例工程。它不是一个统一的 Git 仓库，也没有根目录构建命令。先根据版本确定工作范围，再进入相应目录运行命令；不要把 2.x 与 3.x 的 API、资源格式或构建流程混用。
 
-- The first supported editor version is Cocos Creator `2.4.15`.
-- The local editor reference path is
-  `/Applications/Cocos/Creator/2.4.15/CocosCreator.app`, but production code must not hard-code it.
-- `engine2.4.15/` is a read-only knowledge source. Do not modify or import it into production code.
-- `cocos-2.4.15-demo/` is the destructive-test fixture project.
-- `branding/cocos-agent-icon.png` is the brand master asset.
-- `docs/` contains the approved product, architecture, protocol, safety, permission, roadmap, and
-  test design.
+| 目录 | 内容 | 主要入口 |
+| --- | --- | --- |
+| `2.4.15engine/` | Cocos Creator 2.4.15 JavaScript 引擎 | `cocos2d/`、`editor/`、`gulpfile.js` |
+| `2.4.15NewProject/` | 对应的 2.x Hello World 示例 | `assets/Script/HelloWorld.js`、`assets/Scene/helloworld.fire`；阶段 4 验证用 `assets/Scene/stage4-empty.fire` |
+| `3.8.7engine/` | Cocos Creator 3.8.7 TypeScript/C++ 引擎 | `cocos/`、`native/cocos/`、`pal/`、`exports/`、`tests/` |
+| `3.8,7NewProject/` | 对应的 3.x 3D 场景示例；目录名中的逗号是真实名称 | `assets/scene/main.scene`、`assets/model/`、`assets/material/`；阶段 4 验证用 `assets/scene/stage4-empty.scene` |
 
-Read [docs/README.md](docs/README.md) before architecture or feature work.
+本目录根部有 Git 仓库，`3.8,7NewProject/` 另有独立的 `.git/`；其他三个目录没有独立仓库。检查和提交时先确认所在仓库，避免把嵌套仓库当成根仓库中的普通目录。
 
-## Intended Architecture
+## 官方文档与证据顺序
 
-The production implementation must preserve these boundaries:
+- **2.x 以 [Cocos Creator 2.4 中文用户手册](https://docs.cocos.com/creator/2.4/manual/zh/) 为主；3.x 以 [Cocos Creator 3.8 中文用户手册](https://docs.cocos.com/creator/3.8/manual/zh/) 为主。** 本仓库源码分别是 2.4.15、3.8.7，手册按 2.4、3.8 系列组织。研究或修改前先核对对应版本手册的专题页，明确开发者可见行为、术语、适用平台及编辑器操作；需要精确签名时再查该版本的官方 API 参考。
+- 手册是研究主题和公开用法的基准；本仓库对应版本的源码是内部架构与实际实现的证据；对应版本示例、测试和编辑器预览用于验证可观察行为。引用资料时给出具体手册页、源码路径与符号、验证环境。不要用 3.8 手册解释 2.4，也不要把同名 API 视为相同实现。
+- 文档、源码和运行结果不一致时，记录各自版本、条件和原始证据，继续定位差异；不要为迎合任何一方改写事实。手册涉及但本仓库未提供的编辑器本体或平台实现，标明证据边界，不从运行时源码推断其内部细节。
+- 源码研究与 Cocos agent 的准备工作按 [研究计划](docs/source-study-plan.md) 推进：先分别形成 2.x 和 3.x 结论，再比较同一开发行为；每个主题同步判断能否沉淀成经过验证的版本专属 skill。现有研究笔记和 skill 草案若未逐条对照手册，应标记为待核对，不视为已完成官方文档校准。
+- 阶段 1 的两版独立启动链和同一首帧行为见[流程图](docs/diagrams/01-startup-and-frame.md)。该图只覆盖当前两套示例的 Creator 浏览器预览；预览宿主显式加载场景 JSON 的接线，不等同于游戏脚本公开的 `director.loadScene(name)` 或构建后的 Web/原生宿主。看图时回到两版阶段 1 笔记和原始轨迹核对条件。
+- 阶段 8 动画与表现的入口见 `docs/2.x/08-animation-and-effects.md`、`docs/3.x/08-animation-and-effects.md` 和 `docs/comparisons/08-animation-and-effects.md`。两版缓动的管理器调用顺序、单条 Node Tween 的暂停/恢复及停止值已有 Web 固定时钟轨迹；3.8 示例士兵的 baked 播放状态、帧索引变化和蒙皮渲染器关联也已观测。普通属性剪辑及与 Tween 写同一属性的两版临时探针位于 `docs/agent-foundation/probes/stage8-clip-tween-2.4.js` 和 `stage8-clip-tween-3.8.js`，已有各自固定时钟 Web 轨迹：2.4 ActionManager 先写、AnimationManager 后写，同播最终样本为剪辑的 100；3.8 AnimationManager 先写、TweenSystem 后写，同播最终样本为 Tween 的 200。两版 0.1 秒时间轴函数事件均在第 2 步，剪辑 `stop/finished` 均在第 5 步。现有证据不证明自然 RAF、多个事件键或其他混合权重。音频并发与 3D 粒子状态已取得两版 Web 局部轨迹；2D 粒子的自然帧、停后画面和自动移除也已有两版无头 Web 轨迹。异步释放、3D 自然帧画面、导入粒子资源与原生仍需分别验证。3D 骨骼动画须先确认具体组件与计算模式：2.4 `SkeletonAnimationClip` 受 Model 的 `precomputeJointMatrix` 影响，预计算矩阵写入关节节点、渲染提交时上传当前数据；3.8 `SkeletalAnimation` 按 `useBakedAnimation` 分为预烘焙和实时路径，baked 模式推进帧索引、从共享贴图采样，Socket 单独在 CPU 更新。2.4 音频先区分组件与 `cc.audioEngine`，3.8 音频先区分普通播放与 `playOneShot`；3.8 粒子先区分 `ParticleSystem2D` 与 3D `ParticleSystem`。证据与候选 skill 状态见 `docs/agent-foundation/skills/animation-effects-validation.md`，不可将待测项写成已验证规则。
+- 3.8.7 Web 预览的 legacy `cc` 全局未暴露 `cc.animation.VectorTrack`（只读入口轨迹见 `docs/agent-foundation/traces/3.8.7-stage8-clip-api-web.jsonl`）。`stage8-clip-tween-3.8.js` 改从 SystemJS `cc` 模块读取正式 `animation.VectorTrack` 导出，该导入与固定时钟步进已有 Web 轨迹。不要把 legacy 全局缺失误写成正式模块 API 缺失。
+- 两版 2D 粒子 `stopSystem` 都停发射而继续模拟旧粒子；2.4 自然结束才明确关闭 RenderFlow 渲染标志。3.8 `_canRender` 依赖 `!_stopped`，但 `stopSystem` 不主动把 UIRenderer 标脏，实际可见性取决于后续渲染标志重算时机。两版临时探针在 `docs/agent-foundation/probes/stage8-particle2d-2.4.js` 和 `stage8-particle2d-3.8.js`；自然帧与同步截图轨迹在 `docs/agent-foundation/traces/*-stage8-particle2d-headless-web.jsonl`。本次内存贴图条件下，两版停发射约 100 ms 后存活粒子仍可见；3.8 此时 `_canRender=false` 但 `_renderFlag=true`。主动使渲染器变脏时的可见性仍是源码推论。3.8 先确认 `renderData` 已建立，再解释排空和自动移除。
+- 阶段 8 音频并发诊断须分入口：2.4 `cc.audioEngine` 按同一 `nativeUrl` 的受管 ID 列表限额与淘汰，`AudioSource` 不经此表；3.8 `AudioManager` 合计普通与 one-shot 播放器，在平台通道限额内优先淘汰最早 one-shot。不要把 2.4 对象池大小当播放限额，也不要把 3.8 Web 的 24 通道写成全平台固定值。Web 并发、组件生命周期、场景切换与显式 Clip 释放已有各自局部轨迹；3.8 WebAudio [满额淘汰底层轨迹](docs/agent-foundation/traces/3.8.7-stage8-audio-oneshot-eviction-headless-web.jsonl)已直接记录 one-shot source 先 `stop()`。实际听感、DOM Audio 与原生仍需单独打点。
+- 两套示例的 `assets/resources/` 各新增 `stage8-tone-a.wav`、`stage8-tone-b.wav`，用于 `docs/agent-foundation/probes/stage8-audio-2.4.js` 与 `stage8-audio-3.8.js`。WAV 格式和脚本语法已检查；对应 Creator 均已生成 `audio-clip` `.meta`，3.8 文件还记录 `imported=true`。两版 `resources.load`、Web 并发、普通组件自然结束/停用/销毁及真实磁盘场景切换已有局部轨迹；无头生命周期运行器为隔离控制而放宽 Chrome 首次手势策略，不验证默认自动播放或可听输出。入口见 `docs/agent-foundation/probes/creator-audio-headless-probe.mjs`，阶段 8、9 优先缺口见 `docs/agent-foundation/stage8-9-gap-audit.md`。
+- 音频跨场景结论还取决于 Clip 生命周期：2.4 `AudioClip.destroy → audioEngine.uncache` 会停止该 Clip 的受管 ID；本次显式 `releaseAsset` 已验证。3.8 普通 `AudioSource` 销毁与独立 one-shot 分属不同播放器；本次 WebAudio 底层 one-shot 在源节点销毁、Clip 显式释放后未收到 `stop`，约 3 秒自然结束。两版**动态** `resources.load` Clip 在 `autoReleaseAssets=false/true` 的真实磁盘场景切换后均仍缓存。3.8 源场景序列化的 `AudioSource._clip` 已单独验证：Clip 属于 Scene 依赖，切换后引用数 1→0，`autoReleaseAssets=true` 时下一帧销毁并移出缓存，false 时保持缓存，见 `docs/agent-foundation/traces/3.8.7-stage8-audio-static-scene-headless-web.jsonl`。2.4 的静态音频源 `.fire` 已写入 UUID，但旧 AssetDB 导入缓存仍为 `_clip=null`；须按[2.4 官方资源管理文档](https://docs.cocos.com/creator/2.4/manual/zh/extension/asset-management)刷新导入后再运行，不能把旧缓存当作版本行为。两版游戏暂停的接线不同，见阶段 8 独立笔记；后台可听结果未测。
+- 2.4 音频自动释放另有**内存构造 Scene 依赖**的两条 Web 轨迹，见 `docs/agent-foundation/traces/2.4.15-stage8-audio-injected-scene-dependency-headless-web.jsonl`：探针先动态加载 Clip，再登记旧 Scene 依赖并 `addRef()` 一次；真实场景切换使引用数 1→0，`autoReleaseAssets=false` 保留 Clip 与独立 ID，true 销毁 Clip 且 `uncache` 停 ID。这证明给定依赖表时的 `Director → releaseManager` 路径，**不证明** Creator 已将 `stage8-audio-static.fire` 正式导入。2.4 预览目前仍读到旧 `_clip=null`；仅临时修改单个生成 JSON 未生效，已按 SHA-256 恢复，见 `docs/agent-foundation/traces/2.4.15-stage8-audio-static-scene-stale-import-headless-web.jsonl`。刷新 AssetDB 后须分别复跑 `docs/agent-foundation/probes/stage8-audio-static-scene-2.4.js` 的两个分支。
+- 3.8 WebAudio 的 [one-shot 慢加载轨迹](docs/agent-foundation/traces/3.8.7-stage8-audio-oneshot-slow-load-headless-web.jsonl)在受控延迟 XHR 期间销毁源节点，之后放行请求仍观察到底层 `start()`；无头 RAF 停滞时探针仅对该临时节点强制完成延迟销毁。诊断异步音效时记录请求开始/完成、组件销毁及平台 source 启动的时序；此结果只覆盖 WebAudio 成功请求与放宽浏览器手势的条件，不证明 DOM Audio、Native 或听感。
+- 2D 粒子的 `autoRemoveOnFinish` 在两版均由模拟器停发射且粒子清空后触发，调用 `node.destroy()`，销毁范围是整个节点，实际回收延后。3.8 `Simulator.step` 在 `renderData` 为空时早退于完结检查；这是需确认渲染数据创建条件的源码分支，不是已验证的常见故障。两版 Web 探针已分开记录 `stopSystem`、`_finishedSimulation`、`destroy`、`onDestroy` 和严格/默认有效性：自动移除开启时，零粒子或排空后销毁节点；关闭时完成回调在后续帧重复进入。导入资源与原生需另测。
+- 3D 粒子与 2D 分开诊断：两版非循环 3D 粒子自然结束均先停发射、排空后 `stop`，手动 `stop` 清粒子；两版 3D 均无 2D `autoRemoveOnFinish`。2.4.15 的 `ParticleSystem3D.stop` 不清 `_isEmitting`，手动停止后不能单看 `isEmitting`；3.8 的 `ParticleSystem.stop` 会清发射状态，另有 `stopEmitting`。3.8 开启 RenderCulling 时按官网主模块的三种剔除模式分析离屏模拟和排空时序。两版 3D 粒子手动步进与自然 Director 帧均已有 Web 轨迹；3.8 临时 CPU 粒子的活动/排空画面已同步截图，2.4 当前预览虽有活动粒子但截图未见效果，其可见性仍待隔离验证。3.8 RenderCulling、GPU、导入资产及原生仍待验证。2.4 `getParticleCount()` 返回池分配长度，手动步进样本为 16、后续自然帧池扩容到 64，均不等于活动粒子数。
+- 阶段 9 物理与空间从 `docs/2.x/09-physics-and-spatial.md`、`docs/3.x/09-physics-and-spatial.md`、`docs/comparisons/09-physics-and-spatial.md` 开始。2.4 先分普通 2D `CollisionManager`、Box2D `PhysicsManager`、3D `Physics3DManager`；3.8 先分 `PhysicsSystem2D` 与 3D `PhysicsSystem`，再确认实际后端。不要把同名碰撞回调、默认步长或射线查询结果格式跨系统套用。阶段 9 已有局部 Web 轨迹，条件与剩余缺口见 `docs/agent-foundation/skills/physics-spatial-validation.md`。
+- 阶段 9 的 2D 查询另有一处官网内部差异：3.8 手册把 `PhysicsSystem2D.testPoint` 写为单个碰撞体，但 3.8 API 参考与本仓库 3.8.7 源码返回数组；2.4 `PhysicsManager.testPoint` 才是单个碰撞体或 `null`。3.8 Builtin 2D 的 `raycast` 直接返回空数组，官网也仅为 Box2D 描述射线测试。诊断接触时，2.4 普通碰撞会发 `Stay`；3.8 Builtin 只有 BEGIN/END，Box2D 的系统级接触事件还需至少一侧 `RigidBody2D.enabledContactListener`。3.8 TypeScript Box2D 的查询数组复用及监听门槛、2.4 Box2D 创建前/后开监听的差异均有手动步进 Web 轨迹。两版当前 Box2D Web 的自然帧标记/Begin 顺序已有 `docs/agent-foundation/traces/{2.4.15,3.8.7}-stage9-2d-natural-frame-headless-web.jsonl`：2.4 Begin 在 `BEFORE_UPDATE/AFTER_UPDATE` 之间；3.8 在 `AFTER_UPDATE` 后的 2D `BEFORE_PHYSICS/AFTER_PHYSICS` 之间。当前 3.8 场景的 3D Bullet 也发同名全局 Physics 标记，须分辨来源；另有两版移动传感器的自然帧轨迹：2.4 同帧 `update/Begin` 读旧位置、`lateUpdate` 读回写位置；3.8 同帧 `update/lateUpdate/Begin` 读旧位置、2D `AFTER_PHYSICS` 读回写位置，下一帧 `update` 可读到它。初始重叠条件以外的接触仍待测。可复跑探针见 `docs/agent-foundation/probes/stage9-natural-frame-2d-{2.4,3.8}.js`。监听字段切换与 fixture 重建分支分别见 `stage9-2d-contact-registration-2.4.js`、`stage9-2d-contact-registration-3.8.js`；两版当前 Box2D Web 均已验证仅改字段无登记/回调；2.4 关闭再启用 Collider 与 3.8 `Collider2D.apply()` 重建后分别恢复回调。WASM/JSB 与原生仍待验证。
+- 3D Collider 事件名称按版本核对：2.4 官网使用 `trigger-enter`/`collision-enter` 等连字符名，2.4.15 Cannon 的 `onTrigger…`/`onCollision…` 是额外兼容派发，不能代表 Builtin；3.8 官网和源码使用 `onTrigger…`/`onCollision…`。事件和接触数据在 Cannon 后端可复用，跨回调保存时复制值。阶段 9 的完整证据边界见两版独立笔记。
+- 3D 事件合同按各自官网手册：3.8 的非 Builtin trigger 需至少一侧非静态刚体；碰撞条件在同一手册中分别写为“至少一侧非静态”和“至少一侧动力学”，Kinematic 对须以实际后端验证，不把其中一句写成统一定论。2.4 手册未列刚体类型矩阵。两版 Collider 源码注释都写明 Builtin 中始终按 trigger 处理，`isTrigger` setter 为空；在预览实测前仍只属本地源码结论。Builtin 专用的 3D 事件探针见 `docs/agent-foundation/probes/stage9-3d-builtin-events-{2.4,3.8}.js`；必须确认当前 World 为 `BuiltinWorld` 后运行。当前 Cannon/Bullet 的 3D 射线和四组自然帧事件均已有 Web 轨迹；Builtin、其他后端与原生仍缺。
+- 当前 Web 预览的 3D 事件探针另见 `docs/agent-foundation/probes/stage9-3d-events-cannon-2.4.js` 与 `stage9-3d-events-bullet-3.8.js`，分别只在实际 World 为 Cannon/Bullet 时运行；四组临时配对测试静态 trigger、Dynamic trigger、Dynamic collision、Kinematic collision，同时记录自然物理帧数。2.4 `RigidBody3D` 没有 3.8 的 `type` 属性，本地 Cannon 以 `mass=0` 及 `isKinematic` 决定类型；探针会先确认后端包装器存在。两份探针已有各自无头 Web 自然帧轨迹：`docs/agent-foundation/traces/2.4.15-stage9-3d-events-headless-web.jsonl` 与 `3.8.7-stage9-3d-events-headless-web.jsonl`。Kinematic/Static 的非 trigger 配对在 2.4 Cannon 发 trigger Enter，在 3.8 Bullet 发 collision Enter；这只适用于各自当前后端，Builtin、其他后端和原生尚未验证。
+- 物理查询必须同时区分维度和后端：2.4、3.8 的 **3D Builtin** 都实现射线，3.8 的 **2D Builtin** `raycast` 才是空实现；两版 3D Builtin 源码均未使用 `queryTrigger`，3.8 3D Builtin 的 `hitNormal` 为零向量。3.8 `sweepBox/Sphere/Capsule` 在本快照仅 Bullet、PhysX 有实现，Builtin/Cannon 返回 `false`；不能把不支持误诊为无命中。当前 Web 预览已有 2.4 Cannon 与 3.8 Bullet 的同形状 3D 射线轨迹；其他后端仍为源码结论。
+- 阶段 9 的 2D 临时探针在 `docs/agent-foundation/probes/stage9-2d-query-contact-2.4.js` 与 `stage9-2d-query-contact-3.8.js`。2.4 已经通过预览生成脚本的临时注入得到普通碰撞和 Box2D 查询[局部 Web 轨迹](docs/agent-foundation/traces/2.4.15-stage9-2d-query-web.jsonl)：本快照 `CCPhysicsAABBQueryCallback` 只收集 Dynamic 刚体，Static fixture 即使就绪仍不被 `testPoint/testAABB` 返回。3.8 TypeScript Box2D 查询、[监听门槛](docs/agent-foundation/traces/3.8.7-stage9-2d-contact-web.jsonl)与两版[当前后端 3D 射线](docs/agent-foundation/traces/stage9-3d-ray-web.jsonl)已有局部 Web 轨迹。生成脚本已按 SHA-256 恢复，示例场景未改；当前后端的 2D 自然帧 Begin 顺序和 3D 事件已有局部 Web 轨迹；当前 Box2D Web 的移动刚体回写时序已有局部轨迹；Builtin/其他后端及原生仍未验，不要把阶段 9 标为完成。
+- 阶段 9 后端诊断须分清源码包含、后端注册、系统存在和 World 可用四层。2.4 3D 由 `CC_PHYSICS_CANNON/BUILTIN` 构建宏绑定后端，Director 按宏和模块创建管理器。3.8 后端在 `Game.EVENT_PRE_SUBSYSTEM_INIT` 注册，系统在 Director 初始化或手动 WASM 加载后注册；2D `PhysicsSystem2D.instance` 会懒创建 World，3D `PhysicsSystem.instance` 可能尚未建立。先只读记录标志、系统及 World，勿用 3.8 2D `selector.switchTo` 当探针：本快照切换时未销毁旧 World。两版实际预览的后端身份已记录：2.4 是初始未启用的 `CannonWorld`，3.8 为 2D TypeScript Box2D 与启用的 3D `BulletWorld`；已验证当前后端的射线、两版 Box2D 手动接触及自然帧 Begin 顺序、3D 当前后端事件；不能推广到其他后端；当前 Box2D Web 的移动刚体节点同步另见阶段 9 独立笔记与比较页。
+- 3.8 的 `box2d/`、`box2d-wasm/`、`box2d-jsb/` 三套 TypeScript 包装器都对 `testPoint/testAABB` 返回去重的复用数组，并要求至少一侧 `RigidBody2D.enabledContactListener` 才发系统级接触事件。两版 Box2D 源码都在 fixture 建立时按当时的监听开关登记，派发时再次检查当前开关；仅运行中把属性设为 `true` 未必补登记，须检查 fixture 创建/重建时序。3.8 TypeScript Box2D 的 Web 查询与预先开启监听的手动接触已实测；2.4 Web 轨迹还实测创建后才开启仍未登记、不会产生回调。3.8 当前 TypeScript Box2D Web 的移动刚体同步时刻、创建后只切监听字段与 `Collider2D.apply()` 重建均已有局部轨迹：先让新节点变换标志清零，再开监听，单改字段无登记/回调，`apply()` 重建后才有 Collider 与系统 Begin。2.4 Collider 关闭/启用的 fixture 重建也有 Web 对照轨迹；WASM/JSB 和原生接线仍待验证。
 
-- One Agent loop owns model calls, tool execution, retries, cancellation, and context management.
-- Cocos capabilities are registered through a removable `CocosFeature`, not hard-coded into the
-  runtime.
-- Cocos services own project inspection, indexing, scripts, assets, scenes, builds, validation, and
-  the Bridge client.
-- The Creator extension lives outside the Agent runtime and exposes only a fixed command protocol.
-- The desktop layer owns UI, HTTP/NDJSON transport, application lifecycle, and user approvals.
+## 按版本定位与修改
 
-Expected implementation layout:
+- **2.x 引擎：** `cocos2d/core/` 包含节点、组件、资源、事件、物理等运行时代码；`cocos2d/renderer/` 是渲染相关代码；`gulp/` 和 `gulpfile.js` 定义构建任务。它的公开用法常见 `cc.*`、`cc.Class(...)`，改动时沿用所在模块的 JavaScript 风格。输入诊断先区分 `Node.on` 的鼠标/触摸和 `cc.systemEvent` 的键盘/重力事件；手册不建议游戏脚本直接依赖 `cc.eventManager`。普通自定义事件用 `cc.Event.EventCustom`；`Node.on` 对其忽略 `useCapture`，也不要把内部 `_touchListener.swallowTouches` 当作公开 API。阶段 5 资料见 `docs/2.x/05-input-and-events.md`。
+- **2.x 示例：** `HelloWorld.js` 是挂在场景里的 `cc.Component`，将文本写入 `cc.Label`。场景是 `.fire` 文件；资源旁的 `.meta` 保存编辑器识别所需的 UUID。修改脚本、场景或资源时保留已有 UUID 和引用关系。
+- **3.x 引擎：** TypeScript 运行时代码主要在 `cocos/`，原生 C++ 后端在 `native/cocos/`，平台适配在 `pal/` 与 `platforms/`，公开模块入口在 `exports/`，构建脚本在 `scripts/`，测试在 `tests/`。引擎类型和导出结构要与相邻代码保持一致。输入诊断从 `pal/input/` 对应平台实现开始；全局新代码用 `input`，UI 节点点击沿 `PointerEventDispatcher`/`NodeEventProcessor`，3D 拾取要单独查相机射线。UI 命中可阻止全局 `input` 回调，`preventSwallow` 允许向下层 UI 穿透；`systemEvent` 是兼容桥，触摸回调签名与 `input` 不同。阶段 5 资料见 `docs/3.x/05-input-and-events.md`。
+- **3.x 示例：** 当前主要是 `assets/scene/main.scene`、模型、预制体、材质及贴图，没有项目脚本。新增脚本应放在 `assets/` 下，并通过 Creator 3.8.7 编辑器确认组件、场景和 `.meta` 引用；不要套用 2.x 的 `.fire` 格式或 `cc.Class(...)` 写法。
+- 两套引擎和示例分别使用对应版本的 Cocos Creator 打开。示例的存在不代表已经启用相邻目录中的自定义引擎；如果要验证引擎改动在示例中的效果，先在对应编辑器中检查并配置自定义引擎路径。
+- 阶段 10 发布与原生研究先核对对应官网 [2.4 跨平台发布](https://docs.cocos.com/creator/2.4/manual/zh/publish/)或[3.8 构建发布](https://docs.cocos.com/creator/3.8/manual/zh/editor/publish/index.html)，再读 `docs/2.x/10-publishing-and-native.md`、`docs/3.x/10-publishing-and-native.md` 与 `docs/comparisons/10-publishing-and-native.md`。2.4 先查 `CC_JSB` 构建宏、`CCSys.js` 与目标适配器；3.8 先查 `cc.config.json` 的 PAL 构建映射，再追 `pal/system-info`、`pal/env` 与原生适配器。现有 3.8 Mac `build/` 的 `cocos.compile.config.json` 明确记录使用 Creator 内置 TS/Native 引擎，不是邻接源码；2.4 包的引擎来源仍未确认。
+- 阶段 10 的[2.4 Mac 原生轨迹](docs/agent-foundation/traces/2.4.15-stage10-mac-native-startup.jsonl)与[3.8 Mac 原生轨迹](docs/agent-foundation/traces/3.8.7-stage10-mac-native-startup.jsonl)都覆盖初始化、场景启动前首次 `AFTER_DRAW` 和场景启动后首次 `AFTER_DRAW`；两包都有 `window/document` 而 `isBrowser=false`。同场景 Web 一侧采用阶段 1 浏览器预览轨迹，**预览/发布包条件不同，不能把事件顺序差异只归因于平台**。探针生成脚本已逐字节恢复；小游戏与正式 Web 发布包仍未验证，skill 状态见 `docs/agent-foundation/skills/publishing-native-validation.md`。
+- 阶段 10 在上述 Web 预览/Mac 已发布包切口收口，正式 Web 发布、小游戏及移动端保留为平台专属验证。阶段 11 从 `docs/2.x/11-auxiliary-capabilities.md`、`docs/3.x/11-auxiliary-capabilities.md` 和 `docs/comparisons/11-auxiliary-capabilities.md` 开始：网络区分游戏脚本标准 API 与资源下载管线；持久化先追 `sys.localStorage` 到实际平台对象；热更新的原生 `AssetsManager` 不等于资源系统的 `assetManager`；多语言区分 2.4 外部 i18n 插件、3.8 编辑器 L10N 与引擎运行时；平台 SDK 查项目原生工程和绑定边界。两版现有 Mac 包的唯一临时存储键已验证跨进程重启读取与删除，Web/小游戏和其他专题仍待验证；skill 状态见 `docs/agent-foundation/skills/auxiliary-capabilities-validation.md`。
+- 阶段 11 的 Mac 回环 HTTP 轨迹见 `docs/agent-foundation/traces/2.4.15-stage11-mac-native-http.jsonl` 与 `3.8.7-stage11-mac-native-http.jsonl`：两版 XHR 对 200/503 均进 `onload`；3.8 `fetch` 对 503 仍 resolve，需在业务代码检查状态。[连接被拒绝探针](docs/agent-foundation/probes/stage11-mac-connection-refused.py)另在两版历史包各复测两轮：XHR 超时设 4 秒时，2.4 进入 `ontimeout`，3.8 进入 `onerror` 且 `fetch` rejected；这是当前 Mac 包与特定端口条件，不推广为所有网络错误。3.8 原生适配源码把 `fetch` 包装在 XHR 上，2.4 仓库没有原生 XHR 绑定源码；资源下载器与业务请求分开诊断。TLS、其他失败方式、Web 和小游戏仍未通过阶段 11 运行验证。
+- 阶段 11 的原生热更新入口只读轨迹见 `docs/agent-foundation/traces/*-stage11-mac-native-hotupdate-inventory.jsonl`。两包都有普通 `assetManager` 和原生 `AssetsManager` 构造器，但示例未提供 `.manifest`，不能称为热更新已配置。3.8 `AssetsManagerEx::loadLocalManifest` 可改变搜索路径或删除旧缓存；诊断现场只查 API/路径时不要构造管理器。2.4/3.8 两份搜索路径采样阶段不同，不能直接作为版本差异。
+- 阶段 11 的受控同版本热更新检查见 `docs/agent-foundation/probes/stage11-mac-hotupdate-check.py` 与两版 `*-stage11-mac-native-hotupdate-check*.jsonl`：临时 manifest 版本一致，构造管理器即前置临时目录；两版 `checkUpdate()` 只请求 `version.manifest`，依次派发代码 5、4，没有请求项目 manifest 或资源。2.4 终态 `getState()=12` 与 JS `UP_TO_DATE=12` 一致。**3.8 包在代码 4 回调中 `getState()=13`，但 JS 常量 `UP_TO_DATE=12/FAIL_TO_UPDATE=13`；邻接 C++ 状态枚举比 JS 多 `PREPARE_UPDATING`。诊断 3.8 原生热更新时先核对包内常量与 C++ 枚举，以事件、manifest 和请求日志合判，不能单凭 JS 状态常量判失败。**此分支仅做版本检查，后续另有单文件更新轨迹。版本专属候选 skill 见 `docs/agent-foundation/skills/cocos2-native-hotupdate-check/SKILL.md`、`cocos3-native-hotupdate-check/SKILL.md`。
+- 阶段 11 远端版本较新的 `checkUpdate()` 轨迹见两版 `*-stage11-mac-native-hotupdate-new-version-check*.jsonl`：本地 `1.0.0`、远端 `1.0.1` 且完整 manifest 含哨兵资产。两包均只请求版本与完整 manifest，事件为 `5 → 5 → 3`（发现新版本），未下载哨兵文件；临时缓存留有 `project.manifest.temp`。2.4 代码 3 时 `getState()=9` 与 JS `READY_TO_UPDATE=9` 一致；3.8 `getState()=10` 对应 C++ `READY_TO_UPDATE=10`，但包内 JS 将 10 标为 `UPDATING`。**不要从 `NEW_VERSION_FOUND` 或 3.8 的 JS 状态 10 推断资源已经下载。**此分支未调用 `update()`；单文件成功路径另有轨迹。
+- 阶段 11 的两版 `*-stage11-mac-native-hotupdate-update*.jsonl` 在隔离目录中记录了单字节文件 `A` 的真实下载、`UPDATE_FINISHED=8`、缓存 manifest 从 `1.0.0` 到 `1.0.1`、缓存搜索路径前置以及另起进程后重新构造管理器选中缓存版本。3.8 的代码 8/重启后代码 4 回调仍 `getState()=13`，不能按包内 JS `FAIL_TO_UPDATE=13` 解释。**探针管理器在宿主启动后才构造；此实验不证明更新后的游戏脚本已经在启动前被加载。**真实脚本覆盖、Bundle 刷新、异常重试与回滚还需独立验证。两份生成包脚本已按原 SHA-256 恢复，唯一临时目录已清理。
+- 阶段 11 的 Mac WebSocket 文本/二进制回显、TCP 重置与 HTTP 403 拒绝握手由 `docs/agent-foundation/probes/stage11-mac-websocket.py` 及两版 `*-stage11-mac-native-websocket*.jsonl` 记录。两包均编入 Socket 模块；显式 `binaryType='arraybuffer'` 后发送五字节，服务器和客户端均见原样二进制帧。连接后 TCP 重置两版均只见 `open → close`、未见 `onerror`；拒绝握手则为 `error → close`、从未 `open`。3.8 拒绝握手时 `close` 报 `code=0/wasClean=true`，不可据此认为连接成功。诊断要同时记录 `open/error/close` 和服务端响应。2.4 全局 `WebSocket` 可用但 `jsb.WebSocket` 未暴露，3.8 两者均为函数。2.4 关闭事件未给出 `code/wasClean`；两版正常关闭回调时 `readyState` 均曾变化，不能作为固定状态规则。现有轨迹只验证本机 `ws://` 小消息及两个受控故障，`wss://`、较大/分片消息及其他平台仍待验证。
 
-```text
-src/
-├── mod.ts
-├── runtime.ts
-├── registry.ts
-├── permissions.ts
-├── features/
-│   └── cocos.ts
-└── cocos/
-    ├── contracts.ts
-    ├── project.ts
-    ├── indexer.ts
-    ├── scripts.ts
-    ├── scene.ts
-    ├── assets.ts
-    ├── build.ts
-    ├── bridge_client.ts
-    └── validation.ts
+- 阶段 12 入口为 `docs/2.x/12-editor-extension-and-diagnostics.md`、`docs/3.x/12-editor-extension-and-diagnostics.md` 和 `docs/comparisons/12-editor-extension-and-diagnostics.md`。扩展、构建钩子和定制引擎均先按各版官网手册判断公开入口；本地引擎仓库含部分编辑器集成代码，但不含完整 Creator 编辑器/构建宿主。`docs/agent-foundation/traces/stage12-engine-provenance.jsonl` 的只读检查确认**现有** 3.8 Mac 包 TS/Native 都用 Creator 安装目录内置引擎，邻接 `3.8.7engine/` 改动不会自动进入该包；2.4 builder 配置未记引擎路径，来源仍未知。不要将 `gulp` 或 `@cocos/ccbuild` 的引擎编译视为项目已选用该引擎。两版候选来源诊断 skill 与未验证项见 `docs/agent-foundation/skills/editor-extension-diagnostics-validation.md`。
+- 阶段 12 示例中新建的 `stage12-editor-probe` 是版本专属编辑器扩展：2.4 放在 `2.4.15NewProject/packages/`，3.8 放在 `3.8,7NewProject/extensions/`，都只输出阶段标记，不参与游戏运行或构建。3.8 经扩展管理器刷新、启用后有 `[STAGE12_3] load`，点击 `Develop → Stage 12 Probe` 后有 `[STAGE12_3] ping`；2.4 完整重开工程后包出现在 Package Manager，点击 `Packages → Stage 12 Probe` 后控制台有 `[STAGE12_2] ping`。两版菜单消息链均已验收；2.4 初次 `load` 和 Reload 后 `unload/load` 时点未取证。以 `docs/agent-foundation/traces/stage12-editor-extension.jsonl` 为实际边界。3.8 `native/cocos/profiler/Profiler.h::CC_PROFILE_OBJECT_INC` 的 `C_PROFILER` 拼写错误已修正，`docs/agent-foundation/probes/stage12-profiler-object-inc.cpp` 在 `CC_USE_PROFILER=1/0` 两态均通过聚焦 Clang 语法编译；这不等于完整 Native 构建或性能数据。
 
-creator-extension/
-└── cocos-agent-bridge/
-```
+## 构建与验证
 
-Do not create parallel Agent loops for individual Cocos features.
+所有命令均从表中的对应目录执行，并先确认本机依赖可用。只运行与本次改动相关的验证；编辑器场景与资源改动还需要在对应版本的 Creator 中打开并预览。
 
-## Cocos Project Boundaries
+| 范围 | 可用命令或验证方式 |
+| --- | --- |
+| `2.4.15engine/` | `gulp build`；`npm test` 调用 `gulp test-in-ci`。任务定义见 `gulpfile.js`。 |
+| `2.4.15NewProject/` | 用 Creator 2.4.15 打开工程，检查 `helloworld.fire` 并预览。此工程没有独立的 npm 测试脚本。 |
+| `3.8.7engine/` | `npm run build`；`npm test` 执行 `tsc --noEmit && jest`。局部测试可按 `jest.config.js` 从 `tests/` 选择。 |
+| `3.8,7NewProject/` | 用 Creator 3.8.7 打开工程，检查 `main.scene`、模型与材质并预览。其 `package.json` 没有构建或测试脚本。 |
 
-Treat project paths according to these rules:
+3.x 引擎要求 Node.js `>=18`（见 `3.8.7engine/package.json`）。2.x 的依赖和 Gulp 构建方式与 3.x 不同；不要在根目录执行 `npm install`，也不要把一套引擎的 `node_modules` 用于另一套。`3.8.7engine/docs/TS_CODING_STYLE.md` 和 `docs/CPP_CODING_STYLE.md` 是 3.x 改动的风格参考。
 
-- `assets/` is the primary editable source tree.
-- `settings/` permits limited, schema-validated edits.
-- `packages/cocos-agent-bridge/` is the only package path managed automatically by CocosAgent.
-- `project.json` is read-only except during an explicit migration.
-- `library/`, `temp/`, `local/`, and `build/` are generated state, not source-of-truth input.
-- `.fire`, `.prefab`, and `.meta` are protected serialized assets.
-- `engine2.4.15/` is read-only by default.
+## 文件与生成产物
 
-Resolve and validate real paths at execution time. `auto` mode must never write outside the active
-project or escape it through symlinks.
-
-## Scene, Prefab, Meta, and UUID Safety
-
-Do not treat Cocos serialized assets as ordinary JSON.
-
-- Modify Scene and Prefab objects through Creator Scene Script or Editor APIs.
-- Import, move, refresh, and query assets through AssetDB APIs.
-- Never generate, replace, or reuse UUIDs manually.
-- Never directly edit internal fields such as `__id__`, `__type__`, or Prefab synchronization data.
-- General-purpose file tools must deny writes to `.fire`, `.prefab`, and `.meta`.
-- Every Scene or Prefab write must have a preview, approval, recovery point, save, reread, and
-  verification step.
-- A timeout does not prove that an editor operation failed. Query state before retrying.
-- Mark uncertain write outcomes as `indeterminate` and stop further automatic mutations.
-
-Scene writes are serialized. AssetDB refresh and Scene writes must not overlap. Agent teams must not
-modify the same Scene or Prefab concurrently.
-
-## Creator Bridge Rules
-
-The Creator Bridge is a local capability boundary, not a generic remote execution server.
-
-- Bind only to `127.0.0.1`, never `0.0.0.0`.
-- Require protocol version, request ID, session ID, project ID, expiry, and a session token.
-- Validate request and response sizes.
-- Use a fixed command enum and runtime-validated parameter schemas.
-- Never accept arbitrary JavaScript, module paths, functions, or Shell commands.
-- Do not expose the Bridge to the LAN or internet.
-- Close the server and clear session state when the extension unloads.
-- Keep Scene mutations serial and bound read-only concurrency explicitly.
-- Propagate timeout and cancellation signals through the Bridge client.
-
-Bridge logs may contain command names, targets, durations, and error codes. They must not contain
-tokens, credentials, full scripts, full scenes, or unbounded editor logs.
-
-## Tool Development
-
-Add tools through `ToolRegistry` and register Cocos-specific prompt sections through the prompt
-registration contract.
-
-Every Cocos tool must define:
-
-- A narrow, runtime-validated input schema.
-- A bounded output schema.
-- A permission classification.
-- Project and path validation.
-- AbortSignal behavior.
-- User-visible tool events.
-- Post-operation verification for mutations.
-
-Prefer paths, UUID summaries, node paths, counts, warnings, and cursors over dumping complete files
-or scene trees. Asset lists, node trees, logs, and dependency results must be bounded and paginated.
-
-## Permission Model
-
-The supported modes are:
-
-- `ask`: require approval for mutating, external, and dangerous operations.
-- `auto`: approve ordinary project-scoped operations while retaining all safety checks.
-- `full`: unrestricted execution only after explicit user selection; hard-deny rules still apply.
-
-Classify operations explicitly:
-
-- Read-only: project inspection, asset listing, scene tree reads, bounded logs.
-- Mutating: script edits, asset imports, node creation, component changes, scene saves.
-- Externally effectful: editor launch, preview, build, external file import.
-- Dangerous: deletions, raw serialized-asset writes, engine edits, unresolved recursive operations.
-
-Deletion remains confirmation-gated in every mode. Raw `.fire`, `.prefab`, `.meta`, engine-source,
-and non-loopback Bridge operations are denied by default.
-
-## Process and Cancellation Safety
-
-- Preserve AbortSignal propagation through providers, tools, Bridge requests, preview, and builds.
-- A cancelled run must terminate or explicitly detach every process it started.
-- Bound Agent iterations, tool calls, Bridge concurrency, output size, log retention, and build
-  duration.
-- Do not blindly retry non-idempotent Creator operations.
-- Report when editor state requires manual intervention, such as unsaved user changes.
-
-## Fixture and Generated Files
-
-Use `cocos-2.4.15-demo/` for integration and destructive tests.
-
-The fixture must eventually cover:
-
-- A saved Scene.
-- A Prefab and an instance.
-- A custom component with serialized properties.
-- Label, Sprite, Button, Layout, and Widget components.
-- `assets/textures/cocos-agent-icon.png`.
-
-Do not commit fixture-generated directories:
-
-```text
-cocos-2.4.15-demo/library/
-cocos-2.4.15-demo/temp/
-cocos-2.4.15-demo/local/
-cocos-2.4.15-demo/build/
-```
-
-Do not use generated cache data as the expected source structure in tests.
-
-## Secrets and Local Data
-
-- Never commit API keys, tokens, Keychain output, session secrets, `.env.local`, or user project
-  data.
-- Use platform credential storage or explicitly supplied environment variables.
-- Never return plaintext credentials through general HTTP endpoints, Bridge responses, logs,
-  telemetry, or renderer state.
-- Persist JSON atomically through a temporary file followed by rename.
-- Validate all persisted data and HTTP/Bridge request bodies.
-
-## Documentation Discipline
-
-Update the relevant document when changing product scope, architecture, Bridge protocol, tool
-contracts, serialized-asset safety, permission classification, roadmap, or test requirements.
-
-The design sources are:
-
-- `docs/PRODUCT.md`
-- `docs/ARCHITECTURE.md`
-- `docs/COCOS_PROJECT_MODEL.md`
-- `docs/EDITOR_BRIDGE.md`
-- `docs/TOOL_DESIGN.md`
-- `docs/SCENE_PREFAB_SAFETY.md`
-- `docs/PERMISSIONS.md`
-- `docs/MVP_ROADMAP.md`
-- `docs/TEST_STRATEGY.md`
-
-Do not report a feature complete when implementation and its design contract disagree.
-
-## Verification
-
-During implementation, run the smallest relevant checks first. Before marking a production change
-complete, run the repository's final format, type, unit, and integration tasks once they are
-defined.
-
-The minimum architectural checks must verify:
-
-```sh
-# Production must not import the engine source or fixture.
-rg 'engine2\.4\.15|cocos-2\.4\.15-demo' src desktop creator-extension
-
-# General file-writing code must not write protected serialized assets.
-rg '\\.(fire|prefab|meta)' src
-
-# Bridge must not bind to all interfaces.
-rg '0\\.0\\.0\\.0' creator-extension src
-```
-
-Expected matches must be reviewed and limited to explicit protection rules, validation, test
-fixtures, or documentation. A raw match is not automatically acceptable.
-
-Creator integration changes also require native validation with Creator 2.4.15:
-
-1. Load and unload the Bridge extension.
-2. Connect only over loopback.
-3. Read the current Scene.
-4. Perform the supported mutation.
-5. Save, close, and reopen the Scene.
-6. Check editor compilation and deserialization logs.
-7. Run Web Preview or the smallest relevant build.
-
-Cross-process compilation alone does not prove Creator runtime correctness.
-
-## Change Discipline
-
-- Preserve unrelated user changes and generated artifacts.
-- Prefer small cohesive Cocos service modules over adding responsibilities to the runtime or
-  desktop entry point.
-- Keep public contracts typed and runtime-validated.
-- Do not add Creator 3.x compatibility implicitly.
-- Do not weaken permissions or serialized-asset guards to make tests pass.
-- Do not modify `engine2.4.15/` unless the user explicitly changes its read-only status.
-- Do not claim migration or MVP completion without Creator integration verification.
+- 示例工程中的 `assets/`、同名 `.meta`、项目配置文件是需要一起核对的源文件。移动或重命名资源时，让编辑器更新引用；避免手工重建 UUID。
+- 诊断资源时先按对应官网手册确认 `resources`/Bundle 的公开加载方式，再沿 `.meta` 主/子 UUID、场景或预制体 `__uuid__`、运行时配置与缓存逐层追踪。两版都要区分预加载和已构造 Asset、`decRef` 与强制 `releaseAsset`、移除 Bundle 与释放包内资源；当前阶段 4 细节见 `docs/2.x/04-assets-and-loading.md`、`docs/3.x/04-assets-and-loading.md`。
+- 两套示例各自新增了由对应编辑器创建的 `stage4-empty` 磁盘场景，用于阶段 4 的真实 `director.loadScene` 切换复测。Chrome 与 Mac 原生进程中的旧资源自动释放结果见 `docs/agent-foundation/traces/2.4.15-disk-scene-switch.jsonl`、`3.8.7-disk-scene-switch.jsonl` 及 `*-mac-native-disk-scene-switch.jsonl`。两版源场景都保存 `autoReleaseAssets=false`；开启分支仅在运行时修改旧 Scene 属性。原生包中的临时探针脚本已恢复，并以 SHA-256 核对。
+- 两个示例各保留 `assets/resources/stage4-probe.json` 与由对应 Creator 生成的 `.meta`，用于资源导入和冷缓存加载复测。它们的 UUID 相互独立；观测结果、Mac 原生包的验证边界见 `docs/agent-foundation/asset-validation-matrix.md`。不要把已生成的 `library/` 或 `build/` 当成此探针的源文件。
+- `library/`、`temp/`、`local/`、`build/` 是 Creator 生成或缓存目录。搜索代码时排除它们；不要把对缓存的修改当作源代码修复。
+- 引擎的 `node_modules/`、`bin/` 及生成的声明或构建产物不是首选修改位置。先找到对应的 `cocos2d/`、`cocos/`、`native/` 或 `scripts/` 源文件。
+- 改动只涉及一个版本时，限制在该版本的引擎与示例内；如果需要同时适配两个版本，分别实现并分别验证。

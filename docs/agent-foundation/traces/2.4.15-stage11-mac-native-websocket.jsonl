@@ -1,0 +1,4 @@
+{"version": "2.4.15", "kind": "api", "isNative": true, "isBrowser": false, "type": "function", "jsbType": "undefined"}
+{"version": "2.4.15", "kind": "open", "isNative": true, "isBrowser": false, "readyState": 1}
+{"version": "2.4.15", "kind": "message", "isNative": true, "isBrowser": false, "readyState": 1, "dataType": "[object String]", "data": "stage11-2.4.15-db3e19f622794f5a994252becd50faa7"}
+{"version": "2.4.15", "kind": "close", "isNative": true, "isBrowser": false, "readyState": 2}

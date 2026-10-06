@@ -1,0 +1,12 @@
+{"event":"setup","version":"3.8.7","surface":"Creator Chrome preview","method":"DevTools console; editor-created disk scenes; director.loadScene","oldScene":{"path":"assets/scene/main.scene","uuid":"7c3e7fab-7b1e-4865-ba84-3cf81b48b9fb","sourceAutoReleaseAssets":false},"newScene":{"path":"assets/scene/stage4-empty.scene","uuid":"c89ae6fc-2958-4647-ab1a-63bbdfbcabc8"},"target":{"kind":"Prefab","uuid":"cfc53c4e-7956-482b-aebc-3fb1dcd36eef"},"samplingDelayMs":350}
+{"event":"S4DISK3_BASE","active":"7c3e7fab-7b1e-4865-ba84-3cf81b48b9fb","auto":false,"oldDeps":["ccc3a755-7d3d-4304-aa3b-ca4792d79d9f","cfc53c4e-7956-482b-aebc-3fb1dcd36eef","5e4d48c4-0e34-45af-a268-89485197e8bc","5af201b5-5951-4e2c-a81f-ac4aad9132cb@b47c0","5af201b5-5951-4e2c-a81f-ac4aad9132cb@b47c0"],"newDepsBeforeLoad":[],"target":{"ref":1,"cached":true}}
+{"event":"S4DISK3_FALSE_BEFORE","old":"7c3e7fab-7b1e-4865-ba84-3cf81b48b9fb","auto":false,"ref":1,"cached":true}
+{"event":"S4DISK3_FALSE_ACCEPTED","accepted":true}
+{"event":"S4DISK3_FALSE_LAUNCHED","error":"","active":"c89ae6fc-2958-4647-ab1a-63bbdfbcabc8","newDeps":["d032ac98-05e1-4090-88bb-eb640dcb5fc1@b47c0","6f01cf7f-81bf-4a7e-bd5d-0afc19696480@b47c0"],"ref":0,"cached":true,"valid":true}
+{"event":"S4DISK3_FALSE_SETTLED","active":"c89ae6fc-2958-4647-ab1a-63bbdfbcabc8","ref":0,"cached":true,"valid":true,"samplingDelayMs":350}
+{"event":"fresh_preview","method":"Chrome reload after editor reopened main.scene; next branch starts with a new runtime cache"}
+{"event":"S4DISK3_TRUE_BEFORE","old":"7c3e7fab-7b1e-4865-ba84-3cf81b48b9fb","sourceAuto":false,"ref":1,"cached":true}
+{"event":"S4DISK3_TRUE_SET","runtimeAutoReleaseAssets":true,"method":"set old active disk Scene.autoReleaseAssets in memory before director.loadScene; source .scene remains false"}
+{"event":"S4DISK3_TRUE_ACCEPTED","accepted":true}
+{"event":"S4DISK3_TRUE_LAUNCHED","error":"","active":"c89ae6fc-2958-4647-ab1a-63bbdfbcabc8","ref":0,"cached":true,"valid":true}
+{"event":"S4DISK3_TRUE_SETTLED","active":"c89ae6fc-2958-4647-ab1a-63bbdfbcabc8","ref":0,"cached":false,"valid":false,"samplingDelayMs":350}

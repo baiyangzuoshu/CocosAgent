@@ -1,0 +1,3 @@
+{"version": "2.4.15", "kind": "constructed", "state": 1, "storage": "/private/tmp/cocos-stage11-hotcheck-a5ct816x/cache/", "stateUpToDate": 12, "stateFailToUpdate": 13, "eventAlreadyUpToDate": 4, "localLoaded": true, "localVersion": "1.0.0", "searchPathsBefore": [""], "searchPathsAfter": ["/private/tmp/cocos-stage11-hotcheck-a5ct816x/", ""]}
+{"version": "2.4.15", "kind": "event", "code": 5, "state": 3, "searchPaths": ["/private/tmp/cocos-stage11-hotcheck-a5ct816x/", ""]}
+{"version": "2.4.15", "kind": "event", "code": 4, "state": 12, "searchPaths": ["/private/tmp/cocos-stage11-hotcheck-a5ct816x/", ""]}

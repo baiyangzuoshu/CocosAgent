@@ -1,0 +1,5 @@
+{"version": "2.4.15", "kind": "constructed", "state": 1, "storage": "/private/tmp/cocos-stage11-hotcheck-4u72yk33/cache/", "stateUpToDate": 12, "stateFailToUpdate": 13, "eventAlreadyUpToDate": 4, "localLoaded": true, "localVersion": "1.0.0", "searchPathsBefore": [""], "searchPathsAfter": ["/private/tmp/cocos-stage11-hotcheck-4u72yk33/", ""]}
+{"version": "2.4.15", "kind": "event", "code": 5, "state": 3, "searchPaths": ["/private/tmp/cocos-stage11-hotcheck-4u72yk33/", ""]}
+{"version": "2.4.15", "kind": "event", "code": 5, "state": 6, "searchPaths": ["/private/tmp/cocos-stage11-hotcheck-4u72yk33/", ""]}
+{"version": "2.4.15", "kind": "event", "code": 3, "state": 9, "searchPaths": ["/private/tmp/cocos-stage11-hotcheck-4u72yk33/", ""]}
+{"version": "2.4.15", "kind": "disk_snapshot", "paths": ["cache", "cache_temp", "cache_temp/project.manifest.temp"]}

@@ -1,0 +1,3 @@
+{"version": "2.4.15", "kind": "api", "isNative": true, "isBrowser": false, "type": "function", "jsbType": "undefined"}
+{"version": "2.4.15", "kind": "error", "isNative": true, "isBrowser": false, "eventType": "error", "readyState": 3}
+{"version": "2.4.15", "kind": "close", "isNative": true, "isBrowser": false, "readyState": 3}

@@ -1,0 +1,7 @@
+{"seq":1,"phase":"baseline","environment":"Creator 2.4.15 desktop Web preview, Hello World","object":"cocos Sprite","spriteFrame":"HelloWorld","assembler":"SimpleSpriteAssembler","material":"builtin-2d-sprite (Instance)","vertsDirty":false,"renderFlag":128,"sceneDrawCalls":3}
+{"seq":2,"phase":"transform_immediate","operation":"cocosNode.x=20","renderFlag":136,"vertsDirty":false}
+{"seq":3,"phase":"transform_after_draw","event":"cc.Director.EVENT_AFTER_DRAW","deviceDrawCallsWrappedOneFrame":3,"sceneDrawCalls":3,"x":20,"renderFlag":128}
+{"seq":4,"phase":"transform_restore","operation":"cocosNode.x=0","note":"Original position restored in callback; next frame settled."}
+{"seq":5,"phase":"material_immediate","operation":"sprite.setMaterial(0,grayVariant)","oldMaterial":"builtin-2d-sprite (Instance)","currentMaterial":"builtin-2d-gray-sprite (Instance)","texturePropertyPresent":true,"renderFlag":144}
+{"seq":6,"phase":"material_after_draw","event":"cc.Director.EVENT_AFTER_DRAW","currentMaterial":"builtin-2d-gray-sprite (Instance)","sceneDrawCalls":4}
+{"seq":7,"phase":"material_restore","operation":"sprite.setMaterial(0,originalMaterial)","material":"builtin-2d-sprite (Instance)","sceneDrawCallsAfterSettling":3,"renderFlagAfterSettling":128}

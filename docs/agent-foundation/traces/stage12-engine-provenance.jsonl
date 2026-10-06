@@ -1,0 +1,6 @@
+{"version": "2.4.15", "evidence": "local/builder.json", "engine_keys": []}
+{"version": "2.4.15", "evidence": "settings/builder.json", "engine_keys": []}
+{"version": "2.4.15", "evidence": "project extension/template inventory", "packages": [], "build_templates": false, "conclusion": "engine provenance unresolved from inspected files"}
+{"version": "3.8.7", "evidence": "build/mac/cocos.compile.config.json", "kind": "typescript", "engine_type": "builtin", "engine_path": "/Applications/Cocos/Creator/3.8.7/CocosCreator.app/Contents/Resources/resources/3d/engine", "adjacent_source": "/Users/youjunmao/WORK/Cocos_Engine/3.8.7engine", "uses_adjacent_source": false}
+{"version": "3.8.7", "evidence": "build/mac/cocos.compile.config.json", "kind": "native", "engine_type": "builtin", "engine_path": "/Applications/Cocos/Creator/3.8.7/CocosCreator.app/Contents/Resources/resources/3d/engine/native", "adjacent_source": "/Users/youjunmao/WORK/Cocos_Engine/3.8.7engine", "uses_adjacent_source": false}
+{"version": "3.8.7", "evidence": "project extension/template inventory", "extensions": false, "build_templates": false}

@@ -1,0 +1,2 @@
+{"version": "3.8.7", "api": "xhr", "outcome": "error", "status": 0, "readyState": 1, "text": "", "isNative": true, "isBrowser": false}
+{"version": "3.8.7", "api": "fetch", "outcome": "rejected", "error": "TypeError: Network request failed", "polyfill": true}

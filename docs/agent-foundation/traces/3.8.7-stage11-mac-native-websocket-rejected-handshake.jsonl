@@ -1,0 +1,3 @@
+{"version": "3.8.7", "kind": "api", "isNative": true, "isBrowser": false, "type": "function", "jsbType": "function"}
+{"version": "3.8.7", "kind": "error", "isNative": true, "isBrowser": false, "eventType": "error", "readyState": 3}
+{"version": "3.8.7", "kind": "close", "isNative": true, "isBrowser": false, "code": 0, "wasClean": true, "readyState": 3}

@@ -1,0 +1,17 @@
+{"seq":1,"ms":229.2,"label":"2.x: before game.run"}
+{"seq":2,"ms":229.8,"label":"2.x: game.run returned"}
+{"seq":3,"ms":253.8,"label":"2.x: EVENT_ENGINE_INITED"}
+{"seq":4,"ms":295.5,"label":"2.x: EVENT_GAME_INITED"}
+{"seq":5,"ms":295.6,"label":"2.x: onStart"}
+{"seq":6,"ms":305.6,"label":"2.x: preview scene asset loaded"}
+{"seq":7,"ms":305.7,"label":"2.x: call runSceneImmediate"}
+{"seq":8,"ms":305.7,"label":"2.x: runSceneImmediate callback"}
+{"seq":9,"ms":305.9,"label":"2.x: before scene launch"}
+{"seq":10,"ms":313.3,"label":"2.x: after scene launch"}
+{"seq":11,"ms":313.8,"label":"2.x: director.mainLoop #1"}
+{"seq":12,"ms":314,"label":"2.x: first before update"}
+{"seq":13,"ms":315,"label":"2.x: first after update"}
+{"seq":14,"ms":315.1,"label":"2.x: first before draw"}
+{"seq":15,"ms":317.3,"label":"2.x: first after draw"}
+{"seq":16,"ms":317.9,"label":"2.x: director.mainLoop #2"}
+{"seq":17,"ms":326,"label":"2.x: director.mainLoop #3"}

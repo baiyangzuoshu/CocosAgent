@@ -1,0 +1,9 @@
+{"seq":1,"phase":"baseline","environment":"Creator 3.8.7 desktop Web preview, 3D sample","pipeline":"WebPipeline","pipelineName":"Builtin","builder":"BuiltinPipelineBuilder","renderSceneModels":26,"cameras":1,"sceneDrawCalls":49}
+{"seq":2,"phase":"camera_branch","visibility":1820327937,"defaultLayer":1073741824,"enableFullPipeline":true,"sourceBranch":"BuiltinPipelineBuilder._buildForwardPipeline"}
+{"seq":3,"phase":"mesh_baseline","object":"islands/plane01 MeshRenderer","sharedMaterial":"seafloor","materialPassCount":5,"modelAttached":true,"submodels":1,"materialInstancePresent":false,"firstSubModelPassEqualsSharedMaterialPass":true}
+{"seq":4,"phase":"transform_immediate","operation":"node.setPosition(original.x+1,original.y,original.z)","hasChangedFlags":1,"modelBoundsCenterXBefore":0,"modelUpdateStampBefore":7686,"sceneDrawCalls":49}
+{"seq":5,"phase":"transform_after_render","event":"Director.EVENT_AFTER_RENDER","modelBoundsCenterX":1,"modelUpdateStamp":7687,"sceneDrawCalls":49,"note":"Original position restored in callback."}
+{"seq":6,"phase":"shared_material_immediate","operation":"renderer.setSharedMaterial(stone,0)","sharedMaterial":"stone","firstSubModelPassEqualsStonePass":true,"materialInstancePresent":false}
+{"seq":7,"phase":"shared_material_after_render","event":"Director.EVENT_AFTER_RENDER","sceneDrawCalls":49,"firstSubModelPassEqualsStonePass":true,"note":"Original seafloor shared material restored in callback; pass identity returned to original."}
+{"seq":8,"phase":"material_instance","operation":"renderer.getMaterialInstance(0)","instancePresentBefore":false,"instancePresentAfter":true,"instanceDifferentFromShared":true,"firstSubModelPassEqualsInstancePass":true}
+{"seq":9,"phase":"material_instance_restore","operation":"renderer.setSharedMaterial(originalShared,0,true)","instanceCleared":true,"firstSubModelPassEqualsOriginalSharedPass":true}

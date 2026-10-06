@@ -1,0 +1,12 @@
+{"event":"setup","version":"2.4.15","surface":"Creator Chrome preview","method":"DevTools console; editor-created disk scenes; director.loadScene","oldScene":{"path":"assets/Scene/helloworld.fire","uuid":"2d2f792f-a40c-49bb-a189-ed176a246e49","sourceAutoReleaseAssets":false},"newScene":{"path":"assets/Scene/stage4-empty.fire","uuid":"8e14afdb-015b-4edd-99ce-d8ba7b7f8eee"},"target":{"kind":"SpriteFrame","uuid":"31bc895a-c003-4566-a9f3-2e54ae1c17dc"},"samplingDelayMs":350}
+{"event":"S4DISK2_BASE","active":"2d2f792f-a40c-49bb-a189-ed176a246e49","auto":false,"oldDeps":["410fb916-8721-4663-bab8-34397391ace7","31bc895a-c003-4566-a9f3-2e54ae1c17dc"],"newDepsBeforeLoad":[],"target":{"ref":1,"cached":true}}
+{"event":"S4DISK2_FALSE_BEFORE","old":"2d2f792f-a40c-49bb-a189-ed176a246e49","auto":false,"ref":1,"cached":true}
+{"event":"S4DISK2_FALSE_ACCEPTED","accepted":true}
+{"event":"S4DISK2_FALSE_LAUNCHED","error":"","active":"8e14afdb-015b-4edd-99ce-d8ba7b7f8eee","newDeps":[],"ref":0,"cached":true,"valid":true}
+{"event":"S4DISK2_FALSE_SETTLED","active":"8e14afdb-015b-4edd-99ce-d8ba7b7f8eee","ref":0,"cached":true,"valid":true,"samplingDelayMs":350}
+{"event":"fresh_preview","method":"Chrome reload after editor reopened helloworld.fire; next branch starts with a new runtime cache"}
+{"event":"S4DISK2_TRUE_BEFORE","old":"2d2f792f-a40c-49bb-a189-ed176a246e49","sourceAuto":false,"ref":1,"cached":true}
+{"event":"S4DISK2_TRUE_SET","runtimeAutoReleaseAssets":true,"method":"set old active disk Scene.autoReleaseAssets in memory before director.loadScene; source .fire remains false"}
+{"event":"S4DISK2_TRUE_ACCEPTED","accepted":true}
+{"event":"S4DISK2_TRUE_LAUNCHED","error":"","active":"8e14afdb-015b-4edd-99ce-d8ba7b7f8eee","ref":0,"cached":true,"valid":true}
+{"event":"S4DISK2_TRUE_SETTLED","active":"8e14afdb-015b-4edd-99ce-d8ba7b7f8eee","ref":0,"cached":false,"valid":false,"samplingDelayMs":350}

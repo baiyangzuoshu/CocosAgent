@@ -1,0 +1,2 @@
+{"version": "2.4.15", "api": "xhr", "case": "http-503", "outcome": "load", "status": 503, "readyState": 4, "text": "stage11:3be27eb29c79491781094d3b4ae9605d:/stage11/2.4-xhr-http-503?token=3be27eb29c79491781094d3b4ae9605d", "isNative": true, "isBrowser": false}
+{"version": "2.4.15", "api": "xhr", "case": "ok", "outcome": "load", "status": 200, "readyState": 4, "text": "stage11:3be27eb29c79491781094d3b4ae9605d:/stage11/2.4-xhr-ok?token=3be27eb29c79491781094d3b4ae9605d", "isNative": true, "isBrowser": false}

@@ -1,0 +1,6 @@
+{"event":"before_load","platform":"mac","version":"3.8.7","time":1791001678543,"cached":false,"activeScene":"main"}
+{"event":"load_callback","platform":"mac","version":"3.8.7","time":1791001678663,"uuid":"f6a2d4ff-2327-4d1c-abe8-a8578a43d9fe","type":"cc.JsonAsset","payloadVersion":"3.8.7","cached":true,"sameAsCache":true,"refCount":0,"valid":true}
+{"event":"after_add_ref","platform":"mac","version":"3.8.7","time":1791001678663,"refCount":1,"cached":true}
+{"event":"after_nonforced_release","platform":"mac","version":"3.8.7","time":1791001678929,"refCount":1,"cached":true,"valid":true}
+{"event":"after_dec_ref_immediate","platform":"mac","version":"3.8.7","time":1791001678929,"refCount":0,"cached":true,"valid":true}
+{"event":"after_dec_ref_delayed","platform":"mac","version":"3.8.7","time":1791001679283,"refCount":0,"cached":false,"valid":false}

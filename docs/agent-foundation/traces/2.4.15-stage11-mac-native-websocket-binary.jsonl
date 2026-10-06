@@ -1,0 +1,4 @@
+{"version": "2.4.15", "kind": "api", "isNative": true, "isBrowser": false, "type": "function", "jsbType": "undefined"}
+{"version": "2.4.15", "kind": "open", "isNative": true, "isBrowser": false, "readyState": 1}
+{"version": "2.4.15", "kind": "message", "isNative": true, "isBrowser": false, "readyState": 1, "dataType": "[object ArrayBuffer]", "bytes": [0, 1, 127, 128, 255]}
+{"version": "2.4.15", "kind": "close", "isNative": true, "isBrowser": false, "readyState": 3}

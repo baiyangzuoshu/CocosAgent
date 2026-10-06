@@ -1,0 +1,8 @@
+{"version":"2.4.15","target":"mac-native-engine-source-unconfirmed","probe":"stage10-mac-startup-2.4.py","time_ms":1791102035867,"event":"boot","extra":{"CC_JSB":true,"CC_RUNTIME":false,"isNative":true,"isBrowser":false,"platform":2,"hasWindow":"object","hasDocument":"object"}}
+{"version":"2.4.15","target":"mac-native-engine-source-unconfirmed","probe":"stage10-mac-startup-2.4.py","time_ms":1791102036110,"event":"engine-inited","extra":null}
+{"version":"2.4.15","target":"mac-native-engine-source-unconfirmed","probe":"stage10-mac-startup-2.4.py","time_ms":1791102036185,"event":"game-inited","extra":null}
+{"version":"2.4.15","target":"mac-native-engine-source-unconfirmed","probe":"stage10-mac-startup-2.4.py","time_ms":1791102036185,"event":"onStart","extra":null}
+{"version":"2.4.15","target":"mac-native-engine-source-unconfirmed","probe":"stage10-mac-startup-2.4.py","time_ms":1791102036189,"event":"first-after-draw","extra":null}
+{"version":"2.4.15","target":"mac-native-engine-source-unconfirmed","probe":"stage10-mac-startup-2.4.py","time_ms":1791102036210,"event":"after-scene-launch","extra":null}
+{"version":"2.4.15","target":"mac-native-engine-source-unconfirmed","probe":"stage10-mac-startup-2.4.py","time_ms":1791102036210,"event":"scene-run","extra":{"scene":"db://assets/Scene/helloworld.fire"}}
+{"version":"2.4.15","target":"mac-native-engine-source-unconfirmed","probe":"stage10-mac-startup-2.4.py","time_ms":1791102036219,"event":"first-scene-after-draw","extra":null}

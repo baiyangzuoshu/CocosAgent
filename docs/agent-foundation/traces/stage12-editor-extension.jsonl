@@ -1,0 +1,12 @@
+{"version":"2.4.15","source":"project-files","event":"probe-created","path":"2.4.15NewProject/packages/stage12-editor-probe","result":"package.json and main.js passed local syntax checks"}
+{"version":"2.4.15","source":"Creator Package Manager UI","event":"inventory-before-project-restart","result":"stage12-editor-probe absent from loaded package list","limit":"editor was already running when files were created; load and menu dispatch not verified"}
+{"version":"3.8.7","source":"Creator Extension Manager UI","event":"refresh","result":"stage12-editor-probe V0.0.1 appeared in installed extensions"}
+{"version":"3.8.7","source":"temp/asset-db/log/2026-10-2 15-15.log","event":"register","result":"2026-10-4 18:50:07 register success"}
+{"version":"3.8.7","source":"temp/asset-db/log/2026-10-2 15-15.log","event":"enable","result":"2026-10-4 18:50:20 enable success"}
+{"version":"3.8.7","source":"temp/logs/project.log","event":"load","result":"10-4-2026 18:50:20 [STAGE12_3] load"}
+{"version":"3.8.7","source":"Creator Extension Manager UI","event":"menu-registration","result":"Develop menu appeared","limit":"menu ping handler not yet observed"}
+{"version":"3.8.7","source":"Creator menu and editor console","event":"menu-dispatch","result":"2026-10-4 19:14:13 clicked Develop > Stage 12 Probe; console and temp/logs/project.log showed [STAGE12_3] ping"}
+{"version":"2.4.15","source":"Creator UI","event":"project-reopen","result":"File > Open Project closed editor and showed Creator Dashboard developer login page","limit":"project extension load and ping remain unverified until sign-in and reopening the example"}
+{"version":"2.4.15","source":"Creator Package Manager UI","event":"inventory-after-project-reopen","result":"stage12-editor-probe V0.0.1 appeared in loaded package list"}
+{"version":"2.4.15","source":"Creator menu and editor console","event":"menu-dispatch","result":"clicked Packages > Stage 12 Probe; editor console showed [STAGE12_2] ping","limit":"initial [STAGE12_2] load log was not retained in visible console"}
+{"version":"2.4.15","source":"Creator Package Manager UI","event":"reload-requested","result":"clicked Reload for stage12-editor-probe","limit":"load/unload log after reload not yet observed"}

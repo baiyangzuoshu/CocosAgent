@@ -3,6 +3,17 @@ bin-debug/
 bin-release/
 [Oo]bj/
 [Bb]in/
+dist/
+coverage/
+node_modules/
+.cocos-agent/
+graphify-out/
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.DS_Store
 
 # Other files and folders
 .settings/

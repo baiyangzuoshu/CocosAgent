@@ -1,0 +1,4 @@
+{"phase": "update", "path": "/3a2a40238da74ba0879a335052cb8dca/2.4.15/version.manifest"}
+{"phase": "update", "path": "/3a2a40238da74ba0879a335052cb8dca/2.4.15/project.manifest"}
+{"phase": "update", "path": "/3a2a40238da74ba0879a335052cb8dca/2.4.15/pkg/sentinel.bin?md5=7fc56270e7a70fa81a5935b72eacbe29"}
+{"phase": "restart", "path": "/3a2a40238da74ba0879a335052cb8dca/2.4.15/version.manifest"}

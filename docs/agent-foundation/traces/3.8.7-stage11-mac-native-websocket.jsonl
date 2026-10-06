@@ -1,0 +1,4 @@
+{"version": "3.8.7", "kind": "api", "isNative": true, "isBrowser": false, "type": "function", "jsbType": "function"}
+{"version": "3.8.7", "kind": "open", "isNative": true, "isBrowser": false, "readyState": 1}
+{"version": "3.8.7", "kind": "message", "isNative": true, "isBrowser": false, "readyState": 1, "dataType": "[object String]", "data": "stage11-3.8.7-db3e19f622794f5a994252becd50faa7"}
+{"version": "3.8.7", "kind": "close", "isNative": true, "isBrowser": false, "code": 1000, "wasClean": true, "readyState": 2}

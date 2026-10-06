@@ -1,0 +1,13 @@
+{"seq":1,"ms":363.3,"label":"instantiate","state":{"children":1,"active":true,"activeInHierarchy":false,"detached":true}}
+{"seq":2,"ms":363.5,"label":"addComponent detached","state":{"sameNode":true,"callbacksPending":true}}
+{"seq":3,"ms":363.7,"label":"onLoad","state":{"activeInHierarchy":true}}
+{"seq":4,"ms":363.7,"label":"onEnable","state":null}
+{"seq":5,"ms":363.7,"label":"attach to scene","state":{"activeInHierarchy":true}}
+{"seq":6,"ms":363.9,"label":"onDisable","state":null}
+{"seq":7,"ms":364,"label":"deactivate","state":{"activeInHierarchy":false}}
+{"seq":8,"ms":364,"label":"onEnable","state":null}
+{"seq":9,"ms":364.1,"label":"reactivate","state":{"activeInHierarchy":true}}
+{"seq":10,"ms":364.2,"label":"onDisable","state":null}
+{"seq":11,"ms":364.2,"label":"destroy called","state":{"valid":true,"strictValid":false}}
+{"seq":12,"ms":365.6,"label":"onDestroy","state":null}
+{"seq":13,"ms":486.1,"label":"after deferred destruction","state":{"valid":false,"parentHasNode":false}}

@@ -1,0 +1,17 @@
+{"version":"3.8.7","target":"mac-native-builtin-engine","probe":"stage10-mac-startup-3.8.py","seq":1,"time_ms":1791101958004,"event":"main-entry","extra":null}
+{"version":"3.8.7","target":"mac-native-builtin-engine","probe":"stage10-mac-startup-3.8.py","seq":2,"time_ms":1791101958005,"event":"system-bundle-loaded","extra":null}
+{"version":"3.8.7","target":"mac-native-builtin-engine","probe":"stage10-mac-startup-3.8.py","seq":3,"time_ms":1791101958006,"event":"before-application-import","extra":null}
+{"version":"3.8.7","target":"mac-native-builtin-engine","probe":"stage10-mac-startup-3.8.py","seq":4,"time_ms":1791101958006,"event":"application-module-loaded","extra":null}
+{"version":"3.8.7","target":"mac-native-builtin-engine","probe":"stage10-mac-startup-3.8.py","seq":5,"time_ms":1791101958144,"event":"engine-adapter-loaded","extra":null}
+{"version":"3.8.7","target":"mac-native-builtin-engine","probe":"stage10-mac-startup-3.8.py","seq":6,"time_ms":1791101958144,"event":"application-init","extra":null}
+{"version":"3.8.7","target":"mac-native-builtin-engine","probe":"stage10-mac-startup-3.8.py","seq":7,"time_ms":1791101958144,"event":"before-application-start","extra":null}
+{"version":"3.8.7","target":"mac-native-builtin-engine","probe":"stage10-mac-startup-3.8.py","seq":8,"time_ms":1791101958144,"event":"application-start","extra":null}
+{"version":"3.8.7","target":"mac-native-builtin-engine","probe":"stage10-mac-startup-3.8.py","seq":9,"time_ms":1791101958146,"event":"post-base-init","extra":{"isNative":true,"isBrowser":false,"platform":"MACOS","hasWindow":"object","hasDocument":"object"}}
+{"version":"3.8.7","target":"mac-native-builtin-engine","probe":"stage10-mac-startup-3.8.py","seq":10,"time_ms":1791101958379,"event":"post-subsystem-init","extra":null}
+{"version":"3.8.7","target":"mac-native-builtin-engine","probe":"stage10-mac-startup-3.8.py","seq":11,"time_ms":1791101958379,"event":"engine-inited","extra":null}
+{"version":"3.8.7","target":"mac-native-builtin-engine","probe":"stage10-mac-startup-3.8.py","seq":12,"time_ms":1791101958397,"event":"game-inited","extra":null}
+{"version":"3.8.7","target":"mac-native-builtin-engine","probe":"stage10-mac-startup-3.8.py","seq":13,"time_ms":1791101958398,"event":"game-init-resolved","extra":null}
+{"version":"3.8.7","target":"mac-native-builtin-engine","probe":"stage10-mac-startup-3.8.py","seq":14,"time_ms":1791101960053,"event":"first-after-draw","extra":null}
+{"version":"3.8.7","target":"mac-native-builtin-engine","probe":"stage10-mac-startup-3.8.py","seq":15,"time_ms":1791101960169,"event":"game-onStart","extra":null}
+{"version":"3.8.7","target":"mac-native-builtin-engine","probe":"stage10-mac-startup-3.8.py","seq":16,"time_ms":1791101960170,"event":"after-scene-launch","extra":null}
+{"version":"3.8.7","target":"mac-native-builtin-engine","probe":"stage10-mac-startup-3.8.py","seq":17,"time_ms":1791101960178,"event":"first-scene-after-draw","extra":null}

@@ -1,0 +1,4 @@
+{"version":"3.8.7","phase":"before-fix","condition":"Clang syntax-only; CC_PLATFORM=4; CC_USE_PROFILER=1; invoke CC_PROFILE_OBJECT_INC","result":"failed: use of undeclared identifier C_PROFILER at native/cocos/profiler/Profiler.h:170"}
+{"version":"3.8.7","phase":"source-fix","path":"3.8.7engine/native/cocos/profiler/Profiler.h","change":"C_PROFILER to CC_PROFILER in CC_PROFILE_OBJECT_INC"}
+{"version":"3.8.7","phase":"after-fix","condition":"same Clang syntax-only command; CC_USE_PROFILER=1","result":"passed"}
+{"version":"3.8.7","phase":"after-fix","condition":"same Clang syntax-only command; CC_USE_PROFILER=0","result":"passed"}

@@ -1,0 +1,26 @@
+# 同一 UI 行为：2.4.15 与 3.8.7
+
+先分别阅读[2.x UI 研究](../2.x/07-ui-system.md)与[3.x UI 研究](../3.x/07-ui-system.md)。公开用法分别按 [2.4 UI 手册](https://docs.cocos.com/creator/2.4/manual/zh/ui/index.html)与 [3.8 UI 手册](https://docs.cocos.com/creator/3.8/manual/zh/2d-object/ui-system/index.html)。共同问题是“在不同分辨率下布置动态列表，点击一项后执行逻辑”。目前两版均有实际 Button 点击记录；3.8 的最小 Canvas/Button 案例成功，先前 Graphics/Label/Button 组合的失败仍待定位。以下对照区分源码事实和实测。
+
+| 开发行为 | 2.4.15 | 3.8.7 | 证据状态 |
+| --- | --- | --- | --- |
+| UI 根和相机 | Canvas 管理设计分辨率/Fit，并有当前 Canvas 单例；缺少主相机时可创建默认相机。 | Canvas 继承 RenderRoot2D，向 Batcher2D 注册收集根；Canvas 可多实例，Camera 与 Canvas 不一一对应，由 Layer/Visibility 决定是否绘制。 | 两版源码+手册；2.4 示例有 Canvas/Camera，3.8 示例默认只有 3D Camera。 |
+| 尺寸与锚点存在哪里 | Node 自身的 `contentSize`、anchor。 | UITransform 保存 UI 尺寸和锚点；Node 管理层级与变换。 | 两版源码；2.4 预览读出实际 Canvas/背景尺寸。 |
+| 分辨率策略 | `CCCanvas.applySettings → CCView.setDesignResolutionSize`；当前示例 fitHeight=true。 | 项目设置指定默认设计尺寸/Fit，运行时 `View.setDesignResolutionSize` 与 Canvas/Camera 对齐共同完成适配。 | 源码+手册；两版 Web 预览都已测直接改变 View 设计尺寸，真实窗口 resize 另待测。 |
+| Widget 与 Layout 更新 | WidgetManager 在 `EVENT_AFTER_UPDATE` 对齐；Layout 监听 Node 尺寸/位置等变化，在 `EVENT_AFTER_UPDATE` 排版。 | WidgetManager 在启动、`AFTER_UPDATE`、resize 时检查脏 Widget；Layout 使用 UITransform 并监听子节点尺寸/变换。 | 两版源码；两版 Web 预览均实测三项纵向列表排版与 CONTAINER 尺寸。 |
+| 直接改变设计分辨率 | Web WidgetManager 不直接监听 `cc.view` 的 `design-resolution-changed`，只在 `canvas-resize`/方向变化时标脏。 | WidgetManager 直接监听 View 的 `design-resolution-changed`，把特定模式的 Widget 标脏；Canvas 也用该事件对齐关联相机。 | 2.4 Web 实测直接调用改变 View 为 1280×720、scale=1.5，但 Canvas/背景保持原尺寸，且没有 `canvas-resize`。3.8 Web 实测四边拉伸 Canvas Widget 在 setter 同步阶段标脏、保持旧尺寸，下一次 `AFTER_UPDATE` 才从 960×640 拉到 1280×720并移到中心；恢复也在下一帧完成。 |
+| 列表动态增项与清空 | 加第四项后立即读取仍为旧坐标/尺寸并标脏；手动更新后重排。清空后 `updateLayout()` 因无活动子节点跳过，容器保留旧尺寸 300×266 且持续标脏。 | 加第四项后立即读取仍为旧坐标/尺寸并标脏；手动更新后重排。空列表仍执行 `_doLayout()`，本例容器高 10。 | 两版 Web 预览均实测 3 项→4 项→空列表；空列表结果分别为保留旧尺寸与重新计算 padding/spacing。 |
+| 文字更新 | Label.string 改变使顶点脏；文字尺寸会影响 Layout。 | Label.string 标记 RenderData 更新，尺寸变化经 UITransform 使 Layout 变脏。 | 两版源码；2.4 临时列表的 Label 在画面中可见。 |
+| 点击列表项 | Button 订阅节点 TOUCH_START/END，按下后结束时发 `clickEvents` 和节点 `click`。 | Button 订阅节点 TOUCH_START/END，按下后结束时发 `clickEvents` 与 `ButtonEventType.CLICK`；命中经 UITransform/PointerEventDispatcher。 | 两版源码；2.4 真实点击 Item 1 已观测；3.8 最小 Canvas/Button 点击成功。另一组 Graphics/Label/Button 探针两次未触发，原因未定位。 |
+| 滚动容器结构 | 手册说明 View、Content、可选 ScrollBar；View 通常以 Mask 裁剪，Content 尺寸决定滚动范围。`_calculateBoundary()` 先更新 Content Layout，再按 View/Content 的 Node 尺寸计算。 | 手册说明 View、Content、Mask 和可选 ScrollBar；Content 可用 Widget 或 Layout，手册建议同一节点不要同时挂两者。边界计算先更新 Layout，再按 View UITransform 计算。 | 两版手册+源码；Web 探针已运行带 Mask 的最小 View/Content/Button，未挂 ScrollBar 或 Layout。 |
+| 拖动与子项事件 | ScrollView 捕获触摸；`cancelInnerEvents=true` 时位移超过 7 个 `getLocation()` 坐标单位后，向原目标派发模拟 `TOUCH_CANCEL`。阈值源码标注未按 DPI 换算。 | 同样捕获触摸并在超过 7 个单位后模拟取消；计算使用 `getUILocation()`/`getUIStartLocation()`。阈值同样未按 DPI 换算。 | 两版 Web 同点轻点均触发 Button click；向上移动 4 像素不取消，累计 14 像素时出现 `simulate=true` 的子项 CANCEL、没有 Button click。嵌套滚动和其他 DPI 未测。 |
+| Content 位移时点 | `_handleMoveLogic()` 同步调用 `_processDeltaMove()`，在 MOVE 捕获回调中直接移动 Content 并采集速度样本；`update(dt)` 只推进自动惯性/回弹。 | `_handleMoveLogic()` 累加 `_deltaAmount`；后续 `update(dt)` 才消费增量、移动 Content 并采样速度，自动滚动也由 `update(dt)` 推进。 | 同样的首次 4 像素 MOVE：2.4 的 `scroll-began`/`scrolling` 先读到 Content y=104，子项 MOVE 随后读到 104；3.8 子项 MOVE 先读到旧 y=100，随后滚动回调读到 104。见两版 ScrollView Web 轨迹。 |
+| 鼠标滚轮与其他输入 | 垂直优先，回调内同步移动；默认 `-0.1`，Windows Firefox 为 `-0.1/3`，JSB/Runtime 为 `-7`。 | 垂直优先，固定 `-0.1` 并累加到 `_deltaAmount`，由 `update(dt)` 移动；HANDLE_INPUT/GAMEPAD_INPUT 只在 XR 悬停后读取摇杆，不代表普通键盘/手柄滚动。 | 同一 CDP `deltaY=100` 在本机 Web 分别使 Content y 增 12、50；浏览器事件单位与两版归一化路径不同，不能将数值当作跨平台滚动速度结论。 |
+| ScrollView 事件与结束 | 实际位移触发 `scroll-began → scrolling`；边界事件按滚动轮次去重，`scroll-ended` 重置掩码。触摸 END 先发 `touch-up` 再处理回弹/惯性；滚轮超时发 `scroll-ended`，但不清 `_scrolling`。 | 同样在实际位移后发开始/滚动事件并去重边界事件；由于位移排在 `update(dt)`，事件也随组件更新发出。滚轮超时发 `scroll-ended` 并清 `_scrolling`。 | Web 实测 2.4 滚轮结束后 `_scrolling=true`，下一轮拖动缺 `scroll-began`；3.8 滚轮结束后 `_scrolling=false`。两版触摸松手均记录 `touch-up → scroll-ended`；边界/惯性近终点事件未测。 |
+| 事件 API 接线 | `cc.ScrollView.EventType` 为数字枚举，供编辑器 `scrollEvents`/EventHandler；Node 监听用 `node.on('scroll-began', ...)` 字符串。 | 公开 `ScrollView.EventType` 为字符串枚举，可用于 Node 监听；内部 `scrollEvents` 仍经数字索引映射给 EventHandler。 | 两版源码；agent 生成事件订阅代码时必须按版本选择类型，不能把 2.4 数字枚举用作 Node 事件名。 |
+
+## 对游戏开发者的实际影响
+
+跨版本诊断 UI 时先锁定**当前版本的布局对象**：2.4 从 Node 尺寸与 Canvas.fitWidth/fitHeight 查起；3.8 从 UITransform、RenderRoot2D、Camera layer/visibility 和项目 View 设置查起。两版 Widget 与 Layout 都有延后更新机制，同一帧脚本读取最终位置需要主动调用相应的 `updateAlignment()`/`updateLayout()`；不能把 Button 的 `click` 视为原生 DOM 事件。Scrollable 列表还要检查 View/Content 与 Mask，因为排版完成不等于可滚动区域或命中区域正确。
+
+当前两版运行证据都覆盖三项列表排版、第四项增入和清空后的布局状态。空列表时 2.4 保留旧容器尺寸 300×266 并持续标脏；3.8 重新计算后高度为 10。两版直接改 View 的设计尺寸均已观测：2.4 scale/visibleSize 改变但 Canvas/背景 Widget 未动；3.8 Widget 先标脏，再于 `AFTER_UPDATE` 对齐 Canvas UITransform。新增的[2.4 ScrollView Web 轨迹](../agent-foundation/traces/2.4.15-scrollview-web.jsonl)与[3.8 ScrollView Web 轨迹](../agent-foundation/traces/3.8.7-scrollview-web.jsonl)覆盖最小轻点、拖动、取消与滚轮；均为无 ScrollBar、无惯性的桌面 Web 案例。真实窗口 resize、ScrollBar/弹性/惯性/嵌套滚动及 Native 仍待验证；3.8 原 Graphics/Label/Button 探针的两次点击失败仍需解释，见[UI 验证记录](../agent-foundation/skills/ui-system-validation.md)。

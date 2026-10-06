@@ -1,0 +1,41 @@
+{"recordType": "metadata", "version": "2.4.15", "creatorVersion": "2.4.15", "environment": "Creator Web preview in isolated headless Chrome on macOS", "previewUrl": "http://127.0.0.1:7456/", "sampleProject": "2.4.15NewProject", "scene": "helloworld", "engineProvenance": "editor preview; adjacent source build not confirmed", "backend": "version-specific runtime animation and Tween managers", "probe": "stage8-clip-tween-2.4.js", "probeSha256": "f8b16d5fe0e43b116220b14c26d18be43033ecc7383c3abdb1da6887aefc60d7", "reproductionHarness": "docs/agent-foundation/probes/creator-headless-probe.mjs", "reproductionHarnessSha256": "b4b1e45cca3fa2cd77748874997687c369d955f3b8a3aa4db982872508befa46", "captureMethod": "direct reproduction harness against local preview", "phase": "manual-fixed-clock-clip-and-tween", "timestamp": "2026-10-05T13:03:36.544242+00:00", "clock": "manual Scheduler.update(0.05) while game paused", "clip": {"duration": 0.25, "curve": "Node.x: 0 -> 100"}, "tween": "Node.x: 0 -> 200"}
+{"recordType": "sample", "phase": "clip-only", "step": 0, "positionX": 0}
+{"recordType": "sample", "phase": "clip-only", "step": 1, "positionX": 20}
+{"recordType": "sample", "phase": "clip-only", "step": 2, "positionX": 40}
+{"recordType": "sample", "phase": "clip-only", "step": 3, "positionX": 60.00000000000001}
+{"recordType": "sample", "phase": "clip-only", "step": 4, "positionX": 80}
+{"recordType": "sample", "phase": "clip-only", "step": 5, "positionX": 100}
+{"recordType": "sample", "phase": "clip-only", "step": 6, "positionX": 100}
+{"recordType": "sample", "phase": "clip-only", "step": 7, "positionX": 100}
+{"recordType": "sample", "phase": "clip-plus-tween", "step": 0, "positionX": 0}
+{"recordType": "sample", "phase": "clip-plus-tween", "step": 1, "positionX": 20}
+{"recordType": "sample", "phase": "clip-plus-tween", "step": 2, "positionX": 40}
+{"recordType": "sample", "phase": "clip-plus-tween", "step": 3, "positionX": 60.00000000000001}
+{"recordType": "sample", "phase": "clip-plus-tween", "step": 4, "positionX": 80}
+{"recordType": "sample", "phase": "clip-plus-tween", "step": 5, "positionX": 100}
+{"recordType": "sample", "phase": "clip-plus-tween", "step": 6, "positionX": 100}
+{"recordType": "sample", "phase": "clip-plus-tween", "step": 7, "positionX": 100}
+{"recordType": "managerOrder", "phase": "clip-only", "step": 0, "managerPhase": "action", "positionX": 0}
+{"recordType": "managerOrder", "phase": "clip-only", "step": 0, "managerPhase": "action-after", "positionX": 0}
+{"recordType": "managerOrder", "phase": "clip-only", "step": 0, "managerPhase": "animation", "positionX": 0}
+{"recordType": "managerOrder", "phase": "clip-only", "step": 0, "managerPhase": "animation-after", "positionX": 0}
+{"recordType": "managerOrder", "phase": "clip-only", "step": 1, "managerPhase": "action", "positionX": 0}
+{"recordType": "managerOrder", "phase": "clip-only", "step": 1, "managerPhase": "action-after", "positionX": 0}
+{"recordType": "managerOrder", "phase": "clip-only", "step": 1, "managerPhase": "animation", "positionX": 0}
+{"recordType": "managerOrder", "phase": "clip-only", "step": 1, "managerPhase": "animation-after", "positionX": 20}
+{"recordType": "managerOrder", "phase": "clip-plus-tween", "step": 0, "managerPhase": "action", "positionX": 0}
+{"recordType": "managerOrder", "phase": "clip-plus-tween", "step": 0, "managerPhase": "action-after", "positionX": 0}
+{"recordType": "managerOrder", "phase": "clip-plus-tween", "step": 0, "managerPhase": "animation", "positionX": 0}
+{"recordType": "managerOrder", "phase": "clip-plus-tween", "step": 0, "managerPhase": "animation-after", "positionX": 0}
+{"recordType": "managerOrder", "phase": "clip-plus-tween", "step": 1, "managerPhase": "action", "positionX": 0}
+{"recordType": "managerOrder", "phase": "clip-plus-tween", "step": 1, "managerPhase": "action-after", "positionX": 40}
+{"recordType": "managerOrder", "phase": "clip-plus-tween", "step": 1, "managerPhase": "animation", "positionX": 40}
+{"recordType": "managerOrder", "phase": "clip-plus-tween", "step": 1, "managerPhase": "animation-after", "positionX": 20}
+{"recordType": "event", "phase": "clip-only", "step": 0, "type": "play", "arg": "play", "stateTime": 0, "positionX": 0}
+{"recordType": "event", "phase": "clip-only", "step": 2, "type": "frame", "arg": "event-arg", "stateTime": null, "positionX": 40}
+{"recordType": "event", "phase": "clip-only", "step": 5, "type": "stop", "arg": "stop", "stateTime": 0.25, "positionX": 100}
+{"recordType": "event", "phase": "clip-only", "step": 5, "type": "finished", "arg": "finished", "stateTime": 0.25, "positionX": 100}
+{"recordType": "event", "phase": "clip-plus-tween", "step": 0, "type": "play", "arg": "play", "stateTime": 0, "positionX": 0}
+{"recordType": "event", "phase": "clip-plus-tween", "step": 2, "type": "frame", "arg": "event-arg", "stateTime": null, "positionX": 40}
+{"recordType": "event", "phase": "clip-plus-tween", "step": 5, "type": "stop", "arg": "stop", "stateTime": 0.25, "positionX": 100}
+{"recordType": "event", "phase": "clip-plus-tween", "step": 5, "type": "finished", "arg": "finished", "stateTime": 0.25, "positionX": 100}

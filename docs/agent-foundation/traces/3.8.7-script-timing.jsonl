@@ -1,0 +1,6 @@
+{"environment":"Creator 3.8.7 Chrome editor preview","method":"temporary in-memory components via DevTools console; transcribed from console output","experiment":"priority-and-timer","components":{"A":0,"B":-10,"C":10}}
+{"experiment":"priority-and-timer","frame":243826,"events":["B.onLoad","A.onLoad","C.onLoad","B.onEnable","A.onEnable","C.onEnable","B.start","A.start","C.start","B.update","A.update","C.update","B.lateUpdate","A.lateUpdate","C.lateUpdate"]}
+{"experiment":"priority-and-timer","frame":243827,"events":["B.timer0","A.timer0","C.timer0"]}
+{"experiment":"priority-and-timer","frame":243830,"events":["A.onDisable","B.onDisable","C.onDisable","A.onDestroy","B.onDestroy","C.onDestroy"]}
+{"experiment":"add-during-update","frame":245871,"events":["spawner.start","spawner.update.begin","target.onLoad","target.onEnable","spawner.update.end","spawner.lateUpdate","target.start"]}
+{"experiment":"add-during-update","frame":245872,"events":["target.update","target.timer0","target.lateUpdate"]}

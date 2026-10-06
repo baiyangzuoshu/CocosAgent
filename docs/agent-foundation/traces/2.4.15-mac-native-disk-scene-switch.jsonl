@@ -1,0 +1,10 @@
+{"event":"before","version":"2.4.15","platform":"mac","time":1791018097169,"runtimeAutoRelease":false,"oldScene":"2d2f792f-a40c-49bb-a189-ed176a246e49","sourceAuto":false,"newSceneInfo":true,"oldDeps":["410fb916-8721-4663-bab8-34397391ace7","31bc895a-c003-4566-a9f3-2e54ae1c17dc"],"targetPresent":true,"ref":1,"cached":true}
+{"event":"switch_requested","version":"2.4.15","platform":"mac","time":1791018097170,"runtimeAutoRelease":false,"effectiveAuto":false}
+{"event":"accepted","version":"2.4.15","platform":"mac","time":1791018097171,"runtimeAutoRelease":false,"accepted":true}
+{"event":"launched","version":"2.4.15","platform":"mac","time":1791018097187,"runtimeAutoRelease":false,"error":null,"active":"8e14afdb-015b-4edd-99ce-d8ba7b7f8eee","newDeps":[],"ref":0,"cached":true,"valid":true}
+{"event":"settled","version":"2.4.15","platform":"mac","time":1791018097543,"runtimeAutoRelease":false,"active":"8e14afdb-015b-4edd-99ce-d8ba7b7f8eee","ref":0,"cached":true,"valid":true,"samplingDelayMs":350}
+{"event":"before","version":"2.4.15","platform":"mac","time":1791018375656,"runtimeAutoRelease":true,"oldScene":"2d2f792f-a40c-49bb-a189-ed176a246e49","sourceAuto":false,"newSceneInfo":true,"oldDeps":["410fb916-8721-4663-bab8-34397391ace7","31bc895a-c003-4566-a9f3-2e54ae1c17dc"],"targetPresent":true,"ref":1,"cached":true}
+{"event":"switch_requested","version":"2.4.15","platform":"mac","time":1791018375657,"runtimeAutoRelease":true,"effectiveAuto":true}
+{"event":"accepted","version":"2.4.15","platform":"mac","time":1791018375658,"runtimeAutoRelease":true,"accepted":true}
+{"event":"launched","version":"2.4.15","platform":"mac","time":1791018375675,"runtimeAutoRelease":true,"error":null,"active":"8e14afdb-015b-4edd-99ce-d8ba7b7f8eee","newDeps":[],"ref":0,"cached":true,"valid":true}
+{"event":"settled","version":"2.4.15","platform":"mac","time":1791018376033,"runtimeAutoRelease":true,"active":"8e14afdb-015b-4edd-99ce-d8ba7b7f8eee","ref":0,"cached":false,"valid":false,"samplingDelayMs":350}
