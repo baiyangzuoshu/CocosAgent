@@ -1,0 +1,195 @@
+'use strict';
+
+const crypto = require('crypto');
+const fs = require('fs');
+const http = require('http');
+const path = require('path');
+const WebSocket = require('./vendor/ws');
+
+const args = process.argv.slice(2);
+const values = (flag) => args.flatMap((value, index) => value === flag ? [args[index + 1]] : []);
+const one = (flag) => values(flag)[0];
+const query = one('--query') || 'instances.list';
+const selectedProject = one('--project') && path.resolve(one('--project'));
+const supported = new Set(['2.4.15', '3.8.7']);
+const targetArgs = values('--target');
+
+function output(success, data, error) {
+    process.stdout.write(`${JSON.stringify(success ? { success, data } : { success, error })}\n`);
+    process.exitCode = success ? 0 : 1;
+}
+
+if (!targetArgs.length || !['instances.list', 'instances.get', 'capabilities.list'].includes(query)) {
+    output(false, null, { code: 'INVALID_ARGUMENT', message: 'Use --target <creatorVersion>=<projectPath> (repeatable) and --query instances.list|instances.get|capabilities.list.' });
+    return;
+}
+if (query !== 'instances.list' && !selectedProject) {
+    output(false, null, { code: 'PROJECT_REQUIRED', message: '--project is required for this query.' });
+    return;
+}
+
+const targets = [];
+const seen = new Set();
+for (const arg of targetArgs) {
+    const index = arg.indexOf('=');
+    const creatorVersion = arg.slice(0, index);
+    const projectRoot = path.resolve(arg.slice(index + 1));
+    if (index < 0 || !supported.has(creatorVersion) || !fs.existsSync(projectRoot) || !fs.statSync(projectRoot).isDirectory()) {
+        output(false, null, { code: 'INVALID_TARGET', message: `Invalid Creator target: ${arg}` });
+        return;
+    }
+    if (seen.has(projectRoot)) {
+        output(false, null, { code: 'AMBIGUOUS_EDITOR', message: `Project is listed more than once: ${projectRoot}` });
+        return;
+    }
+    seen.add(projectRoot);
+    targets.push({ creatorVersion, projectRoot, instanceId: null, state: 'disconnected', activeScene: null, commands: [], error: null,
+        sessionId: crypto.randomUUID(), token: crypto.randomBytes(32).toString('hex'), socket: null, requestId: null, nonce: null });
+}
+
+const server = http.createServer((_request, response) => { response.writeHead(404); response.end(); });
+const wss = new WebSocket.Server({
+    server, path: '/cocos-agent-bridge', maxPayload: 16 * 1024,
+    verifyClient: (info, done) => done(targets.some((target) => {
+        const candidate = info.req.headers['x-cocos-agent-token'];
+        const expected = Buffer.from(target.token);
+        const actual = Buffer.from(typeof candidate === 'string' ? candidate : '');
+        return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+    })),
+});
+let timer;
+let finished = false;
+
+function sessionPath(target) { return path.join(target.projectRoot, 'temp', 'cocos-agent-bridge', 'session.json'); }
+function publicInstance(target) {
+    return { instanceId: target.instanceId, projectRoot: target.projectRoot, creatorVersion: target.creatorVersion,
+        extensionVersion: target.extensionVersion || null, state: target.state,
+        activeScene: target.activeScene, error: target.error };
+}
+function cleanup() {
+    if (finished) return;
+    finished = true;
+    clearTimeout(timer);
+    for (const target of targets) {
+        try {
+            const file = sessionPath(target);
+            if (JSON.parse(fs.readFileSync(file, 'utf8')).sessionId === target.sessionId) fs.unlinkSync(file);
+        } catch (_) { /* Keep another session's file. */ }
+        if (target.socket) target.socket.close();
+    }
+    wss.close();
+    server.close();
+}
+function finish() {
+    if (finished) return;
+    for (const target of targets) {
+        if (target.state === 'disconnected' && !target.error) target.error = 'EDITOR_NOT_CONNECTED';
+    }
+    if (query === 'instances.list') output(true, targets.map(publicInstance));
+    else {
+        const matches = targets.filter((target) => target.projectRoot === selectedProject);
+        if (matches.length !== 1) output(false, null, { code: matches.length ? 'AMBIGUOUS_EDITOR' : 'EDITOR_NOT_FOUND', message: 'Target project does not select exactly one Editor.' });
+        else if (matches[0].state !== 'ready') output(false, null, { code: matches[0].error || 'EDITOR_NOT_CONNECTED', message: `Creator catalog is unavailable: ${selectedProject}` });
+        else if (query === 'instances.get') output(true, publicInstance(matches[0]));
+        else output(true, { instance: publicInstance(matches[0]), commands: matches[0].commands });
+    }
+    cleanup();
+}
+function maybeFinish() {
+    if (targets.every((target) => target.state === 'ready' || target.state === 'unavailable')) finish();
+}
+function sendRequest(target, method) {
+    target.requestId = crypto.randomUUID();
+    target.nonce = crypto.randomBytes(12).toString('hex');
+    target.socket.send(JSON.stringify({ type: 'request', id: target.requestId, method, params: { nonce: target.nonce } }));
+}
+function unavailable(target, code) {
+    target.state = 'unavailable';
+    target.error = code;
+    maybeFinish();
+}
+
+wss.on('connection', (socket, request) => {
+    const target = targets.find((item) => item.token === request.headers['x-cocos-agent-token']);
+    if (!target || target.socket) { socket.close(1008); return; }
+    target.socket = socket;
+    socket.on('message', (raw) => {
+        let message;
+        try { message = JSON.parse(raw.toString()); } catch (_) { unavailable(target, 'INVALID_RESPONSE'); return; }
+        if (message.type === 'hello') {
+            if (target.state !== 'disconnected' || message.protocolVersion !== '0.1'
+                || message.creatorVersion !== target.creatorVersion || path.resolve(message.projectRoot || '') !== target.projectRoot
+                || message.extension !== 'cocos-agent-bridge' || !/^[0-9a-f-]{36}$/i.test(message.instanceId || '')) {
+                socket.send(JSON.stringify({ type: 'helloAck', accepted: false, reason: 'instance-mismatch' }));
+                unavailable(target, 'INSTANCE_MISMATCH');
+                return;
+            }
+            target.instanceId = message.instanceId;
+            target.state = 'connected';
+            socket.send(JSON.stringify({ type: 'helloAck', accepted: true, sessionId: target.sessionId, protocolVersion: '0.1' }));
+            sendRequest(target, 'capabilities.list');
+            return;
+        }
+        if (message.type !== 'response' || message.id !== target.requestId) { unavailable(target, 'INVALID_RESPONSE'); return; }
+        const result = message.result || {};
+        if (target.state === 'connected') {
+            const ids = new Set(['scene.snapshot', 'asset.importPng', 'scene.pngSprite']);
+            if (message.ok !== true || result.nonce !== target.nonce || result.instanceId !== target.instanceId
+                || result.creatorVersion !== target.creatorVersion || path.resolve(result.projectRoot || '') !== target.projectRoot
+                || !Array.isArray(result.commands) || result.commands.length !== 3
+                || result.commands.some((command) => !ids.delete(command.id)
+                    || command.contractVersion !== '0.1' || !['read', 'write'].includes(command.access)
+                    || command.status !== 'available')) {
+                unavailable(target, 'CAPABILITY_CATALOG_INVALID');
+                return;
+            }
+            target.commands = result.commands;
+            target.extensionVersion = result.extensionVersion;
+            target.state = 'catalogued';
+            sendRequest(target, 'scene.snapshot');
+            return;
+        }
+        if (target.state === 'catalogued') {
+            if (message.ok === true && result.nonce === target.nonce && result.creatorVersion === target.creatorVersion
+                && path.resolve(result.projectRoot || '') === target.projectRoot && typeof result.sceneName === 'string') {
+                target.activeScene = result.sceneName;
+                if (target.creatorVersion === '2.4.15' && (!Array.isArray(result.nodes) || !result.nodes.some((node) => node.name === 'Canvas'))) {
+                    target.commands = target.commands.map((command) => command.id === 'scene.pngSprite'
+                        ? Object.assign({}, command, { status: 'unavailable', reason: 'CANVAS_NOT_FOUND' }) : command);
+                }
+            } else {
+                target.commands = target.commands.map((command) => command.id === 'scene.snapshot' || command.id === 'scene.pngSprite'
+                    ? Object.assign({}, command, { status: 'unavailable', reason: message.error && message.error.code || 'NO_OPEN_SCENE' }) : command);
+            }
+            target.state = 'ready';
+            maybeFinish();
+        }
+    });
+    socket.on('close', () => { if (!finished && target.state !== 'ready' && target.state !== 'unavailable') unavailable(target, 'EDITOR_DISCONNECTED'); });
+    socket.on('error', () => { if (!finished) unavailable(target, 'EDITOR_DISCONNECTED'); });
+});
+
+server.listen(0, '127.0.0.1', () => {
+    const address = server.address();
+    for (const target of targets) {
+        const file = sessionPath(target);
+        try {
+            const existing = JSON.parse(fs.readFileSync(file, 'utf8'));
+            if (existing.expiresAt > Date.now()) {
+                target.error = 'ACTIVE_SESSION_EXISTS';
+                target.state = 'unavailable';
+                continue;
+            }
+        } catch (_) { /* No existing session. */ }
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, JSON.stringify({ sessionId: target.sessionId, protocolVersion: '0.1',
+            creatorVersion: target.creatorVersion, projectRoot: target.projectRoot,
+            url: `ws://127.0.0.1:${address.port}/cocos-agent-bridge`, token: target.token,
+            expiresAt: Date.now() + 20000 }), { mode: 0o600 });
+        fs.chmodSync(file, 0o600);
+    }
+    timer = setTimeout(finish, 15000);
+    maybeFinish();
+});
+
+process.on('SIGINT', () => { cleanup(); process.exit(130); });

@@ -16,6 +16,19 @@ let connecting = false;
 let lastSessionId = null;
 let activeSession = null;
 let pendingSceneSave = null;
+const instanceBytes = crypto.randomBytes(16);
+instanceBytes[6] = (instanceBytes[6] & 0x0f) | 0x40;
+instanceBytes[8] = (instanceBytes[8] & 0x3f) | 0x80;
+const instanceHex = instanceBytes.toString('hex');
+const INSTANCE_ID = `${instanceHex.slice(0, 8)}-${instanceHex.slice(8, 12)}-${instanceHex.slice(12, 16)}-${instanceHex.slice(16, 20)}-${instanceHex.slice(20)}`;
+
+function commandCatalog() {
+    return [
+        { id: 'scene.snapshot', contractVersion: '0.1', access: 'read', status: 'available' },
+        { id: 'asset.importPng', contractVersion: '0.1', access: 'write', status: 'available' },
+        { id: 'scene.pngSprite', contractVersion: '0.1', access: 'write', status: 'available', inputSchema: 'operation-0.1#/$defs/request' },
+    ];
+}
 
 function send(value) {
     if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(value));
@@ -34,6 +47,14 @@ function onMessage(raw) {
     }
 
     if (message.type !== 'request' || typeof message.id !== 'string') return;
+    if (message.method === 'capabilities.list') {
+        send({ type: 'response', id: message.id, ok: true, result: {
+            nonce: message.params && message.params.nonce, instanceId: INSTANCE_ID,
+            projectRoot: PROJECT_ROOT, creatorVersion: CREATOR_VERSION,
+            extensionVersion: '0.1.0', commands: commandCatalog(),
+        } });
+        return;
+    }
     if (message.method === 'scene.preflightPngSprite') {
         preflightSceneOperation(message);
         return;
@@ -277,6 +298,7 @@ function connectFromSession() {
             creatorVersion: CREATOR_VERSION,
             projectRoot: PROJECT_ROOT,
             extension: 'cocos-agent-bridge',
+            instanceId: INSTANCE_ID,
             capabilities: ['bridge.ping', 'scene.snapshot', 'asset.importPng', 'scene.preflightPngSprite', 'scene.placePngSprite', 'scene.removePngSprite'],
             operationContract: { id: 'scene.pngSprite', contractVersion: '0.1', creatorVersion: CREATOR_VERSION, access: 'scene-write', actions: ['apply', 'compensate', 'replay'], previewVerification: 'manual-web', compensation: 'identity-checked-node-removal' },
         }));

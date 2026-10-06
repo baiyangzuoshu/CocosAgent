@@ -69,4 +69,19 @@ node tools/cocos-agent-bridge/bridge-host.js \
 
 `scene.pngSprite` 的六阶段输入、回执和错误状态见 `tools/cocos-agent-bridge/operation.schema.json` 与 `docs/agent-foundation/cocos-agent-operation-contract-0.1.md`。两版扩展在握手中声明同一合同版本，各自执行场景预检；Host 验证预检后才写入。Host 输出 `operation.receipt {JSON}`，分别说明能力、预检、编辑器写入、磁盘读回、预览和恢复状态。当前预览只由人工确认，每次 Host 运行的预览回执均为 `pending`，不能据此前一次预览推断本次运行已通过。
 
+## 只读实例与命令目录
+
+`catalog-host.js` 可在一次运行中连接多个已打开的 Creator 项目。扩展需先重载到含 `instanceId` 和 `capabilities.list` 的版本。调用示例：
+
+```sh
+node tools/cocos-agent-bridge/catalog-host.js \
+  --target "2.4.15=$PWD/2.4.15NewProject" \
+  --target "3.8.7=$PWD/3.8,7NewProject" \
+  --query instances.list
+```
+
+将 `--query` 换成 `instances.get` 或 `capabilities.list` 时，另传 `--project` 指定其中一个项目的绝对路径。输出为 `{success,data}` 或 `{success:false,error}` 的 JSON。目录目前只含三个已实现的语义命令；`scene.pngSprite` 在 2.4 缺 Canvas、或任一版本无活动场景时标为 `unavailable`。每次查询创建独立短时会话，结束后清除本轮会话文件；它不会导入资源或写场景，也还不是常驻的实例注册服务。扩展重载后需重新查询，新的实例 ID 应与此前不同。
+
+双实例协议测试和两版 Creator 实机查询已通过，记录见 `docs/agent-foundation/traces/cocos-agent-catalog-0.1.jsonl`。本次 2.4 Package Manager 的 Reload 曾报 `package not found` 并卸载扩展；通过 Creator 重开项目后扩展重新加载，双实例和 2.4 命令目录均返回 `ready`。因此扩展重载的可靠性仍需改进，不能把 Package Manager 的 Reload 当成必然成功。
+
 此外还没有重试持久化、断线恢复、进度推送、取消、并行项目隔离或正式安全审查。

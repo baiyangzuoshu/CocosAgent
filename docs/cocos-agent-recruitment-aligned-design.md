@@ -160,6 +160,8 @@ Creator 并不保证多资源或场景批次具备数据库式原子事务。因
 
 ### Unity 参考：借鉴分层与工具链，不复制产品绑定
 
+命令发现、实例定位、结果表达与 skill 调用的具体取舍见 [Unity → CocosAgent 对照设计](agent-foundation/unity-to-cocos-agent-design.md)。
+
 Unity 的可借鉴点是把 Agent 可发现的工具、宿主/CLI 生命周期和编辑器内操作桥接作为不同层，并允许外部 Agent 管理模型与任务。Unity 官方目前将内置 Assistant 的 MCP 连接引导至 Unity CLI；因此这里参考的是“Agent 接入面与 Editor Bridge 分离”的架构方向，不把旧内置 MCP 方案定为 CocosAgent 依赖。Unity 的技能包也说明，操作手册/工作流知识可以随工具交付，但 skill 本身不能替代工具的输入校验、能力协商和执行证据。
 
 对 CocosAgent 的落点是：Host 可独立演进协议入口；2.4、3.8 扩展分别注册版本能力；操作以类型化 schema 暴露；执行结果带结构化诊断和可核对证据。当前实现仍是 Node Host + loopback WebSocket + Creator 扩展，MCP、自动化预览、构建和通用场景写入都属于后续阶段。
