@@ -1,0 +1,8 @@
+engine2.4.15/
+cocos-2.4.15-demo/
+dist/
+node_modules/
+package-lock.json
+*.fire
+*.prefab
+*.meta
