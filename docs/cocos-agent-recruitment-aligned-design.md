@@ -1,6 +1,6 @@
 # CocosAgent 设计：以 AI-Native 引擎岗位要求为目标
 
-> 状态：设计基线；本地通信首个原型已实现并在 Creator 2.4.15、3.8.7 分别完成握手与 ping 往返。PNG 导入与场景操作尚未实现。依据是用户提供的四张招聘截图；截图描述的是岗位方向，不等于本仓库已经具备这些能力。版本范围为 Creator 2.4.15 和 3.8.7，不以版本迁移为目标。
+> 状态：设计基线；本地通信、只读场景快照和单 PNG 导入已在 Creator 2.4.15、3.8.7 分别运行验证，同名冲突也均被拒绝。依据是用户提供的四张招聘截图；截图描述的是岗位方向，不等于本仓库已经具备这些能力。版本范围为 Creator 2.4.15 和 3.8.7，不以版本迁移为目标。
 
 ## 1. 目标与边界
 
@@ -24,17 +24,19 @@
 
 ```mermaid
 flowchart LR
-    U[开发者目标与生成内容] --> P[任务规划与版本能力检查]
-    P --> M[只读项目索引 / 场景与资源语义模型]
-    M --> D[变更计划与前置条件]
-    D --> E2[Creator 2.4 扩展适配器]
-    D --> E3[Creator 3.8 扩展适配器]
-    E2 --> V[导入 / 场景 / 预览 / 构建验证]
-    E3 --> V
-    V --> R[证据、差异、回退记录]
-    R --> P
-    E2 --> RT2[2.4 运行时能力]
-    E3 --> RT3[3.8 运行时能力]
+    U[开发者 / 外部 Agent] --> L[模型与任务规划]
+    L --> H[CocosAgent Host<br/>会话、工具目录、操作日志]
+    H --> M[只读项目索引<br/>场景 / 资源语义模型]
+    M --> D[带前置条件的变更计划]
+    D --> H
+    H -->|本机认证通道| A2[Creator 2.4 扩展适配器]
+    H -->|本机认证通道| A3[Creator 3.8 扩展适配器]
+    A2 --> V[编辑器读回 / 预览 / 构建验证]
+    A3 --> V
+    V --> R[差异、诊断、证据、回退状态]
+    R --> H
+    A2 --> RT2[2.4 运行时]
+    A3 --> RT3[3.8 运行时]
 ```
 
 这不是一个横跨两版引擎的通用写入器。规划层可共享**任务语义**和验证协议，执行层必须各自实现、各自测试。2.4 的 `cc.Class`、`.fire`、扩展包和 3.8 的 TypeScript 装饰器、`.scene`、扩展消息体系不可互换；即便任务名称相同，也要检查对象身份、资源引用、导入和销毁规则。
@@ -48,6 +50,66 @@ flowchart LR
 - `Evidence`：官方手册页、源码符号、编辑器返回、预览/构建日志和平台条件。区分“设计假设”“源码可见”“运行已验证”。
 
 首批工具接口建议为 `inspect_project`、`snapshot_scene`、`find_assets`、`plan_changes`、`apply_change_set`、`import_asset_batch`、`validate_project`、`run_preview_probe`、`build_target`、`revert_change_set`。写入工具统一要求版本、项目快照修订号、操作 ID、预期变更及校验策略；返回实际差异和失败位置。`plan_changes` 默认只读，`apply_change_set` 是显式执行入口。底层不得绕过编辑器导入机制直接伪造 UUID 或修改生成缓存。
+
+### 运行边界与通信职责
+
+模型属于外部 Agent 或其客户端配置；CocosAgent Host 负责把模型给出的意图变成受约束的工具调用；Creator 扩展只负责本版本编辑器 API 的执行与读回。**模型供应商的 API key 不进入 Creator 扩展、项目文件或桥接会话。**本机 WebSocket 的随机会话令牌只认证 Host 与扩展，不是模型凭证，也不提供模型调用能力。
+
+通信协议、传输方式和编辑器操作语义应分层：工具语义定义 `scene.snapshot`、`asset.import` 等操作；当前原型用 loopback WebSocket 承载 Host 与扩展之间的请求；未来可增加 MCP stdio 入口供外部 Agent 调用，但不因此让 Creator 扩展直接连接模型或把 MCP 传输细节写入 2.x/3.x 适配器。Unity 官方从内置 Assistant MCP 转向 Unity CLI 的经验可作参考：把 Agent 接入面与编辑器侧桥接解耦；Unity 旧版 MCP 文档仍可帮助理解工具注册和编辑器连接模型，但不应视为我们需要照搬的当前传输实现。
+
+原型目前只证明：单 Host、单项目会话、本机认证、`bridge.ping`、只读场景摘要和单 PNG 导入。它还没有完成断线重连、并行项目隔离、请求取消、可靠队列或 MCP 接入。会话文件位于项目 `temp/`，即使当前已忽略且设定了本机权限，正式实现仍应检查符号链接/路径归属、令牌轮换、过期清理和日志脱敏。
+
+### 工具发现与版本能力协商
+
+Host 启动后先取得扩展的 `hello` / `capabilities`，并校验项目根、Creator 精确版本、协议主次版本和适配器身份。版本能力表应描述**实际可用的操作及限制**，例如 `scene.snapshot` 只读、`asset.import.png` 写入、是否支持预览控制；不能仅凭“2.4”或“3.8”推断某能力存在。未知或不匹配的能力默认不可调用，不能降级成通用文件写入。
+
+建议把共同工具定义为稳定的任务语义，并由版本适配器提供实现：
+
+| 工具域 | 代表操作 | 初始权限级别 |
+| --- | --- | --- |
+| 项目与诊断 | `project.inspect`、`scene.snapshot`、`asset.find`、`project.validate` | 只读 |
+| 资源管线 | `asset.import`、`asset.configure`、`asset.remove` | 写入；按操作给出目标路径和冲突策略 |
+| 场景编辑 | `scene.create_node`、`scene.attach_component`、`scene.assign_asset`、`scene.remove_node` | 写入；需前置条件与差异预览 |
+| 运行与构建 | `preview.start`、`preview.probe`、`build.run` | 有副作用；声明平台、目标和超时 |
+
+每项能力应带稳定 ID、输入/输出 schema 版本、读写类别、可取消性、幂等策略、超时上限和验证方式。首期只开放有类型约束的操作；不提供任意 JavaScript 执行、任意文件路径写入或无约束编辑器 eval。能力缺失时返回结构化 `UNSUPPORTED_CAPABILITY`，并附版本与可用能力，不静默模拟成功。
+
+### 请求、操作与结果
+
+共同协议可先固定以下对象，再逐项落到实现中：
+
+```text
+ToolManifest {
+  protocolVersion, adapterId, creatorVersion, projectId,
+  capabilities[{ id, schemaVersion, access, limits }]
+}
+
+OperationRequest {
+  requestId, operationId, toolId, projectRevision,
+  arguments, deadline, idempotencyKey
+}
+
+OperationResult {
+  requestId, operationId, status,
+  changedItems[], diagnostics[], evidence[], recovery
+}
+```
+
+`requestId` 用于一次请求/响应关联；`operationId` 标识一个可审计的用户任务，可包含多次工具调用；`idempotencyKey` 防止超时重试造成重复导入或重复建节点。结果状态至少区分 `succeeded`、`partial`、`failed`、`cancelled`、`unsupported` 和 `stale_snapshot`。错误包含稳定错误码、可读说明、失败对象、是否已产生副作用及建议恢复动作，不能只回传日志字符串。
+
+### 写入生命周期与恢复
+
+写入采用“读快照 → 计划 → 校验前置条件 → 应用 → 读回 → 验证”的闭环：
+
+1. Host 读取当前项目修订号和受影响对象身份，生成包含预期差异的 ChangeSet。
+2. 应用前检查 Creator 版本、活动场景、资源 UUID/路径和对象修订号；快照已过期则返回 `stale_snapshot`，要求重新规划。
+3. 执行前检查目标路径、同名冲突及引用影响。所有写操作均有操作 ID 与幂等键；重试查询操作状态，不盲目重复写入。
+4. 编辑器 API 返回后重新从 AssetDB/场景读回，验证 UUID、类型、组件、引用及文件摘要；API 回调成功本身不等于操作验收成功。
+5. 记录已完成步骤、部分副作用、验证证据和恢复结果。仅在编辑器 API 明确可逆时自动补偿；否则保留现场并提供具体人工恢复指引。
+
+Creator 并不保证多资源或场景批次具备数据库式原子事务。因此 ChangeSet 的“回退”是逐项补偿与恢复检查点，不宣称跨文件原子回滚。编辑器重载、连接丢失或构建中断后，Host 应先查询操作日志和项目实际状态，再决定继续、重新规划或停止。
+
+并发规则首期采用每个项目一个活动写操作；只读快照可以并行，但必须返回所用修订号。请求需设截止时间、进度事件和取消标记；取消表示尽可能停止后续步骤，若当前 Creator API 无法中断，应回报“停止后续步骤”及已完成副作用。连接重建后通过会话 ID 恢复状态，不依据旧的 socket 连接推断操作完成。
 
 ## 4. 一条完整的内容生产链
 
@@ -76,15 +138,15 @@ flowchart LR
 
 ## 6. 建设顺序与完成条件
 
-| 阶段 | 交付物 | 完成条件 |
+| 阶段 | 交付物 | 完成条件 | 当前状态 |
 | --- | --- | --- |
-| P0：项目理解 | 两版只读索引器、场景/资源快照、版本能力表、证据引用 | 对两个示例工程各生成可核对的对象与资源图；无法确认的编辑器能力明确标为未知 |
-| P1：编辑器事务 | 两版独立扩展适配器；节点/组件/预制体操作；差异预览、撤销/回退 | 在两版示例中分别完成一次可重复的场景编辑，重开编辑器并预览通过；重复执行无副作用 |
-| P2：资源批处理 | 资源清单、元数据校验、批量导入、依赖检查、错误定位 | 同一批生成资源在两个版本中分别完成导入、场景引用和失败项隔离 |
-| P3：动态内容 | 版本专属资源替换与生命周期操作、运行时探针、回退 | Web 与至少一个原生目标各记录多轮加载/替换/释放轨迹；达到项目定义的帧时间和内存预算 |
-| P4：引擎与工具链改造 | 依据前述证据选择的结构化数据、导入诊断、场景更新或资源管理改造 | 与 P0–P3 的可复现瓶颈对应，变更前后有性能/稳定性数据，并覆盖目标构建 |
+| P0：项目理解与桥接 | 两版只读索引、场景/资源快照、能力清单、证据引用和 Host-扩展会话 | 两个示例都能返回可核对快照；能力未知时明确拒绝调用 | 部分完成：握手、ping、限界场景快照、PNG 单资源导入已验证；能力清单协商、修订号和断线恢复未实现 |
+| P1：编辑器变更闭环 | 两版独立场景适配器；差异计划、节点/组件/资源引用操作、读回验证与补偿 | 同一任务分别在两版可重放；编辑器重开后引用正确，预览通过，重复执行无副作用 | 进行中：两版扩展已加入 Sprite 节点 apply/compensate/replay 原型和保存调用；静态检查及 Host 模拟协议闭环通过，Creator 实际 API、保存、重开及预览证据待验 |
+| P2：资源批处理 | 清单、元数据校验、批量导入、依赖检查、错误定位与隔离 | 同一批资源在两版分别完成导入和场景引用；失败项不污染成功项 | 未完成：当前仅单 PNG、冲突拒绝和摘要校验有证据 |
+| P3：动态内容 | 版本专属资源替换与生命周期操作、运行时探针、恢复策略 | Web 与至少一个原生目标记录多轮加载/替换/释放；达到项目定义的帧时间和内存预算 | 未开始：以阶段 4/10 已有证据为基线，新增 Agent 操作需单独验证 |
+| P4：引擎与工具链改造 | 依据前述证据选择结构化数据、导入诊断、场景更新或资源管理改造 | 对应可复现瓶颈，变更前后有性能/稳定性数据，并覆盖目标构建 | 未开始：先确定使用自定义引擎构建的真实接线和测量基线 |
 
-第一条纵向原型应限制为：**一个生成资源 → 编辑器导入 → 放入场景 → 预览校验 → 撤销/重放**。分别在 2.4 和 3.8 实现同一任务语义。成功后再扩展到批量资源、运行时替换和底层改造。这样可以先验证最关键的编辑器宿主接线、UUID/引用、预览证据和回退协议。
+第一条纵向原型应限制为：**一个生成资源 → 编辑器导入 → 放入场景 → 预览校验 → 撤销/重放**。导入环节已经单独验证，下一步只扩展剩余闭环，分别在 2.4 和 3.8 实现同一任务语义。成功后再扩展到批量资源、运行时替换和底层改造。这样可以先验证最关键的编辑器宿主接线、UUID/引用、预览证据和回退协议。
 
 评估时同时记录任务完成率、人工修复次数、引用错误数、重复执行差异、导入耗时、预览/构建成功率，以及动态内容阶段的帧时间、峰值内存和释放结果。性能目标须先从两个示例与目标平台测基线，再设数值，不凭截图推定阈值。
 
@@ -92,4 +154,14 @@ flowchart LR
 
 现有 [研究计划](source-study-plan.md)提供两版独立分析及对照的方法；[场景对象](comparisons/02-objects-and-scenes.md)、[资源系统](comparisons/04-assets-and-loading.md)、[发布与原生](comparisons/10-publishing-and-native.md)、[编辑器扩展](comparisons/12-editor-extension-and-diagnostics.md)是这份设计的首批技术依据。`docs/agent-foundation/skills/` 下的版本专属 skill 主要用于**定位与诊断**；它们不能自动升级为写入工具。每个操作型 skill 还需要明确输入约束、适用版本、编辑器执行证据、失败回退和可重复试用案例。
 
-两版阶段 12 扩展已验证“菜单 → 消息”这一最小链路；新增 CocosAgent bridge 原型也已在两版 Creator 中验证本地 WebSocket 握手和一次请求/响应。它尚未验证结构化场景编辑、PNG 导入、预览控制、批量导入或构建钩子；现有 3.8 Mac 包使用内置引擎，2.4 包来源仍待确认。因此 P1/P2/P4 中未实测的编辑器和引擎接线属于待实现、待验证事项，不能写成已有能力。实现入口与运行方式见 `tools/cocos-agent-bridge/README.md`。
+操作型 skill 建议统一包含：版本与 Creator 精确版本范围、官方手册入口、所需能力 ID、输入 schema、执行前检查、版本专属步骤、成功/部分成功/失败的可观察信号、读回验证、可逆性与补偿方式、已知限制和对应轨迹。2.4 与 3.8 应分别维护实现细节；可以共享任务目标和验收清单，但不得让一个版本的 API 路径被另一个版本的 skill 直接调用。Skill 负责告诉 Agent 如何选择和串联工具，Host 仍负责权限、schema、路径约束、幂等与操作日志。
+
+两版阶段 12 扩展已验证“菜单 → 消息”这一最小链路；CocosAgent bridge 原型已在两版 Creator 中验证本地 WebSocket 握手、`bridge.ping`、真实只读 `scene.snapshot` 和单 PNG 导入。PNG 主机层限制文件大小、尺寸与文件名，以 SHA-256 和会话隔离目录传递文件；Creator 侧按目标 URL 拒绝冲突，并回传 UUID、类型和导入状态。2.4 首轮运行表明暂存 basename 决定 AssetDB 导入文件名，代码据此修正；修正后两版均导入成功并生成各自 `.meta`，同名重试均拒绝且未覆盖。两版原生资源类型字符串不同（2.4 `texture`、3.8 `cc.ImageAsset`），共同协议当前保留原值。3.8 的图片导入器还需产出 SpriteFrame 子资源，场景 Sprite 才能引用；场景操作现使用已导入的 SpriteFrame UUID。两版真实 Creator 已完成单 PNG 的场景放置、自动保存、Web 预览、补偿、重放及再次补偿；Host 核对了内存快照与磁盘中的节点和 SpriteFrame 引用，两个预览均目视看到图片，最终两份场景文件均无 Agent 节点。3.8 在原无 Canvas 的 3D 场景中创建专用 Canvas/UI 相机；2.4 使用原有 Canvas。3.8 首次写入发现保存回执早于磁盘读回，Host 已增加短时轮询。2.4 未核实参数的撤销记录消息引发编辑器错误，现已移除。场景重开、复杂布局、原生预览、批量导入、自动预览和构建钩子仍未验证或实现。现有 3.8 Mac 包使用内置引擎，2.4 包来源仍待确认。已验证运行轨迹见 `docs/agent-foundation/traces/cocos-agent-scene-snapshot-0.1.jsonl` 与 `docs/agent-foundation/traces/cocos-agent-asset-import-0.1.jsonl`；实现入口与运行方式见 `tools/cocos-agent-bridge/README.md`。
+
+### Unity 参考：借鉴分层与工具链，不复制产品绑定
+
+Unity 的可借鉴点是把 Agent 可发现的工具、宿主/CLI 生命周期和编辑器内操作桥接作为不同层，并允许外部 Agent 管理模型与任务。Unity 官方目前将内置 Assistant 的 MCP 连接引导至 Unity CLI；因此这里参考的是“Agent 接入面与 Editor Bridge 分离”的架构方向，不把旧内置 MCP 方案定为 CocosAgent 依赖。Unity 的技能包也说明，操作手册/工作流知识可以随工具交付，但 skill 本身不能替代工具的输入校验、能力协商和执行证据。
+
+对 CocosAgent 的落点是：Host 可独立演进协议入口；2.4、3.8 扩展分别注册版本能力；操作以类型化 schema 暴露；执行结果带结构化诊断和可核对证据。当前实现仍是 Node Host + loopback WebSocket + Creator 扩展，MCP、自动化预览、构建和通用场景写入都属于后续阶段。
+
+参考资料：[Unity CLI 替代内置 MCP Server](https://docs.unity.com/en-us/unity-cli/replace-mcp-server-unity-cli)、[Unity MCP 架构说明](https://docs.unity3d.com/Packages/com.unity.ai.assistant@2.0/manual/unity-mcp-overview.html)、[Unity Plugin 概览](https://docs.unity.com/en-us/ai/unity-plugin/about-unity-plugin)。这些链接描述 Unity 产品自身的实现与演进，不构成对 Cocos Creator API 的证据。

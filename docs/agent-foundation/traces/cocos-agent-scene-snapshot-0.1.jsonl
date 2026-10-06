@@ -1,0 +1,4 @@
+{"date":"2026-10-06","creator":"2.4.15 adapter","check":"syntax and mocked scene-tree traversal","result":"pass"}
+{"date":"2026-10-06","creator":"2.4.15","check":"localhost WebSocket handshake, bridge.ping, scene.snapshot","project":"2.4.15NewProject","scene":"stage8-audio-static","nodes":9,"result":"pass","evidence":"bridge-host.js live run; project identity and nonce verified"}
+{"date":"2026-10-06","creator":"3.8.7 adapter","check":"syntax and mocked scene-tree traversal","result":"pass"}
+{"date":"2026-10-06","creator":"3.8.7","check":"localhost WebSocket handshake, bridge.ping, scene.snapshot","project":"3.8,7NewProject","scene":"stage8-audio-static","nodes":30,"truncated":true,"result":"pass","evidence":"bridge-host.js live run; project identity and nonce verified; node limit enforced"}
