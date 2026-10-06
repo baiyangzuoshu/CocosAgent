@@ -25,5 +25,6 @@
 `cocos/profiler/profiler.ts::showStats` 把游戏内统计接到 Director 的更新、物理、渲染事件和 GFX 设备计数；`cocos/core/platform/debug.ts::setDisplayStats` 在本快照已标记弃用并委托给该对象。官网的[3.8 原生 Profiler](https://docs.cocos.com/creator/3.8/manual/zh/advanced-topics/profiler.html)是更详细的 **Native C++** 统计，需要项目开启调试文字渲染器、`native/cocos/base/Config.h` 中 `CC_USE_PROFILER=1`，再重新编译原生目标；不能用游戏内 FPS 覆盖层证明 C++ 内存或调用块数据。
 
 本快照 `native/cocos/profiler/Profiler.h::CC_PROFILE_OBJECT_INC` 原来把 `CC_PROFILER` 误写为 `C_PROFILER`。用[最小编译探针](../agent-foundation/probes/stage12-profiler-object-inc.cpp)在 Mac 条件和 `CC_USE_PROFILER=1` 下调用该宏，Clang 原先报 `undeclared identifier 'C_PROFILER'`；修正一个标识符后，同一语法编译在宏开启、关闭两种状态均通过，记录见[编译轨迹](../agent-foundation/traces/stage12-profiler-macro.jsonl)。仓库现有其他 C++ 文件未调用该增量宏，所以普通引擎构建可能不会暴露此错；本次验证也不等于完整原生构建或性能测量。
+根仓库忽略邻接 3.8 引擎副本；该修复另存为[可应用补丁](../agent-foundation/patches/3.8.7-profiler-object-inc.patch)，以免只留在本机参考源码中。
 
 本阶段尚未运行 `npm test`、构建 worker、构建模板、自定义引擎重新发布或原生 Profiler UI；完整宿主时序和实际性能数据仍待聚焦实验。

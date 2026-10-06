@@ -1,0 +1,11 @@
+diff --git a/native/cocos/profiler/Profiler.h b/native/cocos/profiler/Profiler.h
+--- a/native/cocos/profiler/Profiler.h
++++ b/native/cocos/profiler/Profiler.h
+@@ -167,6 +167,6 @@
+         }
+     #define CC_PROFILE_OBJECT_INC(name, count)                      \
+         if (CC_PROFILER && CC_PROFILER->isMainThread()) {           \
+-            C_PROFILER->getObjectStats().objects[#name] += (count); \
++            CC_PROFILER->getObjectStats().objects[#name] += (count); \
+         }
+     #define CC_PROFILE_OBJECT_DEC(name, count)                       \

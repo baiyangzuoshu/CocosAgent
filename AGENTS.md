@@ -12,6 +12,7 @@
 | `3.8,7NewProject/` | 对应的 3.x 3D 场景示例；目录名中的逗号是真实名称 | `assets/scene/main.scene`、`assets/model/`、`assets/material/`；阶段 4 验证用 `assets/scene/stage4-empty.scene` |
 
 本目录根部有 Git 仓库，`3.8,7NewProject/` 另有独立的 `.git/`；其他三个目录没有独立仓库。检查和提交时先确认所在仓库，避免把嵌套仓库当成根仓库中的普通目录。
+根仓库将 `3.8.7engine/` 作为本地上游参考副本忽略；其中的源码修复须在对应引擎仓库提交，或把补丁保存到本仓库的研究证据中，不能假定修改已进入根仓库历史。
 
 ## 官方文档与证据顺序
 
