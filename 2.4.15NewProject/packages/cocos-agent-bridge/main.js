@@ -34,6 +34,10 @@ function onMessage(raw) {
     }
 
     if (message.type !== 'request' || typeof message.id !== 'string') return;
+    if (message.method === 'scene.preflightPngSprite') {
+        preflightSceneOperation(message);
+        return;
+    }
     if (message.method === 'scene.pngSprite') {
         runSceneOperation(message);
         return;
@@ -110,6 +114,31 @@ function runSceneOperation(message) {
                 }, result),
             });
         });
+    });
+}
+
+function preflightSceneOperation(message) {
+    const params = message.params || {};
+    const operation = activeSession && activeSession.sceneOperation;
+    const contract = params.operation || {};
+    if (!operation || params.sessionId !== activeSession.sessionId || params.assetName !== operation.assetName
+        || params.assetUuid !== operation.assetUuid || params.nodeName !== operation.nodeName
+        || params.sceneAction !== operation.sceneAction || typeof params.nonce !== 'string'
+        || contract.contractVersion !== '0.1' || contract.operationId !== activeSession.sessionId
+        || contract.capabilityId !== 'scene.pngSprite' || contract.action !== operation.sceneAction
+        || contract.assetName !== operation.assetName || contract.assetUuid !== operation.assetUuid
+        || contract.nodeName !== operation.nodeName || typeof contract.sceneName !== 'string') {
+        send({ type: 'response', id: message.id, ok: false, error: { code: 'INVALID_SCENE_SESSION', phase: 'preflight', message: 'Session manifest mismatch.', retryable: false, sideEffect: 'none' } });
+        return;
+    }
+    Editor.Scene.callSceneScript('cocos-agent-bridge', 'preflight-png-sprite', {
+        spriteFrameUuid: operation.assetUuid, nodeName: operation.nodeName, action: operation.sceneAction,
+    }, (error, result) => {
+        if (error) {
+            send({ type: 'response', id: message.id, ok: false, error: { code: error.code || 'PREFLIGHT_FAILED', phase: 'preflight', message: String(error.message || error), retryable: false, sideEffect: 'none' } });
+            return;
+        }
+        send({ type: 'response', id: message.id, ok: true, result: Object.assign({ nonce: params.nonce, creatorVersion: CREATOR_VERSION, projectRoot: PROJECT_ROOT }, result) });
     });
 }
 
@@ -248,7 +277,8 @@ function connectFromSession() {
             creatorVersion: CREATOR_VERSION,
             projectRoot: PROJECT_ROOT,
             extension: 'cocos-agent-bridge',
-            capabilities: ['bridge.ping', 'scene.snapshot', 'asset.importPng', 'scene.placePngSprite', 'scene.removePngSprite'],
+            capabilities: ['bridge.ping', 'scene.snapshot', 'asset.importPng', 'scene.preflightPngSprite', 'scene.placePngSprite', 'scene.removePngSprite'],
+            operationContract: { id: 'scene.pngSprite', contractVersion: '0.1', creatorVersion: CREATOR_VERSION, access: 'scene-write', actions: ['apply', 'compensate', 'replay'], previewVerification: 'manual-web', compensation: 'identity-checked-node-removal' },
         }));
         console.log(`[COCOS_AGENT_BRIDGE_2] connected to local Agent session ${session.sessionId}`);
     });

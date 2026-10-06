@@ -76,6 +76,8 @@ const assetImportRequestId = crypto.randomUUID();
 const assetImportNonce = crypto.randomBytes(12).toString('hex');
 const sceneRequestId = crypto.randomUUID();
 const sceneNonce = crypto.randomBytes(12).toString('hex');
+const preflightRequestId = crypto.randomUUID();
+const preflightNonce = crypto.randomBytes(12).toString('hex');
 const verifySnapshotRequestId = crypto.randomUUID();
 const verifySnapshotNonce = crypto.randomBytes(12).toString('hex');
 let stagedPngPath = null;
@@ -113,8 +115,28 @@ let connectedSocket = null;
 let finished = false;
 let activeSceneName = null;
 let pendingSceneResult = null;
+let preflightDecision = null;
 let handshakeTimer = null;
 let requestTimer = null;
+
+function emitReceipt(phase, status, evidence, error) {
+    if (!sceneManifest) return;
+    const receipt = {
+        contractVersion: '0.1',
+        operationId: sessionId,
+        capabilityId: 'scene.pngSprite',
+        creatorVersion,
+        phase,
+        status,
+        evidence,
+    };
+    if (error) receipt.error = error;
+    process.stdout.write(`operation.receipt ${JSON.stringify(receipt)}\n`);
+}
+
+function errorCodeOr(value, fallback) {
+    return typeof value === 'string' && /^[A-Z][A-Z0-9_]{1,63}$/.test(value) ? value : fallback;
+}
 
 function sameSecret(candidate) {
     if (typeof candidate !== 'string') return false;
@@ -195,14 +217,22 @@ webSocketServer.on('connection', (socket) => {
             const capabilityMatches = Array.isArray(message.capabilities)
                 && message.capabilities.includes('scene.snapshot')
                 && (!stagedPng || message.capabilities.includes('asset.importPng'))
-                && (!sceneManifest || (message.capabilities.includes('scene.placePngSprite') && message.capabilities.includes('scene.removePngSprite')));
-            if (!projectMatches || !versionMatches || !protocolMatches || !extensionMatches || !capabilityMatches) {
+                && (!sceneManifest || (message.capabilities.includes('scene.preflightPngSprite')
+                    && message.capabilities.includes('scene.placePngSprite') && message.capabilities.includes('scene.removePngSprite')));
+            const contract = message.operationContract;
+            const contractMatches = !sceneManifest || (contract && contract.id === 'scene.pngSprite'
+                && contract.contractVersion === '0.1' && contract.creatorVersion === creatorVersion
+                && contract.access === 'scene-write'
+                && Array.isArray(contract.actions) && contract.actions.join(',') === 'apply,compensate,replay'
+                && contract.previewVerification === 'manual-web'
+                && contract.compensation === 'identity-checked-node-removal');
+            if (!projectMatches || !versionMatches || !protocolMatches || !extensionMatches || !capabilityMatches || !contractMatches) {
                 send(socket, {
                     type: 'helloAck',
                     accepted: false,
-                    reason: !projectMatches ? 'project-mismatch' : !versionMatches ? 'creator-version-mismatch' : !protocolMatches ? 'protocol-version-mismatch' : !extensionMatches ? 'extension-mismatch' : 'capability-mismatch',
+                    reason: !projectMatches ? 'project-mismatch' : !versionMatches ? 'creator-version-mismatch' : !protocolMatches ? 'protocol-version-mismatch' : !extensionMatches ? 'extension-mismatch' : !capabilityMatches ? 'capability-mismatch' : 'operation-contract-mismatch',
                 });
-                process.stderr.write(`Handshake rejected (project=${projectMatches}, creator=${versionMatches}, protocol=${protocolMatches}, extension=${extensionMatches}, required capabilities=${capabilityMatches}).\n`);
+                process.stderr.write(`Handshake rejected (project=${projectMatches}, creator=${versionMatches}, protocol=${protocolMatches}, extension=${extensionMatches}, required capabilities=${capabilityMatches}, contract=${contractMatches}).\n`);
                 cleanUp(1);
                 return;
             }
@@ -210,6 +240,7 @@ webSocketServer.on('connection', (socket) => {
             clearTimeout(handshakeTimer);
             send(socket, { type: 'helloAck', accepted: true, sessionId, protocolVersion: PROTOCOL_VERSION });
             process.stdout.write(`Handshake accepted: Creator ${creatorVersion}, project ${projectRoot}.\n`);
+            emitReceipt('capability', 'passed', [{ kind: 'capability-declaration', source: 'Creator extension hello', note: 'scene.pngSprite contract 0.1' }]);
             send(socket, { type: 'request', id: requestId, method: 'bridge.ping', params: { nonce } });
             requestTimer = setTimeout(() => {
                 process.stderr.write('bridge.ping timed out.\n');
@@ -280,7 +311,7 @@ webSocketServer.on('connection', (socket) => {
                     cleanUp(1);
                 }, 30000);
             } else if (sceneManifest) {
-                requestSceneOperation();
+                requestPreflight();
             } else {
                 cleanUp(0);
             }
@@ -316,16 +347,46 @@ webSocketServer.on('connection', (socket) => {
                 return;
             }
             process.stdout.write(`asset.importPng verified: ${result.url}, UUID ${result.uuid}, type ${result.type}, ${result.width}x${result.height}.\n`);
-            if (sceneManifest && sceneManifest.sceneAction === 'apply') requestSceneOperation();
+            if (sceneManifest && sceneManifest.sceneAction === 'apply') requestPreflight();
             else cleanUp(0);
+            return;
+        }
+
+        if (message.type === 'response' && message.id === preflightRequestId) {
+            clearTimeout(requestTimer);
+            const result = message.result || {};
+            const allowedDecisions = sceneManifest.sceneAction === 'compensate'
+                ? ['remove', 'alreadyAbsent'] : ['create', 'alreadyApplied'];
+            const valid = message.ok === true
+                && result.nonce === preflightNonce
+                && result.creatorVersion === creatorVersion
+                && path.resolve(result.projectRoot || '') === projectRoot
+                && result.sceneName === activeSceneName
+                && result.nodeName === sceneManifest.nodeName
+                && allowedDecisions.includes(result.decision)
+                && typeof result.canvasName === 'string';
+            if (!valid) {
+                const errorCode = message.error && message.error.code;
+                process.stderr.write(`scene preflight failed (ok=${message.ok === true}, error=${String(errorCode || 'invalid-response')}).\n`);
+                emitReceipt('preflight', 'failed', [], {
+                    code: errorCodeOr(errorCode, 'PREFLIGHT_FAILED'), phase: 'preflight',
+                    message: String(message.error && message.error.message || 'The preflight response failed validation.').slice(0, 500),
+                    retryable: false, sideEffect: 'none',
+                });
+                cleanUp(1);
+                return;
+            }
+            process.stdout.write(`scene preflight verified: ${result.decision}, canvas=${result.canvasName}.\n`);
+            preflightDecision = result.decision;
+            emitReceipt('preflight', 'passed', [{ kind: 'scene-snapshot', source: 'Creator scene script', sceneName: result.sceneName, nodeName: result.nodeName, note: `decision=${result.decision}; canvas=${result.canvasName}` }]);
+            requestSceneOperation();
             return;
         }
 
         if (message.type === 'response' && message.id === sceneRequestId) {
             clearTimeout(requestTimer);
             const result = message.result || {};
-            const savedOnDisk = message.ok === true && await waitForSavedScene();
-            const valid = message.ok === true
+            const editorValid = message.ok === true
                 && result.nonce === sceneNonce
                 && result.creatorVersion === creatorVersion
                 && path.resolve(result.projectRoot || '') === projectRoot
@@ -333,17 +394,32 @@ webSocketServer.on('connection', (socket) => {
                 && result.assetName === sceneManifest.assetName
                 && result.nodeName === sceneManifest.nodeName
                 && result.saved === true
-                && savedOnDisk
                 && ((sceneManifest.sceneAction === 'compensate' && (result.removed === true || result.alreadyAbsent === true))
                     || (sceneManifest.sceneAction !== 'compensate' && typeof result.nodeUuid === 'string' && result.nodeUuid.length > 0));
-            if (!valid) {
+            if (!editorValid) {
                 const errorCode = message.error && message.error.code;
                 const errorMessage = message.error && message.error.message;
                 process.stderr.write(`scene operation failed validation (ok=${message.ok === true}, error=${String(errorCode || 'none')}, detail=${String(errorMessage || 'none').slice(0, 500)}).\n`);
+                emitReceipt('editor', 'failed', [], {
+                    code: errorCodeOr(errorCode, 'SCENE_OPERATION_FAILED'), phase: 'editor',
+                    message: String(errorMessage || 'The editor result failed validation.').slice(0, 500),
+                    retryable: false, sideEffect: message.ok === true ? 'possible' : 'unknown',
+                });
                 cleanUp(1);
                 return;
             }
             pendingSceneResult = result;
+            emitReceipt('editor', 'passed', [{ kind: 'editor-result', source: 'Creator scene operation', sceneName: activeSceneName, nodeName: result.nodeName, assetUuid: sceneManifest.assetUuid, note: `action=${sceneManifest.sceneAction}; preflight=${preflightDecision}` }]);
+            const savedOnDisk = await waitForSavedScene();
+            if (!savedOnDisk) {
+                emitReceipt('disk', 'failed', [], {
+                    code: 'SCENE_SAVE_UNVERIFIED', phase: 'disk',
+                    message: 'The saved scene did not pass disk readback.',
+                    retryable: true, sideEffect: 'possible',
+                });
+                cleanUp(1);
+                return;
+            }
             send(socket, { type: 'request', id: verifySnapshotRequestId, method: 'scene.snapshot', params: { nonce: verifySnapshotNonce, targetNodeName: sceneManifest.nodeName } });
             requestTimer = setTimeout(() => {
                 process.stderr.write('post-write scene.snapshot timed out.\n');
@@ -369,10 +445,21 @@ webSocketServer.on('connection', (socket) => {
                 && pendingSceneResult;
             if (!valid) {
                 process.stderr.write(`post-write scene.snapshot verification failed (ok=${message.ok === true}, expectedNode=${shouldExist}, foundNode=${nodePresent}).\n`);
+                emitReceipt('disk', 'failed', [], {
+                    code: 'SCENE_SNAPSHOT_MISMATCH', phase: 'disk',
+                    message: 'The post-write scene snapshot did not match the saved scene operation.',
+                    retryable: true, sideEffect: 'confirmed',
+                });
                 cleanUp(1);
                 return;
             }
             process.stdout.write(`scene.${sceneManifest.sceneAction} verified in memory and on disk: ${pendingSceneResult.nodeName}${pendingSceneResult.nodeUuid ? ` (${pendingSceneResult.nodeUuid})` : ''}, saved=${pendingSceneResult.saved}, alreadyApplied=${pendingSceneResult.alreadyApplied === true}.\n`);
+            emitReceipt('disk', 'passed', [{ kind: 'disk-readback', source: `${activeSceneName}.${creatorVersion === '2.4.15' ? 'fire' : 'scene'}`, sceneName: activeSceneName, nodeName: sceneManifest.nodeName, assetUuid: sceneManifest.assetUuid, note: `action=${sceneManifest.sceneAction}; scene snapshot cross-check passed` }]);
+            emitReceipt('preview', 'pending', []);
+            emitReceipt('recovery', sceneManifest.sceneAction === 'compensate' ? 'passed' : 'pending',
+                sceneManifest.sceneAction === 'compensate'
+                    ? [{ kind: 'recovery-readback', source: 'Creator scene snapshot and saved scene', sceneName: activeSceneName, nodeName: sceneManifest.nodeName, note: 'Target node absent after compensation.' }]
+                    : []);
             cleanUp(0);
             return;
         }
@@ -398,6 +485,25 @@ function requestSceneOperation() {
         process.stderr.write('scene.pngSprite timed out.\n');
         cleanUp(1);
     }, 30000);
+}
+
+function requestPreflight() {
+    const operation = {
+        contractVersion: '0.1', operationId: sessionId, capabilityId: 'scene.pngSprite',
+        action: sceneManifest.sceneAction, assetName: sceneManifest.assetName,
+        assetUuid: sceneManifest.assetUuid, nodeName: sceneManifest.nodeName,
+        sceneName: activeSceneName,
+    };
+    send(connectedSocket, {
+        type: 'request',
+        id: preflightRequestId,
+        method: 'scene.preflightPngSprite',
+        params: Object.assign({ nonce: preflightNonce, sessionId, operation }, sceneManifest),
+    });
+    requestTimer = setTimeout(() => {
+        process.stderr.write('scene.preflightPngSprite timed out.\n');
+        cleanUp(1);
+    }, 15000);
 }
 
 function verifySavedScene(result) {

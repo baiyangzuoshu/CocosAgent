@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cocos-agent.local/schemas/operation-0.1.json",
+  "title": "CocosAgent operation contract 0.1",
+  "description": "Envelope for one version-specific editor operation. A receipt records evidence for one of six phases; it does not imply that later phases passed.",
+  "oneOf": [
+    { "$ref": "#/$defs/request" },
+    { "$ref": "#/$defs/receipt" },
+    { "$ref": "#/$defs/capability" }
+  ],
+  "$defs": {
+    "phase": {
+      "enum": ["capability", "preflight", "editor", "disk", "preview", "recovery"]
+    },
+    "status": {
+      "enum": ["passed", "failed", "pending", "skipped"]
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "phase", "message", "retryable", "sideEffect"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$" },
+        "phase": { "$ref": "#/$defs/phase" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "retryable": { "type": "boolean" },
+        "sideEffect": { "enum": ["none", "possible", "confirmed", "unknown"] }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "source"],
+      "properties": {
+        "kind": { "enum": ["capability-declaration", "scene-snapshot", "editor-result", "disk-readback", "visual-preview", "recovery-readback"] },
+        "source": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "sceneName": { "type": "string", "maxLength": 64 },
+        "nodeName": { "type": "string", "maxLength": 80 },
+        "assetUuid": { "type": "string", "maxLength": 80 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "observedAt": { "type": "string", "format": "date-time" },
+        "note": { "type": "string", "maxLength": 500 }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "operationId", "capabilityId", "creatorVersion", "phase", "status", "evidence"],
+      "properties": {
+        "contractVersion": { "const": "0.1" },
+        "operationId": { "type": "string", "format": "uuid" },
+        "capabilityId": { "const": "scene.pngSprite" },
+        "creatorVersion": { "enum": ["2.4.15", "3.8.7"] },
+        "phase": { "$ref": "#/$defs/phase" },
+        "status": { "$ref": "#/$defs/status" },
+        "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidence" }, "maxItems": 8 },
+        "error": { "$ref": "#/$defs/error" }
+      },
+      "allOf": [
+        { "if": { "properties": { "status": { "const": "failed" } }, "required": ["status"] }, "then": { "required": ["error"] } },
+        { "if": { "properties": { "status": { "const": "passed" } }, "required": ["status"] }, "then": { "properties": { "evidence": { "minItems": 1 } } } }
+      ]
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "operationId", "capabilityId", "action", "assetName", "assetUuid", "nodeName", "sceneName"],
+      "properties": {
+        "contractVersion": { "const": "0.1" },
+        "operationId": { "type": "string", "format": "uuid" },
+        "capabilityId": { "const": "scene.pngSprite" },
+        "action": { "enum": ["apply", "compensate", "replay"] },
+        "assetName": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$" },
+        "assetUuid": { "type": "string", "pattern": "^[0-9a-f-]{36}(@[0-9a-f]+)?$" },
+        "nodeName": { "type": "string", "pattern": "^CocosAgentAsset_[A-Za-z0-9_-]{1,64}$" },
+        "sceneName": { "type": "string", "minLength": 1, "maxLength": 64 }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "contractVersion", "creatorVersion", "access", "actions", "previewVerification", "compensation"],
+      "properties": {
+        "id": { "const": "scene.pngSprite" },
+        "contractVersion": { "const": "0.1" },
+        "creatorVersion": { "enum": ["2.4.15", "3.8.7"] },
+        "access": { "const": "scene-write" },
+        "actions": { "type": "array", "prefixItems": [{ "const": "apply" }, { "const": "compensate" }, { "const": "replay" }], "items": false },
+        "previewVerification": { "const": "manual-web" },
+        "compensation": { "const": "identity-checked-node-removal" }
+      }
+    }
+  }
+}

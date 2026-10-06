@@ -65,4 +65,8 @@ node tools/cocos-agent-bridge/bridge-host.js \
 本轮操作与预览观察记录在 `docs/agent-foundation/traces/cocos-agent-scene-write-web-0.1.jsonl`。
 验收后，两份示例场景已按试验前备份逐字节恢复；导入的测试 PNG 及其 `.meta` 仍保留，供复测使用。
 
+## 操作合同 0.1
+
+`scene.pngSprite` 的六阶段输入、回执和错误状态见 `tools/cocos-agent-bridge/operation.schema.json` 与 `docs/agent-foundation/cocos-agent-operation-contract-0.1.md`。两版扩展在握手中声明同一合同版本，各自执行场景预检；Host 验证预检后才写入。Host 输出 `operation.receipt {JSON}`，分别说明能力、预检、编辑器写入、磁盘读回、预览和恢复状态。当前预览只由人工确认，每次 Host 运行的预览回执均为 `pending`，不能据此前一次预览推断本次运行已通过。
+
 此外还没有重试持久化、断线恢复、进度推送、取消、并行项目隔离或正式安全审查。
