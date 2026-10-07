@@ -97,3 +97,17 @@ node tools/cocos-agent-bridge/catalog-host.js \
 双实例协议测试和两版 Creator 实机查询的 0.1 版已通过，记录见 `docs/agent-foundation/traces/cocos-agent-catalog-0.1.jsonl`。当前扩展的动态目录已通过模拟双实例、场景切换、扩展实例更新、读取期间场景变化测试；仍需在两版 Creator 重载后验证真实回执。本次 2.4 Package Manager 的 Reload 曾报 `package not found` 并卸载扩展；通过 Creator 重开项目后扩展重新加载。因此 2.4 扩展代码更新后建议完整重开项目，不能把 Package Manager 的 Reload 当成必然成功。
 
 此外还没有重试持久化、断线恢复、进度推送、取消、并行项目隔离或正式安全审查。
+
+## Agent 调度入口
+
+`agent-dispatch.js` 串联实例查询、能力查询、目标核对、命令执行和回执判定。只读示例：
+
+```sh
+node tools/cocos-agent-bridge/agent-dispatch.js \
+  --target "2.4.15=$PWD/2.4.15NewProject" \
+  --target "3.8.7=$PWD/3.8,7NewProject" \
+  --project "$PWD/3.8,7NewProject" --creator-version 3.8.7 \
+  --command scene.snapshot --input '{}'
+```
+
+场景写入把命令改为 `scene.pngSprite`，输入示例为 `{"assetName":"cocos-agent-smoke.png","action":"apply"}`。运行前应确认当前场景；成功保存后返回 `needs-preview`，人工预览仍是独立验收。`needs-review` 表示操作结果不确定，先按返回的 `operationId` 查询记录和场景，不自动重发。完整状态与验证边界见 [`cocos-agent-dispatch-0.1.md`](../../docs/agent-foundation/cocos-agent-dispatch-0.1.md)。

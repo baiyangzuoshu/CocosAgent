@@ -30,11 +30,15 @@ const sceneAction = argument('--scene-action');
 const requestedOperationId = argument('--operation-id');
 const operationGetId = argument('--operation-get');
 const interruptAfterEditor = process.argv.includes('--interrupt-after-editor');
+const expectedInstanceId = argument('--expected-instance-id');
+const expectedScene = argument('--expected-scene');
 if (operationGetId && (sceneAssetName || sceneAction || pngSourceArg || requestedOperationId || interruptAfterEditor)) {
     fail('--operation-get is read-only and cannot be combined with write options.');
 }
 if (requestedOperationId && !sceneAssetName) fail('--operation-id requires a scene operation.');
 if (interruptAfterEditor && !sceneAssetName) fail('--interrupt-after-editor requires a scene operation.');
+if (expectedInstanceId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(expectedInstanceId)) fail('Invalid expected instance ID.');
+if (expectedScene && !/^[A-Za-z0-9_-]{1,64}$/.test(expectedScene)) fail('Invalid expected scene name.');
 if (!projectRootArg || !creatorVersion) {
     fail('Usage: node bridge-host.js --project <project-root> --creator-version <2.4.15|3.8.7> [--png <local-png-file>]');
 }
@@ -264,6 +268,7 @@ webSocketServer.on('connection', (socket) => {
             const versionMatches = message.creatorVersion === creatorVersion;
             const protocolMatches = message.protocolVersion === PROTOCOL_VERSION;
             const extensionMatches = message.extension === 'cocos-agent-bridge';
+            const instanceMatches = !expectedInstanceId || message.instanceId === expectedInstanceId;
             const capabilityMatches = Array.isArray(message.capabilities)
                 && message.capabilities.includes('scene.snapshot')
                 && (!stagedPng || message.capabilities.includes('asset.importPng'))
@@ -276,13 +281,13 @@ webSocketServer.on('connection', (socket) => {
                 && Array.isArray(contract.actions) && contract.actions.join(',') === 'apply,compensate,replay'
                 && contract.previewVerification === 'manual-web'
                 && contract.compensation === 'identity-checked-node-removal');
-            if (!projectMatches || !versionMatches || !protocolMatches || !extensionMatches || !capabilityMatches || !contractMatches) {
+            if (!projectMatches || !versionMatches || !protocolMatches || !extensionMatches || !instanceMatches || !capabilityMatches || !contractMatches) {
                 send(socket, {
                     type: 'helloAck',
                     accepted: false,
-                    reason: !projectMatches ? 'project-mismatch' : !versionMatches ? 'creator-version-mismatch' : !protocolMatches ? 'protocol-version-mismatch' : !extensionMatches ? 'extension-mismatch' : !capabilityMatches ? 'capability-mismatch' : 'operation-contract-mismatch',
+                    reason: !projectMatches ? 'project-mismatch' : !versionMatches ? 'creator-version-mismatch' : !protocolMatches ? 'protocol-version-mismatch' : !extensionMatches ? 'extension-mismatch' : !instanceMatches ? 'instance-mismatch' : !capabilityMatches ? 'capability-mismatch' : 'operation-contract-mismatch',
                 });
-                process.stderr.write(`Handshake rejected (project=${projectMatches}, creator=${versionMatches}, protocol=${protocolMatches}, extension=${extensionMatches}, required capabilities=${capabilityMatches}, contract=${contractMatches}).\n`);
+                process.stderr.write(`Handshake rejected (project=${projectMatches}, creator=${versionMatches}, protocol=${protocolMatches}, extension=${extensionMatches}, instance=${instanceMatches}, required capabilities=${capabilityMatches}, contract=${contractMatches}).\n`);
                 cleanUp(1);
                 return;
             }
@@ -349,6 +354,11 @@ webSocketServer.on('connection', (socket) => {
             }
             process.stdout.write(`scene.snapshot verified: ${result.sceneName || '(unnamed)'}, ${result.nodeCount} nodes${result.truncated ? ', truncated' : ''}.\n`);
             activeSceneName = result.sceneName;
+            if (expectedScene && activeSceneName !== expectedScene) {
+                process.stderr.write(`SCENE_CHANGED: expected ${expectedScene}, got ${activeSceneName}.\n`);
+                cleanUp(1);
+                return;
+            }
             if (operationRecord) {
                 operationRecord.sceneName = activeSceneName;
                 operationRecord.updatedAt = new Date().toISOString();
@@ -368,6 +378,7 @@ webSocketServer.on('connection', (socket) => {
             } else if (sceneManifest) {
                 requestPreflight();
             } else {
+                process.stdout.write(`command.result ${JSON.stringify({ command: 'scene.snapshot', result })}\n`);
                 cleanUp(0);
             }
             return;
@@ -403,7 +414,10 @@ webSocketServer.on('connection', (socket) => {
             }
             process.stdout.write(`asset.importPng verified: ${result.url}, UUID ${result.uuid}, type ${result.type}, ${result.width}x${result.height}.\n`);
             if (sceneManifest && sceneManifest.sceneAction === 'apply') requestPreflight();
-            else cleanUp(0);
+            else {
+                process.stdout.write(`command.result ${JSON.stringify({ command: 'asset.importPng', result })}\n`);
+                cleanUp(0);
+            }
             return;
         }
 
