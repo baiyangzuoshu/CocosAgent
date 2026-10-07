@@ -97,6 +97,22 @@ module.exports = {
             }
             findTarget(scene, '');
         }
+        const targetNodePath = params && typeof params.targetNodePath === 'string' ? params.targetNodePath : '';
+        let targetNode = null;
+        if (targetNodePath) {
+            const parts = targetNodePath.split('/');
+            let matches = parts.length <= 32 && parts[0] === scene.name ? [scene] : [];
+            for (const part of parts.slice(1)) {
+                if (!part || matches.length > 2) { matches = []; break; }
+                matches = matches.flatMap((parent) => (parent.children || []).filter((child) => child.name === part)).slice(0, 3);
+            }
+            if (matches.length === 1) {
+                const node = matches[0];
+                targetNode = { status: 'found', path: targetNodePath, uuid: node.uuid, name: node.name,
+                    active: node.active !== false, childCount: node.children.length,
+                    components: (node._components || []).slice(0, 32).map((component) => cc.js.getClassName(component)).filter(Boolean) };
+            } else targetNode = { status: matches.length > 1 ? 'ambiguous' : 'not-found', path: targetNodePath };
+        }
         event.reply(null, {
             sceneName: scene.name || '',
             nodeCount: nodes.length,
@@ -105,6 +121,7 @@ module.exports = {
             targetNodeName,
             targetNodeMatches,
             targetSearchComplete,
+            targetNode,
         });
     },
 

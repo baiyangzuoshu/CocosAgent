@@ -1,0 +1,5 @@
+{"case":"operation.get-parity","creatorVersion":"2.4.15","operationId":"107f5723-8cf3-4117-9482-09d8d71fa999","directEqualsJsonl":true,"outcome":"completed","disk":"passed","preview":"passed"}
+{"case":"operation.get-parity","creatorVersion":"3.8.7","operationId":"c14c9c6c-11a3-4544-9e9b-8ff04704bef5","directEqualsJsonl":true,"outcome":"completed","disk":"passed","preview":"passed"}
+{"case":"instances.list","transport":"agent-jsonl","success":true,"instances":[{"creatorVersion":"2.4.15","state":"ready","activeScene":"helloworld"},{"creatorVersion":"3.8.7","state":"ready","activeScene":"main"}]}
+{"case":"command.execute-scene.snapshot","transport":"agent-jsonl","creatorVersion":"2.4.15","success":true,"outcome":"completed","activeScene":"helloworld"}
+{"case":"command.execute-scene.snapshot","transport":"agent-jsonl","creatorVersion":"3.8.7","success":true,"outcome":"completed","activeScene":"main"}

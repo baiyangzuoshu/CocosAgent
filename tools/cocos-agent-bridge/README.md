@@ -67,7 +67,7 @@ node tools/cocos-agent-bridge/bridge-host.js \
 
 ## 操作合同 0.1
 
-`scene.pngSprite` 的六阶段输入、回执和错误状态见 `tools/cocos-agent-bridge/operation.schema.json` 与 `docs/agent-foundation/cocos-agent-operation-contract-0.1.md`。两版扩展在握手中声明同一合同版本，各自执行场景预检；Host 验证预检后才写入。Host 输出 `operation.receipt {JSON}`，分别说明能力、预检、编辑器写入、磁盘读回、预览和恢复状态。当前预览只由人工确认，每次 Host 运行的预览回执均为 `pending`，不能据此前一次预览推断本次运行已通过。
+`scene.pngSprite` 的六阶段输入、回执和错误状态见 `tools/cocos-agent-bridge/operation.schema.json` 与 `docs/agent-foundation/cocos-agent-operation-contract-0.1.md`。两版扩展在握手中声明同一合同版本，各自执行场景预检；Host 验证预检后才写入。Host 输出 `operation.receipt {JSON}`，分别说明能力、预检、编辑器写入、磁盘读回、预览和恢复状态。写入当次的预览阶段先为 `pending`；调用方实际观察本次 Web 预览后，可经调度入口补记视觉回执。不能沿用此前操作的预览证据。
 
 场景操作会输出独立于会话的 `operationId`，并写入项目 `.cocos-agent/operations/`。查看持久状态：
 
@@ -90,7 +90,7 @@ node tools/cocos-agent-bridge/catalog-host.js \
   --query instances.list
 ```
 
-将 `--query` 换成 `instances.get` 或 `capabilities.list` 时，另传 `--project` 指定项目绝对路径；建议同时传 `--creator-version 2.4.15|3.8.7` 核对预期版本。`instances.list` 列出显式配置的目标，不接受选择参数。输出为 `{success,data}` 或 `{success:false,error}` 的 JSON。项目没有对应目标返回 `EDITOR_NOT_FOUND`；同项目重复配置返回 `AMBIGUOUS_EDITOR`；选择版本或扩展握手版本不符返回 `CREATOR_VERSION_MISMATCH`，不会选择最近使用的窗口。目录目前只含三个已实现的语义命令；每条声明合同版本、`access`、可直接读取的 `input` JSON Schema、`inputSchema` 引用、`preconditions`、`status` 和 `reason`。Host 会核对扩展返回的输入结构与 [catalog.schema.json](catalog.schema.json) 一致；编辑器写入的内部请求仍按 [operation.schema.json](operation.schema.json) 校验。`asset.importPng` 的公开输入是本地 PNG 路径，文件名由 Host 从路径提取；桥接线上的请求只引用经过 Host 校验的会话暂存清单。`available` 代表查询时命令及场景级条件满足，暂存文件、目标资源名与 SpriteFrame 仍须执行前重新校验。
+将 `--query` 换成 `instances.get` 或 `capabilities.list` 时，另传 `--project` 指定项目绝对路径；建议同时传 `--creator-version 2.4.15|3.8.7` 核对预期版本。`instances.list` 列出显式配置的目标，不接受选择参数。输出为 `{success,data}` 或 `{success:false,error}` 的 JSON。项目没有对应目标返回 `EDITOR_NOT_FOUND`；同项目重复配置返回 `AMBIGUOUS_EDITOR`；选择版本或扩展握手版本不符返回 `CREATOR_VERSION_MISMATCH`，不会选择最近使用的窗口。目录目前包含四个已实现的语义命令；每条声明合同版本、`access`、可直接读取的 `input` JSON Schema、`inputSchema` 引用、`preconditions`、`status` 和 `reason`。Host 会核对扩展返回的输入结构与 [catalog.schema.json](catalog.schema.json) 一致；编辑器写入的内部请求仍按 [operation.schema.json](operation.schema.json) 校验。`asset.importPng` 的公开输入是本地 PNG 路径，文件名由 Host 从路径提取；桥接线上的请求只引用经过 Host 校验的会话暂存清单。`available` 代表查询时命令及场景级条件满足，暂存文件、目标资源名与 SpriteFrame 仍须执行前重新校验。
 
 场景脚本直接读取活动场景与 Canvas 状态；`scene.pngSprite` 在 2.4 缺 Canvas、或任一版本无活动场景时标为 `unavailable`。`catalogRevision` 随目录内容及场景名变化；Host 再读取一次场景，若两次场景名不同则返回 `SCENE_CHANGED`，调用方应重新查询。每次查询创建独立短时会话，结束后清除本轮会话文件；它不会导入资源或写场景，也还不是常驻的实例注册服务。扩展重载后需重新查询，新的实例 ID 应与此前不同。
 
@@ -99,6 +99,8 @@ node tools/cocos-agent-bridge/catalog-host.js \
 此外还没有重试持久化、断线恢复、进度推送、取消、并行项目隔离或正式安全审查。
 
 ## Agent 调度入口
+
+需要由长期运行的 Agent 进程调用时，启动 `node tools/cocos-agent-bridge/agent-jsonl.js`，在 stdin 逐行发送 JSON 请求。它提供 `instances.list/get`、`capabilities.list`、`command.execute`、`operation.get` 与 `preview.accept`，直接复用下面的目录及调度结果。请求格式和双版本验收见 [`cocos-agent-local-api-0.1.md`](../../docs/agent-foundation/cocos-agent-local-api-0.1.md)。
 
 `agent-dispatch.js` 串联实例查询、能力查询、目标核对、命令执行和回执判定。只读示例：
 
@@ -111,3 +113,16 @@ node tools/cocos-agent-bridge/agent-dispatch.js \
 ```
 
 场景写入把命令改为 `scene.pngSprite`，输入示例为 `{"assetName":"cocos-agent-smoke.png","action":"apply"}`。运行前应确认当前场景；成功保存后返回 `needs-preview`，人工预览仍是独立验收。`needs-review` 表示操作结果不确定，先按返回的 `operationId` 查询记录和场景，不自动重发。完整状态与验证边界见 [`cocos-agent-dispatch-0.1.md`](../../docs/agent-foundation/cocos-agent-dispatch-0.1.md)。
+
+只读节点定位使用 `--command scene.node.inspect --input '{"nodePath":"main/Main Light"}'`；2.4 应传自己的活动场景路径，例如 `helloworld/Canvas/label`。返回 `found/not-found/ambiguous` 和有界节点摘要。双版本实机证据与路径约束见[节点检查合同](../../docs/agent-foundation/scene-node-inspect-0.1.md)。
+
+Agent 目视检查**本次操作**的本地 Web 预览后，附证据录入预览回执：
+
+```sh
+node tools/cocos-agent-bridge/agent-dispatch.js \
+  --project "$PWD/3.8,7NewProject" --creator-version 3.8.7 \
+  --preview-accept "<operationId>" \
+  --evidence '{"url":"http://127.0.0.1:7457/","observedAt":"2026-10-07T00:00:00.000Z","note":"测试图片出现在场景中央"}'
+```
+
+`observedAt` 应填写实际观察时刻。重复录入同一操作不会增加回执。随后使用相同项目和版本调用 `--operation-get <operationId>`，可在新进程中读取统一结果包；`disk=passed` 且 `preview=passed` 时返回 `completed`。结果合同见 [`dispatch-result.schema.json`](dispatch-result.schema.json)。两版真实 Web 预览已分别验证状态从 `needs-preview` 转为 `completed`，并在补偿后确认测试图消失。

@@ -1,0 +1,3 @@
+{"case":"scene.node.inspect","creatorVersion":"2.4.15","scene":"helloworld","path":"helloworld/Canvas/label","status":"found","uuid":"31f1bH7V69Ajr1iXhluMpTB","components":["cc.Label"],"outcome":"completed"}
+{"case":"scene.node.inspect","creatorVersion":"3.8.7","scene":"main","path":"main/Main Light","status":"found","uuid":"c0y6F5f+pAvI805TdmxIjx","components":["cc.DirectionalLight"],"outcome":"completed"}
+{"case":"scene.node.inspect","creatorVersion":"3.8.7","transport":"agent-jsonl","scene":"main","path":"main/NoSuchNode","status":"not-found","outcome":"completed"}

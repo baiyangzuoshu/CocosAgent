@@ -39,6 +39,7 @@
         "assetUuid": { "type": "string", "maxLength": 80 },
         "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "observedAt": { "type": "string", "format": "date-time" },
+        "previewUrl": { "type": "string", "maxLength": 256 },
         "note": { "type": "string", "maxLength": 500 }
       }
     },

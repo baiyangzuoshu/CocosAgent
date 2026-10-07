@@ -29,11 +29,16 @@ const sceneAssetName = argument('--scene-asset');
 const sceneAction = argument('--scene-action');
 const requestedOperationId = argument('--operation-id');
 const operationGetId = argument('--operation-get');
+const nodePath = argument('--node-path');
 const interruptAfterEditor = process.argv.includes('--interrupt-after-editor');
 const expectedInstanceId = argument('--expected-instance-id');
 const expectedScene = argument('--expected-scene');
 if (operationGetId && (sceneAssetName || sceneAction || pngSourceArg || requestedOperationId || interruptAfterEditor)) {
     fail('--operation-get is read-only and cannot be combined with write options.');
+}
+if (nodePath && (sceneAssetName || sceneAction || pngSourceArg || operationGetId)
+    || (nodePath && (nodePath.length > 240 || nodePath.includes('\\') || nodePath.includes('//')))) {
+    fail('--node-path requires a bounded scene path and cannot be combined with writes.');
 }
 if (requestedOperationId && !sceneAssetName) fail('--operation-id requires a scene operation.');
 if (interruptAfterEditor && !sceneAssetName) fail('--interrupt-after-editor requires a scene operation.');
@@ -317,7 +322,7 @@ webSocketServer.on('connection', (socket) => {
                 return;
             }
             process.stdout.write(`bridge.ping verified: ${result.creatorVersion}, project identity confirmed, nonce echoed.\n`);
-            send(socket, { type: 'request', id: snapshotRequestId, method: 'scene.snapshot', params: { nonce: snapshotNonce } });
+            send(socket, { type: 'request', id: snapshotRequestId, method: 'scene.snapshot', params: { nonce: snapshotNonce, ...(nodePath ? { targetNodePath: nodePath } : {}) } });
             requestTimer = setTimeout(() => {
                 process.stderr.write('scene.snapshot timed out.\n');
                 cleanUp(1);
@@ -377,6 +382,17 @@ webSocketServer.on('connection', (socket) => {
                 }, 30000);
             } else if (sceneManifest) {
                 requestPreflight();
+            } else if (nodePath) {
+                const target = result.targetNode;
+                if (!target || target.path !== nodePath || !['found', 'not-found', 'ambiguous'].includes(target.status)
+                    || (target.status === 'found' && (typeof target.uuid !== 'string' || target.uuid.length === 0
+                        || !Array.isArray(target.components) || target.components.length > 32))) {
+                    process.stderr.write('scene.node.inspect response failed validation.\n');
+                    cleanUp(1);
+                    return;
+                }
+                process.stdout.write(`command.result ${JSON.stringify({ command: 'scene.node.inspect', result: { sceneName: activeSceneName, node: target } })}\n`);
+                cleanUp(0);
             } else {
                 process.stdout.write(`command.result ${JSON.stringify({ command: 'scene.snapshot', result })}\n`);
                 cleanUp(0);

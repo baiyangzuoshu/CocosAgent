@@ -10,6 +10,12 @@
         "targetNodeName": { "type": "string", "minLength": 1, "maxLength": 64 }
       }
     },
+    "nodeInspectInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodePath"],
+      "properties": { "nodePath": { "type": "string", "minLength": 1, "maxLength": 240 } }
+    },
     "importPngInput": {
       "type": "object",
       "additionalProperties": false,
@@ -33,7 +39,7 @@
       "additionalProperties": false,
       "required": ["id", "contractVersion", "access", "inputSchema", "input", "preconditions", "status", "reason"],
       "properties": {
-        "id": { "enum": ["scene.snapshot", "asset.importPng", "scene.pngSprite"] },
+        "id": { "enum": ["scene.snapshot", "scene.node.inspect", "asset.importPng", "scene.pngSprite"] },
         "contractVersion": { "const": "0.1" },
         "access": { "enum": ["read", "write"] },
         "inputSchema": { "type": "string" },

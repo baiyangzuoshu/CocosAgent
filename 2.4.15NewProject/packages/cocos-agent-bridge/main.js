@@ -24,6 +24,8 @@ const INSTANCE_ID = `${instanceHex.slice(0, 8)}-${instanceHex.slice(8, 12)}-${in
 const COMMAND_INPUTS = {
     snapshot: { type: 'object', additionalProperties: false,
         properties: { targetNodeName: { type: 'string', minLength: 1, maxLength: 64 } } },
+    nodeInspect: { type: 'object', additionalProperties: false, required: ['nodePath'],
+        properties: { nodePath: { type: 'string', minLength: 1, maxLength: 240 } } },
     importPng: { type: 'object', additionalProperties: false, required: ['sourcePath'],
         properties: { sourcePath: { type: 'string', minLength: 1 } } },
     pngSprite: { type: 'object', additionalProperties: false, required: ['assetName', 'action'],
@@ -40,6 +42,9 @@ function commandCatalog(context) {
     return [
         { id: 'scene.snapshot', contractVersion: '0.1', access: 'read',
             inputSchema: 'catalog.schema.json#/$defs/snapshotInput', input: COMMAND_INPUTS.snapshot, preconditions: ['activeScene'],
+            status: sceneReady ? 'available' : 'unavailable', reason: sceneReady ? null : 'NO_OPEN_SCENE' },
+        { id: 'scene.node.inspect', contractVersion: '0.1', access: 'read',
+            inputSchema: 'catalog.schema.json#/$defs/nodeInspectInput', input: COMMAND_INPUTS.nodeInspect, preconditions: ['activeScene'],
             status: sceneReady ? 'available' : 'unavailable', reason: sceneReady ? null : 'NO_OPEN_SCENE' },
         { id: 'asset.importPng', contractVersion: '0.1', access: 'write',
             inputSchema: 'catalog.schema.json#/$defs/importPngInput', input: COMMAND_INPUTS.importPng, preconditions: ['stagedPng', 'destinationFree'],
