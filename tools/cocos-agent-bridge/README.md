@@ -69,6 +69,16 @@ node tools/cocos-agent-bridge/bridge-host.js \
 
 `scene.pngSprite` 的六阶段输入、回执和错误状态见 `tools/cocos-agent-bridge/operation.schema.json` 与 `docs/agent-foundation/cocos-agent-operation-contract-0.1.md`。两版扩展在握手中声明同一合同版本，各自执行场景预检；Host 验证预检后才写入。Host 输出 `operation.receipt {JSON}`，分别说明能力、预检、编辑器写入、磁盘读回、预览和恢复状态。当前预览只由人工确认，每次 Host 运行的预览回执均为 `pending`，不能据此前一次预览推断本次运行已通过。
 
+场景操作会输出独立于会话的 `operationId`，并写入项目 `.cocos-agent/operations/`。查看持久状态：
+
+```sh
+node tools/cocos-agent-bridge/bridge-host.js \
+  --project "$PWD/2.4.15NewProject" --creator-version 2.4.15 \
+  --operation-get "<operationId>"
+```
+
+同一 `operationId` 再次执行会被拒绝，避免 Host 重启后重做场景写入。`--interrupt-after-editor` 是故障注入选项：在编辑器成功回执后、Host 磁盘读回前退出；随后 `operation.get` 只读检查场景磁盘文件。该检查只在磁盘满足目标操作时补记 `disk=passed`，其余阶段保持原状态。本地 WebSocket 模拟扩展以及两版真实 Creator 均已完成中断、Host 新进程读回、重复读取和按身份补偿测试，证据见 `docs/agent-foundation/traces/cocos-agent-operation-persistence-0.1.jsonl`。旧版 3.8 扩展曾在预检拒绝独立 `operationId`；扩展重载后已通过实测。`operation.get` 返回的是该操作的历史回执；后续补偿或人工改动场景不会追溯修改原回执。当前恢复只补验磁盘，不自动重新执行写入，也不自动判定 Web 预览通过。
+
 ## 只读实例与命令目录
 
 `catalog-host.js` 可在一次运行中连接多个已打开的 Creator 项目。扩展需先重载到含 `instanceId` 和 `capabilities.list` 的版本。调用示例：
@@ -80,8 +90,10 @@ node tools/cocos-agent-bridge/catalog-host.js \
   --query instances.list
 ```
 
-将 `--query` 换成 `instances.get` 或 `capabilities.list` 时，另传 `--project` 指定其中一个项目的绝对路径。输出为 `{success,data}` 或 `{success:false,error}` 的 JSON。目录目前只含三个已实现的语义命令；`scene.pngSprite` 在 2.4 缺 Canvas、或任一版本无活动场景时标为 `unavailable`。每次查询创建独立短时会话，结束后清除本轮会话文件；它不会导入资源或写场景，也还不是常驻的实例注册服务。扩展重载后需重新查询，新的实例 ID 应与此前不同。
+将 `--query` 换成 `instances.get` 或 `capabilities.list` 时，另传 `--project` 指定项目绝对路径；建议同时传 `--creator-version 2.4.15|3.8.7` 核对预期版本。`instances.list` 列出显式配置的目标，不接受选择参数。输出为 `{success,data}` 或 `{success:false,error}` 的 JSON。项目没有对应目标返回 `EDITOR_NOT_FOUND`；同项目重复配置返回 `AMBIGUOUS_EDITOR`；选择版本或扩展握手版本不符返回 `CREATOR_VERSION_MISMATCH`，不会选择最近使用的窗口。目录目前只含三个已实现的语义命令；每条声明合同版本、`access`、可直接读取的 `input` JSON Schema、`inputSchema` 引用、`preconditions`、`status` 和 `reason`。Host 会核对扩展返回的输入结构与 [catalog.schema.json](catalog.schema.json) 一致；编辑器写入的内部请求仍按 [operation.schema.json](operation.schema.json) 校验。`asset.importPng` 的公开输入是本地 PNG 路径，文件名由 Host 从路径提取；桥接线上的请求只引用经过 Host 校验的会话暂存清单。`available` 代表查询时命令及场景级条件满足，暂存文件、目标资源名与 SpriteFrame 仍须执行前重新校验。
 
-双实例协议测试和两版 Creator 实机查询已通过，记录见 `docs/agent-foundation/traces/cocos-agent-catalog-0.1.jsonl`。本次 2.4 Package Manager 的 Reload 曾报 `package not found` 并卸载扩展；通过 Creator 重开项目后扩展重新加载，双实例和 2.4 命令目录均返回 `ready`。因此扩展重载的可靠性仍需改进，不能把 Package Manager 的 Reload 当成必然成功。
+场景脚本直接读取活动场景与 Canvas 状态；`scene.pngSprite` 在 2.4 缺 Canvas、或任一版本无活动场景时标为 `unavailable`。`catalogRevision` 随目录内容及场景名变化；Host 再读取一次场景，若两次场景名不同则返回 `SCENE_CHANGED`，调用方应重新查询。每次查询创建独立短时会话，结束后清除本轮会话文件；它不会导入资源或写场景，也还不是常驻的实例注册服务。扩展重载后需重新查询，新的实例 ID 应与此前不同。
+
+双实例协议测试和两版 Creator 实机查询的 0.1 版已通过，记录见 `docs/agent-foundation/traces/cocos-agent-catalog-0.1.jsonl`。当前扩展的动态目录已通过模拟双实例、场景切换、扩展实例更新、读取期间场景变化测试；仍需在两版 Creator 重载后验证真实回执。本次 2.4 Package Manager 的 Reload 曾报 `package not found` 并卸载扩展；通过 Creator 重开项目后扩展重新加载。因此 2.4 扩展代码更新后建议完整重开项目，不能把 Package Manager 的 Reload 当成必然成功。
 
 此外还没有重试持久化、断线恢复、进度推送、取消、并行项目隔离或正式安全审查。

@@ -4,13 +4,16 @@ const crypto = require('crypto');
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
+const { isDeepStrictEqual } = require('util');
 const WebSocket = require('./vendor/ws');
+const catalogSchema = require('./catalog.schema.json');
 
 const args = process.argv.slice(2);
 const values = (flag) => args.flatMap((value, index) => value === flag ? [args[index + 1]] : []);
 const one = (flag) => values(flag)[0];
 const query = one('--query') || 'instances.list';
 const selectedProject = one('--project') && path.resolve(one('--project'));
+const selectedVersion = one('--creator-version');
 const supported = new Set(['2.4.15', '3.8.7']);
 const targetArgs = values('--target');
 
@@ -25,6 +28,15 @@ if (!targetArgs.length || !['instances.list', 'instances.get', 'capabilities.lis
 }
 if (query !== 'instances.list' && !selectedProject) {
     output(false, null, { code: 'PROJECT_REQUIRED', message: '--project is required for this query.' });
+    return;
+}
+if (values('--project').length > 1 || values('--creator-version').length > 1
+    || (selectedVersion && !supported.has(selectedVersion))) {
+    output(false, null, { code: 'INVALID_ARGUMENT', message: 'Use at most one --project and a supported --creator-version.' });
+    return;
+}
+if (query === 'instances.list' && (selectedProject || selectedVersion)) {
+    output(false, null, { code: 'INVALID_ARGUMENT', message: 'instances.list does not accept --project or --creator-version.' });
     return;
 }
 
@@ -43,8 +55,23 @@ for (const arg of targetArgs) {
         return;
     }
     seen.add(projectRoot);
-    targets.push({ creatorVersion, projectRoot, instanceId: null, state: 'disconnected', activeScene: null, commands: [], error: null,
+    targets.push({ creatorVersion, projectRoot, instanceId: null, state: 'disconnected', activeScene: null, catalogRevision: null, commands: [], error: null,
         sessionId: crypto.randomUUID(), token: crypto.randomBytes(32).toString('hex'), socket: null, requestId: null, nonce: null });
+}
+if (query !== 'instances.list') {
+    const matches = targets.filter((target) => target.projectRoot === selectedProject);
+    if (!matches.length) {
+        output(false, null, { code: 'EDITOR_NOT_FOUND', message: `No target for project: ${selectedProject}` });
+        return;
+    }
+    if (matches.length > 1) {
+        output(false, null, { code: 'AMBIGUOUS_EDITOR', message: `More than one target for project: ${selectedProject}` });
+        return;
+    }
+    if (selectedVersion && matches[0].creatorVersion !== selectedVersion) {
+        output(false, null, { code: 'CREATOR_VERSION_MISMATCH', message: `Expected Creator ${selectedVersion}, target is ${matches[0].creatorVersion}.` });
+        return;
+    }
 }
 
 const server = http.createServer((_request, response) => { response.writeHead(404); response.end(); });
@@ -64,7 +91,7 @@ function sessionPath(target) { return path.join(target.projectRoot, 'temp', 'coc
 function publicInstance(target) {
     return { instanceId: target.instanceId, projectRoot: target.projectRoot, creatorVersion: target.creatorVersion,
         extensionVersion: target.extensionVersion || null, state: target.state,
-        activeScene: target.activeScene, error: target.error };
+        activeScene: target.activeScene, catalogRevision: target.catalogRevision, error: target.error };
 }
 function cleanup() {
     if (finished) return;
@@ -109,6 +136,38 @@ function unavailable(target, code) {
     maybeFinish();
 }
 
+function validCatalog(target, result) {
+    if (!Array.isArray(result.commands) || result.commands.length !== 3
+        || !(result.activeScene === null || typeof result.activeScene === 'string')
+        || !/^[0-9a-f]{64}$/.test(result.catalogRevision || '')) return false;
+    const expected = {
+        'scene.snapshot': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/snapshotInput', input: catalogSchema.$defs.snapshotInput, preconditions: ['activeScene'] },
+        'asset.importPng': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/importPngInput', input: catalogSchema.$defs.importPngInput, preconditions: ['stagedPng', 'destinationFree'] },
+        'scene.pngSprite': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/pngSpriteInput', input: catalogSchema.$defs.pngSpriteInput,
+            preconditions: target.creatorVersion === '2.4.15' ? ['activeScene', 'canvasExisting', 'spriteFrameImported'] : ['activeScene', 'spriteFrameImported'] },
+    };
+    const seen = new Set();
+    for (const command of result.commands) {
+        const rule = command && expected[command.id];
+        if (!rule || seen.has(command.id) || command.contractVersion !== '0.1' || command.access !== rule.access
+            || command.inputSchema !== rule.inputSchema || !isDeepStrictEqual(command.input, rule.input)
+            || !isDeepStrictEqual(command.preconditions, rule.preconditions)
+            || !['available', 'unavailable'].includes(command.status)
+            || (command.status === 'available' ? command.reason !== null : typeof command.reason !== 'string')) return false;
+        seen.add(command.id);
+    }
+    const commands = Object.fromEntries(result.commands.map((command) => [command.id, command]));
+    const sceneReady = typeof result.activeScene === 'string' && result.activeScene.length > 0;
+    if (commands['asset.importPng'].status !== 'available') return false;
+    if (commands['scene.snapshot'].status !== (sceneReady ? 'available' : 'unavailable')
+        || commands['scene.snapshot'].reason !== (sceneReady ? null : 'NO_OPEN_SCENE')) return false;
+    if (!sceneReady && (commands['scene.pngSprite'].status !== 'unavailable' || commands['scene.pngSprite'].reason !== 'NO_OPEN_SCENE')) return false;
+    if (sceneReady && target.creatorVersion === '3.8.7' && commands['scene.pngSprite'].status !== 'available') return false;
+    if (sceneReady && target.creatorVersion === '2.4.15' && commands['scene.pngSprite'].status === 'unavailable'
+        && commands['scene.pngSprite'].reason !== 'CANVAS_NOT_FOUND') return false;
+    return true;
+}
+
 wss.on('connection', (socket, request) => {
     const target = targets.find((item) => item.token === request.headers['x-cocos-agent-token']);
     if (!target || target.socket) { socket.close(1008); return; }
@@ -117,8 +176,13 @@ wss.on('connection', (socket, request) => {
         let message;
         try { message = JSON.parse(raw.toString()); } catch (_) { unavailable(target, 'INVALID_RESPONSE'); return; }
         if (message.type === 'hello') {
+            if (message.creatorVersion !== target.creatorVersion) {
+                socket.send(JSON.stringify({ type: 'helloAck', accepted: false, reason: 'creator-version-mismatch' }));
+                unavailable(target, 'CREATOR_VERSION_MISMATCH');
+                return;
+            }
             if (target.state !== 'disconnected' || message.protocolVersion !== '0.1'
-                || message.creatorVersion !== target.creatorVersion || path.resolve(message.projectRoot || '') !== target.projectRoot
+                || path.resolve(message.projectRoot || '') !== target.projectRoot
                 || message.extension !== 'cocos-agent-bridge' || !/^[0-9a-f-]{36}$/i.test(message.instanceId || '')) {
                 socket.send(JSON.stringify({ type: 'helloAck', accepted: false, reason: 'instance-mismatch' }));
                 unavailable(target, 'INSTANCE_MISMATCH');
@@ -133,33 +197,34 @@ wss.on('connection', (socket, request) => {
         if (message.type !== 'response' || message.id !== target.requestId) { unavailable(target, 'INVALID_RESPONSE'); return; }
         const result = message.result || {};
         if (target.state === 'connected') {
-            const ids = new Set(['scene.snapshot', 'asset.importPng', 'scene.pngSprite']);
+            if (result.creatorVersion && result.creatorVersion !== target.creatorVersion) {
+                unavailable(target, 'CREATOR_VERSION_MISMATCH');
+                return;
+            }
             if (message.ok !== true || result.nonce !== target.nonce || result.instanceId !== target.instanceId
                 || result.creatorVersion !== target.creatorVersion || path.resolve(result.projectRoot || '') !== target.projectRoot
-                || !Array.isArray(result.commands) || result.commands.length !== 3
-                || result.commands.some((command) => !ids.delete(command.id)
-                    || command.contractVersion !== '0.1' || !['read', 'write'].includes(command.access)
-                    || command.status !== 'available')) {
+                || !validCatalog(target, result)) {
                 unavailable(target, 'CAPABILITY_CATALOG_INVALID');
                 return;
             }
             target.commands = result.commands;
+            target.activeScene = result.activeScene;
+            target.catalogRevision = result.catalogRevision;
             target.extensionVersion = result.extensionVersion;
             target.state = 'catalogued';
             sendRequest(target, 'scene.snapshot');
             return;
         }
         if (target.state === 'catalogued') {
-            if (message.ok === true && result.nonce === target.nonce && result.creatorVersion === target.creatorVersion
-                && path.resolve(result.projectRoot || '') === target.projectRoot && typeof result.sceneName === 'string') {
-                target.activeScene = result.sceneName;
-                if (target.creatorVersion === '2.4.15' && (!Array.isArray(result.nodes) || !result.nodes.some((node) => node.name === 'Canvas'))) {
-                    target.commands = target.commands.map((command) => command.id === 'scene.pngSprite'
-                        ? Object.assign({}, command, { status: 'unavailable', reason: 'CANVAS_NOT_FOUND' }) : command);
+            if (message.ok === true) {
+                if (result.nonce !== target.nonce || result.creatorVersion !== target.creatorVersion
+                    || path.resolve(result.projectRoot || '') !== target.projectRoot || result.sceneName !== target.activeScene) {
+                    unavailable(target, 'SCENE_CHANGED');
+                    return;
                 }
-            } else {
-                target.commands = target.commands.map((command) => command.id === 'scene.snapshot' || command.id === 'scene.pngSprite'
-                    ? Object.assign({}, command, { status: 'unavailable', reason: message.error && message.error.code || 'NO_OPEN_SCENE' }) : command);
+            } else if (target.activeScene !== null) {
+                unavailable(target, 'SCENE_CHANGED');
+                return;
             }
             target.state = 'ready';
             maybeFinish();

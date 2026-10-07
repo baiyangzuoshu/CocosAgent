@@ -5,13 +5,20 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const WebSocket = require('./vendor/ws');
+const inputs = require('./catalog.schema.json').$defs;
 
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-agent-catalog-'));
 const projects = ['cocos2', 'cocos3'].map((name) => path.join(temporary, name));
 projects.forEach((project) => fs.mkdirSync(project));
 const versions = ['2.4.15', '3.8.7'];
+const scenes = [path.join(projects[0], 'assets', 'Scene', 'helloworld.fire'), path.join(projects[1], 'assets', 'scene', 'main.scene')];
+scenes.forEach((scene, index) => {
+    fs.mkdirSync(path.dirname(scene), { recursive: true });
+    fs.writeFileSync(scene, JSON.stringify({ version: versions[index], scene: path.basename(scene) }));
+});
+const sceneHashes = scenes.map((scene) => crypto.createHash('sha256').update(fs.readFileSync(scene)).digest('hex'));
 
 function waitForSession(project) {
     const file = path.join(project, 'temp', 'cocos-agent-bridge', 'session.json');
@@ -25,31 +32,32 @@ function waitForSession(project) {
     });
 }
 
-async function mockEditor(index, wrongVersion) {
+async function mockEditor(index, options = {}) {
     const project = projects[index];
     const session = await waitForSession(project);
     const instanceId = crypto.randomUUID();
     const socket = new WebSocket(session.url, { headers: { 'x-cocos-agent-token': session.token } });
     await new Promise((resolve, reject) => { socket.once('open', resolve); socket.once('error', reject); });
-    socket.send(JSON.stringify({ type: 'hello', protocolVersion: '0.1', creatorVersion: wrongVersion && index === 0 ? versions[1] : versions[index],
+    socket.send(JSON.stringify({ type: 'hello', protocolVersion: '0.1', creatorVersion: options.wrongVersion && index === 0 ? versions[1] : versions[index],
         projectRoot: project, extension: 'cocos-agent-bridge', instanceId }));
     socket.on('message', (raw) => {
         const message = JSON.parse(raw.toString());
         if (message.type !== 'request') return;
         if (message.method === 'capabilities.list') {
             socket.send(JSON.stringify({ type: 'response', id: message.id, ok: true, result: {
-                nonce: message.params.nonce, instanceId, creatorVersion: versions[index], projectRoot: project,
-                extensionVersion: '0.1.0', commands: [
-                    { id: 'scene.snapshot', contractVersion: '0.1', access: 'read', status: 'available' },
-                    { id: 'asset.importPng', contractVersion: '0.1', access: 'write', status: 'available' },
-                    { id: 'scene.pngSprite', contractVersion: '0.1', access: 'write', status: 'available' },
+                nonce: message.params.nonce, instanceId, creatorVersion: options.wrongCatalogVersion && index === 0 ? versions[1] : versions[index], projectRoot: project,
+                extensionVersion: '0.1.0', activeScene: index === 0 ? options.sceneName || 'helloworld' : null,
+                catalogRevision: crypto.createHash('sha256').update(`${index}:${options.sceneName || 'helloworld'}`).digest('hex'), commands: [
+                    { id: 'scene.snapshot', contractVersion: '0.1', access: 'read', inputSchema: 'catalog.schema.json#/$defs/snapshotInput', input: inputs.snapshotInput, preconditions: ['activeScene'], status: index === 0 && !options.wrongStatus ? 'available' : 'unavailable', reason: index === 0 && !options.wrongStatus ? null : 'NO_OPEN_SCENE' },
+                    { id: 'asset.importPng', contractVersion: '0.1', access: 'write', inputSchema: 'catalog.schema.json#/$defs/importPngInput', input: inputs.importPngInput, preconditions: ['stagedPng', 'destinationFree'], status: 'available', reason: null },
+                    { id: 'scene.pngSprite', contractVersion: '0.1', access: 'write', inputSchema: 'catalog.schema.json#/$defs/pngSpriteInput', input: options.wrongInput && index === 0 ? {} : inputs.pngSpriteInput, preconditions: index === 0 ? ['activeScene', 'canvasExisting', 'spriteFrameImported'] : ['activeScene', 'spriteFrameImported'], status: index === 0 && !options.noCanvas ? 'available' : 'unavailable', reason: index === 0 ? options.noCanvas ? 'CANVAS_NOT_FOUND' : null : 'NO_OPEN_SCENE' },
                 ],
             } }));
         } else if (message.method === 'scene.snapshot') {
             socket.send(JSON.stringify(index === 0
                 ? { type: 'response', id: message.id, ok: true, result: {
                     nonce: message.params.nonce, creatorVersion: versions[index], projectRoot: project,
-                    sceneName: 'helloworld', nodes: [{ name: 'Canvas' }],
+                    sceneName: options.snapshotSceneName || options.sceneName || 'helloworld', nodes: [{ name: 'Canvas' }],
                 } }
                 : { type: 'response', id: message.id, ok: false, error: { code: 'NO_OPEN_SCENE' } }));
         } else {
@@ -59,15 +67,16 @@ async function mockEditor(index, wrongVersion) {
     return socket;
 }
 
-async function run(query, project, wrongVersion) {
+async function run(query, project, options = {}) {
     const args = ['catalog-host.js', '--target', `2.4.15=${projects[0]}`, '--target', `3.8.7=${projects[1]}`, '--query', query];
     if (project) args.push('--project', project);
+    if (options.selectedVersion) args.push('--creator-version', options.selectedVersion);
     const child = spawn(process.execPath, args, { cwd: __dirname });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (data) => { stdout += data; });
     child.stderr.on('data', (data) => { stderr += data; });
-    const sockets = await Promise.all([mockEditor(0, wrongVersion), mockEditor(1, wrongVersion)]);
+    const sockets = await Promise.all([mockEditor(0, options), mockEditor(1, options)]);
     const exit = await new Promise((resolve) => child.on('exit', resolve));
     sockets.forEach((socket) => socket.close());
     assert.strictEqual(stderr, '');
@@ -83,12 +92,36 @@ async function run(query, project, wrongVersion) {
     assert.strictEqual(catalog.exit, 0);
     assert.strictEqual(catalog.data.data.instance.projectRoot, projects[1]);
     assert.strictEqual(catalog.data.data.commands.find((item) => item.id === 'scene.pngSprite').status, 'unavailable');
-    const missing = await run('instances.get', temporary);
-    assert.strictEqual(missing.exit, 1);
-    assert.strictEqual(missing.data.error.code, 'EDITOR_NOT_FOUND');
-    const mismatch = await run('instances.get', projects[0], true);
+    assert.deepStrictEqual(catalog.data.data.commands.find((item) => item.id === 'scene.pngSprite').input.required, ['assetName', 'action']);
+    const exact = await run('instances.get', projects[0], { selectedVersion: versions[0] });
+    assert.strictEqual(exact.data.data.creatorVersion, versions[0]);
+    const first = await run('capabilities.list', projects[0]);
+    const switched = await run('capabilities.list', projects[0], { sceneName: 'stage4-empty', noCanvas: true });
+    assert.notStrictEqual(first.data.data.instance.catalogRevision, switched.data.data.instance.catalogRevision);
+    assert.notStrictEqual(first.data.data.instance.instanceId, switched.data.data.instance.instanceId);
+    assert.strictEqual(switched.data.data.commands.find((item) => item.id === 'scene.pngSprite').reason, 'CANVAS_NOT_FOUND');
+    const changedDuringRead = await run('instances.get', projects[0], { snapshotSceneName: 'another-scene' });
+    assert.strictEqual(changedDuringRead.data.error.code, 'SCENE_CHANGED');
+    const missing = spawnSync(process.execPath, ['catalog-host.js', '--target', `2.4.15=${projects[0]}`, '--query', 'instances.get', '--project', temporary], { cwd: __dirname, encoding: 'utf8' });
+    assert.strictEqual(missing.status, 1);
+    assert.strictEqual(JSON.parse(missing.stdout).error.code, 'EDITOR_NOT_FOUND');
+    const mismatch = await run('instances.get', projects[0], { wrongVersion: true });
     assert.strictEqual(mismatch.exit, 1);
-    assert.strictEqual(mismatch.data.error.code, 'INSTANCE_MISMATCH');
+    assert.strictEqual(mismatch.data.error.code, 'CREATOR_VERSION_MISMATCH');
+    const catalogMismatch = await run('instances.get', projects[0], { wrongCatalogVersion: true });
+    assert.strictEqual(catalogMismatch.data.error.code, 'CREATOR_VERSION_MISMATCH');
+    const wrongInput = await run('capabilities.list', projects[0], { wrongInput: true });
+    assert.strictEqual(wrongInput.data.error.code, 'CAPABILITY_CATALOG_INVALID');
+    const wrongStatus = await run('capabilities.list', projects[0], { wrongStatus: true });
+    assert.strictEqual(wrongStatus.data.error.code, 'CAPABILITY_CATALOG_INVALID');
+    const earlyArgs = ['catalog-host.js', '--target', `2.4.15=${projects[0]}`, '--target', `3.8.7=${projects[1]}`, '--query', 'instances.get', '--project', projects[0]];
+    const wrongSelection = spawnSync(process.execPath, earlyArgs.concat('--creator-version', '3.8.7'), { cwd: __dirname, encoding: 'utf8' });
+    assert.strictEqual(wrongSelection.status, 1);
+    assert.strictEqual(JSON.parse(wrongSelection.stdout).error.code, 'CREATOR_VERSION_MISMATCH');
+    const duplicate = spawnSync(process.execPath, ['catalog-host.js', '--target', `2.4.15=${projects[0]}`, '--target', `3.8.7=${projects[0]}`], { cwd: __dirname, encoding: 'utf8' });
+    assert.strictEqual(duplicate.status, 1);
+    assert.strictEqual(JSON.parse(duplicate.stdout).error.code, 'AMBIGUOUS_EDITOR');
+    assert.deepStrictEqual(scenes.map((scene) => crypto.createHash('sha256').update(fs.readFileSync(scene)).digest('hex')), sceneHashes);
     process.stdout.write('catalog host multi-instance and selection checks passed\n');
 })().catch((error) => { process.stderr.write(`${error.stack}\n`); process.exitCode = 1; }).finally(() => {
     fs.rmSync(temporary, { recursive: true, force: true });

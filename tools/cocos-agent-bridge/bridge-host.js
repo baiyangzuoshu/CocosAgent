@@ -5,6 +5,7 @@ const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const WebSocket = require('./vendor/ws');
+const operationStore = require('./operation-store');
 
 const PROTOCOL_VERSION = '0.1';
 const SUPPORTED_CREATORS = new Set(['2.4.15', '3.8.7']);
@@ -26,6 +27,14 @@ const creatorVersion = argument('--creator-version');
 const pngSourceArg = argument('--png');
 const sceneAssetName = argument('--scene-asset');
 const sceneAction = argument('--scene-action');
+const requestedOperationId = argument('--operation-id');
+const operationGetId = argument('--operation-get');
+const interruptAfterEditor = process.argv.includes('--interrupt-after-editor');
+if (operationGetId && (sceneAssetName || sceneAction || pngSourceArg || requestedOperationId || interruptAfterEditor)) {
+    fail('--operation-get is read-only and cannot be combined with write options.');
+}
+if (requestedOperationId && !sceneAssetName) fail('--operation-id requires a scene operation.');
+if (interruptAfterEditor && !sceneAssetName) fail('--interrupt-after-editor requires a scene operation.');
 if (!projectRootArg || !creatorVersion) {
     fail('Usage: node bridge-host.js --project <project-root> --creator-version <2.4.15|3.8.7> [--png <local-png-file>]');
 }
@@ -63,11 +72,36 @@ function readSceneAssetManifest(assetName) {
 }
 
 const sceneManifest = sceneAssetName ? readSceneAssetManifest(sceneAssetName) : null;
+const operationId = requestedOperationId || crypto.randomUUID();
+if ((requestedOperationId && !/^[0-9a-f-]{36}$/i.test(requestedOperationId))
+    || (operationGetId && !/^[0-9a-f-]{36}$/i.test(operationGetId))) fail('Invalid operation ID.');
+
+if (operationGetId) {
+    let record;
+    try { record = operationStore.read(projectRoot, operationGetId); }
+    catch (error) { fail(`operation.get failed: ${error.code === 'ENOENT' ? 'OPERATION_NOT_FOUND' : error.message}`); }
+    if (record.creatorVersion !== creatorVersion || record.projectRoot !== projectRoot) fail('OPERATION_TARGET_MISMATCH');
+    if (record.intent === 'editor-write-sent' && record.sceneName && record.manifest) {
+        const observed = verifySavedScene(record.manifest, record.sceneName);
+        if (observed && !record.receipts.some((receipt) => receipt.phase === 'disk' && receipt.status === 'passed')) {
+            record.receipts.push({ contractVersion: '0.1', operationId: record.operationId, capabilityId: 'scene.pngSprite', creatorVersion,
+                phase: 'disk', status: 'passed', evidence: [{ kind: 'disk-readback', source: 'operation.get', sceneName: record.sceneName,
+                    nodeName: record.manifest.nodeName, assetUuid: record.manifest.assetUuid, note: 'Recovered by disk readback after Host restart; editor acknowledgement may be unavailable.' }] });
+            record.phases.disk = 'passed';
+            record.intent = 'disk-recovered';
+            record.updatedAt = new Date().toISOString();
+            operationStore.write(projectRoot, record);
+        }
+    }
+    process.stdout.write(`${JSON.stringify({ success: true, data: record })}\n`);
+    process.exit(0);
+}
 
 const sessionDirectory = path.join(projectRoot, 'temp', 'cocos-agent-bridge');
 const sessionPath = path.join(sessionDirectory, 'session.json');
 const token = crypto.randomBytes(32).toString('hex');
 const sessionId = crypto.randomUUID();
+let operationRecord = null;
 const requestId = crypto.randomUUID();
 const snapshotRequestId = crypto.randomUUID();
 const nonce = crypto.randomBytes(12).toString('hex');
@@ -111,6 +145,14 @@ if (pngSourceArg) {
         destinationUrl: `db://assets/resources/${assetName}`,
     };
 }
+if (sceneManifest) {
+    operationRecord = { contractVersion: '0.1', operationId, sessionId, projectRoot, creatorVersion,
+        manifest: sceneManifest, sceneName: null, intent: 'created', receipts: [],
+        phases: { capability: 'pending', preflight: 'pending', editor: 'pending', disk: 'pending', preview: 'pending', recovery: 'pending' },
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    try { operationStore.write(projectRoot, operationRecord, true); }
+    catch (error) { fail(`Cannot create operation record: ${error.code === 'EEXIST' ? 'OPERATION_ALREADY_EXISTS' : error.message}`); }
+}
 let connectedSocket = null;
 let finished = false;
 let activeSceneName = null;
@@ -123,7 +165,7 @@ function emitReceipt(phase, status, evidence, error) {
     if (!sceneManifest) return;
     const receipt = {
         contractVersion: '0.1',
-        operationId: sessionId,
+        operationId,
         capabilityId: 'scene.pngSprite',
         creatorVersion,
         phase,
@@ -131,7 +173,15 @@ function emitReceipt(phase, status, evidence, error) {
         evidence,
     };
     if (error) receipt.error = error;
+    operationRecord.receipts.push(receipt);
+    operationRecord.phases[phase] = status;
+    operationRecord.updatedAt = new Date().toISOString();
+    operationStore.write(projectRoot, operationRecord);
     process.stdout.write(`operation.receipt ${JSON.stringify(receipt)}\n`);
+    if (phase === 'disk' && status === 'passed') {
+        operationRecord.intent = 'disk-verified';
+        operationStore.write(projectRoot, operationRecord);
+    }
 }
 
 function errorCodeOr(value, fallback) {
@@ -299,6 +349,11 @@ webSocketServer.on('connection', (socket) => {
             }
             process.stdout.write(`scene.snapshot verified: ${result.sceneName || '(unnamed)'}, ${result.nodeCount} nodes${result.truncated ? ', truncated' : ''}.\n`);
             activeSceneName = result.sceneName;
+            if (operationRecord) {
+                operationRecord.sceneName = activeSceneName;
+                operationRecord.updatedAt = new Date().toISOString();
+                operationStore.write(projectRoot, operationRecord);
+            }
             if (stagedPng) {
                 send(socket, {
                     type: 'request',
@@ -410,6 +465,11 @@ webSocketServer.on('connection', (socket) => {
             }
             pendingSceneResult = result;
             emitReceipt('editor', 'passed', [{ kind: 'editor-result', source: 'Creator scene operation', sceneName: activeSceneName, nodeName: result.nodeName, assetUuid: sceneManifest.assetUuid, note: `action=${sceneManifest.sceneAction}; preflight=${preflightDecision}` }]);
+            if (interruptAfterEditor) {
+                process.stderr.write('Deliberate interruption after editor receipt; use operation.get for disk readback.\n');
+                cleanUp(75);
+                return;
+            }
             const savedOnDisk = await waitForSavedScene();
             if (!savedOnDisk) {
                 emitReceipt('disk', 'failed', [], {
@@ -475,6 +535,9 @@ webSocketServer.on('connection', (socket) => {
 });
 
 function requestSceneOperation() {
+    operationRecord.intent = 'editor-write-sent';
+    operationRecord.updatedAt = new Date().toISOString();
+    operationStore.write(projectRoot, operationRecord);
     send(connectedSocket, {
         type: 'request',
         id: sceneRequestId,
@@ -489,7 +552,7 @@ function requestSceneOperation() {
 
 function requestPreflight() {
     const operation = {
-        contractVersion: '0.1', operationId: sessionId, capabilityId: 'scene.pngSprite',
+        contractVersion: '0.1', operationId, capabilityId: 'scene.pngSprite',
         action: sceneManifest.sceneAction, assetName: sceneManifest.assetName,
         assetUuid: sceneManifest.assetUuid, nodeName: sceneManifest.nodeName,
         sceneName: activeSceneName,
@@ -506,8 +569,8 @@ function requestPreflight() {
     }, 15000);
 }
 
-function verifySavedScene(result) {
-    if (!activeSceneName || !/^[A-Za-z0-9_-]{1,64}$/.test(activeSceneName)) return false;
+function verifySavedScene(manifest, sceneName) {
+    if (!sceneName || !/^[A-Za-z0-9_-]{1,64}$/.test(sceneName)) return false;
     const sceneFiles = [];
     function visit(directory, depth) {
         if (depth > 8) return;
@@ -517,7 +580,7 @@ function verifySavedScene(result) {
             if (entry.name === 'library' || entry.name === 'temp' || entry.name === 'build' || entry.name === 'local') continue;
             const fullPath = path.join(directory, entry.name);
             if (entry.isDirectory()) visit(fullPath, depth + 1);
-            else if (entry.isFile() && entry.name === `${activeSceneName}.${creatorVersion === '2.4.15' ? 'fire' : 'scene'}`) sceneFiles.push(fullPath);
+            else if (entry.isFile() && entry.name === `${sceneName}.${creatorVersion === '2.4.15' ? 'fire' : 'scene'}`) sceneFiles.push(fullPath);
         }
     }
     visit(path.join(projectRoot, 'assets'), 0);
@@ -525,9 +588,9 @@ function verifySavedScene(result) {
     let objects;
     try { objects = JSON.parse(fs.readFileSync(sceneFiles[0], 'utf8')); } catch (_) { return false; }
     if (!Array.isArray(objects)) return false;
-    const matches = objects.filter((item) => item && item.__type__ === 'cc.Node' && item._name === sceneManifest.nodeName);
+    const matches = objects.filter((item) => item && item.__type__ === 'cc.Node' && item._name === manifest.nodeName);
     const agentCanvases = objects.filter((item) => item && item.__type__ === 'cc.Node' && item._name === 'CocosAgentCanvas');
-    if (sceneManifest.sceneAction === 'compensate') {
+    if (manifest.sceneAction === 'compensate') {
         return matches.length === 0 && (creatorVersion === '2.4.15' || agentCanvases.length === 0);
     }
     if (matches.length !== 1) return false;
@@ -539,13 +602,13 @@ function verifySavedScene(result) {
     const sprite = (matches[0]._components || [])
         .map((ref) => ref && Number.isInteger(ref.__id__) ? objects[ref.__id__] : null)
         .find((component) => component && component.__type__ === 'cc.Sprite');
-    return Boolean(sprite && sprite._spriteFrame && sprite._spriteFrame.__uuid__ === sceneManifest.assetUuid);
+    return Boolean(sprite && sprite._spriteFrame && sprite._spriteFrame.__uuid__ === manifest.assetUuid);
 }
 
 async function waitForSavedScene() {
     const deadline = Date.now() + 3000;
     do {
-        if (verifySavedScene()) return true;
+        if (verifySavedScene(sceneManifest, activeSceneName)) return true;
         await new Promise((resolve) => setTimeout(resolve, 100));
     } while (Date.now() < deadline);
     return false;
@@ -561,6 +624,7 @@ server.listen(0, '127.0.0.1', () => {
     const session = {
         protocolVersion: PROTOCOL_VERSION,
         sessionId,
+        operationId: sceneManifest ? operationId : null,
         creatorVersion,
         projectRoot,
         url: `ws://127.0.0.1:${address.port}/cocos-agent-bridge`,
@@ -579,6 +643,7 @@ server.listen(0, '127.0.0.1', () => {
     fs.renameSync(temporaryPath, sessionPath);
     try { fs.chmodSync(sessionPath, 0o600); } catch (_) { /* ACLs apply on platforms without POSIX modes. */ }
     process.stdout.write(`Bridge ready for Creator ${creatorVersion}${stagedPng ? ' with one PNG import request' : ''}. Open or refresh the matching project extension.\n`);
+    if (operationRecord) process.stdout.write(`operationId: ${operationId}\n`);
     process.stdout.write(`Session discovery file: ${sessionPath}\n`);
 });
 

@@ -21,12 +21,32 @@ instanceBytes[6] = (instanceBytes[6] & 0x0f) | 0x40;
 instanceBytes[8] = (instanceBytes[8] & 0x3f) | 0x80;
 const instanceHex = instanceBytes.toString('hex');
 const INSTANCE_ID = `${instanceHex.slice(0, 8)}-${instanceHex.slice(8, 12)}-${instanceHex.slice(12, 16)}-${instanceHex.slice(16, 20)}-${instanceHex.slice(20)}`;
+const COMMAND_INPUTS = {
+    snapshot: { type: 'object', additionalProperties: false,
+        properties: { targetNodeName: { type: 'string', minLength: 1, maxLength: 64 } } },
+    importPng: { type: 'object', additionalProperties: false, required: ['sourcePath'],
+        properties: { sourcePath: { type: 'string', minLength: 1 } } },
+    pngSprite: { type: 'object', additionalProperties: false, required: ['assetName', 'action'],
+        properties: {
+            assetName: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$' },
+            action: { enum: ['apply', 'compensate', 'replay'] },
+            operationId: { type: 'string', pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' },
+        } },
+};
 
-function commandCatalog() {
+function commandCatalog(context) {
+    const sceneReady = typeof context.sceneName === 'string' && context.sceneName.length > 0;
+    const spriteReady = sceneReady && context.hasCanvas === true;
     return [
-        { id: 'scene.snapshot', contractVersion: '0.1', access: 'read', status: 'available' },
-        { id: 'asset.importPng', contractVersion: '0.1', access: 'write', status: 'available' },
-        { id: 'scene.pngSprite', contractVersion: '0.1', access: 'write', status: 'available', inputSchema: 'operation-0.1#/$defs/request' },
+        { id: 'scene.snapshot', contractVersion: '0.1', access: 'read',
+            inputSchema: 'catalog.schema.json#/$defs/snapshotInput', input: COMMAND_INPUTS.snapshot, preconditions: ['activeScene'],
+            status: sceneReady ? 'available' : 'unavailable', reason: sceneReady ? null : 'NO_OPEN_SCENE' },
+        { id: 'asset.importPng', contractVersion: '0.1', access: 'write',
+            inputSchema: 'catalog.schema.json#/$defs/importPngInput', input: COMMAND_INPUTS.importPng, preconditions: ['stagedPng', 'destinationFree'],
+            status: 'available', reason: null },
+        { id: 'scene.pngSprite', contractVersion: '0.1', access: 'write',
+            inputSchema: 'catalog.schema.json#/$defs/pngSpriteInput', input: COMMAND_INPUTS.pngSprite, preconditions: ['activeScene', 'canvasExisting', 'spriteFrameImported'],
+            status: spriteReady ? 'available' : 'unavailable', reason: spriteReady ? null : sceneReady ? 'CANVAS_NOT_FOUND' : 'NO_OPEN_SCENE' },
     ];
 }
 
@@ -48,11 +68,20 @@ function onMessage(raw) {
 
     if (message.type !== 'request' || typeof message.id !== 'string') return;
     if (message.method === 'capabilities.list') {
-        send({ type: 'response', id: message.id, ok: true, result: {
-            nonce: message.params && message.params.nonce, instanceId: INSTANCE_ID,
-            projectRoot: PROJECT_ROOT, creatorVersion: CREATOR_VERSION,
-            extensionVersion: '0.1.0', commands: commandCatalog(),
-        } });
+        Editor.Scene.callSceneScript('cocos-agent-bridge', 'catalog-context', {}, (error, context) => {
+            if (error || !context) {
+                send({ type: 'response', id: message.id, ok: false, error: { code: 'CATALOG_CONTEXT_UNAVAILABLE', message: String(error && error.message || error || 'No context') } });
+                return;
+            }
+            const commands = commandCatalog(context);
+            send({ type: 'response', id: message.id, ok: true, result: {
+                nonce: message.params && message.params.nonce, instanceId: INSTANCE_ID,
+                projectRoot: PROJECT_ROOT, creatorVersion: CREATOR_VERSION,
+                extensionVersion: '0.1.0', activeScene: context.sceneName,
+                catalogRevision: crypto.createHash('sha256').update(JSON.stringify({ scene: context.sceneName, commands })).digest('hex'),
+                commands,
+            } });
+        });
         return;
     }
     if (message.method === 'scene.preflightPngSprite') {
@@ -145,7 +174,7 @@ function preflightSceneOperation(message) {
     if (!operation || params.sessionId !== activeSession.sessionId || params.assetName !== operation.assetName
         || params.assetUuid !== operation.assetUuid || params.nodeName !== operation.nodeName
         || params.sceneAction !== operation.sceneAction || typeof params.nonce !== 'string'
-        || contract.contractVersion !== '0.1' || contract.operationId !== activeSession.sessionId
+        || contract.contractVersion !== '0.1' || contract.operationId !== activeSession.operationId
         || contract.capabilityId !== 'scene.pngSprite' || contract.action !== operation.sceneAction
         || contract.assetName !== operation.assetName || contract.assetUuid !== operation.assetUuid
         || contract.nodeName !== operation.nodeName || typeof contract.sceneName !== 'string') {

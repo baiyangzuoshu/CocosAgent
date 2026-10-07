@@ -6,6 +6,14 @@ const MAX_NAME_LENGTH = 32;
 const MAX_PATH_LENGTH = 80;
 
 module.exports = {
+    'catalog-context'(event) {
+        const scene = cc.director.getScene();
+        event.reply(null, {
+            sceneName: scene ? scene.name || '' : null,
+            hasCanvas: !!(scene && scene.getChildByName('Canvas')),
+        });
+    },
+
     'preflight-png-sprite'(event, params) {
         if (!params || !/^[0-9a-f-]{36}$/i.test(params.spriteFrameUuid || '')
             || !/^CocosAgentAsset_[A-Za-z0-9_-]{1,64}$/.test(params.nodeName || '')

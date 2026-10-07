@@ -15,7 +15,7 @@
 
 现有 [Bridge 原型](../../tools/cocos-agent-bridge/README.md)由 Host 在指定项目的 `temp/cocos-agent-bridge/session.json` 发布一次性会话，Creator 版本专属扩展主动连接。`hello` 携带项目路径、Creator 版本、固定能力列表与 `scene.pngSprite` 合同声明；Host 核对后执行 `ping → scene.snapshot → 可选导入/场景操作`。场景写入已有[六阶段操作合同 0.1](cocos-agent-operation-contract-0.1.md)，两版各自实现预检、写入和保存，Host 读回内存与磁盘；预览回执目前为 `pending`。
 
-新增的只读 [`catalog-host.js`](../../tools/cocos-agent-bridge/catalog-host.js)可同时连接多个显式指定的项目，调用扩展 `capabilities.list` 并读取活动场景，提供一次性 `instances.list/get` 与 `capabilities.list` 查询。这仍是短时连接，不是常驻实例目录；命令列表固定为三项，尚无跨会话查询和持久操作记录。`operationId` 仍随写入 Host 会话变化。下文的目标合同与现状须据此区分。
+新增的只读 [`catalog-host.js`](../../tools/cocos-agent-bridge/catalog-host.js)可同时连接多个显式指定的项目，调用扩展 `capabilities.list` 并读取活动场景，提供一次性 `instances.list/get` 与 `capabilities.list` 查询。这仍是短时连接，不是常驻实例目录；命令列表固定为三项。写入 Host 已将 `operationId` 与会话 ID 分离并保存六阶段状态，但两版 Creator 的新版故障注入仍待真实编辑器验收。下文的目标合同与现状须据此区分。
 
 ## 1. 命令如何发现
 
@@ -67,3 +67,5 @@ skill 不能绕过 Host 直接发 Creator 内部消息；不能凭目录中的�
 4. **外部接入面**：待上述合同稳定后再包装 CLI/MCP。测试同一操作通过直接 Host 与外部接入面得到相同回执和错误码。
 
 此设计先解决接入的确定性。资源批处理、运行时动态替换与引擎结构改造仍按[招聘目标设计](../cocos-agent-recruitment-aligned-design.md)推进，并以各版源码和实际运行证据决定具体改造点。
+
+当前第 3 步的两份 skill 已写入 `docs/agent-foundation/skills/` 并通过结构校验；独立操作 ID 的 Host 级中断模拟通过。真实 Creator 的新版目录和中断恢复试跑尚未完成，状态与复测条件见 [PNG 场景 skill 验收表](skills/png-scene-validation.md)。

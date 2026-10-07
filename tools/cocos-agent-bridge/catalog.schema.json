@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "catalog.schema.json",
+  "title": "CocosAgent command catalog",
+  "$defs": {
+    "snapshotInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "targetNodeName": { "type": "string", "minLength": 1, "maxLength": 64 }
+      }
+    },
+    "importPngInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourcePath"],
+      "properties": {
+        "sourcePath": { "type": "string", "minLength": 1 }
+      }
+    },
+    "pngSpriteInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assetName", "action"],
+      "properties": {
+        "assetName": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$" },
+        "action": { "enum": ["apply", "compensate", "replay"] },
+        "operationId": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" }
+      }
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "contractVersion", "access", "inputSchema", "input", "preconditions", "status", "reason"],
+      "properties": {
+        "id": { "enum": ["scene.snapshot", "asset.importPng", "scene.pngSprite"] },
+        "contractVersion": { "const": "0.1" },
+        "access": { "enum": ["read", "write"] },
+        "inputSchema": { "type": "string" },
+        "input": { "type": "object" },
+        "preconditions": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "status": { "enum": ["available", "unavailable"] },
+        "reason": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

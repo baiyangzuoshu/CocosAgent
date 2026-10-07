@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "operation-record.schema.json",
+  "title": "CocosAgent persisted scene operation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contractVersion", "operationId", "sessionId", "projectRoot", "creatorVersion", "manifest", "sceneName", "intent", "receipts", "phases", "createdAt", "updatedAt"],
+  "properties": {
+    "contractVersion": { "const": "0.1" },
+    "operationId": { "type": "string", "format": "uuid" },
+    "sessionId": { "type": "string", "format": "uuid" },
+    "projectRoot": { "type": "string", "minLength": 1 },
+    "creatorVersion": { "enum": ["2.4.15", "3.8.7"] },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assetName", "assetUuid", "nodeName", "sceneAction"],
+      "properties": {
+        "assetName": { "type": "string" },
+        "assetUuid": { "type": "string" },
+        "nodeName": { "type": "string" },
+        "sceneAction": { "enum": ["apply", "compensate", "replay"] }
+      }
+    },
+    "sceneName": { "type": ["string", "null"] },
+    "intent": { "enum": ["created", "editor-write-sent", "disk-verified", "disk-recovered"] },
+    "receipts": { "type": "array", "items": { "$ref": "operation.schema.json#/$defs/receipt" } },
+    "phases": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability", "preflight", "editor", "disk", "preview", "recovery"],
+      "properties": {
+        "capability": { "$ref": "#/$defs/phaseStatus" },
+        "preflight": { "$ref": "#/$defs/phaseStatus" },
+        "editor": { "$ref": "#/$defs/phaseStatus" },
+        "disk": { "$ref": "#/$defs/phaseStatus" },
+        "preview": { "$ref": "#/$defs/phaseStatus" },
+        "recovery": { "$ref": "#/$defs/phaseStatus" }
+      }
+    },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "phaseStatus": { "enum": ["pending", "passed", "failed", "skipped"] }
+  }
+}
