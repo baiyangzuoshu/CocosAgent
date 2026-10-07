@@ -4,7 +4,7 @@
 
 轨迹见 [Web 记录](traces/cocos-agent-dynamic-content-web-0.1.jsonl)，探针位于 `probes/cocos-dynamic-content-{2.4,3.8}.js`。两版每轮新纹理 `refCount=1`、缓存中且有效；旧纹理在约 250 ms 后 `refCount=0`、从资源对象缓存移除且无效；第 6 轮后清理结果相同。3.8 首次按主图片名直接加载会返回 `Bundle resources doesn't contain ...`，改用 `/texture` 子资源路径后通过。2.4 各轮墙钟耗时约 254–256 ms，其中主动等待 250 ms；3.8 除一次约 1391 ms 外约 260–282 ms，也包含等待。这些数字不能当作帧时间或吞吐量结论。
 
-首轮探针只把当前纹理引用保存在临时节点属性上；下文追加了可见 Sprite 替换与 Mac 原生加载验证，但仍未接入实际游戏逻辑。现有结果不证明移动平台、远端下载、Bundle 热替换、运行中场景图更新、峰值内存或帧预算。下一条实现应先定义显式版本、依赖、发布路径与回滚规则。官方资源生命周期入口：[2.4 手册](https://docs.cocos.com/creator/2.4/manual/zh/asset-manager/release-manager.html)、[3.8 手册](https://docs.cocos.com/creator/3.8/manual/zh/asset/release-manager.html)。
+首轮探针只把当前纹理引用保存在临时节点属性上；下文追加了可见 Sprite 替换与 Mac 原生加载验证，但仍未接入实际游戏逻辑。现有结果不证明移动平台、远端下载、Bundle 热替换、运行中场景图更新、峰值内存或帧预算。显式版本、依赖、发布路径与回退指针的首版定义见[本地内容版本合同](content-release-0.1.md)，它仍未连接游戏运行时。官方资源生命周期入口：[2.4 手册](https://docs.cocos.com/creator/2.4/manual/zh/asset-manager/release-manager.html)、[3.8 手册](https://docs.cocos.com/creator/3.8/manual/zh/asset/release-manager.html)。
 
 ## 可见对象替换的追加验证
 

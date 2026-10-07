@@ -75,6 +75,7 @@
 ## 构建与验证
 
 动态纹理首条切片的两版 Web 可见 Sprite 截图与重建 Mac 包资源生命周期轨迹，见 `docs/agent-foundation/dynamic-content-first-slice.md`。Mac 临时入口探针 `docs/agent-foundation/probes/cocos-dynamic-native-mac.py` 会恢复生成包脚本；2.4 该包纹理缓存诊断须用 `_uuid`，不能直接拿未定义的 `uuid` 查询。原生轨迹只验证加载、引用和释放，原生画面尚未截图。
+动态内容的本地版本合同见 `docs/agent-foundation/content-release-0.1.md`：`content.plan/stage/get/select/rollback` 只管理 Host 的构建内 `resources` 清单和选中指针，**不会改变运行中的 Creator 游戏**。2.4 主纹理路径与 3.8 `/texture` 子资源路径必须分别核对；远端 Bundle/原生热更新、运行时版本生效和性能预算仍需独立实现及验证。
 
 所有命令均从表中的对应目录执行，并先确认本机依赖可用。只运行与本次改动相关的验证；编辑器场景与资源改动还需要在对应版本的 Creator 中打开并预览。
 

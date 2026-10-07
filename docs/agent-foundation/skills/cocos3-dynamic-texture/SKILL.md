@@ -7,6 +7,8 @@ description: Diagnose repeated Texture2D loading, replacement, references, and r
 
 Use this skill when analyzing runtime texture replacement in 3.8.7. Read the [3.8 release manual](https://docs.cocos.com/creator/3.8/manual/zh/asset/release-manager.html) and [measured first slice](../../dynamic-content-first-slice.md).
 
+For a named local content version, inspect the [CocosAgent 0.1 release contract](../../content-release-0.1.md) first. Its `content.select` changes only Host metadata, not the running game. Resolve each declared PNG in the built-in `resources` bundle through its `/texture` subresource path; check the exact Creator version, staged fingerprint and dependency declaration before runtime work.
+
 1. Confirm the asset is in the intended bundle and read its 3.8 `.meta` importer/subresource IDs. The tested PNGs require `resources.load(name + '/texture', Texture2D)`; the base name alone returned “Bundle resources doesn't contain …”.
 2. Load the next asset, call `addRef()` for the owner, then switch the owner reference. Only after the switch, call `decRef()` on the previous owned asset.
 3. Observe `refCount`, `assetManager.assets.has(uuid)`, validity and time after non-forced `releaseUnusedAssets()`. Do not force-release an asset still in use.
