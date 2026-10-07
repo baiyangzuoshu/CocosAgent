@@ -1,0 +1,7 @@
+{"version": "3.8", "seq": 1, "phase": "scene-launched", "extra": {"isNative": true, "scene": "main"}, "time_ms": 1791379999380}
+{"version": "3.8", "seq": 2, "phase": "swap", "extra": {"phase": "red", "currentUuid": "d5227909-e6cc-404e-9198-babfe7e5a86c@6c48a", "currentRefCount": 1, "currentCached": true, "previous": null}, "time_ms": 1791379999751}
+{"version": "3.8", "seq": 3, "phase": "swap", "extra": {"phase": "blue", "currentUuid": "75a6cdb2-c8d9-4d95-b758-9cf75134a6f6@6c48a", "currentRefCount": 1, "currentCached": true, "previous": {"refCount": 0, "cached": false, "valid": false}}, "time_ms": 1791380000031}
+{"version": "3.8", "seq": 4, "phase": "load-failed-preserved", "extra": {"hasError": true, "retainedRefCount": 1, "retainedCached": true, "retainedValid": true}, "time_ms": 1791380000034}
+{"version": "3.8", "seq": 5, "phase": "swap", "extra": {"phase": "red", "currentUuid": "d5227909-e6cc-404e-9198-babfe7e5a86c@6c48a", "currentRefCount": 1, "currentCached": true, "previous": {"refCount": 0, "cached": false, "valid": false}}, "time_ms": 1791380000331}
+{"version": "3.8", "seq": 6, "phase": "swap", "extra": {"phase": "blue", "currentUuid": "75a6cdb2-c8d9-4d95-b758-9cf75134a6f6@6c48a", "currentRefCount": 1, "currentCached": true, "previous": {"refCount": 0, "cached": false, "valid": false}}, "time_ms": 1791380000601}
+{"version": "3.8", "seq": 7, "phase": "cleanup", "extra": {"heldValid": false, "heldCached": false}, "time_ms": 1791380000868}

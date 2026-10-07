@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cocos-agent.local/schema/scene-composition-0.1.json",
+  "title": "Scene composition request 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["targets", "projectRoot", "creatorVersion", "steps"],
+  "properties": {
+    "targets": { "type": "array", "minItems": 1, "items": { "type": "object", "required": ["projectRoot", "creatorVersion"], "properties": { "projectRoot": { "type": "string" }, "creatorVersion": { "enum": ["2.4.15", "3.8.7"] } } } },
+    "projectRoot": { "type": "string" },
+    "creatorVersion": { "enum": ["2.4.15", "3.8.7"] },
+    "workflowId": { "type": "string", "format": "uuid" },
+    "steps": { "type": "array", "minItems": 2, "maxItems": 8, "items": { "type": "object", "additionalProperties": false, "required": ["id", "name", "parent"], "properties": {
+      "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,31}$" },
+      "name": { "type": "string", "pattern": "^[A-Za-z0-9_ -]{1,64}$" },
+      "parent": { "oneOf": [
+        { "type": "object", "additionalProperties": false, "required": ["path", "uuid"], "properties": { "path": { "type": "string" }, "uuid": { "type": "string" } } },
+        { "type": "object", "additionalProperties": false, "required": ["ref"], "properties": { "ref": { "type": "string" } } }
+      ] }
+    } } }
+  }
+}

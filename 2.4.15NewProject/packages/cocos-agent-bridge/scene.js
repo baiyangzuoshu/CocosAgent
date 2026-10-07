@@ -6,6 +6,62 @@ const MAX_NAME_LENGTH = 32;
 const MAX_PATH_LENGTH = 80;
 
 module.exports = {
+    'node-create-preflight'(event, params) {
+        const scene = cc.director.getScene();
+        const parts = params && typeof params.parentPath === 'string' ? params.parentPath.split('/') : [];
+        if (!scene || parts[0] !== scene.name || parts.length > 32 || !params.parentUuid
+            || !/^[A-Za-z0-9_ -]{1,64}$/.test(params.nodeName || '')) {
+            event.reply({ code: 'INVALID_NODE_REQUEST', message: 'Invalid scene, parent path, or node name.' }); return;
+        }
+        let matches = [scene];
+        for (const part of parts.slice(1)) matches = matches.flatMap((parent) => (parent.children || []).filter((child) => child.name === part)).slice(0, 3);
+        if (matches.length !== 1 || matches[0].uuid !== params.parentUuid) {
+            event.reply({ code: matches.length > 1 ? 'AMBIGUOUS_PARENT' : 'PARENT_CHANGED', message: 'Parent path and UUID do not identify one node.' }); return;
+        }
+        const children = matches[0].children.filter((child) => child.name === params.nodeName);
+        if (params.action === 'compensate' && !children.length && params.targetNodeUuid) {
+            let moved = false;
+            function findUuid(node) { if (node.uuid === params.targetNodeUuid) moved = true; for (const child of node.children || []) findUuid(child); }
+            findUuid(scene);
+            if (moved) { event.reply({ code: 'SCENE_NODE_CONFLICT', message: 'Target node moved to another parent.' }); return; }
+        }
+        if (children.length > 1 || (children.length && (params.action !== 'compensate' || children[0].uuid !== params.targetNodeUuid))) {
+            event.reply({ code: 'SCENE_NODE_CONFLICT', message: 'A child with this name already exists or has changed identity.' }); return;
+        }
+        event.reply(null, { sceneName: scene.name, parentPath: params.parentPath, parentUuid: matches[0].uuid,
+            nodeName: params.nodeName, targetNodeUuid: children[0] ? children[0].uuid : null,
+            decision: params.action === 'compensate' ? (children.length ? 'remove' : 'alreadyAbsent') : 'create' });
+    },
+
+    'node-create-mutate'(event, params) {
+        const scene = cc.director.getScene();
+        const parts = params.parentPath.split('/');
+        let matches = parts[0] === scene.name ? [scene] : [];
+        for (const part of parts.slice(1)) matches = matches.flatMap((parent) => (parent.children || []).filter((child) => child.name === part)).slice(0, 3);
+        if (matches.length !== 1 || matches[0].uuid !== params.parentUuid) {
+            event.reply({ code: 'PARENT_CHANGED', message: 'Parent changed after preflight.' }); return;
+        }
+        const parent = matches[0];
+        const children = parent.children.filter((child) => child.name === params.nodeName);
+        if (params.action === 'compensate') {
+            if (!children.length) {
+                let moved = false;
+                function findUuid(node) { if (node.uuid === params.targetNodeUuid) moved = true; for (const child of node.children || []) findUuid(child); }
+                findUuid(scene);
+                if (moved) { event.reply({ code: 'SCENE_NODE_CONFLICT', message: 'Target node moved to another parent.' }); return; }
+                event.reply(null, { nodeName: params.nodeName, nodeUuid: params.targetNodeUuid, alreadyAbsent: true }); return;
+            }
+            if (children.length !== 1 || children[0].uuid !== params.targetNodeUuid) {
+                event.reply({ code: 'SCENE_NODE_CONFLICT', message: 'Target identity changed after preflight.' }); return;
+            }
+            children[0].removeFromParent(false); children[0].destroy();
+            event.reply(null, { nodeName: params.nodeName, nodeUuid: params.targetNodeUuid, removed: true }); return;
+        }
+        if (children.length) { event.reply({ code: 'SCENE_NODE_CONFLICT', message: 'A child with this name appeared after preflight.' }); return; }
+        const node = new cc.Node(params.nodeName);
+        parent.addChild(node);
+        event.reply(null, { nodeName: node.name, nodeUuid: node.uuid, created: true });
+    },
     'catalog-context'(event) {
         const scene = cc.director.getScene();
         event.reply(null, {

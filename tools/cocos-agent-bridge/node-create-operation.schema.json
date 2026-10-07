@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "node-create-operation.schema.json",
+  "title": "CocosAgent scene.node.create persisted operation 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contractVersion", "capabilityId", "operationId", "projectRoot", "creatorVersion", "manifest", "sceneName", "createdNodeUuid", "intent", "receipts", "phases", "createdAt", "updatedAt"],
+  "properties": {
+    "contractVersion": { "const": "0.1" },
+    "capabilityId": { "const": "scene.node.create" },
+    "operationId": { "type": "string", "format": "uuid" },
+    "projectRoot": { "type": "string", "minLength": 1 },
+    "creatorVersion": { "enum": ["2.4.15", "3.8.7"] },
+    "manifest": {
+      "type": "object", "additionalProperties": false,
+      "required": ["parentPath", "parentUuid", "nodeName", "action", "sourceOperationId", "targetNodeUuid"],
+      "properties": {
+        "parentPath": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "parentUuid": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "nodeName": { "type": "string", "pattern": "^[A-Za-z0-9_ -]{1,64}$" },
+        "action": { "enum": ["apply", "compensate", "replay"] },
+        "sourceOperationId": { "type": ["string", "null"] },
+        "targetNodeUuid": { "type": ["string", "null"] }
+      }
+    },
+    "sceneName": { "type": ["string", "null"] },
+    "createdNodeUuid": { "type": ["string", "null"] },
+    "intent": { "enum": ["created", "editor-write-sent", "disk-verified", "disk-recovered"] },
+    "receipts": { "type": "array", "items": { "type": "object" } },
+    "phases": { "type": "object", "additionalProperties": false,
+      "required": ["capability", "preflight", "editor", "disk", "preview", "recovery"],
+      "properties": {
+        "capability": { "$ref": "#/$defs/phaseStatus" },
+        "preflight": { "$ref": "#/$defs/phaseStatus" },
+        "editor": { "$ref": "#/$defs/phaseStatus" },
+        "disk": { "$ref": "#/$defs/phaseStatus" },
+        "preview": { "$ref": "#/$defs/phaseStatus" },
+        "recovery": { "$ref": "#/$defs/phaseStatus" }
+      }
+    },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": { "phaseStatus": { "enum": ["pending", "passed", "failed", "skipped"] } }
+}

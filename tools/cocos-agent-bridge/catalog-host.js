@@ -137,7 +137,7 @@ function unavailable(target, code) {
 }
 
 function validCatalog(target, result) {
-    if (!Array.isArray(result.commands) || result.commands.length !== 4
+    if (!Array.isArray(result.commands) || result.commands.length !== 5
         || !(result.activeScene === null || typeof result.activeScene === 'string')
         || !/^[0-9a-f]{64}$/.test(result.catalogRevision || '')) return false;
     const expected = {
@@ -146,6 +146,8 @@ function validCatalog(target, result) {
         'asset.importPng': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/importPngInput', input: catalogSchema.$defs.importPngInput, preconditions: ['stagedPng', 'destinationFree'] },
         'scene.pngSprite': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/pngSpriteInput', input: catalogSchema.$defs.pngSpriteInput,
             preconditions: target.creatorVersion === '2.4.15' ? ['activeScene', 'canvasExisting', 'spriteFrameImported'] : ['activeScene', 'spriteFrameImported'] },
+        'scene.node.create': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/nodeCreateInput', input: catalogSchema.$defs.nodeCreateInput,
+            preconditions: ['activeScene', 'parentIdentity'] },
     };
     const seen = new Set();
     for (const command of result.commands) {
@@ -164,6 +166,8 @@ function validCatalog(target, result) {
         || commands['scene.snapshot'].reason !== (sceneReady ? null : 'NO_OPEN_SCENE')) return false;
     if (commands['scene.node.inspect'].status !== (sceneReady ? 'available' : 'unavailable')
         || commands['scene.node.inspect'].reason !== (sceneReady ? null : 'NO_OPEN_SCENE')) return false;
+    if (commands['scene.node.create'].status !== (sceneReady ? 'available' : 'unavailable')
+        || commands['scene.node.create'].reason !== (sceneReady ? null : 'NO_OPEN_SCENE')) return false;
     if (!sceneReady && (commands['scene.pngSprite'].status !== 'unavailable' || commands['scene.pngSprite'].reason !== 'NO_OPEN_SCENE')) return false;
     if (sceneReady && target.creatorVersion === '3.8.7' && commands['scene.pngSprite'].status !== 'available') return false;
     if (sceneReady && target.creatorVersion === '2.4.15' && commands['scene.pngSprite'].status === 'unavailable'

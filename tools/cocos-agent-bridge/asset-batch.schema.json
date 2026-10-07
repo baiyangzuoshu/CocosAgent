@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cocos-agent.local/schema/asset-batch-0.1.json",
+  "title": "PNG asset batch request 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["targets", "projectRoot", "creatorVersion", "sources"],
+  "properties": {
+    "targets": { "type": "array", "minItems": 1, "items": { "type": "object", "required": ["projectRoot", "creatorVersion"], "properties": { "projectRoot": { "type": "string" }, "creatorVersion": { "enum": ["2.4.15", "3.8.7"] } } } },
+    "projectRoot": { "type": "string" },
+    "creatorVersion": { "enum": ["2.4.15", "3.8.7"] },
+    "batchId": { "type": "string", "format": "uuid" },
+    "sources": { "type": "array", "minItems": 2, "maxItems": 16, "items": { "type": "string", "pattern": "\\.png$" } }
+  }
+}

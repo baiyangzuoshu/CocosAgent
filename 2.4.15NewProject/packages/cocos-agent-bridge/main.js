@@ -34,6 +34,15 @@ const COMMAND_INPUTS = {
             action: { enum: ['apply', 'compensate', 'replay'] },
             operationId: { type: 'string', pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' },
         } },
+    nodeCreate: { type: 'object', additionalProperties: false, required: ['parentPath', 'parentUuid', 'nodeName', 'action'],
+        properties: {
+            parentPath: { type: 'string', minLength: 1, maxLength: 240 },
+            parentUuid: { type: 'string', minLength: 1, maxLength: 64 },
+            nodeName: { type: 'string', pattern: '^[A-Za-z0-9_ -]{1,64}$' },
+            action: { enum: ['apply', 'compensate', 'replay'] },
+            sourceOperationId: { type: 'string', pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' },
+            operationId: { type: 'string', pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' },
+        } },
 };
 
 function commandCatalog(context) {
@@ -52,6 +61,9 @@ function commandCatalog(context) {
         { id: 'scene.pngSprite', contractVersion: '0.1', access: 'write',
             inputSchema: 'catalog.schema.json#/$defs/pngSpriteInput', input: COMMAND_INPUTS.pngSprite, preconditions: ['activeScene', 'canvasExisting', 'spriteFrameImported'],
             status: spriteReady ? 'available' : 'unavailable', reason: spriteReady ? null : sceneReady ? 'CANVAS_NOT_FOUND' : 'NO_OPEN_SCENE' },
+        { id: 'scene.node.create', contractVersion: '0.1', access: 'write',
+            inputSchema: 'catalog.schema.json#/$defs/nodeCreateInput', input: COMMAND_INPUTS.nodeCreate, preconditions: ['activeScene', 'parentIdentity'],
+            status: sceneReady ? 'available' : 'unavailable', reason: sceneReady ? null : 'NO_OPEN_SCENE' },
     ];
 }
 
@@ -97,6 +109,10 @@ function onMessage(raw) {
         runSceneOperation(message);
         return;
     }
+    if (message.method === 'scene.node.create.preflight' || message.method === 'scene.node.create') {
+        runNodeCreate(message);
+        return;
+    }
     if (message.method === 'asset.importPng') {
         importPng(message);
         return;
@@ -130,6 +146,31 @@ function onMessage(raw) {
         },
     });
     console.log(`[COCOS_AGENT_BRIDGE_2] bridge.ping replied for Creator ${CREATOR_VERSION}`);
+}
+
+function runNodeCreate(message) {
+    const params = message.params || {};
+    const operation = activeSession && activeSession.nodeOperation;
+    if (!operation || params.sessionId !== activeSession.sessionId || params.operationId !== activeSession.operationId
+        || params.nonce !== operation.nonce || params.parentPath !== operation.parentPath
+        || params.parentUuid !== operation.parentUuid || params.nodeName !== operation.nodeName
+        || params.action !== operation.action || params.targetNodeUuid !== operation.targetNodeUuid) {
+        send({ type: 'response', id: message.id, ok: false, error: { code: 'INVALID_NODE_SESSION' } }); return;
+    }
+    const preflight = message.method.endsWith('.preflight');
+    Editor.Scene.callSceneScript('cocos-agent-bridge', preflight ? 'node-create-preflight' : 'node-create-mutate', operation, (error, result) => {
+        if (error) { send({ type: 'response', id: message.id, ok: false, error: { code: error.code || 'NODE_OPERATION_FAILED', message: String(error.message || error) } }); return; }
+        const reply = () => send({ type: 'response', id: message.id, ok: true, result: Object.assign({
+            nonce: params.nonce, operationId: params.operationId, creatorVersion: CREATOR_VERSION,
+            projectRoot: PROJECT_ROOT, action: operation.action, parentPath: operation.parentPath,
+            parentUuid: operation.parentUuid, nodeName: operation.nodeName,
+        }, result) });
+        if (preflight) reply();
+        else saveActiveScene((saveError) => {
+            if (saveError) { send({ type: 'response', id: message.id, ok: false, error: { code: 'SCENE_SAVE_UNVERIFIED', message: String(saveError.message || saveError) } }); return; }
+            result.saved = true; reply();
+        });
+    });
 }
 
 function runSceneOperation(message) {
@@ -333,7 +374,7 @@ function connectFromSession() {
             projectRoot: PROJECT_ROOT,
             extension: 'cocos-agent-bridge',
             instanceId: INSTANCE_ID,
-            capabilities: ['bridge.ping', 'scene.snapshot', 'asset.importPng', 'scene.preflightPngSprite', 'scene.placePngSprite', 'scene.removePngSprite'],
+            capabilities: ['bridge.ping', 'scene.snapshot', 'asset.importPng', 'scene.preflightPngSprite', 'scene.placePngSprite', 'scene.removePngSprite', 'scene.node.create.preflight', 'scene.node.create'],
             operationContract: { id: 'scene.pngSprite', contractVersion: '0.1', creatorVersion: CREATOR_VERSION, access: 'scene-write', actions: ['apply', 'compensate', 'replay'], previewVerification: 'manual-web', compensation: 'identity-checked-node-removal' },
         }));
         console.log(`[COCOS_AGENT_BRIDGE_2] connected to local Agent session ${session.sessionId}`);

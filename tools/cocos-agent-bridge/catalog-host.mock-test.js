@@ -52,6 +52,7 @@ async function mockEditor(index, options = {}) {
                     { id: 'scene.node.inspect', contractVersion: '0.1', access: 'read', inputSchema: 'catalog.schema.json#/$defs/nodeInspectInput', input: inputs.nodeInspectInput, preconditions: ['activeScene'], status: index === 0 ? 'available' : 'unavailable', reason: index === 0 ? null : 'NO_OPEN_SCENE' },
                     { id: 'asset.importPng', contractVersion: '0.1', access: 'write', inputSchema: 'catalog.schema.json#/$defs/importPngInput', input: inputs.importPngInput, preconditions: ['stagedPng', 'destinationFree'], status: 'available', reason: null },
                     { id: 'scene.pngSprite', contractVersion: '0.1', access: 'write', inputSchema: 'catalog.schema.json#/$defs/pngSpriteInput', input: options.wrongInput && index === 0 ? {} : inputs.pngSpriteInput, preconditions: index === 0 ? ['activeScene', 'canvasExisting', 'spriteFrameImported'] : ['activeScene', 'spriteFrameImported'], status: index === 0 && !options.noCanvas ? 'available' : 'unavailable', reason: index === 0 ? options.noCanvas ? 'CANVAS_NOT_FOUND' : null : 'NO_OPEN_SCENE' },
+                    { id: 'scene.node.create', contractVersion: '0.1', access: 'write', inputSchema: 'catalog.schema.json#/$defs/nodeCreateInput', input: inputs.nodeCreateInput, preconditions: ['activeScene', 'parentIdentity'], status: index === 0 ? 'available' : 'unavailable', reason: index === 0 ? null : 'NO_OPEN_SCENE' },
                 ],
             } }));
         } else if (message.method === 'scene.snapshot') {

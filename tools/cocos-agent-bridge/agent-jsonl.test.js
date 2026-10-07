@@ -26,6 +26,12 @@ const invalid = handle({ id: 8, method: 'command.execute', params: { command: 'u
     { dispatch: (value) => dispatch(value, invoke) });
 assert.strictEqual(invalid.result.error.code, 'INVALID_ARGUMENT');
 assert.strictEqual(handle({ id: 9, method: 'arbitrary.script', params: {} }).result.error.code, 'INVALID_ARGUMENT');
+assert.deepStrictEqual(handle({ id: 10, method: 'workflow.plan', params: { steps: [] } },
+    { workflow: (method, params) => ({ method, params }) }),
+{ id: 10, result: { method: 'workflow.plan', params: { steps: [] } } });
+assert.deepStrictEqual(handle({ id: 11, method: 'assets.batch.get', params: { batchId: operationId } },
+    { assetBatch: (method, params) => ({ method, params }) }),
+{ id: 11, result: { method: 'assets.batch.get', params: { batchId: operationId } } });
 
 const script = path.join(__dirname, 'agent-jsonl.js');
 const child = spawnSync(process.execPath, [script], { encoding: 'utf8', input: '{bad json}\n{"id":1,"method":"unknown","params":{}}\n' });

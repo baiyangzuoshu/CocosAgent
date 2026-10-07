@@ -1,5 +1,11 @@
 # 仓库工作指引
 
+## CocosAgent 当前新增能力
+
+本地 JSONL 入口 `tools/cocos-agent-bridge/agent-jsonl.js` 现支持 `workflow.plan/execute/get/compensate/replay` 的 2–8 步空节点组合，以及 `assets.batch.plan/execute/get` 的 2–16 张 PNG 逐项导入。组合器与批处理器都复用已有版本专属扩展和精确实例选择；写入记录分别在示例项目 `.cocos-agent/compositions/` 与 `.cocos-agent/asset-batches/`。组合的确定失败可逆序补偿；批量导入的已成功项保留，结果不明时停在 `needs-review`，不能把批次理解为原子事务。具体输入与实测范围见 `docs/agent-foundation/scene-composition-0.1.md`、`asset-batch-0.1.md`。
+
+两版新增红蓝 PNG 样本用于 Web 运行时动态纹理测试。2.4 将 PNG 主资源按 `cc.Texture2D` 从基本名加载；3.8 本样本的纹理位于 `基本名/texture` 子资源。两版各完成六轮显式引用持有、替换、释放，旧纹理在 Web 预览中从对象缓存移除；追加的临时 Sprite 探针已用两版红蓝画面截图验证可见替换和下一资源加载失败时保留旧画面。这尚不证明材质替换、热更新或原生性能。详情见 `docs/agent-foundation/dynamic-content-first-slice.md` 与对应版本 skill。
+
 ## 项目结构
 
 本目录并列放置两套 Cocos Creator 引擎源码及各自的示例工程。它不是一个统一的 Git 仓库，也没有根目录构建命令。先根据版本确定工作范围，再进入相应目录运行命令；不要把 2.x 与 3.x 的 API、资源格式或构建流程混用。
@@ -62,7 +68,13 @@
 - 阶段 12 入口为 `docs/2.x/12-editor-extension-and-diagnostics.md`、`docs/3.x/12-editor-extension-and-diagnostics.md` 和 `docs/comparisons/12-editor-extension-and-diagnostics.md`。扩展、构建钩子和定制引擎均先按各版官网手册判断公开入口；本地引擎仓库含部分编辑器集成代码，但不含完整 Creator 编辑器/构建宿主。`docs/agent-foundation/traces/stage12-engine-provenance.jsonl` 的只读检查确认**现有** 3.8 Mac 包 TS/Native 都用 Creator 安装目录内置引擎，邻接 `3.8.7engine/` 改动不会自动进入该包；2.4 builder 配置未记引擎路径，来源仍未知。不要将 `gulp` 或 `@cocos/ccbuild` 的引擎编译视为项目已选用该引擎。两版候选来源诊断 skill 与未验证项见 `docs/agent-foundation/skills/editor-extension-diagnostics-validation.md`。
 - 阶段 12 示例中新建的 `stage12-editor-probe` 是版本专属编辑器扩展：2.4 放在 `2.4.15NewProject/packages/`，3.8 放在 `3.8,7NewProject/extensions/`，都只输出阶段标记，不参与游戏运行或构建。3.8 经扩展管理器刷新、启用后有 `[STAGE12_3] load`，点击 `Develop → Stage 12 Probe` 后有 `[STAGE12_3] ping`；2.4 完整重开工程后包出现在 Package Manager，点击 `Packages → Stage 12 Probe` 后控制台有 `[STAGE12_2] ping`。两版菜单消息链均已验收；2.4 初次 `load` 和 Reload 后 `unload/load` 时点未取证。以 `docs/agent-foundation/traces/stage12-editor-extension.jsonl` 为实际边界。3.8 `native/cocos/profiler/Profiler.h::CC_PROFILE_OBJECT_INC` 的 `C_PROFILER` 拼写错误已修正，`docs/agent-foundation/probes/stage12-profiler-object-inc.cpp` 在 `CC_USE_PROFILER=1/0` 两态均通过聚焦 Clang 语法编译；这不等于完整 Native 构建或性能数据。
 
+## CocosAgent 节点写入切片
+
+`scene.node.create` 是 2.4.15 与 3.8.7 各自编辑器扩展实现、Host 共用语义的空节点写入命令。先用 `scene.node.inspect` 取得活动场景中的父节点路径和 UUID；两者必须同时匹配。重名子节点拒绝创建；`compensate` 只能引用通过磁盘读回的创建/重放操作，按来源节点 UUID 删除；`replay` 引用已校验的补偿记录，得到新 UUID。空节点不以 Web 画面验收，查看场景层级与磁盘父子 UUID。合同与两版实测边界见 `docs/agent-foundation/scene-node-create-0.1.md`，版本专属候选 skill 位于 `docs/agent-foundation/skills/cocos{2,3}-scene-node-create/`。编辑器保存会重写无关场景字段，临时探针结束后必须核对并恢复示例场景；不能把纯文本差异当作节点语义差异。
+
 ## 构建与验证
+
+动态纹理首条切片的两版 Web 可见 Sprite 截图与重建 Mac 包资源生命周期轨迹，见 `docs/agent-foundation/dynamic-content-first-slice.md`。Mac 临时入口探针 `docs/agent-foundation/probes/cocos-dynamic-native-mac.py` 会恢复生成包脚本；2.4 该包纹理缓存诊断须用 `_uuid`，不能直接拿未定义的 `uuid` 查询。原生轨迹只验证加载、引用和释放，原生画面尚未截图。
 
 所有命令均从表中的对应目录执行，并先确认本机依赖可用。只运行与本次改动相关的验证；编辑器场景与资源改动还需要在对应版本的 Creator 中打开并预览。
 

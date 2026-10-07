@@ -58,8 +58,9 @@ async function main() {
       msg.error ? item.reject(new Error(msg.error.message)) : item.resolve(msg.result);
     } else if (msg.method === 'Runtime.consoleAPICalled') {
       const values = msg.params.args.map(x => x.value ?? x.description ?? '').join(' ');
-      if (/STAGE8_PARTICLE2D|STAGE8_PARTICLE3D_NATURAL|STAGE8_CLIP|STAGE9_3D|STAGE9_NATURAL|STAGE9_MOVING|STAGE9_REGISTRATION/.test(values)) process.stdout.write(values + '\n');
+      if (/STAGE8_PARTICLE2D|STAGE8_PARTICLE3D_NATURAL|STAGE8_CLIP|STAGE9_3D|STAGE9_NATURAL|STAGE9_MOVING|STAGE9_REGISTRATION|COCOS_DYNAMIC/.test(values)) process.stdout.write(values + '\n');
       const captureMatch = values.match(/^STAGE8_(PARTICLE2D|PARTICLE3D_NATURAL)_(24|38)_MARK /);
+      const dynamicCapture = values.match(/^COCOS_DYNAMIC_VISUAL_(24|38)_MARK (red|blue)\b/);
       if (captureMatch) {
         const phase = values.split(' ')[1];
         const kind = captureMatch[1] === 'PARTICLE2D' ? 'particle2d' : 'particle3d-natural';
@@ -69,6 +70,15 @@ async function main() {
             writeFileSync(path, Buffer.from(result.data, 'base64'));
             process.stdout.write(`SCREENSHOT ${path}\n`);
           }).finally(() => send('Runtime.evaluate', { expression: 'window.__stage8CaptureResolve && window.__stage8CaptureResolve()' })));
+      }
+      if (dynamicCapture) {
+        const phase = dynamicCapture[2];
+        captures.push(send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })
+          .then(result => {
+            const path = `/private/tmp/cocos-dynamic-visible-${version}-${phase}.png`;
+            writeFileSync(path, Buffer.from(result.data, 'base64'));
+            process.stdout.write(`SCREENSHOT ${path}\n`);
+          }).finally(() => send('Runtime.evaluate', { expression: 'window.__cocosDynamicCaptureResolve && window.__cocosDynamicCaptureResolve()' })));
       }
     } else if (msg.method === 'Runtime.exceptionThrown') {
       process.stderr.write('PAGE_EXCEPTION ' + (msg.params.exceptionDetails.text || '') + '\n');

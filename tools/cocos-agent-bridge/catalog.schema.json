@@ -34,12 +34,25 @@
         "operationId": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" }
       }
     },
+    "nodeCreateInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parentPath", "parentUuid", "nodeName", "action"],
+      "properties": {
+        "parentPath": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "parentUuid": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "nodeName": { "type": "string", "pattern": "^[A-Za-z0-9_ -]{1,64}$" },
+        "action": { "enum": ["apply", "compensate", "replay"] },
+        "sourceOperationId": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" },
+        "operationId": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" }
+      }
+    },
     "command": {
       "type": "object",
       "additionalProperties": false,
       "required": ["id", "contractVersion", "access", "inputSchema", "input", "preconditions", "status", "reason"],
       "properties": {
-        "id": { "enum": ["scene.snapshot", "scene.node.inspect", "asset.importPng", "scene.pngSprite"] },
+        "id": { "enum": ["scene.snapshot", "scene.node.inspect", "asset.importPng", "scene.pngSprite", "scene.node.create"] },
         "contractVersion": { "const": "0.1" },
         "access": { "enum": ["read", "write"] },
         "inputSchema": { "type": "string" },

@@ -9,8 +9,12 @@
 | `command.execute` | `targets`、`projectRoot`、`creatorVersion`、`command`、`input` | `agent-dispatch.js` 的完整统一结果包 |
 | `operation.get` | `projectRoot`、`creatorVersion`、`operationId` | 同上；无需编辑器在线即可读取持久记录 |
 | `preview.accept` | `projectRoot`、`creatorVersion`、`operationId`、`evidence` | 同上；只在实际观察本次预览后调用 |
+| `workflow.plan/execute/get/compensate/replay` | 场景节点计划、`workflowId` 或 `sourceWorkflowId` | [场景组合合同](scene-composition-0.1.md)；持久记录与逐步回执 |
+| `assets.batch.plan/execute/get` | PNG 源路径清单、`batchId` | [批量导入合同](asset-batch-0.1.md)；逐项结果与磁盘读回 |
 
-`targets` 是 `{ "creatorVersion": "2.4.15|3.8.7", "projectRoot": "/绝对路径" }` 数组。`command.execute` 仅接受目录中已实现的四个语义命令；Agent 应先查实例和能力，再按对应版本的 skill 构造输入。错误码、`outcome`、六阶段回执及 `needs-review` 的停止重试规则沿用[调度合同](cocos-agent-dispatch-0.1.md)和[操作合同](cocos-agent-operation-contract-0.1.md)。这个接口不添加新的编辑器写入路径，也不授予任意消息或脚本执行权限。
+组合和批量方法只编排已实现的语义命令，不授予任意脚本执行权限。当前 `command.execute` 的命令目录有五项。
+
+`targets` 是 `{ "creatorVersion": "2.4.15|3.8.7", "projectRoot": "/绝对路径" }` 数组。`command.execute` 仅接受目录中已实现的五个语义命令；Agent 应先查实例和能力，再按对应版本的 skill 构造输入。错误码、`outcome`、六阶段回执及 `needs-review` 的停止重试规则沿用[调度合同](cocos-agent-dispatch-0.1.md)和[操作合同](cocos-agent-operation-contract-0.1.md)。这个接口不添加新的编辑器写入路径，也不授予任意消息或脚本执行权限。
 
 示例：
 

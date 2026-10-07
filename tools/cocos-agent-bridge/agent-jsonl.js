@@ -4,9 +4,13 @@ const path = require('path');
 const readline = require('readline');
 const { spawnSync } = require('child_process');
 const { dispatch } = require('./agent-dispatch');
+const composition = require('./scene-composition');
+const assetBatch = require('./asset-batch');
 
 const catalogMethods = new Set(['instances.list', 'instances.get', 'capabilities.list']);
-const methods = new Set([...catalogMethods, 'command.execute', 'operation.get', 'preview.accept']);
+const workflowMethods = new Set(['workflow.plan', 'workflow.execute', 'workflow.get', 'workflow.compensate', 'workflow.replay']);
+const batchMethods = new Set(['assets.batch.plan', 'assets.batch.execute', 'assets.batch.get']);
+const methods = new Set([...catalogMethods, ...workflowMethods, ...batchMethods, 'command.execute', 'operation.get', 'preview.accept']);
 const versions = new Set(['2.4.15', '3.8.7']);
 
 function error(code, message) { return { code, message }; }
@@ -39,6 +43,10 @@ function handle(request, adapters = {}) {
     }
     const { method, params } = request;
     if (catalogMethods.has(method)) return { id: request.id, result: (adapters.catalog || catalog)(request) };
+    if (workflowMethods.has(method)) return { id: request.id,
+        result: (adapters.workflow || composition.handle)(method, params, adapters.dispatch || dispatch) };
+    if (batchMethods.has(method)) return { id: request.id,
+        result: (adapters.assetBatch || assetBatch.handle)(method, params, adapters.dispatch || dispatch) };
     let dispatchRequest;
     if (method === 'command.execute') dispatchRequest = {
         targets: params.targets, projectRoot: params.projectRoot, creatorVersion: params.creatorVersion,

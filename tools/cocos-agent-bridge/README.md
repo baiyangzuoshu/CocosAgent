@@ -90,7 +90,7 @@ node tools/cocos-agent-bridge/catalog-host.js \
   --query instances.list
 ```
 
-将 `--query` 换成 `instances.get` 或 `capabilities.list` 时，另传 `--project` 指定项目绝对路径；建议同时传 `--creator-version 2.4.15|3.8.7` 核对预期版本。`instances.list` 列出显式配置的目标，不接受选择参数。输出为 `{success,data}` 或 `{success:false,error}` 的 JSON。项目没有对应目标返回 `EDITOR_NOT_FOUND`；同项目重复配置返回 `AMBIGUOUS_EDITOR`；选择版本或扩展握手版本不符返回 `CREATOR_VERSION_MISMATCH`，不会选择最近使用的窗口。目录目前包含四个已实现的语义命令；每条声明合同版本、`access`、可直接读取的 `input` JSON Schema、`inputSchema` 引用、`preconditions`、`status` 和 `reason`。Host 会核对扩展返回的输入结构与 [catalog.schema.json](catalog.schema.json) 一致；编辑器写入的内部请求仍按 [operation.schema.json](operation.schema.json) 校验。`asset.importPng` 的公开输入是本地 PNG 路径，文件名由 Host 从路径提取；桥接线上的请求只引用经过 Host 校验的会话暂存清单。`available` 代表查询时命令及场景级条件满足，暂存文件、目标资源名与 SpriteFrame 仍须执行前重新校验。
+将 `--query` 换成 `instances.get` 或 `capabilities.list` 时，另传 `--project` 指定项目绝对路径；建议同时传 `--creator-version 2.4.15|3.8.7` 核对预期版本。`instances.list` 列出显式配置的目标，不接受选择参数。输出为 `{success,data}` 或 `{success:false,error}` 的 JSON。项目没有对应目标返回 `EDITOR_NOT_FOUND`；同项目重复配置返回 `AMBIGUOUS_EDITOR`；选择版本或扩展握手版本不符返回 `CREATOR_VERSION_MISMATCH`，不会选择最近使用的窗口。目录目前包含五个已实现的语义命令；每条声明合同版本、`access`、可直接读取的 `input` JSON Schema、`inputSchema` 引用、`preconditions`、`status` 和 `reason`。Host 会核对扩展返回的输入结构与 [catalog.schema.json](catalog.schema.json) 一致；编辑器写入的内部请求仍按 [operation.schema.json](operation.schema.json) 校验。`asset.importPng` 的公开输入是本地 PNG 路径，文件名由 Host 从路径提取；桥接线上的请求只引用经过 Host 校验的会话暂存清单。`available` 代表查询时命令及场景级条件满足，暂存文件、目标资源名与 SpriteFrame 仍须执行前重新校验。
 
 场景脚本直接读取活动场景与 Canvas 状态；`scene.pngSprite` 在 2.4 缺 Canvas、或任一版本无活动场景时标为 `unavailable`。`catalogRevision` 随目录内容及场景名变化；Host 再读取一次场景，若两次场景名不同则返回 `SCENE_CHANGED`，调用方应重新查询。每次查询创建独立短时会话，结束后清除本轮会话文件；它不会导入资源或写场景，也还不是常驻的实例注册服务。扩展重载后需重新查询，新的实例 ID 应与此前不同。
 
@@ -115,6 +115,12 @@ node tools/cocos-agent-bridge/agent-dispatch.js \
 场景写入把命令改为 `scene.pngSprite`，输入示例为 `{"assetName":"cocos-agent-smoke.png","action":"apply"}`。运行前应确认当前场景；成功保存后返回 `needs-preview`，人工预览仍是独立验收。`needs-review` 表示操作结果不确定，先按返回的 `operationId` 查询记录和场景，不自动重发。完整状态与验证边界见 [`cocos-agent-dispatch-0.1.md`](../../docs/agent-foundation/cocos-agent-dispatch-0.1.md)。
 
 只读节点定位使用 `--command scene.node.inspect --input '{"nodePath":"main/Main Light"}'`；2.4 应传自己的活动场景路径，例如 `helloworld/Canvas/label`。返回 `found/not-found/ambiguous` 和有界节点摘要。双版本实机证据与路径约束见[节点检查合同](../../docs/agent-foundation/scene-node-inspect-0.1.md)。
+
+空节点写入使用 `scene.node.create`：先用节点检查取得父节点的路径和 UUID，再传 `{"parentPath":"helloworld/Canvas","parentUuid":"<UUID>","nodeName":"Example","action":"apply"}`。补偿和重放均需传 `sourceOperationId`；节点写入合同、双版本实测与验收边界见[节点创建合同](../../docs/agent-foundation/scene-node-create-0.1.md)。
+
+多节点组合通过 JSONL 的 `workflow.plan/execute/get/compensate/replay` 调用。它以有序步骤和前一步 `ref` 组成空节点层级，逐步持久化操作 ID；明确失败时逆序补偿，结果不确定时停止。两版真实编辑器均已创建两级临时节点并逆序补偿。输入和限制见[场景组合合同](../../docs/agent-foundation/scene-composition-0.1.md)。
+
+多张 PNG 导入通过 JSONL 的 `assets.batch.plan/execute/get` 调用。它核对源文件摘要、Creator 导入回执及目标文件和 `.meta`，逐项保留状态；不自动删除已导入资源。两版已分别验证两张 PNG 的批量导入。输入与验证边界见[批量导入合同](../../docs/agent-foundation/asset-batch-0.1.md)。这些资源的 Web 运行时六轮加载、替换与释放证据见[动态内容首条切片](../../docs/agent-foundation/dynamic-content-first-slice.md)。
 
 Agent 目视检查**本次操作**的本地 Web 预览后，附证据录入预览回执：
 
