@@ -85,6 +85,11 @@ test('plans an isolated 2.4 Web-Mobile build from the selected, revalidated rele
         assert.equal(fs.existsSync(plan.outputRoot), false);
         assert.deepEqual(plan.args.slice(0, 2), ['--path', value.root]);
         assert.match(plan.args[3], /^platform=web-mobile;buildPath=\.\/build\/cocos-agent\/web-smoke-01;startScene=2d2f792f-a40c-49bb-a189-ed176a246e49;/);
+        assert.equal(plan.launcher, process.platform === 'darwin' ? '/usr/bin/open' : fs.realpathSync(value.executable));
+        if (process.platform === 'darwin') {
+            assert.deepEqual(plan.launchArgs.slice(0, 5), ['-n', '-W', '-a', path.dirname(path.dirname(path.dirname(fs.realpathSync(value.executable)))), '--args']);
+            assert.deepEqual(plan.launchArgs.slice(5), plan.args);
+        } else assert.deepEqual(plan.launchArgs, plan.args);
         assert.deepEqual(plan.includedResources.map((asset) => asset.resourceUuid), [textureUuid]);
         assert.equal(buildTools.plan({ ...value.params, creatorVersion: '3.8.7' }, { creatorExecutable: value.executable }).error.code,
             'INVALID_TARGET');
@@ -96,8 +101,8 @@ test('executes CLI without a shell and accepts only a package containing the sel
     try {
         let invocation;
         const result = buildTools.execute(value.params, { creatorExecutable: value.executable,
-            spawnSync(executable, args, options) {
-                invocation = { executable, args, options };
+            spawnSync(launcher, args, options) {
+                invocation = { launcher, args, options };
                 const staged = releaseTools.get({ projectRoot: value.root, creatorVersion: '2.4.15', releaseId: 'release-a' }).release;
                 const checked = releaseTools.validate({ projectRoot: value.root, creatorVersion: '2.4.15', manifest: staged });
                 writeWebBuild(path.join(value.root, 'build', 'cocos-agent', value.params.buildId), checked.release);
@@ -106,12 +111,28 @@ test('executes CLI without a shell and accepts only a package containing the sel
         assert.equal(result.success, true);
         assert.equal(result.outcome, 'verified');
         assert.equal(result.resourceCount, 1);
-        assert.equal(invocation.executable, fs.realpathSync(value.executable));
+        assert.equal(invocation.launcher, process.platform === 'darwin' ? '/usr/bin/open' : fs.realpathSync(value.executable));
+        if (process.platform === 'darwin') assert.deepEqual(invocation.args.slice(0, 5), ['-n', '-W', '-a', path.dirname(path.dirname(path.dirname(fs.realpathSync(value.executable)))), '--args']);
         assert.equal(invocation.options.cwd, value.root);
         assert.equal(invocation.options.shell, undefined);
         assert.equal(invocation.options.timeout, 20 * 60 * 1000);
         assert.equal(buildTools.get(value.params).build.state, 'completed');
         assert.equal(agentHandle({ id: 12, method: 'content.build.get', params: value.params }).result.build.buildId, 'web-smoke-01');
+    } finally { fs.rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test('persists a build timeout as uncertain so reconciliation can inspect output without relaunching Creator', () => {
+    const value = fixture();
+    try {
+        const result = buildTools.execute(value.params, { creatorExecutable: value.executable,
+            spawnSync() { return { error: { code: 'ETIMEDOUT' }, status: null, signal: null }; } });
+        assert.equal(result.success, false);
+        assert.equal(result.error.code, 'BUILD_TIMEOUT');
+        assert.equal(buildTools.get(value.params).build.state, 'needs-review');
+        const reconciled = buildTools.reconcile(value.params);
+        assert.equal(reconciled.success, false);
+        assert.equal(reconciled.reconciled, true);
+        assert.equal(buildTools.get(value.params).build.state, 'needs-review');
     } finally { fs.rmSync(value.root, { recursive: true, force: true }); }
 });
 

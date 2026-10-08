@@ -67,7 +67,7 @@ function resolveCreatorExecutable(options = {}) {
     catch (_) { return fail('CREATOR_VERSION_UNVERIFIED', 'Creator application version could not be read.'); }
     const version = plist.match(/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/)?.[1];
     if (version !== '2.4.15') return fail('CREATOR_VERSION_MISMATCH', 'The configured Creator application is not version 2.4.15.');
-    return { success: true, executable };
+    return { success: true, executable, appBundle: match[1] };
 }
 
 function configuredStartScene(root) {
@@ -115,10 +115,15 @@ function plan(params, options = {}) {
     const executable = resolveCreatorExecutable(options);
     if (!executable.success) return executable;
     const buildOptions = `platform=web-mobile;buildPath=./${relativeBuildPath};startScene=${startScene.uuid};debug=false;md5Cache=true`;
+    const args = ['--path', target.root, '--build', buildOptions];
+    const launcher = process.platform === 'darwin' ? '/usr/bin/open' : executable.executable;
+    const launchArgs = process.platform === 'darwin'
+        ? ['-n', '-W', '-a', executable.appBundle, '--args', ...args]
+        : args;
     return { success: true, outcome: 'ready', creatorVersion: '2.4.15', platform: 'web-mobile',
         projectRoot: target.root, releaseId, fingerprint: selected.fingerprint, buildId,
-        outputRoot, executable: executable.executable, startScene: startScene.uuid,
-        args: ['--path', target.root, '--build', buildOptions],
+        outputRoot, executable: executable.executable, appBundle: executable.appBundle,
+        launcher, launchArgs, startScene: startScene.uuid, args,
         includedResources: selected.release.assets.map((asset) => ({ id: asset.id, runtimePath: asset.runtimePath,
             resourceUuid: asset.resourceUuid })) };
 }
@@ -245,7 +250,8 @@ function execute(params, options = {}) {
         platform: planned.platform, projectRoot: planned.projectRoot, releaseId: planned.releaseId,
         fingerprint: planned.fingerprint, outputRoot: planned.outputRoot, state: 'running',
         releaseManifest: releaseResult.release,
-        invocation: { executable: planned.executable, args: planned.args }, startedAt: new Date().toISOString() };
+        invocation: { launcher: planned.launcher, args: planned.launchArgs,
+            creatorExecutable: planned.executable, creatorArgs: planned.args }, startedAt: new Date().toISOString() };
     try { writeRecord(filename, record, true); }
     catch (error) {
         if (error.code === 'EEXIST') return fail('BUILD_ID_CONFLICT', 'Another Host already reserved this buildId.');
@@ -266,13 +272,15 @@ function execute(params, options = {}) {
     const timeout = Number.isSafeInteger(options.timeoutMs) && options.timeoutMs > 0
         ? Math.min(options.timeoutMs, 20 * 60 * 1000) : 20 * 60 * 1000;
     let child;
-    try { child = run(planned.executable, planned.args, { cwd: planned.projectRoot, encoding: 'utf8', timeout, maxBuffer: 8 * 1024 * 1024 }); }
+    try { child = run(planned.launcher, planned.launchArgs,
+        { cwd: planned.projectRoot, encoding: 'utf8', timeout, maxBuffer: 8 * 1024 * 1024 }); }
     catch (_) { child = { error: { code: 'SPAWN_FAILED' }, status: null, signal: null }; }
     let result;
     if (child.error || child.status !== 0) {
-        const code = child.error?.code === 'ETIMEDOUT' ? 'BUILD_TIMEOUT'
+        const timedOut = child.error?.code === 'ETIMEDOUT';
+        const code = timedOut ? 'BUILD_TIMEOUT'
             : child.error?.code === 'ENOENT' ? 'CREATOR_NOT_FOUND' : 'BUILD_FAILED';
-        const failed = { ...record, state: 'failed', finishedAt: new Date().toISOString(),
+        const failed = { ...record, state: timedOut ? 'needs-review' : 'failed', finishedAt: new Date().toISOString(),
             error: { code, signal: child.signal || null, exitCode: Number.isInteger(child.status) ? child.status : null } };
         writeRecord(filename, failed);
         return fail(code, 'Creator Web-Mobile build did not exit successfully.');
