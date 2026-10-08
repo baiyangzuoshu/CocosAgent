@@ -9,7 +9,7 @@
 
 ## CocosAgent 当前新增能力
 
-本地 JSONL 入口 `tools/cocos-agent-bridge/agent-jsonl.js` 现支持 `workflow.plan/execute/get/compensate/replay` 的 2–8 步空节点组合，以及 `assets.batch.plan/execute/get` 的 2–16 张 PNG 逐项导入。组合器与批处理器都复用已有版本专属扩展和精确实例选择；写入记录分别在示例项目 `.cocos-agent/compositions/` 与 `.cocos-agent/asset-batches/`。组合的确定失败可逆序补偿；批量导入的已成功项保留，结果不明时停在 `needs-review`，不能把批次理解为原子事务。具体输入与实测范围见 `docs/agent-foundation/scene-composition-0.1.md`、`asset-batch-0.1.md`。
+本地 JSONL 入口 `tools/cocos-agent-bridge/agent-jsonl.js` 现支持 `workflow.plan/execute/get/compensate/replay` 的 2–8 步空节点组合、`assets.batch.plan/execute/get` 的 2–16 张 PNG 逐项导入，以及仅面向 2.4.15 的 `scene.sprites.plan/execute/get/compensate/replay`。组合、批处理和场景引用编排均复用版本专属扩展与精确实例选择；写入记录保存在示例项目 `.cocos-agent/` 下。批次逐项保存状态；场景批次的确定失败会逆序尝试补偿，不确定结果停在 `needs-review`，不视为原子事务。2.4 资源导入计划核对目标、PNG IHDR 和 Texture → SpriteFrame UUID 关系；场景批次检查现有 Canvas 与 SpriteFrame 关系，并要求逐项预览验收。Creator 2.4.15 已真实验证双项写入、磁盘引用读回、两项分别可见时的预览回执、逆序补偿和新 ID 重放。默认位置相同会使两图重叠，尚无同屏布局输入；场景 `.fire` 文件已恢复到测试前字节。批次合同和运行证据见 `docs/agent-foundation/scene-sprite-batch-0.1.md`、`traces/cocos-agent-scene-sprite-batch-2.4-web.jsonl`、`asset-batch-0.1.md`、`scene-composition-0.1.md`。
 
 两版新增红蓝 PNG 样本用于 Web 运行时动态纹理测试。2.4 将 PNG 主资源按 `cc.Texture2D` 从基本名加载；3.8 本样本的纹理位于 `基本名/texture` 子资源。两版各完成六轮显式引用持有、替换、释放，旧纹理在 Web 预览中从对象缓存移除；追加的临时 Sprite 探针已用两版红蓝画面截图验证可见替换和下一资源加载失败时保留旧画面。这尚不证明材质替换、热更新或原生性能。详情见 `docs/agent-foundation/dynamic-content-first-slice.md` 与对应版本 skill。
 

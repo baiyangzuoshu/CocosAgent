@@ -7,6 +7,8 @@ const { dispatch } = require('./agent-dispatch');
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const name = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/i;
+const MAX_PNG_BYTES = 10 * 1024 * 1024;
+const MAX_PNG_DIMENSION = 4096;
 const fail = (code, message) => ({ success: false, outcome: 'failed', error: { code, message } });
 function file(projectRoot, batchId) { return path.join(projectRoot, '.cocos-agent', 'asset-batches', `${batchId}.json`); }
 function save(record, create = false) {
@@ -23,12 +25,31 @@ function publicRecord(record) { return { success: record.state === 'completed', 
     batchId: record.batchId, projectRoot: record.projectRoot, creatorVersion: record.creatorVersion,
     items: record.items.map(({ sourcePath, assetName, sha256, status, result }) => ({ sourcePath, assetName, sha256, status, result })),
     error: record.error || null }; }
+function verify24Metadata(destination, item, importResult) {
+    let meta;
+    try { meta = JSON.parse(fs.readFileSync(`${destination}.meta`, 'utf8')); }
+    catch (_) { return { success: false, reason: 'CREATOR_META_UNREADABLE' }; }
+    const frames = Object.values(meta.subMetas || {}).filter((subMeta) => subMeta && subMeta.importer === 'sprite-frame');
+    if (meta.importer !== 'texture' || !uuid.test(meta.uuid || '') || meta.uuid !== importResult.uuid
+        || importResult.type !== 'texture' || importResult.imported !== true
+        || meta.width !== item.width || meta.height !== item.height
+        || frames.length !== 1 || !uuid.test(frames[0].uuid || '') || frames[0].rawTextureUuid !== meta.uuid) {
+        return { success: false, reason: 'CREATOR_META_DEPENDENCY_MISMATCH' };
+    }
+    return { success: true, textureUuid: meta.uuid, spriteFrameUuid: frames[0].uuid,
+        rawTextureUuid: frames[0].rawTextureUuid, sourceWidth: item.width, sourceHeight: item.height };
+}
 function validate(params) {
     if (!params || !path.isAbsolute(params.projectRoot || '') || !['2.4.15', '3.8.7'].includes(params.creatorVersion)
-        || !Array.isArray(params.targets) || !params.targets.length || !Array.isArray(params.sources)
+        || !Array.isArray(params.targets) || !params.targets.length || !params.targets.every((target) => target
+            && typeof target.projectRoot === 'string' && path.isAbsolute(target.projectRoot)
+            && ['2.4.15', '3.8.7'].includes(target.creatorVersion)) || !Array.isArray(params.sources)
         || params.sources.length < 2 || params.sources.length > 16) return fail('INVALID_BATCH', 'Provide one target and 2–16 absolute PNG paths.');
     const projectRoot = path.resolve(params.projectRoot);
     if (!fs.statSync(projectRoot, { throwIfNoEntry: false })?.isDirectory()) return fail('PROJECT_NOT_FOUND', 'Project directory does not exist.');
+    const matchingTargets = params.targets.filter((target) => path.resolve(target.projectRoot) === projectRoot
+        && target.creatorVersion === params.creatorVersion);
+    if (matchingTargets.length !== 1) return fail('TARGET_MISMATCH', 'Targets must include the requested project and Creator version exactly once.');
     const items = [];
     const names = new Set();
     for (const source of params.sources) {
@@ -42,12 +63,18 @@ function validate(params) {
             if (!fs.lstatSync(source).isFile()) return fail('INVALID_SOURCE', `Source is not a regular file: ${source}`);
             data = fs.readFileSync(source);
         } catch (_) { return fail('SOURCE_NOT_FOUND', `Cannot read: ${source}`); }
-        if (data.length < 24 || data.length > 16 * 1024 * 1024 || !data.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex')))
+        if (data.length < 24 || data.length > MAX_PNG_BYTES || !data.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))
+            || data.toString('ascii', 12, 16) !== 'IHDR')
             return fail('INVALID_PNG', `Invalid PNG signature or size: ${source}`);
+        const width = data.readUInt32BE(16);
+        const height = data.readUInt32BE(20);
+        if (width < 1 || height < 1 || width > MAX_PNG_DIMENSION || height > MAX_PNG_DIMENSION)
+            return fail('INVALID_PNG_DIMENSIONS', `PNG dimensions must be from 1 to ${MAX_PNG_DIMENSION} pixels: ${source}`);
         if (fs.existsSync(path.join(projectRoot, 'assets', 'resources', assetName))
             || fs.existsSync(path.join(projectRoot, 'assets', 'resources', `${assetName}.meta`)))
             return fail('ASSET_CONFLICT', `Destination already exists: ${assetName}`);
-        items.push({ sourcePath: path.resolve(source), assetName, sha256: crypto.createHash('sha256').update(data).digest('hex'), status: 'pending', result: null });
+        items.push({ sourcePath: path.resolve(source), assetName, sha256: crypto.createHash('sha256').update(data).digest('hex'),
+            width, height, status: 'pending', result: null });
     }
     return { success: true, outcome: 'ready', projectRoot, creatorVersion: params.creatorVersion, items };
 }
@@ -107,7 +134,16 @@ function execute(params, run = dispatch) {
             record.state = 'needs-review'; record.error = { code: 'DISK_READBACK_FAILED', assetName: item.assetName };
             save(record); return publicRecord(record);
         }
-        item.status = 'imported'; item.result = result.result; save(record);
+        if (record.creatorVersion === '2.4.15') {
+            const metadata = verify24Metadata(destination, item, result.result);
+            if (!metadata.success) {
+                item.status = 'needs-review'; item.result = result.result;
+                record.state = 'needs-review'; record.error = { code: metadata.reason, assetName: item.assetName };
+                save(record); return publicRecord(record);
+            }
+            item.result = { ...result.result, metadata };
+        } else item.result = result.result;
+        item.status = 'imported'; save(record);
     }
     record.state = 'completed'; save(record); return publicRecord(record);
 }
@@ -133,4 +169,4 @@ if (require.main === module) {
     process.stdout.write(`${JSON.stringify(result)}\n`);
     process.exitCode = result.success ? 0 : 1;
 }
-module.exports = { handle, plan, execute, get };
+module.exports = { handle, plan, execute, get, verify24Metadata };

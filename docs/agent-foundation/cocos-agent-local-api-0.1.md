@@ -11,6 +11,7 @@
 | `preview.accept` | `projectRoot`、`creatorVersion`、`operationId`、`evidence` | 同上；只在实际观察本次预览后调用 |
 | `workflow.plan/execute/get/compensate/replay` | 场景节点计划、`workflowId` 或 `sourceWorkflowId` | [场景组合合同](scene-composition-0.1.md)；持久记录与逐步回执 |
 | `assets.batch.plan/execute/get` | PNG 源路径清单、`batchId` | [批量导入合同](asset-batch-0.1.md)；逐项结果与磁盘读回 |
+| `scene.sprites.plan/execute/get/compensate/replay` | 已导入 PNG 名称、`batchId` 或 `sourceBatchId` | [2.4 场景 Sprite 批次合同](scene-sprite-batch-0.1.md)；逐项场景操作、预览门和补偿；当前只实现 2.4 |
 | `content.plan/stage/get/select/rollback` | 本地内容清单、`releaseId`、预期当前版本 | [动态内容本地版本合同](content-release-0.1.md)；只管理 Host 版本记录与指针，不改变运行时 |
 | `content.runtime.accept` | `projectRoot`、`creatorVersion`、`platform=web-preview`、运行时成功回执 | 核对当前选中版本/指纹/资源 UUID，另记 `effective`；本地调用者回执尚未认证 |
 

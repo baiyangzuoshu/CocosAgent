@@ -6,13 +6,15 @@ const { spawnSync } = require('child_process');
 const { dispatch } = require('./agent-dispatch');
 const composition = require('./scene-composition');
 const assetBatch = require('./asset-batch');
+const sceneSpriteBatch = require('./scene-sprite-batch');
 const contentRelease = require('./content-release');
 
 const catalogMethods = new Set(['instances.list', 'instances.get', 'capabilities.list']);
 const workflowMethods = new Set(['workflow.plan', 'workflow.execute', 'workflow.get', 'workflow.compensate', 'workflow.replay']);
 const batchMethods = new Set(['assets.batch.plan', 'assets.batch.execute', 'assets.batch.get']);
+const sceneSpriteBatchMethods = new Set(['scene.sprites.plan', 'scene.sprites.execute', 'scene.sprites.get', 'scene.sprites.compensate', 'scene.sprites.replay']);
 const contentMethods = new Set(['content.plan', 'content.stage', 'content.get', 'content.select', 'content.rollback', 'content.runtime.accept']);
-const methods = new Set([...catalogMethods, ...workflowMethods, ...batchMethods, ...contentMethods, 'command.execute', 'operation.get', 'preview.accept']);
+const methods = new Set([...catalogMethods, ...workflowMethods, ...batchMethods, ...sceneSpriteBatchMethods, ...contentMethods, 'command.execute', 'operation.get', 'preview.accept']);
 const versions = new Set(['2.4.15', '3.8.7']);
 
 function error(code, message) { return { code, message }; }
@@ -49,6 +51,8 @@ function handle(request, adapters = {}) {
         result: (adapters.workflow || composition.handle)(method, params, adapters.dispatch || dispatch) };
     if (batchMethods.has(method)) return { id: request.id,
         result: (adapters.assetBatch || assetBatch.handle)(method, params, adapters.dispatch || dispatch) };
+    if (sceneSpriteBatchMethods.has(method)) return { id: request.id,
+        result: (adapters.sceneSpriteBatch || sceneSpriteBatch.handle)(method, params, adapters.dispatch || dispatch) };
     if (contentMethods.has(method)) return { id: request.id,
         result: (adapters.contentRelease || contentRelease.handle)(method, params) };
     let dispatchRequest;

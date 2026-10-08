@@ -122,6 +122,8 @@ node tools/cocos-agent-bridge/agent-dispatch.js \
 
 多张 PNG 导入通过 JSONL 的 `assets.batch.plan/execute/get` 调用。它核对源文件摘要、Creator 导入回执及目标文件和 `.meta`，逐项保留状态；不自动删除已导入资源。两版已分别验证两张 PNG 的批量导入。输入与验证边界见[批量导入合同](../../docs/agent-foundation/asset-batch-0.1.md)。这些资源的 Web 运行时六轮加载、替换与释放证据见[动态内容首条切片](../../docs/agent-foundation/dynamic-content-first-slice.md)。
 
+已导入图像放入场景可通过 `scene.sprites.plan/execute/get/compensate/replay` 编排既有的 `scene.pngSprite` 操作。此 Host 侧批次当前只对 2.4.15 开放；它检查活动 Canvas 和 SpriteFrame UUID，为每张图保留独立操作记录，明确失败时逆序补偿，不确定写入时停在 `needs-review`。执行结果为 `needs-preview` 时，按返回的每项 `operationId` 逐个核验预览后再查询批次状态。合同见[2.4 场景 Sprite 批次](../../docs/agent-foundation/scene-sprite-batch-0.1.md)。它不批量设定布局和坐标；默认沿用单图命令的居中放置语义。
+
 Agent 目视检查**本次操作**的本地 Web 预览后，附证据录入预览回执：
 
 ```sh
