@@ -51,7 +51,11 @@ async function mockEditor(index, options = {}) {
                     { id: 'scene.snapshot', contractVersion: '0.1', access: 'read', inputSchema: 'catalog.schema.json#/$defs/snapshotInput', input: inputs.snapshotInput, preconditions: ['activeScene'], status: index === 0 && !options.wrongStatus ? 'available' : 'unavailable', reason: index === 0 && !options.wrongStatus ? null : 'NO_OPEN_SCENE' },
                     { id: 'scene.node.inspect', contractVersion: '0.1', access: 'read', inputSchema: 'catalog.schema.json#/$defs/nodeInspectInput', input: inputs.nodeInspectInput, preconditions: ['activeScene'], status: index === 0 ? 'available' : 'unavailable', reason: index === 0 ? null : 'NO_OPEN_SCENE' },
                     { id: 'asset.importPng', contractVersion: '0.1', access: 'write', inputSchema: 'catalog.schema.json#/$defs/importPngInput', input: inputs.importPngInput, preconditions: ['stagedPng', 'destinationFree'], status: 'available', reason: null },
-                    { id: 'scene.pngSprite', contractVersion: '0.1', access: 'write', inputSchema: 'catalog.schema.json#/$defs/pngSpriteInput', input: options.wrongInput && index === 0 ? {} : inputs.pngSpriteInput, preconditions: index === 0 ? ['activeScene', 'canvasExisting', 'spriteFrameImported'] : ['activeScene', 'spriteFrameImported'], status: index === 0 && !options.noCanvas ? 'available' : 'unavailable', reason: index === 0 ? options.noCanvas ? 'CANVAS_NOT_FOUND' : null : 'NO_OPEN_SCENE' },
+                    { id: 'scene.pngSprite', contractVersion: '0.1', access: 'write',
+                        inputSchema: index === 0 ? 'catalog.schema.json#/$defs/pngSpriteInput2x' : 'catalog.schema.json#/$defs/pngSpriteInput',
+                        input: options.wrongInput && index === 0 ? {} : index === 0 ? inputs.pngSpriteInput2x : inputs.pngSpriteInput,
+                        preconditions: index === 0 ? ['activeScene', 'canvasExisting', 'spriteFrameImported'] : ['activeScene', 'spriteFrameImported'],
+                        status: index === 0 && !options.noCanvas ? 'available' : 'unavailable', reason: index === 0 ? options.noCanvas ? 'CANVAS_NOT_FOUND' : null : 'NO_OPEN_SCENE' },
                     { id: 'scene.node.create', contractVersion: '0.1', access: 'write', inputSchema: 'catalog.schema.json#/$defs/nodeCreateInput', input: inputs.nodeCreateInput, preconditions: ['activeScene', 'parentIdentity'], status: index === 0 ? 'available' : 'unavailable', reason: index === 0 ? null : 'NO_OPEN_SCENE' },
                 ],
             } }));

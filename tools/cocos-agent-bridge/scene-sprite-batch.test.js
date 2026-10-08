@@ -22,10 +22,12 @@ function fixture() {
         fs.writeFileSync(path.join(resources, `${assetName}.meta`), JSON.stringify({ importer: 'texture', uuid: textureUuid,
             subMetas: { [path.basename(assetName, '.png')]: { importer: 'sprite-frame', uuid: spriteFrameUuid, rawTextureUuid: textureUuid } } }));
     }
-    const params = { targets: [{ projectRoot, creatorVersion: '2.4.15' }], projectRoot, creatorVersion: '2.4.15', assets: ['One.png', 'Two.png'] };
+    const params = { targets: [{ projectRoot, creatorVersion: '2.4.15' }], projectRoot, creatorVersion: '2.4.15', assets: ['One.png', 'Two.png'],
+        positions: [{ x: -64, y: 0 }, { x: 64, y: 0 }] };
     const instance = { instanceId: '11111111-1111-4111-8111-111111111111', projectRoot,
         creatorVersion: '2.4.15', activeScene: 'helloworld' };
     const nodes = new Map();
+    const fPositions = { 'One.png': { x: -64, y: 0 }, 'Two.png': { x: 64, y: 0 } };
     const run = (request) => {
         if (request.command === 'scene.snapshot') return { success: true, outcome: 'completed', instance,
             result: { sceneName: 'helloworld', nodeCount: 2, nodes: [], truncated: false } };
@@ -40,7 +42,8 @@ function fixture() {
             const operation = operationStore.read(projectRoot, request.operationGetId);
             return { success: true, outcome: operation.manifest.sceneAction === 'compensate' ? 'completed' : 'needs-preview',
                 instance, phases: operation.phases, result: { sceneName: 'helloworld', action: operation.manifest.sceneAction,
-                    assetName: operation.manifest.assetName, nodeName: operation.manifest.nodeName, assetUuid: operation.manifest.assetUuid } };
+                    assetName: operation.manifest.assetName, nodeName: operation.manifest.nodeName, assetUuid: operation.manifest.assetUuid,
+                    ...(operation.manifest.position ? { position: operation.manifest.position } : {}) } };
         }
         assert.equal(request.command, 'scene.pngSprite');
         const assetName = request.input.assetName;
@@ -48,6 +51,7 @@ function fixture() {
         const spriteFrameUuid = JSON.parse(fs.readFileSync(path.join(resources, `${assetName}.meta`), 'utf8'))
             .subMetas[path.basename(assetName, '.png')].uuid;
         const action = request.input.action;
+        if (action === 'apply') assert.deepEqual(request.input.position, fPositions[assetName]);
         if (assetName === 'Two.png' && action === 'apply' && failureMode === 'definite') return { success: false, outcome: 'failed',
             instance, error: { code: 'EDITOR_REJECTED', sideEffect: 'none' } };
         if (assetName === 'Two.png' && action === 'apply' && failureMode === 'uncertain') return { success: false, outcome: 'needs-review',
@@ -55,13 +59,15 @@ function fixture() {
         if (action === 'apply') nodes.set(targetNodeName, crypto.randomUUID());
         else nodes.delete(targetNodeName);
         const operation = { contractVersion: '0.1', operationId: request.input.operationId, projectRoot, creatorVersion: '2.4.15',
-            sceneName: 'helloworld', manifest: { sceneAction: action, assetName, nodeName: targetNodeName, assetUuid: spriteFrameUuid },
+            sceneName: 'helloworld', manifest: { sceneAction: action, assetName, nodeName: targetNodeName, assetUuid: spriteFrameUuid,
+                ...(action === 'apply' ? { position: request.input.position } : {}) },
             phases: { capability: 'passed', preflight: 'passed', editor: 'passed', disk: 'passed', preview: action === 'apply' ? 'pending' : 'skipped', recovery: 'passed' },
             receipts: [], intent: 'disk-verified', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
         operationStore.write(projectRoot, operation, true);
         return { success: true, outcome: action === 'compensate' ? 'completed' : 'needs-preview', instance,
             operationId: request.input.operationId, phases: operation.phases,
-            result: { sceneName: 'helloworld', action, assetName, nodeName: targetNodeName, assetUuid: spriteFrameUuid } };
+            result: { sceneName: 'helloworld', action, assetName, nodeName: targetNodeName, assetUuid: spriteFrameUuid,
+                ...(action === 'apply' ? { position: request.input.position } : {}) } };
     };
     let failureMode = null;
     const setFailure = (mode) => { failureMode = mode; };
@@ -75,9 +81,11 @@ test('2.4 plans and applies all imported SpriteFrame references, then exposes pr
         const checked = plan(f.params, f.run);
         assert.equal(checked.outcome, 'ready');
         assert.equal(checked.items.length, 2);
+        assert.deepEqual(checked.items.map((item) => item.position), [{ x: -64, y: 0 }, { x: 64, y: 0 }]);
         const result = execute(f.params, f.run);
         assert.equal(result.outcome, 'needs-preview');
         assert.deepEqual(result.items.map((item) => item.status), ['applied', 'applied']);
+        assert.deepEqual(result.items.map((item) => item.position), [{ x: -64, y: 0 }, { x: 64, y: 0 }]);
         assert.equal(f.nodes.size, 2);
         for (const item of result.items) {
             const operation = operationStore.read(f.projectRoot, item.operationId);
@@ -125,6 +133,16 @@ test('compensated 2.4 batch can be replayed with fresh operation IDs', () => {
         assert.equal(replayed.replayedFrom, first.batchId);
         assert.notEqual(replayed.batchId, first.batchId);
         assert.equal(f.nodes.size, 2);
+        assert.deepEqual(replayed.items.map((item) => item.position), [{ x: -64, y: 0 }, { x: 64, y: 0 }]);
+    } finally { f.cleanup(); }
+});
+
+test('rejects incomplete, non-finite, and out-of-range Canvas positions before editor access', () => {
+    const f = fixture();
+    try {
+        assert.equal(plan({ ...f.params, positions: [{ x: 0, y: 0 }] }, f.run).error.code, 'INVALID_POSITIONS');
+        assert.equal(plan({ ...f.params, positions: [{ x: 0, y: 0 }, { x: NaN, y: 1 }] }, f.run).error.code, 'INVALID_POSITIONS');
+        assert.equal(plan({ ...f.params, positions: [{ x: 0, y: 0 }, { x: 5000, y: 0 }] }, f.run).error.code, 'INVALID_POSITIONS');
     } finally { f.cleanup(); }
 });
 

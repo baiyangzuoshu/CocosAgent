@@ -13,7 +13,7 @@
 | `needs-review` | 写入请求可能已发出，但没有可确认的磁盘结果；保留操作 ID，先检查现场，不自动重发。 |
 | `failed` | 目标、目录、输入或执行前条件失败；返回错误代码。 |
 
-当前 `scene.snapshot` 仅接受 `{}`；目录虽然声明了可选 `targetNodeName`，调度入口尚未暴露该筛选。`scene.node.inspect` 输入为 `{"nodePath":"场景名/节点名"}`；`asset.importPng` 输入为 `{"sourcePath":"/绝对路径/图片.png"}`；`scene.pngSprite` 输入为 `{"assetName":"已导入图片.png","action":"apply|compensate|replay"}`，可选 `operationId`。一次调度只执行一个命令，PNG 导入与场景放置需分两次调用。
+当前 `scene.snapshot` 仅接受 `{}`；目录虽然声明了可选 `targetNodeName`，调度入口尚未暴露该筛选。`scene.node.inspect` 输入为 `{"nodePath":"场景名/节点名"}`；`asset.importPng` 输入为 `{"sourcePath":"/绝对路径/图片.png"}`；`scene.pngSprite` 基础输入为 `{"assetName":"已导入图片.png","action":"apply|compensate|replay"}`，可选 `operationId`。Creator 2.4.15 另可在 `apply/replay` 时传 `position:{x,y}`，表示 Canvas 本地设计像素坐标（±4096）；3.8.7 不接受此扩展输入。一次调度只执行一个命令，PNG 导入与场景放置需分两次调用。
 
 验收：`agent-dispatch.test.js` 用模拟 Host 验证目标变化、命令不可用、预览待验、结果不确定和补偿完成。两版 Creator 的真实 `scene.snapshot` 已跑通目录查询、目标选择、二次场景校验及结构化结果。3.8 实机还故意传错实例 ID 和场景名，执行 Host 均在场景写入前退出。两版 Creator 均通过调度入口执行一次测试 PNG 放置与补偿：放置返回 `needs-preview`，补偿返回 `completed`，四次操作的磁盘阶段均为 `passed`。场景文件在测试后按已核对的 HEAD 基线逐字节恢复。调度入口尚不控制预览；`needs-preview` 不能解释为画面已验收。
 

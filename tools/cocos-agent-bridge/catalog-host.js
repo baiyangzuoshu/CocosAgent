@@ -144,7 +144,9 @@ function validCatalog(target, result) {
         'scene.snapshot': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/snapshotInput', input: catalogSchema.$defs.snapshotInput, preconditions: ['activeScene'] },
         'scene.node.inspect': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/nodeInspectInput', input: catalogSchema.$defs.nodeInspectInput, preconditions: ['activeScene'] },
         'asset.importPng': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/importPngInput', input: catalogSchema.$defs.importPngInput, preconditions: ['stagedPng', 'destinationFree'] },
-        'scene.pngSprite': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/pngSpriteInput', input: catalogSchema.$defs.pngSpriteInput,
+        'scene.pngSprite': { access: 'write', inputSchema: target.creatorVersion === '2.4.15'
+            ? 'catalog.schema.json#/$defs/pngSpriteInput2x' : 'catalog.schema.json#/$defs/pngSpriteInput',
+            input: target.creatorVersion === '2.4.15' ? catalogSchema.$defs.pngSpriteInput2x : catalogSchema.$defs.pngSpriteInput,
             preconditions: target.creatorVersion === '2.4.15' ? ['activeScene', 'canvasExisting', 'spriteFrameImported'] : ['activeScene', 'spriteFrameImported'] },
         'scene.node.create': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/nodeCreateInput', input: catalogSchema.$defs.nodeCreateInput,
             preconditions: ['activeScene', 'parentIdentity'] },

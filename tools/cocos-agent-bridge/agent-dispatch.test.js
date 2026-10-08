@@ -61,6 +61,11 @@ result = dispatch(request, fixture.invoke);
 assert.strictEqual(result.error.code, 'COMMAND_UNAVAILABLE');
 assert.strictEqual(fixture.calls.length, 2);
 
+fixture = mock();
+result = dispatch({ ...request, input: { ...request.input, position: { x: 64, y: 0 } } }, fixture.invoke);
+assert.strictEqual(result.error.code, 'INVALID_ARGUMENT');
+assert.strictEqual(fixture.calls.length, 0, '3.8 must reject the 2.4-only position input before target discovery');
+
 fixture = mock({ pending: true, executionStatus: 1 });
 result = dispatch(request, fixture.invoke);
 assert.strictEqual(result.outcome, 'needs-review');

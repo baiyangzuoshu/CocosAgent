@@ -32,6 +32,21 @@
           "maxItems": 16,
           "uniqueItems": true,
           "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$" }
+        },
+        "positions": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["x", "y"],
+            "properties": {
+              "x": { "type": "number", "minimum": -4096, "maximum": 4096 },
+              "y": { "type": "number", "minimum": -4096, "maximum": 4096 }
+            }
+          },
+          "description": "Optional Canvas-local design-pixel positions paired by index with assets. Length must equal assets."
         }
       }
     },

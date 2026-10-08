@@ -33,6 +33,7 @@ const COMMAND_INPUTS = {
             assetName: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$' },
             action: { enum: ['apply', 'compensate', 'replay'] },
             operationId: { type: 'string', pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' },
+            position: { $ref: '#/$defs/canvasPosition' },
         } },
     nodeCreate: { type: 'object', additionalProperties: false, required: ['parentPath', 'parentUuid', 'nodeName', 'action'],
         properties: {
@@ -59,7 +60,7 @@ function commandCatalog(context) {
             inputSchema: 'catalog.schema.json#/$defs/importPngInput', input: COMMAND_INPUTS.importPng, preconditions: ['stagedPng', 'destinationFree'],
             status: 'available', reason: null },
         { id: 'scene.pngSprite', contractVersion: '0.1', access: 'write',
-            inputSchema: 'catalog.schema.json#/$defs/pngSpriteInput', input: COMMAND_INPUTS.pngSprite, preconditions: ['activeScene', 'canvasExisting', 'spriteFrameImported'],
+            inputSchema: 'catalog.schema.json#/$defs/pngSpriteInput2x', input: COMMAND_INPUTS.pngSprite, preconditions: ['activeScene', 'canvasExisting', 'spriteFrameImported'],
             status: spriteReady ? 'available' : 'unavailable', reason: spriteReady ? null : sceneReady ? 'CANVAS_NOT_FOUND' : 'NO_OPEN_SCENE' },
         { id: 'scene.node.create', contractVersion: '0.1', access: 'write',
             inputSchema: 'catalog.schema.json#/$defs/nodeCreateInput', input: COMMAND_INPUTS.nodeCreate, preconditions: ['activeScene', 'parentIdentity'],
@@ -178,12 +179,14 @@ function runSceneOperation(message) {
     const operation = activeSession && activeSession.sceneOperation;
     if (!operation || params.sessionId !== activeSession.sessionId || params.assetName !== operation.assetName
         || params.assetUuid !== operation.assetUuid || params.nodeName !== operation.nodeName
+        || JSON.stringify(params.position || null) !== JSON.stringify(operation.position || null)
         || params.sceneAction !== operation.sceneAction || typeof params.nonce !== 'string') {
         send({ type: 'response', id: message.id, ok: false, error: { code: 'INVALID_SCENE_SESSION' } });
         return;
     }
     const method = params.sceneAction === 'compensate' ? 'remove-png-sprite' : 'place-png-sprite';
-    Editor.Scene.callSceneScript('cocos-agent-bridge', method, { spriteFrameUuid: operation.assetUuid, nodeName: operation.nodeName }, (error, result) => {
+    Editor.Scene.callSceneScript('cocos-agent-bridge', method, { spriteFrameUuid: operation.assetUuid, nodeName: operation.nodeName,
+        ...(operation.position ? { position: operation.position } : {}) }, (error, result) => {
         if (error) {
             send({ type: 'response', id: message.id, ok: false, error: { code: error.code || 'SCENE_OPERATION_FAILED', message: String(error.message || error) } });
             return;
@@ -219,16 +222,19 @@ function preflightSceneOperation(message) {
     const contract = params.operation || {};
     if (!operation || params.sessionId !== activeSession.sessionId || params.assetName !== operation.assetName
         || params.assetUuid !== operation.assetUuid || params.nodeName !== operation.nodeName
+        || JSON.stringify(params.position || null) !== JSON.stringify(operation.position || null)
         || params.sceneAction !== operation.sceneAction || typeof params.nonce !== 'string'
         || contract.contractVersion !== '0.1' || contract.operationId !== activeSession.operationId
         || contract.capabilityId !== 'scene.pngSprite' || contract.action !== operation.sceneAction
         || contract.assetName !== operation.assetName || contract.assetUuid !== operation.assetUuid
+        || JSON.stringify(contract.position || null) !== JSON.stringify(operation.position || null)
         || contract.nodeName !== operation.nodeName || typeof contract.sceneName !== 'string') {
         send({ type: 'response', id: message.id, ok: false, error: { code: 'INVALID_SCENE_SESSION', phase: 'preflight', message: 'Session manifest mismatch.', retryable: false, sideEffect: 'none' } });
         return;
     }
     Editor.Scene.callSceneScript('cocos-agent-bridge', 'preflight-png-sprite', {
         spriteFrameUuid: operation.assetUuid, nodeName: operation.nodeName, action: operation.sceneAction,
+        ...(operation.position ? { position: operation.position } : {}),
     }, (error, result) => {
         if (error) {
             send({ type: 'response', id: message.id, ok: false, error: { code: error.code || 'PREFLIGHT_FAILED', phase: 'preflight', message: String(error.message || error), retryable: false, sideEffect: 'none' } });
@@ -375,7 +381,7 @@ function connectFromSession() {
             extension: 'cocos-agent-bridge',
             instanceId: INSTANCE_ID,
             capabilities: ['bridge.ping', 'scene.snapshot', 'asset.importPng', 'scene.preflightPngSprite', 'scene.placePngSprite', 'scene.removePngSprite', 'scene.node.create.preflight', 'scene.node.create'],
-            operationContract: { id: 'scene.pngSprite', contractVersion: '0.1', creatorVersion: CREATOR_VERSION, access: 'scene-write', actions: ['apply', 'compensate', 'replay'], previewVerification: 'manual-web', compensation: 'identity-checked-node-removal' },
+            operationContract: { id: 'scene.pngSprite', contractVersion: '0.1', creatorVersion: CREATOR_VERSION, access: 'scene-write', actions: ['apply', 'compensate', 'replay'], previewVerification: 'manual-web', compensation: 'identity-checked-node-removal', positionSpace: 'canvas-local-design-pixels' },
         }));
         console.log(`[COCOS_AGENT_BRIDGE_2] connected to local Agent session ${session.sessionId}`);
     });

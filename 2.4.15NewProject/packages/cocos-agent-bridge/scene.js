@@ -73,7 +73,8 @@ module.exports = {
     'preflight-png-sprite'(event, params) {
         if (!params || !/^[0-9a-f-]{36}$/i.test(params.spriteFrameUuid || '')
             || !/^CocosAgentAsset_[A-Za-z0-9_-]{1,64}$/.test(params.nodeName || '')
-            || !['apply', 'compensate', 'replay'].includes(params.action)) {
+            || !['apply', 'compensate', 'replay'].includes(params.action)
+            || (params.position && !validCanvasPosition(params.position))) {
             event.reply({ code: 'INVALID_SCENE_OPERATION', message: 'Invalid SpriteFrame operation.' });
             return;
         }
@@ -90,6 +91,10 @@ module.exports = {
                 event.reply({ code: 'SCENE_NODE_CONFLICT', message: 'The reserved node name has different data.' });
                 return;
             }
+            if (params.position && (Math.abs(node.x - params.position.x) > 1e-6 || Math.abs(node.y - params.position.y) > 1e-6)) {
+                event.reply({ code: 'SCENE_NODE_CONFLICT', message: 'The reserved node has a different Canvas position.' });
+                return;
+            }
         }
         event.reply(null, {
             sceneName: scene.name,
@@ -97,6 +102,7 @@ module.exports = {
             decision: params.action === 'compensate' ? (node ? 'remove' : 'alreadyAbsent') : (node ? 'alreadyApplied' : 'create'),
             targetNodeUuid: node ? node.uuid : null,
             canvasName: canvas.name,
+            ...(params.position ? { position: params.position } : {}),
         });
     },
 
@@ -184,7 +190,8 @@ module.exports = {
     'place-png-sprite'(event, params) {
         const fail = (code, message) => event.reply({ code, message });
         if (!params || !/^[0-9a-f-]{36}$/i.test(params.spriteFrameUuid || '')
-            || !/^CocosAgentAsset_[A-Za-z0-9_-]{1,64}$/.test(params.nodeName || '')) {
+            || !/^CocosAgentAsset_[A-Za-z0-9_-]{1,64}$/.test(params.nodeName || '')
+            || (params.position && !validCanvasPosition(params.position))) {
             fail('INVALID_SCENE_OPERATION', 'A valid SpriteFrame UUID and reserved node name are required.');
             return;
         }
@@ -197,8 +204,11 @@ module.exports = {
         const existing = canvas.getChildByName(params.nodeName);
         if (existing) {
             const existingSprite = existing.getComponent(cc.Sprite);
-            if (existingSprite && existingSprite.spriteFrame && existingSprite.spriteFrame._uuid === params.spriteFrameUuid) {
-                event.reply(null, { nodeName: existing.name, nodeUuid: existing.uuid, alreadyApplied: true, spriteFrameUuid: params.spriteFrameUuid });
+            const positionMatches = !params.position || (Math.abs(existing.x - params.position.x) <= 1e-6
+                && Math.abs(existing.y - params.position.y) <= 1e-6);
+            if (existingSprite && existingSprite.spriteFrame && existingSprite.spriteFrame._uuid === params.spriteFrameUuid && positionMatches) {
+                event.reply(null, { nodeName: existing.name, nodeUuid: existing.uuid, alreadyApplied: true, spriteFrameUuid: params.spriteFrameUuid,
+                    ...(params.position ? { position: params.position } : {}) });
             } else {
                 fail('SCENE_NODE_CONFLICT', `A node named ${params.nodeName} already exists with different data.`);
             }
@@ -213,10 +223,12 @@ module.exports = {
             const node = new cc.Node(params.nodeName);
             const sprite = node.addComponent(cc.Sprite);
             sprite.spriteFrame = spriteFrame;
-            node.setPosition(0, 0);
+            const position = params.position || { x: 0, y: 0 };
+            node.setPosition(position.x, position.y);
             node.setScale(64, 64, 1);
             canvas.addChild(node);
-            event.reply(null, { nodeName: node.name, nodeUuid: node.uuid, alreadyApplied: false, spriteFrameUuid: spriteFrame._uuid });
+            event.reply(null, { nodeName: node.name, nodeUuid: node.uuid, alreadyApplied: false, spriteFrameUuid: spriteFrame._uuid,
+                position: { x: node.x, y: node.y } });
         });
     },
 
@@ -243,3 +255,9 @@ module.exports = {
         event.reply(null, { nodeName: params.nodeName, nodeUuid, removed: true, alreadyAbsent: false });
     },
 };
+
+function validCanvasPosition(position) {
+    return position && typeof position === 'object' && !Array.isArray(position)
+        && Object.keys(position).length === 2 && Number.isFinite(position.x) && Number.isFinite(position.y)
+        && Math.abs(position.x) <= 4096 && Math.abs(position.y) <= 4096;
+}

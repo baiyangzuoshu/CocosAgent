@@ -28,12 +28,13 @@ const pngSourceArg = argument('--png');
 const sceneAssetName = argument('--scene-asset');
 const sceneAction = argument('--scene-action');
 const requestedOperationId = argument('--operation-id');
+const scenePositionArg = argument('--scene-position');
 const operationGetId = argument('--operation-get');
 const nodePath = argument('--node-path');
 const interruptAfterEditor = process.argv.includes('--interrupt-after-editor');
 const expectedInstanceId = argument('--expected-instance-id');
 const expectedScene = argument('--expected-scene');
-if (operationGetId && (sceneAssetName || sceneAction || pngSourceArg || requestedOperationId || interruptAfterEditor)) {
+if (operationGetId && (sceneAssetName || sceneAction || scenePositionArg || pngSourceArg || requestedOperationId || interruptAfterEditor)) {
     fail('--operation-get is read-only and cannot be combined with write options.');
 }
 if (nodePath && (sceneAssetName || sceneAction || pngSourceArg || operationGetId)
@@ -57,6 +58,14 @@ if ((sceneAssetName && !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/i.test(sceneAsse
     fail('--scene-asset requires --scene-action apply|compensate|replay and a PNG filename in assets/resources/.');
 }
 
+let scenePosition = null;
+if (scenePositionArg !== undefined) {
+    try { scenePosition = JSON.parse(scenePositionArg); } catch (_) { fail('--scene-position must be a JSON object with numeric x and y.'); }
+    if (creatorVersion !== '2.4.15' || !sceneAssetName || !['apply', 'replay'].includes(sceneAction) || !isCanvasPosition(scenePosition)) {
+        fail('--scene-position is supported only for a 2.4.15 scene Sprite apply/replay and coordinates within ±4096.');
+    }
+}
+
 const projectRoot = path.resolve(projectRootArg);
 if (!fs.existsSync(projectRoot) || !fs.statSync(projectRoot).isDirectory()) {
     fail(`Project directory does not exist: ${projectRoot}`);
@@ -77,6 +86,7 @@ function readSceneAssetManifest(assetName) {
         nodeName: `CocosAgentAsset_${path.basename(assetName, '.png').replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 16)}`,
         assetUuid: subAsset.uuid,
         sceneAction,
+        ...(scenePosition ? { position: scenePosition } : {}),
     };
 }
 
@@ -285,7 +295,8 @@ webSocketServer.on('connection', (socket) => {
                 && contract.access === 'scene-write'
                 && Array.isArray(contract.actions) && contract.actions.join(',') === 'apply,compensate,replay'
                 && contract.previewVerification === 'manual-web'
-                && contract.compensation === 'identity-checked-node-removal');
+                && contract.compensation === 'identity-checked-node-removal'
+                && (!sceneManifest.position || contract.positionSpace === 'canvas-local-design-pixels'));
             if (!projectMatches || !versionMatches || !protocolMatches || !extensionMatches || !instanceMatches || !capabilityMatches || !contractMatches) {
                 send(socket, {
                     type: 'helloAck',
@@ -448,6 +459,7 @@ webSocketServer.on('connection', (socket) => {
                 && path.resolve(result.projectRoot || '') === projectRoot
                 && result.sceneName === activeSceneName
                 && result.nodeName === sceneManifest.nodeName
+                && (!sceneManifest.position || sameCanvasPosition(result.position, sceneManifest.position))
                 && allowedDecisions.includes(result.decision)
                 && typeof result.canvasName === 'string';
             if (!valid) {
@@ -463,7 +475,7 @@ webSocketServer.on('connection', (socket) => {
             }
             process.stdout.write(`scene preflight verified: ${result.decision}, canvas=${result.canvasName}.\n`);
             preflightDecision = result.decision;
-            emitReceipt('preflight', 'passed', [{ kind: 'scene-snapshot', source: 'Creator scene script', sceneName: result.sceneName, nodeName: result.nodeName, note: `decision=${result.decision}; canvas=${result.canvasName}` }]);
+            emitReceipt('preflight', 'passed', [{ kind: 'scene-snapshot', source: 'Creator scene script', sceneName: result.sceneName, nodeName: result.nodeName, note: `decision=${result.decision}; canvas=${result.canvasName}${result.position ? `; position=(${result.position.x},${result.position.y})` : ''}` }]);
             requestSceneOperation();
             return;
         }
@@ -478,6 +490,7 @@ webSocketServer.on('connection', (socket) => {
                 && result.action === sceneManifest.sceneAction
                 && result.assetName === sceneManifest.assetName
                 && result.nodeName === sceneManifest.nodeName
+                && (!sceneManifest.position || sameCanvasPosition(result.position, sceneManifest.position))
                 && result.saved === true
                 && ((sceneManifest.sceneAction === 'compensate' && (result.removed === true || result.alreadyAbsent === true))
                     || (sceneManifest.sceneAction !== 'compensate' && typeof result.nodeUuid === 'string' && result.nodeUuid.length > 0));
@@ -494,7 +507,7 @@ webSocketServer.on('connection', (socket) => {
                 return;
             }
             pendingSceneResult = result;
-            emitReceipt('editor', 'passed', [{ kind: 'editor-result', source: 'Creator scene operation', sceneName: activeSceneName, nodeName: result.nodeName, assetUuid: sceneManifest.assetUuid, note: `action=${sceneManifest.sceneAction}; preflight=${preflightDecision}` }]);
+            emitReceipt('editor', 'passed', [{ kind: 'editor-result', source: 'Creator scene operation', sceneName: activeSceneName, nodeName: result.nodeName, assetUuid: sceneManifest.assetUuid, note: `action=${sceneManifest.sceneAction}; preflight=${preflightDecision}${result.position ? `; position=(${result.position.x},${result.position.y})` : ''}` }]);
             if (interruptAfterEditor) {
                 process.stderr.write('Deliberate interruption after editor receipt; use operation.get for disk readback.\n');
                 cleanUp(75);
@@ -585,6 +598,7 @@ function requestPreflight() {
         contractVersion: '0.1', operationId, capabilityId: 'scene.pngSprite',
         action: sceneManifest.sceneAction, assetName: sceneManifest.assetName,
         assetUuid: sceneManifest.assetUuid, nodeName: sceneManifest.nodeName,
+        ...(sceneManifest.position ? { position: sceneManifest.position } : {}),
         sceneName: activeSceneName,
     };
     send(connectedSocket, {
@@ -632,7 +646,24 @@ function verifySavedScene(manifest, sceneName) {
     const sprite = (matches[0]._components || [])
         .map((ref) => ref && Number.isInteger(ref.__id__) ? objects[ref.__id__] : null)
         .find((component) => component && component.__type__ === 'cc.Sprite');
-    return Boolean(sprite && sprite._spriteFrame && sprite._spriteFrame.__uuid__ === manifest.assetUuid);
+    if (!sprite || !sprite._spriteFrame || sprite._spriteFrame.__uuid__ !== manifest.assetUuid) return false;
+    if (manifest.position) {
+        const transform = matches[0]._trs && matches[0]._trs.array;
+        if (!Array.isArray(transform) || transform.length < 2
+            || Math.abs(transform[0] - manifest.position.x) > 1e-6
+            || Math.abs(transform[1] - manifest.position.y) > 1e-6) return false;
+    }
+    return true;
+}
+
+function isCanvasPosition(position) {
+    return position && typeof position === 'object' && !Array.isArray(position)
+        && Object.keys(position).length === 2 && Number.isFinite(position.x) && Number.isFinite(position.y)
+        && Math.abs(position.x) <= 4096 && Math.abs(position.y) <= 4096;
+}
+function sameCanvasPosition(actual, expected) {
+    return isCanvasPosition(actual) && Math.abs(actual.x - expected.x) <= 1e-6
+        && Math.abs(actual.y - expected.y) <= 1e-6;
 }
 
 async function waitForSavedScene() {

@@ -38,7 +38,12 @@ function runProcess(script, args) {
     const result = spawnSync(process.execPath, [path.join(__dirname, script), ...args], { encoding: 'utf8', maxBuffer: 1024 * 1024 });
     return { status: result.status, stdout: result.stdout || '', stderr: result.stderr || '', error: result.error };
 }
-function validInput(command, input) {
+function validPosition(position) {
+    return position && typeof position === 'object' && !Array.isArray(position)
+        && Object.keys(position).length === 2 && Number.isFinite(position.x) && Number.isFinite(position.y)
+        && Math.abs(position.x) <= 4096 && Math.abs(position.y) <= 4096;
+}
+function validInput(command, input, creatorVersion) {
     if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
     const keys = Object.keys(input);
     if (command === 'scene.snapshot') return keys.length === 0;
@@ -53,9 +58,10 @@ function validInput(command, input) {
         && ['apply', 'compensate', 'replay'].includes(input.action)
         && (input.action === 'apply' ? input.sourceOperationId === undefined : typeof input.sourceOperationId === 'string' && /^[0-9a-f-]{36}$/i.test(input.sourceOperationId))
         && (input.operationId === undefined || /^[0-9a-f-]{36}$/i.test(input.operationId));
-    return keys.every((key) => ['assetName', 'action', 'operationId'].includes(key))
+    return keys.every((key) => ['assetName', 'action', 'operationId', ...(creatorVersion === '2.4.15' ? ['position'] : [])].includes(key))
         && typeof input.assetName === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/i.test(input.assetName)
         && ['apply', 'compensate', 'replay'].includes(input.action)
+        && (input.position === undefined || (creatorVersion === '2.4.15' && ['apply', 'replay'].includes(input.action) && validPosition(input.position)))
         && (input.operationId === undefined || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.operationId));
 }
 
@@ -63,7 +69,7 @@ function dispatchCommand(request, invoke) {
     const { targets, projectRoot, creatorVersion, command, input } = request;
     if (!Array.isArray(targets) || !targets.length || !targets.every((target) =>
         target && versions.has(target.creatorVersion) && typeof target.projectRoot === 'string')
-        || !versions.has(creatorVersion) || !commands.has(command) || typeof projectRoot !== 'string' || !validInput(command, input)) {
+        || !versions.has(creatorVersion) || !commands.has(command) || typeof projectRoot !== 'string' || !validInput(command, input, creatorVersion)) {
         return problem('INVALID_ARGUMENT', 'Provide targets, an exact project and Creator version, a supported command, and valid input.');
     }
     const project = path.resolve(projectRoot);
@@ -99,6 +105,7 @@ function dispatchCommand(request, invoke) {
     if (command === 'scene.pngSprite') {
         operationId = input.operationId || crypto.randomUUID();
         executionArgs.push('--scene-asset', input.assetName, '--scene-action', input.action, '--operation-id', operationId);
+        if (input.position) executionArgs.push('--scene-position', JSON.stringify(input.position));
     }
     if (command === 'scene.node.create') {
         operationId = input.operationId || crypto.randomUUID();
@@ -130,7 +137,8 @@ function dispatchCommand(request, invoke) {
         result: nodeOperation ? { sceneName: record.sceneName, action: record.manifest.action, nodeName: record.manifest.nodeName,
             nodeUuid: record.createdNodeUuid || record.manifest.targetNodeUuid, parentPath: record.manifest.parentPath, parentUuid: record.manifest.parentUuid }
             : { sceneName: record.sceneName, action: record.manifest.sceneAction, assetName: record.manifest.assetName,
-                nodeName: record.manifest.nodeName, assetUuid: record.manifest.assetUuid } };
+                nodeName: record.manifest.nodeName, assetUuid: record.manifest.assetUuid,
+                ...(record.manifest.position ? { position: record.manifest.position } : {}) } };
     if (record.phases.disk === 'passed') {
         return { success: true, outcome: nodeOperation || record.phases.preview === 'passed' || input.action === 'compensate' ? 'completed' : 'needs-preview', ...state };
     }
@@ -178,7 +186,8 @@ function operationStatus(request, invoke) {
         result: nodeOperation ? { sceneName: record.sceneName, action: record.manifest.action, nodeName: record.manifest.nodeName,
             nodeUuid: record.createdNodeUuid || record.manifest.targetNodeUuid, parentPath: record.manifest.parentPath, parentUuid: record.manifest.parentUuid }
             : { sceneName: record.sceneName, action: record.manifest.sceneAction, assetName: record.manifest.assetName,
-                nodeName: record.manifest.nodeName, assetUuid: record.manifest.assetUuid } };
+                nodeName: record.manifest.nodeName, assetUuid: record.manifest.assetUuid,
+                ...(record.manifest.position ? { position: record.manifest.position } : {}) } };
     if (record.phases.disk === 'passed') {
         return { success: true, outcome: nodeOperation || record.manifest.sceneAction === 'compensate' || record.phases.preview === 'passed' ? 'completed' : 'needs-preview', ...base };
     }

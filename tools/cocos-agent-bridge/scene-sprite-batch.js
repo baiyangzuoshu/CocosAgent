@@ -11,6 +11,11 @@ const uuidPattern = idPattern;
 const nodeIdPattern = /^[A-Za-z0-9_-]{16,64}$/;
 const assetPattern = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/;
 const fail = (code, message) => ({ success: false, outcome: 'failed', error: { code, message } });
+function validPosition(position) {
+    return position && typeof position === 'object' && !Array.isArray(position)
+        && Object.keys(position).length === 2 && Number.isFinite(position.x) && Number.isFinite(position.y)
+        && Math.abs(position.x) <= 4096 && Math.abs(position.y) <= 4096;
+}
 function file(projectRoot, batchId) { return path.join(projectRoot, '.cocos-agent', 'scene-batches', `${batchId}.json`); }
 function save(record, create = false) {
     const filename = file(record.projectRoot, record.batchId);
@@ -75,10 +80,13 @@ function inspectContext(params, run) {
 function plan(params, run = dispatch) {
     if (!targetValid(params) || !Array.isArray(params.assets) || params.assets.length < 2 || params.assets.length > 16)
         return fail('INVALID_SCENE_BATCH', 'Provide one exact Creator 2.4.15 project and 2–16 imported PNG names.');
+    if (params.positions !== undefined && (!Array.isArray(params.positions) || params.positions.length !== params.assets.length
+        || params.positions.some((position) => !validPosition(position))))
+        return fail('INVALID_POSITIONS', 'Provide one finite Canvas-local x/y position per asset, within ±4096 design pixels.');
     const items = [];
     const names = new Set();
     const nodeNames = new Set();
-    for (const assetName of params.assets) {
+    for (const [index, assetName] of params.assets.entries()) {
         const key = typeof assetName === 'string' ? assetName.toLowerCase() : '';
         if (names.has(key)) return fail('DUPLICATE_ASSET', `Repeated asset: ${String(assetName)}`);
         names.add(key);
@@ -86,7 +94,7 @@ function plan(params, run = dispatch) {
         if (!asset.success) return fail(asset.code, `Cannot use ${String(assetName)} as an imported 2.4 SpriteFrame.`);
         if (nodeNames.has(asset.nodeName)) return fail('NODE_NAME_COLLISION', `Assets map to the same scene node: ${asset.nodeName}`);
         nodeNames.add(asset.nodeName);
-        items.push(asset);
+        items.push({ ...asset, position: params.positions ? { ...params.positions[index] } : { x: 0, y: 0 } });
     }
     const context = inspectContext(params, run);
     if (!context.success) return fail(context.error.code, 'The active 2.4 scene must contain one inspectable Canvas.');
@@ -107,7 +115,7 @@ function publicRecord(record) {
         const operation = operationState(record.projectRoot, item.operationId);
         const compensation = item.compensationOperationId
             ? operationState(record.projectRoot, item.compensationOperationId) : null;
-        return { assetName: item.assetName, nodeName: item.nodeName, assetUuid: item.assetUuid,
+        return { assetName: item.assetName, nodeName: item.nodeName, assetUuid: item.assetUuid, position: item.position || { x: 0, y: 0 },
             status: item.status, operationId: item.operationId, compensationOperationId: item.compensationOperationId,
             phases: operation && operation.phases || null,
             compensationPhases: compensation && compensation.phases || null };
@@ -183,7 +191,9 @@ function execute(params, run = dispatch) {
             createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
         try { save(record, true); } catch (error) { return fail('BATCH_RECORD_FAILED', error.message); }
     } else if (record.projectRoot !== path.resolve(params.projectRoot) || record.creatorVersion !== params.creatorVersion
-        || JSON.stringify(record.items.map((item) => item.assetName)) !== JSON.stringify(params.assets)) {
+        || JSON.stringify(record.items.map((item) => item.assetName)) !== JSON.stringify(params.assets)
+        || JSON.stringify(record.items.map((item) => item.position || { x: 0, y: 0 }))
+            !== JSON.stringify(params.positions || params.assets.map(() => ({ x: 0, y: 0 })))) {
         return fail('BATCH_CONFLICT', 'Batch ID belongs to another project, version, or asset list.');
     } else if (['needs-preview', 'completed', 'compensated', 'failed', 'needs-review'].includes(record.state)) return publicRecord(record);
     if (!reconcile(record, run)) return publicRecord(record);
@@ -209,10 +219,12 @@ function execute(params, run = dispatch) {
         }
         item.status = 'applying'; save(record);
         const result = run({ targets: record.targets, projectRoot: record.projectRoot, creatorVersion: record.creatorVersion,
-            command: 'scene.pngSprite', input: { assetName: item.assetName, action: 'apply', operationId: item.operationId } });
+            command: 'scene.pngSprite', input: { assetName: item.assetName, action: 'apply', operationId: item.operationId, position: item.position } });
         if (result.success && ['completed', 'needs-preview'].includes(result.outcome) && result.phases?.disk === 'passed'
             && result.instance?.instanceId === record.instanceId && result.instance?.activeScene === record.sceneName
-            && result.result?.assetUuid === item.assetUuid && result.result?.nodeName === item.nodeName) {
+            && result.result?.assetUuid === item.assetUuid && result.result?.nodeName === item.nodeName
+            && validPosition(result.result?.position)
+            && result.result.position.x === item.position.x && result.result.position.y === item.position.y) {
             item.status = 'applied'; save(record); continue;
         }
         if (result.outcome === 'failed' && result.error?.sideEffect === 'none') {
@@ -254,7 +266,8 @@ function replay(params, run = dispatch) {
         || source.creatorVersion !== params.creatorVersion || !['compensated', 'failed'].includes(source.state)
         || source.items.some((item) => ['applied', 'applying', 'compensating'].includes(item.status)))
         return fail('SOURCE_BATCH_NOT_COMPENSATED', 'Replay requires a fully compensated 2.4 scene batch.');
-    return execute({ ...params, targets: source.targets, assets: source.items.map((item) => item.assetName), replayedFrom: source.batchId }, run);
+    return execute({ ...params, targets: source.targets, assets: source.items.map((item) => item.assetName),
+        positions: source.items.map((item) => item.position || { x: 0, y: 0 }), replayedFrom: source.batchId }, run);
 }
 function handle(method, params, run = dispatch) {
     if (method === 'scene.sprites.plan') return plan(params, run);

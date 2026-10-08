@@ -1,6 +1,6 @@
 # CocosAgent 操作合同 0.1：PNG 放入场景
 
-本合同当前只覆盖 `scene.pngSprite`：把已导入的 PNG 对应 SpriteFrame 放入当前场景，以及按身份补偿、重放。机器可读定义在 [`operation.schema.json`](../../tools/cocos-agent-bridge/operation.schema.json)，持久状态定义在 [`operation-record.schema.json`](../../tools/cocos-agent-bridge/operation-record.schema.json)。`operationId` 已与一次 Host `sessionId` 分离。Host 为场景操作生成独立 UUID，也可用 `--operation-id` 指定；同一 ID 已存在时拒绝再次执行。六阶段当前状态与已发出的回执保存在项目 `.cocos-agent/operations/<operationId>.json`，`operation.get` 可跨 Host 进程读取。该文件是本地运行状态，不属于场景资源或提交内容。
+本合同当前只覆盖 `scene.pngSprite`：把已导入的 PNG 对应 SpriteFrame 放入当前场景，以及按身份补偿、重放。Creator 2.4.15 写入可选 `position:{x,y}`，坐标是 Canvas 本地设计像素；3.8.7 不接受该字段。机器可读定义在 [`operation.schema.json`](../../tools/cocos-agent-bridge/operation.schema.json)，持久状态定义在 [`operation-record.schema.json`](../../tools/cocos-agent-bridge/operation-record.schema.json)。`operationId` 已与一次 Host `sessionId` 分离。Host 为场景操作生成独立 UUID，也可用 `--operation-id` 指定；同一 ID 已存在时拒绝再次执行。六阶段当前状态与已发出的回执保存在项目 `.cocos-agent/operations/<operationId>.json`，`operation.get` 可跨 Host 进程读取。该文件是本地运行状态，不属于场景资源或提交内容。
 
 写入编辑器前，Host 先持久记录 `editor-write-sent` 意图。若在编辑器回执后、磁盘读回前中断，重新运行 `--operation-get <operationId>` 将只读检查目标场景文件；目标节点和 SpriteFrame 引用满足原操作意图时，补记 `disk=passed` 和恢复证据，不再次发送写入请求。磁盘未满足意图时保持 `pending`，由人或后续专门恢复流程处理；`operation.get` 不自动补写。这里的恢复读回不等于视觉预览通过，也不代表补偿阶段已完成。回执是操作发生时的历史证据；日后补偿或人工修改场景，不会追溯改写原操作的 `disk=passed`。需要当前状态时重新查询场景。
 

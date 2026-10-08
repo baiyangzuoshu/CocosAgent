@@ -74,6 +74,15 @@
         "assetName": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$" },
         "assetUuid": { "type": "string", "pattern": "^[0-9a-f-]{36}(@[0-9a-f]+)?$" },
         "nodeName": { "type": "string", "pattern": "^CocosAgentAsset_[A-Za-z0-9_-]{1,64}$" },
+        "position": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["x", "y"],
+          "properties": {
+            "x": { "type": "number", "minimum": -4096, "maximum": 4096 },
+            "y": { "type": "number", "minimum": -4096, "maximum": 4096 }
+          }
+        },
         "sceneName": { "type": "string", "minLength": 1, "maxLength": 64 }
       }
     },

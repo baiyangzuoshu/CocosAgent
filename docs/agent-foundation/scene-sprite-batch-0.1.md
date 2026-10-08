@@ -4,7 +4,9 @@
 
 ## 输入与阶段
 
-`scene.sprites.plan` 和 `scene.sprites.execute` 接收 `targets`、精确的 `projectRoot`、`creatorVersion="2.4.15"`，以及 2–16 个已导入 PNG 文件名。每项必须位于项目 `assets/resources/`，并有 Creator 生成的 `.meta`。Agent 应先调用 `plan`；它只读验证唯一匹配的目标、活动场景、活动场景下 Canvas、PNG/SpriteFrame 的 UUID 关系、重复文件名和预留节点名冲突。
+`scene.sprites.plan` 和 `scene.sprites.execute` 接收 `targets`、精确的 `projectRoot`、`creatorVersion="2.4.15"`，以及 2–16 个已导入 PNG 文件名。每项必须位于项目 `assets/resources/`，并有 Creator 生成的 `.meta`。可选 `positions` 是与 `assets` 等长的 `{x,y}` 数组，按索引配对；坐标是 Canvas 本地设计像素，原点在 Canvas 中心，范围限制为 ±4096。省略时各 Sprite 保持现有单图命令的 `(0,0)` 默认位置。位置定义依据[2.4 节点变换手册](https://docs.cocos.com/creator/2.4/manual/zh/content-workflow/transform.html)与[Canvas 手册](https://docs.cocos.com/creator/2.4/manual/zh/components/canvas.html)。位置只描述节点锚点，不保证资源尺寸或构图一定落在视口内；仍需观察本次预览。
+
+Agent 应先调用 `plan`；它只读验证唯一匹配的目标、活动场景、活动场景下 Canvas、PNG/SpriteFrame 的 UUID 关系、重复文件名、预留节点名冲突和位置数组。示例：`{"assets":["left.png","right.png"],"positions":[{"x":-64,"y":0},{"x":64,"y":0}]}`。
 
 `execute` 为每个输入项持久分配独立 `operationId`，按顺序调用现有 `scene.pngSprite`，每项检查当前场景、资源摘要、节点名和 SpriteFrame UUID，要求编辑器回执与场景磁盘读回匹配。批次记录在项目 `.cocos-agent/scene-batches/<batchId>.json`；单项记录沿用 `.cocos-agent/operations/<operationId>.json`。相同 `batchId` 重复执行返回已有结果，不产生新节点。
 
@@ -23,8 +25,8 @@
 
 2.4 手册说明图像资源可按 Sprite 类型导入并生成 SpriteFrame 子资源，Sprite 组件引用 SpriteFrame；Canvas 是 UI 场景根节点。本合同要求现有 Canvas，引用 Creator `.meta` 中的 SpriteFrame UUID，并委托既有扩展加载该类型，不自行构造 UUID 或伪造导入结果。[图像资源与 SpriteFrame](https://docs.cocos.com/creator/2.4/manual/zh/asset-workflow/sprite.html)、[Canvas](https://docs.cocos.com/creator/2.4/manual/zh/components/canvas.html)。
 
-当前单图命令把每个 Sprite 放在 Canvas 原点并设置相同缩放，所以多张图片会重叠。批次只验证资源引用和执行可靠性，**不提供位置、布局、图层排序、差异计划，也不代表复杂场景编辑已经解决**。执行后逐项检查 `preview.accept`；若重叠使某项不可见，就不要为该项写预览回执。不能把同一位置上可见一张图当作其余项都通过。
+批次可写入明确坐标，但**不计算自动布局、不提供图层排序或差异计划，也不代表复杂场景编辑已经解决**。执行后逐项检查 `preview.accept`；若某项在视口外或被遮挡，就不要为该项写预览回执。坐标与画面可见性必须分别验收。
 
 ## 验收边界
 
-模拟测试覆盖预检、顺序写入、逐项预览门、相似名称冲突、第二项确定失败后的逆序补偿、不确定写入停止和补偿后重放。2026-10-08 在 Creator 2.4.15 `helloworld` 中，双项写入后的 `.fire` 读回确认两个 Sprite 分别引用正确的 SpriteFrame UUID；逆序补偿和全新 ID 重放后再次补偿均成功。另一次真实批次中，红色 Sprite 在双项场景预览可见；由于后写入 Sprite 遮住白色 smoke，先为红色记录预览回执，再临时补偿红色使 smoke 可见并记录 smoke 回执，随后由批次本身再次补偿两项。**两项资源都单独通过了预览观察，但本合同不提供布局，尚未验证两张图在同一画面中同时可见。** Creator 保存还会规范化旧 `.fire` 字段；最终文件字节已恢复到测试前 SHA-256，Agent 节点数为零。完整运行轨迹见[批量场景验收记录](traces/cocos-agent-scene-sprite-batch-2.4-web.jsonl)。
+模拟测试覆盖预检、顺序写入、逐项预览门、坐标校验、相似名称冲突、第二项确定失败后的逆序补偿、不确定写入停止和补偿后重放。2026-10-08 在 Creator 2.4.15 `helloworld` 中，以 `(-64,0)` 与 `(64,0)` 放入白色 smoke 和红色 Sprite；`.fire` 读回确认坐标及各自 SpriteFrame UUID，Web 预览同一帧中两张图同时可见，两条预览回执均通过。批次逆序补偿后 Agent 节点数为零，场景文件恢复至测试前 SHA-256 `0963cd0a52e25cdfa3edda47a6e998053885d2b93753da7a5c0da2562728d1a8`。先前无坐标版本中遮挡后的逐项观察记录仍保留，作为布局缺口解决前的历史证据。完整轨迹见[批量场景验收记录](traces/cocos-agent-scene-sprite-batch-2.4-web.jsonl)。
