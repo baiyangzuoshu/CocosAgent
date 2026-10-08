@@ -11,7 +11,7 @@
 | `content.build.get` | `projectRoot`、`creatorVersion`、`buildId` | 读取 `.cocos-agent/content-builds/<buildId>.json` 的持久结果 |
 | `content.build.reconcile` | 与 get 相同 | 对 Host 中断后仍为 `running` 或 `needs-review` 的记录，只读校验已有包；不重启 Creator、不重做构建 |
 
-`buildId` 只允许小写字母、数字和连字符，长度 3–32。输出被固定派生到 `build/cocos-agent/<buildId>`，要求此前不存在；冲突会拒绝构建，不清空或覆盖旧输出。CLI 不经过 shell。Creator 版本从应用包 `Info.plist` 核验；默认查找 `/Applications/Cocos/Creator/2.4.15/CocosCreator.app`，也可通过 `COCOS_CREATOR_2_4_15_EXECUTABLE` 指向 Creator 2.4.15 应用包内的可执行文件。构建最多等待 20 分钟。
+`buildId` 只允许小写字母、数字和连字符，长度 3–32。输出被固定派生到 `build/cocos-agent/<buildId>`，要求此前不存在；冲突会拒绝构建，不清空或覆盖旧输出。CLI 不经过 shell。构建入口场景从 `settings/builder.json`（缺失时回退 `settings/builder.panel.json`）读取，并通过对应 `.fire.meta` 与磁盘场景文件双重确认，再显式传入 `startScene`。Creator 版本从应用包 `Info.plist` 核验；默认查找 `/Applications/Cocos/Creator/2.4.15/CocosCreator.app`，也可通过 `COCOS_CREATOR_2_4_15_EXECUTABLE` 指向 Creator 2.4.15 应用包内的可执行文件。构建最多等待 20 分钟。
 
 请求 schema 见 [`content-build.schema.json`](../../tools/cocos-agent-bridge/content-build.schema.json)。
 
@@ -30,6 +30,6 @@ Host 仅在 Creator 进程以成功状态退出后检查产物；还须找到 We
 
 - 2.4 官方命令行发布手册确认 `--path`、`--build`、`platform`、`buildPath` 和 `md5Cache` 参数；手册指出 Creator CLI 仍需要 GUI 环境。构建面板手册说明构建选项可用于命令行，且重新构建可能覆盖既有输出，因此本合同给每次构建分配此前不存在的专用目录。[命令行发布项目](https://docs.cocos.com/creator/2.4/manual/zh/publish/publish-in-command-line.html)、[构建发布面板](https://docs.cocos.com/creator/2.4/manual/zh/editor/publish/build-panel.html)
 - 自动化测试覆盖 release 与 fingerprint 重验、唯一路径、Creator 版本检查、无 shell 调用、资源 UUID 和磁盘文件核对、错误进程持久化、Host 中断后只读对账及内容修改拒绝。
-- **真实 Creator Web-Mobile 构建尚未验证。**当前输出目录格式与 UUID 对账有隔离夹具测试；它们不是 Creator 产物证据。需要 Creator 可交互的 GUI 环境完成首次构建，并保留实际包内 config/UUID/资源路径轨迹后，才可把本 skill 标为实机验证。
+- **真实 Creator Web-Mobile 构建尚未验证。**2026-10-08 曾在隔离临时工程尝试 CLI；Creator 进程以 `SIGABRT` 退出，macOS 崩溃记录显示终止线程位于 `RegisterApplication` 调用链，输出目录没有生成产物。该尝试发生在 Mac 锁屏期间，不能据此断定构建参数或资源有问题。记录见[CLI 尝试轨迹](traces/cocos-agent-content-build-2.4-cli-attempt.jsonl)。当前输出目录格式与 UUID 对账仍只有隔离夹具测试；需要 Creator 可交互的 GUI 环境完成首次构建，并保留实际包内 config/UUID/资源路径轨迹后，才可把本 skill 标为实机验证。
 
 本合同只验收“当前选中的内容版本进入 Web 构建包”。它不证明构建包已经部署、托管或在浏览器打开运行；发布预览与部署验收需要后续切片。

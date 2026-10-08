@@ -11,4 +11,4 @@ Require the desired content release to be selected. Call `content.build.plan` wi
 
 The command never overwrites an existing output folder. If a build fails or stops in `needs-review`, retain the operation and partial output for inspection; retry with a new buildId after diagnosing the cause. Creator's command-line build requires a GUI environment. Do not claim live packaging, deployment, or runtime behavior from unit-test fixtures.
 
-**Validation status:** contract and isolated tests pass. A real Creator 2.4.15 Web-Mobile output has not yet been inspected; until then, treat package-path assumptions as pending runtime validation.
+**Validation status:** contract and isolated tests pass. A CLI attempt from an isolated project while macOS was locked exited with `SIGABRT` during application registration, before Creator produced a package ([trace](../../traces/cocos-agent-content-build-2.4-cli-attempt.jsonl)). A real Creator 2.4.15 Web-Mobile output has not yet been inspected; treat package-path assumptions as pending runtime validation.

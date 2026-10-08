@@ -70,6 +70,33 @@ function resolveCreatorExecutable(options = {}) {
     return { success: true, executable };
 }
 
+function configuredStartScene(root) {
+    const configurationFiles = [path.join(root, 'settings', 'builder.json'), path.join(root, 'settings', 'builder.panel.json')];
+    let startScene = null;
+    for (const filename of configurationFiles) {
+        try {
+            const config = JSON.parse(fs.readFileSync(filename, 'utf8'));
+            if (uuidPattern.test(config.startScene || '')) { startScene = config.startScene.toLowerCase(); break; }
+        } catch (_) { /* Try the other Creator build settings file. */ }
+    }
+    if (!startScene) return fail('BUILD_SCENE_NOT_CONFIGURED', 'Creator build settings do not identify a valid startScene UUID.');
+    let sceneFound = false;
+    const assetsRoot = path.join(root, 'assets');
+    if (!fs.existsSync(assetsRoot)) return fail('BUILD_SCENE_NOT_FOUND', 'Project assets directory is missing.');
+    const completeWalk = walk(assetsRoot, (filename) => {
+        if (!/\.fire\.meta$/i.test(filename)) return;
+        try {
+            const meta = JSON.parse(fs.readFileSync(filename, 'utf8'));
+            const sceneFile = filename.slice(0, -'.meta'.length);
+            if (typeof meta.uuid === 'string' && meta.uuid.toLowerCase() === startScene
+                && fs.statSync(sceneFile).isFile()) sceneFound = true;
+        } catch (_) { /* Ignore unrelated invalid metadata; fail if the configured scene is absent. */ }
+    });
+    if (!completeWalk) return fail('BUILD_SCENE_SCAN_LIMIT', 'Project contains too many assets to validate its configured start scene.');
+    if (!sceneFound) return fail('BUILD_SCENE_NOT_FOUND', 'Configured startScene UUID does not match a scene .meta file.');
+    return { success: true, uuid: startScene };
+}
+
 function plan(params, options = {}) {
     const target = project(params);
     if (!target.success) return target;
@@ -79,16 +106,18 @@ function plan(params, options = {}) {
         return fail('INVALID_ARGUMENT', 'Provide safe buildId and selected releaseId values.');
     const selected = selectedRelease(target.root, releaseId, expectedFingerprint);
     if (!selected.success) return selected;
+    const startScene = configuredStartScene(target.root);
+    if (!startScene.success) return startScene;
     const relativeBuildPath = `build/cocos-agent/${buildId}`;
     const outputRoot = path.resolve(target.root, relativeBuildPath);
     if (!realPathWithin(target.root, outputRoot)) return fail('UNSAFE_BUILD_PATH', 'Build output resolves outside the project.');
     if (fs.existsSync(outputRoot)) return fail('BUILD_OUTPUT_EXISTS', 'Build output must be a new, empty path; existing output is never overwritten.');
     const executable = resolveCreatorExecutable(options);
     if (!executable.success) return executable;
-    const buildOptions = `platform=web-mobile;buildPath=./${relativeBuildPath};debug=false;md5Cache=true`;
+    const buildOptions = `platform=web-mobile;buildPath=./${relativeBuildPath};startScene=${startScene.uuid};debug=false;md5Cache=true`;
     return { success: true, outcome: 'ready', creatorVersion: '2.4.15', platform: 'web-mobile',
         projectRoot: target.root, releaseId, fingerprint: selected.fingerprint, buildId,
-        outputRoot, executable: executable.executable,
+        outputRoot, executable: executable.executable, startScene: startScene.uuid,
         args: ['--path', target.root, '--build', buildOptions],
         includedResources: selected.release.assets.map((asset) => ({ id: asset.id, runtimePath: asset.runtimePath,
             resourceUuid: asset.resourceUuid })) };
@@ -218,8 +247,10 @@ function execute(params, options = {}) {
         return fail('BUILD_OUTPUT_CHANGED', 'Build output path changed or appeared after planning; no build was started.');
     }
     const run = options.spawnSync || spawnSync;
+    const timeout = Number.isSafeInteger(options.timeoutMs) && options.timeoutMs > 0
+        ? Math.min(options.timeoutMs, 20 * 60 * 1000) : 20 * 60 * 1000;
     let child;
-    try { child = run(planned.executable, planned.args, { cwd: planned.projectRoot, encoding: 'utf8', timeout: 20 * 60 * 1000, maxBuffer: 8 * 1024 * 1024 }); }
+    try { child = run(planned.executable, planned.args, { cwd: planned.projectRoot, encoding: 'utf8', timeout, maxBuffer: 8 * 1024 * 1024 }); }
     catch (_) { child = { error: { code: 'SPAWN_FAILED' }, status: null, signal: null }; }
     let result;
     if (child.error || child.status !== 0) {
@@ -283,4 +314,4 @@ function handle(method, params, options = {}) {
     return fail('UNKNOWN_METHOD', 'Unknown content build method.');
 }
 
-module.exports = { handle, plan, execute, get, reconcile, verifyOutput, compactUuid };
+module.exports = { handle, plan, execute, get, reconcile, verifyOutput, compactUuid, configuredStartScene };
