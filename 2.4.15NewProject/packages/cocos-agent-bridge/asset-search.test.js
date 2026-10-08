@@ -82,6 +82,18 @@ try {
     assert.strictEqual(all.items.find((item) => item.metadataStatus === 'valid').spriteFrameUuid, uuidB);
     assert.ok(all.items.every((item) => !path.isAbsolute(item.url)));
     assert.strictEqual(query({ query: 'not-present', limit: 5, offset: 0 }).total, 0);
+    const projectAssets = path.resolve(__dirname, '../../assets');
+    const realMeta = JSON.parse(fs.readFileSync(path.join(projectAssets, 'Texture/HelloWorld.png.meta'), 'utf8'));
+    let realAssetResult;
+    searchPngAssets({ queryAssets(_pattern, _type, callback) {
+        callback(null, [{ url: 'db://assets/Texture/HelloWorld.png', uuid: realMeta.uuid, type: 'texture', isSubAsset: false }]);
+    } }, projectAssets, { query: 'HelloWorld', limit: 5, offset: 0 }, (error, result) => {
+        assert.ifError(error);
+        realAssetResult = result;
+    });
+    assert.strictEqual(realAssetResult.items[0].metadataStatus, 'valid');
+    assert.strictEqual(realAssetResult.items[0].textureUuid, realMeta.uuid);
+    assert.strictEqual(realAssetResult.items[0].spriteFrameUuid, realMeta.subMetas.HelloWorld.uuid);
     let unavailableError;
     searchPngAssets(null, assets, { query: 'x', limit: 1, offset: 0 }, (error) => { unavailableError = error; });
     assert.strictEqual(unavailableError.code, 'ASSETDB_UNAVAILABLE');
@@ -89,5 +101,5 @@ try {
     searchPngAssets({ queryAssets(_pattern, _type, callback) { callback(new Error('fixture failure')); } }, assets,
         { query: 'x', limit: 1, offset: 0 }, (error) => { queryError = error; });
     assert.strictEqual(queryError.code, 'ASSET_QUERY_FAILED');
-    process.stdout.write('2.4 AssetDB PNG filtering, metadata identity, safe paths, and pagination passed\n');
+    process.stdout.write('2.4 AssetDB PNG filtering, real/synthetic metadata identity, safe paths, and pagination passed\n');
 } finally { fs.rmSync(root, { recursive: true, force: true }); }

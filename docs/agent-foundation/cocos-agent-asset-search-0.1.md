@@ -66,6 +66,6 @@
 - `ASSET_QUERY_FAILED`：AssetDB 查询或回调失败。
 - `CAPABILITY_CATALOG_INVALID`：运行中的扩展目录与当前 Host 合同版本不一致；刷新/重载扩展后重试能力查询。
 
-本切片的 MCP schema、实例分发、Host WebSocket 协议模拟和技能结构校验已通过。隔离 fixture 单测覆盖 PNG 主资源筛选、子资源排除、元数据身份与 SpriteFrame UUID、缺失/不匹配元数据、符号链接和路径穿越防护、分页及 AssetDB 错误；运行 `node 2.4.15NewProject/packages/cocos-agent-bridge/asset-search.test.js`。当前 Creator 2.4 实机仍载入旧能力目录，故真实 AssetDB 结果及元数据状态尚未实机验收；失败发生在命令执行前，没有触及场景或资源。其余模拟与聚焦测试可用 `node tools/cocos-agent-bridge/asset-search-host.mock-test.js`、`node tools/cocos-agent-bridge/catalog-extension-contract.test.js`、`node tools/cocos-agent-bridge/agent-dispatch.test.js` 及 `cd tools/cocos-agent-bridge/mcp && npm test` 重跑。
+本切片的 MCP schema、实例分发、Host WebSocket 协议模拟和技能结构校验已通过。隔离 fixture 单测覆盖 PNG 主资源筛选、子资源排除、合成边界用例及仓库真实 `HelloWorld.png.meta` 的 Texture/SpriteFrame UUID 读取、缺失/不匹配元数据、符号链接和路径穿越防护、分页及 AssetDB 错误；运行 `node 2.4.15NewProject/packages/cocos-agent-bridge/asset-search.test.js`。当前 Creator 2.4 实机仍载入旧能力目录，故真实 AssetDB 结果及元数据状态尚未实机验收；失败发生在命令执行前，没有触及场景或资源。其余模拟与聚焦测试可用 `node tools/cocos-agent-bridge/asset-search-host.mock-test.js`、`node tools/cocos-agent-bridge/catalog-extension-contract.test.js`、`node tools/cocos-agent-bridge/agent-dispatch.test.js` 及 `cd tools/cocos-agent-bridge/mcp && npm test` 重跑。
 
 实现：`2.4.15NewProject/packages/cocos-agent-bridge/main.js`、可单测的查询辅助模块 `2.4.15NewProject/packages/cocos-agent-bridge/asset-search.js`、`tools/cocos-agent-bridge/bridge-host.js`、`tools/cocos-agent-bridge/agent-dispatch.js`、`tools/cocos-agent-bridge/catalog-host.js` 与 `tools/cocos-agent-bridge/mcp/mcp-server.mjs`。
