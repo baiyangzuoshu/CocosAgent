@@ -1,7 +1,8 @@
 /* Runtime-only core. Injected after Creator starts; no Node or editor APIs. */
 (function (root, factory) {
-    if (typeof module === 'object' && module.exports) module.exports = factory();
-    else root.CocosAgentContentSwapCore = factory();
+    var value = factory();
+    if (typeof module === 'object' && module.exports) module.exports = value;
+    root.CocosAgentContentSwapCore = value;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
     'use strict';
 
@@ -36,7 +37,8 @@
             try { asset = checked(release, assetId); }
             catch (error) { return receipt('rejected', request, { code: String(error.message || error) }); }
             if (current && current.releaseId === release.releaseId && current.assetId === assetId
-                && current.fingerprint === release.fingerprint) return receipt('already-active', request);
+                && current.fingerprint === release.fingerprint) return receipt('already-active', request,
+                    { resourceUuid: current.resourceUuid, currentRefCount: current.texture.refCount });
             busy = true;
             const previous = current;
             let candidate = null;

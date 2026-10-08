@@ -1,0 +1,152 @@
+{
+  "creatorVersion": "2.4.15",
+  "startup": "scene-component",
+  "ids": {
+    "red": "channel-red-e321e363",
+    "blue": "channel-blue-9b6388ac"
+  },
+  "expected": {
+    "red": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+    "blue": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5"
+  },
+  "red": {
+    "texture": true,
+    "image": "/Users/youjunmao/WORK/Cocos_Engine/docs/agent-foundation/traces/visual/cocos-content-channel-2.4-red.png"
+  },
+  "blue": {
+    "texture": true,
+    "image": "/Users/youjunmao/WORK/Cocos_Engine/docs/agent-foundation/traces/visual/cocos-content-channel-2.4-blue.png"
+  },
+  "colors": {
+    "red": "255,0,0",
+    "blue": "0,0,255"
+  },
+  "events": [
+    {
+      "type": "connected",
+      "creatorVersion": "2.4.15",
+      "scene": "helloworld"
+    },
+    {
+      "type": "dispatched",
+      "id": 1,
+      "releaseId": "channel-red-e321e363"
+    },
+    {
+      "type": "receipt",
+      "id": 1,
+      "receipt": {
+        "outcome": "applied",
+        "releaseId": "channel-red-e321e363",
+        "assetId": "visual",
+        "activeReleaseId": "channel-red-e321e363",
+        "activeAssetId": "visual",
+        "activeFingerprint": "f18b7033447188c8f3045fb004463d1772e8ce119c5aac2414a866a8c39314f1",
+        "previousReleaseId": null,
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "currentRefCount": 1
+      },
+      "acceptance": {
+        "success": true,
+        "outcome": "runtime-observed",
+        "effective": {
+          "releaseId": "channel-red-e321e363",
+          "fingerprint": "f18b7033447188c8f3045fb004463d1772e8ce119c5aac2414a866a8c39314f1",
+          "assetId": "visual",
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "platform": "web-preview",
+          "observedAt": "2026-10-08T06:26:46.565Z"
+        }
+      }
+    },
+    {
+      "type": "dispatched",
+      "id": 2,
+      "releaseId": "channel-blue-9b6388ac"
+    },
+    {
+      "type": "receipt",
+      "id": 2,
+      "receipt": {
+        "outcome": "applied",
+        "releaseId": "channel-blue-9b6388ac",
+        "assetId": "visual",
+        "activeReleaseId": "channel-blue-9b6388ac",
+        "activeAssetId": "visual",
+        "activeFingerprint": "c1d287eccd9a74ec8e4599238a860effa4d6082c2cfbea28b2219e6075607065",
+        "previousReleaseId": "channel-red-e321e363",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "currentRefCount": 1
+      },
+      "acceptance": {
+        "success": true,
+        "outcome": "runtime-observed",
+        "effective": {
+          "releaseId": "channel-blue-9b6388ac",
+          "fingerprint": "c1d287eccd9a74ec8e4599238a860effa4d6082c2cfbea28b2219e6075607065",
+          "assetId": "visual",
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "platform": "web-preview",
+          "observedAt": "2026-10-08T06:26:47.081Z"
+        }
+      }
+    },
+    {
+      "type": "disconnected"
+    },
+    {
+      "type": "connected",
+      "creatorVersion": "2.4.15",
+      "scene": "helloworld"
+    },
+    {
+      "type": "dispatched",
+      "id": 3,
+      "releaseId": "channel-blue-9b6388ac"
+    },
+    {
+      "type": "receipt",
+      "id": 3,
+      "receipt": {
+        "outcome": "already-active",
+        "releaseId": "channel-blue-9b6388ac",
+        "assetId": "visual",
+        "activeReleaseId": "channel-blue-9b6388ac",
+        "activeAssetId": "visual",
+        "activeFingerprint": "c1d287eccd9a74ec8e4599238a860effa4d6082c2cfbea28b2219e6075607065",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "currentRefCount": 1
+      },
+      "acceptance": {
+        "success": true,
+        "outcome": "runtime-observed",
+        "effective": {
+          "releaseId": "channel-blue-9b6388ac",
+          "fingerprint": "c1d287eccd9a74ec8e4599238a860effa4d6082c2cfbea28b2219e6075607065",
+          "assetId": "visual",
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "platform": "web-preview",
+          "observedAt": "2026-10-08T06:26:48.045Z"
+        }
+      }
+    }
+  ],
+  "final": {
+    "success": true,
+    "outcome": "read",
+    "selected": {
+      "releaseId": "channel-blue-9b6388ac",
+      "previousReleaseId": "channel-red-e321e363",
+      "fingerprint": "c1d287eccd9a74ec8e4599238a860effa4d6082c2cfbea28b2219e6075607065",
+      "selectedAt": "2026-10-08T06:26:46.840Z"
+    },
+    "effective": {
+      "releaseId": "channel-blue-9b6388ac",
+      "fingerprint": "c1d287eccd9a74ec8e4599238a860effa4d6082c2cfbea28b2219e6075607065",
+      "assetId": "visual",
+      "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+      "platform": "web-preview",
+      "observedAt": "2026-10-08T06:26:48.045Z"
+    }
+  }
+}

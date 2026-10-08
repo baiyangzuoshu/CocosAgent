@@ -153,7 +153,7 @@ function acceptRuntime(params) {
     if (!target.success) return target;
     const receipt = params.receipt;
     const pointer = selected(target.root);
-    if (params.platform !== 'web-preview' || !receipt || receipt.outcome !== 'applied'
+    if (params.platform !== 'web-preview' || !receipt || !['applied', 'already-active'].includes(receipt.outcome)
         || !pointer || receipt.releaseId !== pointer.releaseId || receipt.activeReleaseId !== pointer.releaseId
         || receipt.activeFingerprint !== pointer.fingerprint || typeof receipt.assetId !== 'string'
         || receipt.activeAssetId !== receipt.assetId || !Number.isFinite(receipt.currentRefCount)

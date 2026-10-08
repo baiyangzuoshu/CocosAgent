@@ -47,6 +47,8 @@ for (const version of ['2.4.15', '3.8.7']) {
                 resourceUuid: asset.resourceUuid, currentRefCount: 1 };
             assert.equal(release.acceptRuntime({ projectRoot: root, creatorVersion: version,
                 platform: 'web-preview', receipt }).outcome, 'runtime-observed');
+            if (version === '2.4.15') assert.equal(release.acceptRuntime({ projectRoot: root, creatorVersion: version,
+                platform: 'web-preview', receipt: { ...receipt, outcome: 'already-active' } }).outcome, 'runtime-observed');
             assert.equal(release.get({ projectRoot: root, creatorVersion: version }).effective.releaseId, 'release-a');
             const second = structuredClone(manifest);
             second.releaseId = 'release-b';
