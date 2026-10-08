@@ -1,0 +1,110 @@
+'use strict';
+
+const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const test = require('node:test');
+const preview = require('./content-preview');
+
+function fixture() {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-agent-content-preview-'));
+    const buildId = 'preview-smoke-01';
+    const outputRoot = path.join(projectRoot, 'build', 'cocos-agent', buildId);
+    const webRoot = path.join(outputRoot, 'web-mobile');
+    const configPath = 'web-mobile/assets/resources/config.123abc.json';
+    fs.mkdirSync(path.dirname(path.join(outputRoot, configPath)), { recursive: true });
+    fs.writeFileSync(path.join(webRoot, 'index.html'), '<!doctype html><title>CocosAgent Preview</title>');
+    fs.writeFileSync(path.join(outputRoot, configPath), '{}');
+    fs.writeFileSync(path.join(webRoot, 'probe.js'), 'window.previewProbe = true;');
+    const outsideFile = path.join(projectRoot, 'private-outside-package.txt');
+    fs.writeFileSync(outsideFile, 'do not serve');
+    try { fs.symlinkSync(outsideFile, path.join(webRoot, 'leak.txt')); } catch (_) { /* Symlinks may be unavailable on some test hosts. */ }
+    const fingerprint = 'a'.repeat(64);
+    const releaseManifest = { contractVersion: '0.1', creatorVersion: '2.4.15', releaseId: 'release-a', fingerprint };
+    const record = { contractVersion: '0.1', buildId, creatorVersion: '2.4.15', projectRoot,
+        releaseId: 'release-a', fingerprint, outputRoot, state: 'completed', releaseManifest };
+    const events = [];
+    const fake = {
+        contentBuild: {
+            get: () => ({ success: true, build: record }),
+            verifyOutput: () => ({ success: true, fingerprint, configPath }),
+        },
+        contentRelease: {
+            get: (params) => params.releaseId
+                ? { success: true, release: releaseManifest, selected: { releaseId: 'release-a', fingerprint } }
+                : { success: true, selected: { releaseId: 'release-a', fingerprint } },
+            validate: () => ({ success: true, fingerprint }),
+        },
+        contentRuntimeHost: {
+            async start({ previewUrl }) {
+                const url = new URL(previewUrl);
+                url.searchParams.set('cocosAgentPort', '50321');
+                url.searchParams.set('cocosAgentToken', 'b'.repeat(64));
+                return { previewUrl: url.toString(), events, close: async () => { fake.runtimeClosed = true; } };
+            },
+        },
+    };
+    return { projectRoot, buildId, outputRoot, webRoot, fingerprint, releaseManifest, record, events, fake,
+        params: { projectRoot, creatorVersion: '2.4.15', buildId } };
+}
+
+test('serves only the verified package on loopback and exposes runtime session status', async () => {
+    const value = fixture();
+    let current;
+    try {
+        current = await preview.start(value.params, value.fake);
+        assert.equal(current.success, true);
+        assert.equal(current.outcome, 'ready');
+        assert.equal(current.status, 'waiting-for-runtime');
+        assert.match(current.previewUrl, /^http:\/\/127\.0\.0\.1:\d+\/\?cocosAgentPort=50321&cocosAgentToken=/);
+        const page = await fetch(current.previewUrl);
+        assert.equal(page.status, 200);
+        assert.match(page.headers.get('content-type'), /^text\/html/);
+        assert.match(await page.text(), /CocosAgent Preview/);
+        const script = await fetch(new URL('probe.js', current.baseUrl));
+        assert.equal(await script.text(), 'window.previewProbe = true;');
+        assert.equal((await fetch(new URL('leak.txt', current.baseUrl))).status, 404);
+        assert.equal((await fetch(`${current.baseUrl}../secret`)).status, 404);
+        assert.equal((await fetch(current.baseUrl, { method: 'POST' })).status, 405);
+
+        value.events.push({ type: 'connected', creatorVersion: '2.4.15', scene: 'helloworld' });
+        assert.equal(preview.get(value.params).status, 'connected');
+        assert.equal(preview.get(value.params).connected, true);
+        value.events.push({ type: 'receipt', receipt: { outcome: 'applied', releaseId: 'release-a' },
+            acceptance: { success: true, outcome: 'runtime-observed' } });
+        const accepted = preview.get(value.params);
+        assert.equal(accepted.status, 'runtime-observed');
+        assert.equal(accepted.connected, true);
+        assert.equal(accepted.lastReceipt.acceptance.outcome, 'runtime-observed');
+        value.events.push({ type: 'disconnected' });
+        assert.equal(preview.get(value.params).connected, false);
+        const stopped = await preview.stop(value.params);
+        assert.equal(stopped.outcome, 'stopped');
+        assert.equal(value.fake.runtimeClosed, true);
+        assert.equal(preview.get(value.params).error.code, 'PREVIEW_NOT_FOUND');
+    } finally {
+        if (preview.get(value.params).success) await preview.stop(value.params);
+        fs.rmSync(value.projectRoot, { recursive: true, force: true });
+    }
+});
+
+test('rejects unverified builds, release drift, and unsafe package roots before listening', async () => {
+    const value = fixture();
+    try {
+        value.fake.contentBuild.get = () => ({ success: true, build: { ...value.record, state: 'needs-review' } });
+        assert.equal((await preview.start(value.params, value.fake)).error.code, 'BUILD_NOT_COMPLETED');
+        value.fake.contentBuild.get = () => ({ success: true, build: value.record });
+        value.fake.contentRelease.get = () => ({ success: true, selected: { releaseId: 'another-release', fingerprint: 'c'.repeat(64) } });
+        assert.equal((await preview.start(value.params, value.fake)).error.code, 'BUILD_RELEASE_NOT_SELECTED');
+        value.fake.contentRelease.get = (params) => params.releaseId
+            ? { success: true, release: value.releaseManifest, selected: { releaseId: 'release-a', fingerprint: value.fingerprint } }
+            : { success: true, selected: { releaseId: 'release-a', fingerprint: value.fingerprint } };
+        value.fake.contentBuild.get = () => ({ success: true, build: { ...value.record,
+            outputRoot: path.join(os.tmpdir(), 'outside-build') } });
+        assert.equal((await preview.start(value.params, value.fake)).error.code, 'BUILD_RECORD_MISMATCH');
+    } finally {
+        await preview.stop(value.params);
+        fs.rmSync(value.projectRoot, { recursive: true, force: true });
+    }
+});

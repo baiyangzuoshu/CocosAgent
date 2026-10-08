@@ -2,8 +2,9 @@
 
 const assert = require('assert');
 const { spawnSync } = require('child_process');
+const test = require('node:test');
 const path = require('path');
-const { handle } = require('./agent-jsonl');
+const { handle, handleAsync } = require('./agent-jsonl');
 const { dispatch } = require('./agent-dispatch');
 
 const projectRoot = '/tmp/cocos-agent-jsonl-test';
@@ -55,3 +56,12 @@ assert.strictEqual(child.status, 0);
 assert.deepStrictEqual(child.stdout.trim().split('\n').map(JSON.parse).map((item) => item.result.error.code), ['INVALID_JSON', 'INVALID_ARGUMENT']);
 assert.strictEqual(child.stderr, '');
 process.stdout.write('JSONL adapter preserves dispatcher envelope and handles malformed requests\n');
+
+test('JSONL async adapter awaits preview lifecycle methods without changing synchronous dispatch', async () => {
+    const calls = [];
+    const response = await handleAsync({ id: 17, method: 'content.preview.start', params: { buildId: 'build-01' } }, {
+        contentPreview: async (method, params) => { calls.push({ method, params }); return { success: true, outcome: 'ready' }; },
+    });
+    assert.deepStrictEqual(response, { id: 17, result: { success: true, outcome: 'ready' } });
+    assert.deepStrictEqual(calls, [{ method: 'content.preview.start', params: { buildId: 'build-01' } }]);
+});

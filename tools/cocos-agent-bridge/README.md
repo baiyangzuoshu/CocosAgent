@@ -102,7 +102,7 @@ node tools/cocos-agent-bridge/catalog-host.js \
 
 ## Agent 调度入口
 
-需要由长期运行的 Agent 进程调用时，启动 `node tools/cocos-agent-bridge/agent-jsonl.js`，在 stdin 逐行发送 JSON 请求。它提供实例/能力查询、命令调度、场景组合、批量资源，以及本地内容版本的 `content.plan/stage/get/select/rollback`、从已验收 2.4 场景流水线生成清单的 `content.fromScene.plan/stage`、`content.runtime.accept` 和 2.4 Web-Mobile `content.build.plan/execute/get/reconcile`。选中版本只改 Host 指针；运行时成功回执另记 `effective`。构建使用隔离输出目录，Creator 2.4.15 通过 Launch Services 已由 `content.build.execute` 实机生成并校验红蓝资源，独立 `content.build.get` 读回 `completed`；构建包运行时也通过蓝色入口资源验收。请求格式和双版本验收见 [`cocos-agent-local-api-0.1.md`](../../docs/agent-foundation/cocos-agent-local-api-0.1.md)；版本合同与 Web 接线见 [`content-release-0.1.md`](../../docs/agent-foundation/content-release-0.1.md)、[`content-runtime-web-0.1.md`](../../docs/agent-foundation/content-runtime-web-0.1.md)、[`content-build-web-0.1.md`](../../docs/agent-foundation/content-build-web-0.1.md)。
+需要由长期运行的 Agent 进程调用时，启动 `node tools/cocos-agent-bridge/agent-jsonl.js`，在 stdin 逐行发送 JSON 请求。它提供实例/能力查询、命令调度、场景组合、批量资源，以及本地内容版本的 `content.plan/stage/get/select/rollback`、从已验收 2.4 场景流水线生成清单的 `content.fromScene.plan/stage`、`content.runtime.accept`、2.4 Web-Mobile `content.build.plan/execute/get/reconcile` 和 `content.preview.start/get/stop`。选中版本只改 Host 指针；运行时成功回执另记 `effective`。构建使用隔离输出目录，Creator 2.4.15 通过 Launch Services 已由 `content.build.execute` 实机生成并校验红蓝资源，独立 `content.build.get` 读回 `completed`；构建包运行时也通过蓝色入口资源验收。请求格式和验收见 [`cocos-agent-local-api-0.1.md`](../../docs/agent-foundation/cocos-agent-local-api-0.1.md)、[`content-build-web-0.1.md`](../../docs/agent-foundation/content-build-web-0.1.md) 与 [`content-preview-web-0.1.md`](../../docs/agent-foundation/content-preview-web-0.1.md)。
 
 2.4 Mac 原生开发包使用独立会话文件，不读取浏览器 URL。先从包内探针或运行日志取得 `jsb.fileUtils.getWritablePath()`，然后运行：
 
@@ -116,7 +116,7 @@ node tools/cocos-agent-bridge/runtime/content-runtime-host.js \
 
 Host 仅监听 `127.0.0.1`，在该可写目录下创建权限为 `0700` 的 `cocos-agent/`，并以 `0600` 写入短时 `runtime-session.json`。在 15 分钟内启动该 Mac 包；运行时只在 2.4 OS X 原生环境读取该文件，Host 首次接受正确版本、场景和会话 ID 后删除文件。Web 预览需提供准确 loopback Origin 与会话令牌。Host 结束时也会删除仍属于本会话的文件。Mac 原生会话用于本机开发，不应复制进可分发包。
 
-Web 预览使用 URL 会话参数。Creator 默认预览可传 `--preview-url http://127.0.0.1:7456/`；本机 Web-Mobile 构建包应先由 loopback 静态服务器提供服务，再把该服务的 `127.0.0.1` 地址作为 `--preview-url`。Host 为 URL 追加短时 token，并将 WebSocket Origin 限定为完全匹配的该地址；Host 不负责启动静态服务器。
+Creator 编辑器 Web 预览仍可直接运行独立 runtime Host 并传入 `--preview-url http://127.0.0.1:7456/`。构建包则在 JSONL Agent 中调用 `content.preview.start`，只对已验收且仍与 selected release 指纹匹配的 2.4 Web-Mobile 构建启动 loopback 静态服务和运行时 Host，返回带会话参数的 `previewUrl`；浏览器连接后，用 `content.preview.get` 查看运行状态和回执，结束时调用 `content.preview.stop`。静态服务只读服务隔离构建目录，不启动浏览器。Agent 进程应保持运行；关闭 stdin 会清理活动预览会话。
 
 ```sh
 node tools/cocos-agent-bridge/runtime/content-runtime-host.js \

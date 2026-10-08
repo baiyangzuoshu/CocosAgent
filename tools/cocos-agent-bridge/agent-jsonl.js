@@ -12,6 +12,7 @@ const assetSceneValidation = require('./asset-scene-validation');
 const contentRelease = require('./content-release');
 const contentSceneRelease = require('./content-scene-release');
 const contentBuild = require('./content-build');
+const contentPreview = require('./content-preview');
 
 const catalogMethods = new Set(['instances.list', 'instances.get', 'capabilities.list']);
 const workflowMethods = new Set(['workflow.plan', 'workflow.execute', 'workflow.get', 'workflow.compensate', 'workflow.replay']);
@@ -22,8 +23,9 @@ const assetSceneValidationMethods = new Set(['assets.scene.validate', 'assets.sc
 const contentSceneReleaseMethods = new Set(['content.fromScene.plan', 'content.fromScene.stage']);
 const contentMethods = new Set(['content.plan', 'content.stage', 'content.get', 'content.select', 'content.rollback', 'content.runtime.accept']);
 const contentBuildMethods = new Set(['content.build.plan', 'content.build.execute', 'content.build.get', 'content.build.reconcile']);
+const contentPreviewMethods = new Set(['content.preview.start', 'content.preview.get', 'content.preview.stop']);
 const methods = new Set([...catalogMethods, ...workflowMethods, ...batchMethods, ...sceneSpriteBatchMethods, ...assetScenePipelineMethods, ...assetSceneValidationMethods, ...contentSceneReleaseMethods, ...contentMethods, ...contentBuildMethods,
-    'command.execute', 'operation.get', 'operation.reconcile', 'preview.accept']);
+    ...contentPreviewMethods, 'command.execute', 'operation.get', 'operation.reconcile', 'preview.accept']);
 const versions = new Set(['2.4.15', '3.8.7']);
 
 function error(code, message) { return { code, message }; }
@@ -80,6 +82,8 @@ function handle(request, adapters = {}) {
             creatorExecutable: adapters.creatorExecutable,
             spawnSync: adapters.spawnSync,
         }) };
+    if (contentPreviewMethods.has(method)) return { id: request.id,
+        result: (adapters.contentPreview || contentPreview.handle)(method, params, adapters.contentPreviewOptions) };
     let dispatchRequest;
     if (method === 'command.execute') dispatchRequest = {
         targets: params.targets, projectRoot: params.projectRoot, creatorVersion: params.creatorVersion,
@@ -99,24 +103,37 @@ function handle(request, adapters = {}) {
     return { id: request.id, result: (adapters.dispatch || dispatch)(dispatchRequest) };
 }
 
+async function handleAsync(request, adapters = {}) {
+    const response = handle(request, adapters);
+    if (response && response.result && typeof response.result.then === 'function') {
+        try { response.result = await response.result; }
+        catch (_) { response.result = { success: false, error: error('INTERNAL_ERROR', 'Local Agent request failed.') }; }
+    }
+    return response;
+}
+
 function main() {
     const input = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+    let queue = Promise.resolve();
     input.on('line', (line) => {
-        let response;
-        if (Buffer.byteLength(line) > 1024 * 1024) response = { id: null, result: { success: false, error: error('REQUEST_TOO_LARGE', 'Request exceeds 1 MiB.') } };
-        else {
-            let request;
-            try { request = JSON.parse(line); }
-            catch (failure) { response = { id: null, result: { success: false, error: error('INVALID_JSON', failure.message) } }; }
-            if (!response) {
-                try { response = handle(request); }
-                catch (_) { response = { id: request && Number.isSafeInteger(request.id) ? request.id : null,
-                    result: { success: false, error: error('INTERNAL_ERROR', 'Local Agent request failed.') } }; }
+        queue = queue.then(async () => {
+            let response;
+            if (Buffer.byteLength(line) > 1024 * 1024) response = { id: null, result: { success: false, error: error('REQUEST_TOO_LARGE', 'Request exceeds 1 MiB.') } };
+            else {
+                let request;
+                try { request = JSON.parse(line); }
+                catch (failure) { response = { id: null, result: { success: false, error: error('INVALID_JSON', failure.message) } }; }
+                if (!response) {
+                    try { response = await handleAsync(request); }
+                    catch (_) { response = { id: request && Number.isSafeInteger(request.id) ? request.id : null,
+                        result: { success: false, error: error('INTERNAL_ERROR', 'Local Agent request failed.') } }; }
+                }
             }
-        }
-        process.stdout.write(`${JSON.stringify(response)}\n`);
+            process.stdout.write(`${JSON.stringify(response)}\n`);
+        });
     });
+    input.on('close', () => { queue = queue.then(() => contentPreview.closeAll()).catch(() => {}); });
 }
 
 if (require.main === module) main();
-module.exports = { handle, catalog };
+module.exports = { handle, handleAsync, catalog };

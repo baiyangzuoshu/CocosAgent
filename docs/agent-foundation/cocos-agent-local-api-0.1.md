@@ -1,6 +1,6 @@
 # CocosAgent 本地 Agent 接口 0.1
 
-`tools/cocos-agent-bridge/agent-jsonl.js` 是无网络监听的本地进程接口。Agent 启动后通过 stdin 每行发送一个 JSON 对象，stdout 每行返回 `{ "id": <整数>, "result": ... }`。请求按输入顺序处理；一次进程可处理多行。标准输出只含响应，诊断信息不能混入。它不调用 LLM，不需要模型 Key；Creator 扩展仍通过现有 Host 的本机短时会话工作。
+`tools/cocos-agent-bridge/agent-jsonl.js` 是本地进程接口，通过 stdin 每行接收一个 JSON 对象，stdout 每行返回 `{ "id": <整数>, "result": ... }`。Agent 主接口不直接监听网络；明确调用 `content.preview.start` 时，Host 另启动只绑定 `127.0.0.1` 的静态预览和 WebSocket 会话。请求按输入顺序处理；一次进程可处理多行。标准输出只含响应，诊断信息不能混入。它不调用 LLM，不需要模型 Key；Creator 扩展仍通过本机短时会话工作。
 
 | `method` | `params` | 返回值来源 |
 | --- | --- | --- |
@@ -17,7 +17,8 @@
 | `content.plan/stage/get/select/rollback` | 本地内容清单、`releaseId`、预期当前版本 | [动态内容本地版本合同](content-release-0.1.md)；只管理 Host 版本记录与指针，不改变运行时 |
 | `content.fromScene.plan/stage` | 已完成的 2.4 资源场景 `pipelineId`、入口 PNG、稳定资源 ID 映射与 `releaseId` | 从已验收场景流水线派生不可变 `resources` 清单；重新核验 AssetDB、UUID 与运行时路径，只暂存版本，不自动选中或构建 |
 | `content.runtime.accept` | `projectRoot`、`creatorVersion`、`platform=web-preview`、运行时成功回执 | 核对当前选中版本/指纹/资源 UUID，另记 `effective`；本地调用者回执尚未认证 |
-| `content.build.plan/execute/get/reconcile` | 已选择的 2.4.15 release、预期指纹与唯一 `buildId` | 调用 Creator 2.4.15 CLI 构建 Web-Mobile 到新隔离路径，再核对 resources bundle、Texture2D UUID、独立或 pack 导入 JSON 与 PNG native 文件；reconcile 只读恢复 Host 中断记录；GUI 实际构建包已验，Host CLI 接线尚待验收 |
+| `content.build.plan/execute/get/reconcile` | 已选择的 2.4.15 release、预期指纹与唯一 `buildId` | 调用 Creator 2.4.15 CLI 构建 Web-Mobile 到新隔离路径，再核对 resources bundle、Texture2D UUID、独立或 pack 导入 JSON 与 PNG native 文件；reconcile 只读恢复 Host 中断记录；Host CLI 构建与新进程读回已验 |
+| `content.preview.start/get/stop` | 已完成的 2.4 Web-Mobile `buildId` | 重验隔离包与 selected release，启动 loopback 静态服务器和运行时 Host，返回会话 URL，并读取应用回执或停止会话；[合同](content-preview-web-0.1.md) |
 
 组合和批量方法只编排已实现的语义命令，不授予任意脚本执行权限。当前 `command.execute` 目录在 2.4.15 有八项，在 3.8.7 有五项；`asset.removeImportedPng`、`asset.validatePng` 和 `asset.refreshPng` 只由 2.4 扩展提供。
 
@@ -30,6 +31,6 @@ node tools/cocos-agent-bridge/agent-jsonl.js
 {"id":1,"method":"instances.list","params":{"targets":[{"creatorVersion":"2.4.15","projectRoot":"/绝对路径/2.4.15NewProject"},{"creatorVersion":"3.8.7","projectRoot":"/绝对路径/3.8,7NewProject"}]}}
 ```
 
-第二行是发送到进程 stdin 的 JSON，不是 Shell 命令。Agent 对 `result.success=false` 的响应应检查结构化 `error.code`；对于 `command.execute` 的 `needs-preview` 或 `needs-review`，还要检查 `result.outcome` 与 `result.operationId`。输入行上限 1 MiB。当前没有并行执行、取消或推送，长时间查询会阻塞后续请求；适合单个本地 Agent 逐步调用。将来增加 MCP 时应包装同一目录与调度合同。
+第二行是发送到进程 stdin 的 JSON，不是 Shell 命令。Agent 对 `result.success=false` 的响应应检查结构化 `error.code`；对于 `command.execute` 的 `needs-preview` 或 `needs-review`，还要检查 `result.outcome` 与 `result.operationId`。输入行上限 1 MiB。当前没有并行命令执行、取消或推送，长时间查询会阻塞后续请求；预览会话可在单次 `start` 返回后保持活动，并用 `get/stop` 管理。将来增加 MCP 时应包装同一目录与调度合同。
 
-验收：两版已有 `scene.pngSprite` 操作通过 `operation.get` 查询时，本接口的 `result` 与直接运行 `agent-dispatch.js` 完全一致，均为 `completed` 且 `disk/preview=passed`；通过本接口进行的双实例 `instances.list` 返回 2.4.15 `helloworld` 与 3.8.7 `main`，两者均 `ready`。两版各自通过本接口执行只读 `scene.snapshot`，均返回 `completed` 及正确活动场景。本轮未通过本接口再次写场景。结构、错误输入及代理合同测试已通过。记录见[轨迹](traces/cocos-agent-local-api-0.1.jsonl)。
+验收：两版已有 `scene.pngSprite` 操作通过 `operation.get` 查询时，本接口的 `result` 与直接运行 `agent-dispatch.js` 完全一致，均为 `completed` 且 `disk/preview=passed`；通过本接口进行的双实例 `instances.list` 返回 2.4.15 `helloworld` 与 3.8.7 `main`，两者均 `ready`。两版各自通过本接口执行只读 `scene.snapshot`，均返回 `completed` 及正确活动场景。本轮未通过本接口再次写场景。构建包预览另通过同一 JSONL 进程启动、读取运行时应用回执并停止；记录见[预览轨迹](traces/cocos-agent-content-preview-2.4.jsonl)。结构、错误输入及代理合同测试已通过。记录见[原接口轨迹](traces/cocos-agent-local-api-0.1.jsonl)。
