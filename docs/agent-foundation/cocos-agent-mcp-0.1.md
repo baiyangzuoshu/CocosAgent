@@ -25,6 +25,7 @@
 | `cocos_2x_operation_preview_accept` | 写预览回执 | 登记本地预览中的可见结果；保留同阶段已有的运行态读回证据 |
 | `cocos_2x_assets_scene_plan` | 只读 | 预检 2–16 张 PNG 的导入身份、活动场景 Canvas 与目标节点 |
 | `cocos_2x_assets_scene_execute` | 导入资源并写场景 | 用 AssetDB 导入 PNG、核对 UUID，再创建 Sprite 节点并读回场景 |
+| `cocos_2x_assets_scene_cancel` | 合作取消并可能触发补偿 | 请求活动流水线在安全写入边界停止，等待当前 Host 命令完成，并补偿本流水线的场景节点与导入资源 |
 | `cocos_2x_assets_scene_get` | 读/刷新 Host 回执 | 查看流水线状态和逐项预览状态 |
 | `cocos_2x_assets_scene_preview_accept` | 写预览回执 | 为流水线中的一项记录本地 Web 预览观察 |
 | `cocos_2x_assets_scene_compensate` | 删除流水线资源 | 先撤销场景引用，再按身份与引用检查清理流水线导入的资源 |
@@ -64,7 +65,7 @@ Resource 只读取固定仓库 skill 文件，不接受任意文件路径。Prom
 
 只有 `cocos_2x_assets_scene_execute` 已切到 Worker 线程。它会在每个 Host 命令开始和完成时发出进度事件，内容只含命令、阶段和结果，不含本地路径。MCP 客户端需在请求中提供 progress token 才会收到通知；是否据此延长客户端等待时间由客户端决定。
 
-流水线执行期间，同一项目的重复 execute 返回 `PIPELINE_EXECUTION_IN_PROGRESS`；其他非只读操作返回 `EDITOR_BUSY`。此时可调用 `assets_scene_get` 查看已有回执。请求超时或客户端断开不会取消 Worker，也不证明写入失败：先读取流水线和操作记录，再决定补偿；不要盲目重发。其余 MCP Host 调用仍可能同步阻塞，取消与跨进程重连恢复尚未实现。
+流水线执行期间，同一项目的重复 execute 返回 `PIPELINE_EXECUTION_IN_PROGRESS`；其他非只读操作返回 `EDITOR_BUSY`。此时可调用 `assets_scene_get` 查看已有回执。只有用户明确要求取消时才调用 `assets_scene_cancel`。它对活动 Worker 设置共享取消标记；当前 Host 命令不被强杀，随后在下一写入边界停止，并尝试按“场景引用先、导入资源后”补偿。取消结果仍须以流水线回执为准，状态不确定时保留 `needs-review`。请求超时或客户端断开本身不会取消 Worker，也不证明写入失败：先读取流水线和操作记录，再决定补偿；不要盲目重发。其余 MCP Host 调用仍可能同步阻塞，跨进程重连恢复尚未实现。
 
 ## 启动和配置
 
@@ -110,6 +111,6 @@ node /absolute/path/Cocos_Engine/tools/cocos-agent-bridge/mcp/mcp-server.mjs \
 
 本轮新增 12 个资源流水线和内容 release MCP 工具，InMemoryTransport 测试已验证工具发现、专属 schema、固定 2.4 目标映射及全部方法到 JSONL 的路由。另通过真实 MCP stdio 与隔离临时工程验证 `content.get/select/rollback`：红、蓝测试 release 依次选择；错误的旧 `expectedCurrent` 返回 `CURRENT_CHANGED`；rollback 选回红版，随后清理整个 fixture。此前曾因锁屏使真实 `instances.list` 返回 `CATALOG_FAILED`（轨迹第 38 条）；解锁后 Host 精确选中 `2.4.15NewProject` 的 `helloworld` 实例，3.8 工程仍为 disconnected。之后经 MCP 成功预检并由 AssetDB 导入两张临时 PNG，读取 Texture/SpriteFrame UUID 与 `.meta`；第一张 Sprite 的场景写入和磁盘读回通过。两项 `assets.scene.execute` 请求超过 MCP Client 的默认等待时间，断开后第一节点存在、第二节点在活动场景和 `.fire` 中均不存在且没有操作记录。为此修复 `scene.sprites` 的恢复分支：缺少操作记录时，只有在同一实例/Canvas、资源 SHA 与 UUID、活动场景精确节点缺席、序列化场景父身份匹配且目标子节点缺席都通过后，才记录 `WRITE_RECONCILED_NO_EFFECT`；此分支把该项标为 rejected，不自动重发写入。之后经 MCP 补偿撤销第一节点、删除两份 PNG 和 `.meta`，恢复读回将流水线结为 `compensated` / `rollbackStatus=passed`；再次查询确认两个节点均为 `not-found`，资源与元数据均不存在，`helloworld.fire` 已按测试前 SHA-256 恢复。当前 MCP 路径尚未取得该场景的有效预览画面，因此没有调用 `assets_scene_preview_accept`，也没有执行 `content.fromScene.plan/stage`；完整预览验收仍待后续一轮。预览截图本轮显示空画布，不能写成已通过视觉验收。当时尚未提供的 MCP Resource/Prompt 与资源场景执行进度已在后续切片补齐；取消、跨进程重连恢复和远程 HTTP transport 仍未实现。当前首版不改 Creator 扩展代码；后续可按面试目标继续沉淀经验证的 2.x 能力，再制定 3.x 适配计划。
 
-上述超时后新增的资源场景进度切片已通过 InMemoryTransport 测试：opt-in progress token 可收到带命令名的通知；同项目重复 execute 会被阻止，流水线查询仍可用。Worker 消息通道另通过无编辑器副作用的请求测试。此自动验收没有对 Creator 执行资源导入或场景写入；因此不构成真实 MCP 写入/预览验收，也不证明客户端一定延长超时。
+上述超时后新增的资源场景进度与合作取消切片已通过自动测试：opt-in progress token 可收到带命令名的通知；同项目重复 execute 会被阻止，回执仍可查询；明确取消会设置共享标记，模拟验收覆盖写入场景节点后补偿节点与资源、以及导入中途停止并清理已导入资源。Worker 消息通道另通过无编辑器副作用的请求测试。此自动验收没有对 Creator 执行资源导入或场景写入；因此不构成真实 MCP 写入/预览验收，也不证明客户端一定延长超时。
 
 后续只读诊断确认 2.4 Creator 的活动场景不是空场景：`scene.snapshot` 读回 `helloworld` 下 12 个节点，包括 Canvas、Main Camera、background、cocos 与 label。7456 预览服务返回 HTTP 200，`settings.js` 指向 `db://assets/Scene/helloworld.fire`，quick-compile 与预览引擎脚本也均返回 200。Mac 当前再次锁屏；为区分页面启动问题，在隔离 Chrome headless + SwiftShader 中打开同一 URL，脚本编译并打印 `Cocos Creator v2.4.15`，但截图停在 splash，控制台伴随 `CVDisplayLinkCreateWithCGDisplay` 错误。该 headless 结果不能代表实际桌面浏览器，不能用作预览验收；还需要在解锁桌面后读取实际浏览器运行状态/控制台，再决定是否调用 `assets_scene_preview_accept`。诊断轨迹为第 50–52 条。

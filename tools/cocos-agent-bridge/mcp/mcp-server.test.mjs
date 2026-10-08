@@ -50,7 +50,7 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         const { tools } = await client.listTools();
         const names = tools.map((tool) => tool.name).sort();
         assert.deepEqual(names, [
-            'cocos_2x_assets_scene_compensate', 'cocos_2x_assets_scene_execute', 'cocos_2x_assets_scene_get',
+            'cocos_2x_assets_scene_cancel', 'cocos_2x_assets_scene_compensate', 'cocos_2x_assets_scene_execute', 'cocos_2x_assets_scene_get',
             'cocos_2x_assets_scene_plan', 'cocos_2x_assets_scene_preview_accept', 'cocos_2x_assets_scene_repair',
             'cocos_2x_assets_scene_validate', 'cocos_2x_capabilities_list', 'cocos_2x_command_execute',
             'cocos_2x_content_build_execute',
@@ -61,7 +61,7 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
             'cocos_2x_instances_get', 'cocos_2x_instances_list', 'cocos_2x_operation_get',
             'cocos_2x_operation_preview_accept', 'cocos_2x_operation_reconcile',
         ]);
-        assert.equal(tools.length, 26);
+        assert.equal(tools.length, 27);
         const commandTool = tools.find((tool) => tool.name === 'cocos_2x_command_execute');
         assert.equal(commandTool.annotations.readOnlyHint, false);
         assert.equal(commandTool.annotations.destructiveHint, true);
@@ -297,6 +297,56 @@ test('scene pipeline worker returns through its message channel without touching
     assert.equal(response.id, 31);
     assert.equal(response.result.success, false);
     assert.equal(response.result.error.code, 'INVALID_ARGUMENT');
+});
+
+test('MCP cancellation sets the active pipeline shared flag and leaves compensation to the Worker', async () => {
+    const value = fixture();
+    let resolveWorker;
+    let cancelView;
+    let signalStarted;
+    const started = new Promise((resolve) => { signalStarted = resolve; });
+    const runScenePipelineWorker = async (request, onProgress, cancelBuffer) => {
+        cancelView = new Int32Array(cancelBuffer);
+        await onProgress({ progress: 1, command: 'scene.snapshot', state: 'started' });
+        signalStarted();
+        return new Promise((resolve) => { resolveWorker = () => resolve({ id: request.id,
+            result: { success: false, outcome: 'failed', error: { code: 'EXECUTION_CANCELLED' } } }); });
+    };
+    const server = createServer(value.projects, { runScenePipelineWorker });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'cocos-agent-cancel-test', version: '0.1.0' });
+    try {
+        await server.connect(serverTransport);
+        await client.connect(clientTransport);
+        const pipelineId = '5858dc80-32d0-4610-8291-f057fa13151e';
+        const execution = client.callTool({ name: 'cocos_2x_assets_scene_execute', arguments: {
+            projectRoot: value.projects[0], pipelineId,
+            sources: [path.join(value.parent, 'one.png'), path.join(value.parent, 'two.png')],
+        } });
+        await started;
+        const cancelled = await client.callTool({ name: 'cocos_2x_assets_scene_cancel', arguments: {
+            projectRoot: value.projects[0], pipelineId,
+        } });
+        assert.equal(cancelled.structuredContent.outcome, 'cancellation-requested');
+        assert.equal(Atomics.load(cancelView, 0), 1);
+        const repeated = await client.callTool({ name: 'cocos_2x_assets_scene_cancel', arguments: {
+            projectRoot: value.projects[0], pipelineId,
+        } });
+        assert.equal(repeated.structuredContent.outcome, 'cancellation-already-requested');
+
+        resolveWorker();
+        const result = await execution;
+        assert.equal(result.structuredContent.error.code, 'EXECUTION_CANCELLED');
+        const after = await client.callTool({ name: 'cocos_2x_assets_scene_cancel', arguments: {
+            projectRoot: value.projects[0], pipelineId,
+        } });
+        assert.equal(after.structuredContent.error.code, 'PIPELINE_NOT_RUNNING');
+    } finally {
+        resolveWorker?.();
+        await client.close();
+        await server.close();
+        fs.rmSync(value.parent, { recursive: true, force: true });
+    }
 });
 
 test('MCP converts dispatcher failures to structured tool errors without losing the Cocos error code', async () => {

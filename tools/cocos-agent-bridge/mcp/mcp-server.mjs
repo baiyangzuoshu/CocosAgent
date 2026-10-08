@@ -88,9 +88,9 @@ function parseArgs(args) {
     return { help: false, projects: canonical };
 }
 
-function runAgentWorker(request, onProgress) {
+function runAgentWorker(request, onProgress, cancelBuffer) {
     return new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('./agent-request-worker.mjs', import.meta.url), { workerData: { request } });
+        const worker = new Worker(new URL('./agent-request-worker.mjs', import.meta.url), { workerData: { request, cancelBuffer } });
         let settled = false;
         let progressQueue = Promise.resolve();
         worker.on('message', (message) => {
@@ -148,6 +148,7 @@ function createServer(projectRoots, options = {}) {
             'Start with cocos_2x_instances_get and cocos_2x_capabilities_list. Continue only if this exact project is ready.',
             'For PNG placement, call cocos_2x_assets_scene_plan first. Review the returned pipelineId, asset identities, target Canvas, node names, and positions before calling cocos_2x_assets_scene_execute once.',
             'After execution, read cocos_2x_assets_scene_get and cocos_2x_assets_scene_validate. If a call times out or returns an uncertain state, do not retry execute; inspect the pipeline, exact nodes, and operation records, then compensate only with the required live and disk evidence.',
+            'Call cocos_2x_assets_scene_cancel only when the user explicitly asks to cancel an active resource-to-scene execution. Cancellation waits for the current Host call, stops at a safe write boundary, and attempts compensation; inspect the final pipeline receipt.',
             'Inspect each Sprite in the matching local Web preview before calling cocos_2x_assets_scene_preview_accept. Never invent visual evidence or treat source, disk, or headless-only observations as visual acceptance.',
             'Call cocos_2x_content_from_scene_plan only after the pipeline is completed and every item is visually accepted. Review stable IDs, dependencies, entry asset, derived UUIDs, and fingerprint; call cocos_2x_content_from_scene_stage only when the user requested release staging and the plan is valid.',
             'Use cocos://2x/agent/mcp-tools for the full version-specific tool and recovery instructions.',
@@ -156,6 +157,17 @@ function createServer(projectRoots, options = {}) {
 
     async function invoke(method, params, context) {
         const selectedProject = typeof params?.projectRoot === 'string' ? path.resolve(params.projectRoot) : null;
+        if (method === 'assets.scene.cancel') {
+            const active = selectedProject && activeScenePipelines.get(selectedProject);
+            if (!active) return { success: false, outcome: 'failed', error: { code: 'PIPELINE_NOT_RUNNING',
+                message: 'No active resource-to-scene execution exists for this project.' } };
+            if (active.pipelineId !== params.pipelineId) return { success: false, outcome: 'failed', error: { code: 'PIPELINE_ID_MISMATCH',
+                message: 'The active resource-to-scene operation has a different pipelineId.' } };
+            if (Atomics.load(active.cancelView, 0) === 1) return { success: true, outcome: 'cancellation-already-requested', pipelineId: active.pipelineId };
+            Atomics.store(active.cancelView, 0, 1);
+            return { success: true, outcome: 'cancellation-requested', pipelineId: active.pipelineId,
+                message: 'Cancellation will be applied at the next safe write boundary.' };
+        }
         if (selectedProject && activeScenePipelines.has(selectedProject) && method !== 'assets.scene.execute'
             && !['assets.scene.get', 'assets.scene.validate', 'instances.get', 'capabilities.list', 'operation.get'].includes(method)) {
             return { success: false, outcome: 'in-progress', error: { code: 'EDITOR_BUSY',
@@ -186,12 +198,15 @@ function createServer(projectRoots, options = {}) {
                     return { success: false, outcome: 'in-progress', error: { code: 'PIPELINE_EXECUTION_IN_PROGRESS',
                         message: 'A resource-to-scene operation is already running for this project. Read its pipeline receipt; do not retry execute.' } };
                 }
-                const operation = options.invokeAgent
-                    ? invokeAgent(request, { onProgress })
-                    : runScenePipelineWorker(request, onProgress);
-                activeScenePipelines.set(selectedProject, operation);
-                try { response = await operation; }
-                finally { activeScenePipelines.delete(selectedProject); }
+                const cancelBuffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT);
+                const active = { pipelineId: params.pipelineId, cancelView: new Int32Array(cancelBuffer), promise: null };
+                activeScenePipelines.set(selectedProject, active);
+                try {
+                    active.promise = options.invokeAgent
+                        ? invokeAgent(request, { onProgress })
+                        : runScenePipelineWorker(request, onProgress, cancelBuffer);
+                    response = await active.promise;
+                } finally { activeScenePipelines.delete(selectedProject); }
             } else {
                 response = await invokeAgent(request, { onProgress });
             }
@@ -283,6 +298,10 @@ function createServer(projectRoots, options = {}) {
         z.object({ projectRoot, pipelineId: OPERATION_ID, sources: resourceSceneSources, positions: resourceScenePositions }).strict(),
         'assets.scene.execute', ({ projectRoot: selected, ...params }) => resourceSceneParams(selected, params),
         { title: 'Import PNGs and add them to a Creator 2.4 scene', readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
+    register('cocos_2x_assets_scene_cancel',
+        'Request cooperative cancellation of the active Creator 2.4.15 resource-to-scene execution for this pipeline. The current Host command is allowed to finish; the pipeline then stops at a safe write boundary and attempts to compensate its own scene and imported-asset changes. Read the final pipeline receipt to confirm the result.',
+        pipelineIdInput, 'assets.scene.cancel', ({ projectRoot: selected, pipelineId }) => resourceSceneParams(selected, { pipelineId }),
+        { title: 'Cancel a Creator 2.4 resource-to-scene operation', readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
     register('cocos_2x_assets_scene_get',
         'Read a Creator 2.4 resource-to-scene pipeline receipt. A pending or completed preview phase may be refreshed from its child scene records.',
         pipelineIdInput, 'assets.scene.get', ({ projectRoot: selected, pipelineId }) => resourceSceneParams(selected, { pipelineId }),

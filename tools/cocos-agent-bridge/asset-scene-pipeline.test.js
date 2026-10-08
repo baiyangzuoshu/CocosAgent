@@ -140,6 +140,47 @@ test('reports monotonic progress around each real Host call without exposing req
     } finally { f.cleanup(); }
 });
 
+test('cooperative cancellation after scene writes compensates nodes and imported assets', () => {
+    const f = fixture();
+    try {
+        let cancelled = false;
+        const run = (request) => {
+            const result = f.run(request);
+            if (request.command === 'scene.pngSprite' && request.input?.action === 'apply'
+                && request.input.assetName === 'Blue.png') cancelled = true;
+            return result;
+        };
+        const result = handle('assets.scene.execute', { ...f.params, pipelineId: crypto.randomUUID() }, run,
+            () => {}, () => cancelled);
+        assert.equal(result.outcome, 'failed', JSON.stringify(result));
+        assert.equal(result.error.code, 'EXECUTION_CANCELLED');
+        assert.equal(result.rollbackStatus, 'passed');
+        assert.ok(result.items.every((item) => item.sceneStatus === 'compensated' && item.removalStatus === 'removed'));
+        assert.equal(f.nodes.size, 0);
+        assert.ok(f.params.sources.every((source) => !fs.existsSync(path.join(f.projectRoot, 'assets', 'resources', path.basename(source)))));
+    } finally { f.cleanup(); }
+});
+
+test('cooperative cancellation between imports removes only the asset already imported by this pipeline', () => {
+    const f = fixture();
+    try {
+        let cancelled = false;
+        const run = (request) => {
+            const result = f.run(request);
+            if (request.command === 'asset.importPng' && path.basename(request.input.sourcePath) === 'Red.png') cancelled = true;
+            return result;
+        };
+        const result = handle('assets.scene.execute', { ...f.params, pipelineId: crypto.randomUUID() }, run,
+            () => {}, () => cancelled);
+        assert.equal(result.outcome, 'failed', JSON.stringify(result));
+        assert.equal(result.error.code, 'EXECUTION_CANCELLED');
+        assert.equal(result.rollbackStatus, 'passed');
+        assert.equal(f.nodes.size, 0);
+        assert.ok(f.params.sources.every((source) => !fs.existsSync(path.join(f.projectRoot, 'assets', 'resources', path.basename(source)))));
+        assert.equal(f.calls.filter((request) => request.command === 'scene.pngSprite').length, 0);
+    } finally { f.cleanup(); }
+});
+
 test('a definite import failure rolls back only resources this pipeline imported', () => {
     const f = fixture({ failImport: true });
     try {

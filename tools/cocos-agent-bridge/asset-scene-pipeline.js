@@ -253,7 +253,7 @@ function contextStillMatches(record, run) {
     const context = sceneContext({ targets: record.targets, projectRoot: record.projectRoot }, run);
     return context.success && sameInstance(context.instance, snapshot.instance) && context.canvasUuid === record.canvasUuid;
 }
-function execute(params, run = dispatch) {
+function execute(params, run = dispatch, isCancelled = () => false) {
     if (!validTarget(params) || !Array.isArray(params.sources)) return fail('INVALID_ARGUMENT', 'Provide an exact Creator 2.4.15 target and source PNGs.');
     const pipelineId = params.pipelineId || crypto.randomUUID();
     if (!idPattern.test(pipelineId)) return fail('INVALID_PIPELINE_ID', 'Pipeline ID must be a UUID.');
@@ -300,11 +300,26 @@ function execute(params, run = dispatch) {
         const item = record.items.find((candidate) => candidate.assetName === child.assetName);
         if (item) { item.operationId = child.operationId; item.sceneStatus = child.status; item.previewStatus = child.phases?.preview === 'passed' ? 'passed' : 'pending'; }
     }
+    if ((scene.success || scene.outcome === 'needs-preview') && ['needs-preview', 'completed'].includes(scene.outcome) && isCancelled()) {
+        const reverted = sceneBatch.compensate({ projectRoot, creatorVersion: '2.4.15', batchId: record.sceneBatchId }, run);
+        if (!sceneRefsSafe(record, reverted)) {
+            record.state = 'needs-review'; record.rollbackStatus = 'blocked';
+            record.error = { code: 'CANCELLATION_COMPENSATION_UNVERIFIED', detail: reverted.error || null };
+            save(record); return publicRecord(record);
+        }
+        if (Array.isArray(reverted.items)) for (const child of reverted.items) {
+            const item = record.items.find((candidate) => candidate.assetName === child.assetName);
+            if (item) { item.operationId = child.operationId; item.sceneStatus = child.status;
+                item.previewStatus = child.status === 'compensated' ? 'skipped' : item.previewStatus; }
+        }
+        record.state = 'failed'; record.rollbackStatus = 'pending'; record.error = { code: 'EXECUTION_CANCELLED' };
+        save(record); return removeImported(record, run);
+    }
     if ((scene.success || scene.outcome === 'needs-preview') && ['needs-preview', 'completed'].includes(scene.outcome)) {
         record.state = scene.outcome === 'completed' ? 'completed' : 'needs-preview'; save(record); return publicRecord(record);
     }
     if (scene.outcome === 'failed' && sceneRefsSafe(record, scene)) {
-        record.state = 'failed'; record.rollbackStatus = 'pending'; record.error = { code: scene.error?.code || 'SCENE_PIPELINE_FAILED', detail: scene.error || null };
+        record.state = 'failed'; record.rollbackStatus = 'pending'; record.error = { code: isCancelled() ? 'EXECUTION_CANCELLED' : scene.error?.detail?.code || scene.error?.code || 'SCENE_PIPELINE_FAILED', detail: scene.error || null };
         save(record); return removeImported(record, run);
     }
     record.state = 'needs-review'; record.rollbackStatus = 'blocked';
@@ -373,24 +388,34 @@ function compensate(params, run = dispatch) {
     record.error = null; record.rollbackStatus = 'pending'; save(record);
     return removeImported(record, run);
 }
-function handle(method, params, run = dispatch, onProgress) {
+function handle(method, params, run = dispatch, onProgress, isCancelled = () => false) {
     if (method === 'assets.scene.plan') return plan(params, run);
     if (method === 'assets.scene.execute') {
-        if (typeof onProgress !== 'function') return execute(params, run);
+        const emitProgress = typeof onProgress === 'function' ? onProgress : () => {};
         let progress = 0;
         const trackedRun = (request) => {
             const command = request.command || (request.operationGetId ? 'operation.get'
                 : request.operationReconcileId ? 'operation.reconcile' : request.previewAcceptId ? 'preview.accept' : 'host-check');
             const report = (state, outcome) => {
-                try { onProgress({ progress: ++progress, command, state, ...(outcome ? { outcome } : {}) }); }
+                try { emitProgress({ progress: ++progress, command, state, ...(outcome ? { outcome } : {}) }); }
                 catch (_) { /* Progress delivery must never interrupt a scene/resource write. */ }
             };
             report('started');
+            const isCleanup = request.command === 'asset.removeImportedPng'
+                || request.command === 'scene.pngSprite' && request.input?.action === 'compensate';
+            const writes = request.command === 'asset.importPng' || request.command === 'asset.refreshPng'
+                || request.command === 'scene.pngSprite' && ['apply', 'replay'].includes(request.input?.action);
+            if (writes && !isCleanup && isCancelled()) {
+                report('finished', 'cancelled');
+                return { success: false, outcome: 'failed', error: { code: 'EXECUTION_CANCELLED',
+                    message: 'The resource-to-scene operation was cancelled at a write boundary.',
+                    phase: 'execution', retryable: false, sideEffect: 'none' } };
+            }
             const result = run(request);
             report('finished', typeof result?.outcome === 'string' ? result.outcome : result?.success === true ? 'completed' : 'failed');
             return result;
         };
-        return execute(params, trackedRun);
+        return execute(params, trackedRun, isCancelled);
     }
     if (method === 'assets.scene.get') return get(params);
     if (method === 'assets.scene.preview.accept') return acceptPreview(params, run);
