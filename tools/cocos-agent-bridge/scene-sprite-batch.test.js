@@ -27,6 +27,7 @@ function fixture() {
     const instance = { instanceId: '11111111-1111-4111-8111-111111111111', projectRoot,
         creatorVersion: '2.4.15', activeScene: 'helloworld' };
     const nodes = new Map();
+    const sceneCalls = [];
     const fPositions = { 'One.png': { x: -64, y: 0 }, 'Two.png': { x: 64, y: 0 } };
     const run = (request) => {
         if (request.command === 'scene.snapshot') return { success: true, outcome: 'completed', instance,
@@ -51,6 +52,7 @@ function fixture() {
         const spriteFrameUuid = JSON.parse(fs.readFileSync(path.join(resources, `${assetName}.meta`), 'utf8'))
             .subMetas[path.basename(assetName, '.png')].uuid;
         const action = request.input.action;
+        sceneCalls.push({ assetName, action, operationId: request.input.operationId });
         if (action === 'apply') assert.deepEqual(request.input.position, fPositions[assetName]);
         if (assetName === 'Two.png' && action === 'apply' && failureMode === 'definite') return { success: false, outcome: 'failed',
             instance, error: { code: 'EDITOR_REJECTED', sideEffect: 'none' } };
@@ -64,6 +66,10 @@ function fixture() {
             phases: { capability: 'passed', preflight: 'passed', editor: 'passed', disk: 'passed', preview: action === 'apply' ? 'pending' : 'skipped', recovery: 'passed' },
             receipts: [], intent: 'disk-verified', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
         operationStore.write(projectRoot, operation, true);
+        if (failureMode === 'interrupt-after-persist' && assetName === 'One.png' && action === 'apply') {
+            failureMode = null;
+            throw new Error('INJECTED_HOST_INTERRUPTION');
+        }
         return { success: true, outcome: action === 'compensate' ? 'completed' : 'needs-preview', instance,
             operationId: request.input.operationId, phases: operation.phases,
             result: { sceneName: 'helloworld', action, assetName, nodeName: targetNodeName, assetUuid: spriteFrameUuid,
@@ -71,7 +77,7 @@ function fixture() {
     };
     let failureMode = null;
     const setFailure = (mode) => { failureMode = mode; };
-    return { root, params, projectRoot, nodes, run, setFailure,
+    return { root, params, projectRoot, nodes, sceneCalls, run, setFailure,
         cleanup: () => fs.rmSync(root, { recursive: true, force: true }) };
 }
 
@@ -117,6 +123,30 @@ test('uncertain scene write stops without automatic compensation', () => {
         assert.equal(f.nodes.size, 1);
         assert.equal(compensate({ projectRoot: f.projectRoot, creatorVersion: '2.4.15', batchId: result.batchId }, f.run).error.code,
             'BATCH_NOT_COMPENSABLE');
+    } finally { f.cleanup(); }
+});
+
+test('same batch resumes after host interruption between persisted operation and reply', () => {
+    const f = fixture();
+    const batchId = crypto.randomUUID();
+    try {
+        f.setFailure('interrupt-after-persist');
+        assert.throws(() => execute({ ...f.params, batchId }, f.run), /INJECTED_HOST_INTERRUPTION/);
+
+        const batchFile = path.join(f.projectRoot, '.cocos-agent', 'scene-batches', `${batchId}.json`);
+        const interrupted = JSON.parse(fs.readFileSync(batchFile, 'utf8'));
+        assert.equal(interrupted.state, 'executing');
+        assert.deepEqual(interrupted.items.map((item) => item.status), ['applying', 'pending']);
+        assert.equal(operationStore.read(f.projectRoot, interrupted.items[0].operationId).phases.disk, 'passed');
+        assert.equal(f.nodes.size, 1);
+
+        const resumed = execute({ ...f.params, batchId }, f.run);
+        assert.equal(resumed.outcome, 'needs-preview');
+        assert.deepEqual(resumed.items.map((item) => item.status), ['applied', 'applied']);
+        assert.equal(resumed.items[0].operationId, interrupted.items[0].operationId);
+        assert.equal(f.sceneCalls.filter((call) => call.assetName === 'One.png' && call.action === 'apply').length, 1);
+        assert.equal(f.sceneCalls.filter((call) => call.assetName === 'Two.png' && call.action === 'apply').length, 1);
+        assert.equal(f.nodes.size, 2);
     } finally { f.cleanup(); }
 });
 
