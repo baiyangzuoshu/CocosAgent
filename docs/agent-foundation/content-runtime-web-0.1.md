@@ -15,3 +15,11 @@
 这次实测证明本地 2.4 Web 预览中的一次纹理导入网络失败会走到运行时 `retained` 回执，并可经 Host 指针回滚与后续重试恢复。运行时核心单测仍覆盖加载失败和绘制确认失败；Host 通道测试仍覆盖失败回执不得覆盖 `effective`。它不证明其他失败类型、远端内容分发、原生版本生效或性能预算已验收。
 
 正常启动通道仅完成 2.4 Web 预览验证；3.8 保留较早的临时注入轨迹，尚无项目启动接线验收。该 Host 本机通道没有外部用户认证能力，令牌只用于本机开发预览；URL 中的令牌不可复用于模型凭证或公开部署。一次绘制确认与截图只证明本次 Web 画面可见，不给出帧预算或所有平台的 GPU 完成保证。Mac 原生包此前只验证纹理加载/释放，动态版本生效与运行时通道仍未在原生包验收。
+
+## 2.4 Mac 原生通道边界审计
+
+2026-10-08 用 Creator 2.4.15 构建并编译当前 `Mac` 目标，两个构建步骤都完成；启动新包后可见 `Hello, World!` 场景。这只确认当前示例能生成并启动 Mac 原生包，不证明 CocosAgent 动态内容通道已连接。结构化边界记录见[原生 bootstrap 审计](traces/cocos-agent-content-runtime-native-bootstrap-2.4.jsonl)。
+
+源码已说明为什么不能直接复用 Web 通道：`assets/Script/CocosAgentRuntimeChannel.js::session` 只从浏览器 `location` 读取 `cocosAgentPort` 和 `cocosAgentToken`；没有这两个预览 URL 参数时，`HelloWorld.onLoad` 不会挂载运行时。Host 的 `tools/cocos-agent-bridge/runtime/content-runtime-host.js::start` 也只接受 2.4 Web 预览 `http://127.0.0.1:7456/`，并要求 WebSocket `Origin` 与预览源一致。此次 Mac 启动没有启动 Host 连接，因此没有声称已经实测 native 连接失败或成功；结论是当前合同缺少 native session bootstrap。
+
+下一步先为 2.4 Mac 开发包确定独立的本地 session 交付和认证边界，保持 Web 预览的 Origin 检查不变；再实现并验收原生应用收到版本、应用资源、提交 `effective` 回执，以及资源加载失败时保留旧内容和 Host 回滚。移动端不由本次 Mac 证据覆盖。
