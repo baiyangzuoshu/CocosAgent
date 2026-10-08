@@ -50,13 +50,15 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         const { tools } = await client.listTools();
         const names = tools.map((tool) => tool.name).sort();
         assert.deepEqual(names, [
-            'cocos_2x_capabilities_list', 'cocos_2x_command_execute', 'cocos_2x_content_build_execute',
+            'cocos_2x_assets_scene_compensate', 'cocos_2x_assets_scene_execute', 'cocos_2x_assets_scene_get',
+            'cocos_2x_assets_scene_plan', 'cocos_2x_assets_scene_preview_accept', 'cocos_2x_assets_scene_repair',
+            'cocos_2x_assets_scene_validate', 'cocos_2x_capabilities_list', 'cocos_2x_command_execute', 'cocos_2x_content_build_execute',
             'cocos_2x_content_build_get', 'cocos_2x_content_build_plan', 'cocos_2x_content_build_reconcile',
             'cocos_2x_content_preview_get', 'cocos_2x_content_preview_start', 'cocos_2x_content_preview_stop',
             'cocos_2x_instances_get', 'cocos_2x_instances_list', 'cocos_2x_operation_get',
             'cocos_2x_operation_preview_accept', 'cocos_2x_operation_reconcile',
         ]);
-        assert.equal(tools.length, 14);
+        assert.equal(tools.length, 21);
         const commandTool = tools.find((tool) => tool.name === 'cocos_2x_command_execute');
         assert.equal(commandTool.annotations.readOnlyHint, false);
         assert.equal(commandTool.annotations.destructiveHint, true);
@@ -112,6 +114,57 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         } });
         assert.equal(previewAccepted.structuredContent.method, 'preview.accept');
         assert.equal(calls.at(-1).params.evidence.url, 'http://127.0.0.1:7457/');
+
+        const resourceSources = [path.join(value.parent, 'red.png'), path.join(value.parent, 'blue.png')];
+        const pipelineId = 'e717fbc0-13a0-4d4c-8957-8439570be51a';
+        const sceneOperationId = 'f12163cd-bf66-4210-9043-60f07c4ce07b';
+        const repairId = '61f4b44d-8d91-4df8-bef3-6f07a23772fa';
+        const plannedScene = await client.callTool({ name: 'cocos_2x_assets_scene_plan', arguments: {
+            projectRoot: value.projects[0], sources: resourceSources, positions: [{ x: -32, y: 0 }, { x: 32, y: 0 }],
+        } });
+        assert.equal(plannedScene.structuredContent.method, 'assets.scene.plan');
+        assert.deepEqual(calls.at(-1).params.targets, value.projects.map((projectRoot) => ({ creatorVersion: '2.4.15', projectRoot })));
+        assert.equal(calls.at(-1).params.creatorVersion, '2.4.15');
+        assert.deepEqual(calls.at(-1).params.sources, resourceSources);
+
+        const executedScene = await client.callTool({ name: 'cocos_2x_assets_scene_execute', arguments: {
+            projectRoot: value.projects[0], pipelineId, sources: resourceSources,
+        } });
+        assert.equal(executedScene.structuredContent.method, 'assets.scene.execute');
+        assert.equal(calls.at(-1).params.pipelineId, pipelineId);
+        assert.deepEqual(calls.at(-1).params.positions, undefined);
+
+        const pipelineReceipt = await client.callTool({ name: 'cocos_2x_assets_scene_get', arguments: {
+            projectRoot: value.projects[0], pipelineId,
+        } });
+        assert.equal(pipelineReceipt.structuredContent.method, 'assets.scene.get');
+        assert.equal(calls.at(-1).params.projectRoot, value.projects[0]);
+
+        const scenePreview = await client.callTool({ name: 'cocos_2x_assets_scene_preview_accept', arguments: {
+            projectRoot: value.projects[0], pipelineId, operationId: sceneOperationId,
+            evidence: { url: 'http://127.0.0.1:7457/', observedAt: '2026-10-09T01:00:00+08:00', note: 'Blue Sprite visible.' },
+        } });
+        assert.equal(scenePreview.structuredContent.method, 'assets.scene.preview.accept');
+        assert.equal(calls.at(-1).params.operationId, sceneOperationId);
+        assert.equal(calls.at(-1).params.evidence.note, 'Blue Sprite visible.');
+
+        const validatedScene = await client.callTool({ name: 'cocos_2x_assets_scene_validate', arguments: {
+            projectRoot: value.projects[0], pipelineId, assetName: 'blue.png',
+        } });
+        assert.equal(validatedScene.structuredContent.method, 'assets.scene.validate');
+        assert.equal(calls.at(-1).params.assetName, 'blue.png');
+
+        const repairedScene = await client.callTool({ name: 'cocos_2x_assets_scene_repair', arguments: {
+            projectRoot: value.projects[0], pipelineId, assetName: 'blue.png', repairId,
+        } });
+        assert.equal(repairedScene.structuredContent.method, 'assets.scene.repair');
+        assert.equal(calls.at(-1).params.repairId, repairId);
+
+        const compensatedScene = await client.callTool({ name: 'cocos_2x_assets_scene_compensate', arguments: {
+            projectRoot: value.projects[0], pipelineId,
+        } });
+        assert.equal(compensatedScene.structuredContent.method, 'assets.scene.compensate');
+        assert.equal(calls.at(-1).params.pipelineId, pipelineId);
 
         const invalidProject = await client.callTool({ name: 'cocos_2x_command_execute', arguments: {
             projectRoot: path.join(value.parent, 'not-registered'), command: 'scene.snapshot', input: {},

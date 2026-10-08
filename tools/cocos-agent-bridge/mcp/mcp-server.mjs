@@ -170,6 +170,52 @@ function createServer(projectRoots, options = {}) {
             projectRoot: selected, creatorVersion: CREATOR_VERSION, operationId, evidence,
         }), { title: 'Record scene preview acceptance', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
 
+    const assetName = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/);
+    const pipelineIdInput = z.object({ projectRoot, pipelineId: OPERATION_ID }).strict();
+    const resourceSceneSources = z.array(z.string().min(1).max(4096)).min(2).max(16)
+        .refine((sources) => new Set(sources).size === sources.length, 'Source paths must be unique.');
+    const resourceScenePositions = z.array(positionSchema()).min(2).max(16).optional();
+    function resourceSceneParams(selected, params = {}) {
+        return { targets: targetList, projectRoot: selected, creatorVersion: CREATOR_VERSION, ...params };
+    }
+    register('cocos_2x_assets_scene_plan',
+        'Preflight importing 2–16 PNG files into Creator 2.4.15 and adding Sprite nodes under the active Canvas. Reads the selected scene and disk; does not import assets or save the scene.',
+        z.object({ projectRoot, sources: resourceSceneSources, positions: resourceScenePositions }).strict(),
+        'assets.scene.plan', ({ projectRoot: selected, ...params }) => resourceSceneParams(selected, params),
+        { title: 'Plan a Creator 2.4 resource-to-scene operation', readOnlyHint: true, destructiveHint: false, openWorldHint: false });
+    register('cocos_2x_assets_scene_execute',
+        'Import the planned PNG files through Creator AssetDB, verify their Texture/SpriteFrame UUIDs, create Canvas Sprite nodes, and read the saved scene back. This writes project assets and scene data; use the returned pipelineId for later acceptance or compensation.',
+        z.object({ projectRoot, pipelineId: OPERATION_ID, sources: resourceSceneSources, positions: resourceScenePositions }).strict(),
+        'assets.scene.execute', ({ projectRoot: selected, ...params }) => resourceSceneParams(selected, params),
+        { title: 'Import PNGs and add them to a Creator 2.4 scene', readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
+    register('cocos_2x_assets_scene_get',
+        'Read a Creator 2.4 resource-to-scene pipeline receipt. A pending or completed preview phase may be refreshed from its child scene records.',
+        pipelineIdInput, 'assets.scene.get', ({ projectRoot: selected, pipelineId }) => resourceSceneParams(selected, { pipelineId }),
+        { title: 'Read a Creator 2.4 resource-to-scene receipt', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+    register('cocos_2x_assets_scene_preview_accept',
+        'Record that one imported Sprite was visually inspected in its matching local Creator 2.4 Web preview. Supply the operationId returned for that pipeline item.',
+        z.object({ ...pipelineIdInput.shape, operationId: OPERATION_ID, evidence: z.object({
+            url: z.string().min(1).max(256), observedAt: z.string().min(1), note: z.string().min(1).max(500),
+        }).strict() }).strict(), 'assets.scene.preview.accept',
+        ({ projectRoot: selected, pipelineId, operationId, evidence }) => resourceSceneParams(selected, { pipelineId, operationId, evidence }),
+        { title: 'Accept one resource-to-scene preview result', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+    register('cocos_2x_assets_scene_compensate',
+        'Compensate a Creator 2.4 resource-to-scene pipeline. It removes the tracked scene references before asking AssetDB to remove only pipeline-owned assets whose UUIDs and serialized references still match.',
+        pipelineIdInput, 'assets.scene.compensate', ({ projectRoot: selected, pipelineId }) => resourceSceneParams(selected, { pipelineId }),
+        { title: 'Compensate a Creator 2.4 resource-to-scene operation', readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
+    register('cocos_2x_assets_scene_validate',
+        'Read-only validation of PNG bytes, Creator meta UUID relationships, AssetDB mappings, active-scene Sprite references, serialized scene structure, and pipeline records.',
+        z.object({ ...pipelineIdInput.shape, assetName: assetName.optional() }).strict(),
+        'assets.scene.validate', ({ projectRoot: selected, pipelineId, assetName: selectedAsset }) => resourceSceneParams(selected,
+            { pipelineId, ...(selectedAsset ? { assetName: selectedAsset } : {}) }),
+        { title: 'Validate imported Creator 2.4 scene resources', readOnlyHint: true, destructiveHint: false, openWorldHint: false });
+    register('cocos_2x_assets_scene_repair',
+        'Repair only the validated stale AssetDB URL mapping for a tracked Creator 2.4 pipeline asset. It may call Editor.assetdb.refresh and then verifies the same UUID and scene references; it never rewrites .meta.',
+        z.object({ ...pipelineIdInput.shape, assetName, repairId: OPERATION_ID.optional() }).strict(),
+        'assets.scene.repair', ({ projectRoot: selected, pipelineId, assetName: selectedAsset, repairId }) => resourceSceneParams(selected,
+            { pipelineId, assetName: selectedAsset, ...(repairId ? { repairId } : {}) }),
+        { title: 'Repair a stale Creator 2.4 AssetDB mapping', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+
     const buildInput = z.object({
         projectRoot,
         releaseId: RELEASE_ID,
