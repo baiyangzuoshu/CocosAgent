@@ -29,6 +29,11 @@
 | `cocos_2x_assets_scene_compensate` | 删除流水线资源 | 先撤销场景引用，再按身份与引用检查清理流水线导入的资源 |
 | `cocos_2x_assets_scene_validate` | 只读 | 交叉检查 PNG、meta UUID、AssetDB、场景和批次记录 |
 | `cocos_2x_assets_scene_repair` | 刷新 AssetDB 映射 | 仅修复验证为陈旧的 URL→UUID 映射，不改写 meta |
+| `cocos_2x_content_from_scene_plan` | 只读 | 从已完成预览验收的场景流水线派生内容 release 清单和指纹 |
+| `cocos_2x_content_from_scene_stage` | 写 Host release 记录 | 持久化不可变 release，不自动选择或构建 |
+| `cocos_2x_content_get` | 只读 | 查询某 release、当前 selected 与 effective 指针 |
+| `cocos_2x_content_select` | 写 Host 指针 | 以 `expectedCurrent` compare-and-set 选中 release；不会直接改运行中的游戏 |
+| `cocos_2x_content_rollback` | 写 Host 指针 | 仅在当前版本匹配时选择上一个 release |
 | `cocos_2x_content_build_plan` | 只读 | 校验 release 并查看构建计划 |
 | `cocos_2x_content_build_execute` | 写入构建产物 | 生成并校验 Web-Mobile 包 |
 | `cocos_2x_content_build_get` | 只读 | 读取持久化构建记录 |
@@ -39,7 +44,7 @@
 
 实例调用顺序为：列出实例，选定列表中的 `projectRoot`，查询能力，再按回执决定是否调用命令。构建和预览工具也要求从实例列表选择项目；MCP 参数 schema 会将项目路径限制为本进程启动时配置的路径。
 
-资源到场景的建议顺序为 `assets_scene_plan → assets_scene_execute → assets_scene_get/validate → 浏览器逐项检查 → assets_scene_preview_accept → assets_scene_get`。如果结果不满足预期，调用 `assets_scene_compensate`；它会先恢复场景引用，再经 AssetDB 清理由该流水线导入且确认无引用的资源。`assets_scene_repair` 只用于验证返回 `repairable` 的陈旧 AssetDB 映射。工具使用 2.4.15 Host 的既有流水线合同；详细状态、错误与前置条件见 [资源到场景合同](cocos-agent-resource-scene-pipeline-0.1.md)。
+资源到场景的建议顺序为 `assets_scene_plan → assets_scene_execute → assets_scene_get/validate → 浏览器逐项检查 → assets_scene_preview_accept → assets_scene_get`。如果结果不满足预期，调用 `assets_scene_compensate`；它会先恢复场景引用，再经 AssetDB 清理由该流水线导入且确认无引用的资源。`assets_scene_repair` 只用于验证返回 `repairable` 的陈旧 AssetDB 映射。完成视觉验收后，调用 `content_from_scene_plan`，明确检查 release ID、入口资源、稳定 asset ID、依赖关系、派生 UUID 和 fingerprint，再调用 `content_from_scene_stage`。随后通过 `content_select` 并携带 `expectedCurrent` 选择版本；此步骤只改 Host 指针。要将内容交给 Web 包，继续按 `content_build_plan/execute` 构建，再用 `content_preview_start/get/stop` 检查运行时回执；若需恢复之前版本，使用 `content_rollback` 并检查运行时回执。工具使用 2.4.15 Host 的既有合同；详细前置条件见[资源到场景合同](cocos-agent-resource-scene-pipeline-0.1.md)、[内容 release 合同](content-release-0.1.md)、[Web-Mobile 构建合同](content-build-web-0.1.md)和[本机预览合同](content-preview-web-0.1.md)。
 
 `cocos_2x_operation_preview_accept` 只接受 loopback HTTP URL。preview 阶段仍待验收时，它创建视觉回执；自动运行态检查已通过时，它会把视觉观察作为额外证据追加到现有 preview 回执，不覆盖原有 runtime 状态证据。相同视觉证据重复提交幂等；每个回执最多保留 8 条证据。
 
@@ -85,4 +90,4 @@ node /absolute/path/Cocos_Engine/tools/cocos-agent-bridge/mcp/mcp-server.mjs \
 
 自动测试使用官方 MCP SDK 的 Client、Server 和 `InMemoryTransport`：确认工具发现、2.4 目标固定、实例选择、共享 JSONL 路由、错误保留、命令专属输入拒绝及操作记录、对账和预览回执的请求映射。官方 MCP SDK `StdioClientTransport` 连接真实 2.4.15 工程后，发现 14 个工具、选中 `helloworld` 实例、读取 8 项可用命令，并经 MCP 完成只读 `scene.snapshot`。随后通过 MCP 在 `Canvas` 下创建带 `cc.Label` 的临时节点：编辑器保存、磁盘读回和 Chrome 运行态属性检查均通过；浏览器截图实际显示 “MCP WRITE VERIFIED”。`cocos_2x_operation_preview_accept` 将单独的视觉证据追加到已有运行态 preview 回执，`operation.get` 返回 `completed`。用 MCP 补偿和重放两轮后，补偿记录的 capability/editor/disk/recovery 均通过，preview 为 `skipped`；`operation.get` 与 `scene.node.inspect` 分别返回 `completed` 和 `not-found`，刷新预览恢复到原始 Hello World 画面。Creator 保存时重排了 `.fire` 序列化字段，测试后已把示例场景恢复为提交版本；当前 MCP 实测未留下场景差异。该轮还修复了补偿型 `scene.node.create` 被错误报告为 `needs-preview` 的状态判断，并为运行态与视觉双证据追加行为增加回归测试。随后用临时合成的“不确定写入”记录经 MCP 调用 `operation.reconcile`；真实 Creator 活动场景与磁盘均确认目标缺席，返回 `WRITE_RECONCILED_NO_EFFECT`、`sideEffect=none`、`recovery=passed`。合成记录在验收后删除；这证明 MCP 接线及真实双侧读回，不代表经历了真实编辑器故障。经 MCP 完成 `content.build.plan/execute/get`，构建 ID `web-mcp-real-01` 的隔离包状态依次为 `ready/verified/completed`，校验了红蓝两张资源的 UUID、pack import JSON 与 native PNG；随后同一构建又经 MCP 完成 `content.preview.start/get/stop`。浏览器实际显示蓝色方块、Cocos logo 和 Hello World，`get` 返回 `runtime-observed`，运行时回执确认蓝色资源已应用且引用计数为 1；预览服务和浏览器标签均已关闭。预览 URL 中的短期访问 token 未写入轨迹。最后，使用短期 synthetic `running` 构建记录（引用上面的已验证输出，不模拟真实 Creator 崩溃）通过 MCP `content.build.reconcile` 得到 `verified`，随后 `get` 读回 `completed`，重复 reconcile 返回 `already-terminal`；临时记录已删除。这验证了 MCP stdio 路由和恢复结果幂等，不替代真实 Host 崩溃后的进程恢复测试。证据见 [MCP 实机轨迹](traces/cocos-agent-mcp-2.4.jsonl)；构建执行的既有 JSONL/Host 实机证据仍见内容构建合同。
 
-本轮新增 7 个资源到场景 MCP 工具，InMemoryTransport 测试已验证工具发现、专属 schema、2.4 目标映射和所有七种方法到 JSONL 的路由。实机 MCP 流程尚未验收：只读 `instances.list` 返回 `CATALOG_FAILED`，桌面接口确认 Mac 已锁定；本轮没有开始资源导入或场景写入。此前 Host/Creator 对应流水线本身已有单独实机验收，不能据此宣称新 MCP 入口也已实机通过。其他尚未提供的是 MCP 资源/提示词、实时进度、取消、重连恢复和远程 HTTP transport。当前首版不改 Creator 扩展代码；后续可按面试目标继续沉淀经验证的 2.x 能力，再制定 3.x 适配计划。
+本轮新增 12 个资源流水线和内容 release MCP 工具，InMemoryTransport 测试已验证工具发现、专属 schema、固定 2.4 目标映射及全部方法到 JSONL 的路由。实机 MCP 流程尚未验收：只读 `instances.list` 返回 `CATALOG_FAILED`，桌面接口确认 Mac 已锁定；本轮没有开始资源导入或场景写入。此前 Host/Creator 对应流水线和内容 release 流程已有独立实机验收，不能据此宣称新 MCP 入口也已实机通过。其他尚未提供的是 MCP 资源/提示词、实时进度、取消、重连恢复和远程 HTTP transport。当前首版不改 Creator 扩展代码；后续可按面试目标继续沉淀经验证的 2.x 能力，再制定 3.x 适配计划。

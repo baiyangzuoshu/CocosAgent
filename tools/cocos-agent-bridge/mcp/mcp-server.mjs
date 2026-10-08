@@ -216,6 +216,48 @@ function createServer(projectRoots, options = {}) {
             { pipelineId, assetName: selectedAsset, ...(repairId ? { repairId } : {}) }),
         { title: 'Repair a stale Creator 2.4 AssetDB mapping', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
 
+    const contentAssetId = z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/);
+    const contentAssetName = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/i);
+    const contentAssets = z.array(z.object({
+        assetName: contentAssetName,
+        id: contentAssetId,
+        dependsOn: z.array(contentAssetId).max(64).refine((ids) => new Set(ids).size === ids.length, 'Dependency IDs must be unique.').optional(),
+    }).strict()).min(1).max(16).refine((items) => new Set(items.map((item) => item.assetName.toLowerCase())).size === items.length
+        && new Set(items.map((item) => item.id)).size === items.length, 'Asset names and IDs must be unique.');
+    const contentFromSceneInput = z.object({
+        projectRoot,
+        pipelineId: OPERATION_ID,
+        releaseId: RELEASE_ID,
+        entryAssetName: contentAssetName,
+        assets: contentAssets,
+    }).strict();
+    function contentFromSceneParams(selected, params) {
+        return { targets: targetList, projectRoot: selected, creatorVersion: CREATOR_VERSION, ...params };
+    }
+    register('cocos_2x_content_from_scene_plan',
+        'Plan a built-in resources content release from a completed, preview-accepted Creator 2.4 scene pipeline. Revalidates imported UUIDs and serialized scene references; does not stage or select the release.',
+        contentFromSceneInput, 'content.fromScene.plan', ({ projectRoot: selected, ...params }) => contentFromSceneParams(selected, params),
+        { title: 'Plan content release from an accepted scene', readOnlyHint: true, destructiveHint: false, openWorldHint: false });
+    register('cocos_2x_content_from_scene_stage',
+        'Stage an immutable Creator 2.4 built-in resources release derived from a completed, preview-accepted scene pipeline. This writes a local release record but does not change the selected release or build output.',
+        contentFromSceneInput, 'content.fromScene.stage', ({ projectRoot: selected, ...params }) => contentFromSceneParams(selected, params),
+        { title: 'Stage content release from an accepted scene', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+    register('cocos_2x_content_get',
+        'Read the selected/effective content pointers, or one immutable staged Creator 2.4 release.',
+        z.object({ projectRoot, releaseId: RELEASE_ID.optional() }).strict(), 'content.get',
+        ({ projectRoot: selected, releaseId }) => ({ projectRoot: selected, creatorVersion: CREATOR_VERSION, ...(releaseId ? { releaseId } : {}) }),
+        { title: 'Read a Creator 2.4 content release', readOnlyHint: true, destructiveHint: false, openWorldHint: false });
+    register('cocos_2x_content_select',
+        'Select an existing immutable Creator 2.4 release using compare-and-set on the expected current release. This changes only the local Host pointer; the runtime must separately report application.',
+        z.object({ projectRoot, releaseId: RELEASE_ID, expectedCurrent: RELEASE_ID.nullable() }).strict(), 'content.select',
+        ({ projectRoot: selected, ...params }) => ({ projectRoot: selected, creatorVersion: CREATOR_VERSION, ...params }),
+        { title: 'Select a Creator 2.4 content release', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+    register('cocos_2x_content_rollback',
+        'Select the previous release only if it is still the expected current release. This changes the Host pointer; inspect the runtime receipt afterward.',
+        z.object({ projectRoot, expectedCurrent: RELEASE_ID }).strict(), 'content.rollback',
+        ({ projectRoot: selected, expectedCurrent }) => ({ projectRoot: selected, creatorVersion: CREATOR_VERSION, expectedCurrent }),
+        { title: 'Roll back the selected Creator 2.4 content release', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+
     const buildInput = z.object({
         projectRoot,
         releaseId: RELEASE_ID,

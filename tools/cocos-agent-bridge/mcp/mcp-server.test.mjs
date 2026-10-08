@@ -52,13 +52,16 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         assert.deepEqual(names, [
             'cocos_2x_assets_scene_compensate', 'cocos_2x_assets_scene_execute', 'cocos_2x_assets_scene_get',
             'cocos_2x_assets_scene_plan', 'cocos_2x_assets_scene_preview_accept', 'cocos_2x_assets_scene_repair',
-            'cocos_2x_assets_scene_validate', 'cocos_2x_capabilities_list', 'cocos_2x_command_execute', 'cocos_2x_content_build_execute',
+            'cocos_2x_assets_scene_validate', 'cocos_2x_capabilities_list', 'cocos_2x_command_execute',
+            'cocos_2x_content_build_execute',
             'cocos_2x_content_build_get', 'cocos_2x_content_build_plan', 'cocos_2x_content_build_reconcile',
+            'cocos_2x_content_from_scene_plan', 'cocos_2x_content_from_scene_stage', 'cocos_2x_content_get',
             'cocos_2x_content_preview_get', 'cocos_2x_content_preview_start', 'cocos_2x_content_preview_stop',
+            'cocos_2x_content_rollback', 'cocos_2x_content_select',
             'cocos_2x_instances_get', 'cocos_2x_instances_list', 'cocos_2x_operation_get',
             'cocos_2x_operation_preview_accept', 'cocos_2x_operation_reconcile',
         ]);
-        assert.equal(tools.length, 21);
+        assert.equal(tools.length, 26);
         const commandTool = tools.find((tool) => tool.name === 'cocos_2x_command_execute');
         assert.equal(commandTool.annotations.readOnlyHint, false);
         assert.equal(commandTool.annotations.destructiveHint, true);
@@ -165,6 +168,41 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         } });
         assert.equal(compensatedScene.structuredContent.method, 'assets.scene.compensate');
         assert.equal(calls.at(-1).params.pipelineId, pipelineId);
+
+        const releaseId = 'mcp-release-blue-01';
+        const contentMappings = [
+            { assetName: 'red.png', id: 'red', dependsOn: [] },
+            { assetName: 'blue.png', id: 'blue', dependsOn: ['red'] },
+        ];
+        const fromSceneInput = { projectRoot: value.projects[0], pipelineId, releaseId,
+            entryAssetName: 'blue.png', assets: contentMappings };
+        const contentPlan = await client.callTool({ name: 'cocos_2x_content_from_scene_plan', arguments: fromSceneInput });
+        assert.equal(contentPlan.structuredContent.method, 'content.fromScene.plan');
+        assert.deepEqual(calls.at(-1).params.targets, value.projects.map((projectRoot) => ({ creatorVersion: '2.4.15', projectRoot })));
+        assert.equal(calls.at(-1).params.entryAssetName, 'blue.png');
+        assert.deepEqual(calls.at(-1).params.assets, contentMappings);
+
+        const contentStage = await client.callTool({ name: 'cocos_2x_content_from_scene_stage', arguments: fromSceneInput });
+        assert.equal(contentStage.structuredContent.method, 'content.fromScene.stage');
+        assert.equal(calls.at(-1).params.releaseId, releaseId);
+
+        const contentRead = await client.callTool({ name: 'cocos_2x_content_get', arguments: {
+            projectRoot: value.projects[0], releaseId,
+        } });
+        assert.equal(contentRead.structuredContent.method, 'content.get');
+        assert.equal(calls.at(-1).params.releaseId, releaseId);
+
+        const contentSelected = await client.callTool({ name: 'cocos_2x_content_select', arguments: {
+            projectRoot: value.projects[0], releaseId, expectedCurrent: null,
+        } });
+        assert.equal(contentSelected.structuredContent.method, 'content.select');
+        assert.equal(calls.at(-1).params.expectedCurrent, null);
+
+        const contentRollback = await client.callTool({ name: 'cocos_2x_content_rollback', arguments: {
+            projectRoot: value.projects[0], expectedCurrent: releaseId,
+        } });
+        assert.equal(contentRollback.structuredContent.method, 'content.rollback');
+        assert.equal(calls.at(-1).params.expectedCurrent, releaseId);
 
         const invalidProject = await client.callTool({ name: 'cocos_2x_command_execute', arguments: {
             projectRoot: path.join(value.parent, 'not-registered'), command: 'scene.snapshot', input: {},
