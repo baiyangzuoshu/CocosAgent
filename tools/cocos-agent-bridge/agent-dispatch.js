@@ -6,7 +6,7 @@ const { spawnSync } = require('child_process');
 const operationStore = require('./operation-store');
 const operationReconcile = require('./operation-reconcile');
 
-const commands = new Set(['scene.snapshot', 'scene.node.inspect', 'asset.importPng', 'asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'scene.pngSprite', 'scene.node.create']);
+const commands = new Set(['scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'scene.pngSprite', 'scene.node.create']);
 const versions = new Set(['2.4.15', '3.8.7']);
 
 function dispatchError(code, message, phase = 'selection', sideEffect = 'none', retryable = false) {
@@ -68,6 +68,12 @@ function validInput(command, input, creatorVersion) {
     if (command === 'scene.snapshot') return keys.length === 0;
     if (command === 'scene.node.inspect') return keys.length === 1 && typeof input.nodePath === 'string'
         && input.nodePath.length > 0 && input.nodePath.length <= 240 && !input.nodePath.includes('\\') && !input.nodePath.includes('//');
+    if (command === 'asset.searchPng') return creatorVersion === '2.4.15'
+        && keys.every((key) => ['query', 'limit', 'offset'].includes(key))
+        && typeof input.query === 'string' && input.query.length >= 1 && input.query.length <= 80
+        && !/[\u0000-\u001f\u007f]/.test(input.query)
+        && (input.limit === undefined || Number.isInteger(input.limit) && input.limit >= 1 && input.limit <= 50)
+        && (input.offset === undefined || Number.isInteger(input.offset) && input.offset >= 0 && input.offset <= 100000);
     if (command === 'asset.importPng') return keys.length === 1 && typeof input.sourcePath === 'string' && input.sourcePath.length > 0;
     if (command === 'asset.removeImportedPng') return creatorVersion === '2.4.15' && keys.length === 4
         && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/i.test(input.assetName || '')
@@ -98,9 +104,12 @@ function dispatchCommand(request, invoke) {
     const { targets, projectRoot, creatorVersion, command, input } = request;
     if (!Array.isArray(targets) || !targets.length || !targets.every((target) =>
         target && versions.has(target.creatorVersion) && typeof target.projectRoot === 'string')
-        || !versions.has(creatorVersion) || !commands.has(command) || typeof projectRoot !== 'string' || !validInput(command, input, creatorVersion)) {
+        || !versions.has(creatorVersion) || !commands.has(command) || typeof projectRoot !== 'string') {
         return problem('INVALID_ARGUMENT', 'Provide targets, an exact project and Creator version, a supported command, and valid input.');
     }
+    if (command === 'asset.searchPng' && creatorVersion !== '2.4.15')
+        return problem('COMMAND_UNAVAILABLE', 'PNG asset search is currently supported only by Creator 2.4.15.');
+    if (!validInput(command, input, creatorVersion)) return problem('INVALID_ARGUMENT', 'Provide valid input for the selected command and Creator version.');
     const project = path.resolve(projectRoot);
     if (['asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng'].includes(command) && creatorVersion !== '2.4.15')
         return problem('COMMAND_UNAVAILABLE', 'Pipeline-owned PNG validation, refresh, and removal are currently supported only by Creator 2.4.15.');
@@ -129,7 +138,7 @@ function dispatchCommand(request, invoke) {
         return problem('COMMAND_UNAVAILABLE', 'Command is not currently available.', { reason: capability && capability.reason || null });
     }
     const executionArgs = ['--project', project, '--creator-version', creatorVersion, '--expected-instance-id', selected.instanceId];
-    if (selected.activeScene) executionArgs.push('--expected-scene', selected.activeScene);
+    if (selected.activeScene && command !== 'asset.searchPng') executionArgs.push('--expected-scene', selected.activeScene);
     let operationId = null;
     if (command === 'asset.importPng') executionArgs.push('--png', path.resolve(input.sourcePath));
     if (command === 'asset.removeImportedPng') executionArgs.push('--asset-remove', input.assetName,
@@ -137,6 +146,9 @@ function dispatchCommand(request, invoke) {
     if (command === 'asset.validatePng') executionArgs.push('--asset-validate', input.assetName, '--asset-pipeline-id', input.pipelineId);
     if (command === 'asset.refreshPng') executionArgs.push('--asset-refresh', input.assetName, '--asset-pipeline-id', input.pipelineId);
     if (command === 'scene.node.inspect') executionArgs.push('--node-path', input.nodePath);
+    if (command === 'asset.searchPng') executionArgs.push('--asset-search-png', input.query,
+        '--asset-search-limit', String(input.limit === undefined ? 20 : input.limit),
+        '--asset-search-offset', String(input.offset === undefined ? 0 : input.offset));
     if (command === 'scene.pngSprite') {
         operationId = input.operationId || crypto.randomUUID();
         executionArgs.push('--scene-asset', input.assetName, '--scene-action', input.action, '--operation-id', operationId);

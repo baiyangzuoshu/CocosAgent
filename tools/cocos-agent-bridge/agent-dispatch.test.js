@@ -27,6 +27,7 @@ function mock(options = {}) {
                     { id: 'scene.pngSprite', contractVersion: '0.1', status: options.unavailable ? 'unavailable' : 'available', reason: options.unavailable ? 'NO_OPEN_SCENE' : null },
                     { id: 'scene.snapshot', contractVersion: '0.1', status: 'available', reason: null },
                     { id: 'scene.node.inspect', contractVersion: '0.1', status: 'available', reason: null, access: 'read' },
+                    ...(options.includeAssetSearch ? [{ id: 'asset.searchPng', contractVersion: '0.1', status: 'available', reason: null, access: 'read' }] : []),
                     { id: 'asset.importPng', contractVersion: '0.1', status: 'available', reason: null },
                 ],
             } }) };
@@ -38,7 +39,7 @@ function mock(options = {}) {
                 phases: { editor: options.pending ? 'pending' : 'passed', disk: options.pending ? 'pending' : 'passed', preview: options.previewPassed ? 'passed' : 'pending' },
             } }) };
         }
-        const command = args.includes('--png') ? 'asset.importPng' : args.includes('--node-path') ? 'scene.node.inspect' : 'scene.snapshot';
+        const command = args.includes('--asset-search-png') ? 'asset.searchPng' : args.includes('--png') ? 'asset.importPng' : args.includes('--node-path') ? 'scene.node.inspect' : 'scene.snapshot';
         return { status: options.executionStatus || 0,
             stdout: args.includes('--scene-asset') ? '' : `command.result ${JSON.stringify({ command, result: { verified: true } })}\n`,
             stderr: options.executionStatus ? 'interrupted' : '' };
@@ -93,6 +94,36 @@ for (const [command, input] of [['scene.snapshot', {}], ['scene.node.inspect', {
     assert.strictEqual(result.result.verified, true);
     assert.strictEqual(result.operationId, null);
     assert.strictEqual(result.error, null);
+}
+
+const searchProject = '/tmp/cocos-agent-dispatch-project-2x-search';
+const searchInstance = { ...instance, creatorVersion: '2.4.15', projectRoot: searchProject, activeScene: null };
+const searchFixture = mock({ includeAssetSearch: true, instance: searchInstance });
+const searchRequest = { targets: [{ creatorVersion: '2.4.15', projectRoot: searchProject }], projectRoot: searchProject,
+    creatorVersion: '2.4.15', command: 'asset.searchPng', input: { query: 'smoke', limit: 10, offset: 20 } };
+const originalMock = searchFixture.invoke;
+const searchInvoke = (script, args) => {
+    if (script === 'catalog-host.js' && args.includes('instances.list')) return { status: 0, stdout: JSON.stringify({ success: true, data: [searchInstance] }) };
+    if (script === 'catalog-host.js') return { status: 0, stdout: JSON.stringify({ success: true, data: {
+        instance: searchInstance, commands: [{ id: 'asset.searchPng', contractVersion: '0.1', status: 'available', reason: null, access: 'read' }],
+    } }) };
+    return originalMock(script, args);
+};
+result = dispatch(searchRequest, searchInvoke);
+assert.strictEqual(result.outcome, 'completed', JSON.stringify(result));
+const searchExecution = searchFixture.calls.find((call) => call.args.includes('--asset-search-png'));
+assert(searchExecution, 'search command must reach the bridge host');
+assert.deepStrictEqual(searchExecution.args.slice(searchExecution.args.indexOf('--asset-search-png'), searchExecution.args.indexOf('--asset-search-png') + 6),
+    ['--asset-search-png', 'smoke', '--asset-search-limit', '10', '--asset-search-offset', '20']);
+for (const invalid of [
+    { ...searchRequest, creatorVersion: '3.8.7', targets: [{ creatorVersion: '3.8.7', projectRoot: searchProject }] },
+    { ...searchRequest, input: { query: 'bad\nquery' } },
+    { ...searchRequest, input: { query: 'smoke', limit: 51 } },
+]) {
+    const invalidFixture = mock({ includeAssetSearch: true, instance: searchInstance });
+    assert.strictEqual(dispatch(invalid, invalidFixture.invoke).error.code,
+        invalid.creatorVersion === '3.8.7' ? 'COMMAND_UNAVAILABLE' : 'INVALID_ARGUMENT');
+    assert.strictEqual(invalidFixture.calls.length, 0, 'invalid search requests must be rejected before instance discovery');
 }
 
 const nodeOperationId = '4f89c7a5-40af-44f9-b526-2eb171e2e334';

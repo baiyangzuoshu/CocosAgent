@@ -26,6 +26,9 @@ const COMMAND_INPUTS = {
         properties: { targetNodeName: { type: 'string', minLength: 1, maxLength: 64 } } },
     nodeInspect: { type: 'object', additionalProperties: false, required: ['nodePath'],
         properties: { nodePath: { type: 'string', minLength: 1, maxLength: 240 } } },
+    searchPng: { type: 'object', additionalProperties: false, required: ['query'],
+        properties: { query: { type: 'string', minLength: 1, maxLength: 80, pattern: '^[^\\u0000-\\u001f\\u007f]+$' },
+            limit: { type: 'integer', minimum: 1, maximum: 50 }, offset: { type: 'integer', minimum: 0, maximum: 100000 } } },
     importPng: { type: 'object', additionalProperties: false, required: ['sourcePath'],
         properties: { sourcePath: { type: 'string', minLength: 1 } } },
     removeImportedPng: { type: 'object', additionalProperties: false, required: ['assetName', 'textureUuid', 'spriteFrameUuid', 'sha256'],
@@ -71,6 +74,7 @@ const COMMAND_INPUTS = {
 function commandCatalog(context) {
     const sceneReady = typeof context.sceneName === 'string' && context.sceneName.length > 0;
     const spriteReady = sceneReady && context.hasCanvas === true;
+    const assetDbReady = context.assetDbReady === true;
     return [
         { id: 'scene.snapshot', contractVersion: '0.1', access: 'read',
             inputSchema: 'catalog.schema.json#/$defs/snapshotInput', input: COMMAND_INPUTS.snapshot, preconditions: ['activeScene'],
@@ -78,6 +82,9 @@ function commandCatalog(context) {
         { id: 'scene.node.inspect', contractVersion: '0.1', access: 'read',
             inputSchema: 'catalog.schema.json#/$defs/nodeInspectInput', input: COMMAND_INPUTS.nodeInspect, preconditions: ['activeScene'],
             status: sceneReady ? 'available' : 'unavailable', reason: sceneReady ? null : 'NO_OPEN_SCENE' },
+        { id: 'asset.searchPng', contractVersion: '0.1', access: 'read',
+            inputSchema: 'catalog.schema.json#/$defs/pngAssetSearchInput', input: COMMAND_INPUTS.searchPng, preconditions: ['assetDbReady'],
+            status: assetDbReady ? 'available' : 'unavailable', reason: assetDbReady ? null : 'ASSETDB_UNAVAILABLE' },
         { id: 'asset.importPng', contractVersion: '0.1', access: 'write',
             inputSchema: 'catalog.schema.json#/$defs/importPngInput', input: COMMAND_INPUTS.importPng, preconditions: ['stagedPng', 'destinationFree'],
             status: 'available', reason: null },
@@ -118,16 +125,13 @@ function onMessage(raw) {
     if (message.type !== 'request' || typeof message.id !== 'string') return;
     if (message.method === 'capabilities.list') {
         Editor.Scene.callSceneScript('cocos-agent-bridge', 'catalog-context', {}, (error, context) => {
-            if (error || !context) {
-                send({ type: 'response', id: message.id, ok: false, error: { code: 'CATALOG_CONTEXT_UNAVAILABLE', message: String(error && error.message || error || 'No context') } });
-                return;
-            }
-            const commands = commandCatalog(context);
+            const sceneContext = error || !context ? { sceneName: null, hasCanvas: false } : context;
+            const commands = commandCatalog({ ...sceneContext, assetDbReady: !!(Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function') });
             send({ type: 'response', id: message.id, ok: true, result: {
                 nonce: message.params && message.params.nonce, instanceId: INSTANCE_ID,
                 projectRoot: PROJECT_ROOT, creatorVersion: CREATOR_VERSION,
-                extensionVersion: '0.1.0', activeScene: context.sceneName,
-                catalogRevision: crypto.createHash('sha256').update(JSON.stringify({ scene: context.sceneName, commands })).digest('hex'),
+                extensionVersion: '0.1.0', activeScene: sceneContext.sceneName,
+                catalogRevision: crypto.createHash('sha256').update(JSON.stringify({ scene: sceneContext.sceneName, commands })).digest('hex'),
                 commands,
             } });
         });
@@ -157,6 +161,10 @@ function onMessage(raw) {
     }
     if (message.method === 'asset.importPng') {
         importPng(message);
+        return;
+    }
+    if (message.method === 'asset.searchPng') {
+        searchPng(message);
         return;
     }
     if (message.method === 'asset.removeImportedPng') {
@@ -401,6 +409,82 @@ function importPng(message) {
     });
 }
 
+function searchPng(message) {
+    const params = message.params || {};
+    const search = activeSession && activeSession.assetSearch;
+    if (!search || params.sessionId !== activeSession.sessionId || params.nonce !== search.nonce
+        || params.query !== search.query || params.limit !== search.limit || params.offset !== search.offset) {
+        send({ type: 'response', id: message.id, ok: false, error: { code: 'INVALID_ASSET_SEARCH_SESSION' } });
+        return;
+    }
+    const failSearch = (code, error) => send({ type: 'response', id: message.id, ok: false,
+        error: { code, message: String(error && error.message || error || code).slice(0, 400) } });
+    if (!Editor.assetdb || typeof Editor.assetdb.queryAssets !== 'function') { failSearch('ASSETDB_UNAVAILABLE'); return; }
+    let assetsRoot;
+    try { assetsRoot = fs.realpathSync(path.resolve(PROJECT_ROOT, 'assets')); }
+    catch (error) { failSearch('ASSET_QUERY_FAILED', error); return; }
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const query = search.query.toLocaleLowerCase();
+    try {
+        Editor.assetdb.queryAssets('db://assets/**/*', 'texture', (error, results) => {
+            if (error || !Array.isArray(results)) { failSearch('ASSET_QUERY_FAILED', error || 'AssetDB returned no result list.'); return; }
+            try {
+                const matches = results.filter((item) => item && item.isSubAsset !== true && item.type === 'texture'
+                    && typeof item.url === 'string' && item.url.startsWith('db://assets/') && /\.png$/i.test(item.url)
+                    && typeof item.uuid === 'string' && uuidPattern.test(item.uuid))
+                    .map((item) => ({ item, relativeUrl: item.url.slice('db://assets/'.length) }))
+                    .filter(({ relativeUrl }) => {
+                        let decoded = relativeUrl;
+                        try { decoded = decodeURIComponent(relativeUrl); } catch (_) { /* Keep the AssetDB URL for literal matching. */ }
+                        return `${decoded} ${path.posix.basename(decoded)}`.toLocaleLowerCase().includes(query);
+                    })
+                    .sort((left, right) => left.item.url.localeCompare(right.item.url));
+                const total = matches.length;
+                const page = matches.slice(search.offset, search.offset + search.limit);
+                const items = page.map(({ item, relativeUrl }) => {
+                    let metadataStatus = 'unavailable';
+                    let spriteFrameUuid = null;
+                    let width = null;
+                    let height = null;
+                    let decoded = relativeUrl;
+                    try { decoded = decodeURIComponent(relativeUrl); } catch (_) { /* Keep the AssetDB URL for display. */ }
+                    try {
+                        const segments = decoded.split('/');
+                        if (!decoded || decoded.includes('\\') || segments.some((segment) => !segment || segment === '.' || segment === '..'))
+                            throw new Error('Asset URL is not a safe project-relative path.');
+                        const assetPath = path.resolve(assetsRoot, ...segments);
+                        if (!assetPath.startsWith(`${assetsRoot}${path.sep}`)) throw new Error('Asset path escaped project assets.');
+                        const realAssetPath = fs.realpathSync(assetPath);
+                        if (!realAssetPath.startsWith(`${assetsRoot}${path.sep}`)) throw new Error('Asset path resolves outside project assets.');
+                        const assetStat = fs.lstatSync(assetPath);
+                        const metaStat = fs.lstatSync(`${assetPath}.meta`);
+                        if (!assetStat.isFile() || assetStat.isSymbolicLink() || !metaStat.isFile() || metaStat.isSymbolicLink())
+                            throw new Error('Asset and metadata must be regular files.');
+                        const meta = JSON.parse(fs.readFileSync(`${assetPath}.meta`, 'utf8'));
+                        if (meta.importer !== 'texture' || meta.uuid !== item.uuid) metadataStatus = 'identity-mismatch';
+                        else {
+                            width = Number.isInteger(meta.width) && meta.width > 0 ? meta.width : null;
+                            height = Number.isInteger(meta.height) && meta.height > 0 ? meta.height : null;
+                            const frames = Object.values(meta.subMetas || {}).filter((sub) => sub && sub.importer === 'sprite-frame');
+                            if (frames.length === 1 && frames[0].rawTextureUuid === item.uuid && uuidPattern.test(frames[0].uuid || '')) {
+                                spriteFrameUuid = frames[0].uuid;
+                                metadataStatus = 'valid';
+                            } else metadataStatus = 'sprite-frame-unavailable';
+                        }
+                    } catch (_) { metadataStatus = 'metadata-unavailable'; }
+                    return { name: path.posix.basename(decoded), url: item.url, type: 'texture', textureUuid: item.uuid,
+                        spriteFrameUuid, width, height, metadataStatus };
+                });
+                send({ type: 'response', id: message.id, ok: true, result: {
+                    nonce: search.nonce, sessionId: activeSession.sessionId, creatorVersion: CREATOR_VERSION,
+                    projectRoot: PROJECT_ROOT, query: search.query, total, offset: search.offset, limit: search.limit,
+                    nextOffset: search.offset + items.length < total ? search.offset + items.length : null, items,
+                } });
+            } catch (queryError) { failSearch('ASSET_QUERY_FAILED', queryError); }
+        });
+    } catch (error) { failSearch('ASSET_QUERY_FAILED', error); }
+}
+
 function removeImportedPng(message) {
     const params = message.params || {};
     const asset = activeSession && activeSession.assetRemoval;
@@ -591,12 +675,14 @@ function connectFromSession() {
             projectRoot: PROJECT_ROOT,
             extension: 'cocos-agent-bridge',
             instanceId: INSTANCE_ID,
-            capabilities: ['bridge.ping', 'scene.snapshot', 'asset.importPng', 'asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'scene.preflightPngSprite', 'scene.placePngSprite', 'scene.removePngSprite', 'scene.node.create.preflight', 'scene.node.create'],
+            capabilities: ['bridge.ping', 'scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'scene.preflightPngSprite', 'scene.placePngSprite', 'scene.removePngSprite', 'scene.node.create.preflight', 'scene.node.create'],
             operationContract: { id: 'scene.pngSprite', contractVersion: '0.1', creatorVersion: CREATOR_VERSION, access: 'scene-write', actions: ['apply', 'compensate', 'replay'], previewVerification: 'manual-web', compensation: 'identity-checked-node-removal', positionSpace: 'canvas-local-design-pixels' },
             assetRemovalContract: { id: 'asset.removeImportedPng', contractVersion: '0.1', creatorVersion: CREATOR_VERSION,
                 access: 'write', implementation: 'Editor.assetdb.delete', verify: 'matching-texture-uuid-and-deleted-result' },
             assetValidationContract: { id: 'asset.validatePng', repairId: 'asset.refreshPng', contractVersion: '0.1', creatorVersion: CREATOR_VERSION,
                 refreshImplementation: 'Editor.assetdb.refresh', refreshRequires: 'matching-pipeline-owned-file-meta-and-scene-reference' },
+            assetSearchContract: { id: 'asset.searchPng', contractVersion: '0.1', creatorVersion: CREATOR_VERSION,
+                access: 'read', implementation: 'Editor.assetdb.queryAssets', maximumPageSize: 50 },
         }));
         console.log(`[COCOS_AGENT_BRIDGE_2] connected to local Agent session ${session.sessionId}`);
     });

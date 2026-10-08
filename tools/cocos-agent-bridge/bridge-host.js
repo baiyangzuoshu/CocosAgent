@@ -25,6 +25,9 @@ function fail(message) {
 const projectRootArg = argument('--project');
 const creatorVersion = argument('--creator-version');
 const pngSourceArg = argument('--png');
+const assetSearchQuery = argument('--asset-search-png');
+const assetSearchLimitArg = argument('--asset-search-limit');
+const assetSearchOffsetArg = argument('--asset-search-offset');
 const removeAssetName = argument('--asset-remove');
 const removeTextureUuid = argument('--texture-uuid');
 const removeSpriteFrameUuid = argument('--sprite-frame-uuid');
@@ -41,22 +44,38 @@ const nodePath = argument('--node-path');
 const interruptAfterEditor = process.argv.includes('--interrupt-after-editor');
 const expectedInstanceId = argument('--expected-instance-id');
 const expectedScene = argument('--expected-scene');
-if (operationGetId && (sceneAssetName || sceneAction || scenePositionArg || pngSourceArg || removeAssetName || assetValidateName || assetRefreshName || requestedOperationId || interruptAfterEditor)) {
+let assetSearch = null;
+if (assetSearchQuery !== undefined) {
+    const limit = assetSearchLimitArg === undefined ? 20 : Number(assetSearchLimitArg);
+    const offset = assetSearchOffsetArg === undefined ? 0 : Number(assetSearchOffsetArg);
+    if (creatorVersion !== '2.4.15' || assetSearchQuery.length < 1 || assetSearchQuery.length > 80
+        || /[\u0000-\u001f\u007f]/.test(assetSearchQuery) || !Number.isInteger(limit) || limit < 1 || limit > 50
+        || !Number.isInteger(offset) || offset < 0 || offset > 100000) {
+        fail('--asset-search-png requires a bounded query and Creator 2.4.15; limit must be 1–50 and offset 0–100000.');
+    }
+    assetSearch = { query: assetSearchQuery, limit, offset };
+} else if (assetSearchLimitArg !== undefined || assetSearchOffsetArg !== undefined) {
+    fail('--asset-search-limit/offset require --asset-search-png.');
+}
+if (operationGetId && (sceneAssetName || sceneAction || scenePositionArg || pngSourceArg || assetSearch || removeAssetName || assetValidateName || assetRefreshName || requestedOperationId || interruptAfterEditor)) {
     fail('--operation-get is read-only and cannot be combined with write options.');
 }
-if (nodePath && (sceneAssetName || sceneAction || pngSourceArg || removeAssetName || assetValidateName || assetRefreshName || operationGetId)
+if (nodePath && (sceneAssetName || sceneAction || pngSourceArg || assetSearch || removeAssetName || assetValidateName || assetRefreshName || operationGetId)
     || (nodePath && (nodePath.length > 240 || nodePath.includes('\\') || nodePath.includes('//')))) {
     fail('--node-path requires a bounded scene path and cannot be combined with writes.');
 }
 if (requestedOperationId && !sceneAssetName) fail('--operation-id requires a scene operation.');
 if (interruptAfterEditor && !sceneAssetName) fail('--interrupt-after-editor requires a scene operation.');
-if (removeAssetName && (pngSourceArg || sceneAssetName || sceneAction || scenePositionArg || requestedOperationId || interruptAfterEditor
+if (assetSearch && (pngSourceArg || removeAssetName || assetValidateName || assetRefreshName || sceneAssetName || sceneAction
+    || scenePositionArg || requestedOperationId || interruptAfterEditor || operationGetId || nodePath))
+    fail('--asset-search-png is a read-only action and cannot be combined with another command.');
+if (removeAssetName && (pngSourceArg || assetSearch || sceneAssetName || sceneAction || scenePositionArg || requestedOperationId || interruptAfterEditor
     || creatorVersion !== '2.4.15' || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/i.test(removeAssetName)
     || !/^[0-9a-f-]{36}$/i.test(removeTextureUuid || '') || !/^[0-9a-f-]{36}$/i.test(removeSpriteFrameUuid || '')
     || !/^[0-9a-f]{64}$/.test(removeSha256 || ''))) fail('--asset-remove requires one exact Creator 2.4.15 PNG identity and cannot be combined with another action.');
 if (!removeAssetName && (removeTextureUuid || removeSpriteFrameUuid || removeSha256)) fail('Asset removal identity flags require --asset-remove.');
 const assetActionCount = [assetValidateName, assetRefreshName].filter(Boolean).length;
-if (assetActionCount && (assetActionCount !== 1 || pngSourceArg || removeAssetName || sceneAssetName || sceneAction || scenePositionArg
+if (assetActionCount && (assetActionCount !== 1 || pngSourceArg || assetSearch || removeAssetName || sceneAssetName || sceneAction || scenePositionArg
     || requestedOperationId || interruptAfterEditor || creatorVersion !== '2.4.15' || !assetPipelineId
     || !/^[0-9a-f-]{36}$/i.test(assetPipelineId)
     || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/i.test(assetValidateName || assetRefreshName)))
@@ -273,6 +292,8 @@ const assetRemovalRequestId = crypto.randomUUID();
 const assetRemovalNonce = crypto.randomBytes(12).toString('hex');
 const assetActionRequestId = crypto.randomUUID();
 const assetActionNonce = crypto.randomBytes(12).toString('hex');
+const assetSearchRequestId = crypto.randomUUID();
+const assetSearchNonce = crypto.randomBytes(12).toString('hex');
 const sceneRequestId = crypto.randomUUID();
 const sceneNonce = crypto.randomBytes(12).toString('hex');
 const preflightRequestId = crypto.randomUUID();
@@ -433,6 +454,7 @@ webSocketServer.on('connection', (socket) => {
             const capabilityMatches = Array.isArray(message.capabilities)
                 && message.capabilities.includes('scene.snapshot')
                 && (!stagedPng || message.capabilities.includes('asset.importPng'))
+                && (!assetSearch || message.capabilities.includes('asset.searchPng'))
                 && (!assetRemoval || message.capabilities.includes('asset.removeImportedPng'))
                 && (!assetAction || (message.capabilities.includes('asset.validatePng')
                     && (assetAction.kind !== 'refresh' || message.capabilities.includes('asset.refreshPng'))))
@@ -457,13 +479,18 @@ webSocketServer.on('connection', (socket) => {
                 && assetValidationContract.creatorVersion === creatorVersion
                 && assetValidationContract.refreshImplementation === 'Editor.assetdb.refresh'
                 && assetValidationContract.refreshRequires === 'matching-pipeline-owned-file-meta-and-scene-reference');
-            if (!projectMatches || !versionMatches || !protocolMatches || !extensionMatches || !instanceMatches || !capabilityMatches || !contractMatches || !removalContractMatches || !assetValidationContractMatches) {
+            const assetSearchContract = message.assetSearchContract;
+            const assetSearchContractMatches = !assetSearch || (assetSearchContract && assetSearchContract.id === 'asset.searchPng'
+                && assetSearchContract.contractVersion === '0.1' && assetSearchContract.creatorVersion === creatorVersion
+                && assetSearchContract.access === 'read' && assetSearchContract.implementation === 'Editor.assetdb.queryAssets'
+                && assetSearchContract.maximumPageSize === 50);
+            if (!projectMatches || !versionMatches || !protocolMatches || !extensionMatches || !instanceMatches || !capabilityMatches || !contractMatches || !removalContractMatches || !assetValidationContractMatches || !assetSearchContractMatches) {
                 send(socket, {
                     type: 'helloAck',
                     accepted: false,
-                    reason: !projectMatches ? 'project-mismatch' : !versionMatches ? 'creator-version-mismatch' : !protocolMatches ? 'protocol-version-mismatch' : !extensionMatches ? 'extension-mismatch' : !instanceMatches ? 'instance-mismatch' : !capabilityMatches ? 'capability-mismatch' : !contractMatches ? 'operation-contract-mismatch' : !removalContractMatches ? 'asset-removal-contract-mismatch' : 'asset-validation-contract-mismatch',
+                    reason: !projectMatches ? 'project-mismatch' : !versionMatches ? 'creator-version-mismatch' : !protocolMatches ? 'protocol-version-mismatch' : !extensionMatches ? 'extension-mismatch' : !instanceMatches ? 'instance-mismatch' : !capabilityMatches ? 'capability-mismatch' : !contractMatches ? 'operation-contract-mismatch' : !removalContractMatches ? 'asset-removal-contract-mismatch' : !assetValidationContractMatches ? 'asset-validation-contract-mismatch' : 'asset-search-contract-mismatch',
                 });
-                process.stderr.write(`Handshake rejected (project=${projectMatches}, creator=${versionMatches}, protocol=${protocolMatches}, extension=${extensionMatches}, instance=${instanceMatches}, required capabilities=${capabilityMatches}, contract=${contractMatches}, assetRemoval=${removalContractMatches}, assetValidation=${assetValidationContractMatches}).\n`);
+                process.stderr.write(`Handshake rejected (project=${projectMatches}, creator=${versionMatches}, protocol=${protocolMatches}, extension=${extensionMatches}, instance=${instanceMatches}, required capabilities=${capabilityMatches}, contract=${contractMatches}, assetRemoval=${removalContractMatches}, assetValidation=${assetValidationContractMatches}, assetSearch=${assetSearchContractMatches}).\n`);
                 cleanUp(1);
                 return;
             }
@@ -493,6 +520,15 @@ webSocketServer.on('connection', (socket) => {
                 return;
             }
             process.stdout.write(`bridge.ping verified: ${result.creatorVersion}, project identity confirmed, nonce echoed.\n`);
+            if (assetSearch) {
+                send(socket, { type: 'request', id: assetSearchRequestId, method: 'asset.searchPng',
+                    params: { nonce: assetSearchNonce, sessionId, query: assetSearch.query, limit: assetSearch.limit, offset: assetSearch.offset } });
+                requestTimer = setTimeout(() => {
+                    process.stderr.write('asset.searchPng timed out.\n');
+                    cleanUp(1);
+                }, 30000);
+                return;
+            }
             send(socket, { type: 'request', id: snapshotRequestId, method: 'scene.snapshot', params: { nonce: snapshotNonce, ...(nodePath ? { targetNodePath: nodePath } : {}) } });
             requestTimer = setTimeout(() => {
                 process.stderr.write('scene.snapshot timed out.\n');
@@ -593,6 +629,40 @@ webSocketServer.on('connection', (socket) => {
                 process.stdout.write(`command.result ${JSON.stringify({ command: 'scene.snapshot', result })}\n`);
                 cleanUp(0);
             }
+            return;
+        }
+
+        if (message.type === 'response' && message.id === assetSearchRequestId) {
+            clearTimeout(requestTimer);
+            const result = message.result || {};
+            const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            const expectedNextOffset = Array.isArray(result.items) && result.offset + result.items.length < result.total
+                ? result.offset + result.items.length : null;
+            const valid = message.ok === true && result.nonce === assetSearchNonce && result.sessionId === sessionId
+                && result.creatorVersion === creatorVersion && path.resolve(result.projectRoot || '') === projectRoot
+                && result.query === assetSearch.query && result.offset === assetSearch.offset && result.limit === assetSearch.limit
+                && Number.isSafeInteger(result.total) && result.total >= 0
+                && Array.isArray(result.items) && result.items.length <= assetSearch.limit
+                && result.nextOffset === expectedNextOffset
+                && result.items.every((item) => item && typeof item.name === 'string' && item.name.length <= 255
+                    && !/[\/\\\u0000-\u001f\u007f]/.test(item.name)
+                    && typeof item.url === 'string' && item.url.startsWith('db://assets/') && item.url.length <= 1024
+                    && /\.png$/i.test(item.url) && !/[\\\u0000-\u001f\u007f]/.test(item.url)
+                    && !item.url.slice('db://assets/'.length).split('/').some((part) => !part || part === '.' || part === '..')
+                    && item.type === 'texture' && uuidPattern.test(item.textureUuid || '')
+                    && (item.spriteFrameUuid === null || uuidPattern.test(item.spriteFrameUuid))
+                    && (item.spriteFrameUuid === null ? item.metadataStatus !== 'valid' : item.metadataStatus === 'valid')
+                    && ['valid', 'sprite-frame-unavailable', 'identity-mismatch', 'metadata-unavailable'].includes(item.metadataStatus)
+                    && (item.width === null || Number.isInteger(item.width) && item.width > 0)
+                    && (item.height === null || Number.isInteger(item.height) && item.height > 0));
+            if (!valid) {
+                const errorCode = message.error && (message.error.code || message.error.message);
+                process.stderr.write(`asset.searchPng response failed validation (ok=${message.ok === true}, error=${String(errorCode || 'none')}).\n`);
+                cleanUp(1);
+                return;
+            }
+            process.stdout.write(`command.result ${JSON.stringify({ command: 'asset.searchPng', result })}\n`);
+            cleanUp(0);
             return;
         }
 
@@ -922,6 +992,7 @@ server.listen(0, '127.0.0.1', () => {
         token,
         expiresAt: Date.now() + 1800000,
         assetImport: stagedPng ? Object.assign({}, stagedPng) : null,
+        assetSearch: assetSearch ? { ...assetSearch, nonce: assetSearchNonce } : null,
         assetRemoval,
         assetAction,
         sceneOperation: sceneManifest,

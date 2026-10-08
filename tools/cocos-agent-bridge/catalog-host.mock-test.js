@@ -50,6 +50,9 @@ async function mockEditor(index, options = {}) {
                 catalogRevision: crypto.createHash('sha256').update(`${index}:${options.sceneName || 'helloworld'}`).digest('hex'), commands: [
                     { id: 'scene.snapshot', contractVersion: '0.1', access: 'read', inputSchema: 'catalog.schema.json#/$defs/snapshotInput', input: inputs.snapshotInput, preconditions: ['activeScene'], status: index === 0 && !options.wrongStatus ? 'available' : 'unavailable', reason: index === 0 && !options.wrongStatus ? null : 'NO_OPEN_SCENE' },
                     { id: 'scene.node.inspect', contractVersion: '0.1', access: 'read', inputSchema: 'catalog.schema.json#/$defs/nodeInspectInput', input: inputs.nodeInspectInput, preconditions: ['activeScene'], status: index === 0 ? 'available' : 'unavailable', reason: index === 0 ? null : 'NO_OPEN_SCENE' },
+                    ...(index === 0 ? [{ id: 'asset.searchPng', contractVersion: '0.1', access: 'read',
+                        inputSchema: 'catalog.schema.json#/$defs/pngAssetSearchInput', input: inputs.pngAssetSearchInput,
+                        preconditions: ['assetDbReady'], status: 'available', reason: null }] : []),
                     { id: 'asset.importPng', contractVersion: '0.1', access: 'write', inputSchema: 'catalog.schema.json#/$defs/importPngInput', input: inputs.importPngInput, preconditions: ['stagedPng', 'destinationFree'], status: 'available', reason: null },
                     ...(index === 0 ? [{ id: 'asset.removeImportedPng', contractVersion: '0.1', access: 'write',
                         inputSchema: 'catalog.schema.json#/$defs/removeImportedPngInput', input: inputs.removeImportedPngInput,

@@ -16,6 +16,16 @@
       "required": ["nodePath"],
       "properties": { "nodePath": { "type": "string", "minLength": 1, "maxLength": 240 } }
     },
+    "pngAssetSearchInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query"],
+      "properties": {
+        "query": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[^\\u0000-\\u001f\\u007f]+$" },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 50 },
+        "offset": { "type": "integer", "minimum": 0, "maximum": 100000 }
+      }
+    },
     "importPngInput": {
       "type": "object",
       "additionalProperties": false,
@@ -115,7 +125,7 @@
       "additionalProperties": false,
       "required": ["id", "contractVersion", "access", "inputSchema", "input", "preconditions", "status", "reason"],
       "properties": {
-        "id": { "enum": ["scene.snapshot", "scene.node.inspect", "asset.importPng", "asset.removeImportedPng", "asset.validatePng", "asset.refreshPng", "scene.pngSprite", "scene.node.create"] },
+        "id": { "enum": ["scene.snapshot", "scene.node.inspect", "asset.searchPng", "asset.importPng", "asset.removeImportedPng", "asset.validatePng", "asset.refreshPng", "scene.pngSprite", "scene.node.create"] },
         "contractVersion": { "const": "0.1" },
         "access": { "enum": ["read", "write"] },
         "inputSchema": { "type": "string" },

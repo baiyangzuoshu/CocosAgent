@@ -20,7 +20,7 @@
 | `content.build.plan/execute/get/reconcile` | 已选择的 2.4.15 release、预期指纹与唯一 `buildId` | 调用 Creator 2.4.15 CLI 构建 Web-Mobile 到新隔离路径，再核对 resources bundle、Texture2D UUID、独立或 pack 导入 JSON 与 PNG native 文件；reconcile 只读恢复 Host 中断记录；Host CLI 构建与新进程读回已验 |
 | `content.preview.start/get/stop` | 已完成的 2.4 Web-Mobile `buildId` | 重验隔离包与 selected release，启动 loopback 静态服务器和运行时 Host，返回会话 URL，并读取应用回执或停止会话；[合同](content-preview-web-0.1.md) |
 
-组合和批量方法只编排已实现的语义命令，不授予任意脚本执行权限。当前 `command.execute` 目录在 2.4.15 有八项，在 3.8.7 有五项；`asset.removeImportedPng`、`asset.validatePng` 和 `asset.refreshPng` 只由 2.4 扩展提供。
+组合和批量方法只编排已实现的语义命令，不授予任意脚本执行权限。当前源码定义的 `command.execute` 目录在 2.4.15 有九项，在 3.8.7 有五项；`asset.searchPng`、`asset.removeImportedPng`、`asset.validatePng` 和 `asset.refreshPng` 只由 2.4 扩展提供。PNG 搜索合同见[资源发现合同](cocos-agent-asset-search-0.1.md)，真实 Creator 目录仍需重载后验收。
 
 `targets` 是 `{ "creatorVersion": "2.4.15|3.8.7", "projectRoot": "/绝对路径" }` 数组。`command.execute` 仅接受所选版本目录中的语义命令；Agent 应先查实例和能力，再按对应版本的 skill 构造输入。错误码、`outcome`、六阶段回执及 `needs-review` 的停止重试规则沿用[调度合同](cocos-agent-dispatch-0.1.md)和[操作合同](cocos-agent-operation-contract-0.1.md)。资源流水线在 Host 侧组合这些命令，不授予任意消息或脚本执行权限。
 

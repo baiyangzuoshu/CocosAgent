@@ -137,13 +137,15 @@ function unavailable(target, code) {
 }
 
 function validCatalog(target, result) {
-    const expectedCommandCount = target.creatorVersion === '2.4.15' ? 8 : 5;
+    const expectedCommandCount = target.creatorVersion === '2.4.15' ? 9 : 5;
     if (!Array.isArray(result.commands) || result.commands.length !== expectedCommandCount
         || !(result.activeScene === null || typeof result.activeScene === 'string')
         || !/^[0-9a-f]{64}$/.test(result.catalogRevision || '')) return false;
     const expected = {
         'scene.snapshot': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/snapshotInput', input: catalogSchema.$defs.snapshotInput, preconditions: ['activeScene'] },
         'scene.node.inspect': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/nodeInspectInput', input: catalogSchema.$defs.nodeInspectInput, preconditions: ['activeScene'] },
+        ...(target.creatorVersion === '2.4.15' ? { 'asset.searchPng': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/pngAssetSearchInput',
+            input: catalogSchema.$defs.pngAssetSearchInput, preconditions: ['assetDbReady'] } } : {}),
         'asset.importPng': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/importPngInput', input: catalogSchema.$defs.importPngInput, preconditions: ['stagedPng', 'destinationFree'] },
         ...(target.creatorVersion === '2.4.15' ? { 'asset.removeImportedPng': { access: 'write',
             inputSchema: 'catalog.schema.json#/$defs/removeImportedPngInput', input: catalogSchema.$defs.removeImportedPngInput,
@@ -172,6 +174,7 @@ function validCatalog(target, result) {
             || !isDeepStrictEqual(command.preconditions, rule.preconditions)
             || !['available', 'unavailable'].includes(command.status)
             || (command.status === 'available' ? command.reason !== null : typeof command.reason !== 'string')) return false;
+        if (command.id === 'asset.searchPng' && (command.status === 'unavailable' ? command.reason !== 'ASSETDB_UNAVAILABLE' : command.reason !== null)) return false;
         seen.add(command.id);
     }
     const commands = Object.fromEntries(result.commands.map((command) => [command.id, command]));

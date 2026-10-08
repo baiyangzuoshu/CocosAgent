@@ -18,15 +18,19 @@ function loadCatalog(relativePath) {
 const catalog2 = loadCatalog('2.4.15NewProject/packages/cocos-agent-bridge/main.js');
 const catalog3 = loadCatalog('3.8,7NewProject/extensions/cocos-agent-bridge/dist/main.js');
 for (const [version, catalog] of [['2.4.15', catalog2], ['3.8.7', catalog3]]) {
-    const commands = catalog({ sceneName: 'example', hasCanvas: true });
-    const expectedIds = ['scene.snapshot', 'scene.node.inspect', 'asset.importPng', ...(version === '2.4.15' ? ['asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng'] : []), 'scene.pngSprite', 'scene.node.create'];
+    const commands = catalog({ sceneName: 'example', hasCanvas: true, assetDbReady: true });
+    const expectedIds = ['scene.snapshot', 'scene.node.inspect', ...(version === '2.4.15' ? ['asset.searchPng'] : []), 'asset.importPng', ...(version === '2.4.15' ? ['asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng'] : []), 'scene.pngSprite', 'scene.node.create'];
     assert.deepStrictEqual(commands.map((item) => item.id), expectedIds);
     assert.ok(commands.every((item) => item.contractVersion === '0.1'));
-    assert.deepStrictEqual(commands.map((item) => item.access), ['read', 'read', 'write', ...(version === '2.4.15' ? ['write', 'read', 'write'] : []), 'write', 'write']);
+    assert.deepStrictEqual(commands.map((item) => item.access), ['read', 'read', ...(version === '2.4.15' ? ['read'] : []), 'write', ...(version === '2.4.15' ? ['write', 'read', 'write'] : []), 'write', 'write']);
     assert.ok(isDeepStrictEqual(commands[0].input, inputs.snapshotInput));
     assert.ok(isDeepStrictEqual(commands[1].input, inputs.nodeInspectInput));
-    assert.ok(isDeepStrictEqual(commands[2].input, inputs.importPngInput));
+    assert.ok(isDeepStrictEqual(commands.find((item) => item.id === 'asset.importPng').input, inputs.importPngInput));
     if (version === '2.4.15') {
+        const search = commands.find((item) => item.id === 'asset.searchPng');
+        assert.ok(isDeepStrictEqual(search.input, inputs.pngAssetSearchInput));
+        assert.deepStrictEqual(search.preconditions, ['assetDbReady']);
+        assert.equal(search.status, 'available');
         assert.ok(isDeepStrictEqual(commands.find((item) => item.id === 'asset.removeImportedPng').input, inputs.removeImportedPngInput));
         assert.ok(isDeepStrictEqual(commands.find((item) => item.id === 'asset.validatePng').input, inputs.pipelinePngInput));
         assert.ok(isDeepStrictEqual(commands.find((item) => item.id === 'asset.refreshPng').input, inputs.pipelinePngInput));
@@ -42,11 +46,13 @@ for (const [version, catalog] of [['2.4.15', catalog2], ['3.8.7', catalog3]]) {
     assert.strictEqual(spriteCommand.status, 'available', version);
     assert.strictEqual(catalog({ sceneName: null, hasCanvas: false }).find((item) => item.id === 'scene.pngSprite').reason, 'NO_OPEN_SCENE');
 }
-assert.strictEqual(catalog2({ sceneName: 'example', hasCanvas: true })[3].inputSchema, 'catalog.schema.json#/$defs/removeImportedPngInput');
-assert.strictEqual(catalog2({ sceneName: 'example', hasCanvas: true }).find((item) => item.id === 'scene.pngSprite').inputSchema, 'catalog.schema.json#/$defs/pngSpriteInput2x');
+assert.strictEqual(catalog2({ sceneName: 'example', hasCanvas: true, assetDbReady: true }).find((item) => item.id === 'asset.removeImportedPng').inputSchema, 'catalog.schema.json#/$defs/removeImportedPngInput');
+assert.strictEqual(catalog2({ sceneName: null, hasCanvas: false, assetDbReady: true }).find((item) => item.id === 'asset.searchPng').status, 'available');
+assert.strictEqual(catalog2({ sceneName: null, hasCanvas: false, assetDbReady: false }).find((item) => item.id === 'asset.searchPng').reason, 'ASSETDB_UNAVAILABLE');
+assert.strictEqual(catalog2({ sceneName: 'example', hasCanvas: true, assetDbReady: true }).find((item) => item.id === 'scene.pngSprite').inputSchema, 'catalog.schema.json#/$defs/pngSpriteInput2x');
 assert.strictEqual(catalog3({ sceneName: 'example', hasCanvas: true }).find((item) => item.id === 'scene.pngSprite').inputSchema, 'catalog.schema.json#/$defs/pngSpriteInput');
-assert.strictEqual(catalog2({ sceneName: 'example', hasCanvas: true }).find((item) => item.id === 'scene.node.create').inputSchema, 'catalog.schema.json#/$defs/nodeCreateInput2x');
+assert.strictEqual(catalog2({ sceneName: 'example', hasCanvas: true, assetDbReady: true }).find((item) => item.id === 'scene.node.create').inputSchema, 'catalog.schema.json#/$defs/nodeCreateInput2x');
 assert.strictEqual(catalog3({ sceneName: 'example', hasCanvas: true }).find((item) => item.id === 'scene.node.create').inputSchema, 'catalog.schema.json#/$defs/nodeCreateInput');
-assert.strictEqual(catalog2({ sceneName: 'example', hasCanvas: false }).find((item) => item.id === 'scene.pngSprite').reason, 'CANVAS_NOT_FOUND');
+assert.strictEqual(catalog2({ sceneName: 'example', hasCanvas: false, assetDbReady: true }).find((item) => item.id === 'scene.pngSprite').reason, 'CANVAS_NOT_FOUND');
 assert.strictEqual(catalog3({ sceneName: 'example', hasCanvas: false }).find((item) => item.id === 'scene.pngSprite').status, 'available');
 process.stdout.write('both extension command catalogs match input and status contract\n');

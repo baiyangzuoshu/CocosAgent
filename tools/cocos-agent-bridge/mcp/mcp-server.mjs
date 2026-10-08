@@ -14,7 +14,7 @@ const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)
 const COCOS_2X_SKILL_URI = 'cocos://2x/agent/mcp-tools';
 const COCOS_2X_SKILL_PATH = path.join(REPOSITORY_ROOT, 'docs/agent-foundation/skills/cocos2-mcp-tools/SKILL.md');
 const COMMANDS_2X = [
-    'scene.snapshot', 'scene.node.inspect', 'asset.importPng', 'asset.removeImportedPng',
+    'scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng',
     'asset.validatePng', 'asset.refreshPng', 'scene.pngSprite', 'scene.node.create',
 ];
 const CONTENT_BUILD_ID = z.string().regex(/^[a-z0-9][a-z0-9-]{2,31}$/);
@@ -36,6 +36,8 @@ function commandInputSchema(projectRoot) {
     const definitions = {
         'scene.snapshot': z.object({ targetNodeName: z.string().min(1).max(64).optional() }).strict(),
         'scene.node.inspect': z.object({ nodePath: z.string().min(1).max(240) }).strict(),
+        'asset.searchPng': z.object({ query: z.string().min(1).max(80).regex(/^[^\u0000-\u001f\u007f]+$/), limit: z.number().int().min(1).max(50).optional(),
+            offset: z.number().int().min(0).max(100000).optional() }).strict(),
         'asset.importPng': z.object({ sourcePath: z.string().min(1) }).strict(),
         'asset.removeImportedPng': z.object({ assetName: RESOURCE_NAME, textureUuid: UUID,
             spriteFrameUuid: UUID, sha256: SHA256 }).strict(),

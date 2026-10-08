@@ -14,6 +14,7 @@
 8. 对已导入的 `assets/resources/*.png`，可请求 `scene-action apply|compensate|replay`。扩展按版本解析 SpriteFrame 或 Texture2D 子资源，在当前编辑场景新增或删除专用 Sprite 节点，调用编辑器保存接口；Host 再检查场景文件序列化内容。`replay` 使用稳定节点名重做 apply，重复 apply 应识别为已应用，不额外创建节点。
 9. 2.4.15 的 `scene.node.create` 另支持在已定位的父节点下创建 Sprite 或 Label 单组件节点、引用已导入的 SpriteFrame UUID、设置二维位置与缩放；保存后检查 `.fire`、自动启动 Web 预览并读回运行时节点。Creator 3.8.7 目前仍只接受空节点输入。
 10. 仅 2.4.15 的 `assets.scene.*` 流水线把 PNG 计划、AssetDB 导入、Texture/SpriteFrame `.meta` 与 UUID 校验、Canvas Sprite 写入、预览回执和失败补偿串联。执行状态保存在 `.cocos-agent/asset-scene-pipelines/`；补偿先移除本流水线的场景节点，再通过 `Editor.assetdb.delete` 删除身份仍匹配且没有序列化 UUID 引用的资源。`assets.scene.validate` 只读核对磁盘、AssetDB、活动场景与序列化引用；`assets.scene.repair` 仅在身份全部一致而 URL→UUID 映射陈旧时调用 `Editor.assetdb.refresh`，不编辑 `.meta`。合同、调用参数、失败状态与实机验证范围见 [`cocos-agent-resource-scene-pipeline-0.1.md`](../../docs/agent-foundation/cocos-agent-resource-scene-pipeline-0.1.md)。
+11. 2.4.15 的只读 `asset.searchPng` 通过 Creator AssetDB 查询 PNG 主资源，再核对磁盘 `.meta` 的 Texture UUID 与唯一 SpriteFrame 子资源 UUID；只返回项目相对 URL、UUID、尺寸和元数据状态，不返回绝对路径，也不修改资源或场景。仅 `metadataStatus: valid` 的结果含 `spriteFrameUuid`，可作为后续 Sprite 命令输入。其实现使用 Creator 2.4 的 [`Editor.assetdb.queryAssets`](https://docs.cocos.com/creator/2.4/manual/zh/extension/api/asset-db/asset-db-renderer.html)；不支持 3.x。
 
 Agent key 不参与此流程，也不会写入项目。WebSocket 会话令牌只用于本机桥接认证。
 
@@ -37,7 +38,7 @@ node tools/cocos-agent-bridge/bridge-host.js \
   --creator-version 2.4.15
 ```
 
-启动后，服务等待最多 15 秒完成握手，随后验证 `bridge.ping` 和只读 `scene.snapshot`。2.4 新增 `packages/` 扩展后需重开工程；3.8 可在扩展管理器刷新并启用项目扩展。
+启动后，服务等待最多 15 秒完成握手，随后验证 `bridge.ping` 和只读 `scene.snapshot`。执行 `asset.searchPng` 时，Host 在 `bridge.ping` 后直接读取 AssetDB，不依赖活动场景。2.4 新增 `packages/` 扩展后需重开工程；3.8 可在扩展管理器刷新并启用项目扩展。
 
 导入一张 PNG 时，在对应命令中追加 `--png /绝对路径/图片.png`。目标文件名必须在 `assets/resources/` 中尚不存在；冲突会拒绝，不覆盖或自动改名。2.4 使用 `Editor.assetdb.import`，3.8 使用 AssetDB 消息 API；两者使用各自版本的编辑器导入机制。
 
@@ -96,7 +97,7 @@ node tools/cocos-agent-bridge/catalog-host.js \
   --query instances.list
 ```
 
-将 `--query` 换成 `instances.get` 或 `capabilities.list` 时，另传 `--project` 指定项目绝对路径；建议同时传 `--creator-version 2.4.15|3.8.7` 核对预期版本。`instances.list` 列出显式配置的目标，不接受选择参数。输出为 `{success,data}` 或 `{success:false,error}` 的 JSON。项目没有对应目标返回 `EDITOR_NOT_FOUND`；同项目重复配置返回 `AMBIGUOUS_EDITOR`；选择版本或扩展握手版本不符返回 `CREATOR_VERSION_MISMATCH`，不会选择最近使用的窗口。目录在 2.4.15 有六个语义命令、在 3.8.7 有五个；每条声明合同版本、`access`、可直接读取的 `input` JSON Schema、`inputSchema` 引用、`preconditions`、`status` 和 `reason`。新增的 `asset.removeImportedPng` 仅用于 2.4 流水线回滚。Host 会核对扩展返回的输入结构与 [catalog.schema.json](catalog.schema.json) 一致；编辑器写入的内部请求仍按 [operation.schema.json](operation.schema.json) 校验。`asset.importPng` 的公开输入是本地 PNG 路径，文件名由 Host 从路径提取；桥接线上的请求只引用经过 Host 校验的会话暂存清单。`available` 代表查询时命令及场景级条件满足，暂存文件、目标资源名与 SpriteFrame 仍须执行前重新校验。
+将 `--query` 换成 `instances.get` 或 `capabilities.list` 时，另传 `--project` 指定项目绝对路径；建议同时传 `--creator-version 2.4.15|3.8.7` 核对预期版本。`instances.list` 列出显式配置的目标，不接受选择参数。输出为 `{success,data}` 或 `{success:false,error}` 的 JSON。项目没有对应目标返回 `EDITOR_NOT_FOUND`；同项目重复配置返回 `AMBIGUOUS_EDITOR`；选择版本或扩展握手版本不符返回 `CREATOR_VERSION_MISMATCH`，不会选择最近使用的窗口。目录在 2.4.15 有九个语义命令、在 3.8.7 有五个；每条声明合同版本、`access`、可直接读取的 `input` JSON Schema、`inputSchema` 引用、`preconditions`、`status` 和 `reason`。2.4 新增的 `asset.searchPng` 是只读 AssetDB PNG 查询，`asset.removeImportedPng` 仅用于流水线回滚。Host 会核对扩展返回的输入结构与 [catalog.schema.json](catalog.schema.json) 一致；编辑器写入的内部请求仍按 [operation.schema.json](operation.schema.json) 校验。`asset.importPng` 的公开输入是本地 PNG 路径，文件名由 Host 从路径提取；桥接线上的请求只引用经过 Host 校验的会话暂存清单。`available` 代表查询时命令及场景级条件满足，暂存文件、目标资源名与 SpriteFrame 仍须执行前重新校验。
 
 场景脚本直接读取活动场景与 Canvas 状态；`scene.pngSprite` 在 2.4 缺 Canvas、或任一版本无活动场景时标为 `unavailable`。`catalogRevision` 随目录内容及场景名变化；Host 再读取一次场景，若两次场景名不同则返回 `SCENE_CHANGED`，调用方应重新查询。每次查询创建独立短时会话，结束后清除本轮会话文件；它不会导入资源或写场景，也还不是常驻的实例注册服务。扩展重载后需重新查询，新的实例 ID 应与此前不同。
 
