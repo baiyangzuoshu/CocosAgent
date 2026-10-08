@@ -17,6 +17,8 @@
 
 新增 `content.build.plan/execute/get/reconcile` 仅面向 2.4.15 `web-mobile`：只允许构建当前选中且重新校验通过的内容 release，使用唯一 `buildId` 写入此前不存在的 `build/cocos-agent/<buildId>`，从 builder 配置及 `.fire.meta` 核对 startScene，并在 Creator CLI 成功退出后校验包内 `resources` 配置、压缩 Texture UUID、import JSON 与 PNG 文件。构建记录持久化到项目 `.cocos-agent/content-builds/`；已有输出不覆盖，CLI 不经 shell；Host 中断后 reconcile 只读对账，不重启构建。合同与候选 skill 见 `docs/agent-foundation/content-build-web-0.1.md` 与 `docs/agent-foundation/skills/cocos2-content-build/SKILL.md`。自动化夹具测试已通过。锁屏期间的隔离工程 CLI 尝试在 macOS `RegisterApplication` 调用链 SIGABRT，未产出 Web 包；实机验收轨迹见 `docs/agent-foundation/traces/cocos-agent-content-build-2.4-cli-attempt.jsonl`。
 
+新增 `tools/cocos-agent-bridge/mcp/mcp-server.mjs` 是本地 JSONL Host 的 MCP stdio 薄适配，仅固定 Creator 2.4.15，并将可操作项目约束为启动时显式注册的绝对路径。MCP 工具包含实例/能力查询、带命令专属 schema 的语义调度、Web-Mobile 构建和构建包预览；不调用 LLM，也不接收模型 Key。依赖安装和测试从 `tools/cocos-agent-bridge/mcp/` 执行 `npm ci`、`npm test`。真实 MCP stdio 已查询 `helloworld` 的 8 项能力并验收只读 `scene.snapshot`，但 MCP 写命令、构建和预览尚未实机验收。合同与 skill 见 `docs/agent-foundation/cocos-agent-mcp-0.1.md`、`docs/agent-foundation/skills/cocos2-mcp-tools/SKILL.md`，轨迹见 `docs/agent-foundation/traces/cocos-agent-mcp-2.4.jsonl`。
+
 两版新增红蓝 PNG 样本用于 Web 运行时动态纹理测试。2.4 将 PNG 主资源按 `cc.Texture2D` 从基本名加载；3.8 本样本的纹理位于 `基本名/texture` 子资源。两版各完成六轮显式引用持有、替换、释放，旧纹理在 Web 预览中从对象缓存移除；追加的临时 Sprite 探针已用两版红蓝画面截图验证可见替换和下一资源加载失败时保留旧画面。这尚不证明材质替换、热更新或原生性能。详情见 `docs/agent-foundation/dynamic-content-first-slice.md` 与对应版本 skill。
 
 ## 项目结构

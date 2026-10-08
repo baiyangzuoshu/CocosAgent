@@ -17,6 +17,10 @@
 
 Agent key 不参与此流程，也不会写入项目。WebSocket 会话令牌只用于本机桥接认证。
 
+## MCP stdio 适配器（2.4.15）
+
+通用 MCP 宿主可通过 [`mcp/mcp-server.mjs`](mcp/mcp-server.mjs) 使用已实现的实例查询、能力目录、语义命令、2.4 Web-Mobile 构建和构建包预览。适配器只注册启动参数中列出的绝对项目路径，并固定 Creator 2.4.15；MCP 宿主提供模型，CocosAgent 不配置或调用 LLM Key。安装依赖、宿主配置、工具状态和验收边界见[适配层合同](../../docs/agent-foundation/cocos-agent-mcp-0.1.md)。
+
 ## 启动
 
 先确保对应 Creator 工程已打开并启用 `cocos-agent-bridge` 扩展，然后在仓库根目录运行对应命令：

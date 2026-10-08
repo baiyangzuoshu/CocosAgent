@@ -31,6 +31,8 @@ node tools/cocos-agent-bridge/agent-jsonl.js
 {"id":1,"method":"instances.list","params":{"targets":[{"creatorVersion":"2.4.15","projectRoot":"/绝对路径/2.4.15NewProject"},{"creatorVersion":"3.8.7","projectRoot":"/绝对路径/3.8,7NewProject"}]}}
 ```
 
-第二行是发送到进程 stdin 的 JSON，不是 Shell 命令。Agent 对 `result.success=false` 的响应应检查结构化 `error.code`；对于 `command.execute` 的 `needs-preview` 或 `needs-review`，还要检查 `result.outcome` 与 `result.operationId`。输入行上限 1 MiB。当前没有并行命令执行、取消或推送，长时间查询会阻塞后续请求；预览会话可在单次 `start` 返回后保持活动，并用 `get/stop` 管理。将来增加 MCP 时应包装同一目录与调度合同。
+第二行是发送到进程 stdin 的 JSON，不是 Shell 命令。Agent 对 `result.success=false` 的响应应检查结构化 `error.code`；对于 `command.execute` 的 `needs-preview` 或 `needs-review`，还要检查 `result.outcome` 与 `result.operationId`。输入行上限 1 MiB。当前没有并行命令执行、取消或推送，长时间查询会阻塞后续请求；预览会话可在单次 `start` 返回后保持活动，并用 `get/stop` 管理。通用 MCP 宿主可使用现有合同的 2.4.15 stdio 包装层，见[适配层合同](cocos-agent-mcp-0.1.md)。
 
 验收：两版已有 `scene.pngSprite` 操作通过 `operation.get` 查询时，本接口的 `result` 与直接运行 `agent-dispatch.js` 完全一致，均为 `completed` 且 `disk/preview=passed`；通过本接口进行的双实例 `instances.list` 返回 2.4.15 `helloworld` 与 3.8.7 `main`，两者均 `ready`。两版各自通过本接口执行只读 `scene.snapshot`，均返回 `completed` 及正确活动场景。本轮未通过本接口再次写场景。构建包预览另通过同一 JSONL 进程启动、读取运行时应用回执并停止；记录见[预览轨迹](traces/cocos-agent-content-preview-2.4.jsonl)。结构、错误输入及代理合同测试已通过。记录见[原接口轨迹](traces/cocos-agent-local-api-0.1.jsonl)。
+
+面向通用 MCP 宿主的 2.4.15 stdio 适配器已实现，固定版本并将可操作项目限制为进程启动时注册的白名单。它只包装这里的 JSONL 调度合同；MCP 工具清单、annotations、启动配置与验证结果见[适配层合同](cocos-agent-mcp-0.1.md)。

@@ -1,0 +1,4 @@
+{"sequence":1,"event":"mcp-tools-listed","transport":"stdio","sdk":"@modelcontextprotocol/server@2.3.1","toolCount":11,"includesCreator3Tools":false,"node":"22.22.2"}
+{"sequence":2,"event":"instances.list","project":"2.4.15NewProject","creatorVersion":"2.4.15","extensionVersion":"0.1.0","instanceId":"538268cf-04bc-41c1-89af-20ef61f4d513","state":"ready","activeScene":"helloworld","catalogRevision":"c248a5d866191e30f9885ea39b1cf8c203ef672c0790af491913a2e0d94785ec"}
+{"sequence":3,"event":"capabilities.list","project":"2.4.15NewProject","commandCount":8,"availableCount":8,"scene":"helloworld"}
+{"sequence":4,"event":"command.execute","project":"2.4.15NewProject","creatorVersion":"2.4.15","command":"scene.snapshot","access":"read","success":true,"outcome":"completed","sceneName":"helloworld","nodeCount":12,"truncated":false,"sceneWritten":false}

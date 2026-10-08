@@ -1,0 +1,16 @@
+---
+name: cocos2-mcp-tools
+description: Use the CocosAgent MCP stdio tools to query Creator 2.4.15 instances and capabilities, run approved semantic commands, and build or preview content releases.
+---
+
+# CocosAgent MCP tools for Creator 2.4
+
+Use this skill when an MCP host exposes the `cocos_2x_*` tools. This adapter is fixed to Creator **2.4.15**; it cannot select Creator 3.8. Read the [MCP adapter contract](../../cocos-agent-mcp-0.1.md) for tool names, project allowlisting and transport setup. The MCP host supplies its model; CocosAgent does not need an LLM key.
+
+Start with `cocos_2x_instances_list`. Select the exact project path returned by the tool, and require `state: ready`. Then call `cocos_2x_instances_get` or `cocos_2x_capabilities_list` for that `projectRoot`. Use only commands whose current catalog entry says `status: available`; the catalog includes `access`, preconditions, and the command input schema. Project paths and Creator version are constrained by the server process, so do not construct another target.
+
+Call `cocos_2x_command_execute` with the selected `projectRoot`, catalog `command` ID, and matching `input`. The MCP tool schema has a separate input contract for every 2.4 command. Read-only commands such as `scene.snapshot` are safe for inspection. Other commands can import assets or change the active scene; for those, follow the corresponding version-specific skill and operation contract. Check the returned `success`, `outcome`, error code, phase receipts, and `operationId`. If the result is `needs-review`, query the recorded operation or reconcile it as the contract allows; do not repeat a possibly completed write.
+
+For content builds, follow [cocos2-content-build](../cocos2-content-build/SKILL.md): call `cocos_2x_content_build_plan`, proceed to `execute` only when ready, then read `get` and require a verified completed package. Use `reconcile` for an interrupted build record without relaunching Creator. For a runtime preview, call `cocos_2x_content_preview_start` only for that completed build, open the returned loopback URL when visual/runtime observation is needed, inspect `get` for the application receipt, then call `stop`. A preview session lives only while this MCP process remains open.
+
+**Validation status:** the official MCP TypeScript SDK client connected to a real stdio MCP server and an open Creator 2.4.15 project. It discovered 11 tools, selected the ready `helloworld` instance, read eight available commands, and completed read-only `scene.snapshot` with 12 nodes. No scene write was performed. See the [MCP acceptance trace](../../traces/cocos-agent-mcp-2.4.jsonl). MCP-driven write commands and build/preview calls are not yet covered by this real-editor run.
