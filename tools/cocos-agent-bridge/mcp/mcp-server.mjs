@@ -9,6 +9,9 @@ import * as z from 'zod/v4';
 const require = createRequire(import.meta.url);
 const { handleAsync } = require('../agent-jsonl.js');
 const CREATOR_VERSION = '2.4.15';
+const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const COCOS_2X_SKILL_URI = 'cocos://2x/agent/mcp-tools';
+const COCOS_2X_SKILL_PATH = path.join(REPOSITORY_ROOT, 'docs/agent-foundation/skills/cocos2-mcp-tools/SKILL.md');
 const COMMANDS_2X = [
     'scene.snapshot', 'scene.node.inspect', 'asset.importPng', 'asset.removeImportedPng',
     'asset.validatePng', 'asset.refreshPng', 'scene.pngSprite', 'scene.node.create',
@@ -96,6 +99,28 @@ function createServer(projectRoots, options = {}) {
     const invokeAgent = options.invokeAgent || handleAsync;
     let requestId = 0;
     const server = new McpServer({ name: 'cocos-agent-2x', version: SERVER_VERSION });
+
+    server.registerResource('cocos2-mcp-tools', COCOS_2X_SKILL_URI, {
+        title: 'CocosAgent MCP tools for Creator 2.4',
+        description: 'Version-specific instructions for selecting Creator 2.4.15, executing semantic tools, recovering writes, and validating resources and content.',
+        mimeType: 'text/markdown',
+    }, async (uri) => ({ contents: [{ uri: uri.href, mimeType: 'text/markdown', text: fs.readFileSync(COCOS_2X_SKILL_PATH, 'utf8') }] }));
+
+    server.registerPrompt('cocos_2x_resource_to_scene_workflow', {
+        title: 'Import PNGs into a Creator 2.4 scene',
+        description: 'Guide a requested PNG-to-scene operation through planning, execution, readback, visual acceptance, and optional content release staging.',
+        argsSchema: z.object({ projectRoot, request: z.string().min(1).max(2000) }).strict(),
+    }, ({ projectRoot: selectedProject, request }) => ({
+        messages: [{ role: 'user', content: { type: 'text', text: [
+            `Target the registered Creator 2.4.15 project ${selectedProject}. User request: ${request}`,
+            'Start with cocos_2x_instances_get and cocos_2x_capabilities_list. Continue only if this exact project is ready.',
+            'For PNG placement, call cocos_2x_assets_scene_plan first. Review the returned pipelineId, asset identities, target Canvas, node names, and positions before calling cocos_2x_assets_scene_execute once.',
+            'After execution, read cocos_2x_assets_scene_get and cocos_2x_assets_scene_validate. If a call times out or returns an uncertain state, do not retry execute; inspect the pipeline, exact nodes, and operation records, then compensate only with the required live and disk evidence.',
+            'Inspect each Sprite in the matching local Web preview before calling cocos_2x_assets_scene_preview_accept. Never invent visual evidence or treat source, disk, or headless-only observations as visual acceptance.',
+            'Call cocos_2x_content_from_scene_plan only after the pipeline is completed and every item is visually accepted. Review stable IDs, dependencies, entry asset, derived UUIDs, and fingerprint; call cocos_2x_content_from_scene_stage only when the user requested release staging and the plan is valid.',
+            'Use cocos://2x/agent/mcp-tools for the full version-specific tool and recovery instructions.',
+        ].join('\n\n') } }],
+    }));
 
     async function invoke(method, params) {
         try {

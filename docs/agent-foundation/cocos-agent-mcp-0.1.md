@@ -42,6 +42,17 @@
 | `cocos_2x_content_preview_get` | 只读 | 读取预览连接状态和运行时回执 |
 | `cocos_2x_content_preview_stop` | 结束本机会话 | 关闭预览运行时与静态服务 |
 
+## MCP Resource 与 Prompt
+
+| MCP 能力 | 名称/URI | 用途 |
+| --- | --- | --- |
+| Resource | `cocos://2x/agent/mcp-tools` | 返回仓库内 Creator 2.4 专属 MCP skill，包含实例选择、写入恢复、预览验收与 release 工作流 |
+| Prompt | `cocos_2x_resource_to_scene_workflow` | 接收注册项目路径和用户请求，指导 Agent 查询实例与能力，再按计划、执行、读回、视觉验收的顺序处理 PNG 场景操作 |
+
+Resource 只读取固定仓库 skill 文件，不接受任意文件路径。Prompt 的 `projectRoot` 由 MCP 启动时的项目白名单限制，并明确禁止对超时写入盲目重试、伪造视觉证据，或在用户未请求 release staging 时提交内容。Prompt 为用户请求提供可复用指引；它不启动模型，也不绕过各工具自己的 schema、实例检查和 Host 前置条件。
+
+已通过官方 SDK 的 `StdioClientTransport` 对真实 MCP 进程验收 `resources/list/read` 与 `prompts/list/get`：读取到固定 2.4 skill，并确认 Prompt 展开了白名单内的项目路径及超时恢复、视觉证据要求。该检查没有查询 Creator 实例或调用模型；InMemoryTransport 另覆盖参数约束与请求映射。
+
 实例调用顺序为：列出实例，选定列表中的 `projectRoot`，查询能力，再按回执决定是否调用命令。构建和预览工具也要求从实例列表选择项目；MCP 参数 schema 会将项目路径限制为本进程启动时配置的路径。
 
 资源到场景的建议顺序为 `assets_scene_plan → assets_scene_execute → assets_scene_get/validate → 浏览器逐项检查 → assets_scene_preview_accept → assets_scene_get`。如果结果不满足预期，调用 `assets_scene_compensate`；它会先恢复场景引用，再经 AssetDB 清理由该流水线导入且确认无引用的资源。`assets_scene_repair` 只用于验证返回 `repairable` 的陈旧 AssetDB 映射。完成视觉验收后，调用 `content_from_scene_plan`，明确检查 release ID、入口资源、稳定 asset ID、依赖关系、派生 UUID 和 fingerprint，再调用 `content_from_scene_stage`。随后通过 `content_select` 并携带 `expectedCurrent` 选择版本；此步骤只改 Host 指针。要将内容交给 Web 包，继续按 `content_build_plan/execute` 构建，再用 `content_preview_start/get/stop` 检查运行时回执；若需恢复之前版本，使用 `content_rollback` 并检查运行时回执。工具使用 2.4.15 Host 的既有合同；详细前置条件见[资源到场景合同](cocos-agent-resource-scene-pipeline-0.1.md)、[内容 release 合同](content-release-0.1.md)、[Web-Mobile 构建合同](content-build-web-0.1.md)和[本机预览合同](content-preview-web-0.1.md)。

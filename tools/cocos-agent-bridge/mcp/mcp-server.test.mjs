@@ -71,6 +71,21 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         assert.deepEqual(inspectBranch.properties.input.required, ['nodePath']);
         assert.equal(tools.find((tool) => tool.name === 'cocos_2x_instances_list').annotations.readOnlyHint, true);
 
+        const { resources } = await client.listResources();
+        assert.deepEqual(resources.map((resource) => resource.uri), ['cocos://2x/agent/mcp-tools']);
+        const skill = await client.readResource({ uri: resources[0].uri });
+        assert.match(skill.contents[0].text, /Creator \*\*2\.4\.15\*\*/);
+        assert.match(skill.contents[0].text, /Do not repeat a possibly completed write/);
+
+        const { prompts } = await client.listPrompts();
+        assert.deepEqual(prompts.map((prompt) => prompt.name), ['cocos_2x_resource_to_scene_workflow']);
+        const workflow = await client.getPrompt({ name: prompts[0].name, arguments: {
+            projectRoot: value.projects[0], request: 'Import the provided sprites into the active scene.',
+        } });
+        assert.match(workflow.messages[0].content.text, new RegExp(value.projects[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+        assert.match(workflow.messages[0].content.text, /do not retry execute/i);
+        assert.match(workflow.messages[0].content.text, /Never invent visual evidence/);
+
         const listed = await client.callTool({ name: 'cocos_2x_instances_list', arguments: {} });
         assert.equal(listed.structuredContent.data.length, 2);
         assert.equal(calls.at(-1).method, 'instances.list');
