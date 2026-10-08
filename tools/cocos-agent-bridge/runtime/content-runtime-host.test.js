@@ -78,3 +78,51 @@ test('local runtime channel sends selected release and accepts its receipt', asy
         fs.rmSync(root, { recursive: true, force: true });
     }
 });
+
+test('Mac native runtime uses a private writable-path session and loopback Origin handshake', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-runtime-native-'));
+    const writable = path.join(root, 'native-writable');
+    const dir = path.join(root, 'project/assets/resources');
+    fs.mkdirSync(dir, { recursive: true });
+    const bytes = fs.readFileSync(path.resolve(__dirname, '../../../2.4.15NewProject/assets/resources/cocos-agent-batch-red.png'));
+    fs.writeFileSync(path.join(dir, 'red.png'), bytes);
+    fs.writeFileSync(path.join(dir, 'red.png.meta'), JSON.stringify({ importer: 'texture', uuid: 'red-texture' }));
+    const manifest = { contractVersion: '0.1', releaseId: 'native-red', creatorVersion: '2.4.15',
+        delivery: 'built-in-resources', entryAssetId: 'visual', assets: [{ id: 'visual', source: 'assets/resources/red.png',
+            sha256: crypto.createHash('sha256').update(bytes).digest('hex'), runtimePath: 'red', dependsOn: [] }] };
+    let host; let socket;
+    try {
+        assert.equal(content.stage({ projectRoot: path.join(root, 'project'), creatorVersion: '2.4.15', manifest }).success, true);
+        assert.equal(content.select({ projectRoot: path.join(root, 'project'), creatorVersion: '2.4.15',
+            releaseId: 'native-red', expectedCurrent: null }).success, true);
+        host = await start({ projectRoot: path.join(root, 'project'), creatorVersion: '2.4.15',
+            platform: 'mac-native', nativeWritablePath: writable });
+        const session = JSON.parse(fs.readFileSync(host.sessionPath, 'utf8'));
+        assert.equal(session.platform, 'mac-native');
+        assert.equal(session.host, '127.0.0.1');
+        assert.equal((fs.statSync(host.sessionPath).mode & 0o777), 0o600);
+        assert.equal((fs.statSync(path.dirname(host.sessionPath)).mode & 0o777), 0o700);
+        socket = new WebSocket(`ws://127.0.0.1:${session.port}/runtime?token=${session.token}`,
+            { origin: 'http://127.0.0.1:49152' });
+        const next = () => new Promise((resolve) => socket.once('message', (raw) => resolve(JSON.parse(String(raw)))));
+        await new Promise((resolve, reject) => { socket.once('open', resolve); socket.once('error', reject); });
+        socket.send(JSON.stringify({ type: 'hello', platform: 'mac-native', sessionId: session.sessionId,
+            creatorVersion: '2.4.15', scene: 'helloworld' }));
+        const request = await next();
+        assert.equal(request.type, 'apply');
+        assert.equal(fs.existsSync(host.sessionPath), false);
+        const receipt = { outcome: 'applied', releaseId: 'native-red', activeReleaseId: 'native-red',
+            activeFingerprint: request.release.fingerprint, assetId: 'visual', activeAssetId: 'visual',
+            resourceUuid: 'red-texture', currentRefCount: 1 };
+        socket.send(JSON.stringify({ type: 'receipt', id: request.id, receipt }));
+        assert.equal((await next()).acceptance.success, true);
+        assert.equal(content.acceptRuntime({ projectRoot: path.join(root, 'project'), creatorVersion: '2.4.15',
+            platform: 'mac-native', receipt }).success, false);
+        assert.equal(content.get({ projectRoot: path.join(root, 'project'), creatorVersion: '2.4.15' })
+            .effective.platform, 'mac-native');
+    } finally {
+        if (socket) socket.close();
+        if (host) await host.close();
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});

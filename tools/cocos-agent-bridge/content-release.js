@@ -148,12 +148,12 @@ function get(params) {
     try { return { success: true, outcome: 'read', release: JSON.parse(fs.readFileSync(releaseFile(target.root, params.releaseId), 'utf8')), selected: pointer, effective: effective(target.root) }; }
     catch (error) { if (error.code === 'ENOENT') return fail('RELEASE_NOT_FOUND', 'Release is not staged.'); throw error; }
 }
-function acceptRuntime(params) {
+function acceptRuntimeForPlatform(params, platform) {
     const target = project(params);
     if (!target.success) return target;
     const receipt = params.receipt;
     const pointer = selected(target.root);
-    if (params.platform !== 'web-preview' || !receipt || !['applied', 'already-active'].includes(receipt.outcome)
+    if (!receipt || !['applied', 'already-active'].includes(receipt.outcome)
         || !pointer || receipt.releaseId !== pointer.releaseId || receipt.activeReleaseId !== pointer.releaseId
         || receipt.activeFingerprint !== pointer.fingerprint || typeof receipt.assetId !== 'string'
         || receipt.activeAssetId !== receipt.assetId || !Number.isFinite(receipt.currentRefCount)
@@ -169,10 +169,17 @@ function acceptRuntime(params) {
     if (!checked.success || checked.fingerprint !== release.fingerprint)
         return fail('RELEASE_CHANGED', 'Selected release no longer matches project assets.');
     const observation = { releaseId: release.releaseId, fingerprint: release.fingerprint,
-        assetId: asset.id, resourceUuid: asset.resourceUuid, platform: params.platform,
+        assetId: asset.id, resourceUuid: asset.resourceUuid, platform,
         observedAt: new Date().toISOString() };
     atomicWrite(effectiveFile(target.root), observation);
     return { success: true, outcome: 'runtime-observed', effective: observation };
+}
+function acceptRuntime(params) {
+    if (!params || params.platform !== 'web-preview') return fail('UNTRUSTED_RUNTIME_PLATFORM', 'Use the authenticated runtime channel for native receipts.');
+    return acceptRuntimeForPlatform(params, 'web-preview');
+}
+function acceptNativeRuntime(params) {
+    return acceptRuntimeForPlatform(params, 'mac-native');
 }
 function rollback(params) {
     const target = project(params);
@@ -192,4 +199,4 @@ function handle(method, params) {
     if (method === 'content.runtime.accept') return acceptRuntime(params);
     return fail('UNKNOWN_METHOD', 'Unknown content release method.');
 }
-module.exports = { validate, stage, select, rollback, get, acceptRuntime, handle };
+module.exports = { validate, stage, select, rollback, get, acceptRuntime, acceptNativeRuntime, handle };

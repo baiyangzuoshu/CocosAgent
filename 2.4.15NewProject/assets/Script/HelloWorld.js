@@ -17,9 +17,10 @@ cc.Class({
     // use this for initialization
     onLoad: function () {
         this.label.string = this.text;
-        if (CocosAgentContentRuntimeClient.session()) {
+        if (CocosAgentContentRuntimeClient.session(cc)) {
             this._cocosAgentRuntime = CocosAgentContentRuntime.mount({ cc: cc, core: CocosAgentContentSwapCore });
             this._cocosAgentChannel = CocosAgentContentRuntimeClient.connect({
+                cc: cc,
                 runtime: this._cocosAgentRuntime,
                 creatorVersion: '2.4.15',
                 scene: cc.director.getScene().name,

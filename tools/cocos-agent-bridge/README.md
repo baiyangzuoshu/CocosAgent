@@ -102,6 +102,18 @@ node tools/cocos-agent-bridge/catalog-host.js \
 
 需要由长期运行的 Agent 进程调用时，启动 `node tools/cocos-agent-bridge/agent-jsonl.js`，在 stdin 逐行发送 JSON 请求。它提供实例/能力查询、命令调度、场景组合、批量资源，以及本地内容版本的 `content.plan/stage/get/select/rollback` 与 `content.runtime.accept`。选中版本只改 Host 指针；运行时成功回执另记 `effective`。请求格式和双版本验收见 [`cocos-agent-local-api-0.1.md`](../../docs/agent-foundation/cocos-agent-local-api-0.1.md)；版本合同与 Web 接线见 [`content-release-0.1.md`](../../docs/agent-foundation/content-release-0.1.md)、[`content-runtime-web-0.1.md`](../../docs/agent-foundation/content-runtime-web-0.1.md)。
 
+2.4 Mac 原生开发包使用独立会话文件，不读取浏览器 URL。先从包内探针或运行日志取得 `jsb.fileUtils.getWritablePath()`，然后运行：
+
+```sh
+node tools/cocos-agent-bridge/runtime/content-runtime-host.js \
+  --project "$PWD/2.4.15NewProject" \
+  --creator-version 2.4.15 \
+  --platform mac-native \
+  --native-writable-path "/absolute/path/from/getWritablePath"
+```
+
+Host 仅监听 `127.0.0.1`，在该可写目录下创建权限为 `0700` 的 `cocos-agent/`，并以 `0600` 写入短时 `runtime-session.json`。在 15 分钟内启动该 Mac 包；运行时只在 2.4 OS X 原生环境读取该文件，Host 首次接受正确版本、场景和会话 ID 后删除文件。Web 预览仍要求其固定预览 Origin 和会话令牌。Host 结束时也会删除仍属于本会话的文件。Mac 原生会话用于本机开发，不应复制进可分发包。
+
 `agent-dispatch.js` 串联实例查询、能力查询、目标核对、命令执行和回执判定。只读示例：
 
 ```sh
