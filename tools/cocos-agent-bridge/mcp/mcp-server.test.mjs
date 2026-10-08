@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
-import { createServer, parseArgs } from './mcp-server.mjs';
+import { createServer, parseArgs, runAgentWorker } from './mcp-server.mjs';
 
 function fixture() {
     const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-agent-mcp-'));
@@ -237,6 +237,66 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         await server.close();
         fs.rmSync(value.parent, { recursive: true, force: true });
     }
+});
+
+test('MCP forwards opted-in progress and prevents a duplicate scene pipeline while it is running', async () => {
+    const value = fixture();
+    let finishExecution;
+    let signalProgress;
+    const progressSeen = new Promise((resolve) => { signalProgress = resolve; });
+    const invokeAgent = async (request, options = {}) => {
+        if (request.method === 'assets.scene.execute') {
+            await options.onProgress?.({ progress: 1, command: 'scene.snapshot', state: 'started' });
+            await new Promise((resolve) => { finishExecution = resolve; });
+        }
+        if (request.method === 'assets.scene.get') return { id: request.id,
+            result: { success: true, outcome: 'executing', pipelineId: request.params.pipelineId } };
+        return { id: request.id, result: { success: true, outcome: 'completed', method: request.method } };
+    };
+    const server = createServer(value.projects, { invokeAgent });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'cocos-agent-progress-test', version: '0.1.0' });
+    try {
+        await server.connect(serverTransport);
+        await client.connect(clientTransport);
+        const args = { projectRoot: value.projects[0], pipelineId: '5858dc80-32d0-4610-8291-f057fa13151e',
+            sources: [path.join(value.parent, 'one.png'), path.join(value.parent, 'two.png')] };
+        const execution = client.callTool({ name: 'cocos_2x_assets_scene_execute', arguments: args }, {
+            onprogress: (progress) => signalProgress(progress),
+        });
+        const progress = await progressSeen;
+        assert.equal(progress.progress, 1);
+        assert.equal(progress.message, 'scene.snapshot 开始');
+
+        const duplicate = await client.callTool({ name: 'cocos_2x_assets_scene_execute', arguments: args });
+        assert.equal(duplicate.isError, true);
+        assert.equal(duplicate.structuredContent.error.code, 'PIPELINE_EXECUTION_IN_PROGRESS');
+        const competingWrite = await client.callTool({ name: 'cocos_2x_content_select', arguments: {
+            projectRoot: value.projects[0], releaseId: 'release-a', expectedCurrent: null,
+        } });
+        assert.equal(competingWrite.isError, true);
+        assert.equal(competingWrite.structuredContent.error.code, 'EDITOR_BUSY');
+        const receipt = await client.callTool({ name: 'cocos_2x_assets_scene_get', arguments: {
+            projectRoot: value.projects[0], pipelineId: args.pipelineId,
+        } });
+        assert.equal(receipt.structuredContent.outcome, 'executing');
+
+        finishExecution();
+        const completed = await execution;
+        assert.equal(completed.structuredContent.outcome, 'completed');
+    } finally {
+        finishExecution?.();
+        await client.close();
+        await server.close();
+        fs.rmSync(value.parent, { recursive: true, force: true });
+    }
+});
+
+test('scene pipeline worker returns through its message channel without touching an editor', async () => {
+    const response = await runAgentWorker({ id: 31, method: 'unsupported.test.method', params: {} }, async () => {});
+    assert.equal(response.id, 31);
+    assert.equal(response.result.success, false);
+    assert.equal(response.result.error.code, 'INVALID_ARGUMENT');
 });
 
 test('MCP converts dispatcher failures to structured tool errors without losing the Cocos error code', async () => {

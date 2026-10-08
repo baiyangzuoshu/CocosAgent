@@ -373,9 +373,25 @@ function compensate(params, run = dispatch) {
     record.error = null; record.rollbackStatus = 'pending'; save(record);
     return removeImported(record, run);
 }
-function handle(method, params, run = dispatch) {
+function handle(method, params, run = dispatch, onProgress) {
     if (method === 'assets.scene.plan') return plan(params, run);
-    if (method === 'assets.scene.execute') return execute(params, run);
+    if (method === 'assets.scene.execute') {
+        if (typeof onProgress !== 'function') return execute(params, run);
+        let progress = 0;
+        const trackedRun = (request) => {
+            const command = request.command || (request.operationGetId ? 'operation.get'
+                : request.operationReconcileId ? 'operation.reconcile' : request.previewAcceptId ? 'preview.accept' : 'host-check');
+            const report = (state, outcome) => {
+                try { onProgress({ progress: ++progress, command, state, ...(outcome ? { outcome } : {}) }); }
+                catch (_) { /* Progress delivery must never interrupt a scene/resource write. */ }
+            };
+            report('started');
+            const result = run(request);
+            report('finished', typeof result?.outcome === 'string' ? result.outcome : result?.success === true ? 'completed' : 'failed');
+            return result;
+        };
+        return execute(params, trackedRun);
+    }
     if (method === 'assets.scene.get') return get(params);
     if (method === 'assets.scene.preview.accept') return acceptPreview(params, run);
     if (method === 'assets.scene.compensate') return compensate(params, run);

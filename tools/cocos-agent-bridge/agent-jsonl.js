@@ -65,7 +65,7 @@ function handle(request, adapters = {}) {
     if (sceneSpriteBatchMethods.has(method)) return { id: request.id,
         result: (adapters.sceneSpriteBatch || sceneSpriteBatch.handle)(method, params, adapters.dispatch || dispatch) };
     if (assetScenePipelineMethods.has(method)) return { id: request.id,
-        result: (adapters.assetScenePipeline || assetScenePipeline.handle)(method, params, adapters.dispatch || dispatch) };
+        result: (adapters.assetScenePipeline || assetScenePipeline.handle)(method, params, adapters.dispatch || dispatch, adapters.onProgress) };
     if (assetSceneValidationMethods.has(method)) return { id: request.id,
         result: method === 'assets.scene.validate'
             ? (adapters.assetSceneValidate || assetSceneValidation.validate)(params, adapters.dispatch || dispatch)

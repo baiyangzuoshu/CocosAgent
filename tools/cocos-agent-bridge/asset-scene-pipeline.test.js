@@ -7,7 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const operationStore = require('./operation-store');
-const { plan, execute, get, acceptPreview, compensate } = require('./asset-scene-pipeline');
+const { plan, execute, get, acceptPreview, compensate, handle } = require('./asset-scene-pipeline');
 const sceneBatch = require('./scene-sprite-batch');
 
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WlXjQAAAABJRU5ErkJggg==', 'base64');
@@ -121,6 +121,22 @@ test('plans, imports, validates Creator metadata and UUIDs, places resources, an
         assert.equal(f.nodes.size, 0);
         assert.ok(undone.items.every((item) => item.removalStatus === 'removed'));
         assert.ok(undone.items.every((item) => !fs.existsSync(path.join(f.projectRoot, 'assets', 'resources', item.assetName))));
+    } finally { f.cleanup(); }
+});
+
+test('reports monotonic progress around each real Host call without exposing request paths', () => {
+    const f = fixture();
+    try {
+        const pipelineId = crypto.randomUUID();
+        const events = [];
+        const result = handle('assets.scene.execute', { ...f.params, pipelineId }, f.run,
+            (event) => events.push(event));
+        assert.equal(result.outcome, 'needs-preview');
+        assert.ok(events.length > 0);
+        assert.deepEqual(events.map((event) => event.progress), events.map((_, index) => index + 1));
+        assert.ok(events.some((event) => event.command === 'asset.importPng' && event.state === 'started'));
+        assert.ok(events.some((event) => event.command === 'scene.pngSprite' && event.state === 'finished' && event.outcome === 'needs-preview'));
+        assert.ok(events.every((event) => !JSON.stringify(event).includes(f.root)));
     } finally { f.cleanup(); }
 });
 

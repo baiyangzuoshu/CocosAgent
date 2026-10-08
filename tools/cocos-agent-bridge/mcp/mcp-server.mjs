@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { Worker } from 'node:worker_threads';
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import * as z from 'zod/v4';
@@ -87,6 +88,35 @@ function parseArgs(args) {
     return { help: false, projects: canonical };
 }
 
+function runAgentWorker(request, onProgress) {
+    return new Promise((resolve, reject) => {
+        const worker = new Worker(new URL('./agent-request-worker.mjs', import.meta.url), { workerData: { request } });
+        let settled = false;
+        let progressQueue = Promise.resolve();
+        worker.on('message', (message) => {
+            if (message?.type === 'progress') {
+                progressQueue = progressQueue.then(() => onProgress(message.progress)).catch(() => {});
+            } else if (message?.type === 'result') {
+                settled = true;
+                progressQueue.then(() => resolve(message.response));
+            } else if (message?.type === 'failure') {
+                settled = true;
+                progressQueue.then(() => reject(new Error(message.code || 'WORKER_FAILED')));
+            }
+        });
+        worker.once('error', (error) => {
+            if (settled) return;
+            settled = true;
+            progressQueue.then(() => reject(error));
+        });
+        worker.once('exit', (code) => {
+            if (settled) return;
+            settled = true;
+            progressQueue.then(() => reject(new Error(`Agent worker exited before returning a result (${code}).`)));
+        });
+    });
+}
+
 function createServer(projectRoots, options = {}) {
     if (!Array.isArray(projectRoots) || projectRoots.length < 1 || projectRoots.length > 8
         || projectRoots.some((root) => typeof root !== 'string' || !path.isAbsolute(root))) {
@@ -97,6 +127,8 @@ function createServer(projectRoots, options = {}) {
     const targetList = roots.map((projectRoot) => ({ creatorVersion: CREATOR_VERSION, projectRoot }));
     const projectRoot = z.enum(roots);
     const invokeAgent = options.invokeAgent || handleAsync;
+    const runScenePipelineWorker = options.runScenePipelineWorker || runAgentWorker;
+    const activeScenePipelines = new Map();
     let requestId = 0;
     const server = new McpServer({ name: 'cocos-agent-2x', version: SERVER_VERSION });
 
@@ -122,9 +154,47 @@ function createServer(projectRoots, options = {}) {
         ].join('\n\n') } }],
     }));
 
-    async function invoke(method, params) {
+    async function invoke(method, params, context) {
+        const selectedProject = typeof params?.projectRoot === 'string' ? path.resolve(params.projectRoot) : null;
+        if (selectedProject && activeScenePipelines.has(selectedProject) && method !== 'assets.scene.execute'
+            && !['assets.scene.get', 'assets.scene.validate', 'instances.get', 'capabilities.list', 'operation.get'].includes(method)) {
+            return { success: false, outcome: 'in-progress', error: { code: 'EDITOR_BUSY',
+                message: 'A resource-to-scene operation is running for this project. Read its pipeline receipt before starting another write.' } };
+        }
+        const progressToken = context?.mcpReq?._meta?.progressToken;
+        let progressValue = 0;
+        const onProgress = async (event) => {
+            if (progressToken === undefined || typeof context?.mcpReq?.notify !== 'function') return;
+            const progress = Number.isSafeInteger(event?.progress) && event.progress > progressValue
+                ? event.progress : progressValue + 1;
+            progressValue = progress;
+            const command = typeof event?.command === 'string' ? event.command : 'CocosAgent';
+            const state = event?.state === 'started' ? '开始' : '完成';
+            const suffix = typeof event?.outcome === 'string' ? `，结果 ${event.outcome}` : '';
+            try {
+                await context.mcpReq.notify({ method: 'notifications/progress', params: {
+                    progress, progressToken, message: `${command} ${state}${suffix}`,
+                } });
+            } catch (_) { /* A detached MCP client must not interrupt an editor operation. */ }
+        };
         try {
-            const response = await invokeAgent({ id: ++requestId, method, params });
+            const request = { id: ++requestId, method, params };
+            let response;
+            if (method === 'assets.scene.execute') {
+                if (!selectedProject) return { success: false, outcome: 'failed', error: { code: 'INVALID_ARGUMENT', message: 'A registered project is required.' } };
+                if (activeScenePipelines.has(selectedProject)) {
+                    return { success: false, outcome: 'in-progress', error: { code: 'PIPELINE_EXECUTION_IN_PROGRESS',
+                        message: 'A resource-to-scene operation is already running for this project. Read its pipeline receipt; do not retry execute.' } };
+                }
+                const operation = options.invokeAgent
+                    ? invokeAgent(request, { onProgress })
+                    : runScenePipelineWorker(request, onProgress);
+                activeScenePipelines.set(selectedProject, operation);
+                try { response = await operation; }
+                finally { activeScenePipelines.delete(selectedProject); }
+            } else {
+                response = await invokeAgent(request, { onProgress });
+            }
             return response && response.result && typeof response.result === 'object'
                 ? response.result
                 : { success: false, error: { code: 'INVALID_HOST_RESPONSE', message: 'CocosAgent Host returned an invalid result.' } };
@@ -145,8 +215,8 @@ function createServer(projectRoots, options = {}) {
     }
 
     function register(name, description, inputSchema, method, mapArgs, annotations) {
-        server.registerTool(name, { description, inputSchema, annotations }, async (args) => {
-            const result = await invoke(method, mapArgs(args));
+        server.registerTool(name, { description, inputSchema, annotations }, async (args, context) => {
+            const result = await invoke(method, mapArgs(args), context);
             return toolReply(result);
         });
     }
@@ -354,4 +424,4 @@ if (isEntrypoint) {
     }
 }
 
-export { COMMANDS_2X, CREATOR_VERSION, createServer, parseArgs };
+export { COMMANDS_2X, CREATOR_VERSION, createServer, parseArgs, runAgentWorker };
