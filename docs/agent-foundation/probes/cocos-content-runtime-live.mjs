@@ -127,6 +127,7 @@ async function main() {
         if (!staged.success) throw Error(JSON.stringify(staged));
     }
     await evaluate(fs.readFileSync(path.join(root, 'tools/cocos-agent-bridge/runtime/content-swap-core.js'), 'utf8'));
+    await evaluate(fs.readFileSync(path.join(projectRoot, 'assets', choice === '2.4' ? 'Script/CocosAgentContentRuntime.js' : 'CocosAgentContentRuntime.js'), 'utf8'));
     await evaluate(fs.readFileSync(path.join(root, `docs/agent-foundation/probes/cocos-content-runtime-${choice}.js`), 'utf8'));
     records.red = select('red', null);
     const red = await apply(records.red);
@@ -152,7 +153,9 @@ async function main() {
     const recoveredObserved = accept(recovered);
     const snapshot = await evaluate('window.__cocosContentRuntime.snapshot()');
     const disposed = await evaluate('window.__cocosContentRuntimeCleanup()');
-    const trace = { creatorVersion: version, previewUrl: url, releases: ids,
+    const trace = { creatorVersion: version, previewUrl: url,
+        adapterSource: choice === '2.4' ? '2.4.15NewProject/assets/Script/CocosAgentContentRuntime.js'
+            : '3.8,7NewProject/assets/CocosAgentContentRuntime.js', releases: ids,
         receipts: { red, redObserved, blue, blueObserved, failed, hostRollback: rollback, recovered, recoveredObserved }, snapshot, disposed,
         screenshots: [redImage, blueImage] };
     const output = path.join(root, 'docs/agent-foundation/traces', `cocos-agent-content-runtime-${choice}-web.json`);

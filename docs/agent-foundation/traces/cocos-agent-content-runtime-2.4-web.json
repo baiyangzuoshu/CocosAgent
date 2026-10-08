@@ -1,18 +1,19 @@
 {
   "creatorVersion": "2.4.15",
   "previewUrl": "http://127.0.0.1:7456/",
+  "adapterSource": "2.4.15NewProject/assets/Script/CocosAgentContentRuntime.js",
   "releases": {
-    "red": "runtime-red-6d86aa64",
-    "blue": "runtime-blue-6d86aa64"
+    "red": "runtime-red-8a7a2bf9",
+    "blue": "runtime-blue-8a7a2bf9"
   },
   "receipts": {
     "red": {
       "outcome": "applied",
-      "releaseId": "runtime-red-6d86aa64",
+      "releaseId": "runtime-red-8a7a2bf9",
       "assetId": "visual",
-      "activeReleaseId": "runtime-red-6d86aa64",
+      "activeReleaseId": "runtime-red-8a7a2bf9",
       "activeAssetId": "visual",
-      "activeFingerprint": "94c7756a87959068a7ca89269d43c51cadab3ff388b7ec275d483fdf5098fd5d",
+      "activeFingerprint": "b555783fc41647da9be37e0d6b826428bfb9b60a177913e2464e993fa47c930c",
       "previousReleaseId": null,
       "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
       "currentRefCount": 1
@@ -21,22 +22,22 @@
       "success": true,
       "outcome": "runtime-observed",
       "effective": {
-        "releaseId": "runtime-red-6d86aa64",
-        "fingerprint": "94c7756a87959068a7ca89269d43c51cadab3ff388b7ec275d483fdf5098fd5d",
+        "releaseId": "runtime-red-8a7a2bf9",
+        "fingerprint": "b555783fc41647da9be37e0d6b826428bfb9b60a177913e2464e993fa47c930c",
         "assetId": "visual",
         "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
         "platform": "web-preview",
-        "observedAt": "2026-10-08T01:26:41.898Z"
+        "observedAt": "2026-10-08T01:36:33.311Z"
       }
     },
     "blue": {
       "outcome": "applied",
-      "releaseId": "runtime-blue-6d86aa64",
+      "releaseId": "runtime-blue-8a7a2bf9",
       "assetId": "visual",
-      "activeReleaseId": "runtime-blue-6d86aa64",
+      "activeReleaseId": "runtime-blue-8a7a2bf9",
       "activeAssetId": "visual",
-      "activeFingerprint": "e4c1384ceae1818625c8ece030974ffb1bc2cc3f1e3d3c838149b1c825251ddf",
-      "previousReleaseId": "runtime-red-6d86aa64",
+      "activeFingerprint": "346951f148d77b2c9413066b64f85a2c7954b87de4c128b01f2d9f4d120b8ed7",
+      "previousReleaseId": "runtime-red-8a7a2bf9",
       "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
       "currentRefCount": 1
     },
@@ -44,39 +45,39 @@
       "success": true,
       "outcome": "runtime-observed",
       "effective": {
-        "releaseId": "runtime-blue-6d86aa64",
-        "fingerprint": "e4c1384ceae1818625c8ece030974ffb1bc2cc3f1e3d3c838149b1c825251ddf",
+        "releaseId": "runtime-blue-8a7a2bf9",
+        "fingerprint": "346951f148d77b2c9413066b64f85a2c7954b87de4c128b01f2d9f4d120b8ed7",
         "assetId": "visual",
         "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
         "platform": "web-preview",
-        "observedAt": "2026-10-08T01:26:42.354Z"
+        "observedAt": "2026-10-08T01:36:33.749Z"
       }
     },
     "failed": {
       "outcome": "retained",
-      "releaseId": "runtime-red-6d86aa64",
+      "releaseId": "runtime-red-8a7a2bf9",
       "assetId": "visual",
-      "activeReleaseId": "runtime-blue-6d86aa64",
+      "activeReleaseId": "runtime-blue-8a7a2bf9",
       "activeAssetId": "visual",
-      "activeFingerprint": "e4c1384ceae1818625c8ece030974ffb1bc2cc3f1e3d3c838149b1c825251ddf",
+      "activeFingerprint": "346951f148d77b2c9413066b64f85a2c7954b87de4c128b01f2d9f4d120b8ed7",
       "code": "FORCED_LOAD_FAILURE",
-      "retainedReleaseId": "runtime-blue-6d86aa64"
+      "retainedReleaseId": "runtime-blue-8a7a2bf9"
     },
     "hostRollback": {
       "success": true,
       "outcome": "selected",
-      "releaseId": "runtime-blue-6d86aa64",
-      "previousReleaseId": "runtime-red-6d86aa64",
+      "releaseId": "runtime-blue-8a7a2bf9",
+      "previousReleaseId": "runtime-red-8a7a2bf9",
       "idempotent": false
     },
     "recovered": {
       "outcome": "applied",
-      "releaseId": "runtime-red-6d86aa64",
+      "releaseId": "runtime-red-8a7a2bf9",
       "assetId": "visual",
-      "activeReleaseId": "runtime-red-6d86aa64",
+      "activeReleaseId": "runtime-red-8a7a2bf9",
       "activeAssetId": "visual",
-      "activeFingerprint": "94c7756a87959068a7ca89269d43c51cadab3ff388b7ec275d483fdf5098fd5d",
-      "previousReleaseId": "runtime-blue-6d86aa64",
+      "activeFingerprint": "b555783fc41647da9be37e0d6b826428bfb9b60a177913e2464e993fa47c930c",
+      "previousReleaseId": "runtime-blue-8a7a2bf9",
       "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
       "currentRefCount": 1
     },
@@ -84,19 +85,19 @@
       "success": true,
       "outcome": "runtime-observed",
       "effective": {
-        "releaseId": "runtime-red-6d86aa64",
-        "fingerprint": "94c7756a87959068a7ca89269d43c51cadab3ff388b7ec275d483fdf5098fd5d",
+        "releaseId": "runtime-red-8a7a2bf9",
+        "fingerprint": "b555783fc41647da9be37e0d6b826428bfb9b60a177913e2464e993fa47c930c",
         "assetId": "visual",
         "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
         "platform": "web-preview",
-        "observedAt": "2026-10-08T01:26:42.732Z"
+        "observedAt": "2026-10-08T01:36:34.147Z"
       }
     }
   },
   "snapshot": {
     "busy": false,
     "closed": false,
-    "activeReleaseId": "runtime-red-6d86aa64",
+    "activeReleaseId": "runtime-red-8a7a2bf9",
     "activeAssetId": "visual",
     "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
     "valid": true,
