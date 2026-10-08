@@ -12,7 +12,7 @@ Host 在 `.cocos-agent/content-releases/<releaseId>.json` 保存不可变记录�
 
 `content.fromScene.plan` 和 `content.fromScene.stage` 将[资源到场景流水线](cocos-agent-resource-scene-pipeline-0.1.md)接到本地内容版本。调用方显式给出 `pipelineId`、`releaseId`、入口 PNG 名称，以及每个 PNG 对应的稳定 `assetId` 和依赖 ID；源路径、SHA-256、Creator 资源 UUID 和 2.4 运行路径均从流水线记录及工程磁盘读回派生，不接受调用方覆盖。计划阶段要求父流水线为 `completed`，也就是场景写入已经逐项预览验收；随后再次实时核对 AssetDB、`.meta`、运行时 Sprite 引用和序列化场景关系，并由 `content.plan` 重验源文件摘要和纹理 UUID。任何资源身份变化或场景上下文变化都会阻断暂存。
 
-`content.fromScene.stage` 只创建标准 `content-releases/<releaseId>.json` 不可变版本记录，不自动调用 `content.select`，不改场景，也不生成 Creator 构建包。Agent 应先检查返回清单和指纹，再按预期当前版本调用 `content.select`；运行时是否实际切换仍以认证通道的 `applied`/`already-active` 回执及 `effective.json` 为准。这个连接只适用于 2.4.15 已验收的 PNG Sprite 与内置 `resources`；尚未实现 Bundle 构建、远端分发、原生包增量更新或 3.8 适配。
+`content.fromScene.stage` 只创建标准 `content-releases/<releaseId>.json` 不可变版本记录，不自动调用 `content.select`，不改场景，也不生成 Creator 构建包。Agent 应先检查返回清单和指纹，再按预期当前版本调用 `content.select`；运行时是否实际切换仍以认证通道的 `applied`/`already-active` 回执及 `effective.json` 为准。这个连接只适用于 2.4.15 已验收的 PNG Sprite 与内置 `resources`。现已新增独立的 2.4 Web-Mobile 构建切片，见[构建合同](content-build-web-0.1.md)；Bundle、远端分发、原生包增量更新和 3.8 适配仍未实现。
 
 2026-10-07，两版示例中的红蓝 PNG 与真实 Creator `.meta` 已通过 `content.plan` 只读预检；[计划轨迹](traces/cocos-agent-content-release-plan-0.1.jsonl)分别记录版本指纹和 Texture2D UUID。自动化测试使用临时工程覆盖两版 `stage → select → get → rollback`、陈旧指针拒绝、依赖环和源文件改动阻断。当时真实示例尚未写入或选择内容版本。
 

@@ -1,0 +1,286 @@
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const contentRelease = require('./content-release');
+
+const buildIdPattern = /^[a-z0-9][a-z0-9-]{2,31}$/;
+const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+const fail = (code, message) => ({ success: false, outcome: 'failed', error: { code, message } });
+const recordDir = (root) => path.join(root, '.cocos-agent', 'content-builds');
+const recordFile = (root, id) => path.join(recordDir(root), `${id}.json`);
+
+function project(params) {
+    if (!params || params.creatorVersion !== '2.4.15' || typeof params.projectRoot !== 'string'
+        || !path.isAbsolute(params.projectRoot)) return fail('INVALID_TARGET', 'This build slice requires an absolute Creator 2.4.15 project path.');
+    const root = path.resolve(params.projectRoot);
+    try { if (!fs.statSync(root).isDirectory()) throw Error('not directory'); }
+    catch (_) { return fail('PROJECT_NOT_FOUND', 'Project directory does not exist.'); }
+    return { success: true, root };
+}
+
+function selectedRelease(root, releaseId, expectedFingerprint) {
+    let pointer; let release;
+    try {
+        pointer = JSON.parse(fs.readFileSync(path.join(root, '.cocos-agent', 'content-releases', 'selected.json'), 'utf8'));
+        release = JSON.parse(fs.readFileSync(path.join(root, '.cocos-agent', 'content-releases', `${releaseId}.json`), 'utf8'));
+    } catch (error) {
+        return fail(error.code === 'ENOENT' ? 'RELEASE_NOT_SELECTED' : 'RELEASE_READ_FAILED', 'Selected content release or its record is missing.');
+    }
+    if (pointer.releaseId !== releaseId || pointer.fingerprint !== release.fingerprint
+        || (expectedFingerprint !== undefined && expectedFingerprint !== pointer.fingerprint))
+        return fail('RELEASE_CHANGED', 'The selected release or its expected fingerprint changed.');
+    const checked = contentRelease.validate({ projectRoot: root, creatorVersion: '2.4.15', manifest: release });
+    if (!checked.success || checked.fingerprint !== pointer.fingerprint)
+        return fail('RELEASE_CHANGED', 'Revalidation of the selected release failed.');
+    if (release.assets.some((asset) => !uuidPattern.test(asset.resourceUuid || '')))
+        return fail('INVALID_RESOURCE_IDENTITY', 'A release asset has no valid Creator texture UUID.');
+    return { success: true, release, fingerprint: checked.fingerprint };
+}
+
+function realPathWithin(root, candidate) {
+    const realRoot = fs.realpathSync(root);
+    let existing = path.resolve(candidate);
+    while (!fs.existsSync(existing)) {
+        const parent = path.dirname(existing);
+        if (parent === existing) return false;
+        existing = parent;
+    }
+    const realExisting = fs.realpathSync(existing);
+    return realExisting === realRoot || realExisting.startsWith(`${realRoot}${path.sep}`);
+}
+
+function resolveCreatorExecutable(options = {}) {
+    const configured = options.creatorExecutable || process.env.COCOS_CREATOR_2_4_15_EXECUTABLE
+        || '/Applications/Cocos/Creator/2.4.15/CocosCreator.app/Contents/MacOS/CocosCreator';
+    let executable;
+    try {
+        executable = fs.realpathSync(configured);
+        if (!fs.statSync(executable).isFile()) throw Error('not executable');
+        fs.accessSync(executable, fs.constants.X_OK);
+    } catch (_) { return fail('CREATOR_NOT_FOUND', 'Creator 2.4.15 executable is not available.'); }
+    const match = executable.match(/^(.*\.app)\/Contents\/MacOS\/[^/]+$/);
+    if (!match) return fail('CREATOR_VERSION_UNVERIFIED', 'Creator executable must be inside a versioned macOS application bundle.');
+    let plist;
+    try { plist = fs.readFileSync(path.join(match[1], 'Contents', 'Info.plist'), 'utf8'); }
+    catch (_) { return fail('CREATOR_VERSION_UNVERIFIED', 'Creator application version could not be read.'); }
+    const version = plist.match(/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/)?.[1];
+    if (version !== '2.4.15') return fail('CREATOR_VERSION_MISMATCH', 'The configured Creator application is not version 2.4.15.');
+    return { success: true, executable };
+}
+
+function plan(params, options = {}) {
+    const target = project(params);
+    if (!target.success) return target;
+    const { buildId, releaseId, expectedFingerprint } = params;
+    if (!buildIdPattern.test(buildId || '') || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(releaseId || '')
+        || ['selected', 'effective'].includes(releaseId))
+        return fail('INVALID_ARGUMENT', 'Provide safe buildId and selected releaseId values.');
+    const selected = selectedRelease(target.root, releaseId, expectedFingerprint);
+    if (!selected.success) return selected;
+    const relativeBuildPath = `build/cocos-agent/${buildId}`;
+    const outputRoot = path.resolve(target.root, relativeBuildPath);
+    if (!realPathWithin(target.root, outputRoot)) return fail('UNSAFE_BUILD_PATH', 'Build output resolves outside the project.');
+    if (fs.existsSync(outputRoot)) return fail('BUILD_OUTPUT_EXISTS', 'Build output must be a new, empty path; existing output is never overwritten.');
+    const executable = resolveCreatorExecutable(options);
+    if (!executable.success) return executable;
+    const buildOptions = `platform=web-mobile;buildPath=./${relativeBuildPath};debug=false;md5Cache=true`;
+    return { success: true, outcome: 'ready', creatorVersion: '2.4.15', platform: 'web-mobile',
+        projectRoot: target.root, releaseId, fingerprint: selected.fingerprint, buildId,
+        outputRoot, executable: executable.executable,
+        args: ['--path', target.root, '--build', buildOptions],
+        includedResources: selected.release.assets.map((asset) => ({ id: asset.id, runtimePath: asset.runtimePath,
+            resourceUuid: asset.resourceUuid })) };
+}
+
+function compactUuid(uuid) {
+    const hex = uuid.replace(/-/g, '').toLowerCase();
+    const encoded = Buffer.from(hex.slice(2), 'hex').toString('base64').replace(/=/g, '');
+    return `${hex.slice(0, 2)}/${encoded.slice(1)}`;
+}
+
+function fileVersion(entries, index) {
+    if (!Array.isArray(entries)) return null;
+    for (let cursor = 0; cursor + 1 < entries.length; cursor += 2) {
+        if (entries[cursor] === index && typeof entries[cursor + 1] === 'string') return entries[cursor + 1];
+    }
+    return null;
+}
+
+function walk(root, visit, maxEntries = 50000) {
+    const stack = [{ directory: root, depth: 0 }];
+    let visited = 0;
+    while (stack.length) {
+        const current = stack.pop();
+        if (current.depth > 14) continue;
+        let entries;
+        try { entries = fs.readdirSync(current.directory, { withFileTypes: true }); }
+        catch (_) { continue; }
+        for (const entry of entries) {
+            visited += 1;
+            if (visited > maxEntries) return false;
+            const filename = path.join(current.directory, entry.name);
+            if (entry.isDirectory()) stack.push({ directory: filename, depth: current.depth + 1 });
+            else if (entry.isFile() && visit(filename) === false) return true;
+        }
+    }
+    return true;
+}
+
+function verifyOutput(outputRoot, release) {
+    if (!fs.existsSync(outputRoot) || !fs.statSync(outputRoot).isDirectory())
+        return fail('BUILD_OUTPUT_MISSING', 'Creator did not produce the planned output directory.');
+    let hasIndex = false;
+    const configs = [];
+    const completeWalk = walk(outputRoot, (filename) => {
+        if (path.basename(filename).toLowerCase() === 'index.html') hasIndex = true;
+        if (/^config(?:\.[a-f0-9]+)?\.json$/i.test(path.basename(filename))) {
+            try {
+                const value = JSON.parse(fs.readFileSync(filename, 'utf8'));
+                if (value && value.name === 'resources' && value.paths && value.uuids && value.types) configs.push({ filename, value });
+            } catch (_) { /* Ignore unrelated or non-JSON config files. */ }
+        }
+    });
+    if (!completeWalk) return fail('BUILD_OUTPUT_TOO_LARGE', 'Build output exceeds the bounded inspection limit.');
+    if (!hasIndex) return fail('BUILD_OUTPUT_INCOMPLETE', 'No Web-Mobile index.html was found in the output.');
+    for (const candidate of configs) {
+        const { filename, value } = candidate;
+        const bundleRoot = path.dirname(filename);
+        const verified = [];
+        let allAssetsPresent = true;
+        for (const asset of release.assets) {
+            const index = Object.keys(value.paths).find((key) => {
+                const entry = value.paths[key];
+                return Array.isArray(entry) && entry[0] === asset.runtimePath;
+            });
+            const pathEntry = index === undefined ? null : value.paths[index];
+            const typeIndex = pathEntry && Number.isInteger(pathEntry[1]) ? pathEntry[1] : -1;
+            const uuid = index === undefined ? null : value.uuids[Number(index)];
+            const importHash = index === undefined ? null : fileVersion(value.versions?.import, Number(index));
+            const nativeHash = index === undefined ? null : fileVersion(value.versions?.native, Number(index));
+            const importBase = typeof value.importBase === 'string' ? value.importBase : 'import';
+            const nativeBase = typeof value.nativeBase === 'string' ? value.nativeBase : 'native';
+            const importFile = importHash && path.resolve(bundleRoot, importBase, asset.resourceUuid.slice(0, 2), `${asset.resourceUuid}.${importHash}.json`);
+            const nativeFile = nativeHash && path.resolve(bundleRoot, nativeBase, asset.resourceUuid.slice(0, 2), `${asset.resourceUuid}.${nativeHash}.png`);
+            const matches = value.types[typeIndex] === 'cc.Texture2D' && uuid === compactUuid(asset.resourceUuid)
+                && importFile && realPathWithin(outputRoot, importFile) && fs.existsSync(importFile)
+                && nativeFile && realPathWithin(outputRoot, nativeFile) && fs.existsSync(nativeFile);
+            if (!matches) { allAssetsPresent = false; break; }
+            verified.push({ id: asset.id, runtimePath: asset.runtimePath, resourceUuid: asset.resourceUuid,
+                importFile: path.relative(outputRoot, importFile), nativeFile: path.relative(outputRoot, nativeFile) });
+        }
+        if (allAssetsPresent) return { success: true, outcome: 'verified', platform: 'web-mobile',
+            outputRoot, configPath: path.relative(outputRoot, filename), fingerprint: release.fingerprint,
+            resourceCount: verified.length, resources: verified };
+    }
+    return fail(configs.length ? 'BUILD_ASSET_MISSING' : 'BUILD_RESOURCE_CONFIG_MISSING',
+        configs.length ? 'Built resources bundle does not contain every release texture identity and file.'
+            : 'No resources bundle configuration was found in the Web-Mobile output.');
+}
+
+function writeRecord(filename, value, exclusive = false) {
+    fs.mkdirSync(path.dirname(filename), { recursive: true, mode: 0o700 });
+    if (exclusive) return fs.writeFileSync(filename, `${JSON.stringify(value)}\n`, { flag: 'wx', mode: 0o600 });
+    const temporary = `${filename}.${process.pid}.tmp`;
+    try {
+        fs.writeFileSync(temporary, `${JSON.stringify(value)}\n`, { flag: 'wx', mode: 0o600 });
+        fs.renameSync(temporary, filename);
+    } finally { try { fs.unlinkSync(temporary); } catch (_) { /* renamed */ } }
+}
+
+function execute(params, options = {}) {
+    const planned = plan(params, options);
+    if (!planned.success) return planned;
+    const filename = recordFile(planned.projectRoot, planned.buildId);
+    if (fs.existsSync(filename)) return fail('BUILD_ID_CONFLICT', 'Build ID already has a persisted operation record.');
+    const releaseResult = selectedRelease(planned.projectRoot, planned.releaseId, planned.fingerprint);
+    if (!releaseResult.success) return releaseResult;
+    const record = { contractVersion: '0.1', buildId: planned.buildId, creatorVersion: planned.creatorVersion,
+        platform: planned.platform, projectRoot: planned.projectRoot, releaseId: planned.releaseId,
+        fingerprint: planned.fingerprint, outputRoot: planned.outputRoot, state: 'running',
+        releaseManifest: releaseResult.release,
+        invocation: { executable: planned.executable, args: planned.args }, startedAt: new Date().toISOString() };
+    try { writeRecord(filename, record, true); }
+    catch (error) {
+        if (error.code === 'EEXIST') return fail('BUILD_ID_CONFLICT', 'Another Host already reserved this buildId.');
+        return fail('BUILD_RECORD_WRITE_FAILED', 'Could not reserve the build operation record.');
+    }
+    try { fs.mkdirSync(path.dirname(planned.outputRoot), { recursive: true }); }
+    catch (_) {
+        const failed = { ...record, state: 'failed', finishedAt: new Date().toISOString(), error: { code: 'BUILD_PATH_CREATE_FAILED' } };
+        writeRecord(filename, failed);
+        return fail('BUILD_PATH_CREATE_FAILED', 'Could not create the isolated build parent directory.');
+    }
+    if (!realPathWithin(planned.projectRoot, planned.outputRoot) || fs.existsSync(planned.outputRoot)) {
+        const failed = { ...record, state: 'failed', finishedAt: new Date().toISOString(), error: { code: 'BUILD_OUTPUT_CHANGED', message: 'Output path changed after planning.' } };
+        writeRecord(filename, failed);
+        return fail('BUILD_OUTPUT_CHANGED', 'Build output path changed or appeared after planning; no build was started.');
+    }
+    const run = options.spawnSync || spawnSync;
+    let child;
+    try { child = run(planned.executable, planned.args, { cwd: planned.projectRoot, encoding: 'utf8', timeout: 20 * 60 * 1000, maxBuffer: 8 * 1024 * 1024 }); }
+    catch (_) { child = { error: { code: 'SPAWN_FAILED' }, status: null, signal: null }; }
+    let result;
+    if (child.error || child.status !== 0) {
+        const code = child.error?.code === 'ETIMEDOUT' ? 'BUILD_TIMEOUT'
+            : child.error?.code === 'ENOENT' ? 'CREATOR_NOT_FOUND' : 'BUILD_FAILED';
+        const failed = { ...record, state: 'failed', finishedAt: new Date().toISOString(),
+            error: { code, signal: child.signal || null, exitCode: Number.isInteger(child.status) ? child.status : null } };
+        writeRecord(filename, failed);
+        return fail(code, 'Creator Web-Mobile build did not exit successfully.');
+    }
+    result = verifyOutput(planned.outputRoot, releaseResult.release);
+    const completed = result.success
+        ? { ...record, state: 'completed', finishedAt: new Date().toISOString(), artifact: result }
+        : { ...record, state: 'needs-review', finishedAt: new Date().toISOString(), error: result.error };
+    writeRecord(filename, completed);
+    return result.success ? { ...result, buildId: planned.buildId, releaseId: planned.releaseId }
+        : { ...result, buildId: planned.buildId, releaseId: planned.releaseId };
+}
+
+function get(params) {
+    const target = project(params);
+    if (!target.success) return target;
+    if (!buildIdPattern.test(params.buildId || '')) return fail('INVALID_ARGUMENT', 'Provide a valid buildId.');
+    try {
+        const record = JSON.parse(fs.readFileSync(recordFile(target.root, params.buildId), 'utf8'));
+        if (record.projectRoot !== target.root || record.creatorVersion !== '2.4.15') return fail('BUILD_RECORD_MISMATCH', 'Build record belongs to another target.');
+        return { success: true, outcome: 'read', build: record };
+    } catch (error) { return fail(error.code === 'ENOENT' ? 'BUILD_NOT_FOUND' : 'BUILD_RECORD_INVALID', 'Build operation record is missing or invalid.'); }
+}
+
+function reconcile(params) {
+    const current = get(params);
+    if (!current.success) return current;
+    const record = current.build;
+    if (record.state === 'completed' || record.state === 'failed') return { ...current, outcome: 'already-terminal' };
+    if (!['running', 'needs-review'].includes(record.state) || !record.releaseManifest
+        || !path.isAbsolute(record.outputRoot) || !realPathWithin(record.projectRoot, record.outputRoot))
+        return fail('BUILD_RECORD_INVALID', 'Build record cannot be reconciled safely.');
+    const checked = contentRelease.validate({ projectRoot: record.projectRoot,
+        creatorVersion: '2.4.15', manifest: record.releaseManifest });
+    if (!checked.success || checked.fingerprint !== record.fingerprint) {
+        const needsReview = { ...record, state: 'needs-review', finishedAt: new Date().toISOString(),
+            error: { code: 'RELEASE_CHANGED' } };
+        writeRecord(recordFile(record.projectRoot, record.buildId), needsReview);
+        return fail('RELEASE_CHANGED', 'Current project assets no longer match the build record.');
+    }
+    const verified = verifyOutput(record.outputRoot, checked.release);
+    const reconciled = verified.success
+        ? { ...record, state: 'completed', finishedAt: new Date().toISOString(), artifact: verified, error: undefined }
+        : { ...record, state: 'needs-review', finishedAt: new Date().toISOString(), error: verified.error };
+    writeRecord(recordFile(record.projectRoot, record.buildId), reconciled);
+    return verified.success ? { ...verified, buildId: record.buildId, releaseId: record.releaseId, reconciled: true }
+        : { ...verified, buildId: record.buildId, releaseId: record.releaseId, reconciled: true };
+}
+
+function handle(method, params, options = {}) {
+    if (method === 'content.build.plan') return plan(params, options);
+    if (method === 'content.build.execute') return execute(params, options);
+    if (method === 'content.build.get') return get(params);
+    if (method === 'content.build.reconcile') return reconcile(params);
+    return fail('UNKNOWN_METHOD', 'Unknown content build method.');
+}
+
+module.exports = { handle, plan, execute, get, reconcile, verifyOutput, compactUuid };
