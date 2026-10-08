@@ -102,7 +102,7 @@ node tools/cocos-agent-bridge/catalog-host.js \
 
 ## Agent 调度入口
 
-需要由长期运行的 Agent 进程调用时，启动 `node tools/cocos-agent-bridge/agent-jsonl.js`，在 stdin 逐行发送 JSON 请求。它提供实例/能力查询、命令调度、场景组合、批量资源，以及本地内容版本的 `content.plan/stage/get/select/rollback` 与 `content.runtime.accept`。选中版本只改 Host 指针；运行时成功回执另记 `effective`。请求格式和双版本验收见 [`cocos-agent-local-api-0.1.md`](../../docs/agent-foundation/cocos-agent-local-api-0.1.md)；版本合同与 Web 接线见 [`content-release-0.1.md`](../../docs/agent-foundation/content-release-0.1.md)、[`content-runtime-web-0.1.md`](../../docs/agent-foundation/content-runtime-web-0.1.md)。
+需要由长期运行的 Agent 进程调用时，启动 `node tools/cocos-agent-bridge/agent-jsonl.js`，在 stdin 逐行发送 JSON 请求。它提供实例/能力查询、命令调度、场景组合、批量资源，以及本地内容版本的 `content.plan/stage/get/select/rollback`、从已验收 2.4 场景流水线生成清单的 `content.fromScene.plan/stage` 与 `content.runtime.accept`。选中版本只改 Host 指针；运行时成功回执另记 `effective`。请求格式和双版本验收见 [`cocos-agent-local-api-0.1.md`](../../docs/agent-foundation/cocos-agent-local-api-0.1.md)；版本合同与 Web 接线见 [`content-release-0.1.md`](../../docs/agent-foundation/content-release-0.1.md)、[`content-runtime-web-0.1.md`](../../docs/agent-foundation/content-runtime-web-0.1.md)。
 
 2.4 Mac 原生开发包使用独立会话文件，不读取浏览器 URL。先从包内探针或运行日志取得 `jsb.fileUtils.getWritablePath()`，然后运行：
 

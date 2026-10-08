@@ -8,6 +8,16 @@ Host 在 `.cocos-agent/content-releases/<releaseId>.json` 保存不可变记录�
 
 实际部署路径目前就是当前工程的 Creator 构建包内 `resources`。两版 Web 预览中，独立验收宿主已把选中记录交给版本专属运行时适配器并读回成功/失败状态；游戏本身尚未在场景中持久挂接 Host 通道，不能把这条测试通道当作已发布游戏能力。两版早期 Web 可见替换与 Mac 加载/释放证据见[动态内容首条切片](dynamic-content-first-slice.md)。新的远端发布必须另外定义 URL、构建版本 Hash、依赖下载、缓存和回退策略。
 
-2026-10-07，两版示例中的红蓝 PNG 与真实 Creator `.meta` 已通过 `content.plan` 只读预检；[计划轨迹](traces/cocos-agent-content-release-plan-0.1.jsonl)分别记录版本指纹和 Texture2D UUID。自动化测试使用临时工程覆盖两版 `stage → select → get → rollback`、陈旧指针拒绝、依赖环和源文件改动阻断。真实示例尚未写入或选择内容版本，因此不能称为运行中的游戏已应用该版本。
+### 从已验收场景流水线生成运行时版本（仅 Creator 2.4.15）
+
+`content.fromScene.plan` 和 `content.fromScene.stage` 将[资源到场景流水线](cocos-agent-resource-scene-pipeline-0.1.md)接到本地内容版本。调用方显式给出 `pipelineId`、`releaseId`、入口 PNG 名称，以及每个 PNG 对应的稳定 `assetId` 和依赖 ID；源路径、SHA-256、Creator 资源 UUID 和 2.4 运行路径均从流水线记录及工程磁盘读回派生，不接受调用方覆盖。计划阶段要求父流水线为 `completed`，也就是场景写入已经逐项预览验收；随后再次实时核对 AssetDB、`.meta`、运行时 Sprite 引用和序列化场景关系，并由 `content.plan` 重验源文件摘要和纹理 UUID。任何资源身份变化或场景上下文变化都会阻断暂存。
+
+`content.fromScene.stage` 只创建标准 `content-releases/<releaseId>.json` 不可变版本记录，不自动调用 `content.select`，不改场景，也不生成 Creator 构建包。Agent 应先检查返回清单和指纹，再按预期当前版本调用 `content.select`；运行时是否实际切换仍以认证通道的 `applied`/`already-active` 回执及 `effective.json` 为准。这个连接只适用于 2.4.15 已验收的 PNG Sprite 与内置 `resources`；尚未实现 Bundle 构建、远端分发、原生包增量更新或 3.8 适配。
+
+2026-10-07，两版示例中的红蓝 PNG 与真实 Creator `.meta` 已通过 `content.plan` 只读预检；[计划轨迹](traces/cocos-agent-content-release-plan-0.1.jsonl)分别记录版本指纹和 Texture2D UUID。自动化测试使用临时工程覆盖两版 `stage → select → get → rollback`、陈旧指针拒绝、依赖环和源文件改动阻断。当时真实示例尚未写入或选择内容版本。
+
+2026-10-08，Creator 2.4.15 `helloworld` 实机完成“资源到场景流水线 → 预览验收 → `content.fromScene.plan/stage` → `content.select` → Web 运行时应用 → `effective` 回执”闭环。两张测试 PNG 先经 AssetDB 导入并写入 Canvas；预览中红蓝 Sprite 均可见。内容计划再次实时校验两项资产和场景引用为 `valid`，派生的 Texture UUID、源摘要与 2.4 无扩展名运行路径进入 release 清单；选择后运行时实际应用蓝色入口资源，回执为 `applied`、引用计数为 2，Host 接受 `runtime-observed`。完整记录见[实机轨迹](traces/cocos-agent-content-from-scene-2.4-web.jsonl)。
+
+测试结束后流水线补偿通过，PNG、`.meta` 和临时场景 Sprite 已移除；测试 release、选中/生效指针和临时源图均已清理，`.fire` 文件按原 Git 字节恢复。此闭环仅验证 2.4.15 Web 预览和内置 `resources` 加载，不包括 Creator 构建产物、Bundle、远端分发、原生增量更新或 3.8。
 
 官方基准：[2.4 配置和加载 Asset Bundle](https://docs.cocos.com/creator/2.4/manual/zh/scripting/asset-bundle.html)、[3.8 Asset Bundle 介绍](https://docs.cocos.com/creator/3.8/manual/zh/asset/bundle.html)、[2.4 资源释放](https://docs.cocos.com/creator/2.4/manual/zh/asset-manager/release-manager.html)、[3.8 资源释放](https://docs.cocos.com/creator/3.8/manual/zh/asset/release-manager.html)。本合同的 `releaseId` 是 CocosAgent 自有版本，不等同于 Creator 构建产生的 Bundle Hash。

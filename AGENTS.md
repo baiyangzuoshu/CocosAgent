@@ -13,6 +13,8 @@
 
 新增的 `assets.scene.plan/execute/get/preview.accept/compensate/validate/repair` 已在 Creator 2.4.15 打通资源导入、Texture/SpriteFrame UUID 核对、Canvas 场景引用、磁盘读回、场景重开、Web 预览验收和失败补偿。父记录保存在 `.cocos-agent/asset-scene-pipelines/`，并关联独立导入批次、场景批次和单项操作记录；补偿先撤销场景引用，再经 AssetDB 删除仅在身份和无序列化引用检查通过的本流水线资源。实测中 AssetDB 删除回执不确定时先返回 `needs-review`，随后凭磁盘缺失与 UUID 引用扫描完成显式恢复对账。新增只读校验会交叉核对 PNG 字节、`.meta` UUID 链、AssetDB、活动场景、序列化场景引用和批次记录；修复仅允许唯一的陈旧 AssetDB URL 映射分支。Creator 实机已验证资源校验、已有效时的 `already-valid` 无刷新结果及补偿清理；陈旧映射的真实 `Editor.assetdb.refresh` 分支目前仅由模拟测试覆盖，未在编辑器中诱发。仅 Creator 2.4.15 PNG Sprite/Web 路径已验证；3.8、原生及其他资源类型尚未验证。入口合同、验收限制和 2.4 专属 skill 见 `docs/agent-foundation/cocos-agent-resource-scene-pipeline-0.1.md`、`docs/agent-foundation/skills/cocos2-resource-scene-pipeline/SKILL.md` 与 `docs/agent-foundation/traces/cocos-agent-resource-scene-pipeline-2.4-web.jsonl`、`docs/agent-foundation/traces/cocos-agent-resource-scene-validation-2.4-web.jsonl`。
 
+`content.fromScene.plan/stage` 只接受已完成预览验收的 2.4 资源场景流水线，并实时重验 AssetDB、UUID、场景引用和源字节，再从流水线身份派生内置 `resources` 内容清单。`stage` 只落不可变 release 记录，不会自动选中版本、构建包或发布远端；随后由 `content.select` 和 2.4 认证运行时通道完成选择与 `effective` 回执。2026-10-08 已在 2.4.15 Web 预览实测从 PNG 导入、场景挂接、预览验收到蓝图运行时应用的闭环，并在验收后补偿清理；不代表 Creator 构建包、Bundle、远端或原生增量更新已验证。轨迹与合同见 `docs/agent-foundation/content-release-0.1.md` 和 `docs/agent-foundation/traces/cocos-agent-content-from-scene-2.4-web.jsonl`。
+
 两版新增红蓝 PNG 样本用于 Web 运行时动态纹理测试。2.4 将 PNG 主资源按 `cc.Texture2D` 从基本名加载；3.8 本样本的纹理位于 `基本名/texture` 子资源。两版各完成六轮显式引用持有、替换、释放，旧纹理在 Web 预览中从对象缓存移除；追加的临时 Sprite 探针已用两版红蓝画面截图验证可见替换和下一资源加载失败时保留旧画面。这尚不证明材质替换、热更新或原生性能。详情见 `docs/agent-foundation/dynamic-content-first-slice.md` 与对应版本 skill。
 
 ## 项目结构

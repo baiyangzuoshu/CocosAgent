@@ -52,7 +52,7 @@ function validate(params) {
             || new Set(asset.dependsOn).size !== asset.dependsOn.length) return fail('INVALID_ASSET', 'Invalid asset identity, source, digest or dependencies.');
         ids.add(asset.id);
         sources.add(asset.source.toLowerCase());
-        const base = path.basename(asset.source, '.png');
+        const base = path.basename(asset.source).replace(/\.png$/i, '');
         const runtimePath = params.creatorVersion === '2.4.15' ? base : `${base}/texture`;
         if (asset.runtimePath !== runtimePath) return fail('RUNTIME_PATH_MISMATCH', `Expected ${runtimePath} for ${asset.id}.`);
         const filename = path.join(target.root, asset.source);

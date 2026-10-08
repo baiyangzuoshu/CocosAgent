@@ -18,7 +18,7 @@
         "required": ["id", "source", "sha256", "runtimePath", "dependsOn"],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" },
-          "source": { "type": "string", "pattern": "^assets/resources/[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$" },
+          "source": { "type": "string", "pattern": "^assets/resources/[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.[pP][nN][gG]$" },
           "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
           "runtimePath": { "type": "string" },
           "dependsOn": { "type": "array", "uniqueItems": true, "items": { "type": "string" } }

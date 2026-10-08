@@ -205,7 +205,10 @@ function start(options) {
 }
 
 if (require.main === module) {
-    const at = (flag) => process.argv[process.argv.indexOf(flag) + 1];
+    const at = (flag) => {
+        const index = process.argv.indexOf(flag);
+        return index < 0 ? undefined : process.argv[index + 1];
+    };
     const platform = at('--platform') || 'web-preview';
     start({ projectRoot: at('--project'), creatorVersion: at('--creator-version'), platform,
         previewUrl: at('--preview-url'), nativeWritablePath: at('--native-writable-path') })
