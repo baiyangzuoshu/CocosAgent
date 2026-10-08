@@ -4,7 +4,7 @@
 
 `asset.searchPng` 是 Creator **2.4.15** 的只读语义命令。它用于 Agent 先发现已导入 PNG 的编辑器身份，再决定后续是否把 SpriteFrame 引用到场景。3.8 不实现此命令。
 
-扩展调用 Creator 2.4 [`Editor.assetdb.queryAssets`](https://docs.cocos.com/creator/2.4/manual/zh/extension/api/asset-db/asset-db-renderer.html)，按 `texture` 类型查询 AssetDB 中 PNG 主资源，再用 `.meta` 交叉核对磁盘身份。AssetDB 返回 `url`、`path`、`uuid`、`type` 和 `isSubAsset`；查询不修改资源或场景。
+扩展调用 Creator 2.4 [`Editor.assetdb.queryAssets`](https://docs.cocos.com/creator/2.4/manual/zh/extension/api/asset-db/asset-db-renderer.html)，按 `texture` 类型查询 AssetDB 中 PNG 主资源，再用 `.meta` 交叉核对磁盘身份。AssetDB 返回 `url`、`path`、`uuid`、`type` 和 `isSubAsset`；查询不修改资源或场景。过滤、分页与元数据核对位于扩展的 `asset-search.js`，不依赖 Creator 全局对象，可用临时工程 fixture 单测。
 
 ## 输入
 
@@ -66,6 +66,6 @@
 - `ASSET_QUERY_FAILED`：AssetDB 查询或回调失败。
 - `CAPABILITY_CATALOG_INVALID`：运行中的扩展目录与当前 Host 合同版本不一致；刷新/重载扩展后重试能力查询。
 
-本切片的 MCP schema、实例分发、Host WebSocket 协议模拟和技能结构校验已通过。当前 Creator 2.4 实机仍载入旧能力目录，故真实 AssetDB 结果及元数据状态尚未实机验收；失败发生在命令执行前，没有触及场景或资源。模拟与聚焦测试可用 `node tools/cocos-agent-bridge/asset-search-host.mock-test.js`、`node tools/cocos-agent-bridge/catalog-extension-contract.test.js`、`node tools/cocos-agent-bridge/agent-dispatch.test.js` 及 `cd tools/cocos-agent-bridge/mcp && npm test` 重跑。
+本切片的 MCP schema、实例分发、Host WebSocket 协议模拟和技能结构校验已通过。隔离 fixture 单测覆盖 PNG 主资源筛选、子资源排除、元数据身份与 SpriteFrame UUID、缺失/不匹配元数据、符号链接和路径穿越防护、分页及 AssetDB 错误；运行 `node 2.4.15NewProject/packages/cocos-agent-bridge/asset-search.test.js`。当前 Creator 2.4 实机仍载入旧能力目录，故真实 AssetDB 结果及元数据状态尚未实机验收；失败发生在命令执行前，没有触及场景或资源。其余模拟与聚焦测试可用 `node tools/cocos-agent-bridge/asset-search-host.mock-test.js`、`node tools/cocos-agent-bridge/catalog-extension-contract.test.js`、`node tools/cocos-agent-bridge/agent-dispatch.test.js` 及 `cd tools/cocos-agent-bridge/mcp && npm test` 重跑。
 
-实现：`2.4.15NewProject/packages/cocos-agent-bridge/main.js`、`tools/cocos-agent-bridge/bridge-host.js`、`tools/cocos-agent-bridge/agent-dispatch.js`、`tools/cocos-agent-bridge/catalog-host.js` 与 `tools/cocos-agent-bridge/mcp/mcp-server.mjs`。
+实现：`2.4.15NewProject/packages/cocos-agent-bridge/main.js`、可单测的查询辅助模块 `2.4.15NewProject/packages/cocos-agent-bridge/asset-search.js`、`tools/cocos-agent-bridge/bridge-host.js`、`tools/cocos-agent-bridge/agent-dispatch.js`、`tools/cocos-agent-bridge/catalog-host.js` 与 `tools/cocos-agent-bridge/mcp/mcp-server.mjs`。

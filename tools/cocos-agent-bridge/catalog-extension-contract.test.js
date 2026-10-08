@@ -9,7 +9,8 @@ const inputs = require('./catalog.schema.json').$defs;
 function loadCatalog(relativePath) {
     const filename = path.resolve(__dirname, '..', '..', relativePath);
     const module = { exports: {} };
-    const localRequire = (name) => name === 'ws' ? {} : require(name);
+    const localRequire = (name) => name === 'ws' ? {} : name === './asset-search'
+        ? require(path.resolve(path.dirname(filename), name)) : require(name);
     const source = `${fs.readFileSync(filename, 'utf8')}\nmodule.exports.testCatalog = commandCatalog;`;
     new Function('require', 'module', 'exports', '__dirname', source)(localRequire, module, module.exports, path.dirname(filename));
     return module.exports.testCatalog;

@@ -4,6 +4,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const path = require('path');
 const WebSocket = require('ws');
+const { searchPngAssets } = require('./asset-search');
 
 const CREATOR_VERSION = '2.4.15';
 const PROTOCOL_VERSION = '0.1';
@@ -419,70 +420,13 @@ function searchPng(message) {
     }
     const failSearch = (code, error) => send({ type: 'response', id: message.id, ok: false,
         error: { code, message: String(error && error.message || error || code).slice(0, 400) } });
-    if (!Editor.assetdb || typeof Editor.assetdb.queryAssets !== 'function') { failSearch('ASSETDB_UNAVAILABLE'); return; }
-    let assetsRoot;
-    try { assetsRoot = fs.realpathSync(path.resolve(PROJECT_ROOT, 'assets')); }
-    catch (error) { failSearch('ASSET_QUERY_FAILED', error); return; }
-    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const query = search.query.toLocaleLowerCase();
-    try {
-        Editor.assetdb.queryAssets('db://assets/**/*', 'texture', (error, results) => {
-            if (error || !Array.isArray(results)) { failSearch('ASSET_QUERY_FAILED', error || 'AssetDB returned no result list.'); return; }
-            try {
-                const matches = results.filter((item) => item && item.isSubAsset !== true && item.type === 'texture'
-                    && typeof item.url === 'string' && item.url.startsWith('db://assets/') && /\.png$/i.test(item.url)
-                    && typeof item.uuid === 'string' && uuidPattern.test(item.uuid))
-                    .map((item) => ({ item, relativeUrl: item.url.slice('db://assets/'.length) }))
-                    .filter(({ relativeUrl }) => {
-                        let decoded = relativeUrl;
-                        try { decoded = decodeURIComponent(relativeUrl); } catch (_) { /* Keep the AssetDB URL for literal matching. */ }
-                        return `${decoded} ${path.posix.basename(decoded)}`.toLocaleLowerCase().includes(query);
-                    })
-                    .sort((left, right) => left.item.url.localeCompare(right.item.url));
-                const total = matches.length;
-                const page = matches.slice(search.offset, search.offset + search.limit);
-                const items = page.map(({ item, relativeUrl }) => {
-                    let metadataStatus = 'unavailable';
-                    let spriteFrameUuid = null;
-                    let width = null;
-                    let height = null;
-                    let decoded = relativeUrl;
-                    try { decoded = decodeURIComponent(relativeUrl); } catch (_) { /* Keep the AssetDB URL for display. */ }
-                    try {
-                        const segments = decoded.split('/');
-                        if (!decoded || decoded.includes('\\') || segments.some((segment) => !segment || segment === '.' || segment === '..'))
-                            throw new Error('Asset URL is not a safe project-relative path.');
-                        const assetPath = path.resolve(assetsRoot, ...segments);
-                        if (!assetPath.startsWith(`${assetsRoot}${path.sep}`)) throw new Error('Asset path escaped project assets.');
-                        const realAssetPath = fs.realpathSync(assetPath);
-                        if (!realAssetPath.startsWith(`${assetsRoot}${path.sep}`)) throw new Error('Asset path resolves outside project assets.');
-                        const assetStat = fs.lstatSync(assetPath);
-                        const metaStat = fs.lstatSync(`${assetPath}.meta`);
-                        if (!assetStat.isFile() || assetStat.isSymbolicLink() || !metaStat.isFile() || metaStat.isSymbolicLink())
-                            throw new Error('Asset and metadata must be regular files.');
-                        const meta = JSON.parse(fs.readFileSync(`${assetPath}.meta`, 'utf8'));
-                        if (meta.importer !== 'texture' || meta.uuid !== item.uuid) metadataStatus = 'identity-mismatch';
-                        else {
-                            width = Number.isInteger(meta.width) && meta.width > 0 ? meta.width : null;
-                            height = Number.isInteger(meta.height) && meta.height > 0 ? meta.height : null;
-                            const frames = Object.values(meta.subMetas || {}).filter((sub) => sub && sub.importer === 'sprite-frame');
-                            if (frames.length === 1 && frames[0].rawTextureUuid === item.uuid && uuidPattern.test(frames[0].uuid || '')) {
-                                spriteFrameUuid = frames[0].uuid;
-                                metadataStatus = 'valid';
-                            } else metadataStatus = 'sprite-frame-unavailable';
-                        }
-                    } catch (_) { metadataStatus = 'metadata-unavailable'; }
-                    return { name: path.posix.basename(decoded), url: item.url, type: 'texture', textureUuid: item.uuid,
-                        spriteFrameUuid, width, height, metadataStatus };
-                });
-                send({ type: 'response', id: message.id, ok: true, result: {
-                    nonce: search.nonce, sessionId: activeSession.sessionId, creatorVersion: CREATOR_VERSION,
-                    projectRoot: PROJECT_ROOT, query: search.query, total, offset: search.offset, limit: search.limit,
-                    nextOffset: search.offset + items.length < total ? search.offset + items.length : null, items,
-                } });
-            } catch (queryError) { failSearch('ASSET_QUERY_FAILED', queryError); }
-        });
-    } catch (error) { failSearch('ASSET_QUERY_FAILED', error); }
+    searchPngAssets(Editor.assetdb, path.resolve(PROJECT_ROOT, 'assets'), search, (error, result) => {
+        if (error) { failSearch(error.code || 'ASSET_QUERY_FAILED', error); return; }
+        send({ type: 'response', id: message.id, ok: true, result: Object.assign({
+            nonce: search.nonce, sessionId: activeSession.sessionId, creatorVersion: CREATOR_VERSION,
+            projectRoot: PROJECT_ROOT,
+        }, result) });
+    });
 }
 
 function removeImportedPng(message) {
