@@ -113,4 +113,8 @@ node /absolute/path/Cocos_Engine/tools/cocos-agent-bridge/mcp/mcp-server.mjs \
 
 上述超时后新增的资源场景进度与合作取消切片已通过自动测试：opt-in progress token 可收到带命令名的通知；同项目重复 execute 会被阻止，回执仍可查询；明确取消会设置共享标记，模拟验收覆盖写入场景节点后补偿节点与资源、以及导入中途停止并清理已导入资源。Worker 消息通道另通过无编辑器副作用的请求测试。此自动验收没有对 Creator 执行资源导入或场景写入；因此不构成真实 MCP 写入/预览验收，也不证明客户端一定延长超时。
 
+2026-10-09 又通过 MCP 官方 SDK `StdioClientTransport` 在真实 Creator 2.4.15 中完成了进度、协作取消与补偿验收：Host 精确选中 `2.4.15NewProject` 的 `helloworld` 实例；两张 RGBA PNG 计划成功；收到逐 Host 命令进度；第一张 AssetDB 导入和 UUID 读回通过；取消请求被接受；第二张导入在下一写入边界以 `sideEffect=none` 拒绝；第一张资源经 `asset.removeImportedPng` 删除并由磁盘读回确认。父流水线终态为 `failed/EXECUTION_CANCELLED`、`rollbackStatus=passed`，两个节点均 `not-found`，资源目录无残留。另以隔离的单张 RGBA 图片验证 AssetDB 导入与受校验删除命令可各自成功。
+
+失败边界也有实机证据：灰度/透明 PNG 测试夹具触发 2.4 导入失败，AssetDB 留下宽高为零、无 SpriteFrame 子 UUID 的不完整 `.meta`；流水线返回 `needs-review/IMPORT_OUTCOME_UNCERTAIN` 并阻止自动删除，场景未写入。测试后按精确文件摘要、元数据 UUID 和完整无引用扫描移除了这两个专属临时文件。该结果不应外推为 Creator 对所有灰度 PNG 的限制；它记录的是该夹具与当前编辑器的导入结果。完整进度、取消、回滚及失败清理边界见 [`MCP 取消实机轨迹`](traces/cocos-agent-mcp-cancel-2.4.jsonl)。
+
 后续只读诊断确认 2.4 Creator 的活动场景不是空场景：`scene.snapshot` 读回 `helloworld` 下 12 个节点，包括 Canvas、Main Camera、background、cocos 与 label。7456 预览服务返回 HTTP 200，`settings.js` 指向 `db://assets/Scene/helloworld.fire`，quick-compile 与预览引擎脚本也均返回 200。Mac 当前再次锁屏；为区分页面启动问题，在隔离 Chrome headless + SwiftShader 中打开同一 URL，脚本编译并打印 `Cocos Creator v2.4.15`，但截图停在 splash，控制台伴随 `CVDisplayLinkCreateWithCGDisplay` 错误。该 headless 结果不能代表实际桌面浏览器，不能用作预览验收；还需要在解锁桌面后读取实际浏览器运行状态/控制台，再决定是否调用 `assets_scene_preview_accept`。诊断轨迹为第 50–52 条。

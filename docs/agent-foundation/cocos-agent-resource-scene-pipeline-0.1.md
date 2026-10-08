@@ -71,3 +71,9 @@ assets.scene.repair 仅接受本流水线管理、仍被场景引用且处于 ne
 在 Creator 2.4.15 的 `helloworld` 活动场景中，另一条双 PNG 流水线执行 `assets.scene.validate`，Red 与 Blue 均为 `valid`：PNG 摘要/尺寸、Texture/SpriteFrame `.meta` UUID 链、AssetDB URL 映射、活动场景 Sprite、`.fire` Canvas 父子关系和场景批次记录全部通过。随后调用 `assets.scene.repair`，结果为 `already-valid`，并将 repairId 与尝试状态写入父记录；此路径没有触发 AssetDB 刷新。最后显式补偿成功，两个 PNG 与 `.meta` 均由 AssetDB 删除，场景批次撤销通过。完整实例、流水线、批次、资源 UUID、校验结果和清理状态见 [`cocos-agent-resource-scene-validation-2.4-web.jsonl`](traces/cocos-agent-resource-scene-validation-2.4-web.jsonl)。
 
 这次运行没有诱发陈旧 URL→UUID 映射，因此真实 `Editor.assetdb.refresh` 修复分支尚未在 Creator 中验证；该分支目前只有模拟测试覆盖。Creator 保存场景时会规范化 `.fire` 中与本次操作无关的序列化字段。本次补偿后将测试场景文件按测试前 Git 基线字节恢复，并确认测试 PNG 与 `.meta` 已删除；这说明场景文件字节恢复是单独的测试清理动作，不应误记为场景批次补偿自身恢复了原始文件字节。
+
+### 取消与导入失败的 2.4.15 实机验收（2026-10-09）
+
+真实 MCP stdio 客户端在 `helloworld` 场景计划两张 1×1 RGBA PNG。收到 `asset.importPng` 开始通知后请求取消；第一张已完成并通过 UUID/meta 读回，第二张在下一写入边界被拒绝且 `sideEffect=none`。流水线随后调用 `asset.removeImportedPng` 清除第一张资源，终态为 `failed/EXECUTION_CANCELLED`、`rollbackStatus=passed`。两个目标场景节点均为 `not-found`，两张 PNG 和 `.meta` 均不存在。单张 PNG 的 AssetDB 导入和删除也分别独立通过。
+
+一次较早的灰度/透明 PNG 夹具导入失败并留下宽高为零、无 SpriteFrame 子资源的不完整 `.meta`。父流水线按设计进入 `needs-review`，未将不确定导入误报为无副作用，也未自动删除；随后仅在确认测试文件摘要、UUID 与工程内无序列化引用后清除该临时文件及 `.meta`。此例说明失败补偿的安全边界，不证明 Creator 普遍不支持灰度 PNG。逐条回执见 [`cocos-agent-mcp-cancel-2.4.jsonl`](traces/cocos-agent-mcp-cancel-2.4.jsonl)。
