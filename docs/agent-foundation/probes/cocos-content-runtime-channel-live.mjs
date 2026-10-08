@@ -24,6 +24,10 @@ let ownsContentState = false;
 let serial = 0;
 const pending = new Map();
 const browserErrors = [];
+const networkRequests = [];
+const interceptedRequests = [];
+let failBlueRequest = false;
+let blueTextureUuids = [];
 
 function manifest(color) {
     const basename = `cocos-agent-batch-${color}`;
@@ -41,7 +45,8 @@ async function until(label, predicate) {
         if (predicate()) return;
         await delay(100);
     }
-    throw Error(`TIMEOUT_${label}: ${JSON.stringify({ state: state(), events: host.events, browserErrors })}`);
+    throw Error(`TIMEOUT_${label}: ${JSON.stringify({ state: state(), events: host.events, browserErrors,
+        interceptedRequests, networkRequests })}`);
 }
 function send(method, params = {}) {
     const id = ++serial;
@@ -88,9 +93,22 @@ async function browser(url) {
         if (message.method === 'Runtime.exceptionThrown') browserErrors.push(message.params.exceptionDetails.exception?.description || message.params.exceptionDetails.text);
         if (message.method === 'Runtime.consoleAPICalled' && message.params.type === 'error')
             browserErrors.push(message.params.args.map((arg) => arg.value || arg.description || '').join(' '));
+        if (message.method === 'Network.requestWillBeSent') networkRequests.push(message.params.request.url);
+        if (message.method === 'Fetch.requestPaused') {
+            const { requestId, request } = message.params;
+            const isBlueTexture = blueTextureUuids.some((uuid) => request.url.includes(uuid));
+            if (failBlueRequest && isBlueTexture) {
+                interceptedRequests.push({ url: request.url, action: 'fail' });
+                send('Fetch.failRequest', { requestId, errorReason: 'Failed' }).catch((error) => browserErrors.push(String(error)));
+            } else {
+                interceptedRequests.push({ url: request.url, action: 'continue' });
+                send('Fetch.continueRequest', { requestId }).catch((error) => browserErrors.push(String(error)));
+            }
+        }
     };
     await send('Runtime.enable');
     await send('Page.enable');
+    await send('Network.enable');
 }
 async function observedTexture() {
     return evaluate("(function(){var s=cc.director.getScene();var c=s&&s.getChildByName('Canvas');var n=c&&c.getChildByName('CocosAgentContentRuntime');var f=n&&n.getComponent(cc.Sprite).spriteFrame;return !!(f&&f.getTexture())})()");
@@ -116,20 +134,42 @@ async function main() {
     await browser(host.previewUrl);
     await until('RED_EFFECTIVE', () => state().effective?.releaseId === ids.red);
     const red = { texture: await observedTexture(), image: await shot('red') };
+    const blueAsset = content.get({ projectRoot, creatorVersion: version, releaseId: ids.blue }).release.assets[0];
+    blueTextureUuids = [blueAsset.resourceUuid, '937a00eb-73dc-44f4-b41b-d17c8cd781f4'];
+    await send('Fetch.enable', { patterns: [{ urlPattern: '*', requestStage: 'Request' }] });
+    failBlueRequest = true;
     ensure(content.select({ projectRoot, creatorVersion: version, releaseId: ids.blue, expectedCurrent: ids.red }));
-    await until('BLUE_EFFECTIVE', () => state().effective?.releaseId === ids.blue);
-    const blue = { texture: await observedTexture(), image: await shot('blue') };
+    await until('BLUE_FAILURE_RETAINED', () => host.events.some((event) => event.type === 'receipt'
+        && event.receipt.releaseId === ids.blue && event.receipt.outcome === 'retained'));
+    failBlueRequest = false;
+    await send('Fetch.disable');
+    const failedRetained = { texture: await observedTexture(), image: await shot('failed-retained') };
+    if (failBlueRequest || interceptedRequests.filter((item) => item.action === 'fail').length < 1
+        || interceptedRequests.some((item) => item.action === 'continue' && blueTextureUuids.some((uuid) => item.url.includes(uuid)))
+        || state().selected?.releaseId !== ids.blue || state().effective?.releaseId !== ids.red
+        || !failedRetained.texture || pixel(failedRetained.image) !== '255,0,0')
+        throw Error(`FAILURE_RETENTION_MISMATCH ${JSON.stringify({ state: state(), interceptedRequests, networkRequests })}`);
+    ensure(content.rollback({ projectRoot, creatorVersion: version, expectedCurrent: ids.blue }));
+    await until('ROLLBACK_RED_ACTIVE', () => state().selected?.releaseId === ids.red
+        && host.events.some((event) => event.type === 'receipt' && event.receipt.releaseId === ids.red
+            && event.receipt.outcome === 'already-active'));
+    ensure(content.select({ projectRoot, creatorVersion: version, releaseId: ids.blue, expectedCurrent: ids.red }));
+    await until('BLUE_RETRIED', () => state().effective?.releaseId === ids.blue
+        && host.events.some((event) => event.type === 'receipt' && event.receipt.releaseId === ids.blue
+            && event.receipt.outcome === 'applied'));
+    const retried = { texture: await observedTexture(), image: await shot('retried') };
+    const colors = { red: pixel(red.image), failedRetained: pixel(failedRetained.image), retried: pixel(retried.image) };
     const expected = Object.fromEntries(['red', 'blue'].map((color) => [color,
         content.get({ projectRoot, creatorVersion: version, releaseId: ids[color] }).release.assets[0].resourceUuid]));
-    const colors = { red: pixel(red.image), blue: pixel(blue.image) };
-    if (!red.texture || !blue.texture || colors.red !== '255,0,0' || colors.blue !== '0,0,255')
-        throw Error(`VISIBLE_TEXTURE_MISMATCH ${JSON.stringify({ red, blue, colors, expected })}`);
+    if (!retried.texture || colors.red !== '255,0,0' || colors.failedRetained !== '255,0,0' || colors.retried !== '0,0,255')
+        throw Error(`VISIBLE_TEXTURE_MISMATCH ${JSON.stringify({ red, failedRetained, retried, colors, expected })}`);
     const closed = await evaluate("(function(){var c=cc.director.getScene().getChildByName('Canvas').getComponents(cc.Component).find(function(x){return !!x._cocosAgentChannel});if(!c)return false;c._cocosAgentChannel.socket.close();return true})()");
     if (!closed) throw Error('RUNTIME_CHANNEL_COMPONENT_MISSING');
     await until('RECONNECT_ALREADY_ACTIVE', () => host.events.some((event) => event.type === 'receipt' && event.receipt.outcome === 'already-active'));
     if (pixel(await shot('reconnected')) !== '0,0,255') throw Error('RECONNECT_VISIBLE_CONTENT_CHANGED');
-    const trace = { creatorVersion: version, startup: 'scene-component', ids, expected, red, blue, colors,
-        events: host.events, final: state() };
+    const trace = { creatorVersion: version, startup: 'scene-component', ids, expected, red, failedRetained, retried,
+        colors, interceptedRequests, networkRequests: networkRequests.filter((url) => blueTextureUuids.some((uuid) => url.includes(uuid))),
+        browserErrors, events: host.events, final: state() };
     const output = path.join(root, 'docs/agent-foundation/traces', `cocos-agent-content-channel-${choice}-web.json`);
     fs.writeFileSync(output, `${JSON.stringify(trace, null, 2)}\n`);
     process.stdout.write(`CONTENT_CHANNEL_ACCEPTED ${version} ${output}\n`);

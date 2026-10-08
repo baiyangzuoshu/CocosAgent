@@ -83,7 +83,7 @@
 
 动态纹理首条切片的两版 Web 可见 Sprite 截图与重建 Mac 包资源生命周期轨迹，见 `docs/agent-foundation/dynamic-content-first-slice.md`。Mac 临时入口探针 `docs/agent-foundation/probes/cocos-dynamic-native-mac.py` 会恢复生成包脚本；2.4 该包纹理缓存诊断须用 `_uuid`，不能直接拿未定义的 `uuid` 查询。原生轨迹只验证加载、引用和释放，原生画面尚未截图。
 动态内容的本地版本合同见 `docs/agent-foundation/content-release-0.1.md`：`content.plan/stage/get/select/rollback` 只管理 Host 的构建内 `resources` 清单和选中指针，**不会自行改变运行中的 Creator 游戏**。2.4 主纹理路径与 3.8 `/texture` 子资源路径必须分别核对；远端 Bundle/原生热更新、正式项目挂接和性能预算仍需独立实现及验证。
-运行时动态内容证据见 `docs/agent-foundation/content-runtime-web-0.1.md`。2.4 示例现通过 `HelloWorld.onLoad` 正常启动本地 WebSocket 客户端；红/蓝画面替换、`applied`/`already-active` 回执、断线自动重连与重放已有不注入源码的 Web 预览轨迹。核心单测验证失败时保留旧 SpriteFrame，Host 测试验证失败回执不覆盖先前 `effective`；失败注入尚未在该正常启动预览中实测。3.8 仅有旧版临时注入轨迹，按当前范围暂停新增 3.x 接线与验收；原生版本生效仍未验证。
+运行时动态内容证据见 `docs/agent-foundation/content-runtime-web-0.1.md`。2.4 示例通过 `HelloWorld.onLoad` 正常启动本地 WebSocket 客户端；红/蓝替换、`applied`/`already-active`、断线自动重连，以及正常启动预览中的真实纹理导入网络失败、`retained`、Host 回滚与重试均有不注入源码的 Web 轨迹。失败时 `selected` 可暂指向候选版，但 `effective` 与画面保持旧版；回滚后再试成功才更新 `effective`。3.8 仅保留旧版临时注入轨迹，按当前范围暂停新增 3.x 接线与验收；原生版本生效仍未验证。
 
 所有命令均从表中的对应目录执行，并先确认本机依赖可用。只运行与本次改动相关的验证；编辑器场景与资源改动还需要在对应版本的 Creator 中打开并预览。
 
