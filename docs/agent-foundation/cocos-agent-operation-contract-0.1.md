@@ -4,6 +4,8 @@
 
 写入编辑器前，Host 先持久记录 `editor-write-sent` 意图。若在编辑器回执后、磁盘读回前中断，重新运行 `--operation-get <operationId>` 将只读检查目标场景文件；目标节点和 SpriteFrame 引用满足原操作意图时，补记 `disk=passed` 和恢复证据，不再次发送写入请求。磁盘未满足意图时保持 `pending`，由人或后续专门恢复流程处理；`operation.get` 不自动补写。这里的恢复读回不等于视觉预览通过，也不代表补偿阶段已完成。回执是操作发生时的历史证据；日后补偿或人工修改场景，不会追溯改写原操作的 `disk=passed`。需要当前状态时重新查询场景。
 
+对“请求已发出、编辑器明确失败、可能产生副作用，但磁盘没有目标节点”的 2.4 `scene.node.create` 记录，可通过 JSONL 方法 `operation.reconcile` 显式对账。Host 必须连接同一项目的精确 Creator 实例，在一个会话内先读回父路径与 UUID、再读回目标完整路径，并要求活动场景与操作记录一致；随后读磁盘 `.fire`，确认该 UUID 父节点下没有同名子节点，并将文件 SHA-256 写入 `recovery-readback` 证据。只在两侧均确认缺席时，将 `reconciliation.disposition=no-effect`、`recovery=passed` 持久化。原始 `editor=failed`、`disk=pending` 和错误回执保持不变；`operation.get` 将返回 `failed`、错误 `WRITE_RECONCILED_NO_EFFECT`、`sideEffect=none`。它不会重发写入，也不会把失败改成成功。输入见 [`operation-reconcile.schema.json`](../../tools/cocos-agent-bridge/operation-reconcile.schema.json)。
+
 两版真实 Creator 已用 `--interrupt-after-editor` 验证 Host 退出码 75、新 Host 进程磁盘读回、重复 `operation.get` 不重复补记，以及独立补偿操作的内存与磁盘结果。测试后场景文件均恢复到原始 SHA-256。3.8 Creator 随后重启，扩展以新实例 ID 注册，历史操作记录在关闭期间和重开后均可读取。模拟的“请求已发出但无编辑器回执”分支验证：磁盘未匹配时保持 `pending`，匹配后只补记一次 `disk=passed`。证据见 [`cocos-agent-operation-persistence-0.1.jsonl`](traces/cocos-agent-operation-persistence-0.1.jsonl)。目前不涵盖 2.4 Creator 进程重启、真实编辑器写入中掉电、预览自动验收或跨设备恢复。
 
 | 阶段 | 输入与执行方 | 通过证据 | 失败状态 |

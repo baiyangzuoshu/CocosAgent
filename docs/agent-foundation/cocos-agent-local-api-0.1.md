@@ -8,6 +8,7 @@
 | `instances.get`、`capabilities.list` | `targets`、`projectRoot`、可选 `creatorVersion` | 同上 |
 | `command.execute` | `targets`、`projectRoot`、`creatorVersion`、`command`、`input` | `agent-dispatch.js` 的完整统一结果包 |
 | `operation.get` | `projectRoot`、`creatorVersion`、`operationId` | 同上；无需编辑器在线即可读取持久记录 |
+| `operation.reconcile` | `targets`、`projectRoot`、`creatorVersion`、`operationId` | 仅对可对账的历史失败写入进行同场景内存与磁盘读回；不重发编辑器写入 |
 | `preview.accept` | `projectRoot`、`creatorVersion`、`operationId`、`evidence` | 同上；只在实际观察本次预览后调用 |
 | `workflow.plan/execute/get/compensate/replay` | 场景节点计划、`workflowId` 或 `sourceWorkflowId` | [场景组合合同](scene-composition-0.1.md)；持久记录与逐步回执 |
 | `assets.batch.plan/execute/get` | PNG 源路径清单、`batchId` | [批量导入合同](asset-batch-0.1.md)；逐项结果与磁盘读回 |

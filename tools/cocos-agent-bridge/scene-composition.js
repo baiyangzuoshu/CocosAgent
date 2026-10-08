@@ -23,15 +23,41 @@ function write(record, create = false) {
     finally { try { fs.unlinkSync(temporary); } catch (_) { /* rename consumed it */ } }
 }
 function save(record) { record.updatedAt = new Date().toISOString(); write(record); }
-function validSteps(steps) {
+function canonical(value) {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]));
+    return value;
+}
+function samePlan(left, right) { return JSON.stringify(canonical(left)) === JSON.stringify(canonical(right)); }
+function validComponents(components) {
+    if (!Array.isArray(components) || components.length > 1) return false;
+    return components.every((component) => {
+        if (!component || typeof component !== 'object' || Array.isArray(component)) return false;
+        if (component.classId === 'cc.Sprite') return Object.keys(component).every((key) => ['classId', 'spriteFrameUuid'].includes(key))
+            && uuid.test(component.spriteFrameUuid || '');
+        return component.classId === 'cc.Label' && Object.keys(component).every((key) => ['classId', 'text'].includes(key))
+            && typeof component.text === 'string' && component.text.length <= 256;
+    });
+}
+function validTransform(transform) {
+    if (!transform || typeof transform !== 'object' || Array.isArray(transform)
+        || Object.keys(transform).some((key) => !['position', 'scale'].includes(key))) return false;
+    return ['position', 'scale'].every((key) => transform[key] === undefined || (transform[key]
+        && typeof transform[key] === 'object' && !Array.isArray(transform[key])
+        && Object.keys(transform[key]).length === 2 && Number.isFinite(transform[key].x) && Number.isFinite(transform[key].y)
+        && Math.abs(transform[key].x) <= 4096 && Math.abs(transform[key].y) <= 4096));
+}
+function validSteps(steps, creatorVersion) {
     if (!Array.isArray(steps) || steps.length < 2 || steps.length > 8) return false;
     const seen = new Set();
     const siblingNames = new Set();
     for (const step of steps) {
         if (!step || typeof step !== 'object' || Array.isArray(step)
-            || Object.keys(step).some((key) => !['id', 'name', 'parent'].includes(key))
+            || Object.keys(step).some((key) => !['id', 'name', 'parent', 'components', 'transform'].includes(key))
             || !stepId.test(step.id || '') || seen.has(step.id) || !nodeName.test(step.name || '')
-            || !step.parent || typeof step.parent !== 'object' || Array.isArray(step.parent)) return false;
+            || !step.parent || typeof step.parent !== 'object' || Array.isArray(step.parent)
+            || (step.components !== undefined && (creatorVersion !== '2.4.15' || !validComponents(step.components)))
+            || (step.transform !== undefined && (creatorVersion !== '2.4.15' || !validTransform(step.transform)))) return false;
         const parent = step.parent;
         const isRef = Object.keys(parent).length === 1 && stepId.test(parent.ref || '') && seen.has(parent.ref);
         const isPath = Object.keys(parent).length === 2 && typeof parent.path === 'string' && parent.path.length > 0
@@ -52,7 +78,7 @@ function inspect(params, nodePath, run) {
     return run({ ...targetRequest(params), command: 'scene.node.inspect', input: { nodePath } });
 }
 function plan(params, run = dispatch) {
-    if (!params || !validSteps(params.steps) || !['2.4.15', '3.8.7'].includes(params.creatorVersion)
+    if (!params || !validSteps(params.steps, params.creatorVersion) || !['2.4.15', '3.8.7'].includes(params.creatorVersion)
         || typeof params.projectRoot !== 'string' || !path.isAbsolute(params.projectRoot)
         || !Array.isArray(params.targets) || !params.targets.length) return issue('INVALID_PLAN', 'Provide one target and 2–8 ordered node steps.');
     let instance = null;
@@ -83,7 +109,8 @@ function publicRecord(record) {
     return { success: record.state === 'completed' || record.state === 'compensated', outcome: record.state,
         workflowId: record.workflowId, projectRoot: record.projectRoot, creatorVersion: record.creatorVersion,
         sceneName: record.sceneName, steps: record.steps.map((step) => ({ id: step.id, name: step.name,
-            parent: step.parent, status: step.status, operationId: step.operationId,
+            parent: step.parent, ...(step.components !== undefined ? { components: step.components } : {}),
+            ...(step.transform !== undefined ? { transform: step.transform } : {}), status: step.status, operationId: step.operationId,
             nodeUuid: step.nodeUuid, compensationId: step.compensationId })),
         error: record.error || null, replayedFrom: record.replayedFrom || null };
 }
@@ -98,7 +125,14 @@ function reconcile(record, run) {
         if (step.status !== 'applying' && step.status !== 'compensating') continue;
         const operationId = step.status === 'applying' ? step.operationId : step.compensationId;
         const result = run({ projectRoot: record.projectRoot, creatorVersion: record.creatorVersion, operationGetId: operationId });
-        if (!result.success || !result.phases || result.phases.disk !== 'passed') {
+        if (!result.success || !result.phases || result.phases.disk !== 'passed'
+            || (step.status === 'applying' && (step.components || []).length && result.phases.preview !== 'passed')) {
+            if (result && !result.success && result.error && result.error.sideEffect === 'none') {
+                step.status = 'rejected'; record.state = 'compensating';
+                record.error = { code: 'STEP_REJECTED', stepId: step.id, operationId,
+                    detail: { code: result.error.code, sideEffect: 'none' } };
+                save(record); rollback(record, run); return false;
+            }
             record.state = 'needs-review'; record.error = { code: 'STEP_OUTCOME_UNCERTAIN', stepId: step.id, operationId };
             save(record); return false;
         }
@@ -132,7 +166,7 @@ function rollback(record, run) {
 }
 function execute(params, run = dispatch) {
     if (!params || typeof params.projectRoot !== 'string' || !path.isAbsolute(params.projectRoot)
-        || !validSteps(params.steps) || !['2.4.15', '3.8.7'].includes(params.creatorVersion))
+        || !validSteps(params.steps, params.creatorVersion) || !['2.4.15', '3.8.7'].includes(params.creatorVersion))
         return issue('INVALID_ARGUMENT', 'Provide an absolute project, version, and valid steps.');
     const workflowId = params && params.workflowId || crypto.randomUUID();
     if (!uuid.test(workflowId)) return issue('INVALID_WORKFLOW_ID', 'Workflow ID must be a UUID.');
@@ -149,7 +183,8 @@ function execute(params, run = dispatch) {
             createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
         try { write(record, true); } catch (error) { return issue('WORKFLOW_RECORD_FAILED', error.message); }
     } else if (record.projectRoot !== path.resolve(params.projectRoot) || record.creatorVersion !== params.creatorVersion
-        || JSON.stringify(record.steps.map(({ id, name, parent }) => ({ id, name, parent }))) !== JSON.stringify(params.steps)) {
+        || !samePlan(record.steps.map(({ id, name, parent, components, transform }) => ({ id, name, parent,
+            ...(components !== undefined ? { components } : {}), ...(transform !== undefined ? { transform } : {}) })), params.steps)) {
         return issue('WORKFLOW_CONFLICT', 'Workflow ID already belongs to another target or plan.');
     } else if (record.state === 'completed' || record.state === 'compensated' || record.state === 'failed') return publicRecord(record);
     if (!reconcile(record, run)) return publicRecord(record);
@@ -170,8 +205,11 @@ function execute(params, run = dispatch) {
         step.resolvedParent = parent; step.status = 'applying'; save(record);
         const result = run({ targets: record.targets, projectRoot: record.projectRoot, creatorVersion: record.creatorVersion,
             command: 'scene.node.create', input: { parentPath: parent.path, parentUuid: parent.uuid,
-                nodeName: step.name, action: 'apply', operationId: step.operationId } });
+                nodeName: step.name, action: 'apply', operationId: step.operationId,
+                ...(step.components !== undefined ? { components: step.components } : {}),
+                ...(step.transform !== undefined ? { transform: step.transform } : {}) } });
         if (result.success && result.outcome === 'completed' && result.phases && result.phases.disk === 'passed'
+            && (!(step.components || []).length || result.phases.preview === 'passed')
             && result.instance && result.instance.instanceId === record.instanceId && result.instance.activeScene === record.sceneName
             && result.result && typeof result.result.nodeUuid === 'string') {
             step.status = 'applied'; step.nodeUuid = result.result.nodeUuid; save(record); continue;
@@ -212,7 +250,8 @@ function replay(params, run = dispatch) {
         || source.creatorVersion !== params.creatorVersion || source.steps.some((step) => step.status === 'applied'))
         return issue('SOURCE_WORKFLOW_NOT_COMPENSATED', 'Replay requires a fully compensated workflow.');
     return execute({ ...params, targets: source.targets,
-        steps: source.steps.map(({ id, name, parent }) => ({ id, name, parent })), replayedFrom: source.workflowId }, run);
+        steps: source.steps.map(({ id, name, parent, components, transform }) => ({ id, name, parent,
+            ...(components !== undefined ? { components } : {}), ...(transform !== undefined ? { transform } : {}) })), replayedFrom: source.workflowId }, run);
 }
 function handle(method, params, run = dispatch) {
     if (method === 'workflow.plan') return plan(params, run);

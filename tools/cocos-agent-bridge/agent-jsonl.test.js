@@ -35,6 +35,10 @@ assert.deepStrictEqual(handle({ id: 11, method: 'assets.batch.get', params: { ba
 assert.deepStrictEqual(handle({ id: 12, method: 'scene.sprites.plan', params: { creatorVersion: '2.4.15' } },
     { sceneSpriteBatch: (method, params) => ({ method, params }) }),
 { id: 12, result: { method: 'scene.sprites.plan', params: { creatorVersion: '2.4.15' } } });
+assert.deepStrictEqual(handle({ id: 13, method: 'operation.reconcile', params: { projectRoot, creatorVersion: '2.4.15',
+    operationId, targets: [{ projectRoot, creatorVersion: '2.4.15' }] } },
+{ dispatch: (value) => value }), { id: 13, result: { targets: [{ projectRoot, creatorVersion: '2.4.15' }], projectRoot,
+    creatorVersion: '2.4.15', operationReconcileId: operationId } });
 
 const script = path.join(__dirname, 'agent-jsonl.js');
 const child = spawnSync(process.execPath, [script], { encoding: 'utf8', input: '{bad json}\n{"id":1,"method":"unknown","params":{}}\n' });

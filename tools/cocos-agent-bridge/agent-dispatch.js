@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const operationStore = require('./operation-store');
+const operationReconcile = require('./operation-reconcile');
 
 const commands = new Set(['scene.snapshot', 'scene.node.inspect', 'asset.importPng', 'scene.pngSprite', 'scene.node.create']);
 const versions = new Set(['2.4.15', '3.8.7']);
@@ -218,6 +219,11 @@ function operationStatus(request, invoke) {
                 nodeName: record.manifest.nodeName, assetUuid: record.manifest.assetUuid,
                 ...(record.manifest.position ? { position: record.manifest.position } : {}) },
         ...(record.previewAttempt ? { previewAttempt: record.previewAttempt } : {}) };
+    const statusBase = { ...base, ...(record.reconciliation ? { reconciliation: record.reconciliation } : {}) };
+    if (record.reconciliation && record.reconciliation.disposition === 'no-effect') {
+        return { success: false, outcome: 'failed', ...statusBase,
+            error: dispatchError('WRITE_RECONCILED_NO_EFFECT', 'The editor write failed and live plus disk readback confirmed no scene change.', 'recovery', 'none') };
+    }
     if (record.phases.disk === 'passed') {
         return { success: true, outcome: (nodeOperation && record.phases.preview === 'passed') || (nodeOperation && !(record.manifest.components || []).length)
             || record.manifest.sceneAction === 'compensate' || record.phases.preview === 'passed' ? 'completed' : 'needs-preview', ...base };
@@ -235,13 +241,63 @@ function operationStatus(request, invoke) {
     return problem('OPERATION_INCOMPLETE', 'Operation did not reach a verified disk write.', null, 'record', 'possible');
 }
 
+function reconcileOperation(request, invoke = runProcess) {
+    const { targets, projectRoot, creatorVersion, operationReconcileId } = request;
+    if (!Array.isArray(targets) || !targets.length || !targets.every((target) =>
+        target && versions.has(target.creatorVersion) && typeof target.projectRoot === 'string')
+        || !versions.has(creatorVersion) || typeof projectRoot !== 'string'
+        || typeof operationReconcileId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(operationReconcileId)) {
+        return problem('INVALID_ARGUMENT', 'Provide targets, exact project/version, and operation ID.');
+    }
+    const project = path.resolve(projectRoot);
+    let record;
+    try { record = operationStore.read(project, operationReconcileId); }
+    catch (_) { return problem('OPERATION_NOT_FOUND', 'Operation record does not exist.'); }
+    if (record.reconciliation && record.reconciliation.disposition === 'no-effect') {
+        return operationStatus({ projectRoot: project, creatorVersion, operationGetId: operationReconcileId }, invoke);
+    }
+    if (!operationReconcile.allowedRecord(record, project, creatorVersion, operationReconcileId)) {
+        return problem('OPERATION_NOT_RECONCILABLE', 'Only an uncertain failed apply/replay with no recorded node can be reconciled.', null, 'recovery');
+    }
+    const targetArgs = targets.flatMap((target) => ['--target', `${target.creatorVersion}=${path.resolve(target.projectRoot)}`]);
+    const listed = parseJson(invoke('catalog-host.js', [...targetArgs, '--query', 'instances.list']));
+    if (!listed || listed.success !== true || !Array.isArray(listed.data)) return problem('CATALOG_FAILED', 'Cannot list Creator instances.', null, 'selection');
+    const matches = listed.data.filter((item) => item.projectRoot === project);
+    if (matches.length !== 1) return problem(matches.length ? 'AMBIGUOUS_EDITOR' : 'EDITOR_NOT_FOUND', 'Project must select one Creator instance.');
+    const instance = matches[0];
+    if (instance.creatorVersion !== creatorVersion) return problem('CREATOR_VERSION_MISMATCH', 'Selected Creator version differs from the operation.');
+    if (instance.state !== 'ready') return problem(instance.error || 'EDITOR_NOT_CONNECTED', 'Selected Creator instance is not ready.');
+    const catalog = parseJson(invoke('catalog-host.js', [...targetArgs, '--query', 'capabilities.list', '--project', project, '--creator-version', creatorVersion]));
+    const selected = catalog && catalog.data && catalog.data.instance;
+    const snapshot = catalog && catalog.data && Array.isArray(catalog.data.commands)
+        && catalog.data.commands.find((command) => command.id === 'scene.snapshot');
+    if (!catalog || catalog.success !== true || !selected || !snapshot || snapshot.status !== 'available'
+        || selected.instanceId !== instance.instanceId || selected.catalogRevision !== instance.catalogRevision
+        || selected.activeScene !== instance.activeScene || selected.activeScene !== record.sceneName) {
+        return problem('RECONCILE_TARGET_CHANGED', 'The selected Creator instance must be stable and have the recorded scene active.', null, 'recovery');
+    }
+    const execution = invoke('node-create-host.js', ['--project', project, '--creator-version', creatorVersion,
+        '--expected-instance-id', selected.instanceId, '--expected-scene', record.sceneName,
+        '--operation-reconcile', operationReconcileId]);
+    if (execution.status !== 0) return problem('RECONCILE_NOT_CONFIRMED', 'Live and disk state did not satisfy the no-effect reconciliation checks.',
+        { operationId: operationReconcileId, stderr: execution.stderr.trim() }, 'recovery', 'possible');
+    const reconciliationLine = execution.stdout.split('\n').find((line) => line.startsWith('reconcile.result '));
+    let reconciliationResult;
+    try { reconciliationResult = JSON.parse(reconciliationLine.slice('reconcile.result '.length)); } catch (_) { reconciliationResult = null; }
+    if (!reconciliationResult || reconciliationResult.operationId !== operationReconcileId || reconciliationResult.disposition !== 'no-effect') {
+        return problem('RECONCILE_RESULT_MISSING', 'Host finished without a no-effect reconciliation receipt.', { operationId: operationReconcileId }, 'recovery', 'unknown');
+    }
+    return operationStatus({ projectRoot: project, creatorVersion, operationGetId: operationReconcileId }, invoke);
+}
+
 function dispatch(request, invoke = runProcess) {
-    const raw = request.operationGetId || request.previewAcceptId
+    const raw = request.operationReconcileId ? reconcileOperation(request, invoke) : request.operationGetId || request.previewAcceptId
         ? operationStatus(request, invoke) : dispatchCommand(request, invoke);
     return { success: raw.success, outcome: raw.outcome, command: raw.command || request.command || (request.operationGetId || request.previewAcceptId ? 'scene.pngSprite' : null),
         instance: raw.instance || null, operationId: raw.operationId || request.operationGetId || request.previewAcceptId || null,
         result: raw.result || null, phases: raw.phases || null, intent: raw.intent || null,
-        error: raw.error || null, ...(raw.details ? { details: raw.details } : {}) };
+        error: raw.error || null, ...(raw.reconciliation ? { reconciliation: raw.reconciliation } : {}),
+        ...(raw.details ? { details: raw.details } : {}) };
 }
 
 function parseArgs(argv) {
@@ -256,7 +312,7 @@ function parseArgs(argv) {
     try { evidence = JSON.parse(values('--evidence')[0] || 'null'); } catch (_) { evidence = null; }
     return { targets, projectRoot: values('--project')[0], creatorVersion: values('--creator-version')[0],
         command: values('--command')[0], input, operationGetId: values('--operation-get')[0],
-        previewAcceptId: values('--preview-accept')[0], evidence };
+        previewAcceptId: values('--preview-accept')[0], operationReconcileId: values('--operation-reconcile')[0], evidence };
 }
 
 if (require.main === module) {
@@ -265,4 +321,4 @@ if (require.main === module) {
     process.exitCode = result.success ? 0 : 1;
 }
 
-module.exports = { dispatch, parseArgs };
+module.exports = { dispatch, parseArgs, operationStatus, reconcileOperation };

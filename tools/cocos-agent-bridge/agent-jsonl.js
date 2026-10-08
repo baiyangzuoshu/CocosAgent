@@ -14,7 +14,8 @@ const workflowMethods = new Set(['workflow.plan', 'workflow.execute', 'workflow.
 const batchMethods = new Set(['assets.batch.plan', 'assets.batch.execute', 'assets.batch.get']);
 const sceneSpriteBatchMethods = new Set(['scene.sprites.plan', 'scene.sprites.execute', 'scene.sprites.get', 'scene.sprites.compensate', 'scene.sprites.replay']);
 const contentMethods = new Set(['content.plan', 'content.stage', 'content.get', 'content.select', 'content.rollback', 'content.runtime.accept']);
-const methods = new Set([...catalogMethods, ...workflowMethods, ...batchMethods, ...sceneSpriteBatchMethods, ...contentMethods, 'command.execute', 'operation.get', 'preview.accept']);
+const methods = new Set([...catalogMethods, ...workflowMethods, ...batchMethods, ...sceneSpriteBatchMethods, ...contentMethods,
+    'command.execute', 'operation.get', 'operation.reconcile', 'preview.accept']);
 const versions = new Set(['2.4.15', '3.8.7']);
 
 function error(code, message) { return { code, message }; }
@@ -62,6 +63,10 @@ function handle(request, adapters = {}) {
     };
     else if (method === 'operation.get') dispatchRequest = {
         projectRoot: params.projectRoot, creatorVersion: params.creatorVersion, operationGetId: params.operationId,
+    };
+    else if (method === 'operation.reconcile') dispatchRequest = {
+        targets: params.targets, projectRoot: params.projectRoot, creatorVersion: params.creatorVersion,
+        operationReconcileId: params.operationId,
     };
     else dispatchRequest = {
         projectRoot: params.projectRoot, creatorVersion: params.creatorVersion,

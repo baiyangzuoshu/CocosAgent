@@ -43,6 +43,19 @@
           "properties": { "code": { "type": "string", "minLength": 1, "maxLength": 64 }, "message": { "type": "string", "minLength": 1, "maxLength": 500 } } }
       }
     },
+    "reconciliation": { "type": "object", "additionalProperties": false,
+      "required": ["disposition", "observedAt", "sceneName", "parentPath", "parentUuid", "targetPath", "diskPath", "diskSha256"],
+      "properties": {
+        "disposition": { "const": "no-effect" },
+        "observedAt": { "type": "string", "format": "date-time" },
+        "sceneName": { "type": "string", "maxLength": 64 },
+        "parentPath": { "type": "string", "maxLength": 240 },
+        "parentUuid": { "type": "string", "maxLength": 64 },
+        "targetPath": { "type": "string", "maxLength": 240 },
+        "diskPath": { "type": "string", "maxLength": 512 },
+        "diskSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
     "receipts": { "type": "array", "items": { "type": "object" } },
     "phases": { "type": "object", "additionalProperties": false,
       "required": ["capability", "preflight", "editor", "disk", "preview", "recovery"],

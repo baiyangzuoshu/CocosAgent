@@ -36,4 +36,12 @@
 
 一次 Sprite+Label 组合尝试在编辑器报告 `RenderComponent` 冲突，现场确认没有节点进入活动场景或磁盘。随后把集合大小限制为每个节点最多一个白名单渲染组件，并实测调度入口在目标选择前返回 `INVALID_ARGUMENT`、无操作 ID、`sideEffect=none`。该负测促成了执行前限制，不能把它写成正常写入失败。
 
+该负测的历史操作 `e13826fa-5d36-4104-9d9b-dfbd79e53d01` 最初因编辑器回执带 `sideEffect=possible` 而进入 `needs-review`。之后新增 `operation.reconcile`：它在一个 2.4 Creator 会话内确认 `helloworld/Canvas` 的 UUID、精确目标路径缺席，再核对 `helloworld.fire` 中该父节点没有同名子节点。两处均缺席后记录磁盘 SHA-256，恢复阶段通过；原编辑器失败和磁盘 pending 回执仍保留，最终状态明确为 `failed` 且 `sideEffect=none`，没有重试或写入场景。协议示例：
+
+```json
+{"id":1,"method":"operation.reconcile","params":{"targets":[{"projectRoot":"<2.4 项目绝对路径>","creatorVersion":"2.4.15"}],"projectRoot":"<2.4 项目绝对路径>","creatorVersion":"2.4.15","operationId":"e13826fa-5d36-4104-9d9b-dfbd79e53d01"}}
+```
+
+实际轨迹与磁盘哈希见 [`scene-node-component-p1-2.4.jsonl`](traces/scene-node-component-p1-2.4.jsonl)。
+
 两项测试随后均按操作 UUID 补偿，并把示例场景文件恢复到测试前提交内容；再次重开后探针节点为 `not-found`。完整操作与重开读回轨迹见 [`scene-node-component-p1-2.4.jsonl`](traces/scene-node-component-p1-2.4.jsonl)。这一验收只覆盖 2.4.15 Web 预览和示例项目；3.8 组件合同、原生预览、多组件相容矩阵与视觉截图验收留待后续。

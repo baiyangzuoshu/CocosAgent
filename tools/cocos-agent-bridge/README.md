@@ -131,7 +131,9 @@ node tools/cocos-agent-bridge/agent-dispatch.js \
 
 节点写入使用 `scene.node.create`：先用节点检查取得父节点的路径和 UUID，再传 `{"parentPath":"helloworld/Canvas","parentUuid":"<UUID>","nodeName":"Example","action":"apply"}`。在 2.4.15 可选 `components`（一个 `cc.Sprite`+SpriteFrame UUID，或一个 `cc.Label`+文本）和 `transform.position/scale`；Sprite 与 Label 同属 `RenderComponent`，同一节点不可同时挂载。含组件写入会在磁盘读回后自动触发 2.4 Web 预览结构验收；编辑器场景重开仍需在 Creator UI 切场景再打开。补偿和重放均需传 `sourceOperationId`。3.8.7 目前仍是空节点合同。节点输入、回执和运行证据见[节点、组件与资源引用合同](../../docs/agent-foundation/scene-node-create-0.1.md)。
 
-多节点组合通过 JSONL 的 `workflow.plan/execute/get/compensate/replay` 调用。它以有序步骤和前一步 `ref` 组成空节点层级，逐步持久化操作 ID；明确失败时逆序补偿，结果不确定时停止。两版真实编辑器均已创建两级临时节点并逆序补偿。输入和限制见[场景组合合同](../../docs/agent-foundation/scene-composition-0.1.md)。
+多节点组合通过 JSONL 的 `workflow.plan/execute/get/compensate/replay` 调用。它以有序步骤和前一步 `ref` 组成节点层级，逐步持久化操作 ID；2.4 可在不同节点挂接 Sprite/Label 与变换，3.8 仍为空节点；明确失败时逆序补偿，结果不确定时停止。两版真实编辑器已验证空节点组合，2.4 组件组合的实机验收见[场景组合合同](../../docs/agent-foundation/scene-composition-0.1.md)。
+
+符合条件的历史不确定写入可通过 JSONL 的 `operation.reconcile` 显式对账。它需要同一 Creator 实例中的活动场景父节点/目标路径读回，再与磁盘场景核对；只有同时证明目标未写入才返回 `failed`、`sideEffect=none` 并追加恢复证据。它不重试场景写入。请求结构见 [`operation-reconcile.schema.json`](operation-reconcile.schema.json)。
 
 多张 PNG 导入通过 JSONL 的 `assets.batch.plan/execute/get` 调用。它核对源文件摘要、Creator 导入回执及目标文件和 `.meta`，逐项保留状态；不自动删除已导入资源。两版已分别验证两张 PNG 的批量导入。输入与验证边界见[批量导入合同](../../docs/agent-foundation/asset-batch-0.1.md)。这些资源的 Web 运行时六轮加载、替换与释放证据见[动态内容首条切片](../../docs/agent-foundation/dynamic-content-first-slice.md)。
 

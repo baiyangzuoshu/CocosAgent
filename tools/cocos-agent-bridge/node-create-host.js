@@ -6,6 +6,7 @@ const http = require('http');
 const path = require('path');
 const WebSocket = require('./vendor/ws');
 const store = require('./operation-store');
+const reconcile = require('./operation-reconcile');
 
 const arg = (name) => { const index = process.argv.indexOf(name); return index < 0 ? undefined : process.argv[index + 1]; };
 const fail = (message) => { process.stderr.write(`${message}\n`); process.exit(2); };
@@ -13,6 +14,7 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 const projectRoot = path.resolve(arg('--project') || '.');
 const creatorVersion = arg('--creator-version');
 const operationGetId = arg('--operation-get');
+const operationReconcileId = arg('--operation-reconcile');
 const operationId = arg('--operation-id') || crypto.randomUUID();
 const expectedInstanceId = arg('--expected-instance-id');
 const expectedScene = arg('--expected-scene');
@@ -32,7 +34,7 @@ const componentsProvided = arg('--components') !== undefined;
 const transformProvided = arg('--transform') !== undefined;
 const interruptAfterEditor = process.argv.includes('--interrupt-after-editor');
 if (!['2.4.15', '3.8.7'].includes(creatorVersion) || !fs.existsSync(projectRoot)) fail('INVALID_TARGET');
-if (!uuidPattern.test(operationGetId || operationId) || (expectedInstanceId && !uuidPattern.test(expectedInstanceId))) fail('INVALID_OPERATION_ID');
+if (!uuidPattern.test(operationGetId || operationReconcileId || operationId) || (expectedInstanceId && !uuidPattern.test(expectedInstanceId))) fail('INVALID_OPERATION_ID');
 
 function scenePath(sceneName) {
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(sceneName || '')) return null;
@@ -135,15 +137,25 @@ if (operationGetId) {
     process.stdout.write(`${JSON.stringify({ success: true, data: record })}\n`);
     process.exit(0);
 }
-if (!uuidPattern.test(operationId) || !['apply', 'compensate', 'replay'].includes(action)
+let reconciliationRecord = null;
+if (operationReconcileId) {
+    if (operationGetId || arg('--operation-id') || action || parentPath || parentUuid || nodeName || sourceOperationId
+        || componentsProvided || transformProvided || interruptAfterEditor) {
+        fail('OPERATION_RECONCILE_READ_ONLY');
+    }
+    try { reconciliationRecord = store.read(projectRoot, operationReconcileId); } catch (_) { fail('OPERATION_NOT_FOUND'); }
+    if (!reconcile.allowedRecord(reconciliationRecord, projectRoot, creatorVersion, operationReconcileId)) fail('OPERATION_NOT_RECONCILABLE');
+    if (expectedScene && expectedScene !== reconciliationRecord.sceneName) fail('EXPECTED_SCENE_MISMATCH');
+}
+if (!operationReconcileId && (!uuidPattern.test(operationId) || !['apply', 'compensate', 'replay'].includes(action)
     || typeof parentPath !== 'string' || parentPath.length > 240 || parentPath.includes('//') || parentPath.includes('\\')
     || typeof parentUuid !== 'string' || parentUuid.length < 1 || parentUuid.length > 64
     || !/^[A-Za-z0-9_ -]{1,64}$/.test(nodeName || '')
     || !validObjectComponents(components) || !validTransform(transform)
     || (creatorVersion !== '2.4.15' && (components.length || Object.keys(transform).length))
-    || (action === 'apply' ? !!sourceOperationId : !uuidPattern.test(sourceOperationId || ''))) fail('INVALID_NODE_CREATE_INPUT');
+    || (action === 'apply' ? !!sourceOperationId : !uuidPattern.test(sourceOperationId || '')))) fail('INVALID_NODE_CREATE_INPUT');
 let source = null;
-if (sourceOperationId) {
+if (!operationReconcileId && sourceOperationId) {
     try { source = store.read(projectRoot, sourceOperationId); } catch (_) { fail('SOURCE_OPERATION_NOT_FOUND'); }
     if (source.capabilityId !== 'scene.node.create' || source.projectRoot !== projectRoot || source.creatorVersion !== creatorVersion
         || source.phases.disk !== 'passed' || source.manifest.parentPath !== parentPath || source.manifest.parentUuid !== parentUuid
@@ -155,13 +167,17 @@ if (sourceOperationId) {
     if (!transformProvided) transform = source.manifest.transform || {};
     else if (JSON.stringify(transform) !== JSON.stringify(source.manifest.transform || {})) fail('SOURCE_OBJECT_SPEC_MISMATCH');
 }
-const manifest = { parentPath, parentUuid, nodeName, action, sourceOperationId: sourceOperationId || null,
-    targetNodeUuid: action === 'compensate' ? source.createdNodeUuid : null, components, transform };
-const record = { contractVersion: '0.1', capabilityId: 'scene.node.create', operationId, projectRoot, creatorVersion,
-    manifest, sceneName: null, createdNodeUuid: null, intent: 'created', receipts: [],
-    phases: { capability: 'pending', preflight: 'pending', editor: 'pending', disk: 'pending', preview: 'pending', recovery: 'pending' },
-    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-try { store.write(projectRoot, record, true); } catch (error) { fail(error.code === 'EEXIST' ? 'OPERATION_ALREADY_EXISTS' : error.message); }
+let record = reconciliationRecord;
+if (!operationReconcileId) {
+    const manifest = { parentPath, parentUuid, nodeName, action, sourceOperationId: sourceOperationId || null,
+        targetNodeUuid: action === 'compensate' ? source.createdNodeUuid : null, components, transform };
+    record = { contractVersion: '0.1', capabilityId: 'scene.node.create', operationId, projectRoot, creatorVersion,
+        manifest, sceneName: null, createdNodeUuid: null, intent: 'created', receipts: [],
+        phases: { capability: 'pending', preflight: 'pending', editor: 'pending', disk: 'pending', preview: 'pending', recovery: 'pending' },
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    try { store.write(projectRoot, record, true); } catch (error) { fail(error.code === 'EEXIST' ? 'OPERATION_ALREADY_EXISTS' : error.message); }
+}
+const manifest = record.manifest;
 
 const sessionId = crypto.randomUUID();
 const token = crypto.randomBytes(32).toString('hex');
@@ -201,6 +217,7 @@ function request(method, params) {
 async function run() {
     const ping = await request('bridge.ping', { nonce });
     if (!ping || ping.nonce !== nonce || ping.creatorVersion !== creatorVersion || path.resolve(ping.projectRoot || '') !== projectRoot) throw new Error('PING_MISMATCH');
+    if (operationReconcileId) return runReconciliation();
     const before = await request('scene.snapshot', { nonce, targetNodePath: parentPath });
     if (!before || before.nonce !== nonce || before.creatorVersion !== creatorVersion || (expectedScene && before.sceneName !== expectedScene)
         || !before.targetNode || before.targetNode.status !== 'found' || before.targetNode.uuid !== parentUuid) throw new Error('PARENT_CHANGED');
@@ -236,6 +253,28 @@ async function run() {
     store.write(projectRoot, record);
     process.stdout.write(`command.result ${JSON.stringify({ command: 'scene.node.create', operationId, sceneName: record.sceneName, action, nodeName, nodeUuid: disk.nodeUuid })}\n`);
     if (components.length && action !== 'compensate') await verifyRuntimePreview();
+    close(0);
+}
+async function runReconciliation() {
+    const record = reconciliationRecord;
+    const parentPath = record.manifest.parentPath;
+    const targetPath = `${parentPath}/${record.manifest.nodeName}`;
+    const parentSnapshot = await request('scene.snapshot', { nonce, targetNodePath: parentPath });
+    const targetSnapshot = await request('scene.snapshot', { nonce, targetNodePath: targetPath });
+    if (!parentSnapshot || !targetSnapshot || parentSnapshot.nonce !== nonce || targetSnapshot.nonce !== nonce
+        || parentSnapshot.creatorVersion !== creatorVersion || targetSnapshot.creatorVersion !== creatorVersion
+        || path.resolve(parentSnapshot.projectRoot || '') !== projectRoot || path.resolve(targetSnapshot.projectRoot || '') !== projectRoot
+        || parentSnapshot.sceneName !== targetSnapshot.sceneName || (expectedScene && parentSnapshot.sceneName !== expectedScene)) {
+        throw new Error('RECONCILE_SCENE_CHANGED');
+    }
+    const observedAt = new Date().toISOString();
+    const result = reconcile.reconcileNoEffect({ projectRoot, creatorVersion, operationId: operationReconcileId,
+        liveObservation: { observedAt, sceneName: parentSnapshot.sceneName,
+            parent: parentSnapshot.targetNode, target: targetSnapshot.targetNode } });
+    if (!result.success) throw new Error(result.error.code);
+    process.stdout.write(`reconcile.result ${JSON.stringify({ operationId: operationReconcileId,
+        disposition: result.data.reconciliation.disposition, alreadyReconciled: result.alreadyReconciled,
+        phases: result.data.phases, diskSha256: result.data.reconciliation.diskSha256 })}\n`);
     close(0);
 }
 function runtimeObjectMatches(observed, expected) {
@@ -283,16 +322,20 @@ wss.on('connection', (client) => {
         let message;
         try { message = JSON.parse(raw.toString()); } catch (_) { close(1); return; }
         if (message.type === 'hello') {
-            const ok = message.protocolVersion === '0.1' && message.creatorVersion === creatorVersion
+        const ok = message.protocolVersion === '0.1' && message.creatorVersion === creatorVersion
                 && path.resolve(message.projectRoot || '') === projectRoot && message.extension === 'cocos-agent-bridge'
                 && (!expectedInstanceId || message.instanceId === expectedInstanceId)
                 && Array.isArray(message.capabilities) && message.capabilities.includes('scene.node.create.preflight')
-                && message.capabilities.includes('scene.node.create');
+                && message.capabilities.includes('scene.node.create')
+                && (!operationReconcileId || message.capabilities.includes('scene.snapshot'));
             client.send(JSON.stringify({ type: 'helloAck', accepted: ok, sessionId, protocolVersion: '0.1' }));
             if (!ok) { close(1); return; }
             clearTimeout(timer);
-            receipt(record, 'capability', 'passed', [{ kind: 'capability-declaration', source: 'Creator extension hello' }]);
+            if (!operationReconcileId) receipt(record, 'capability', 'passed', [{ kind: 'capability-declaration', source: 'Creator extension hello' }]);
             run().catch((error) => {
+                if (operationReconcileId) {
+                    process.stderr.write(`${error.code || error.message || error}\n`); close(1); return;
+                }
                 const phase = record.phases.preflight === 'pending' ? 'preflight' : record.phases.editor === 'pending' ? 'editor' : 'disk';
                 receipt(record, phase, 'failed', [], { code: error.code || error.message || 'NODE_OPERATION_FAILED', phase,
                     message: String(error.message || error), retryable: false, sideEffect: record.intent === 'editor-write-sent' ? 'possible' : 'none' });
@@ -304,13 +347,13 @@ wss.on('connection', (client) => {
 });
 server.listen(0, '127.0.0.1', () => {
     fs.mkdirSync(sessionDirectory, { recursive: true });
-    const session = { protocolVersion: '0.1', sessionId, operationId, creatorVersion, projectRoot,
+    const session = { protocolVersion: '0.1', sessionId, operationId: operationReconcileId || operationId, creatorVersion, projectRoot,
         url: `ws://127.0.0.1:${server.address().port}/cocos-agent-bridge`, token, expiresAt: Date.now() + 1800000,
-        nodeOperation: { nonce, ...manifest } };
+        ...(operationReconcileId ? { operationReconcile: { nonce } } : { nodeOperation: { nonce, ...record.manifest } }) };
     const temporary = `${sessionPath}.${process.pid}.tmp`;
     fs.writeFileSync(temporary, JSON.stringify(session), { mode: 0o600 }); fs.renameSync(temporary, sessionPath);
     timer = setTimeout(() => { process.stderr.write('Editor handshake timed out.\n'); close(1); }, 20000);
-    process.stdout.write(`Node create Host ready; operationId: ${operationId}\n`);
+    process.stdout.write(`Node create Host ready; operationId: ${operationReconcileId || operationId}\n`);
 });
 process.on('SIGINT', () => close(130));
 process.on('SIGTERM', () => close(143));
