@@ -78,8 +78,10 @@ function start(options) {
     let nativeSessionPath = null;
     if (platform === 'web-preview') {
         preview = new URL(options.previewUrl);
+        const previewPort = Number(preview.port);
         if (preview.protocol !== 'http:' || preview.hostname !== '127.0.0.1'
-            || preview.port !== '7456') throw Error('INVALID_PREVIEW_URL');
+            || !Number.isInteger(previewPort) || previewPort < 1 || previewPort > 65535
+            || preview.username || preview.password) throw Error('INVALID_PREVIEW_URL');
         origin = preview.origin;
     } else {
         nativeSessionPath = prepareNativeSessionPath(options.nativeWritablePath);

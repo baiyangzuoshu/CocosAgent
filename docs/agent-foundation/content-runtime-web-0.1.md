@@ -20,12 +20,16 @@
 
 2026-10-08 用 Creator 2.4.15 构建并编译当前 `Mac` 目标，两个构建步骤都完成；启动新包后可见 `Hello, World!` 场景。这只确认当前示例能生成并启动 Mac 原生包，不证明 CocosAgent 动态内容通道已连接。结构化边界记录见[原生 bootstrap 审计](traces/cocos-agent-content-runtime-native-bootstrap-2.4.jsonl)。
 
-源码已说明为什么不能直接复用 Web 通道：`assets/Script/CocosAgentRuntimeChannel.js::session` 只从浏览器 `location` 读取 `cocosAgentPort` 和 `cocosAgentToken`；没有这两个预览 URL 参数时，`HelloWorld.onLoad` 不会挂载运行时。Host 的 `tools/cocos-agent-bridge/runtime/content-runtime-host.js::start` 也只接受 2.4 Web 预览 `http://127.0.0.1:7456/`，并要求 WebSocket `Origin` 与预览源一致。此次 Mac 启动没有启动 Host 连接，因此没有声称已经实测 native 连接失败或成功；结论是当前合同缺少 native session bootstrap。
+源码已说明为什么不能直接复用 Web 通道：`assets/Script/CocosAgentRuntimeChannel.js::session` 只从浏览器 `location` 读取 `cocosAgentPort` 和 `cocosAgentToken`；没有这两个预览 URL 参数时，`HelloWorld.onLoad` 不会挂载运行时。Host 的 `tools/cocos-agent-bridge/runtime/content-runtime-host.js::start` 要求显式提供准确的 `http://127.0.0.1:<port>/` 预览地址，并要求 WebSocket `Origin` 与该 origin 一致。Creator 预览通常使用 7456，独立构建包可使用自己的 loopback 静态服务端口。此次 Mac 启动没有启动 Host 连接，因此没有声称已经实测 native 连接失败或成功；结论是当时合同缺少 native session bootstrap。
 
 ## 2.4 Mac 原生会话接线
 
-2026-10-08 已实现独立的 Mac 原生会话引导：Host 仍绑定 `127.0.0.1`，为每次会话生成随机 256-bit bearer token 和 session ID，将连接地址写入 `jsb.fileUtils.getWritablePath() + "cocos-agent/runtime-session.json"`。目录权限为 `0700`，会话文件为 `0600`；文件携带 15 分钟首次启动期限，Host 接受首个匹配会话后立即删除。运行时仅在 Creator 2.4 的 OS X 原生环境读取该文件，并发送平台、版本、场景及 session ID。Creator 的 JSB WebSocket 实测会携带 `Origin: http://127.0.0.1:<临时端口>`；原生 Host 只接受该 loopback Origin 形式并继续校验随机令牌。Web 预览继续要求 `http://127.0.0.1:7456` 的准确 Origin，不接受原生路径放宽。
+2026-10-08 已实现独立的 Mac 原生会话引导：Host 仍绑定 `127.0.0.1`，为每次会话生成随机 256-bit bearer token 和 session ID，将连接地址写入 `jsb.fileUtils.getWritablePath() + "cocos-agent/runtime-session.json"`。目录权限为 `0700`，会话文件为 `0600`；文件携带 15 分钟首次启动期限，Host 接受首个匹配会话后立即删除。运行时仅在 Creator 2.4 的 OS X 原生环境读取该文件，并发送平台、版本、场景及 session ID。Creator 的 JSB WebSocket 实测会携带 `Origin: http://127.0.0.1:<临时端口>`；原生 Host 只接受该 loopback Origin 形式并继续校验随机令牌。Web Host 也只接受精确匹配调用方配置的 `127.0.0.1` Origin，不接受其他 Host 或 HTTPS。
 
 Host 的命令行接线见 [`tools/cocos-agent-bridge/README.md`](../../tools/cocos-agent-bridge/README.md)。2.4.15 Mac 包既有轨迹显示 `getWritablePath()` 为当前用户的 `Documents/`；调用时应传入实际包观测到的绝对路径，不在 Host 内推算操作系统目录。原生成功回执只由已认证的运行时通道写入；公开 `content.runtime.accept` 仍只接受 Web 预览回执，避免外部 Agent 冒充原生应用。
 
 Host 级测试覆盖了 Mac JSB 的 loopback Origin、权限、首次认证、会话文件删除与 `effective` 回执。Creator 2.4.15 已重新 Build/Compile 并启动 Mac 包，真实通道完成红、蓝资源应用；对构建包缺少的资源返回 `retained`，屏幕仍显示蓝版；Host 回滚后运行时回 `already-active`，并再次确认蓝版 `effective`。真实握手还发现 JSB Origin 带临时端口，Host 据此采用严格的 `http://127.0.0.1:<port>` 规则。完整身份、指纹、UUID、回执和证据边界见[Mac 原生轨迹](traces/cocos-agent-content-channel-2.4-mac-native.jsonl)。此结果只覆盖本机 2.4 Mac 开发包；重启恢复、多轮内存/性能预算、其他构建身份与移动端尚未验证。
+
+## Web-Mobile 构建包运行时通道
+
+为使 Creator 的默认 7456 预览仍运行时能够单独打开 Web-Mobile 构建包，Host 接受调用方显式提供的准确 `http://127.0.0.1:<port>/` Origin。Host 继续只绑定 `127.0.0.1`、生成一次性会话 token，并拒绝其他 Host 与 HTTPS；集成测试确认非 `127.0.0.1` 主机和 HTTPS 会被拒绝。实际 2.4 Web-Mobile 构建包在独立 loopback 静态服务中启动后，`HelloWorld.onLoad` 经 URL 参数挂接认证通道，从包内 `resources` 加载蓝、红纹理。蓝 → 红回执均为 `applied`；`content.rollback` 选回蓝版后再次得到 `applied`，最终 `effective.json` 为原蓝色 release。浏览器画面按蓝、红、蓝验证；完整身份与回执见[构建包通道轨迹](traces/cocos-agent-content-build-2.4-runtime-web.jsonl)。临时红色 release 清理、原选中指针恢复；保留蓝色 `effective` 观测。该轨迹只证明此 Creator 2.4.15 Web-Mobile 包和当前本机资源，仍不代表远端内容分发、移动设备、原生构建或性能预算。

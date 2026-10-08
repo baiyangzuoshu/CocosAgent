@@ -1,0 +1,3 @@
+{"sequence":1,"observedAt":"2026-10-08T15:20:58Z","event":"static-preview-start","creatorVersion":"2.4.15","buildId":"web-real-ui-01","root":"2.4.15NewProject/build/cocos-agent/web-real-ui-01/web-mobile","origin":"http://127.0.0.1:50466/","boundAddress":"127.0.0.1","mode":"read-only-static-files"}
+{"sequence":2,"observedAt":"2026-10-08T15:20:58Z","event":"browser-runtime-observed","pageTitle":"Cocos Creator | hello_world","accessibilityTree":["GameCanvas"],"screenshotObservation":"Hello World scene rendered","visualAcceptance":"passed"}
+{"sequence":3,"observedAt":"2026-10-08T15:20:58Z","event":"static-preview-stopped","outputModified":false,"publicDeployment":false,"dynamicContentSwapTested":false}

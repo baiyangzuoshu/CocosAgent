@@ -6,7 +6,7 @@
 
 Host 在 `.cocos-agent/content-releases/<releaseId>.json` 保存不可变记录和指纹，在同目录 `selected.json` 保存本地选择及上一个版本，`effective.json` 保存已核对的运行时成功回执。重复 staging 同一 ID/相同指纹是幂等的；同一 ID 不同内容被拒绝。选择需传 `expectedCurrent`，避免过期请求覆盖新选择；选择前重读文件、`.meta`、摘要和指纹。失败不修改指针。回退需传当前 ID 并且必须有上一版本；回退本身只更改 Host 选中指针。运行时 `retained` 回执不得登记为 `effective`。单项目仍按[调度合同](cocos-agent-dispatch-0.1.md)采用一个活动写操作；本版本文件协议未实现跨进程锁，因此不允许多个 Host 同时写同一项目。
 
-实际部署路径目前就是当前工程的 Creator 构建包内 `resources`。两版 Web 预览中，独立验收宿主已把选中记录交给版本专属运行时适配器并读回成功/失败状态；游戏本身尚未在场景中持久挂接 Host 通道，不能把这条测试通道当作已发布游戏能力。两版早期 Web 可见替换与 Mac 加载/释放证据见[动态内容首条切片](dynamic-content-first-slice.md)。新的远端发布必须另外定义 URL、构建版本 Hash、依赖下载、缓存和回退策略。
+实际部署路径目前就是当前工程的 Creator 构建包内 `resources`。2.4 游戏在 Web 预览、Mac 开发包和本机 Web-Mobile 构建包中已接入 Host 运行时通道；3.8 仍以独立验收宿主为主，尚无等价的正常启动接线。Web-Mobile 构建包的蓝红切换与回滚证据见[构建合同](content-build-web-0.1.md)；两版早期 Web 可见替换与 Mac 加载/释放证据见[动态内容首条切片](dynamic-content-first-slice.md)。这些本地回环不是已部署游戏能力；新的远端发布必须另外定义 URL、构建版本 Hash、依赖下载、缓存和回退策略。
 
 ### 从已验收场景流水线生成运行时版本（仅 Creator 2.4.15）
 

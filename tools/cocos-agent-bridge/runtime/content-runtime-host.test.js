@@ -15,6 +15,22 @@ test('runtime channel refuses Creator versions outside the active 2.4.15 scope',
         { message: 'UNSUPPORTED_CREATOR_VERSION' });
 });
 
+test('web runtime accepts an explicitly configured loopback preview origin and rejects non-loopback origins', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-runtime-origin-'));
+    let host;
+    try {
+        host = await start({ projectRoot: root, creatorVersion: '2.4.15', previewUrl: 'http://127.0.0.1:50466/' });
+        assert.equal(new URL(host.previewUrl).origin, 'http://127.0.0.1:50466');
+        assert.throws(() => start({ projectRoot: root, creatorVersion: '2.4.15', previewUrl: 'http://localhost:50466/' }),
+            { message: 'INVALID_PREVIEW_URL' });
+        assert.throws(() => start({ projectRoot: root, creatorVersion: '2.4.15', previewUrl: 'https://127.0.0.1:50466/' }),
+            { message: 'INVALID_PREVIEW_URL' });
+    } finally {
+        if (host) await host.close();
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
 test('local runtime channel sends selected release and accepts its receipt', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-runtime-host-'));
     const dir = path.join(root, 'assets/resources');
@@ -31,7 +47,7 @@ test('local runtime channel sends selected release and accepts its receipt', asy
     try {
         assert.equal(content.stage({ projectRoot: root, creatorVersion: '2.4.15', manifest }).success, true);
         assert.equal(content.select({ projectRoot: root, creatorVersion: '2.4.15', releaseId: 'red', expectedCurrent: null }).success, true);
-        host = await start({ projectRoot: root, creatorVersion: '2.4.15', previewUrl: 'http://127.0.0.1:7456/' });
+        host = await start({ projectRoot: root, creatorVersion: '2.4.15', previewUrl: 'http://127.0.0.1:50466/' });
         const preview = new URL(host.previewUrl);
         socket = new WebSocket(`ws://127.0.0.1:${preview.searchParams.get('cocosAgentPort')}/runtime?token=${preview.searchParams.get('cocosAgentToken')}`,
             { origin: preview.origin });
