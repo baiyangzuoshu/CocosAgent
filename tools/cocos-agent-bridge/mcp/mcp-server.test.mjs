@@ -87,6 +87,10 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         assert.match(workflow.messages[0].content.text, new RegExp(value.projects[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
         assert.match(workflow.messages[0].content.text, /do not retry execute/i);
         assert.match(workflow.messages[0].content.text, /Never invent visual evidence/);
+        assert.match(workflow.messages[0].content.text, /asset\.searchPng/);
+        assert.match(workflow.messages[0].content.text, /metadataStatus is valid/);
+        assert.match(workflow.messages[0].content.text, /scene\.node\.create/);
+        assert.match(workflow.messages[0].content.text, /multiple candidates fit.*stop and ask/i);
 
         const listed = await client.callTool({ name: 'cocos_2x_instances_list', arguments: {} });
         assert.equal(listed.structuredContent.data.length, 2);

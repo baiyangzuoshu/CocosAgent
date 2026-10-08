@@ -141,14 +141,17 @@ function createServer(projectRoots, options = {}) {
     }, async (uri) => ({ contents: [{ uri: uri.href, mimeType: 'text/markdown', text: fs.readFileSync(COCOS_2X_SKILL_PATH, 'utf8') }] }));
 
     server.registerPrompt('cocos_2x_resource_to_scene_workflow', {
-        title: 'Import PNGs into a Creator 2.4 scene',
-        description: 'Guide a requested PNG-to-scene operation through planning, execution, readback, visual acceptance, and optional content release staging.',
+        title: 'Find or import PNGs into a Creator 2.4 scene',
+        description: 'Guide a requested existing or new PNG-to-scene operation through discovery or import, readback, visual acceptance, and optional content release staging.',
         argsSchema: z.object({ projectRoot, request: z.string().min(1).max(2000) }).strict(),
     }, ({ projectRoot: selectedProject, request }) => ({
         messages: [{ role: 'user', content: { type: 'text', text: [
             `Target the registered Creator 2.4.15 project ${selectedProject}. User request: ${request}`,
             'Start with cocos_2x_instances_get and cocos_2x_capabilities_list. Continue only if this exact project is ready.',
-            'For PNG placement, call cocos_2x_assets_scene_plan first. Review the returned pipelineId, asset identities, target Canvas, node names, and positions before calling cocos_2x_assets_scene_execute once.',
+            'When the requested PNG already exists in the project, call cocos_2x_command_execute with asset.searchPng. Use only an item whose metadataStatus is valid. If no valid match exists or multiple candidates fit the request, stop and ask which asset to use.',
+            'For a uniquely identified existing PNG, call scene.node.inspect for the requested parent and use its exact node path and UUID. When the user requested scene placement, call cocos_2x_command_execute with scene.node.create, a cc.Sprite component that references the returned spriteFrameUuid, and only the requested transform.',
+            'When the request provides new local PNG files, call cocos_2x_assets_scene_plan. Review the returned pipelineId, asset identities, target Canvas, node names, and positions before calling cocos_2x_assets_scene_execute once.',
+            'After scene.node.create, inspect the operation phases and matching local Web preview; record visual acceptance only after viewing the requested Sprite. If the write outcome is uncertain, inspect operation state and never repeat the write blindly.',
             'After execution, read cocos_2x_assets_scene_get and cocos_2x_assets_scene_validate. If a call times out or returns an uncertain state, do not retry execute; inspect the pipeline, exact nodes, and operation records, then compensate only with the required live and disk evidence.',
             'Call cocos_2x_assets_scene_cancel only when the user explicitly asks to cancel an active resource-to-scene execution. Cancellation waits for the current Host call, stops at a safe write boundary, and attempts compensation; inspect the final pipeline receipt.',
             'Inspect each Sprite in the matching local Web preview before calling cocos_2x_assets_scene_preview_accept. Never invent visual evidence or treat source, disk, or headless-only observations as visual acceptance.',
