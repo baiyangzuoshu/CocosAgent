@@ -1,7 +1,11 @@
 'use strict';
 
 const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { dispatch } = require('./agent-dispatch');
+const operationStore = require('./operation-store');
 
 const projectRoot = '/tmp/cocos-agent-dispatch-project';
 const instanceId = 'dfc80898-3a3b-4ac1-8d28-bc6df6515c88';
@@ -131,6 +135,23 @@ result = dispatch({ ...nodeRequest, input: { ...nodeRequest.input, components: l
         : nodeInvoke(script, args));
 assert.strictEqual(result.outcome, 'needs-preview');
 assert.deepStrictEqual(result.result.components, labelComponents);
+
+const compensatedProject = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-agent-node-compensation-'));
+const compensatedOperationId = 'b2765d36-d354-4c6f-ae12-a24f564bb310';
+const compensatedRecord = { ...nodeRecord, operationId: compensatedOperationId, projectRoot: compensatedProject,
+    manifest: { ...nodeRecord.manifest, action: 'compensate' },
+    phases: { editor: 'passed', disk: 'passed', preview: 'skipped', recovery: 'passed' } };
+try {
+    operationStore.write(compensatedProject, compensatedRecord, true);
+    result = dispatch({ projectRoot: compensatedProject, creatorVersion: '2.4.15', operationGetId: compensatedOperationId },
+        (script, args) => script === 'node-create-host.js' && args.includes('--operation-get')
+            ? { status: 0, stdout: JSON.stringify({ success: true, data: compensatedRecord }) }
+            : { status: 1, stdout: '', stderr: 'Unexpected operation status request.' });
+    assert.strictEqual(result.outcome, 'completed');
+    assert.strictEqual(result.result.action, 'compensate');
+    assert.strictEqual(result.phases.preview, 'skipped');
+} finally { fs.rmSync(compensatedProject, { recursive: true, force: true }); }
+
 const callsBeforeInvalidSet = nodeInvokeCalls.length;
 assert.strictEqual(dispatch({ ...nodeRequest, input: { ...nodeRequest.input,
     components: [...nodeComponents, ...labelComponents] } }, nodeInvoke).error.code, 'INVALID_ARGUMENT');

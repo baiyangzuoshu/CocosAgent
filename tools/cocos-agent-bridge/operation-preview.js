@@ -41,19 +41,26 @@ function acceptPreview({ projectRoot, creatorVersion, operationId, evidence }) {
     if (!record.manifest || !record.phases || !record.sceneName) return failure('OPERATION_RECORD_INVALID', 'Operation record is incomplete.');
     if (!hasPreviewTarget(record)) return failure('PREVIEW_NOT_APPLICABLE', 'This operation has no visible scene object to preview.');
     if (record.phases.disk !== 'passed') return failure('DISK_NOT_VERIFIED', 'Preview cannot pass before disk readback.');
+    const visualEvidence = { kind: 'visual-preview', source: 'Agent visual inspection in local Web preview',
+        sceneName: record.sceneName, nodeName: record.manifest.nodeName, assetUuid: record.manifest.assetUuid || firstSpriteUuid(record),
+        nodeUuid: record.createdNodeUuid || undefined, previewUrl: evidence.url,
+        observedAt: new Date(evidence.observedAt).toISOString(), note: evidence.note.trim() };
     if (record.phases.preview === 'passed') {
         const previous = record.receipts.find((item) => item.phase === 'preview' && item.status === 'passed');
-        const original = previous && previous.evidence && previous.evidence[0];
-        if (!original || original.previewUrl !== evidence.url || original.observedAt !== new Date(evidence.observedAt).toISOString()
-            || original.note !== evidence.note.trim()) return failure('PREVIEW_ALREADY_ACCEPTED', 'A different preview observation is already recorded.');
-        return { success: true, data: record, alreadyAccepted: true };
+        if (!previous || !Array.isArray(previous.evidence)) return failure('OPERATION_RECORD_INVALID', 'Preview receipt is incomplete.');
+        const duplicate = previous.evidence.some((item) => item.kind === 'visual-preview'
+            && item.previewUrl === visualEvidence.previewUrl && item.observedAt === visualEvidence.observedAt
+            && item.note === visualEvidence.note);
+        if (duplicate) return { success: true, data: record, alreadyAccepted: true };
+        if (previous.evidence.length >= 8) return failure('PREVIEW_EVIDENCE_LIMIT', 'Preview receipt already has the maximum evidence count.');
+        previous.evidence.push(visualEvidence);
+        record.updatedAt = new Date().toISOString();
+        try { store.write(project, record); } catch (_) { return failure('OPERATION_WRITE_FAILED', 'Cannot persist preview receipt.'); }
+        return { success: true, data: record, alreadyAccepted: false, appended: true };
     }
     if (record.phases.preview !== 'pending') return failure('PREVIEW_STATE_CONFLICT', 'Preview is not pending.');
     const receipt = { contractVersion: '0.1', operationId, capabilityId: record.capabilityId || 'scene.pngSprite', creatorVersion,
-        phase: 'preview', status: 'passed', evidence: [{ kind: 'visual-preview', source: 'Agent visual inspection in local Web preview',
-            sceneName: record.sceneName, nodeName: record.manifest.nodeName, assetUuid: record.manifest.assetUuid || firstSpriteUuid(record),
-            nodeUuid: record.createdNodeUuid || undefined,
-            previewUrl: evidence.url, observedAt: new Date(evidence.observedAt).toISOString(), note: evidence.note.trim() }] };
+        phase: 'preview', status: 'passed', evidence: [visualEvidence] };
     record.receipts.push(receipt);
     record.phases.preview = 'passed';
     record.updatedAt = new Date().toISOString();

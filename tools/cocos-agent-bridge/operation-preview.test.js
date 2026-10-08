@@ -32,7 +32,11 @@ try {
     assert.strictEqual(first.data.receipts[0].evidence[0].previewUrl, request.evidence.url);
     const second = acceptPreview(request);
     assert.strictEqual(second.alreadyAccepted, true);
-    assert.strictEqual(acceptPreview({ ...request, evidence: { ...request.evidence, note: 'Different observation.' } }).error.code, 'PREVIEW_ALREADY_ACCEPTED');
+    const additionalVisual = acceptPreview({ ...request, evidence: { ...request.evidence, note: 'A second visual check.' } });
+    assert.strictEqual(additionalVisual.success, true);
+    assert.strictEqual(additionalVisual.appended, true);
+    assert.strictEqual(store.read(projectRoot, operationId).receipts[0].evidence.length, 2);
+    assert.strictEqual(acceptPreview({ ...request, evidence: { ...request.evidence, note: 'A second visual check.' } }).alreadyAccepted, true);
     assert.strictEqual(store.read(projectRoot, operationId).receipts.length, 1);
 
     const nodeOperationId = crypto.randomUUID();
@@ -58,6 +62,13 @@ try {
     assert.strictEqual(runtimeAccepted.data.receipts[0].capabilityId, 'scene.node.create');
     assert.strictEqual(runtimeAccepted.data.receipts[0].evidence[0].kind, 'runtime-preview');
     assert.strictEqual(acceptRuntimePreview(runtimeRequest).alreadyAccepted, true);
+    const manualEvidence = { url: 'http://127.0.0.1:7456/', observedAt: now, note: 'The sprite is visible in the local preview.' };
+    const visualOnRuntime = acceptPreview({ projectRoot, creatorVersion: '2.4.15', operationId: nodeOperationId, evidence: manualEvidence });
+    assert.strictEqual(visualOnRuntime.success, true);
+    assert.strictEqual(visualOnRuntime.appended, true);
+    assert.strictEqual(visualOnRuntime.data.receipts[0].evidence[0].kind, 'runtime-preview');
+    assert.strictEqual(visualOnRuntime.data.receipts[0].evidence[1].kind, 'visual-preview');
+    assert.strictEqual(acceptPreview({ projectRoot, creatorVersion: '2.4.15', operationId: nodeOperationId, evidence: manualEvidence }).alreadyAccepted, true);
     assert.strictEqual(acceptRuntimePreview({ ...runtimeRequest, previewUrl: 'https://example.com/' }).error.code,
         'INVALID_PREVIEW_EVIDENCE');
     process.stdout.write('preview evidence validation and idempotent persistence passed\n');

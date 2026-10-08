@@ -238,7 +238,8 @@ function operationStatus(request, invoke) {
     }
     if (record.phases.disk === 'passed') {
         return { success: true, outcome: (nodeOperation && record.phases.preview === 'passed') || (nodeOperation && !(record.manifest.components || []).length)
-            || record.manifest.sceneAction === 'compensate' || record.phases.preview === 'passed' ? 'completed' : 'needs-preview', ...base };
+            || (nodeOperation && record.manifest.action === 'compensate') || record.manifest.sceneAction === 'compensate'
+            || record.phases.preview === 'passed' ? 'completed' : 'needs-preview', ...base };
     }
     if (record.intent === 'editor-write-sent' || record.phases.editor === 'passed') {
         return { success: false, outcome: 'needs-review', ...base,

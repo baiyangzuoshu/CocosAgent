@@ -21,7 +21,7 @@
 | `cocos_2x_command_execute` | 写入可能 | 调度目录中的 2.4.15 语义命令，返回统一 Host 回执 |
 | `cocos_2x_operation_get` | 只读 | 查询持久操作记录，供重新连接和不确定结果检查 |
 | `cocos_2x_operation_reconcile` | 写 Host 恢复证据 | 对账符合条件的中断操作；不重放编辑器写入 |
-| `cocos_2x_operation_preview_accept` | 写预览回执 | 在实际观察本次场景预览后，登记 URL、时间和可见结果 |
+| `cocos_2x_operation_preview_accept` | 写预览回执 | 登记本地预览中的可见结果；保留同阶段已有的运行态读回证据 |
 | `cocos_2x_content_build_plan` | 只读 | 校验 release 并查看构建计划 |
 | `cocos_2x_content_build_execute` | 写入构建产物 | 生成并校验 Web-Mobile 包 |
 | `cocos_2x_content_build_get` | 只读 | 读取持久化构建记录 |
@@ -31,6 +31,8 @@
 | `cocos_2x_content_preview_stop` | 结束本机会话 | 关闭预览运行时与静态服务 |
 
 实例调用顺序为：列出实例，选定列表中的 `projectRoot`，查询能力，再按回执决定是否调用命令。构建和预览工具也要求从实例列表选择项目；MCP 参数 schema 会将项目路径限制为本进程启动时配置的路径。
+
+`cocos_2x_operation_preview_accept` 只接受 loopback HTTP URL。preview 阶段仍待验收时，它创建视觉回执；自动运行态检查已通过时，它会把视觉观察作为额外证据追加到现有 preview 回执，不覆盖原有 runtime 状态证据。相同视觉证据重复提交幂等；每个回执最多保留 8 条证据。
 
 ## 启动和配置
 
@@ -72,6 +74,6 @@ node /absolute/path/Cocos_Engine/tools/cocos-agent-bridge/mcp/mcp-server.mjs \
 
 ## 验收与限制
 
-自动测试使用官方 MCP SDK 的 Client、Server 和 `InMemoryTransport`：确认工具发现、2.4 目标固定、实例选择、共享 JSONL 路由、错误保留、命令专属输入拒绝及操作记录、对账和预览回执的请求映射。另用官方 MCP SDK `StdioClientTransport` 连接真实 2.4.15 工程：发现 14 个工具、实例 `ready`、读取 8 项可用命令，并经 MCP 执行只读 `scene.snapshot`，结果为 `completed`、活动场景 `helloworld`、12 个节点且未截断；没有执行写入。通过 MCP 读取已有操作记录 `107f5723-8cf3-4117-9482-09d8d71fa999` 成功。随后经 MCP 读取已完成的 `web-host-cli-01`，调用 `content.preview.start/get/stop`；浏览器画面显示蓝色方块和 “Hello, World!”，运行时状态为 `runtime-observed`，预览服务已关闭。场景和构建包未修改。证据见 [MCP 实机轨迹](traces/cocos-agent-mcp-2.4.jsonl)。MCP 场景写命令、操作 reconcile/preview-accept 及 `content.build.execute` 尚未实机验收。
+自动测试使用官方 MCP SDK 的 Client、Server 和 `InMemoryTransport`：确认工具发现、2.4 目标固定、实例选择、共享 JSONL 路由、错误保留、命令专属输入拒绝及操作记录、对账和预览回执的请求映射。官方 MCP SDK `StdioClientTransport` 连接真实 2.4.15 工程后，发现 14 个工具、选中 `helloworld` 实例、读取 8 项可用命令，并经 MCP 完成只读 `scene.snapshot`。随后通过 MCP 在 `Canvas` 下创建带 `cc.Label` 的临时节点：编辑器保存、磁盘读回和 Chrome 运行态属性检查均通过；浏览器截图实际显示 “MCP WRITE VERIFIED”。`cocos_2x_operation_preview_accept` 将单独的视觉证据追加到已有运行态 preview 回执，`operation.get` 返回 `completed`。用 MCP 补偿和重放两轮后，补偿记录的 capability/editor/disk/recovery 均通过，preview 为 `skipped`；`operation.get` 与 `scene.node.inspect` 分别返回 `completed` 和 `not-found`，刷新预览恢复到原始 Hello World 画面。Creator 保存时重排了 `.fire` 序列化字段，测试后已把示例场景恢复为提交版本；当前 MCP 实测未留下场景差异。该轮还修复了补偿型 `scene.node.create` 被错误报告为 `needs-preview` 的状态判断，并为运行态与视觉双证据追加行为增加回归测试。证据见 [MCP 实机轨迹](traces/cocos-agent-mcp-2.4.jsonl)。MCP `operation.reconcile` 和 `content.build.execute` 尚未实机验收；`content.build.execute` 的既有 JSONL/Host 实机证据仍见内容构建合同。
 
 当前没有 MCP 资源/提示词、实时进度、取消、重连恢复或远程 HTTP transport。当前首版不改 Creator 扩展代码；后续可按面试目标逐步把验证过的 2.x 命令合同沉淀为 CocosAgent skill，再决定是否补 3.x。
