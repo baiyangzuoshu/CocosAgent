@@ -148,8 +148,12 @@ function validCatalog(target, result) {
             ? 'catalog.schema.json#/$defs/pngSpriteInput2x' : 'catalog.schema.json#/$defs/pngSpriteInput',
             input: target.creatorVersion === '2.4.15' ? catalogSchema.$defs.pngSpriteInput2x : catalogSchema.$defs.pngSpriteInput,
             preconditions: target.creatorVersion === '2.4.15' ? ['activeScene', 'canvasExisting', 'spriteFrameImported'] : ['activeScene', 'spriteFrameImported'] },
-        'scene.node.create': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/nodeCreateInput', input: catalogSchema.$defs.nodeCreateInput,
-            preconditions: ['activeScene', 'parentIdentity'] },
+        'scene.node.create': { access: 'write', inputSchema: target.creatorVersion === '2.4.15'
+            ? 'catalog.schema.json#/$defs/nodeCreateInput2x' : 'catalog.schema.json#/$defs/nodeCreateInput',
+            input: target.creatorVersion === '2.4.15' ? catalogSchema.$defs.nodeCreateInput2x : catalogSchema.$defs.nodeCreateInput,
+            preconditions: target.creatorVersion === '2.4.15'
+                ? ['activeScene', 'parentIdentity', 'componentTypesWhitelisted', 'componentSetCompatible', 'resourceReferencesResolvable']
+                : ['activeScene', 'parentIdentity'] },
     };
     const seen = new Set();
     for (const command of result.commands) {

@@ -1,12 +1,16 @@
 ---
 name: cocos2-scene-node-create
-description: 在 Cocos Creator 2.4.15 活动场景中，通过 CocosAgent 安全创建、补偿或重放空节点；适用于已连接的 2.x 示例或同版工程。
+description: 在 Cocos Creator 2.4.15 中用 CocosAgent 创建、检查、补偿或重放场景节点；Sprite、Label、SpriteFrame 引用和 2D 变换仅限此版本已验证的输入。
 ---
 
-# Creator 2.4 空节点写入
+# Creator 2.4 场景节点与组件操作
 
-使用 `scene.node.inspect` 读取目标父节点的完整路径和 UUID，再向 `scene.node.create` 提交两者、节点名与 `action=apply`。2.4 的场景文件是 `.fire`；节点可位于 Canvas 或其他父节点下。先核对当前活动场景，不能用 3.8 的场景格式或组件 API 解释结果。
+先用 `scene.node.inspect` 确认活动场景、父节点完整路径与 UUID，再用 `scene.node.create` 写入。2.4 场景是 `.fire` 文件，不能把 3.8 的 `.scene` 序列化或组件 API 套进来。
 
-重名直接子节点是冲突，不能当作幂等成功。补偿时使用已通过 `disk=passed` 的创建/重放操作 ID 作为 `sourceOperationId`；扩展只删除 UUID 与来源记录相同的节点。重放引用已通过磁盘校验的补偿操作 ID，并接受新 UUID。结果不确定时先调用 `operation.get`，不要换新操作 ID 盲目重做。
+当前白名单是空组件节点、一个 `cc.Sprite`（已导入 SpriteFrame UUID）或一个 `cc.Label`（文本），以及 2D position/scale。Sprite 与 Label 同属 `RenderComponent`，不能挂在同一个节点；Host 会在选择编辑器前拒绝该组合。不要动态调用用户给出的组件类名，不要把资源文件路径伪装成 UUID。
 
-空节点没有可见画面；验收看编辑器层级快照与 `.fire` 的父子 UUID 读回。Creator 保存会重写无关序列化字段，临时探针完成后核对并恢复示例场景文件。输入、回执与已验范围见 `docs/agent-foundation/scene-node-create-0.1.md`。
+成功写入后检查 `capability`、`preflight`、`editor` 与 `.fire` 磁盘读回；含组件操作还会自动启动本地 Web 预览，并读回运行时场景节点、组件值、资源 UUID 和变换。若结果为 `needs-review`，先查 `operation.get` 与 `scene.node.inspect`，确认副作用后再决定后续动作，不要换新 operation ID 重试。
+
+需要验证编辑器场景重开时，在 Creator UI 中切到另一个已保存场景，再重新打开目标 `.fire`，然后执行只读 `scene.node.inspect`。`operation.get` 只做磁盘恢复，不能代替 UI 重开。完成测试后按来源操作 ID 补偿，并检查示例场景没有残留探针；Creator 保存可能重写无关序列化字段，核对并恢复已确认干净的样例文件。
+
+命令合同、自动预览证据、实测范围与局限见 [`scene.node.create 0.1`](../../scene-node-create-0.1.md)。源码研究要结合 [Creator 2.4 节点树手册](https://docs.cocos.com/creator/2.4/manual/zh/content-workflow/node-tree.html)、`2.4.15engine/cocos2d/core/components/CCRenderComponent.js` 与 `core/utils/base-node.js`；版本边界和运行证据见 [P1 轨迹](../../traces/scene-node-component-p1-2.4.jsonl)。

@@ -21,6 +21,15 @@ const parentPath = arg('--parent-path');
 const parentUuid = arg('--parent-uuid');
 const nodeName = arg('--node-name');
 const sourceOperationId = arg('--source-operation-id');
+function parseObjectArg(flag, fallback) {
+    const raw = arg(flag);
+    if (raw === undefined) return fallback;
+    try { return JSON.parse(raw); } catch (_) { fail(`INVALID_${flag.slice(2).toUpperCase()}`); }
+}
+let components = parseObjectArg('--components', []);
+let transform = parseObjectArg('--transform', {});
+const componentsProvided = arg('--components') !== undefined;
+const transformProvided = arg('--transform') !== undefined;
 const interruptAfterEditor = process.argv.includes('--interrupt-after-editor');
 if (!['2.4.15', '3.8.7'].includes(creatorVersion) || !fs.existsSync(projectRoot)) fail('INVALID_TARGET');
 if (!uuidPattern.test(operationGetId || operationId) || (expectedInstanceId && !uuidPattern.test(expectedInstanceId))) fail('INVALID_OPERATION_ID');
@@ -57,9 +66,48 @@ function diskState(record) {
     if (sceneAction === 'compensate') return matches.length === 0
         && !objects.some((item) => item && item.__type__ === 'cc.Node' && item._id === record.manifest.targetNodeUuid)
         ? { filename, nodeUuid: record.manifest.targetNodeUuid } : null;
-    if (matches.length !== 1 || !record.createdNodeUuid || matches[0]._id !== record.createdNodeUuid
-        || (matches[0]._components || []).length !== 0) return null;
-    return { filename, nodeUuid: matches[0]._id };
+    if (matches.length !== 1 || (record.createdNodeUuid && matches[0]._id !== record.createdNodeUuid)
+        || !serializedObjectMatches(objects, matches[0], record.manifest)) return null;
+    return { filename, nodeUuid: matches[0]._id, components: record.manifest.components || [] };
+}
+function validObjectComponents(value) {
+    if (!Array.isArray(value) || value.length > 1) return false;
+    const seen = new Set();
+    return value.every((item) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item) || !['cc.Sprite', 'cc.Label'].includes(item.classId)
+            || seen.has(item.classId)) return false;
+        seen.add(item.classId);
+        if (item.classId === 'cc.Sprite') return Object.keys(item).every((key) => ['classId', 'spriteFrameUuid'].includes(key))
+            && uuidPattern.test(item.spriteFrameUuid || '');
+        return Object.keys(item).every((key) => ['classId', 'text'].includes(key))
+            && typeof item.text === 'string' && item.text.length <= 256;
+    });
+}
+function validTransform(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)
+        || Object.keys(value).some((key) => !['position', 'scale'].includes(key))) return false;
+    return ['position', 'scale'].every((key) => value[key] === undefined || (value[key]
+        && typeof value[key] === 'object' && !Array.isArray(value[key])
+        && Object.keys(value[key]).length === 2 && Number.isFinite(value[key].x) && Number.isFinite(value[key].y)
+        && Math.abs(value[key].x) <= 4096 && Math.abs(value[key].y) <= 4096));
+}
+function serializedObjectMatches(objects, node, manifest) {
+    const expected = manifest.components || [];
+    const refs = Array.isArray(node._components) ? node._components : [];
+    if (refs.length !== expected.length) return false;
+    for (let i = 0; i < expected.length; i++) {
+        const ref = refs[i];
+        const component = ref && Number.isInteger(ref.__id__) ? objects[ref.__id__] : null;
+        if (!component || component.__type__ !== expected[i].classId) return false;
+        if (expected[i].classId === 'cc.Sprite' && (!component._spriteFrame || component._spriteFrame.__uuid__ !== expected[i].spriteFrameUuid)) return false;
+        if (expected[i].classId === 'cc.Label' && component._string !== expected[i].text) return false;
+    }
+    const array = node._trs && node._trs.array;
+    const position = manifest.transform && manifest.transform.position;
+    const scale = manifest.transform && manifest.transform.scale;
+    if (position && (!Array.isArray(array) || Math.abs(array[0] - position.x) > 1e-5 || Math.abs(array[1] - position.y) > 1e-5)) return false;
+    if (scale && (!Array.isArray(array) || Math.abs(array[7] - scale.x) > 1e-5 || Math.abs(array[8] - scale.y) > 1e-5)) return false;
+    return true;
 }
 function receipt(record, phase, status, evidence = [], error) {
     record.phases[phase] = status;
@@ -71,15 +119,19 @@ function receipt(record, phase, status, evidence = [], error) {
     store.write(projectRoot, record);
 }
 if (operationGetId) {
-    if (action || parentPath || parentUuid || nodeName || sourceOperationId) fail('READ_ONLY_OPERATION_GET');
+    if (action || parentPath || parentUuid || nodeName || sourceOperationId || arg('--components') !== undefined || arg('--transform') !== undefined) fail('READ_ONLY_OPERATION_GET');
     let record;
     try { record = store.read(projectRoot, operationGetId); } catch (_) { fail('OPERATION_NOT_FOUND'); }
     if (record.projectRoot !== projectRoot || record.creatorVersion !== creatorVersion || record.capabilityId !== 'scene.node.create') fail('OPERATION_TARGET_MISMATCH');
-    if (record.intent === 'editor-write-sent' && (record.createdNodeUuid || record.manifest.action === 'compensate') && record.phases.disk !== 'passed') {
+    if (record.intent === 'editor-write-sent' && (record.createdNodeUuid || record.manifest.action === 'compensate'
+        || (record.manifest.components || []).length) && record.phases.disk !== 'passed') {
         const observed = diskState(record);
-        if (observed) { receipt(record, 'disk', 'passed', [{ kind: 'disk-readback', source: 'operation.get', sceneName: record.sceneName, nodeUuid: observed.nodeUuid }]); record.intent = 'disk-recovered'; record.phases.preview = 'skipped'; if (record.manifest.action === 'compensate') record.phases.recovery = 'passed'; store.write(projectRoot, record); }
+        if (observed) { if (record.manifest.action !== 'compensate') record.createdNodeUuid = observed.nodeUuid;
+            receipt(record, 'disk', 'passed', [{ kind: 'disk-readback', source: 'operation.get', sceneName: record.sceneName, nodeUuid: observed.nodeUuid }]);
+            record.intent = 'disk-recovered'; record.phases.preview = (record.manifest.components || []).length ? 'pending' : 'skipped';
+            if (record.manifest.action === 'compensate') record.phases.recovery = 'passed'; store.write(projectRoot, record); }
     }
-    if (record.phases.disk === 'passed' && record.phases.preview === 'pending') { record.phases.preview = 'skipped'; store.write(projectRoot, record); }
+    if (record.phases.disk === 'passed' && record.phases.preview === 'pending' && !(record.manifest.components || []).length) { record.phases.preview = 'skipped'; store.write(projectRoot, record); }
     process.stdout.write(`${JSON.stringify({ success: true, data: record })}\n`);
     process.exit(0);
 }
@@ -87,6 +139,8 @@ if (!uuidPattern.test(operationId) || !['apply', 'compensate', 'replay'].include
     || typeof parentPath !== 'string' || parentPath.length > 240 || parentPath.includes('//') || parentPath.includes('\\')
     || typeof parentUuid !== 'string' || parentUuid.length < 1 || parentUuid.length > 64
     || !/^[A-Za-z0-9_ -]{1,64}$/.test(nodeName || '')
+    || !validObjectComponents(components) || !validTransform(transform)
+    || (creatorVersion !== '2.4.15' && (components.length || Object.keys(transform).length))
     || (action === 'apply' ? !!sourceOperationId : !uuidPattern.test(sourceOperationId || ''))) fail('INVALID_NODE_CREATE_INPUT');
 let source = null;
 if (sourceOperationId) {
@@ -96,9 +150,13 @@ if (sourceOperationId) {
         || source.manifest.nodeName !== nodeName || sourceOperationId === operationId
         || (action === 'compensate' && (!['apply', 'replay'].includes(source.manifest.action) || !source.createdNodeUuid))
         || (action === 'replay' && source.manifest.action !== 'compensate')) fail('SOURCE_OPERATION_MISMATCH');
+    if (!componentsProvided) components = source.manifest.components || [];
+    else if (JSON.stringify(components) !== JSON.stringify(source.manifest.components || [])) fail('SOURCE_OBJECT_SPEC_MISMATCH');
+    if (!transformProvided) transform = source.manifest.transform || {};
+    else if (JSON.stringify(transform) !== JSON.stringify(source.manifest.transform || {})) fail('SOURCE_OBJECT_SPEC_MISMATCH');
 }
 const manifest = { parentPath, parentUuid, nodeName, action, sourceOperationId: sourceOperationId || null,
-    targetNodeUuid: action === 'compensate' ? source.createdNodeUuid : null };
+    targetNodeUuid: action === 'compensate' ? source.createdNodeUuid : null, components, transform };
 const record = { contractVersion: '0.1', capabilityId: 'scene.node.create', operationId, projectRoot, creatorVersion,
     manifest, sceneName: null, createdNodeUuid: null, intent: 'created', receipts: [],
     phases: { capability: 'pending', preflight: 'pending', editor: 'pending', disk: 'pending', preview: 'pending', recovery: 'pending' },
@@ -159,6 +217,7 @@ async function run() {
     const changed = await request('scene.node.create', params);
     if (!changed || changed.nonce !== nonce || changed.operationId !== operationId || changed.saved !== true
         || changed.parentUuid !== parentUuid || changed.nodeName !== nodeName || typeof changed.nodeUuid !== 'string'
+        || (action !== 'compensate' && !runtimeObjectMatches(changed, manifest))
         || (action === 'compensate' && changed.nodeUuid !== manifest.targetNodeUuid)) throw new Error('EDITOR_RESULT_MISMATCH');
     if (action !== 'compensate') record.createdNodeUuid = changed.nodeUuid;
     receipt(record, 'editor', 'passed', [{ kind: 'editor-result', source: 'Creator scene script', sceneName: record.sceneName, nodeName, nodeUuid: changed.nodeUuid }]);
@@ -168,14 +227,53 @@ async function run() {
     if (!disk) throw new Error('DISK_READBACK_MISMATCH');
     const after = await request('scene.snapshot', { nonce, targetNodePath: `${parentPath}/${nodeName}` });
     if (!after || after.nonce !== nonce || !after.targetNode
-        || (action === 'compensate' ? after.targetNode.status !== 'not-found' : after.targetNode.status !== 'found' || after.targetNode.uuid !== record.createdNodeUuid)) throw new Error('POST_WRITE_SNAPSHOT_MISMATCH');
+        || (action === 'compensate' ? after.targetNode.status !== 'not-found' : after.targetNode.status !== 'found'
+            || after.targetNode.uuid !== record.createdNodeUuid || !runtimeObjectMatches(after.targetNode, manifest))) throw new Error('POST_WRITE_SNAPSHOT_MISMATCH');
     receipt(record, 'disk', 'passed', [{ kind: 'disk-readback', source: disk.filename, sceneName: record.sceneName, nodeName, nodeUuid: disk.nodeUuid, parentUuid }]);
     record.intent = 'disk-verified';
-    record.phases.preview = 'skipped';
+    record.phases.preview = components.length && action !== 'compensate' ? 'pending' : 'skipped';
     record.phases.recovery = action === 'compensate' ? 'passed' : 'pending';
     store.write(projectRoot, record);
     process.stdout.write(`command.result ${JSON.stringify({ command: 'scene.node.create', operationId, sceneName: record.sceneName, action, nodeName, nodeUuid: disk.nodeUuid })}\n`);
+    if (components.length && action !== 'compensate') await verifyRuntimePreview();
     close(0);
+}
+function runtimeObjectMatches(observed, expected) {
+    const actual = observed && (observed.componentDetails || observed.components);
+    const components = expected.components || [];
+    if (!Array.isArray(actual) || actual.length !== components.length) return false;
+    for (let i = 0; i < components.length; i++) {
+        if (actual[i].classId !== components[i].classId) return false;
+        if (components[i].classId === 'cc.Sprite' && actual[i].spriteFrameUuid !== components[i].spriteFrameUuid) return false;
+        if (components[i].classId === 'cc.Label' && actual[i].text !== components[i].text) return false;
+    }
+    const transform = expected.transform || {};
+    if (transform.position && (!observed.transform || Math.abs(observed.transform.position.x - transform.position.x) > 1e-5
+        || Math.abs(observed.transform.position.y - transform.position.y) > 1e-5)) return false;
+    if (transform.scale && (!observed.transform || Math.abs(observed.transform.scale.x - transform.scale.x) > 1e-5
+        || Math.abs(observed.transform.scale.y - transform.scale.y) > 1e-5)) return false;
+    return true;
+}
+async function verifyRuntimePreview() {
+    const nodePath = `${parentPath}/${nodeName}`;
+    try {
+        const started = await request('scene.preview.start', { nonce, sessionId });
+        if (!started || started.nonce !== nonce || started.started !== true || started.creatorVersion !== creatorVersion
+            || path.resolve(started.projectRoot || '') !== projectRoot) throw new Error('PREVIEW_START_MISMATCH');
+        const observed = await require('./preview-runtime').verify({ creatorVersion, projectRoot,
+            sceneName: record.sceneName, nodePath, nodeUuid: record.createdNodeUuid,
+            components, transform });
+        const accepted = require('./operation-preview').acceptRuntimePreview({ projectRoot, creatorVersion,
+            operationId, previewUrl: observed.previewUrl, observedAt: observed.observedAt, runtimeState: observed.runtimeState });
+        if (!accepted || accepted.success !== true) throw new Error(accepted && accepted.error && accepted.error.code || 'PREVIEW_RECEIPT_REJECTED');
+        process.stdout.write(`preview.result ${JSON.stringify({ status: 'passed', previewUrl: observed.previewUrl })}\n`);
+    } catch (error) {
+        record.previewAttempt = { status: 'failed', attemptedAt: new Date().toISOString(),
+            error: { code: error.code || error.message || 'AUTO_PREVIEW_FAILED', message: String(error.message || error).slice(0, 500) } };
+        record.updatedAt = new Date().toISOString();
+        store.write(projectRoot, record);
+        process.stdout.write(`preview.result ${JSON.stringify({ status: 'pending', error: record.previewAttempt.error })}\n`);
+    }
 }
 server.on('error', (error) => { process.stderr.write(`${error.message}\n`); close(1); });
 wss.on('connection', (client) => {

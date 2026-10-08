@@ -67,6 +67,29 @@
         "operationId": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" }
       }
     },
+    "nodeCreateInput2x": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parentPath", "parentUuid", "nodeName", "action"],
+      "properties": {
+        "parentPath": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "parentUuid": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "nodeName": { "type": "string", "pattern": "^[A-Za-z0-9_ -]{1,64}$" },
+        "action": { "enum": ["apply", "compensate", "replay"] },
+        "components": { "type": "array", "maxItems": 1, "items": { "oneOf": [
+          { "type": "object", "additionalProperties": false, "required": ["classId", "spriteFrameUuid"], "properties": {
+            "classId": { "const": "cc.Sprite" }, "spriteFrameUuid": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$" } } },
+          { "type": "object", "additionalProperties": false, "required": ["classId", "text"], "properties": {
+            "classId": { "const": "cc.Label" }, "text": { "type": "string", "maxLength": 256 } } }
+        ] } },
+        "transform": { "type": "object", "additionalProperties": false, "properties": {
+          "position": { "$ref": "#/$defs/canvasPosition" },
+          "scale": { "$ref": "#/$defs/canvasPosition" }
+        } },
+        "sourceOperationId": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" },
+        "operationId": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" }
+      }
+    },
     "command": {
       "type": "object",
       "additionalProperties": false,

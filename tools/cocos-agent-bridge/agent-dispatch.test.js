@@ -91,4 +91,49 @@ for (const [command, input] of [['scene.snapshot', {}], ['scene.node.inspect', {
     assert.strictEqual(result.error, null);
 }
 
+const nodeOperationId = '4f89c7a5-40af-44f9-b526-2eb171e2e334';
+const spriteFrameUuid = 'd5cce470-1e42-4917-a416-332e905525c0';
+const nodeComponents = [{ classId: 'cc.Sprite', spriteFrameUuid }];
+const nodeTransform = { position: { x: 12, y: -4 }, scale: { x: 2, y: 3 } };
+const nodeInstance = { ...instance, creatorVersion: '2.4.15', projectRoot: '/tmp/cocos-agent-dispatch-project-2x' };
+const nodeRecord = { capabilityId: 'scene.node.create', operationId: nodeOperationId, projectRoot: nodeInstance.projectRoot,
+    creatorVersion: '2.4.15', createdNodeUuid: '51d83934-8f4a-47b6-99ee-df64a2f36712', intent: 'disk-verified',
+    sceneName: 'helloworld', manifest: { action: 'apply', parentPath: 'helloworld/Canvas', parentUuid: 'parent-uuid',
+        nodeName: 'P1Probe', components: nodeComponents, transform: nodeTransform },
+    phases: { editor: 'passed', disk: 'passed', preview: 'pending' } };
+const nodeInvokeCalls = [];
+function nodeInvoke(script, args) {
+    nodeInvokeCalls.push({ script, args });
+    if (script === 'catalog-host.js' && args.includes('instances.list'))
+        return { status: 0, stdout: JSON.stringify({ success: true, data: [nodeInstance] }) };
+    if (script === 'catalog-host.js') return { status: 0, stdout: JSON.stringify({ success: true, data: {
+        instance: nodeInstance, commands: [{ id: 'scene.node.create', contractVersion: '0.1', status: 'available', reason: null }],
+    } }) };
+    if (args.includes('--operation-get')) return { status: 0, stdout: JSON.stringify({ success: true, data: nodeRecord }) };
+    return { status: 0, stdout: `command.result ${JSON.stringify({ command: 'scene.node.create', result: { verified: true } })}\n`, stderr: '' };
+}
+const nodeRequest = { targets: [{ creatorVersion: '2.4.15', projectRoot: nodeInstance.projectRoot }],
+    projectRoot: nodeInstance.projectRoot, creatorVersion: '2.4.15', command: 'scene.node.create',
+    input: { parentPath: 'helloworld/Canvas', parentUuid: 'parent-uuid', nodeName: 'P1Probe', action: 'apply',
+        operationId: nodeOperationId, components: nodeComponents, transform: nodeTransform } };
+result = dispatch(nodeRequest, nodeInvoke);
+assert.strictEqual(result.outcome, 'needs-preview');
+assert.deepStrictEqual(result.result.components, nodeComponents);
+assert(nodeInvokeCalls.some((call) => call.script === 'node-create-host.js' && call.args.includes('--components')
+    && call.args.includes(JSON.stringify(nodeComponents)) && call.args.includes('--transform') && call.args.includes(JSON.stringify(nodeTransform))));
+assert.strictEqual(dispatch({ ...nodeRequest, input: { ...nodeRequest.input, components: [{ classId: 'cc.Camera' }] } }, nodeInvoke).error.code,
+    'INVALID_ARGUMENT');
+const labelComponents = [{ classId: 'cc.Label', text: 'P1 label' }];
+const labelRecord = { ...nodeRecord, manifest: { ...nodeRecord.manifest, components: labelComponents, transform: {} } };
+result = dispatch({ ...nodeRequest, input: { ...nodeRequest.input, components: labelComponents, transform: undefined } },
+    (script, args) => script === 'node-create-host.js' && args.includes('--operation-get')
+        ? { status: 0, stdout: JSON.stringify({ success: true, data: labelRecord }) }
+        : nodeInvoke(script, args));
+assert.strictEqual(result.outcome, 'needs-preview');
+assert.deepStrictEqual(result.result.components, labelComponents);
+const callsBeforeInvalidSet = nodeInvokeCalls.length;
+assert.strictEqual(dispatch({ ...nodeRequest, input: { ...nodeRequest.input,
+    components: [...nodeComponents, ...labelComponents] } }, nodeInvoke).error.code, 'INVALID_ARGUMENT');
+assert.strictEqual(nodeInvokeCalls.length, callsBeforeInvalidSet, 'invalid component sets are rejected before target discovery');
+
 process.stdout.write('agent dispatch selection, guards, and receipt decisions passed\n');

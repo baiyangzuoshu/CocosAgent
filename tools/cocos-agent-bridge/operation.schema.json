@@ -32,15 +32,17 @@
       "additionalProperties": false,
       "required": ["kind", "source"],
       "properties": {
-        "kind": { "enum": ["capability-declaration", "scene-snapshot", "editor-result", "disk-readback", "visual-preview", "recovery-readback"] },
+        "kind": { "enum": ["capability-declaration", "scene-snapshot", "editor-result", "disk-readback", "visual-preview", "runtime-preview", "recovery-readback"] },
         "source": { "type": "string", "minLength": 1, "maxLength": 256 },
         "sceneName": { "type": "string", "maxLength": 64 },
         "nodeName": { "type": "string", "maxLength": 80 },
         "assetUuid": { "type": "string", "maxLength": 80 },
+        "nodeUuid": { "type": "string", "maxLength": 80 },
         "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "observedAt": { "type": "string", "format": "date-time" },
         "previewUrl": { "type": "string", "maxLength": 256 },
-        "note": { "type": "string", "maxLength": 500 }
+        "note": { "type": "string", "maxLength": 500 },
+        "runtimeState": { "type": "object" }
       }
     },
     "receipt": {
@@ -50,7 +52,7 @@
       "properties": {
         "contractVersion": { "const": "0.1" },
         "operationId": { "type": "string", "format": "uuid" },
-        "capabilityId": { "const": "scene.pngSprite" },
+        "capabilityId": { "enum": ["scene.pngSprite", "scene.node.create"] },
         "creatorVersion": { "enum": ["2.4.15", "3.8.7"] },
         "phase": { "$ref": "#/$defs/phase" },
         "status": { "$ref": "#/$defs/status" },

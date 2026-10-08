@@ -56,7 +56,11 @@ async function mockEditor(index, options = {}) {
                         input: options.wrongInput && index === 0 ? {} : index === 0 ? inputs.pngSpriteInput2x : inputs.pngSpriteInput,
                         preconditions: index === 0 ? ['activeScene', 'canvasExisting', 'spriteFrameImported'] : ['activeScene', 'spriteFrameImported'],
                         status: index === 0 && !options.noCanvas ? 'available' : 'unavailable', reason: index === 0 ? options.noCanvas ? 'CANVAS_NOT_FOUND' : null : 'NO_OPEN_SCENE' },
-                    { id: 'scene.node.create', contractVersion: '0.1', access: 'write', inputSchema: 'catalog.schema.json#/$defs/nodeCreateInput', input: inputs.nodeCreateInput, preconditions: ['activeScene', 'parentIdentity'], status: index === 0 ? 'available' : 'unavailable', reason: index === 0 ? null : 'NO_OPEN_SCENE' },
+                    { id: 'scene.node.create', contractVersion: '0.1', access: 'write',
+                        inputSchema: index === 0 ? 'catalog.schema.json#/$defs/nodeCreateInput2x' : 'catalog.schema.json#/$defs/nodeCreateInput',
+                        input: index === 0 ? inputs.nodeCreateInput2x : inputs.nodeCreateInput,
+                        preconditions: index === 0 ? ['activeScene', 'parentIdentity', 'componentTypesWhitelisted', 'componentSetCompatible', 'resourceReferencesResolvable'] : ['activeScene', 'parentIdentity'],
+                        status: index === 0 ? 'available' : 'unavailable', reason: index === 0 ? null : 'NO_OPEN_SCENE' },
                 ],
             } }));
         } else if (message.method === 'scene.snapshot') {

@@ -26,7 +26,7 @@ for (const [version, catalog] of [['2.4.15', catalog2], ['3.8.7', catalog3]]) {
     assert.ok(isDeepStrictEqual(commands[1].input, inputs.nodeInspectInput));
     assert.ok(isDeepStrictEqual(commands[2].input, inputs.importPngInput));
     assert.ok(isDeepStrictEqual(commands[3].input, version === '2.4.15' ? inputs.pngSpriteInput2x : inputs.pngSpriteInput));
-    assert.ok(isDeepStrictEqual(commands[4].input, inputs.nodeCreateInput));
+    assert.ok(isDeepStrictEqual(commands[4].input, version === '2.4.15' ? inputs.nodeCreateInput2x : inputs.nodeCreateInput));
     assert.strictEqual(commands[4].status, 'available', version);
     assert.strictEqual(catalog({ sceneName: null, hasCanvas: false })[4].reason, 'NO_OPEN_SCENE');
     assert.strictEqual(commands[3].status, 'available', version);
@@ -34,6 +34,8 @@ for (const [version, catalog] of [['2.4.15', catalog2], ['3.8.7', catalog3]]) {
 }
 assert.strictEqual(catalog2({ sceneName: 'example', hasCanvas: true })[3].inputSchema, 'catalog.schema.json#/$defs/pngSpriteInput2x');
 assert.strictEqual(catalog3({ sceneName: 'example', hasCanvas: true })[3].inputSchema, 'catalog.schema.json#/$defs/pngSpriteInput');
+assert.strictEqual(catalog2({ sceneName: 'example', hasCanvas: true })[4].inputSchema, 'catalog.schema.json#/$defs/nodeCreateInput2x');
+assert.strictEqual(catalog3({ sceneName: 'example', hasCanvas: true })[4].inputSchema, 'catalog.schema.json#/$defs/nodeCreateInput');
 assert.strictEqual(catalog2({ sceneName: 'example', hasCanvas: false })[3].reason, 'CANVAS_NOT_FOUND');
 assert.strictEqual(catalog3({ sceneName: 'example', hasCanvas: false })[3].status, 'available');
 process.stdout.write('both extension command catalogs match input and status contract\n');

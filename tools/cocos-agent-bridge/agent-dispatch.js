@@ -43,6 +43,24 @@ function validPosition(position) {
         && Object.keys(position).length === 2 && Number.isFinite(position.x) && Number.isFinite(position.y)
         && Math.abs(position.x) <= 4096 && Math.abs(position.y) <= 4096;
 }
+function validObjectComponents(components) {
+    if (!Array.isArray(components) || components.length > 1) return false;
+    const seen = new Set();
+    return components.every((component) => {
+        if (!component || typeof component !== 'object' || Array.isArray(component)
+            || !['cc.Sprite', 'cc.Label'].includes(component.classId) || seen.has(component.classId)) return false;
+        seen.add(component.classId);
+        if (component.classId === 'cc.Sprite') return Object.keys(component).every((key) => ['classId', 'spriteFrameUuid'].includes(key))
+            && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(component.spriteFrameUuid || '');
+        return Object.keys(component).every((key) => ['classId', 'text'].includes(key))
+            && typeof component.text === 'string' && component.text.length <= 256;
+    });
+}
+function validTransform(transform) {
+    return transform && typeof transform === 'object' && !Array.isArray(transform)
+        && Object.keys(transform).every((key) => ['position', 'scale'].includes(key))
+        && ['position', 'scale'].every((key) => transform[key] === undefined || validPosition(transform[key]));
+}
 function validInput(command, input, creatorVersion) {
     if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
     const keys = Object.keys(input);
@@ -50,7 +68,11 @@ function validInput(command, input, creatorVersion) {
     if (command === 'scene.node.inspect') return keys.length === 1 && typeof input.nodePath === 'string'
         && input.nodePath.length > 0 && input.nodePath.length <= 240 && !input.nodePath.includes('\\') && !input.nodePath.includes('//');
     if (command === 'asset.importPng') return keys.length === 1 && typeof input.sourcePath === 'string' && input.sourcePath.length > 0;
-    if (command === 'scene.node.create') return keys.every((key) => ['parentPath', 'parentUuid', 'nodeName', 'action', 'sourceOperationId', 'operationId'].includes(key))
+    if (command === 'scene.node.create') return keys.every((key) => ['parentPath', 'parentUuid', 'nodeName', 'action', 'sourceOperationId', 'operationId',
+        ...(creatorVersion === '2.4.15' ? ['components', 'transform'] : [])].includes(key))
+        && (creatorVersion === '2.4.15' || (input.components === undefined && input.transform === undefined))
+        && (input.components === undefined || validObjectComponents(input.components))
+        && (input.transform === undefined || (creatorVersion === '2.4.15' && validTransform(input.transform)))
         && typeof input.parentPath === 'string' && input.parentPath.length > 0 && input.parentPath.length <= 240
         && !input.parentPath.includes('//') && !input.parentPath.includes('\\')
         && typeof input.parentUuid === 'string' && input.parentUuid.length > 0 && input.parentUuid.length <= 64
@@ -112,6 +134,8 @@ function dispatchCommand(request, invoke) {
         executionArgs.push('--parent-path', input.parentPath, '--parent-uuid', input.parentUuid,
             '--node-name', input.nodeName, '--action', input.action, '--operation-id', operationId);
         if (input.sourceOperationId) executionArgs.push('--source-operation-id', input.sourceOperationId);
+        if (input.components !== undefined) executionArgs.push('--components', JSON.stringify(input.components));
+        if (input.transform !== undefined) executionArgs.push('--transform', JSON.stringify(input.transform));
     }
     const hostScript = command === 'scene.node.create' ? 'node-create-host.js' : 'bridge-host.js';
     const execution = invoke(hostScript, executionArgs);
@@ -135,12 +159,15 @@ function dispatchCommand(request, invoke) {
     const nodeOperation = command === 'scene.node.create';
     const state = { ...base, phases: record.phases, intent: record.intent,
         result: nodeOperation ? { sceneName: record.sceneName, action: record.manifest.action, nodeName: record.manifest.nodeName,
-            nodeUuid: record.createdNodeUuid || record.manifest.targetNodeUuid, parentPath: record.manifest.parentPath, parentUuid: record.manifest.parentUuid }
+            nodeUuid: record.createdNodeUuid || record.manifest.targetNodeUuid, parentPath: record.manifest.parentPath, parentUuid: record.manifest.parentUuid,
+            components: record.manifest.components || [], transform: record.manifest.transform || {} }
             : { sceneName: record.sceneName, action: record.manifest.sceneAction, assetName: record.manifest.assetName,
                 nodeName: record.manifest.nodeName, assetUuid: record.manifest.assetUuid,
-                ...(record.manifest.position ? { position: record.manifest.position } : {}) } };
+                ...(record.manifest.position ? { position: record.manifest.position } : {}) },
+        ...(record.previewAttempt ? { previewAttempt: record.previewAttempt } : {}) };
     if (record.phases.disk === 'passed') {
-        return { success: true, outcome: nodeOperation || record.phases.preview === 'passed' || input.action === 'compensate' ? 'completed' : 'needs-preview', ...state };
+        return { success: true, outcome: (nodeOperation && record.phases.preview === 'passed') || (nodeOperation && !(record.manifest.components || []).length)
+            || (!nodeOperation && record.phases.preview === 'passed') || input.action === 'compensate' ? 'completed' : 'needs-preview', ...state };
     }
     if (record.intent === 'editor-write-sent' || record.phases.editor === 'passed') {
         return { success: false, outcome: 'needs-review', ...state,
@@ -166,7 +193,8 @@ function operationStatus(request, invoke) {
     let knownRecord;
     try { knownRecord = operationStore.read(project, operationId); } catch (_) { /* Host reports the missing record. */ }
     const nodeOperation = knownRecord && knownRecord.capabilityId === 'scene.node.create';
-    if (nodeOperation && previewAcceptId) return problem('PREVIEW_NOT_APPLICABLE', 'Empty node creation is verified by scene readback.', null, 'preview');
+    if (nodeOperation && previewAcceptId && !(knownRecord.manifest.components || []).length)
+        return problem('PREVIEW_NOT_APPLICABLE', 'Empty node creation is verified by scene readback.', null, 'preview');
     if (previewAcceptId) {
         const accepted = parseJson(invoke('operation-preview.js', ['--project', project, '--creator-version', creatorVersion,
             '--operation-id', operationId, '--evidence', JSON.stringify(evidence || null)]));
@@ -184,12 +212,15 @@ function operationStatus(request, invoke) {
     }
     const base = { command: nodeOperation ? 'scene.node.create' : 'scene.pngSprite', operationId, phases: record.phases, intent: record.intent,
         result: nodeOperation ? { sceneName: record.sceneName, action: record.manifest.action, nodeName: record.manifest.nodeName,
-            nodeUuid: record.createdNodeUuid || record.manifest.targetNodeUuid, parentPath: record.manifest.parentPath, parentUuid: record.manifest.parentUuid }
+            nodeUuid: record.createdNodeUuid || record.manifest.targetNodeUuid, parentPath: record.manifest.parentPath, parentUuid: record.manifest.parentUuid,
+            components: record.manifest.components || [], transform: record.manifest.transform || {} }
             : { sceneName: record.sceneName, action: record.manifest.sceneAction, assetName: record.manifest.assetName,
                 nodeName: record.manifest.nodeName, assetUuid: record.manifest.assetUuid,
-                ...(record.manifest.position ? { position: record.manifest.position } : {}) } };
+                ...(record.manifest.position ? { position: record.manifest.position } : {}) },
+        ...(record.previewAttempt ? { previewAttempt: record.previewAttempt } : {}) };
     if (record.phases.disk === 'passed') {
-        return { success: true, outcome: nodeOperation || record.manifest.sceneAction === 'compensate' || record.phases.preview === 'passed' ? 'completed' : 'needs-preview', ...base };
+        return { success: true, outcome: (nodeOperation && record.phases.preview === 'passed') || (nodeOperation && !(record.manifest.components || []).length)
+            || record.manifest.sceneAction === 'compensate' || record.phases.preview === 'passed' ? 'completed' : 'needs-preview', ...base };
     }
     if (record.intent === 'editor-write-sent' || record.phases.editor === 'passed') {
         return { success: false, outcome: 'needs-review', ...base,

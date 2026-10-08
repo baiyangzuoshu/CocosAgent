@@ -13,19 +13,36 @@
     "creatorVersion": { "enum": ["2.4.15", "3.8.7"] },
     "manifest": {
       "type": "object", "additionalProperties": false,
-      "required": ["parentPath", "parentUuid", "nodeName", "action", "sourceOperationId", "targetNodeUuid"],
+      "required": ["parentPath", "parentUuid", "nodeName", "action", "sourceOperationId", "targetNodeUuid", "components", "transform"],
       "properties": {
         "parentPath": { "type": "string", "minLength": 1, "maxLength": 240 },
         "parentUuid": { "type": "string", "minLength": 1, "maxLength": 64 },
         "nodeName": { "type": "string", "pattern": "^[A-Za-z0-9_ -]{1,64}$" },
         "action": { "enum": ["apply", "compensate", "replay"] },
         "sourceOperationId": { "type": ["string", "null"] },
-        "targetNodeUuid": { "type": ["string", "null"] }
+        "targetNodeUuid": { "type": ["string", "null"] },
+        "components": { "type": "array", "maxItems": 1, "items": { "oneOf": [
+          { "type": "object", "additionalProperties": false, "required": ["classId", "spriteFrameUuid"], "properties": {
+            "classId": { "const": "cc.Sprite" }, "spriteFrameUuid": { "type": "string", "format": "uuid" } } },
+          { "type": "object", "additionalProperties": false, "required": ["classId", "text"], "properties": {
+            "classId": { "const": "cc.Label" }, "text": { "type": "string", "maxLength": 256 } } }
+        ] } },
+        "transform": { "type": "object", "additionalProperties": false, "properties": {
+          "position": { "$ref": "#/$defs/vector2" }, "scale": { "$ref": "#/$defs/vector2" }
+        } }
       }
     },
     "sceneName": { "type": ["string", "null"] },
     "createdNodeUuid": { "type": ["string", "null"] },
     "intent": { "enum": ["created", "editor-write-sent", "disk-verified", "disk-recovered"] },
+    "previewAttempt": { "type": "object", "additionalProperties": false, "required": ["status", "attemptedAt", "error"],
+      "properties": {
+        "status": { "const": "failed" },
+        "attemptedAt": { "type": "string", "format": "date-time" },
+        "error": { "type": "object", "additionalProperties": false, "required": ["code", "message"],
+          "properties": { "code": { "type": "string", "minLength": 1, "maxLength": 64 }, "message": { "type": "string", "minLength": 1, "maxLength": 500 } } }
+      }
+    },
     "receipts": { "type": "array", "items": { "type": "object" } },
     "phases": { "type": "object", "additionalProperties": false,
       "required": ["capability", "preflight", "editor", "disk", "preview", "recovery"],
@@ -41,5 +58,11 @@
     "createdAt": { "type": "string", "format": "date-time" },
     "updatedAt": { "type": "string", "format": "date-time" }
   },
-  "$defs": { "phaseStatus": { "enum": ["pending", "passed", "failed", "skipped"] } }
+  "$defs": {
+    "phaseStatus": { "enum": ["pending", "passed", "failed", "skipped"] },
+    "vector2": { "type": "object", "additionalProperties": false, "required": ["x", "y"], "properties": {
+      "x": { "type": "number", "minimum": -4096, "maximum": 4096 },
+      "y": { "type": "number", "minimum": -4096, "maximum": 4096 }
+    } }
+  }
 }

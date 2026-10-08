@@ -10,7 +10,7 @@ module.exports = {
         const scene = cc.director.getScene();
         const parts = params && typeof params.parentPath === 'string' ? params.parentPath.split('/') : [];
         if (!scene || parts[0] !== scene.name || parts.length > 32 || !params.parentUuid
-            || !/^[A-Za-z0-9_ -]{1,64}$/.test(params.nodeName || '')) {
+            || !/^[A-Za-z0-9_ -]{1,64}$/.test(params.nodeName || '') || !validObjectSpec(params)) {
             event.reply({ code: 'INVALID_NODE_REQUEST', message: 'Invalid scene, parent path, or node name.' }); return;
         }
         let matches = [scene];
@@ -27,6 +27,9 @@ module.exports = {
         }
         if (children.length > 1 || (children.length && (params.action !== 'compensate' || children[0].uuid !== params.targetNodeUuid))) {
             event.reply({ code: 'SCENE_NODE_CONFLICT', message: 'A child with this name already exists or has changed identity.' }); return;
+        }
+        if (params.action === 'compensate' && children.length && !nodeMatchesSpec(children[0], params)) {
+            event.reply({ code: 'SCENE_OBJECT_CHANGED', message: 'Target node components or references changed after the operation.' }); return;
         }
         event.reply(null, { sceneName: scene.name, parentPath: params.parentPath, parentUuid: matches[0].uuid,
             nodeName: params.nodeName, targetNodeUuid: children[0] ? children[0].uuid : null,
@@ -54,13 +57,37 @@ module.exports = {
             if (children.length !== 1 || children[0].uuid !== params.targetNodeUuid) {
                 event.reply({ code: 'SCENE_NODE_CONFLICT', message: 'Target identity changed after preflight.' }); return;
             }
+            if (!nodeMatchesSpec(children[0], params)) {
+                event.reply({ code: 'SCENE_OBJECT_CHANGED', message: 'Target node components or references changed after preflight.' }); return;
+            }
             children[0].removeFromParent(false); children[0].destroy();
             event.reply(null, { nodeName: params.nodeName, nodeUuid: params.targetNodeUuid, removed: true }); return;
         }
         if (children.length) { event.reply({ code: 'SCENE_NODE_CONFLICT', message: 'A child with this name appeared after preflight.' }); return; }
-        const node = new cc.Node(params.nodeName);
-        parent.addChild(node);
-        event.reply(null, { nodeName: node.name, nodeUuid: node.uuid, created: true });
+        loadSpriteFrames(params.components, (error, loaded) => {
+            if (error) { event.reply(error); return; }
+            const node = new cc.Node(params.nodeName);
+            if (params.transform && params.transform.position) node.setPosition(params.transform.position.x, params.transform.position.y);
+            if (params.transform && params.transform.scale) node.setScale(params.transform.scale.x, params.transform.scale.y, 1);
+            try {
+                for (const spec of params.components || []) {
+                    if (spec.classId === 'cc.Sprite') {
+                        const component = node.addComponent(cc.Sprite);
+                        component.spriteFrame = loaded[spec.spriteFrameUuid];
+                    } else if (spec.classId === 'cc.Label') {
+                        const component = node.addComponent(cc.Label);
+                        component.string = spec.text;
+                    }
+                }
+                parent.addChild(node);
+            } catch (componentError) {
+                node.destroy();
+                event.reply({ code: 'COMPONENT_ATTACH_FAILED', message: String(componentError && componentError.message || componentError) });
+                return;
+            }
+            event.reply(null, { nodeName: node.name, nodeUuid: node.uuid, created: true,
+                components: componentDetails(node), transform: transformDetails(node) });
+        });
     },
     'catalog-context'(event) {
         const scene = cc.director.getScene();
@@ -172,7 +199,8 @@ module.exports = {
                 const node = matches[0];
                 targetNode = { status: 'found', path: targetNodePath, uuid: node.uuid, name: node.name,
                     active: node.active !== false, childCount: node.children.length,
-                    components: (node._components || []).slice(0, 32).map((component) => cc.js.getClassName(component)).filter(Boolean) };
+                    components: (node._components || []).slice(0, 32).map((component) => cc.js.getClassName(component)).filter(Boolean),
+                    componentDetails: componentDetails(node), transform: transformDetails(node) };
             } else targetNode = { status: matches.length > 1 ? 'ambiguous' : 'not-found', path: targetNodePath };
         }
         event.reply(null, {
@@ -260,4 +288,79 @@ function validCanvasPosition(position) {
     return position && typeof position === 'object' && !Array.isArray(position)
         && Object.keys(position).length === 2 && Number.isFinite(position.x) && Number.isFinite(position.y)
         && Math.abs(position.x) <= 4096 && Math.abs(position.y) <= 4096;
+}
+
+function validObjectSpec(params) {
+    const components = params && params.components === undefined ? [] : params && params.components;
+    // Sprite and Label both extend RenderComponent, which disallows combining
+    // renderer subclasses on one Node in Creator 2.4.
+    if (!Array.isArray(components) || components.length > 1) return false;
+    const seen = new Set();
+    for (const component of components) {
+        if (!component || typeof component !== 'object' || Array.isArray(component)
+            || !['cc.Sprite', 'cc.Label'].includes(component.classId) || seen.has(component.classId)) return false;
+        seen.add(component.classId);
+        if (component.classId === 'cc.Sprite') {
+            if (Object.keys(component).some((key) => !['classId', 'spriteFrameUuid'].includes(key))
+                || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(component.spriteFrameUuid || '')) return false;
+        } else if (Object.keys(component).some((key) => !['classId', 'text'].includes(key))
+            || typeof component.text !== 'string' || component.text.length > 256) return false;
+    }
+    const transform = params.transform;
+    if (transform !== undefined) {
+        if (!transform || typeof transform !== 'object' || Array.isArray(transform)
+            || Object.keys(transform).some((key) => !['position', 'scale'].includes(key))) return false;
+        for (const key of ['position', 'scale']) {
+            if (transform[key] !== undefined && (!transform[key] || typeof transform[key] !== 'object'
+                || Array.isArray(transform[key]) || Object.keys(transform[key]).some((name) => !['x', 'y'].includes(name))
+                || !Number.isFinite(transform[key].x) || !Number.isFinite(transform[key].y)
+                || Math.abs(transform[key].x) > 4096 || Math.abs(transform[key].y) > 4096)) return false;
+        }
+    }
+    return true;
+}
+
+function loadSpriteFrames(components, callback) {
+    const specs = components || [];
+    const spriteSpecs = specs.filter((item) => item.classId === 'cc.Sprite');
+    const loaded = Object.create(null);
+    if (!spriteSpecs.length) { callback(null, loaded); return; }
+    let remaining = spriteSpecs.length;
+    for (const spec of spriteSpecs) {
+        cc.assetManager.loadAny({ uuid: spec.spriteFrameUuid }, (error, asset) => {
+            if (error || !(asset instanceof cc.SpriteFrame)) {
+                callback({ code: 'SPRITE_FRAME_LOAD_FAILED', message: String(error && error.message || error || 'Asset UUID is not a SpriteFrame.') });
+                callback = function () {};
+                return;
+            }
+            loaded[spec.spriteFrameUuid] = asset;
+            remaining--;
+            if (!remaining) callback(null, loaded);
+        });
+    }
+}
+
+function componentDetails(node) {
+    return (node._components || []).map((component) => {
+        const classId = cc.js.getClassName(component);
+        if (classId === 'cc.Sprite') return { classId, spriteFrameUuid: component.spriteFrame && component.spriteFrame._uuid || null };
+        if (classId === 'cc.Label') return { classId, text: component.string };
+        return { classId };
+    }).filter((item) => item.classId);
+}
+
+function transformDetails(node) {
+    return { position: { x: node.x, y: node.y }, scale: { x: node.scaleX, y: node.scaleY } };
+}
+
+function nodeMatchesSpec(node, params) {
+    const expected = params.components || [];
+    const actual = componentDetails(node);
+    if (actual.length !== expected.length) return false;
+    for (let i = 0; i < expected.length; i++) {
+        if (actual[i].classId !== expected[i].classId) return false;
+        if (expected[i].classId === 'cc.Sprite' && actual[i].spriteFrameUuid !== expected[i].spriteFrameUuid) return false;
+        if (expected[i].classId === 'cc.Label' && actual[i].text !== expected[i].text) return false;
+    }
+    return true;
 }

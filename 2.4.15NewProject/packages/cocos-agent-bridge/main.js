@@ -41,6 +41,15 @@ const COMMAND_INPUTS = {
             parentUuid: { type: 'string', minLength: 1, maxLength: 64 },
             nodeName: { type: 'string', pattern: '^[A-Za-z0-9_ -]{1,64}$' },
             action: { enum: ['apply', 'compensate', 'replay'] },
+            components: { type: 'array', maxItems: 1, items: { oneOf: [
+                { type: 'object', additionalProperties: false, required: ['classId', 'spriteFrameUuid'], properties: {
+                    classId: { const: 'cc.Sprite' }, spriteFrameUuid: { type: 'string', pattern: '^[0-9a-fA-F-]{36}$' } } },
+                { type: 'object', additionalProperties: false, required: ['classId', 'text'], properties: {
+                    classId: { const: 'cc.Label' }, text: { type: 'string', maxLength: 256 } } },
+            ] } },
+            transform: { type: 'object', additionalProperties: false, properties: {
+                position: { $ref: '#/$defs/canvasPosition' }, scale: { $ref: '#/$defs/canvasPosition' },
+            } },
             sourceOperationId: { type: 'string', pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' },
             operationId: { type: 'string', pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' },
         } },
@@ -63,7 +72,7 @@ function commandCatalog(context) {
             inputSchema: 'catalog.schema.json#/$defs/pngSpriteInput2x', input: COMMAND_INPUTS.pngSprite, preconditions: ['activeScene', 'canvasExisting', 'spriteFrameImported'],
             status: spriteReady ? 'available' : 'unavailable', reason: spriteReady ? null : sceneReady ? 'CANVAS_NOT_FOUND' : 'NO_OPEN_SCENE' },
         { id: 'scene.node.create', contractVersion: '0.1', access: 'write',
-            inputSchema: 'catalog.schema.json#/$defs/nodeCreateInput', input: COMMAND_INPUTS.nodeCreate, preconditions: ['activeScene', 'parentIdentity'],
+            inputSchema: 'catalog.schema.json#/$defs/nodeCreateInput2x', input: COMMAND_INPUTS.nodeCreate, preconditions: ['activeScene', 'parentIdentity', 'componentTypesWhitelisted', 'componentSetCompatible', 'resourceReferencesResolvable'],
             status: sceneReady ? 'available' : 'unavailable', reason: sceneReady ? null : 'NO_OPEN_SCENE' },
     ];
 }
@@ -114,6 +123,16 @@ function onMessage(raw) {
         runNodeCreate(message);
         return;
     }
+    if (message.method === 'scene.preview.start') {
+        const params = message.params || {};
+        if (!activeSession || params.sessionId !== activeSession.sessionId || typeof params.nonce !== 'string') {
+            send({ type: 'response', id: message.id, ok: false, error: { code: 'INVALID_PREVIEW_SESSION' } }); return;
+        }
+        Editor.Ipc.sendToPanel('scene', 'scene:play-on-device');
+        send({ type: 'response', id: message.id, ok: true, result: { nonce: params.nonce, started: true,
+            creatorVersion: CREATOR_VERSION, projectRoot: PROJECT_ROOT } });
+        return;
+    }
     if (message.method === 'asset.importPng') {
         importPng(message);
         return;
@@ -155,7 +174,9 @@ function runNodeCreate(message) {
     if (!operation || params.sessionId !== activeSession.sessionId || params.operationId !== activeSession.operationId
         || params.nonce !== operation.nonce || params.parentPath !== operation.parentPath
         || params.parentUuid !== operation.parentUuid || params.nodeName !== operation.nodeName
-        || params.action !== operation.action || params.targetNodeUuid !== operation.targetNodeUuid) {
+        || params.action !== operation.action || params.targetNodeUuid !== operation.targetNodeUuid
+        || JSON.stringify(params.components || []) !== JSON.stringify(operation.components || [])
+        || JSON.stringify(params.transform || {}) !== JSON.stringify(operation.transform || {})) {
         send({ type: 'response', id: message.id, ok: false, error: { code: 'INVALID_NODE_SESSION' } }); return;
     }
     const preflight = message.method.endsWith('.preflight');

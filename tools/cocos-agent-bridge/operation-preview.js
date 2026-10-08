@@ -4,6 +4,14 @@ const path = require('path');
 const store = require('./operation-store');
 
 function failure(code, message) { return { success: false, error: { code, message } }; }
+
+function sceneObject(record) { return record && record.capabilityId === 'scene.node.create'; }
+function hasPreviewTarget(record) {
+    return sceneObject(record) ? (record.manifest.components || []).length > 0
+        && ['apply', 'replay'].includes(record.manifest.action)
+        : record && record.manifest && ['apply', 'replay'].includes(record.manifest.sceneAction);
+}
+
 function acceptPreview({ projectRoot, creatorVersion, operationId, evidence }) {
     if (typeof projectRoot !== 'string' || !['2.4.15', '3.8.7'].includes(creatorVersion)
         || typeof operationId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(operationId)) {
@@ -31,7 +39,7 @@ function acceptPreview({ projectRoot, creatorVersion, operationId, evidence }) {
         return failure('INVALID_PREVIEW_EVIDENCE', 'Observation time must follow operation creation and cannot be in the future.');
     }
     if (!record.manifest || !record.phases || !record.sceneName) return failure('OPERATION_RECORD_INVALID', 'Operation record is incomplete.');
-    if (record.manifest.sceneAction === 'compensate') return failure('PREVIEW_NOT_APPLICABLE', 'Compensation is verified by scene readback.');
+    if (!hasPreviewTarget(record)) return failure('PREVIEW_NOT_APPLICABLE', 'This operation has no visible scene object to preview.');
     if (record.phases.disk !== 'passed') return failure('DISK_NOT_VERIFIED', 'Preview cannot pass before disk readback.');
     if (record.phases.preview === 'passed') {
         const previous = record.receipts.find((item) => item.phase === 'preview' && item.status === 'passed');
@@ -41,14 +49,86 @@ function acceptPreview({ projectRoot, creatorVersion, operationId, evidence }) {
         return { success: true, data: record, alreadyAccepted: true };
     }
     if (record.phases.preview !== 'pending') return failure('PREVIEW_STATE_CONFLICT', 'Preview is not pending.');
-    const receipt = { contractVersion: '0.1', operationId, capabilityId: 'scene.pngSprite', creatorVersion,
+    const receipt = { contractVersion: '0.1', operationId, capabilityId: record.capabilityId || 'scene.pngSprite', creatorVersion,
         phase: 'preview', status: 'passed', evidence: [{ kind: 'visual-preview', source: 'Agent visual inspection in local Web preview',
-            sceneName: record.sceneName, nodeName: record.manifest.nodeName, assetUuid: record.manifest.assetUuid,
+            sceneName: record.sceneName, nodeName: record.manifest.nodeName, assetUuid: record.manifest.assetUuid || firstSpriteUuid(record),
+            nodeUuid: record.createdNodeUuid || undefined,
             previewUrl: evidence.url, observedAt: new Date(evidence.observedAt).toISOString(), note: evidence.note.trim() }] };
     record.receipts.push(receipt);
     record.phases.preview = 'passed';
     record.updatedAt = new Date().toISOString();
     try { store.write(project, record); } catch (_) { return failure('OPERATION_WRITE_FAILED', 'Cannot persist preview receipt.'); }
+    return { success: true, data: record, alreadyAccepted: false };
+}
+
+function firstSpriteUuid(record) {
+    const sprite = record && record.manifest && Array.isArray(record.manifest.components)
+        && record.manifest.components.find((component) => component.classId === 'cc.Sprite');
+    return sprite && sprite.spriteFrameUuid;
+}
+
+function runtimeStateMatches(record, observed) {
+    if (!sceneObject(record) || !observed || observed.sceneName !== record.sceneName
+        || observed.nodePath !== `${record.manifest.parentPath}/${record.manifest.nodeName}`
+        || observed.nodeUuid !== record.createdNodeUuid || !Array.isArray(observed.components)) return false;
+    const expected = record.manifest.components || [];
+    if (observed.components.length !== expected.length) return false;
+    for (let i = 0; i < expected.length; i++) {
+        if (observed.components[i].classId !== expected[i].classId) return false;
+        if (expected[i].classId === 'cc.Sprite' && observed.components[i].spriteFrameUuid !== expected[i].spriteFrameUuid) return false;
+        if (expected[i].classId === 'cc.Label' && observed.components[i].text !== expected[i].text) return false;
+    }
+    const transform = record.manifest.transform || {};
+    for (const key of ['position', 'scale']) {
+        if (transform[key] && (!observed.transform || !observed.transform[key]
+            || Math.abs(observed.transform[key].x - transform[key].x) > 1e-5
+            || Math.abs(observed.transform[key].y - transform[key].y) > 1e-5)) return false;
+    }
+    return true;
+}
+
+function acceptRuntimePreview({ projectRoot, creatorVersion, operationId, previewUrl, observedAt, runtimeState }) {
+    if (typeof projectRoot !== 'string' || creatorVersion !== '2.4.15'
+        || typeof operationId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(operationId)) {
+        return failure('INVALID_ARGUMENT', 'Runtime preview accepts only a 2.4.15 operation target.');
+    }
+    let url;
+    try { url = new URL(previewUrl); } catch (_) { return failure('INVALID_PREVIEW_EVIDENCE', 'Invalid preview URL.'); }
+    if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || url.port !== '7456' || previewUrl.length > 256
+        || typeof observedAt !== 'string' || !Number.isFinite(Date.parse(observedAt))) {
+        return failure('INVALID_PREVIEW_EVIDENCE', 'Automatic preview evidence must come from the local 2.4 Web preview.');
+    }
+    const project = path.resolve(projectRoot);
+    let record;
+    try { record = store.read(project, operationId); }
+    catch (error) { return failure(error.code === 'ENOENT' ? 'OPERATION_NOT_FOUND' : 'OPERATION_READ_FAILED', 'Cannot read operation record.'); }
+    if (record.projectRoot !== project || record.creatorVersion !== creatorVersion || record.operationId !== operationId)
+        return failure('OPERATION_TARGET_MISMATCH', 'Operation record does not match the requested target.');
+    if (!hasPreviewTarget(record) || record.phases.disk !== 'passed' || !record.createdNodeUuid)
+        return failure('PREVIEW_NOT_APPLICABLE', 'A saved component-bearing node is required for runtime preview.');
+    const observationTime = Date.parse(observedAt);
+    if (observationTime < Date.parse(record.createdAt) || observationTime > Date.now() + 60000)
+        return failure('INVALID_PREVIEW_EVIDENCE', 'Observation time must follow the write and cannot be in the future.');
+    if (!runtimeStateMatches(record, runtimeState))
+        return failure('RUNTIME_PREVIEW_MISMATCH', 'The running scene does not match the saved node, component, resource, and transform.');
+    if (record.phases.preview === 'passed') {
+        const previous = record.receipts.find((item) => item.phase === 'preview' && item.status === 'passed');
+        const evidence = previous && previous.evidence && previous.evidence[0];
+        if (evidence && evidence.kind === 'runtime-preview' && evidence.previewUrl === previewUrl
+            && JSON.stringify(evidence.runtimeState) === JSON.stringify(runtimeState)) return { success: true, data: record, alreadyAccepted: true };
+        return failure('PREVIEW_ALREADY_ACCEPTED', 'A different preview observation is already recorded.');
+    }
+    if (record.phases.preview !== 'pending') return failure('PREVIEW_STATE_CONFLICT', 'Preview is not pending.');
+    const evidence = { kind: 'runtime-preview', source: 'isolated Chrome DevTools runtime readback',
+        sceneName: record.sceneName, nodeName: record.manifest.nodeName, nodeUuid: record.createdNodeUuid,
+        ...(firstSpriteUuid(record) ? { assetUuid: firstSpriteUuid(record) } : {}), previewUrl,
+        observedAt: new Date(observedAt).toISOString(), runtimeState,
+        note: 'Runtime scene node, whitelisted component values, resource UUIDs, and requested transform matched the saved operation.' };
+    record.receipts.push({ contractVersion: '0.1', operationId, capabilityId: record.capabilityId,
+        creatorVersion, phase: 'preview', status: 'passed', evidence: [evidence] });
+    record.phases.preview = 'passed';
+    record.updatedAt = new Date().toISOString();
+    try { store.write(project, record); } catch (_) { return failure('OPERATION_WRITE_FAILED', 'Cannot persist runtime preview receipt.'); }
     return { success: true, data: record, alreadyAccepted: false };
 }
 
@@ -63,4 +143,4 @@ if (require.main === module) {
     process.exitCode = result.success ? 0 : 1;
 }
 
-module.exports = { acceptPreview };
+module.exports = { acceptPreview, acceptRuntimePreview, runtimeStateMatches };

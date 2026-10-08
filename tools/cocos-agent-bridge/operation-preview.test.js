@@ -6,7 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const store = require('./operation-store');
-const { acceptPreview } = require('./operation-preview');
+const { acceptPreview, acceptRuntimePreview } = require('./operation-preview');
 
 const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-agent-preview-'));
 const operationId = crypto.randomUUID();
@@ -34,5 +34,31 @@ try {
     assert.strictEqual(second.alreadyAccepted, true);
     assert.strictEqual(acceptPreview({ ...request, evidence: { ...request.evidence, note: 'Different observation.' } }).error.code, 'PREVIEW_ALREADY_ACCEPTED');
     assert.strictEqual(store.read(projectRoot, operationId).receipts.length, 1);
+
+    const nodeOperationId = crypto.randomUUID();
+    const spriteFrameUuid = crypto.randomUUID();
+    const nodeUuid = crypto.randomUUID();
+    const nodeRecord = { contractVersion: '0.1', capabilityId: 'scene.node.create', operationId: nodeOperationId,
+        projectRoot, creatorVersion: '2.4.15', createdNodeUuid: nodeUuid,
+        manifest: { action: 'apply', parentPath: 'helloworld/Canvas', parentUuid: crypto.randomUUID(), nodeName: 'P1Probe',
+            components: [{ classId: 'cc.Sprite', spriteFrameUuid }],
+            transform: { position: { x: 12, y: -4 }, scale: { x: 2, y: 3 } } },
+        sceneName: 'helloworld', phases: { disk: 'passed', preview: 'pending' }, receipts: [], createdAt: now, updatedAt: now };
+    store.write(projectRoot, nodeRecord, true);
+    const runtimeState = { sceneName: 'helloworld', nodePath: 'helloworld/Canvas/P1Probe', nodeUuid,
+        components: [{ classId: 'cc.Sprite', spriteFrameUuid }],
+        transform: { position: { x: 12, y: -4 }, scale: { x: 2, y: 3 } } };
+    const runtimeRequest = { projectRoot, creatorVersion: '2.4.15', operationId: nodeOperationId,
+        previewUrl: 'http://127.0.0.1:7456/', observedAt: new Date(Date.now() + 1000).toISOString(), runtimeState };
+    assert.strictEqual(acceptRuntimePreview({ ...runtimeRequest, runtimeState: { ...runtimeState, nodeUuid: crypto.randomUUID() } }).error.code,
+        'RUNTIME_PREVIEW_MISMATCH');
+    const runtimeAccepted = acceptRuntimePreview(runtimeRequest);
+    assert.strictEqual(runtimeAccepted.success, true);
+    assert.strictEqual(runtimeAccepted.data.phases.preview, 'passed');
+    assert.strictEqual(runtimeAccepted.data.receipts[0].capabilityId, 'scene.node.create');
+    assert.strictEqual(runtimeAccepted.data.receipts[0].evidence[0].kind, 'runtime-preview');
+    assert.strictEqual(acceptRuntimePreview(runtimeRequest).alreadyAccepted, true);
+    assert.strictEqual(acceptRuntimePreview({ ...runtimeRequest, previewUrl: 'https://example.com/' }).error.code,
+        'INVALID_PREVIEW_EVIDENCE');
     process.stdout.write('preview evidence validation and idempotent persistence passed\n');
 } finally { fs.rmSync(projectRoot, { recursive: true, force: true }); }

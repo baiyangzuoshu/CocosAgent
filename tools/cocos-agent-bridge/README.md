@@ -12,6 +12,7 @@
 6. Agent 发送只读 `scene.snapshot` 请求；对应版本的 Scene Script 返回当前场景名称及有界节点摘要（最多 30 个节点、深度 6，名称和路径也有长度上限）。写入后可按目标节点名做独立查找，最多扫描 10,000 个节点，避免节点摘要截断导致误报。
 7. 如果传入 `--png`，Agent 检查 PNG 头、尺寸、文件大小和文件名，将文件复制到项目 `temp/` 下的会话隔离目录；扩展校验会话、路径、签名与 SHA-256 后，调用本版 AssetDB 导入到 `assets/resources/`。Agent 校验返回的资源 URL、UUID、类型、导入状态和内容摘要，然后清理临时文件。
 8. 对已导入的 `assets/resources/*.png`，可请求 `scene-action apply|compensate|replay`。扩展按版本解析 SpriteFrame 或 Texture2D 子资源，在当前编辑场景新增或删除专用 Sprite 节点，调用编辑器保存接口；Host 再检查场景文件序列化内容。`replay` 使用稳定节点名重做 apply，重复 apply 应识别为已应用，不额外创建节点。
+9. 2.4.15 的 `scene.node.create` 另支持在已定位的父节点下创建 Sprite 或 Label 单组件节点、引用已导入的 SpriteFrame UUID、设置二维位置与缩放；保存后检查 `.fire`、自动启动 Web 预览并读回运行时节点。Creator 3.8.7 目前仍只接受空节点输入。
 
 Agent key 不参与此流程，也不会写入项目。WebSocket 会话令牌只用于本机桥接认证。
 
@@ -60,7 +61,7 @@ node tools/cocos-agent-bridge/bridge-host.js \
 
 首轮 2.4 测试证实 AssetDB 按暂存文件 basename 决定资源名；实现已调整为在会话隔离子目录中保留原文件名。修正后，两版均已实测导入 `assets/resources/cocos-agent-smoke.png` 并生成 Creator 元数据；再以同名导入均返回 `ASSET_CONFLICT`，没有覆盖已有文件。2.4 AssetDB 回报类型为 `texture`，3.8 为 `cc.ImageAsset`，因此上层接口保留 Creator 原生类型字符串，不把类型名强行归一化。该测试只验证单张 PNG，不代表批量导入。预览控制和构建钩子尚未实现。
 
-两版真实 Creator 均完成了放置、保存、预览、补偿、重放、再次补偿的单资源闭环。2.4.15 在 `helloworld.fire` 的现有 Canvas 下放置 Sprite；3.8.7 的 `main.scene` 原无 Canvas，扩展创建 `CocosAgentCanvas` 和 UI 相机。两个 Web 预览都目视确认了场景中央的测试图片；Host 对场景操作核对内存快照和磁盘中 SpriteFrame 引用。最终两份磁盘场景均无 `CocosAgent` 节点。3.8 首次创建 Canvas 时，编辑器报告保存成功早于磁盘读回完成，Host 现以短时轮询核对；同一节点的幂等 apply 随后通过。2.4 曾试用未核实参数的撤销记录消息，编辑器报 `Unknown object to record`，现已移除，该错误不影响已验证的保存与补偿。此验证只覆盖两套示例、单张 2×2 PNG 和 Web 预览；场景重开、复杂 UI 布局、原生预览及自动预览控制尚未验证。
+两版真实 Creator 均完成了放置、保存、预览、补偿、重放、再次补偿的单资源闭环。2.4.15 在 `helloworld.fire` 的现有 Canvas 下放置 Sprite；3.8.7 的 `main.scene` 原无 Canvas，扩展创建 `CocosAgentCanvas` 和 UI 相机。两个 Web 预览都目视确认了场景中央的测试图片；Host 对场景操作核对内存快照和磁盘中 SpriteFrame 引用。最终两份磁盘场景均无 `CocosAgent` 节点。3.8 首次创建 Canvas 时，编辑器报告保存成功早于磁盘读回完成，Host 现以短时轮询核对；同一节点的幂等 apply 随后通过。2.4 曾试用未核实参数的撤销记录消息，编辑器报 `Unknown object to record`，现已移除，该错误不影响已验证的保存与补偿。该单资源切片只覆盖两套示例、单张 2×2 PNG 和 Web 预览；复杂 UI 布局、原生预览及 `scene.pngSprite` 自动预览仍未验证。2.4 `scene.node.create` 的 Sprite/Label 组件、自动运行时预览和场景切换后重开读回是独立 P1 切片，见 [`scene.node.create 0.1`](../../docs/agent-foundation/scene-node-create-0.1.md)。
 
 本轮操作与预览观察记录在 `docs/agent-foundation/traces/cocos-agent-scene-write-web-0.1.jsonl`。
 验收后，两份示例场景已按试验前备份逐字节恢复；导入的测试 PNG 及其 `.meta` 仍保留，供复测使用。
@@ -128,7 +129,7 @@ node tools/cocos-agent-bridge/agent-dispatch.js \
 
 只读节点定位使用 `--command scene.node.inspect --input '{"nodePath":"main/Main Light"}'`；2.4 应传自己的活动场景路径，例如 `helloworld/Canvas/label`。返回 `found/not-found/ambiguous` 和有界节点摘要。双版本实机证据与路径约束见[节点检查合同](../../docs/agent-foundation/scene-node-inspect-0.1.md)。
 
-空节点写入使用 `scene.node.create`：先用节点检查取得父节点的路径和 UUID，再传 `{"parentPath":"helloworld/Canvas","parentUuid":"<UUID>","nodeName":"Example","action":"apply"}`。补偿和重放均需传 `sourceOperationId`；节点写入合同、双版本实测与验收边界见[节点创建合同](../../docs/agent-foundation/scene-node-create-0.1.md)。
+节点写入使用 `scene.node.create`：先用节点检查取得父节点的路径和 UUID，再传 `{"parentPath":"helloworld/Canvas","parentUuid":"<UUID>","nodeName":"Example","action":"apply"}`。在 2.4.15 可选 `components`（一个 `cc.Sprite`+SpriteFrame UUID，或一个 `cc.Label`+文本）和 `transform.position/scale`；Sprite 与 Label 同属 `RenderComponent`，同一节点不可同时挂载。含组件写入会在磁盘读回后自动触发 2.4 Web 预览结构验收；编辑器场景重开仍需在 Creator UI 切场景再打开。补偿和重放均需传 `sourceOperationId`。3.8.7 目前仍是空节点合同。节点输入、回执和运行证据见[节点、组件与资源引用合同](../../docs/agent-foundation/scene-node-create-0.1.md)。
 
 多节点组合通过 JSONL 的 `workflow.plan/execute/get/compensate/replay` 调用。它以有序步骤和前一步 `ref` 组成空节点层级，逐步持久化操作 ID；明确失败时逆序补偿，结果不确定时停止。两版真实编辑器均已创建两级临时节点并逆序补偿。输入和限制见[场景组合合同](../../docs/agent-foundation/scene-composition-0.1.md)。
 
