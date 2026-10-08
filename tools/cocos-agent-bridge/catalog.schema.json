@@ -24,6 +24,17 @@
         "sourcePath": { "type": "string", "minLength": 1 }
       }
     },
+    "removeImportedPngInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assetName", "textureUuid", "spriteFrameUuid", "sha256"],
+      "properties": {
+        "assetName": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$" },
+        "textureUuid": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$" },
+        "spriteFrameUuid": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
     "pngSpriteInput": {
       "type": "object",
       "additionalProperties": false,
@@ -95,7 +106,7 @@
       "additionalProperties": false,
       "required": ["id", "contractVersion", "access", "inputSchema", "input", "preconditions", "status", "reason"],
       "properties": {
-        "id": { "enum": ["scene.snapshot", "scene.node.inspect", "asset.importPng", "scene.pngSprite", "scene.node.create"] },
+        "id": { "enum": ["scene.snapshot", "scene.node.inspect", "asset.importPng", "asset.removeImportedPng", "scene.pngSprite", "scene.node.create"] },
         "contractVersion": { "const": "0.1" },
         "access": { "enum": ["read", "write"] },
         "inputSchema": { "type": "string" },

@@ -11,6 +11,8 @@
 
 本地 JSONL 入口 `tools/cocos-agent-bridge/agent-jsonl.js` 现支持 `workflow.plan/execute/get/compensate/replay` 的 2–8 步空节点组合、`assets.batch.plan/execute/get` 的 2–16 张 PNG 逐项导入，以及仅面向 2.4.15 的 `scene.sprites.plan/execute/get/compensate/replay`。组合、批处理和场景引用编排均复用版本专属扩展与精确实例选择；写入记录保存在示例项目 `.cocos-agent/` 下。批次逐项保存状态；场景批次的确定失败会逆序尝试补偿，不确定结果停在 `needs-review`，不视为原子事务。2.4 资源导入计划核对目标、PNG IHDR 和 Texture → SpriteFrame UUID 关系；场景批次检查现有 Canvas、SpriteFrame 关系和可选 Canvas 本地设计像素坐标（±4096），并要求预览验收。Creator 2.4.15 已真实验证双项坐标写入、`.fire` 坐标与资源引用读回、同屏双图预览、逆序补偿和新 ID 重放。省略坐标时多个 Sprite 仍默认重叠；`3.8.7` 不接受此 2.x 输入扩展。测试后场景 `.fire` 文件已恢复到原 SHA-256。批次合同和运行证据见 `docs/agent-foundation/scene-sprite-batch-0.1.md`、`traces/cocos-agent-scene-sprite-batch-2.4-web.jsonl`、`asset-batch-0.1.md`、`scene-composition-0.1.md`。
 
+新增的 `assets.scene.plan/execute/get/preview.accept/compensate` 已在 Creator 2.4.15 打通资源导入、Texture/SpriteFrame UUID 核对、Canvas 场景引用、磁盘读回、场景重开、Web 预览验收和失败补偿。父记录保存在 `.cocos-agent/asset-scene-pipelines/`，并关联独立导入批次、场景批次和单项操作记录；补偿先撤销场景引用，再经 AssetDB 删除仅在身份和无序列化引用检查通过的本流水线资源。实测中 AssetDB 删除回执不确定时先返回 `needs-review`，随后凭磁盘缺失与 UUID 引用扫描完成显式恢复对账。仅 Creator 2.4.15 PNG Sprite/Web 路径已验证；3.8、原生及其他资源类型尚未验证。入口合同、验收限制和 2.4 专属 skill 见 `docs/agent-foundation/cocos-agent-resource-scene-pipeline-0.1.md`、`docs/agent-foundation/skills/cocos2-resource-scene-pipeline/SKILL.md` 与 `docs/agent-foundation/traces/cocos-agent-resource-scene-pipeline-2.4-web.jsonl`。
+
 两版新增红蓝 PNG 样本用于 Web 运行时动态纹理测试。2.4 将 PNG 主资源按 `cc.Texture2D` 从基本名加载；3.8 本样本的纹理位于 `基本名/texture` 子资源。两版各完成六轮显式引用持有、替换、释放，旧纹理在 Web 预览中从对象缓存移除；追加的临时 Sprite 探针已用两版红蓝画面截图验证可见替换和下一资源加载失败时保留旧画面。这尚不证明材质替换、热更新或原生性能。详情见 `docs/agent-foundation/dynamic-content-first-slice.md` 与对应版本 skill。
 
 ## 项目结构

@@ -253,7 +253,7 @@ module.exports = {
             sprite.spriteFrame = spriteFrame;
             const position = params.position || { x: 0, y: 0 };
             node.setPosition(position.x, position.y);
-            node.setScale(64, 64, 1);
+            node.setScale(1, 1, 1);
             canvas.addChild(node);
             event.reply(null, { nodeName: node.name, nodeUuid: node.uuid, alreadyApplied: false, spriteFrameUuid: spriteFrame._uuid,
                 position: { x: node.x, y: node.y } });

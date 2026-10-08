@@ -136,4 +136,28 @@ assert.strictEqual(dispatch({ ...nodeRequest, input: { ...nodeRequest.input,
     components: [...nodeComponents, ...labelComponents] } }, nodeInvoke).error.code, 'INVALID_ARGUMENT');
 assert.strictEqual(nodeInvokeCalls.length, callsBeforeInvalidSet, 'invalid component sets are rejected before target discovery');
 
+const removalProject = '/tmp/cocos-agent-removal-project';
+const removalInstance = { instanceId, projectRoot: removalProject, creatorVersion: '2.4.15', state: 'ready',
+    activeScene: 'helloworld', catalogRevision: 'b'.repeat(64) };
+const removalInput = { assetName: 'agent-created.png', textureUuid: 'f0b2e43c-7e8d-4e20-a5d3-a13458cf1c75',
+    spriteFrameUuid: 'f0b2e43c-7e8d-4e20-a5d3-a13458cf1c76', sha256: 'a'.repeat(64) };
+const removalCalls = [];
+const removalInvoke = (script, args) => {
+    removalCalls.push({ script, args });
+    if (script === 'catalog-host.js' && args.includes('instances.list'))
+        return { status: 0, stdout: JSON.stringify({ success: true, data: [removalInstance] }) };
+    if (script === 'catalog-host.js') return { status: 0, stdout: JSON.stringify({ success: true, data: {
+        instance: removalInstance, commands: [{ id: 'asset.removeImportedPng', contractVersion: '0.1', access: 'write', status: 'available', reason: null }],
+    } }) };
+    return { status: 0, stdout: `command.result ${JSON.stringify({ command: 'asset.removeImportedPng', result: { ...removalInput, removed: true } })}\n`, stderr: '' };
+};
+result = dispatch({ targets: [{ creatorVersion: '2.4.15', projectRoot: removalProject }], projectRoot: removalProject,
+    creatorVersion: '2.4.15', command: 'asset.removeImportedPng', input: removalInput }, removalInvoke);
+assert.strictEqual(result.outcome, 'completed');
+assert.deepStrictEqual(removalCalls[2].args.slice(-8), ['--asset-remove', removalInput.assetName,
+    '--texture-uuid', removalInput.textureUuid, '--sprite-frame-uuid', removalInput.spriteFrameUuid, '--source-sha256', removalInput.sha256]);
+assert.strictEqual(dispatch({ targets: [{ creatorVersion: '3.8.7', projectRoot }], projectRoot, creatorVersion: '3.8.7',
+    command: 'asset.removeImportedPng', input: removalInput }, removalInvoke).error.code, 'INVALID_ARGUMENT');
+assert.strictEqual(removalCalls.length, 3, '3.8 rejects this 2.4-only capability before editor discovery');
+
 process.stdout.write('agent dispatch selection, guards, and receipt decisions passed\n');

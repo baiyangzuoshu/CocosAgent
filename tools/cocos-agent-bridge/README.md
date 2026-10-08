@@ -13,6 +13,7 @@
 7. 如果传入 `--png`，Agent 检查 PNG 头、尺寸、文件大小和文件名，将文件复制到项目 `temp/` 下的会话隔离目录；扩展校验会话、路径、签名与 SHA-256 后，调用本版 AssetDB 导入到 `assets/resources/`。Agent 校验返回的资源 URL、UUID、类型、导入状态和内容摘要，然后清理临时文件。
 8. 对已导入的 `assets/resources/*.png`，可请求 `scene-action apply|compensate|replay`。扩展按版本解析 SpriteFrame 或 Texture2D 子资源，在当前编辑场景新增或删除专用 Sprite 节点，调用编辑器保存接口；Host 再检查场景文件序列化内容。`replay` 使用稳定节点名重做 apply，重复 apply 应识别为已应用，不额外创建节点。
 9. 2.4.15 的 `scene.node.create` 另支持在已定位的父节点下创建 Sprite 或 Label 单组件节点、引用已导入的 SpriteFrame UUID、设置二维位置与缩放；保存后检查 `.fire`、自动启动 Web 预览并读回运行时节点。Creator 3.8.7 目前仍只接受空节点输入。
+10. 仅 2.4.15 的 `assets.scene.*` 流水线把 PNG 计划、AssetDB 导入、Texture/SpriteFrame `.meta` 与 UUID 校验、Canvas Sprite 写入、预览回执和失败补偿串联。执行状态保存在 `.cocos-agent/asset-scene-pipelines/`；补偿先移除本流水线的场景节点，再通过 `Editor.assetdb.delete` 删除身份仍匹配且没有序列化 UUID 引用的资源。合同、调用参数、失败状态与实机验证范围见 [`cocos-agent-resource-scene-pipeline-0.1.md`](../../docs/agent-foundation/cocos-agent-resource-scene-pipeline-0.1.md)。
 
 Agent key 不参与此流程，也不会写入项目。WebSocket 会话令牌只用于本机桥接认证。
 
@@ -91,7 +92,7 @@ node tools/cocos-agent-bridge/catalog-host.js \
   --query instances.list
 ```
 
-将 `--query` 换成 `instances.get` 或 `capabilities.list` 时，另传 `--project` 指定项目绝对路径；建议同时传 `--creator-version 2.4.15|3.8.7` 核对预期版本。`instances.list` 列出显式配置的目标，不接受选择参数。输出为 `{success,data}` 或 `{success:false,error}` 的 JSON。项目没有对应目标返回 `EDITOR_NOT_FOUND`；同项目重复配置返回 `AMBIGUOUS_EDITOR`；选择版本或扩展握手版本不符返回 `CREATOR_VERSION_MISMATCH`，不会选择最近使用的窗口。目录目前包含五个已实现的语义命令；每条声明合同版本、`access`、可直接读取的 `input` JSON Schema、`inputSchema` 引用、`preconditions`、`status` 和 `reason`。Host 会核对扩展返回的输入结构与 [catalog.schema.json](catalog.schema.json) 一致；编辑器写入的内部请求仍按 [operation.schema.json](operation.schema.json) 校验。`asset.importPng` 的公开输入是本地 PNG 路径，文件名由 Host 从路径提取；桥接线上的请求只引用经过 Host 校验的会话暂存清单。`available` 代表查询时命令及场景级条件满足，暂存文件、目标资源名与 SpriteFrame 仍须执行前重新校验。
+将 `--query` 换成 `instances.get` 或 `capabilities.list` 时，另传 `--project` 指定项目绝对路径；建议同时传 `--creator-version 2.4.15|3.8.7` 核对预期版本。`instances.list` 列出显式配置的目标，不接受选择参数。输出为 `{success,data}` 或 `{success:false,error}` 的 JSON。项目没有对应目标返回 `EDITOR_NOT_FOUND`；同项目重复配置返回 `AMBIGUOUS_EDITOR`；选择版本或扩展握手版本不符返回 `CREATOR_VERSION_MISMATCH`，不会选择最近使用的窗口。目录在 2.4.15 有六个语义命令、在 3.8.7 有五个；每条声明合同版本、`access`、可直接读取的 `input` JSON Schema、`inputSchema` 引用、`preconditions`、`status` 和 `reason`。新增的 `asset.removeImportedPng` 仅用于 2.4 流水线回滚。Host 会核对扩展返回的输入结构与 [catalog.schema.json](catalog.schema.json) 一致；编辑器写入的内部请求仍按 [operation.schema.json](operation.schema.json) 校验。`asset.importPng` 的公开输入是本地 PNG 路径，文件名由 Host 从路径提取；桥接线上的请求只引用经过 Host 校验的会话暂存清单。`available` 代表查询时命令及场景级条件满足，暂存文件、目标资源名与 SpriteFrame 仍须执行前重新校验。
 
 场景脚本直接读取活动场景与 Canvas 状态；`scene.pngSprite` 在 2.4 缺 Canvas、或任一版本无活动场景时标为 `unavailable`。`catalogRevision` 随目录内容及场景名变化；Host 再读取一次场景，若两次场景名不同则返回 `SCENE_CHANGED`，调用方应重新查询。每次查询创建独立短时会话，结束后清除本轮会话文件；它不会导入资源或写场景，也还不是常驻的实例注册服务。扩展重载后需重新查询，新的实例 ID 应与此前不同。
 
@@ -138,6 +139,8 @@ node tools/cocos-agent-bridge/agent-dispatch.js \
 多张 PNG 导入通过 JSONL 的 `assets.batch.plan/execute/get` 调用。它核对源文件摘要、Creator 导入回执及目标文件和 `.meta`，逐项保留状态；不自动删除已导入资源。两版已分别验证两张 PNG 的批量导入。输入与验证边界见[批量导入合同](../../docs/agent-foundation/asset-batch-0.1.md)。这些资源的 Web 运行时六轮加载、替换与释放证据见[动态内容首条切片](../../docs/agent-foundation/dynamic-content-first-slice.md)。
 
 已导入图像放入场景可通过 `scene.sprites.plan/execute/get/compensate/replay` 编排既有的 `scene.pngSprite` 操作。此 Host 侧批次当前只对 2.4.15 开放；它检查活动 Canvas 和 SpriteFrame UUID，为每张图保留独立操作记录，明确失败时逆序补偿，不确定写入时停在 `needs-review`。可选 `positions` 按 `assets` 索引指定 Canvas 本地设计像素坐标（±4096），省略时仍居中；此输入不适用于 3.8.7。执行结果为 `needs-preview` 时，观察本次预览，并按返回的每项 `operationId` 录入预览回执后查询批次状态。双 Sprite 坐标读回、同屏预览和补偿已有 2.4.15 实机轨迹。合同见[2.4 场景 Sprite 批次](../../docs/agent-foundation/scene-sprite-batch-0.1.md)。
+
+从新 PNG 到场景 Sprite 可使用 2.4.15 专属 `assets.scene.plan/execute/get/preview.accept/compensate`。它持久化一个父流水线，再串联 PNG 导入与元数据/UUID 校验、既有场景 Sprite 批次、逐项本次预览证据。确定失败时先撤销场景引用，再尝试移除本流水线确认创建且不再被项目序列化资源引用的资源；Host 复核文件哈希和 Texture/SpriteFrame UUID，扩展通过 `Editor.assetdb.delete` 删除。官方建议用 AssetDB 删除 API 保持文件、`.meta` 与数据库同步，见 [2.4 AssetDB API](https://docs.cocos.com/creator/2.4/manual/en/extension/api/asset-db/asset-db-main.html)。无法确定身份、引用或场景副作用时返回 `needs-review` 并停止删除。输入、状态和失败边界见[资源到场景流水线合同](../../docs/agent-foundation/cocos-agent-resource-scene-pipeline-0.1.md)；当前是否完成实机验收以该合同记录为准。
 
 Agent 目视检查**本次操作**的本地 Web 预览后，附证据录入预览回执：
 

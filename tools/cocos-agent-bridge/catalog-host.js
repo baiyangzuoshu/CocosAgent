@@ -137,13 +137,17 @@ function unavailable(target, code) {
 }
 
 function validCatalog(target, result) {
-    if (!Array.isArray(result.commands) || result.commands.length !== 5
+    const expectedCommandCount = target.creatorVersion === '2.4.15' ? 6 : 5;
+    if (!Array.isArray(result.commands) || result.commands.length !== expectedCommandCount
         || !(result.activeScene === null || typeof result.activeScene === 'string')
         || !/^[0-9a-f]{64}$/.test(result.catalogRevision || '')) return false;
     const expected = {
         'scene.snapshot': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/snapshotInput', input: catalogSchema.$defs.snapshotInput, preconditions: ['activeScene'] },
         'scene.node.inspect': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/nodeInspectInput', input: catalogSchema.$defs.nodeInspectInput, preconditions: ['activeScene'] },
         'asset.importPng': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/importPngInput', input: catalogSchema.$defs.importPngInput, preconditions: ['stagedPng', 'destinationFree'] },
+        ...(target.creatorVersion === '2.4.15' ? { 'asset.removeImportedPng': { access: 'write',
+            inputSchema: 'catalog.schema.json#/$defs/removeImportedPngInput', input: catalogSchema.$defs.removeImportedPngInput,
+            preconditions: ['assetIdentityMatches', 'noSerializedReferences'] } } : {}),
         'scene.pngSprite': { access: 'write', inputSchema: target.creatorVersion === '2.4.15'
             ? 'catalog.schema.json#/$defs/pngSpriteInput2x' : 'catalog.schema.json#/$defs/pngSpriteInput',
             input: target.creatorVersion === '2.4.15' ? catalogSchema.$defs.pngSpriteInput2x : catalogSchema.$defs.pngSpriteInput,

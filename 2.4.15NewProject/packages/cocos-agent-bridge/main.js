@@ -28,6 +28,13 @@ const COMMAND_INPUTS = {
         properties: { nodePath: { type: 'string', minLength: 1, maxLength: 240 } } },
     importPng: { type: 'object', additionalProperties: false, required: ['sourcePath'],
         properties: { sourcePath: { type: 'string', minLength: 1 } } },
+    removeImportedPng: { type: 'object', additionalProperties: false, required: ['assetName', 'textureUuid', 'spriteFrameUuid', 'sha256'],
+        properties: {
+            assetName: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$' },
+            textureUuid: { type: 'string', pattern: '^[0-9a-fA-F-]{36}$' },
+            spriteFrameUuid: { type: 'string', pattern: '^[0-9a-fA-F-]{36}$' },
+            sha256: { type: 'string', pattern: '^[0-9a-f]{64}$' },
+        } },
     pngSprite: { type: 'object', additionalProperties: false, required: ['assetName', 'action'],
         properties: {
             assetName: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$' },
@@ -68,6 +75,9 @@ function commandCatalog(context) {
         { id: 'asset.importPng', contractVersion: '0.1', access: 'write',
             inputSchema: 'catalog.schema.json#/$defs/importPngInput', input: COMMAND_INPUTS.importPng, preconditions: ['stagedPng', 'destinationFree'],
             status: 'available', reason: null },
+        { id: 'asset.removeImportedPng', contractVersion: '0.1', access: 'write',
+            inputSchema: 'catalog.schema.json#/$defs/removeImportedPngInput', input: COMMAND_INPUTS.removeImportedPng,
+            preconditions: ['assetIdentityMatches', 'noSerializedReferences'], status: 'available', reason: null },
         { id: 'scene.pngSprite', contractVersion: '0.1', access: 'write',
             inputSchema: 'catalog.schema.json#/$defs/pngSpriteInput2x', input: COMMAND_INPUTS.pngSprite, preconditions: ['activeScene', 'canvasExisting', 'spriteFrameImported'],
             status: spriteReady ? 'available' : 'unavailable', reason: spriteReady ? null : sceneReady ? 'CANVAS_NOT_FOUND' : 'NO_OPEN_SCENE' },
@@ -135,6 +145,10 @@ function onMessage(raw) {
     }
     if (message.method === 'asset.importPng') {
         importPng(message);
+        return;
+    }
+    if (message.method === 'asset.removeImportedPng') {
+        removeImportedPng(message);
         return;
     }
     if (message.method === 'scene.snapshot') {
@@ -367,6 +381,64 @@ function importPng(message) {
     });
 }
 
+function removeImportedPng(message) {
+    const params = message.params || {};
+    const asset = activeSession && activeSession.assetRemoval;
+    if (!asset || params.sessionId !== activeSession.sessionId || typeof params.nonce !== 'string'
+        || params.assetName !== asset.assetName || params.textureUuid !== asset.textureUuid
+        || params.spriteFrameUuid !== asset.spriteFrameUuid || params.sha256 !== asset.sha256) {
+        send({ type: 'response', id: message.id, ok: false, error: { code: 'INVALID_ASSET_REMOVAL_SESSION' } });
+        return;
+    }
+    const url = `db://assets/resources/${asset.assetName}`;
+    const filename = path.join(PROJECT_ROOT, 'assets', 'resources', asset.assetName);
+    let diskData; let meta;
+    try {
+        const sourceStat = fs.lstatSync(filename);
+        const metaStat = fs.lstatSync(`${filename}.meta`);
+        if (!sourceStat.isFile() || sourceStat.isSymbolicLink() || !metaStat.isFile() || metaStat.isSymbolicLink()) throw new Error('not a regular imported asset');
+        diskData = fs.readFileSync(filename);
+        meta = JSON.parse(fs.readFileSync(`${filename}.meta`, 'utf8'));
+    } catch (_) {
+        send({ type: 'response', id: message.id, ok: false, error: { code: 'ASSET_IDENTITY_UNAVAILABLE' } });
+        return;
+    }
+    const frames = Object.values(meta.subMetas || {}).filter((item) => item && item.importer === 'sprite-frame');
+    const diskHash = crypto.createHash('sha256').update(diskData).digest('hex');
+    if (diskHash !== asset.sha256 || meta.importer !== 'texture' || meta.uuid !== asset.textureUuid || frames.length !== 1
+        || frames[0].uuid !== asset.spriteFrameUuid || frames[0].rawTextureUuid !== asset.textureUuid) {
+        send({ type: 'response', id: message.id, ok: false, error: { code: 'ASSET_IDENTITY_CHANGED' } });
+        return;
+    }
+    const currentUuid = Editor.assetdb.urlToUuid(url);
+    if (currentUuid !== asset.textureUuid) {
+        send({ type: 'response', id: message.id, ok: false,
+            error: { code: 'ASSET_IDENTITY_CHANGED', message: 'AssetDB no longer maps the URL to the recorded texture UUID.' } });
+        return;
+    }
+    Editor.assetdb.delete([url], (error, results) => {
+        if (error) {
+            send({ type: 'response', id: message.id, ok: false,
+                error: { code: 'ASSETDB_DELETE_FAILED', message: String(error.message || error) } });
+            return;
+        }
+        const uuidAfter = Editor.assetdb.urlToUuid(url);
+        const resultRows = Array.isArray(results) ? results : [];
+        const deletedIdentity = resultRows.some((item) => item && item.uuid === asset.textureUuid);
+        if (uuidAfter || !deletedIdentity || fs.existsSync(filename) || fs.existsSync(`${filename}.meta`)) {
+            send({ type: 'response', id: message.id, ok: false,
+                error: { code: 'ASSETDB_DELETE_UNVERIFIED', message: `uuidAfter=${String(uuidAfter || '')}; deletedIdentity=${deletedIdentity}` } });
+            return;
+        }
+        send({ type: 'response', id: message.id, ok: true, result: {
+            nonce: params.nonce, sessionId: activeSession.sessionId, creatorVersion: CREATOR_VERSION,
+            projectRoot: PROJECT_ROOT, assetName: asset.assetName, textureUuid: asset.textureUuid,
+            spriteFrameUuid: asset.spriteFrameUuid, sha256: asset.sha256, removed: true,
+            assetDbUuidAfter: uuidAfter || null,
+        } });
+    });
+}
+
 function connectFromSession() {
     if (connecting || (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING))) return;
     let session;
@@ -401,8 +473,10 @@ function connectFromSession() {
             projectRoot: PROJECT_ROOT,
             extension: 'cocos-agent-bridge',
             instanceId: INSTANCE_ID,
-            capabilities: ['bridge.ping', 'scene.snapshot', 'asset.importPng', 'scene.preflightPngSprite', 'scene.placePngSprite', 'scene.removePngSprite', 'scene.node.create.preflight', 'scene.node.create'],
+            capabilities: ['bridge.ping', 'scene.snapshot', 'asset.importPng', 'asset.removeImportedPng', 'scene.preflightPngSprite', 'scene.placePngSprite', 'scene.removePngSprite', 'scene.node.create.preflight', 'scene.node.create'],
             operationContract: { id: 'scene.pngSprite', contractVersion: '0.1', creatorVersion: CREATOR_VERSION, access: 'scene-write', actions: ['apply', 'compensate', 'replay'], previewVerification: 'manual-web', compensation: 'identity-checked-node-removal', positionSpace: 'canvas-local-design-pixels' },
+            assetRemovalContract: { id: 'asset.removeImportedPng', contractVersion: '0.1', creatorVersion: CREATOR_VERSION,
+                access: 'write', implementation: 'Editor.assetdb.delete', verify: 'matching-texture-uuid-and-deleted-result' },
         }));
         console.log(`[COCOS_AGENT_BRIDGE_2] connected to local Agent session ${session.sessionId}`);
     });
