@@ -160,4 +160,37 @@ assert.strictEqual(dispatch({ targets: [{ creatorVersion: '3.8.7', projectRoot }
     command: 'asset.removeImportedPng', input: removalInput }, removalInvoke).error.code, 'INVALID_ARGUMENT');
 assert.strictEqual(removalCalls.length, 3, '3.8 rejects this 2.4-only capability before editor discovery');
 
+const validationProject = '/tmp/cocos-agent-validation-project';
+const validationInstance = { ...removalInstance, projectRoot: validationProject };
+const validationPipelineId = '77777777-7777-4777-8777-777777777777';
+const validationInput = { assetName: 'probe.png', pipelineId: validationPipelineId };
+const validationCalls = [];
+let validationCommand = 'asset.validatePng';
+const validationInvoke = (script, args) => {
+    validationCalls.push({ script, args });
+    if (script === 'catalog-host.js' && args.includes('instances.list'))
+        return { status: 0, stdout: JSON.stringify({ success: true, data: [validationInstance] }) };
+    if (script === 'catalog-host.js') return { status: 0, stdout: JSON.stringify({ success: true, data: {
+        instance: validationInstance, commands: [{ id: validationCommand,
+            contractVersion: '0.1', access: validationCommand === 'asset.validatePng' ? 'read' : 'write', status: 'available', reason: null }],
+    } }) };
+    const command = args.includes('--asset-validate') ? 'asset.validatePng' : 'asset.refreshPng';
+    const result = command === 'asset.validatePng' ? { status: 'valid' }
+        : { status: 'valid', refreshed: true, checks: { filePresent: true, assetDbUrlUuidMatches: true } };
+    return { status: 0, stdout: `command.result ${JSON.stringify({ command, result })}\n`, stderr: '' };
+};
+const validateRequest = { targets: [{ creatorVersion: '2.4.15', projectRoot: validationProject }],
+    projectRoot: validationProject, creatorVersion: '2.4.15', command: 'asset.validatePng', input: validationInput };
+let validationResult = dispatch(validateRequest, validationInvoke);
+assert.equal(validationResult.outcome, 'completed');
+assert.deepEqual(validationCalls[2].args.slice(-4), ['--asset-validate', 'probe.png', '--asset-pipeline-id', validationPipelineId]);
+validationCalls.length = 0;
+validationCommand = 'asset.refreshPng';
+validationResult = dispatch({ ...validateRequest, command: 'asset.refreshPng' }, validationInvoke);
+assert.equal(validationResult.outcome, 'completed');
+assert.deepEqual(validationCalls[2].args.slice(-4), ['--asset-refresh', 'probe.png', '--asset-pipeline-id', validationPipelineId]);
+assert.equal(dispatch({ ...validateRequest, creatorVersion: '3.8.7',
+    targets: [{ creatorVersion: '3.8.7', projectRoot: validationProject }] }, validationInvoke).error.code, 'INVALID_ARGUMENT');
+assert.equal(validationCalls.length, 3, '2.4 validation and refresh are unavailable to 3.8 before instance discovery');
+
 process.stdout.write('agent dispatch selection, guards, and receipt decisions passed\n');

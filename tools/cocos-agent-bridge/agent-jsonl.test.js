@@ -38,6 +38,12 @@ assert.deepStrictEqual(handle({ id: 12, method: 'scene.sprites.plan', params: { 
 assert.deepStrictEqual(handle({ id: 14, method: 'assets.scene.execute', params: { creatorVersion: '2.4.15' } },
     { assetScenePipeline: (method, params) => ({ method, params }) }),
 { id: 14, result: { method: 'assets.scene.execute', params: { creatorVersion: '2.4.15' } } });
+assert.deepStrictEqual(handle({ id: 15, method: 'assets.scene.validate', params: { creatorVersion: '2.4.15', pipelineId: operationId } },
+    { assetSceneValidate: (params) => ({ method: 'validate', params }) }),
+{ id: 15, result: { method: 'validate', params: { creatorVersion: '2.4.15', pipelineId: operationId } } });
+assert.deepStrictEqual(handle({ id: 16, method: 'assets.scene.repair', params: { creatorVersion: '2.4.15', pipelineId: operationId } },
+    { assetSceneRepair: (params) => ({ method: 'repair', params }) }),
+{ id: 16, result: { method: 'repair', params: { creatorVersion: '2.4.15', pipelineId: operationId } } });
 assert.deepStrictEqual(handle({ id: 13, method: 'operation.reconcile', params: { projectRoot, creatorVersion: '2.4.15',
     operationId, targets: [{ projectRoot, creatorVersion: '2.4.15' }] } },
 { dispatch: (value) => value }), { id: 13, result: { targets: [{ projectRoot, creatorVersion: '2.4.15' }], projectRoot,

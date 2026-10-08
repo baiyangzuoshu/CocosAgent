@@ -4,6 +4,15 @@
 
 ## 流程与不变量
 
+只读校验与安全修复
+----------------
+
+assets.scene.validate 对指定流水线的一个或全部资源执行只读交叉核验：磁盘 PNG 的 SHA-256、签名和 IHDR 尺寸；Texture 与唯一 SpriteFrame 子资源的 .meta UUID 链；Creator AssetDB URL 到 Texture UUID 的映射；当前 Creator 实例/活动场景里的 SpriteFrame 引用；场景 .fire 中节点与 Canvas 父子关系；以及场景批次的已应用记录。每项返回 valid、repairable 或 needs-review，并携带逐项检查与问题代码。它不会保存场景或修改文件。
+
+assets.scene.repair 仅接受本流水线管理、仍被场景引用且处于 needs-preview 或 completed 的资源。只有本地 PNG 摘要/尺寸、.meta UUID、运行时引用、序列化场景引用和批次身份全部匹配，且唯一问题是 ASSETDB_MAPPING_STALE 时，才请求 Creator 2.4 的 Editor.assetdb.refresh(url, callback)。扩展和 Host 分别读回 AssetDB 映射、磁盘元数据、UUID 与场景引用；若 Creator 报告 uuid-change、身份变化或刷新错误，结果进入 needs-review。修复尝试在父流水线记录中按 repairId 持久化；进程中断后重试会先重新校验，若前一次刷新已生效则对账，不会重复刷新。已有效资源返回 already-valid。
+
+修复不编辑、不重建 .meta，不手工分配 UUID，也不把一般导入错误转换成自动修复。官方手册指出资源文件与 AssetDB 不一致时应使用 AssetDB 的刷新 API 同步；.meta 由 AssetDB 管理，必须保留其中的 UUID 身份：[AssetDB 主进程 API](https://docs.cocos.com/creator/2.4/manual/en/extension/api/asset-db/asset-db-main.html)、[管理项目资源](https://docs.cocos.com/creator/2.4/manual/zh/extension/asset-management.html)、[Meta Reference](https://docs.cocos.com/creator/2.4/manual/zh/extension/reference/meta-reference.html)。
+
 `assets.scene.plan` 是只读预检：检查 2–16 个绝对 PNG 路径、PNG IHDR 与大小/尺寸限制、文件名及目标资源冲突、精确项目/版本、当前活动场景、唯一 Canvas 和拟创建节点名。资源尚未导入时，预检不会伪造 `.meta` 或 UUID。
 
 `assets.scene.execute` 首先在项目 `.cocos-agent/asset-scene-pipelines/<pipelineId>.json` 持久化父记录，再调用既有 `assets.batch.execute`。每个导入项都要通过源摘要、Creator AssetDB 导入回执、资源磁盘读回和 `.meta` 验证；2.4 的身份链为主纹理 UUID → 唯一 SpriteFrame 子资源 UUID，且 SpriteFrame 的 `rawTextureUuid` 必须回指主纹理。通过后才调用 `scene.sprites.execute`，在同一活动场景的 Canvas 下引用对应 SpriteFrame，并逐项核对场景磁盘读回。
@@ -23,6 +32,8 @@
 | `failed` + `rollbackStatus=passed` | 发生可确认的失败；场景引用和本流水线已确认导入的资源都已按顺序撤销。 |
 | `compensated` | 显式补偿完成；先撤销场景引用，再移除导入资源。 |
 | `needs-review` | 导入、场景写入、身份或清理结果不确定；停止自动删除，检查父记录、子批次、单项操作、场景与 AssetDB。 |
+
+验证与修复结果为独立调用回执，不会把父流水线 needs-preview 自动改为 completed，也不代替真实 Web 预览回执。assets.scene.get 会返回持久化的 repairAttempts，便于进程重启后检查尝试状态。
 
 确定的部分导入失败会清理此前已确认由此批次导入的资源。场景写入发生确定失败时，先让场景批次逆序补偿，再清理资源。显式 `assets.scene.compensate` 也采用相同次序。对于不确定导入身份、场景副作用或删除回执，不猜测副作用归属，也不继续删除。
 
@@ -54,3 +65,9 @@
 随后显式补偿先撤销两个场景节点，再请求 AssetDB 删除。Blue 删除回执一度为 `sideEffect=possible`，首次调用正确返回 `needs-review` 并暂停；现场读回确认两个 PNG 与 `.meta` 均不存在，场景批次已补偿，`assets/` UUID 引用扫描完整且无引用。再次显式调用 `assets.scene.compensate` 后，流水线以 `asset-absence-and-reference-scan` 证据对账为 `compensated` / `rollbackStatus=passed`。最后刷新 Web 预览确认恢复原始 Hello World 画面；`helloworld.fire` 恢复为测试前 SHA-256 `0963cd0a52e25cdfa3edda47a6e998053885d2b93753da7a5c0da2562728d1a8`，测试 PNG 和 `.meta` 均已清除。完整 UUID、批次 ID 和持久化终态见 [`cocos-agent-resource-scene-pipeline-2.4-web.jsonl`](traces/cocos-agent-resource-scene-pipeline-2.4-web.jsonl)。
 
 这次实机验证覆盖 Creator 2.4.15、当前本机 Web 预览与普通 PNG Sprite；不代表 3.8、原生运行时、其他导入类型、运行时动态 UUID 依赖或任意用户资源删除已验证。模拟测试仍负责覆盖确定失败和元数据不一致分支。
+
+### 2.4.15 资源校验与修复实机验收（2026-10-08）
+
+在 Creator 2.4.15 的 `helloworld` 活动场景中，另一条双 PNG 流水线执行 `assets.scene.validate`，Red 与 Blue 均为 `valid`：PNG 摘要/尺寸、Texture/SpriteFrame `.meta` UUID 链、AssetDB URL 映射、活动场景 Sprite、`.fire` Canvas 父子关系和场景批次记录全部通过。随后调用 `assets.scene.repair`，结果为 `already-valid`，并将 repairId 与尝试状态写入父记录；此路径没有触发 AssetDB 刷新。最后显式补偿成功，两个 PNG 与 `.meta` 均由 AssetDB 删除，场景批次撤销通过。完整实例、流水线、批次、资源 UUID、校验结果和清理状态见 [`cocos-agent-resource-scene-validation-2.4-web.jsonl`](traces/cocos-agent-resource-scene-validation-2.4-web.jsonl)。
+
+这次运行没有诱发陈旧 URL→UUID 映射，因此真实 `Editor.assetdb.refresh` 修复分支尚未在 Creator 中验证；该分支目前只有模拟测试覆盖。Creator 保存场景时会规范化 `.fire` 中与本次操作无关的序列化字段。本次补偿后将测试场景文件按测试前 Git 基线字节恢复，并确认测试 PNG 与 `.meta` 已删除；这说明场景文件字节恢复是单独的测试清理动作，不应误记为场景批次补偿自身恢复了原始文件字节。

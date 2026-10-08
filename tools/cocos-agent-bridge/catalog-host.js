@@ -137,7 +137,7 @@ function unavailable(target, code) {
 }
 
 function validCatalog(target, result) {
-    const expectedCommandCount = target.creatorVersion === '2.4.15' ? 6 : 5;
+    const expectedCommandCount = target.creatorVersion === '2.4.15' ? 8 : 5;
     if (!Array.isArray(result.commands) || result.commands.length !== expectedCommandCount
         || !(result.activeScene === null || typeof result.activeScene === 'string')
         || !/^[0-9a-f]{64}$/.test(result.catalogRevision || '')) return false;
@@ -148,6 +148,11 @@ function validCatalog(target, result) {
         ...(target.creatorVersion === '2.4.15' ? { 'asset.removeImportedPng': { access: 'write',
             inputSchema: 'catalog.schema.json#/$defs/removeImportedPngInput', input: catalogSchema.$defs.removeImportedPngInput,
             preconditions: ['assetIdentityMatches', 'noSerializedReferences'] } } : {}),
+        ...(target.creatorVersion === '2.4.15' ? { 'asset.validatePng': { access: 'read',
+            inputSchema: 'catalog.schema.json#/$defs/pipelinePngInput', input: catalogSchema.$defs.pipelinePngInput,
+            preconditions: ['pipelineOwnedAsset', 'importedMetadata'] },
+        'asset.refreshPng': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/pipelinePngInput',
+            input: catalogSchema.$defs.pipelinePngInput, preconditions: ['pipelineOwnedAsset', 'assetDbMappingStale', 'stableUuid'] } } : {}),
         'scene.pngSprite': { access: 'write', inputSchema: target.creatorVersion === '2.4.15'
             ? 'catalog.schema.json#/$defs/pngSpriteInput2x' : 'catalog.schema.json#/$defs/pngSpriteInput',
             input: target.creatorVersion === '2.4.15' ? catalogSchema.$defs.pngSpriteInput2x : catalogSchema.$defs.pngSpriteInput,

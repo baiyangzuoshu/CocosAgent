@@ -6,7 +6,7 @@ const { spawnSync } = require('child_process');
 const operationStore = require('./operation-store');
 const operationReconcile = require('./operation-reconcile');
 
-const commands = new Set(['scene.snapshot', 'scene.node.inspect', 'asset.importPng', 'asset.removeImportedPng', 'scene.pngSprite', 'scene.node.create']);
+const commands = new Set(['scene.snapshot', 'scene.node.inspect', 'asset.importPng', 'asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'scene.pngSprite', 'scene.node.create']);
 const versions = new Set(['2.4.15', '3.8.7']);
 
 function dispatchError(code, message, phase = 'selection', sideEffect = 'none', retryable = false) {
@@ -73,6 +73,8 @@ function validInput(command, input, creatorVersion) {
         && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/i.test(input.assetName || '')
         && /^[0-9a-f-]{36}$/i.test(input.textureUuid || '') && /^[0-9a-f-]{36}$/i.test(input.spriteFrameUuid || '')
         && /^[0-9a-f]{64}$/.test(input.sha256 || '');
+    if (command === 'asset.validatePng' || command === 'asset.refreshPng') return creatorVersion === '2.4.15' && keys.length === 2
+        && /^[0-9a-f-]{36}$/i.test(input.pipelineId || '') && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/i.test(input.assetName || '');
     if (command === 'scene.node.create') return keys.every((key) => ['parentPath', 'parentUuid', 'nodeName', 'action', 'sourceOperationId', 'operationId',
         ...(creatorVersion === '2.4.15' ? ['components', 'transform'] : [])].includes(key))
         && (creatorVersion === '2.4.15' || (input.components === undefined && input.transform === undefined))
@@ -100,8 +102,8 @@ function dispatchCommand(request, invoke) {
         return problem('INVALID_ARGUMENT', 'Provide targets, an exact project and Creator version, a supported command, and valid input.');
     }
     const project = path.resolve(projectRoot);
-    if (command === 'asset.removeImportedPng' && creatorVersion !== '2.4.15')
-        return problem('COMMAND_UNAVAILABLE', 'Imported PNG removal is currently supported only by Creator 2.4.15.');
+    if (['asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng'].includes(command) && creatorVersion !== '2.4.15')
+        return problem('COMMAND_UNAVAILABLE', 'Pipeline-owned PNG validation, refresh, and removal are currently supported only by Creator 2.4.15.');
     const targetArgs = targets.flatMap((target) => ['--target', `${target.creatorVersion}=${path.resolve(target.projectRoot)}`]);
     const listed = parseJson(invoke('catalog-host.js', [...targetArgs, '--query', 'instances.list']));
     if (!listed || listed.success !== true || !Array.isArray(listed.data)) {
@@ -132,6 +134,8 @@ function dispatchCommand(request, invoke) {
     if (command === 'asset.importPng') executionArgs.push('--png', path.resolve(input.sourcePath));
     if (command === 'asset.removeImportedPng') executionArgs.push('--asset-remove', input.assetName,
         '--texture-uuid', input.textureUuid, '--sprite-frame-uuid', input.spriteFrameUuid, '--source-sha256', input.sha256);
+    if (command === 'asset.validatePng') executionArgs.push('--asset-validate', input.assetName, '--asset-pipeline-id', input.pipelineId);
+    if (command === 'asset.refreshPng') executionArgs.push('--asset-refresh', input.assetName, '--asset-pipeline-id', input.pipelineId);
     if (command === 'scene.node.inspect') executionArgs.push('--node-path', input.nodePath);
     if (command === 'scene.pngSprite') {
         operationId = input.operationId || crypto.randomUUID();

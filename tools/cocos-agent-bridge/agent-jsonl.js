@@ -8,6 +8,7 @@ const composition = require('./scene-composition');
 const assetBatch = require('./asset-batch');
 const sceneSpriteBatch = require('./scene-sprite-batch');
 const assetScenePipeline = require('./asset-scene-pipeline');
+const assetSceneValidation = require('./asset-scene-validation');
 const contentRelease = require('./content-release');
 
 const catalogMethods = new Set(['instances.list', 'instances.get', 'capabilities.list']);
@@ -15,8 +16,9 @@ const workflowMethods = new Set(['workflow.plan', 'workflow.execute', 'workflow.
 const batchMethods = new Set(['assets.batch.plan', 'assets.batch.execute', 'assets.batch.get']);
 const sceneSpriteBatchMethods = new Set(['scene.sprites.plan', 'scene.sprites.execute', 'scene.sprites.get', 'scene.sprites.compensate', 'scene.sprites.replay']);
 const assetScenePipelineMethods = new Set(['assets.scene.plan', 'assets.scene.execute', 'assets.scene.get', 'assets.scene.preview.accept', 'assets.scene.compensate']);
+const assetSceneValidationMethods = new Set(['assets.scene.validate', 'assets.scene.repair']);
 const contentMethods = new Set(['content.plan', 'content.stage', 'content.get', 'content.select', 'content.rollback', 'content.runtime.accept']);
-const methods = new Set([...catalogMethods, ...workflowMethods, ...batchMethods, ...sceneSpriteBatchMethods, ...assetScenePipelineMethods, ...contentMethods,
+const methods = new Set([...catalogMethods, ...workflowMethods, ...batchMethods, ...sceneSpriteBatchMethods, ...assetScenePipelineMethods, ...assetSceneValidationMethods, ...contentMethods,
     'command.execute', 'operation.get', 'operation.reconcile', 'preview.accept']);
 const versions = new Set(['2.4.15', '3.8.7']);
 
@@ -58,6 +60,10 @@ function handle(request, adapters = {}) {
         result: (adapters.sceneSpriteBatch || sceneSpriteBatch.handle)(method, params, adapters.dispatch || dispatch) };
     if (assetScenePipelineMethods.has(method)) return { id: request.id,
         result: (adapters.assetScenePipeline || assetScenePipeline.handle)(method, params, adapters.dispatch || dispatch) };
+    if (assetSceneValidationMethods.has(method)) return { id: request.id,
+        result: method === 'assets.scene.validate'
+            ? (adapters.assetSceneValidate || assetSceneValidation.validate)(params, adapters.dispatch || dispatch)
+            : (adapters.assetSceneRepair || assetSceneValidation.repair)(params, adapters.dispatch || dispatch) };
     if (contentMethods.has(method)) return { id: request.id,
         result: (adapters.contentRelease || contentRelease.handle)(method, params) };
     let dispatchRequest;

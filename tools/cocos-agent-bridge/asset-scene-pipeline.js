@@ -121,7 +121,8 @@ function publicRecord(record) {
         pipelineId: record.pipelineId, assetBatchId: record.assetBatchId, sceneBatchId: record.sceneBatchId,
         projectRoot: record.projectRoot, creatorVersion: record.creatorVersion, instanceId: record.instanceId,
         sceneName: record.sceneName, canvasUuid: record.canvasUuid, items,
-        rollbackStatus: record.rollbackStatus, rollbackError: record.rollbackError || null, error: record.error || null };
+        repairAttempts: record.repairAttempts || [], rollbackStatus: record.rollbackStatus,
+        rollbackError: record.rollbackError || null, error: record.error || null };
 }
 function readImportedIdentity(record, item) {
     const assetPath = path.join(record.projectRoot, 'assets', 'resources', item.assetName);

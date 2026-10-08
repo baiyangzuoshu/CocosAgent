@@ -5,7 +5,9 @@
   "oneOf": [
     { "$ref": "#/$defs/planOrExecute" },
     { "$ref": "#/$defs/byPipelineId" },
-    { "$ref": "#/$defs/previewAccept" }
+    { "$ref": "#/$defs/previewAccept" },
+    { "$ref": "#/$defs/validate" },
+    { "$ref": "#/$defs/repair" }
   ],
   "$defs": {
     "target": {
@@ -77,6 +79,47 @@
                 "observedAt": { "type": "string", "format": "date-time" },
                 "note": { "type": "string", "minLength": 1, "maxLength": 500 }
               } }
+          }
+        }
+      }
+    },
+    "validate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "params"],
+      "properties": {
+        "method": { "const": "assets.scene.validate" },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["targets", "projectRoot", "creatorVersion", "pipelineId"],
+          "properties": {
+            "targets": { "type": "array", "minItems": 1, "maxItems": 16, "items": { "$ref": "#/$defs/target" } },
+            "projectRoot": { "type": "string", "minLength": 1 },
+            "creatorVersion": { "const": "2.4.15" },
+            "pipelineId": { "type": "string", "format": "uuid" },
+            "assetName": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$" }
+          }
+        }
+      }
+    },
+    "repair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "params"],
+      "properties": {
+        "method": { "const": "assets.scene.repair" },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["targets", "projectRoot", "creatorVersion", "pipelineId", "assetName"],
+          "properties": {
+            "targets": { "type": "array", "minItems": 1, "maxItems": 16, "items": { "$ref": "#/$defs/target" } },
+            "projectRoot": { "type": "string", "minLength": 1 },
+            "creatorVersion": { "const": "2.4.15" },
+            "pipelineId": { "type": "string", "format": "uuid" },
+            "assetName": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$" },
+            "repairId": { "type": "string", "format": "uuid" }
           }
         }
       }

@@ -35,6 +35,12 @@ const COMMAND_INPUTS = {
             spriteFrameUuid: { type: 'string', pattern: '^[0-9a-fA-F-]{36}$' },
             sha256: { type: 'string', pattern: '^[0-9a-f]{64}$' },
         } },
+    validatePng: { type: 'object', additionalProperties: false, required: ['pipelineId', 'assetName'],
+        properties: { pipelineId: { type: 'string', format: 'uuid' },
+            assetName: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$' } } },
+    refreshPng: { type: 'object', additionalProperties: false, required: ['pipelineId', 'assetName'],
+        properties: { pipelineId: { type: 'string', format: 'uuid' },
+            assetName: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$' } } },
     pngSprite: { type: 'object', additionalProperties: false, required: ['assetName', 'action'],
         properties: {
             assetName: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$' },
@@ -78,6 +84,12 @@ function commandCatalog(context) {
         { id: 'asset.removeImportedPng', contractVersion: '0.1', access: 'write',
             inputSchema: 'catalog.schema.json#/$defs/removeImportedPngInput', input: COMMAND_INPUTS.removeImportedPng,
             preconditions: ['assetIdentityMatches', 'noSerializedReferences'], status: 'available', reason: null },
+        { id: 'asset.validatePng', contractVersion: '0.1', access: 'read',
+            inputSchema: 'catalog.schema.json#/$defs/pipelinePngInput', input: COMMAND_INPUTS.validatePng,
+            preconditions: ['pipelineOwnedAsset', 'importedMetadata'], status: 'available', reason: null },
+        { id: 'asset.refreshPng', contractVersion: '0.1', access: 'write',
+            inputSchema: 'catalog.schema.json#/$defs/pipelinePngInput', input: COMMAND_INPUTS.refreshPng,
+            preconditions: ['pipelineOwnedAsset', 'assetDbMappingStale', 'stableUuid'], status: 'available', reason: null },
         { id: 'scene.pngSprite', contractVersion: '0.1', access: 'write',
             inputSchema: 'catalog.schema.json#/$defs/pngSpriteInput2x', input: COMMAND_INPUTS.pngSprite, preconditions: ['activeScene', 'canvasExisting', 'spriteFrameImported'],
             status: spriteReady ? 'available' : 'unavailable', reason: spriteReady ? null : sceneReady ? 'CANVAS_NOT_FOUND' : 'NO_OPEN_SCENE' },
@@ -149,6 +161,14 @@ function onMessage(raw) {
     }
     if (message.method === 'asset.removeImportedPng') {
         removeImportedPng(message);
+        return;
+    }
+    if (message.method === 'asset.validatePng') {
+        validateOwnedPng(message, false);
+        return;
+    }
+    if (message.method === 'asset.refreshPng') {
+        validateOwnedPng(message, true);
         return;
     }
     if (message.method === 'scene.snapshot') {
@@ -439,6 +459,104 @@ function removeImportedPng(message) {
     });
 }
 
+function inspectOwnedPng(asset) {
+    const filename = path.join(PROJECT_ROOT, 'assets', 'resources', asset.assetName);
+    const checks = { filePresent: false, sourceHashMatches: false, pngSignatureValid: false, dimensionsMatch: false,
+        metaReadable: false, textureUuidMatches: false, spriteFrameUuidMatches: false, rawTextureUuidMatches: false,
+        assetDbUrlUuidMatches: false };
+    const issues = [];
+    let data; let meta;
+    try {
+        const stat = fs.lstatSync(filename);
+        if (!stat.isFile() || stat.isSymbolicLink()) issues.push('ASSET_FILE_NOT_REGULAR');
+        else { data = fs.readFileSync(filename); checks.filePresent = true; }
+    } catch (_) { issues.push('ASSET_FILE_MISSING'); }
+    if (data) {
+        checks.sourceHashMatches = crypto.createHash('sha256').update(data).digest('hex') === asset.sha256;
+        if (!checks.sourceHashMatches) issues.push('ASSET_HASH_MISMATCH');
+        checks.pngSignatureValid = data.length >= 24 && data.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))
+            && data.toString('ascii', 12, 16) === 'IHDR';
+        if (!checks.pngSignatureValid) issues.push('INVALID_PNG');
+        if (checks.pngSignatureValid) {
+            checks.dimensionsMatch = data.readUInt32BE(16) === asset.width && data.readUInt32BE(20) === asset.height;
+            if (!checks.dimensionsMatch) issues.push('PNG_DIMENSIONS_MISMATCH');
+        }
+    }
+    try {
+        const metaPath = `${filename}.meta`;
+        const stat = fs.lstatSync(metaPath);
+        if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('meta is not a regular file');
+        meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+        checks.metaReadable = true;
+    } catch (_) { issues.push('META_UNREADABLE'); }
+    if (meta) {
+        checks.textureUuidMatches = meta.importer === 'texture' && meta.uuid === asset.textureUuid;
+        if (!checks.textureUuidMatches) issues.push('TEXTURE_UUID_MISMATCH');
+        const frames = Object.values(meta.subMetas || {}).filter((sub) => sub && sub.importer === 'sprite-frame');
+        checks.spriteFrameUuidMatches = frames.length === 1 && frames[0].uuid === asset.spriteFrameUuid;
+        if (!checks.spriteFrameUuidMatches) issues.push('SPRITEFRAME_UUID_MISMATCH');
+        checks.rawTextureUuidMatches = frames.length === 1 && frames[0].rawTextureUuid === asset.textureUuid;
+        if (!checks.rawTextureUuidMatches) issues.push('RAWTEXTURE_UUID_MISMATCH');
+    }
+    const url = `db://assets/resources/${asset.assetName}`;
+    const dbUuid = Editor.assetdb.urlToUuid(url);
+    checks.assetDbUrlUuidMatches = dbUuid === asset.textureUuid;
+    if (!checks.assetDbUrlUuidMatches) issues.push('ASSETDB_MAPPING_STALE');
+    const diskIssues = issues.filter((code) => code !== 'ASSETDB_MAPPING_STALE');
+    const repairable = diskIssues.length === 0 && !checks.assetDbUrlUuidMatches;
+    return { status: diskIssues.length ? 'needs-review' : repairable ? 'repairable' : 'valid', checks,
+        issues, repairable, assetDbUrlUuid: dbUuid || null };
+}
+
+function validateOwnedPng(message, refresh) {
+    const params = message.params || {};
+    const asset = activeSession && activeSession.assetAction;
+    if (!asset || asset.kind !== (refresh ? 'refresh' : 'validate') || params.sessionId !== activeSession.sessionId
+        || typeof params.nonce !== 'string' || params.pipelineId !== asset.pipelineId || params.assetName !== asset.assetName) {
+        send({ type: 'response', id: message.id, ok: false, error: { code: 'INVALID_ASSET_VALIDATION_SESSION' } });
+        return;
+    }
+    const initial = inspectOwnedPng(asset);
+    if (!refresh) {
+        send({ type: 'response', id: message.id, ok: true, result: { nonce: params.nonce, sessionId: activeSession.sessionId,
+            projectRoot: PROJECT_ROOT, creatorVersion: CREATOR_VERSION, pipelineId: asset.pipelineId,
+            assetName: asset.assetName, status: initial.status, checks: initial.checks, issues: initial.issues,
+            repairable: initial.repairable, assetDbUrlUuid: initial.assetDbUrlUuid } });
+        return;
+    }
+    if (initial.status === 'valid') {
+        send({ type: 'response', id: message.id, ok: true, result: { nonce: params.nonce, sessionId: activeSession.sessionId,
+            projectRoot: PROJECT_ROOT, creatorVersion: CREATOR_VERSION, pipelineId: asset.pipelineId,
+            assetName: asset.assetName, status: 'valid', refreshed: false, checks: initial.checks,
+            assetDbUrlUuid: initial.assetDbUrlUuid, issues: [] } });
+        return;
+    }
+    if (initial.status !== 'repairable') {
+        send({ type: 'response', id: message.id, ok: false, error: { code: 'ASSET_REPAIR_UNSAFE',
+            message: 'Source bytes or imported metadata do not match the recorded pipeline identity.' } });
+        return;
+    }
+    const url = `db://assets/resources/${asset.assetName}`;
+    Editor.assetdb.refresh(url, (error, results) => {
+        if (error) {
+            send({ type: 'response', id: message.id, ok: false, error: { code: 'ASSETDB_REFRESH_FAILED', message: String(error.message || error) } });
+            return;
+        }
+        const after = inspectOwnedPng(asset);
+        const rows = Array.isArray(results) ? results : [];
+        const identityChanges = rows.filter((row) => row && row.command === 'uuid-change').map((row) => ({ oldUuid: row.oldUuid, uuid: row.uuid }));
+        if (after.status !== 'valid' || identityChanges.length) {
+            send({ type: 'response', id: message.id, ok: false, error: { code: 'ASSET_REFRESH_IDENTITY_UNVERIFIED',
+                message: JSON.stringify({ status: after.status, issues: after.issues, identityChanges }) } });
+            return;
+        }
+        send({ type: 'response', id: message.id, ok: true, result: { nonce: params.nonce, sessionId: activeSession.sessionId,
+            projectRoot: PROJECT_ROOT, creatorVersion: CREATOR_VERSION, pipelineId: asset.pipelineId,
+            assetName: asset.assetName, status: 'valid', refreshed: true,
+            refreshCommands: rows.map((row) => row && row.command).filter(Boolean), checks: after.checks } });
+    });
+}
+
 function connectFromSession() {
     if (connecting || (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING))) return;
     let session;
@@ -473,10 +591,12 @@ function connectFromSession() {
             projectRoot: PROJECT_ROOT,
             extension: 'cocos-agent-bridge',
             instanceId: INSTANCE_ID,
-            capabilities: ['bridge.ping', 'scene.snapshot', 'asset.importPng', 'asset.removeImportedPng', 'scene.preflightPngSprite', 'scene.placePngSprite', 'scene.removePngSprite', 'scene.node.create.preflight', 'scene.node.create'],
+            capabilities: ['bridge.ping', 'scene.snapshot', 'asset.importPng', 'asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'scene.preflightPngSprite', 'scene.placePngSprite', 'scene.removePngSprite', 'scene.node.create.preflight', 'scene.node.create'],
             operationContract: { id: 'scene.pngSprite', contractVersion: '0.1', creatorVersion: CREATOR_VERSION, access: 'scene-write', actions: ['apply', 'compensate', 'replay'], previewVerification: 'manual-web', compensation: 'identity-checked-node-removal', positionSpace: 'canvas-local-design-pixels' },
             assetRemovalContract: { id: 'asset.removeImportedPng', contractVersion: '0.1', creatorVersion: CREATOR_VERSION,
                 access: 'write', implementation: 'Editor.assetdb.delete', verify: 'matching-texture-uuid-and-deleted-result' },
+            assetValidationContract: { id: 'asset.validatePng', repairId: 'asset.refreshPng', contractVersion: '0.1', creatorVersion: CREATOR_VERSION,
+                refreshImplementation: 'Editor.assetdb.refresh', refreshRequires: 'matching-pipeline-owned-file-meta-and-scene-reference' },
         }));
         console.log(`[COCOS_AGENT_BRIDGE_2] connected to local Agent session ${session.sessionId}`);
     });

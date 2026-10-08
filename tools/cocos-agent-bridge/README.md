@@ -13,7 +13,7 @@
 7. 如果传入 `--png`，Agent 检查 PNG 头、尺寸、文件大小和文件名，将文件复制到项目 `temp/` 下的会话隔离目录；扩展校验会话、路径、签名与 SHA-256 后，调用本版 AssetDB 导入到 `assets/resources/`。Agent 校验返回的资源 URL、UUID、类型、导入状态和内容摘要，然后清理临时文件。
 8. 对已导入的 `assets/resources/*.png`，可请求 `scene-action apply|compensate|replay`。扩展按版本解析 SpriteFrame 或 Texture2D 子资源，在当前编辑场景新增或删除专用 Sprite 节点，调用编辑器保存接口；Host 再检查场景文件序列化内容。`replay` 使用稳定节点名重做 apply，重复 apply 应识别为已应用，不额外创建节点。
 9. 2.4.15 的 `scene.node.create` 另支持在已定位的父节点下创建 Sprite 或 Label 单组件节点、引用已导入的 SpriteFrame UUID、设置二维位置与缩放；保存后检查 `.fire`、自动启动 Web 预览并读回运行时节点。Creator 3.8.7 目前仍只接受空节点输入。
-10. 仅 2.4.15 的 `assets.scene.*` 流水线把 PNG 计划、AssetDB 导入、Texture/SpriteFrame `.meta` 与 UUID 校验、Canvas Sprite 写入、预览回执和失败补偿串联。执行状态保存在 `.cocos-agent/asset-scene-pipelines/`；补偿先移除本流水线的场景节点，再通过 `Editor.assetdb.delete` 删除身份仍匹配且没有序列化 UUID 引用的资源。合同、调用参数、失败状态与实机验证范围见 [`cocos-agent-resource-scene-pipeline-0.1.md`](../../docs/agent-foundation/cocos-agent-resource-scene-pipeline-0.1.md)。
+10. 仅 2.4.15 的 `assets.scene.*` 流水线把 PNG 计划、AssetDB 导入、Texture/SpriteFrame `.meta` 与 UUID 校验、Canvas Sprite 写入、预览回执和失败补偿串联。执行状态保存在 `.cocos-agent/asset-scene-pipelines/`；补偿先移除本流水线的场景节点，再通过 `Editor.assetdb.delete` 删除身份仍匹配且没有序列化 UUID 引用的资源。`assets.scene.validate` 只读核对磁盘、AssetDB、活动场景与序列化引用；`assets.scene.repair` 仅在身份全部一致而 URL→UUID 映射陈旧时调用 `Editor.assetdb.refresh`，不编辑 `.meta`。合同、调用参数、失败状态与实机验证范围见 [`cocos-agent-resource-scene-pipeline-0.1.md`](../../docs/agent-foundation/cocos-agent-resource-scene-pipeline-0.1.md)。
 
 Agent key 不参与此流程，也不会写入项目。WebSocket 会话令牌只用于本机桥接认证。
 
@@ -141,6 +141,8 @@ node tools/cocos-agent-bridge/agent-dispatch.js \
 已导入图像放入场景可通过 `scene.sprites.plan/execute/get/compensate/replay` 编排既有的 `scene.pngSprite` 操作。此 Host 侧批次当前只对 2.4.15 开放；它检查活动 Canvas 和 SpriteFrame UUID，为每张图保留独立操作记录，明确失败时逆序补偿，不确定写入时停在 `needs-review`。可选 `positions` 按 `assets` 索引指定 Canvas 本地设计像素坐标（±4096），省略时仍居中；此输入不适用于 3.8.7。执行结果为 `needs-preview` 时，观察本次预览，并按返回的每项 `operationId` 录入预览回执后查询批次状态。双 Sprite 坐标读回、同屏预览和补偿已有 2.4.15 实机轨迹。合同见[2.4 场景 Sprite 批次](../../docs/agent-foundation/scene-sprite-batch-0.1.md)。
 
 从新 PNG 到场景 Sprite 可使用 2.4.15 专属 `assets.scene.plan/execute/get/preview.accept/compensate`。它持久化一个父流水线，再串联 PNG 导入与元数据/UUID 校验、既有场景 Sprite 批次、逐项本次预览证据。确定失败时先撤销场景引用，再尝试移除本流水线确认创建且不再被项目序列化资源引用的资源；Host 复核文件哈希和 Texture/SpriteFrame UUID，扩展通过 `Editor.assetdb.delete` 删除。官方建议用 AssetDB 删除 API 保持文件、`.meta` 与数据库同步，见 [2.4 AssetDB API](https://docs.cocos.com/creator/2.4/manual/en/extension/api/asset-db/asset-db-main.html)。无法确定身份、引用或场景副作用时返回 `needs-review` 并停止删除。输入、状态和失败边界见[资源到场景流水线合同](../../docs/agent-foundation/cocos-agent-resource-scene-pipeline-0.1.md)；当前是否完成实机验收以该合同记录为准。
+
+既有流水线资源的只读核验与安全重导入可调用 `assets.scene.validate` / `assets.scene.repair`。修复只覆盖唯一的 AssetDB URL 映射陈旧分支；PNG 字节、元数据 UUID、场景 Sprite 引用或批次记录不一致时会停止，不触碰 `.meta`。详见[资源到场景流水线合同](../../docs/agent-foundation/cocos-agent-resource-scene-pipeline-0.1.md#流程与不变量)。
 
 Agent 目视检查**本次操作**的本地 Web 预览后，附证据录入预览回执：
 

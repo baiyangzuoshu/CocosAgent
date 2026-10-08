@@ -13,11 +13,11 @@
 | `workflow.plan/execute/get/compensate/replay` | 场景节点计划、`workflowId` 或 `sourceWorkflowId` | [场景组合合同](scene-composition-0.1.md)；持久记录与逐步回执 |
 | `assets.batch.plan/execute/get` | PNG 源路径清单、`batchId` | [批量导入合同](asset-batch-0.1.md)；逐项结果与磁盘读回 |
 | `scene.sprites.plan/execute/get/compensate/replay` | 已导入 PNG 名称、可选的 `positions`、`batchId` 或 `sourceBatchId` | [2.4 场景 Sprite 批次合同](scene-sprite-batch-0.1.md)；逐项场景操作、Canvas 坐标、预览门和补偿；当前只实现 2.4 |
-| `assets.scene.plan/execute/get/preview.accept/compensate` | PNG 源路径清单、`pipelineId`、逐项预览证据 | [2.4 资源到场景流水线](cocos-agent-resource-scene-pipeline-0.1.md)；串联导入、UUID 校验、场景引用、预览和身份校验回滚；当前只实现 2.4 |
+| `assets.scene.plan/execute/get/preview.accept/compensate/validate/repair` | PNG 源路径清单、`pipelineId`、逐项预览证据或资源名 | [2.4 资源到场景流水线](cocos-agent-resource-scene-pipeline-0.1.md)；串联导入、UUID 校验、场景引用、预览和身份校验回滚；validate 只读检查，repair 仅刷新唯一失配的 AssetDB URL 映射；当前只实现 2.4 |
 | `content.plan/stage/get/select/rollback` | 本地内容清单、`releaseId`、预期当前版本 | [动态内容本地版本合同](content-release-0.1.md)；只管理 Host 版本记录与指针，不改变运行时 |
 | `content.runtime.accept` | `projectRoot`、`creatorVersion`、`platform=web-preview`、运行时成功回执 | 核对当前选中版本/指纹/资源 UUID，另记 `effective`；本地调用者回执尚未认证 |
 
-组合和批量方法只编排已实现的语义命令，不授予任意脚本执行权限。当前 `command.execute` 目录在 2.4.15 有六项，在 3.8.7 有五项；新增的 `asset.removeImportedPng` 只由 2.4 扩展提供。
+组合和批量方法只编排已实现的语义命令，不授予任意脚本执行权限。当前 `command.execute` 目录在 2.4.15 有八项，在 3.8.7 有五项；`asset.removeImportedPng`、`asset.validatePng` 和 `asset.refreshPng` 只由 2.4 扩展提供。
 
 `targets` 是 `{ "creatorVersion": "2.4.15|3.8.7", "projectRoot": "/绝对路径" }` 数组。`command.execute` 仅接受所选版本目录中的语义命令；Agent 应先查实例和能力，再按对应版本的 skill 构造输入。错误码、`outcome`、六阶段回执及 `needs-review` 的停止重试规则沿用[调度合同](cocos-agent-dispatch-0.1.md)和[操作合同](cocos-agent-operation-contract-0.1.md)。资源流水线在 Host 侧组合这些命令，不授予任意消息或脚本执行权限。
 
