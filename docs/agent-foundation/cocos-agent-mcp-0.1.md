@@ -19,6 +19,9 @@
 | `cocos_2x_instances_get` | 只读 | 查询所选项目的在线状态 |
 | `cocos_2x_capabilities_list` | 只读 | 查询命令合同、输入结构、访问级别与当前可用状态 |
 | `cocos_2x_command_execute` | 写入可能 | 调度目录中的 2.4.15 语义命令，返回统一 Host 回执 |
+| `cocos_2x_operation_get` | 只读 | 查询持久操作记录，供重新连接和不确定结果检查 |
+| `cocos_2x_operation_reconcile` | 写 Host 恢复证据 | 对账符合条件的中断操作；不重放编辑器写入 |
+| `cocos_2x_operation_preview_accept` | 写预览回执 | 在实际观察本次场景预览后，登记 URL、时间和可见结果 |
 | `cocos_2x_content_build_plan` | 只读 | 校验 release 并查看构建计划 |
 | `cocos_2x_content_build_execute` | 写入构建产物 | 生成并校验 Web-Mobile 包 |
 | `cocos_2x_content_build_get` | 只读 | 读取持久化构建记录 |
@@ -69,6 +72,6 @@ node /absolute/path/Cocos_Engine/tools/cocos-agent-bridge/mcp/mcp-server.mjs \
 
 ## 验收与限制
 
-自动测试使用官方 MCP SDK 的 Client、Server 和 `InMemoryTransport`：确认工具发现、2.4 目标固定、实例选择、共享 JSONL 路由、错误保留及命令专属输入拒绝。另用官方 MCP SDK `StdioClientTransport` 连接真实 2.4.15 工程：发现 11 个工具、实例 `ready`、读取 8 项可用命令，并经 MCP 执行只读 `scene.snapshot`，结果为 `completed`、活动场景 `helloworld`、12 个节点且未截断；没有执行写入。证据见 [MCP 实机轨迹](traces/cocos-agent-mcp-2.4.jsonl)。实机未覆盖 MCP 调用写命令及 MCP 触发的构建/预览。
+自动测试使用官方 MCP SDK 的 Client、Server 和 `InMemoryTransport`：确认工具发现、2.4 目标固定、实例选择、共享 JSONL 路由、错误保留、命令专属输入拒绝及操作记录、对账和预览回执的请求映射。另用官方 MCP SDK `StdioClientTransport` 连接真实 2.4.15 工程：发现 14 个工具、实例 `ready`、读取 8 项可用命令，并经 MCP 执行只读 `scene.snapshot`，结果为 `completed`、活动场景 `helloworld`、12 个节点且未截断；没有执行写入。通过 MCP 读取已有操作记录 `107f5723-8cf3-4117-9482-09d8d71fa999` 成功。随后经 MCP 读取已完成的 `web-host-cli-01`，调用 `content.preview.start/get/stop`；浏览器画面显示蓝色方块和 “Hello, World!”，运行时状态为 `runtime-observed`，预览服务已关闭。场景和构建包未修改。证据见 [MCP 实机轨迹](traces/cocos-agent-mcp-2.4.jsonl)。MCP 场景写命令、操作 reconcile/preview-accept 及 `content.build.execute` 尚未实机验收。
 
 当前没有 MCP 资源/提示词、实时进度、取消、重连恢复或远程 HTTP transport。当前首版不改 Creator 扩展代码；后续可按面试目标逐步把验证过的 2.x 命令合同沉淀为 CocosAgent skill，再决定是否补 3.x。

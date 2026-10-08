@@ -17,6 +17,7 @@ const CONTENT_BUILD_ID = z.string().regex(/^[a-z0-9][a-z0-9-]{2,31}$/);
 const RELEASE_ID = z.string().regex(/^(?!(selected|effective)$)[a-z0-9][a-z0-9._-]{0,63}$/);
 const SHA256 = z.string().regex(/^[a-f0-9]{64}$/);
 const UUID = z.string().regex(/^[0-9a-fA-F-]{36}$/);
+const OPERATION_ID = z.string().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/);
 const RESOURCE_NAME = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/);
 const SERVER_VERSION = '0.1.0';
 
@@ -147,6 +148,27 @@ function createServer(projectRoots, options = {}) {
         commandInputSchema(projectRoot), 'command.execute', ({ projectRoot: selected, command, input }) => ({
             targets: targetList, projectRoot: selected, creatorVersion: CREATOR_VERSION, command, input,
         }), { title: 'Execute a Creator 2.4.15 command', readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
+
+    const operationInput = z.object({ projectRoot, operationId: OPERATION_ID }).strict();
+    register('cocos_2x_operation_get',
+        'Read the durable CocosAgent receipt for a Creator 2.4.15 operation. Use this after reconnecting or when command.execute returned a non-final state.',
+        operationInput, 'operation.get', ({ projectRoot: selected, operationId }) => ({
+            projectRoot: selected, creatorVersion: CREATOR_VERSION, operationId,
+        }), { title: 'Read a Creator 2.4.15 operation receipt', readOnlyHint: true, destructiveHint: false, openWorldHint: false });
+    register('cocos_2x_operation_reconcile',
+        'Reconcile an eligible interrupted Creator 2.4.15 scene operation using the existing instance and disk evidence. It does not repeat the editor write.',
+        operationInput, 'operation.reconcile', ({ projectRoot: selected, operationId }) => ({
+            targets: targetList, projectRoot: selected, creatorVersion: CREATOR_VERSION, operationId,
+        }), { title: 'Reconcile a Creator 2.4.15 operation', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+    register('cocos_2x_operation_preview_accept',
+        'Record visual acceptance for a Creator 2.4.15 scene operation only after inspecting that operation in its local Web preview. Evidence must include the exact local preview URL, observation time and a concise visible-result note.',
+        z.object({ ...operationInput.shape, evidence: z.object({
+            url: z.string().min(1).max(256),
+            observedAt: z.string().min(1),
+            note: z.string().min(1).max(500),
+        }).strict() }).strict(), 'preview.accept', ({ projectRoot: selected, operationId, evidence }) => ({
+            projectRoot: selected, creatorVersion: CREATOR_VERSION, operationId, evidence,
+        }), { title: 'Record scene preview acceptance', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
 
     const buildInput = z.object({
         projectRoot,

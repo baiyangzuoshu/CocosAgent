@@ -53,8 +53,10 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
             'cocos_2x_capabilities_list', 'cocos_2x_command_execute', 'cocos_2x_content_build_execute',
             'cocos_2x_content_build_get', 'cocos_2x_content_build_plan', 'cocos_2x_content_build_reconcile',
             'cocos_2x_content_preview_get', 'cocos_2x_content_preview_start', 'cocos_2x_content_preview_stop',
-            'cocos_2x_instances_get', 'cocos_2x_instances_list',
+            'cocos_2x_instances_get', 'cocos_2x_instances_list', 'cocos_2x_operation_get',
+            'cocos_2x_operation_preview_accept', 'cocos_2x_operation_reconcile',
         ]);
+        assert.equal(tools.length, 14);
         const commandTool = tools.find((tool) => tool.name === 'cocos_2x_command_execute');
         assert.equal(commandTool.annotations.readOnlyHint, false);
         assert.equal(commandTool.annotations.destructiveHint, true);
@@ -89,6 +91,27 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         assert.equal(planned.structuredContent.method, 'content.build.plan');
         assert.equal(calls.at(-1).params.creatorVersion, '2.4.15');
         assert.equal(calls.at(-1).params.projectRoot, value.projects[0]);
+
+        const operationId = '5858dc80-32d0-4610-8291-f057fa13151e';
+        const history = await client.callTool({ name: 'cocos_2x_operation_get', arguments: {
+            projectRoot: value.projects[0], operationId,
+        } });
+        assert.equal(history.structuredContent.method, 'operation.get');
+        assert.equal(calls.at(-1).params.operationId, operationId);
+
+        const reconciled = await client.callTool({ name: 'cocos_2x_operation_reconcile', arguments: {
+            projectRoot: value.projects[0], operationId,
+        } });
+        assert.equal(reconciled.structuredContent.method, 'operation.reconcile');
+        assert.equal(calls.at(-1).params.operationId, operationId);
+        assert.equal(calls.at(-1).params.targets.length, 2);
+
+        const previewAccepted = await client.callTool({ name: 'cocos_2x_operation_preview_accept', arguments: {
+            projectRoot: value.projects[0], operationId,
+            evidence: { url: 'http://127.0.0.1:7457/', observedAt: '2026-10-08T16:00:00.000Z', note: 'Sprite visible in the scene.' },
+        } });
+        assert.equal(previewAccepted.structuredContent.method, 'preview.accept');
+        assert.equal(calls.at(-1).params.evidence.url, 'http://127.0.0.1:7457/');
 
         const invalidProject = await client.callTool({ name: 'cocos_2x_command_execute', arguments: {
             projectRoot: path.join(value.parent, 'not-registered'), command: 'scene.snapshot', input: {},
