@@ -126,13 +126,30 @@ function plan(params, options = {}) {
 function compactUuid(uuid) {
     const hex = uuid.replace(/-/g, '').toLowerCase();
     const encoded = Buffer.from(hex.slice(2), 'hex').toString('base64').replace(/=/g, '');
-    return `${hex.slice(0, 2)}/${encoded.slice(1)}`;
+    return encoded.startsWith('/') ? `${hex.slice(0, 2)}/${encoded.slice(1)}` : `${hex.slice(0, 2)}${encoded}`;
 }
 
 function fileVersion(entries, index) {
     if (!Array.isArray(entries)) return null;
     for (let cursor = 0; cursor + 1 < entries.length; cursor += 2) {
         if (entries[cursor] === index && typeof entries[cursor + 1] === 'string') return entries[cursor + 1];
+    }
+    return null;
+}
+
+function findImportFile(outputRoot, bundleRoot, config, index, resourceUuid) {
+    const importBase = typeof config.importBase === 'string' ? config.importBase : 'import';
+    const directVersion = fileVersion(config.versions?.import, index);
+    if (directVersion) {
+        const directFile = path.resolve(bundleRoot, importBase, resourceUuid.slice(0, 2), `${resourceUuid}.${directVersion}.json`);
+        if (realPathWithin(outputRoot, directFile) && fs.existsSync(directFile)) return directFile;
+    }
+    for (const [packUuid, indices] of Object.entries(config.packs || {})) {
+        if (!Array.isArray(indices) || !indices.includes(index)) continue;
+        const packVersion = fileVersion(config.versions?.import, packUuid);
+        if (!packVersion || !/^[a-f0-9]+$/i.test(packUuid)) continue;
+        const packFile = path.resolve(bundleRoot, importBase, packUuid.slice(0, 2), `${packUuid}.${packVersion}.json`);
+        if (realPathWithin(outputRoot, packFile) && fs.existsSync(packFile)) return packFile;
     }
     return null;
 }
@@ -188,12 +205,11 @@ function verifyOutput(outputRoot, release) {
             const uuid = index === undefined ? null : value.uuids[Number(index)];
             const importHash = index === undefined ? null : fileVersion(value.versions?.import, Number(index));
             const nativeHash = index === undefined ? null : fileVersion(value.versions?.native, Number(index));
-            const importBase = typeof value.importBase === 'string' ? value.importBase : 'import';
             const nativeBase = typeof value.nativeBase === 'string' ? value.nativeBase : 'native';
-            const importFile = importHash && path.resolve(bundleRoot, importBase, asset.resourceUuid.slice(0, 2), `${asset.resourceUuid}.${importHash}.json`);
+            const importFile = index === undefined ? null : findImportFile(outputRoot, bundleRoot, value, Number(index), asset.resourceUuid);
             const nativeFile = nativeHash && path.resolve(bundleRoot, nativeBase, asset.resourceUuid.slice(0, 2), `${asset.resourceUuid}.${nativeHash}.png`);
             const matches = value.types[typeIndex] === 'cc.Texture2D' && uuid === compactUuid(asset.resourceUuid)
-                && importFile && realPathWithin(outputRoot, importFile) && fs.existsSync(importFile)
+                && importFile
                 && nativeFile && realPathWithin(outputRoot, nativeFile) && fs.existsSync(nativeFile);
             if (!matches) { allAssetsPresent = false; break; }
             verified.push({ id: asset.id, runtimePath: asset.runtimePath, resourceUuid: asset.resourceUuid,

@@ -73,6 +73,8 @@ function writeWebBuild(outputRoot, release, options = {}) {
 }
 
 test('plans an isolated 2.4 Web-Mobile build from the selected, revalidated release', () => {
+    assert.equal(buildTools.compactUuid(textureUuid), '07/pqZf4dL2KziOawIXDYk');
+    assert.equal(buildTools.compactUuid('a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5'), 'a4rUXYa+dFtrLGINVrr0z1');
     const value = fixture();
     try {
         const plan = buildTools.plan(value.params, { creatorExecutable: value.executable });
@@ -110,6 +112,37 @@ test('executes CLI without a shell and accepts only a package containing the sel
         assert.equal(invocation.options.timeout, 20 * 60 * 1000);
         assert.equal(buildTools.get(value.params).build.state, 'completed');
         assert.equal(agentHandle({ id: 12, method: 'content.build.get', params: value.params }).result.build.buildId, 'web-smoke-01');
+    } finally { fs.rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test('verifies Creator 2.4 texture import data stored in a resources bundle pack', () => {
+    const value = fixture();
+    try {
+        const staged = releaseTools.get({ projectRoot: value.root, creatorVersion: '2.4.15', releaseId: 'release-a' }).release;
+        const checked = releaseTools.validate({ projectRoot: value.root, creatorVersion: '2.4.15', manifest: staged });
+        const outputRoot = path.join(value.root, 'packed-build');
+        const { bundleRoot } = writeWebBuild(outputRoot, checked.release);
+        const configPath = path.join(bundleRoot, fs.readdirSync(bundleRoot).find((name) => /^config.*\.json$/.test(name)));
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        const asset = checked.release.assets[0];
+        const directImport = path.join(bundleRoot, 'import', asset.resourceUuid.slice(0, 2), `${asset.resourceUuid}.imp123.json`);
+        fs.unlinkSync(directImport);
+
+        const packUuid = '045d29faf';
+        const packVersion = '8ff53';
+        config.packs = { [packUuid]: [0] };
+        config.versions.import = [packUuid, packVersion];
+        fs.writeFileSync(configPath, JSON.stringify(config));
+        const packedImport = path.join(bundleRoot, 'import', packUuid.slice(0, 2), `${packUuid}.${packVersion}.json`);
+        fs.mkdirSync(path.dirname(packedImport), { recursive: true });
+        fs.writeFileSync(packedImport, JSON.stringify({ type: 'cc.Texture2D', data: 'packed texture settings' }));
+
+        const verified = buildTools.verifyOutput(outputRoot, checked.release);
+        assert.equal(verified.success, true);
+        assert.equal(verified.resources[0].importFile, path.relative(outputRoot, packedImport));
+
+        fs.unlinkSync(packedImport);
+        assert.equal(buildTools.verifyOutput(outputRoot, checked.release).error.code, 'BUILD_ASSET_MISSING');
     } finally { fs.rmSync(value.root, { recursive: true, force: true }); }
 });
 

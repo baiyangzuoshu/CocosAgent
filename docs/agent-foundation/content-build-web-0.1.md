@@ -15,7 +15,7 @@
 
 请求 schema 见 [`content-build.schema.json`](../../tools/cocos-agent-bridge/content-build.schema.json)。
 
-Host 仅在 Creator 进程以成功状态退出后检查产物；还须找到 Web `index.html` 与 `name: "resources"` 的 bundle 配置。每个资源需同时满足：路径项等于 release 的 `runtimePath`、type 为 `cc.Texture2D`、UUID 与 2.4 压缩 UUID 一致，并且导入 JSON 和 PNG native 文件均存在于此输出包中。Creator 命令退出成功但任何资源缺失时，operation 为 `needs-review`，不会报告构建验收成功。失败输出保留用于诊断；应使用新 buildId 重试。
+Host 仅在 Creator 进程以成功状态退出后检查产物；还须找到 Web `index.html` 与 `name: "resources"` 的 bundle 配置。每个资源需同时满足：路径项等于 release 的 `runtimePath`、type 为 `cc.Texture2D`、UUID 与 2.4 压缩 UUID 一致，并且导入 JSON 和 PNG native 文件均存在于此输出包中。导入 JSON 可由独立资源文件提供，也可由 `config.packs` 与 `versions.import` 指向的 pack 文件提供；UUID 压缩时，只有编码首字符为 `/` 才用斜线作分隔符。Creator 命令退出成功但任何资源缺失时，operation 为 `needs-review`，不会报告构建验收成功。失败输出保留用于诊断；应使用新 buildId 重试。
 
 示例调用顺序：
 
@@ -29,7 +29,8 @@ Host 仅在 Creator 进程以成功状态退出后检查产物；还须找到 We
 ## 证据状态
 
 - 2.4 官方命令行发布手册确认 `--path`、`--build`、`platform`、`buildPath` 和 `md5Cache` 参数；手册指出 Creator CLI 仍需要 GUI 环境。构建面板手册说明构建选项可用于命令行，且重新构建可能覆盖既有输出，因此本合同给每次构建分配此前不存在的专用目录。[命令行发布项目](https://docs.cocos.com/creator/2.4/manual/zh/publish/publish-in-command-line.html)、[构建发布面板](https://docs.cocos.com/creator/2.4/manual/zh/editor/publish/build-panel.html)
-- 自动化测试覆盖 release 与 fingerprint 重验、唯一路径、Creator 版本检查、无 shell 调用、资源 UUID 和磁盘文件核对、错误进程持久化、Host 中断后只读对账及内容修改拒绝。
-- **真实 Creator Web-Mobile 构建尚未验证。**2026-10-08 曾在隔离临时工程尝试 CLI；Creator 进程以 `SIGABRT` 退出，macOS 崩溃记录显示终止线程位于 `RegisterApplication` 调用链，输出目录没有生成产物。该尝试发生在 Mac 锁屏期间，不能据此断定构建参数或资源有问题。记录见[CLI 尝试轨迹](traces/cocos-agent-content-build-2.4-cli-attempt.jsonl)。当前输出目录格式与 UUID 对账仍只有隔离夹具测试；需要 Creator 可交互的 GUI 环境完成首次构建，并保留实际包内 config/UUID/资源路径轨迹后，才可把本 skill 标为实机验证。
+- 自动化测试覆盖 release 与 fingerprint 重验、唯一路径、Creator 版本检查、无 shell 调用、standalone/pack 两种导入 JSON、Creator 2.4 UUID 编码、资源 UUID 和磁盘文件核对、错误进程持久化、Host 中断后只读对账及内容修改拒绝。
+- 2026-10-08，Creator 2.4.15 图形构建面板以 `Web Mobile` 构建实际 `2.4.15NewProject`，状态 `completed`；隔离输出 `build/cocos-agent/web-real-ui-01` 的 `web-mobile/assets/resources/config.f54dc.json` 通过 Host 输出校验，红蓝 Texture2D 的 UUID、pack 导入 JSON 和 native PNG 均匹配。[实机包轨迹](traces/cocos-agent-content-build-2.4-gui-output.jsonl)。这验证了输出格式与解析器，不代表 `content.build.execute` CLI 接线成功，也不代表包已部署或运行。
+- CLI 仍有明确缺口：一次发生于锁屏时，一次发生于桌面可交互且 Creator 窗口打开时，直接启动 Creator 可执行文件都在 macOS `RegisterApplication` 阶段以 `SIGABRT` 退出且没有产物；`open -n -W` 包装方式返回 `kLSNoExecutableErr`。见[CLI 尝试轨迹](traces/cocos-agent-content-build-2.4-cli-attempt.jsonl)。这只界定当前 Host 启动上下文的限制，不证明 Creator 的构建参数无效；CLI 执行与 Host 持久回执仍需在可访问 WindowServer 的 Host 进程环境验收。
 
 本合同只验收“当前选中的内容版本进入 Web 构建包”。它不证明构建包已经部署、托管或在浏览器打开运行；发布预览与部署验收需要后续切片。
