@@ -12,6 +12,7 @@
 | `workflow.plan/execute/get/compensate/replay` | 场景节点计划、`workflowId` 或 `sourceWorkflowId` | [场景组合合同](scene-composition-0.1.md)；持久记录与逐步回执 |
 | `assets.batch.plan/execute/get` | PNG 源路径清单、`batchId` | [批量导入合同](asset-batch-0.1.md)；逐项结果与磁盘读回 |
 | `content.plan/stage/get/select/rollback` | 本地内容清单、`releaseId`、预期当前版本 | [动态内容本地版本合同](content-release-0.1.md)；只管理 Host 版本记录与指针，不改变运行时 |
+| `content.runtime.accept` | `projectRoot`、`creatorVersion`、`platform=web-preview`、运行时成功回执 | 核对当前选中版本/指纹/资源 UUID，另记 `effective`；本地调用者回执尚未认证 |
 
 组合和批量方法只编排已实现的语义命令，不授予任意脚本执行权限。当前 `command.execute` 的命令目录有五项。
 

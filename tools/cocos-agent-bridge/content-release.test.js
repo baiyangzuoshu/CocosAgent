@@ -41,11 +41,21 @@ for (const version of ['2.4.15', '3.8.7']) {
             assert.equal(release.stage(params).idempotent, true);
             assert.equal(release.select({ projectRoot: root, creatorVersion: version,
                 releaseId: 'release-a', expectedCurrent: null }).outcome, 'selected');
+            const asset = release.get({ projectRoot: root, creatorVersion: version, releaseId: 'release-a' }).release.assets[1];
+            const receipt = { outcome: 'applied', releaseId: 'release-a', activeReleaseId: 'release-a',
+                activeFingerprint: planned.fingerprint, assetId: asset.id, activeAssetId: asset.id,
+                resourceUuid: asset.resourceUuid, currentRefCount: 1 };
+            assert.equal(release.acceptRuntime({ projectRoot: root, creatorVersion: version,
+                platform: 'web-preview', receipt }).outcome, 'runtime-observed');
+            assert.equal(release.get({ projectRoot: root, creatorVersion: version }).effective.releaseId, 'release-a');
             const second = structuredClone(manifest);
             second.releaseId = 'release-b';
             assert.equal(release.stage({ ...params, manifest: second }).success, true);
             assert.equal(release.select({ projectRoot: root, creatorVersion: version,
                 releaseId: 'release-b', expectedCurrent: 'release-a' }).previousReleaseId, 'release-a');
+            assert.equal(release.acceptRuntime({ projectRoot: root, creatorVersion: version,
+                platform: 'web-preview', receipt }).error.code, 'RUNTIME_RECEIPT_MISMATCH');
+            assert.equal(release.get({ projectRoot: root, creatorVersion: version }).effective.releaseId, 'release-a');
             assert.equal(release.select({ projectRoot: root, creatorVersion: version,
                 releaseId: 'release-a', expectedCurrent: null }).error.code, 'CURRENT_CHANGED');
             assert.equal(release.rollback({ projectRoot: root, creatorVersion: version,

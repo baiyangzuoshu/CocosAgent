@@ -8,11 +8,13 @@ const releaseIdPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const assetIdPattern = /^[a-z][a-z0-9_-]{0,63}$/;
 const sourcePattern = /^assets\/resources\/([a-z0-9][a-z0-9._-]{0,94}\.png)$/i;
 const digestPattern = /^[a-f0-9]{64}$/;
+const reservedIds = new Set(['selected', 'effective']);
 const fail = (code, message) => ({ success: false, outcome: 'failed', error: { code, message } });
 const sha256 = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 const directory = (root) => path.join(root, '.cocos-agent', 'content-releases');
 const releaseFile = (root, id) => path.join(directory(root), `${id}.json`);
 const pointerFile = (root) => path.join(directory(root), 'selected.json');
+const effectiveFile = (root) => path.join(directory(root), 'effective.json');
 
 function atomicWrite(filename, value, exclusive = false) {
     fs.mkdirSync(path.dirname(filename), { recursive: true, mode: 0o700 });
@@ -35,7 +37,7 @@ function validate(params) {
     if (!target.success) return target;
     const { manifest } = params;
     if (!manifest || manifest.contractVersion !== '0.1' || manifest.creatorVersion !== params.creatorVersion
-        || !releaseIdPattern.test(manifest.releaseId || '') || manifest.releaseId === 'selected'
+        || !releaseIdPattern.test(manifest.releaseId || '') || reservedIds.has(manifest.releaseId)
         || manifest.delivery !== 'built-in-resources'
         || !Array.isArray(manifest.assets) || manifest.assets.length < 1 || manifest.assets.length > 16
         || !assetIdPattern.test(manifest.entryAssetId || '')) return fail('INVALID_MANIFEST', 'Invalid local built-in resources manifest.');
@@ -114,10 +116,14 @@ function selected(root) {
     try { return JSON.parse(fs.readFileSync(pointerFile(root), 'utf8')); }
     catch (error) { if (error.code === 'ENOENT') return null; throw error; }
 }
+function effective(root) {
+    try { return JSON.parse(fs.readFileSync(effectiveFile(root), 'utf8')); }
+    catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+}
 function select(params) {
     const target = project(params);
     if (!target.success) return target;
-    if (!releaseIdPattern.test(params.releaseId || '') || params.releaseId === 'selected'
+    if (!releaseIdPattern.test(params.releaseId || '') || reservedIds.has(params.releaseId)
         || (params.expectedCurrent !== null && params.expectedCurrent !== undefined
         && !releaseIdPattern.test(params.expectedCurrent))) return fail('INVALID_ARGUMENT', 'Provide a staged release and expected current release.');
     const current = selected(target.root);
@@ -137,10 +143,36 @@ function get(params) {
     const target = project(params);
     if (!target.success) return target;
     const pointer = selected(target.root);
-    if (!params.releaseId) return { success: true, outcome: 'read', selected: pointer };
-    if (!releaseIdPattern.test(params.releaseId) || params.releaseId === 'selected') return fail('INVALID_ARGUMENT', 'Invalid release ID.');
-    try { return { success: true, outcome: 'read', release: JSON.parse(fs.readFileSync(releaseFile(target.root, params.releaseId), 'utf8')), selected: pointer }; }
+    if (!params.releaseId) return { success: true, outcome: 'read', selected: pointer, effective: effective(target.root) };
+    if (!releaseIdPattern.test(params.releaseId) || reservedIds.has(params.releaseId)) return fail('INVALID_ARGUMENT', 'Invalid release ID.');
+    try { return { success: true, outcome: 'read', release: JSON.parse(fs.readFileSync(releaseFile(target.root, params.releaseId), 'utf8')), selected: pointer, effective: effective(target.root) }; }
     catch (error) { if (error.code === 'ENOENT') return fail('RELEASE_NOT_FOUND', 'Release is not staged.'); throw error; }
+}
+function acceptRuntime(params) {
+    const target = project(params);
+    if (!target.success) return target;
+    const receipt = params.receipt;
+    const pointer = selected(target.root);
+    if (params.platform !== 'web-preview' || !receipt || receipt.outcome !== 'applied'
+        || !pointer || receipt.releaseId !== pointer.releaseId || receipt.activeReleaseId !== pointer.releaseId
+        || receipt.activeFingerprint !== pointer.fingerprint || typeof receipt.assetId !== 'string'
+        || receipt.activeAssetId !== receipt.assetId || !Number.isFinite(receipt.currentRefCount)
+        || receipt.currentRefCount < 1)
+        return fail('RUNTIME_RECEIPT_MISMATCH', 'Runtime receipt does not match the selected release.');
+    let release;
+    try { release = JSON.parse(fs.readFileSync(releaseFile(target.root, pointer.releaseId), 'utf8')); }
+    catch (_) { return fail('RELEASE_NOT_FOUND', 'Selected release record is missing.'); }
+    const asset = release.assets.find((item) => item.id === receipt.assetId);
+    if (!asset || receipt.resourceUuid !== asset.resourceUuid || release.creatorVersion !== params.creatorVersion)
+        return fail('RUNTIME_RECEIPT_MISMATCH', 'Runtime resource identity differs from the staged release.');
+    const checked = validate({ projectRoot: target.root, creatorVersion: params.creatorVersion, manifest: release });
+    if (!checked.success || checked.fingerprint !== release.fingerprint)
+        return fail('RELEASE_CHANGED', 'Selected release no longer matches project assets.');
+    const observation = { releaseId: release.releaseId, fingerprint: release.fingerprint,
+        assetId: asset.id, resourceUuid: asset.resourceUuid, platform: params.platform,
+        observedAt: new Date().toISOString() };
+    atomicWrite(effectiveFile(target.root), observation);
+    return { success: true, outcome: 'runtime-observed', effective: observation };
 }
 function rollback(params) {
     const target = project(params);
@@ -157,6 +189,7 @@ function handle(method, params) {
     if (method === 'content.select') return select(params);
     if (method === 'content.rollback') return rollback(params);
     if (method === 'content.get') return get(params);
+    if (method === 'content.runtime.accept') return acceptRuntime(params);
     return fail('UNKNOWN_METHOD', 'Unknown content release method.');
 }
-module.exports = { validate, stage, select, rollback, get, handle };
+module.exports = { validate, stage, select, rollback, get, acceptRuntime, handle };

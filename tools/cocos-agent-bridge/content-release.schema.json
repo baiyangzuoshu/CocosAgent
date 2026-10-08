@@ -7,7 +7,7 @@
   "required": ["contractVersion", "releaseId", "creatorVersion", "delivery", "entryAssetId", "assets"],
   "properties": {
     "contractVersion": { "const": "0.1" },
-    "releaseId": { "type": "string", "pattern": "^(?!selected$)[a-z0-9][a-z0-9._-]{0,63}$" },
+    "releaseId": { "type": "string", "pattern": "^(?!(selected|effective)$)[a-z0-9][a-z0-9._-]{0,63}$" },
     "creatorVersion": { "enum": ["2.4.15", "3.8.7"] },
     "delivery": { "const": "built-in-resources" },
     "entryAssetId": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" },

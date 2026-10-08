@@ -1,0 +1,113 @@
+{
+  "creatorVersion": "2.4.15",
+  "previewUrl": "http://127.0.0.1:7456/",
+  "releases": {
+    "red": "runtime-red-6d86aa64",
+    "blue": "runtime-blue-6d86aa64"
+  },
+  "receipts": {
+    "red": {
+      "outcome": "applied",
+      "releaseId": "runtime-red-6d86aa64",
+      "assetId": "visual",
+      "activeReleaseId": "runtime-red-6d86aa64",
+      "activeAssetId": "visual",
+      "activeFingerprint": "94c7756a87959068a7ca89269d43c51cadab3ff388b7ec275d483fdf5098fd5d",
+      "previousReleaseId": null,
+      "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+      "currentRefCount": 1
+    },
+    "redObserved": {
+      "success": true,
+      "outcome": "runtime-observed",
+      "effective": {
+        "releaseId": "runtime-red-6d86aa64",
+        "fingerprint": "94c7756a87959068a7ca89269d43c51cadab3ff388b7ec275d483fdf5098fd5d",
+        "assetId": "visual",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "platform": "web-preview",
+        "observedAt": "2026-10-08T01:26:41.898Z"
+      }
+    },
+    "blue": {
+      "outcome": "applied",
+      "releaseId": "runtime-blue-6d86aa64",
+      "assetId": "visual",
+      "activeReleaseId": "runtime-blue-6d86aa64",
+      "activeAssetId": "visual",
+      "activeFingerprint": "e4c1384ceae1818625c8ece030974ffb1bc2cc3f1e3d3c838149b1c825251ddf",
+      "previousReleaseId": "runtime-red-6d86aa64",
+      "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+      "currentRefCount": 1
+    },
+    "blueObserved": {
+      "success": true,
+      "outcome": "runtime-observed",
+      "effective": {
+        "releaseId": "runtime-blue-6d86aa64",
+        "fingerprint": "e4c1384ceae1818625c8ece030974ffb1bc2cc3f1e3d3c838149b1c825251ddf",
+        "assetId": "visual",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "platform": "web-preview",
+        "observedAt": "2026-10-08T01:26:42.354Z"
+      }
+    },
+    "failed": {
+      "outcome": "retained",
+      "releaseId": "runtime-red-6d86aa64",
+      "assetId": "visual",
+      "activeReleaseId": "runtime-blue-6d86aa64",
+      "activeAssetId": "visual",
+      "activeFingerprint": "e4c1384ceae1818625c8ece030974ffb1bc2cc3f1e3d3c838149b1c825251ddf",
+      "code": "FORCED_LOAD_FAILURE",
+      "retainedReleaseId": "runtime-blue-6d86aa64"
+    },
+    "hostRollback": {
+      "success": true,
+      "outcome": "selected",
+      "releaseId": "runtime-blue-6d86aa64",
+      "previousReleaseId": "runtime-red-6d86aa64",
+      "idempotent": false
+    },
+    "recovered": {
+      "outcome": "applied",
+      "releaseId": "runtime-red-6d86aa64",
+      "assetId": "visual",
+      "activeReleaseId": "runtime-red-6d86aa64",
+      "activeAssetId": "visual",
+      "activeFingerprint": "94c7756a87959068a7ca89269d43c51cadab3ff388b7ec275d483fdf5098fd5d",
+      "previousReleaseId": "runtime-blue-6d86aa64",
+      "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+      "currentRefCount": 1
+    },
+    "recoveredObserved": {
+      "success": true,
+      "outcome": "runtime-observed",
+      "effective": {
+        "releaseId": "runtime-red-6d86aa64",
+        "fingerprint": "94c7756a87959068a7ca89269d43c51cadab3ff388b7ec275d483fdf5098fd5d",
+        "assetId": "visual",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "platform": "web-preview",
+        "observedAt": "2026-10-08T01:26:42.732Z"
+      }
+    }
+  },
+  "snapshot": {
+    "busy": false,
+    "closed": false,
+    "activeReleaseId": "runtime-red-6d86aa64",
+    "activeAssetId": "visual",
+    "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+    "valid": true,
+    "refCount": 1
+  },
+  "disposed": {
+    "outcome": "disposed",
+    "idempotent": false
+  },
+  "screenshots": [
+    "/Users/youjunmao/WORK/Cocos_Engine/docs/agent-foundation/traces/visual/cocos-content-runtime-2.4-red.png",
+    "/Users/youjunmao/WORK/Cocos_Engine/docs/agent-foundation/traces/visual/cocos-content-runtime-2.4-blue.png"
+  ]
+}

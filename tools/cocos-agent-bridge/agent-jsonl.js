@@ -11,7 +11,7 @@ const contentRelease = require('./content-release');
 const catalogMethods = new Set(['instances.list', 'instances.get', 'capabilities.list']);
 const workflowMethods = new Set(['workflow.plan', 'workflow.execute', 'workflow.get', 'workflow.compensate', 'workflow.replay']);
 const batchMethods = new Set(['assets.batch.plan', 'assets.batch.execute', 'assets.batch.get']);
-const contentMethods = new Set(['content.plan', 'content.stage', 'content.get', 'content.select', 'content.rollback']);
+const contentMethods = new Set(['content.plan', 'content.stage', 'content.get', 'content.select', 'content.rollback', 'content.runtime.accept']);
 const methods = new Set([...catalogMethods, ...workflowMethods, ...batchMethods, ...contentMethods, 'command.execute', 'operation.get', 'preview.accept']);
 const versions = new Set(['2.4.15', '3.8.7']);
 

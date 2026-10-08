@@ -1,0 +1,113 @@
+{
+  "creatorVersion": "3.8.7",
+  "previewUrl": "http://127.0.0.1:7457/",
+  "releases": {
+    "red": "runtime-red-28f466be",
+    "blue": "runtime-blue-28f466be"
+  },
+  "receipts": {
+    "red": {
+      "outcome": "applied",
+      "releaseId": "runtime-red-28f466be",
+      "assetId": "visual",
+      "activeReleaseId": "runtime-red-28f466be",
+      "activeAssetId": "visual",
+      "activeFingerprint": "d6890daa7a8372344e0666a0a2ecf45c7e09ed8e192d8f0b429dc7919020c300",
+      "previousReleaseId": null,
+      "resourceUuid": "d5227909-e6cc-404e-9198-babfe7e5a86c@6c48a",
+      "currentRefCount": 1
+    },
+    "redObserved": {
+      "success": true,
+      "outcome": "runtime-observed",
+      "effective": {
+        "releaseId": "runtime-red-28f466be",
+        "fingerprint": "d6890daa7a8372344e0666a0a2ecf45c7e09ed8e192d8f0b429dc7919020c300",
+        "assetId": "visual",
+        "resourceUuid": "d5227909-e6cc-404e-9198-babfe7e5a86c@6c48a",
+        "platform": "web-preview",
+        "observedAt": "2026-10-08T01:27:43.322Z"
+      }
+    },
+    "blue": {
+      "outcome": "applied",
+      "releaseId": "runtime-blue-28f466be",
+      "assetId": "visual",
+      "activeReleaseId": "runtime-blue-28f466be",
+      "activeAssetId": "visual",
+      "activeFingerprint": "c80ad321d3b7ad4e603caad3992bb5f9571c63f9c82b28052cb7e9cf2f7f27da",
+      "previousReleaseId": "runtime-red-28f466be",
+      "resourceUuid": "75a6cdb2-c8d9-4d95-b758-9cf75134a6f6@6c48a",
+      "currentRefCount": 1
+    },
+    "blueObserved": {
+      "success": true,
+      "outcome": "runtime-observed",
+      "effective": {
+        "releaseId": "runtime-blue-28f466be",
+        "fingerprint": "c80ad321d3b7ad4e603caad3992bb5f9571c63f9c82b28052cb7e9cf2f7f27da",
+        "assetId": "visual",
+        "resourceUuid": "75a6cdb2-c8d9-4d95-b758-9cf75134a6f6@6c48a",
+        "platform": "web-preview",
+        "observedAt": "2026-10-08T01:27:43.973Z"
+      }
+    },
+    "failed": {
+      "outcome": "retained",
+      "releaseId": "runtime-red-28f466be",
+      "assetId": "visual",
+      "activeReleaseId": "runtime-blue-28f466be",
+      "activeAssetId": "visual",
+      "activeFingerprint": "c80ad321d3b7ad4e603caad3992bb5f9571c63f9c82b28052cb7e9cf2f7f27da",
+      "code": "FORCED_LOAD_FAILURE",
+      "retainedReleaseId": "runtime-blue-28f466be"
+    },
+    "hostRollback": {
+      "success": true,
+      "outcome": "selected",
+      "releaseId": "runtime-blue-28f466be",
+      "previousReleaseId": "runtime-red-28f466be",
+      "idempotent": false
+    },
+    "recovered": {
+      "outcome": "applied",
+      "releaseId": "runtime-red-28f466be",
+      "assetId": "visual",
+      "activeReleaseId": "runtime-red-28f466be",
+      "activeAssetId": "visual",
+      "activeFingerprint": "d6890daa7a8372344e0666a0a2ecf45c7e09ed8e192d8f0b429dc7919020c300",
+      "previousReleaseId": "runtime-blue-28f466be",
+      "resourceUuid": "d5227909-e6cc-404e-9198-babfe7e5a86c@6c48a",
+      "currentRefCount": 1
+    },
+    "recoveredObserved": {
+      "success": true,
+      "outcome": "runtime-observed",
+      "effective": {
+        "releaseId": "runtime-red-28f466be",
+        "fingerprint": "d6890daa7a8372344e0666a0a2ecf45c7e09ed8e192d8f0b429dc7919020c300",
+        "assetId": "visual",
+        "resourceUuid": "d5227909-e6cc-404e-9198-babfe7e5a86c@6c48a",
+        "platform": "web-preview",
+        "observedAt": "2026-10-08T01:27:44.605Z"
+      }
+    }
+  },
+  "snapshot": {
+    "busy": false,
+    "closed": false,
+    "activeReleaseId": "runtime-red-28f466be",
+    "activeAssetId": "visual",
+    "resourceUuid": "d5227909-e6cc-404e-9198-babfe7e5a86c@6c48a",
+    "valid": true,
+    "refCount": 1
+  },
+  "disposed": {
+    "outcome": "disposed",
+    "idempotent": false
+  },
+  "screenshots": [
+    "/Users/youjunmao/WORK/Cocos_Engine/docs/agent-foundation/traces/visual/cocos-content-runtime-3.8-red.png",
+    "/Users/youjunmao/WORK/Cocos_Engine/docs/agent-foundation/traces/visual/cocos-content-runtime-3.8-blue.png"
+  ]
+}

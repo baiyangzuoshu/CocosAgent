@@ -100,7 +100,7 @@ node tools/cocos-agent-bridge/catalog-host.js \
 
 ## Agent 调度入口
 
-需要由长期运行的 Agent 进程调用时，启动 `node tools/cocos-agent-bridge/agent-jsonl.js`，在 stdin 逐行发送 JSON 请求。它提供实例/能力查询、命令调度、场景组合、批量资源，以及本地内容版本的 `content.plan/stage/get/select/rollback`。内容版本只读/写 Host 的本地版本记录，不改变运行中的游戏。请求格式和双版本验收见 [`cocos-agent-local-api-0.1.md`](../../docs/agent-foundation/cocos-agent-local-api-0.1.md)；版本合同见 [`content-release-0.1.md`](../../docs/agent-foundation/content-release-0.1.md)。
+需要由长期运行的 Agent 进程调用时，启动 `node tools/cocos-agent-bridge/agent-jsonl.js`，在 stdin 逐行发送 JSON 请求。它提供实例/能力查询、命令调度、场景组合、批量资源，以及本地内容版本的 `content.plan/stage/get/select/rollback` 与 `content.runtime.accept`。选中版本只改 Host 指针；运行时成功回执另记 `effective`。请求格式和双版本验收见 [`cocos-agent-local-api-0.1.md`](../../docs/agent-foundation/cocos-agent-local-api-0.1.md)；版本合同与 Web 接线见 [`content-release-0.1.md`](../../docs/agent-foundation/content-release-0.1.md)、[`content-runtime-web-0.1.md`](../../docs/agent-foundation/content-runtime-web-0.1.md)。
 
 `agent-dispatch.js` 串联实例查询、能力查询、目标核对、命令执行和回执判定。只读示例：
 

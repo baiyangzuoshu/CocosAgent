@@ -9,6 +9,8 @@ Use this skill when analyzing runtime texture replacement in 3.8.7. Read the [3.
 
 For a named local content version, inspect the [CocosAgent 0.1 release contract](../../content-release-0.1.md) first. Its `content.select` changes only Host metadata, not the running game. Resolve each declared PNG in the built-in `resources` bundle through its `/texture` subresource path; check the exact Creator version, staged fingerprint and dependency declaration before runtime work.
 
+For the [measured Web runtime flow](../../content-runtime-web-0.1.md), pass the selected record to the 3.8 adapter, wait for its `applied` receipt and a visible frame, then submit the matching fingerprint, `uuid` and positive reference count through `content.runtime.accept`. On `retained`, keep the old Sprite and return the Host pointer to the effective release; do not record the failed candidate as effective. The current adapter is injected by a test harness and has no persistent game hookup.
+
 1. Confirm the asset is in the intended bundle and read its 3.8 `.meta` importer/subresource IDs. The tested PNGs require `resources.load(name + '/texture', Texture2D)`; the base name alone returned “Bundle resources doesn't contain …”.
 2. Load the next asset, call `addRef()` for the owner, then switch the owner reference. Only after the switch, call `decRef()` on the previous owned asset.
 3. Observe `refCount`, `assetManager.assets.has(uuid)`, validity and time after non-forced `releaseUnusedAssets()`. Do not force-release an asset still in use.
