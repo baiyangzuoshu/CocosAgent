@@ -15,6 +15,7 @@ function fixture() {
     const projectRoot = path.join(root, 'project');
     const resources = path.join(projectRoot, 'assets', 'resources');
     fs.mkdirSync(resources, { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, 'assets', 'Scene'), { recursive: true });
     for (const [index, assetName] of ['One.png', 'Two.png'].entries()) {
         const textureUuid = `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`;
         const spriteFrameUuid = `00000000-0000-4000-8000-${String(index + 11).padStart(12, '0')}`;
@@ -27,6 +28,20 @@ function fixture() {
     const instance = { instanceId: '11111111-1111-4111-8111-111111111111', projectRoot,
         creatorVersion: '2.4.15', activeScene: 'helloworld' };
     const nodes = new Map();
+    const sceneFile = path.join(projectRoot, 'assets', 'Scene', 'helloworld.fire');
+    function writeScene() {
+        const objects = [
+            { __type__: 'cc.Scene', _name: 'helloworld', _children: [{ __id__: 1 }] },
+            { __type__: 'cc.Node', _name: 'Canvas', _id: 'a286bbGknJLZpRpxROV6M94', _children: [] },
+        ];
+        for (const [name, uuid] of nodes) {
+            const index = objects.length;
+            objects[1]._children.push({ __id__: index });
+            objects.push({ __type__: 'cc.Node', _name: name, _id: uuid, _parent: { __id__: 1 }, _children: [] });
+        }
+        fs.writeFileSync(sceneFile, JSON.stringify(objects));
+    }
+    writeScene();
     const sceneCalls = [];
     const fPositions = { 'One.png': { x: -64, y: 0 }, 'Two.png': { x: 64, y: 0 } };
     const run = (request) => {
@@ -34,13 +49,16 @@ function fixture() {
             result: { sceneName: 'helloworld', nodeCount: 2, nodes: [], truncated: false } };
         if (request.command === 'scene.node.inspect') {
             if (request.input.nodePath === 'helloworld/Canvas') return { success: true, outcome: 'completed', instance,
-                result: { sceneName: 'helloworld', node: { status: 'found', uuid: 'a286bbGknJLZpRpxROV6M94' } } };
+                result: { sceneName: 'helloworld', node: { status: 'found', path: 'helloworld/Canvas', uuid: 'a286bbGknJLZpRpxROV6M94' } } };
             const name = request.input.nodePath.split('/').at(-1);
             return { success: true, outcome: 'completed', instance, result: { sceneName: 'helloworld',
-                node: nodes.has(name) ? { status: 'found', uuid: nodes.get(name) } : { status: 'not-found' } } };
+                node: nodes.has(name) ? { status: 'found', path: request.input.nodePath, uuid: nodes.get(name) }
+                    : { status: 'not-found', path: request.input.nodePath } } };
         }
         if (request.operationGetId) {
-            const operation = operationStore.read(projectRoot, request.operationGetId);
+            let operation;
+            try { operation = operationStore.read(projectRoot, request.operationGetId); }
+            catch (error) { if (error.code === 'ENOENT') return { success: false, error: { code: 'OPERATION_STATUS_UNKNOWN' } }; throw error; }
             return { success: true, outcome: operation.manifest.sceneAction === 'compensate' ? 'completed' : 'needs-preview',
                 instance, phases: operation.phases, result: { sceneName: 'helloworld', action: operation.manifest.sceneAction,
                     assetName: operation.manifest.assetName, nodeName: operation.manifest.nodeName, assetUuid: operation.manifest.assetUuid,
@@ -58,8 +76,13 @@ function fixture() {
             instance, error: { code: 'EDITOR_REJECTED', sideEffect: 'none' } };
         if (assetName === 'Two.png' && action === 'apply' && failureMode === 'uncertain') return { success: false, outcome: 'needs-review',
             instance, error: { code: 'WRITE_UNKNOWN', sideEffect: 'possible' } };
+        if (assetName === 'Two.png' && action === 'apply' && failureMode === 'interrupt-before-persist') {
+            failureMode = null;
+            throw new Error('INJECTED_HOST_INTERRUPTION_BEFORE_OPERATION_RECORD');
+        }
         if (action === 'apply') nodes.set(targetNodeName, crypto.randomUUID());
         else nodes.delete(targetNodeName);
+        writeScene();
         const operation = { contractVersion: '0.1', operationId: request.input.operationId, projectRoot, creatorVersion: '2.4.15',
             sceneName: 'helloworld', manifest: { sceneAction: action, assetName, nodeName: targetNodeName, assetUuid: spriteFrameUuid,
                 ...(action === 'apply' ? { position: request.input.position } : {}) },
@@ -113,7 +136,7 @@ test('definite second scene rejection compensates the first item in reverse orde
     } finally { f.cleanup(); }
 });
 
-test('uncertain scene write stops without automatic compensation', () => {
+test('uncertain scene write is compensated only after live and disk readback prove no effect', () => {
     const f = fixture();
     try {
         f.setFailure('uncertain');
@@ -121,8 +144,45 @@ test('uncertain scene write stops without automatic compensation', () => {
         assert.equal(result.outcome, 'needs-review');
         assert.deepEqual(result.items.map((item) => item.status), ['applied', 'applying']);
         assert.equal(f.nodes.size, 1);
-        assert.equal(compensate({ projectRoot: f.projectRoot, creatorVersion: '2.4.15', batchId: result.batchId }, f.run).error.code,
-            'BATCH_NOT_COMPENSABLE');
+        const compensated = compensate({ projectRoot: f.projectRoot, creatorVersion: '2.4.15', batchId: result.batchId }, f.run);
+        assert.equal(compensated.outcome, 'failed');
+        assert.deepEqual(compensated.items.map((item) => item.status), ['compensated', 'rejected']);
+        assert.equal(f.nodes.size, 0);
+        const record = JSON.parse(fs.readFileSync(path.join(f.projectRoot, '.cocos-agent', 'scene-batches', `${result.batchId}.json`), 'utf8'));
+        assert.equal(record.items[1].reconciliations[0].disposition, 'no-effect');
+        assert.match(record.items[1].reconciliations[0].diskSha256, /^[a-f0-9]{64}$/);
+    } finally { f.cleanup(); }
+});
+
+test('compensation resumes an interrupted apply only when live and serialized scene both lack the target', () => {
+    const f = fixture();
+    const batchId = crypto.randomUUID();
+    try {
+        f.setFailure('interrupt-before-persist');
+        assert.throws(() => execute({ ...f.params, batchId }, f.run), /INJECTED_HOST_INTERRUPTION_BEFORE_OPERATION_RECORD/);
+        const batchFile = path.join(f.projectRoot, '.cocos-agent', 'scene-batches', `${batchId}.json`);
+        const interrupted = JSON.parse(fs.readFileSync(batchFile, 'utf8'));
+        assert.equal(interrupted.state, 'executing');
+        assert.deepEqual(interrupted.items.map((item) => item.status), ['applied', 'applying']);
+        assert.throws(() => operationStore.read(f.projectRoot, interrupted.items[1].operationId), { code: 'ENOENT' });
+        assert.equal(f.nodes.size, 1);
+
+        const reconciled = execute({ ...f.params, batchId }, f.run);
+        assert.equal(reconciled.outcome, 'needs-review');
+        assert.deepEqual(reconciled.items.map((item) => item.status), ['applied', 'rejected']);
+        assert.equal(f.sceneCalls.filter((call) => call.assetName === 'Two.png' && call.action === 'apply').length, 1);
+
+        const compensated = compensate({ projectRoot: f.projectRoot, creatorVersion: '2.4.15', batchId }, f.run);
+        assert.equal(compensated.outcome, 'failed');
+        assert.deepEqual(compensated.items.map((item) => item.status), ['compensated', 'rejected']);
+        assert.equal(f.nodes.size, 0);
+        assert.deepEqual(f.sceneCalls.map((call) => [call.assetName, call.action]), [
+            ['One.png', 'apply'], ['Two.png', 'apply'], ['One.png', 'compensate'],
+        ]);
+        const recovered = JSON.parse(fs.readFileSync(batchFile, 'utf8'));
+        assert.equal(recovered.items[1].reconciliations[0].disposition, 'no-effect');
+        assert.equal(recovered.items[1].reconciliations[0].action, 'apply');
+        assert.equal(recovered.error.code, 'WRITE_RECONCILED_NO_EFFECT');
     } finally { f.cleanup(); }
 });
 

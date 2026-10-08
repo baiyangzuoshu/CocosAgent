@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { dispatch } = require('./agent-dispatch');
 const operationStore = require('./operation-store');
+const operationReconcile = require('./operation-reconcile');
 
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const uuidPattern = idPattern;
@@ -110,6 +111,46 @@ function plan(params, run = dispatch) {
 function operationState(projectRoot, operationId) {
     try { return operationStore.read(projectRoot, operationId); } catch (_) { return null; }
 }
+function operationRecordMissing(projectRoot, operationId) {
+    const root = path.join(projectRoot, '.cocos-agent');
+    const directory = path.join(root, 'operations');
+    for (const filename of [root, directory]) {
+        let stat;
+        try { stat = fs.lstatSync(filename); } catch (error) { return error.code === 'ENOENT'; }
+        if (!stat.isDirectory() || stat.isSymbolicLink()) return false;
+    }
+    try { fs.lstatSync(path.join(directory, `${operationId}.json`)); return false; }
+    catch (error) { return error.code === 'ENOENT'; }
+}
+function reconcileMissingOperation(record, item, action, operationId, run) {
+    if (!operationRecordMissing(record.projectRoot, operationId)) return false;
+    const asset = readAsset(record.projectRoot, item.assetName);
+    if (!asset.success || asset.assetUuid !== item.assetUuid || asset.sha256 !== item.sha256) return false;
+    if (!contextStillMatches(record, run)) return false;
+    const nodePath = `${record.canvasPath}/${item.nodeName}`;
+    const target = inspect({ targets: record.targets, projectRoot: record.projectRoot, creatorVersion: record.creatorVersion }, nodePath, run);
+    if (!target.success || !sameInstance(target.instance, { instanceId: record.instanceId,
+        projectRoot: record.projectRoot, creatorVersion: record.creatorVersion, activeScene: record.sceneName })
+        || target.result?.sceneName !== record.sceneName || target.result?.node?.status !== 'not-found'
+        || target.result.node.path !== nodePath) return false;
+    const disk = operationReconcile.diskAbsence(record.projectRoot, record.creatorVersion, {
+        sceneName: record.sceneName,
+        manifest: { parentPath: record.canvasPath, parentUuid: record.canvasUuid, nodeName: item.nodeName },
+    });
+    if (!disk) return false;
+    const observedAt = new Date().toISOString();
+    item.reconciliations ||= [];
+    item.reconciliations.push({ disposition: 'no-effect', action, operationId, nodePath,
+        diskPath: path.relative(record.projectRoot, disk.filename).split(path.sep).join('/'),
+        diskSha256: disk.sha256, observedAt });
+    item.status = action === 'apply' ? 'rejected' : 'compensated';
+    if (action === 'apply') {
+        record.state = 'needs-review';
+        record.error = { code: 'WRITE_RECONCILED_NO_EFFECT', assetName: item.assetName, operationId };
+    }
+    save(record);
+    return true;
+}
 function publicRecord(record) {
     const items = record.items.map((item) => {
         const operation = operationState(record.projectRoot, item.operationId);
@@ -133,6 +174,11 @@ function reconcile(record, run) {
         if (!['applying', 'compensating'].includes(item.status)) continue;
         const operationId = item.status === 'applying' ? item.operationId : item.compensationOperationId;
         const expectedAction = item.status === 'applying' ? 'apply' : 'compensate';
+        if (operationRecordMissing(record.projectRoot, operationId)) {
+            if (reconcileMissingOperation(record, item, expectedAction, operationId, run)) continue;
+            record.state = 'needs-review'; record.error = { code: 'ITEM_OUTCOME_UNCERTAIN', assetName: item.assetName, operationId };
+            save(record); return false;
+        }
         const result = run({ projectRoot: record.projectRoot, creatorVersion: record.creatorVersion, operationGetId: operationId });
         if (!result.success || result.phases?.disk !== 'passed' || result.result?.sceneName !== record.sceneName
             || result.result?.assetUuid !== item.assetUuid || result.result?.action !== expectedAction) {
@@ -253,7 +299,8 @@ function compensate(params, run = dispatch) {
     catch (error) { return fail(error.code === 'ENOENT' ? 'BATCH_NOT_FOUND' : 'BATCH_READ_FAILED', error.message); }
     if (record.projectRoot !== path.resolve(params.projectRoot) || record.creatorVersion !== params.creatorVersion) return fail('BATCH_TARGET_MISMATCH', 'Batch target differs.');
     if (['compensated', 'failed'].includes(record.state)) return publicRecord(record);
-    if (!['needs-preview', 'completed', 'compensating'].includes(record.state)) return fail('BATCH_NOT_COMPENSABLE', 'Resolve uncertain item operations before compensation.');
+    if (!['executing', 'needs-preview', 'completed', 'compensating', 'needs-review'].includes(record.state))
+        return fail('BATCH_NOT_COMPENSABLE', 'Resolve uncertain item operations before compensation.');
     if (!reconcile(record, run)) return publicRecord(record);
     return compensateRecord(record, run);
 }
