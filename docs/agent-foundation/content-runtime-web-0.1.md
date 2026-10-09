@@ -16,6 +16,18 @@
 
 正常启动通道的项目接线目前覆盖 2.4 Web 预览和 Mac 开发包；3.8 保留较早的临时注入轨迹，尚无项目启动接线验收。Host 本机通道的令牌只用于本机开发，不是模型凭证，也不能用于公开部署。一次绘制确认与截图只证明该 Web 运行中的画面可见，不给出帧预算或所有平台的 GPU 完成保证。Mac 原生接线和本次资源故障恢复边界见下文。
 
+## Creator 2.4 Web 运行时诊断采样
+
+2.4 运行时替换回执和 `snapshot()` 可附 `runtimeDiagnostics`：`assetCacheCount`、`bundleCacheCount` 与最多 32 个 Bundle 名来自引擎 `AssetManager.Cache.count/forEach`；`jsHeap` 在浏览器提供非标准 `performance.memory` 时记录 JS 堆 used/total/limit 字节，否则为 `null`。单项纹理的 `currentRefCount` 仍独立返回。替换旧资源后，适配器等待下一次 `EVENT_AFTER_DRAW` 再记录回执，因此非强制 `releaseUnusedAssets()` 的下一帧释放已反映在旧资源有效性和缓存读回中。
+
+这些数不是 GPU 显存、解码纹理总字节、原生内存或峰值瞬时使用量。`assetCacheCount` 也包括当前场景和其他引擎资源，不能直接算成 Agent 内容资产数；诊断只用于同一构建与浏览器会话的差分。此字段目前只由 Creator 2.4.15 示例运行时写入，3.8 路径没有新增实现或验收。
+
+2026-10-09，Host 使用 Creator 2.4.15 Web-Mobile 隔离构建 `bundle-cleanupwait-20261009` 做了两轮 Bundle ↔ built-in `resources` 往返。每次新画面通过 `EVENT_AFTER_DRAW` 后才释放旧纹理；回执再等一个 draw 事件，使延迟清理可读回。活动纹理每次 `currentRefCount=1`；旧纹理在释放后 `refCount=0`、`valid=false`、`assetCached=false`。`AssetManager` 缓存数稳定为 30；不含 Agent Bundle 时 Bundle 缓存数为 3，加载 `cocos-agent-smoke` 后为 4，切回 resources 后恢复 3。两轮状态一致，selected/effective 最终恢复为 `web-content-ui-2026-10-08`。详见[缓存与引用计数轨迹](traces/cocos-agent-content-runtime-diagnostics-2.4-web.jsonl)。
+
+这一回环暴露并修复了 Bundle 旧纹理残留：引擎 `removeBundle` 只移除 Bundle 对象缓存；旧 Bundle Texture 的 `refCount` 为 0 时，运行时现在先按 Bundle 路径和 UUID 身份核验，再调用 `bundle.release(path, cc.Texture2D)` 并检查 Asset Cache 已移除该 UUID。若引用计数仍大于 0，则不强制释放，以免破坏共享引用。此 Web 样本未覆盖多个 Bundle 同时驻留、共享依赖、逐帧耗时、峰值内存或 GPU/Native 内存预算。
+
+`performance.memory` 在本次样本中可读，但 JS 堆 used/total 随场景与浏览器波动；它不是纹理内存或峰值测量，不能据此定性能阈值。下一切片应单独构造两个 Bundle 同时持有资源的场景，量出驻留、切换与释放行为，并引入目标设备上的帧耗时和内存采样。
+
 ## 2.4 Mac 原生通道边界审计
 
 2026-10-08 用 Creator 2.4.15 构建并编译当前 `Mac` 目标，两个构建步骤都完成；启动新包后可见 `Hello, World!` 场景。这只确认当前示例能生成并启动 Mac 原生包，不证明 CocosAgent 动态内容通道已连接。结构化边界记录见[原生 bootstrap 审计](traces/cocos-agent-content-runtime-native-bootstrap-2.4.jsonl)。

@@ -20,6 +20,12 @@ function harness() {
     class Sprite { }
     Sprite.SizeMode = { CUSTOM: 1 };
     class Texture2D { }
+    const cachedUuids = new Set(['texture-uuid']);
+    const assetCache = { count: 7, forEach() {}, has(uuid) { return cachedUuids.has(uuid); } };
+    const bundleCache = { count: 2, forEach(callback) {
+        callback({ name: 'resources' }, 'resources');
+        callback({ name: 'cocos-agent-smoke' }, 'cocos-agent-smoke');
+    } };
     const cc = {
         Node,
         Sprite,
@@ -30,10 +36,28 @@ function harness() {
         isValid: (asset) => !!asset,
         resources: { load(path, type, callback) { calls.push(['resources.load', path, type]); callback(null, { _uuid: `${path}-uuid` }); } },
         assetManager: {
+            assets: assetCache,
+            bundles: bundleCache,
             getBundle(name) { return bundles.get(name); },
             loadBundle(name, callback) {
                 calls.push(['loadBundle', name]);
-                const bundle = { name, load(path, type, done) { calls.push(['bundle.load', name, path, type]); done(null, { _uuid: `${path}-uuid` }); } };
+                const loaded = new Map();
+                const bundle = { name,
+                    get(path) { return loaded.get(path); },
+                    load(path, type, done) {
+                        calls.push(['bundle.load', name, path, type]);
+                        const texture = { _uuid: `${path}-uuid` };
+                        loaded.set(path, texture);
+                        cachedUuids.add(texture._uuid);
+                        done(null, texture);
+                    },
+                    release(path, type) {
+                        calls.push(['bundle.release', name, path, type]);
+                        const texture = loaded.get(path);
+                        if (texture) cachedUuids.delete(texture._uuid);
+                        loaded.delete(path);
+                    },
+                };
                 bundles.set(name, bundle);
                 callback(null, bundle);
             },
@@ -62,6 +86,10 @@ test('Creator 2.4 runtime loads a Bundle texture through AssetManager and remove
     ]);
     assert.equal(h.calls[1][2], 'BlueReleaseOct09');
     assert.equal(h.calls[1][3], h.Texture2D);
+    assert.equal(adapter.isCached(texture), true);
+    assert.equal(adapter.releaseBundleAsset('cocos-agent-smoke', 'BlueReleaseOct09', texture._uuid), true);
+    assert.deepEqual(h.calls[2], ['bundle.release', 'cocos-agent-smoke', 'BlueReleaseOct09', h.Texture2D]);
+    assert.equal(adapter.isCached(texture), false);
     adapter.removeBundle('cocos-agent-smoke');
     assert.deepEqual(h.calls.at(-1), ['removeBundle', 'cocos-agent-smoke']);
 });
@@ -72,4 +100,17 @@ test('Creator 2.4 built-in resources keep using cc.resources.load', async () => 
     const texture = await h.captured().load(asset.runtimePath, asset, { delivery: 'built-in-resources' });
     assert.equal(texture._uuid, 'GeneratedBlue-uuid');
     assert.equal(h.calls[0][0], 'resources.load');
+});
+
+test('Creator 2.4 runtime reports bounded AssetManager cache counts and Bundle names', () => {
+    const diagnostics = harness().captured().diagnostics();
+    assert.equal(diagnostics.assetCacheCount, 7);
+    assert.equal(diagnostics.bundleCacheCount, 2);
+    assert.deepEqual(diagnostics.bundleNames, ['cocos-agent-smoke', 'resources']);
+    assert.equal(diagnostics.bundleNamesTruncated, false);
+    assert.match(diagnostics.sampledAt, /^20\d\d-/);
+    assert.ok(diagnostics.jsHeap === null || diagnostics.jsHeap.source === 'performance.memory');
+    const adapter = harness().captured();
+    assert.equal(adapter.isCached({ _uuid: 'texture-uuid' }), true);
+    assert.equal(adapter.isCached({ _uuid: 'missing' }), false);
 });

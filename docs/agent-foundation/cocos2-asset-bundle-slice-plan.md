@@ -56,5 +56,5 @@ Host 用 `content.bundle.plan/stage` 登记 `cocos-agent-smoke` 的红蓝 PNG，
 
 - Creator 2.4.15 实际构建通过 Bundle config、资源 UUID、SpriteFrame 依赖和文件校验；Host release 选择、运行时 applied、effective、视觉观察、缺失资源 retained、显式重选和 rollback 均已实测。
 - 单元测试验证不同 Bundle 替换在新帧确认后清理旧 Bundle、候选失败时保留当前 SpriteFrame，以及 3.8 拒绝 Bundle 合同；实际预览另验证 Bundle 与 built-in-resources 双向切换。
-- 本地手册烟雾实验分别核对 `removeBundle`、`release`、`releaseAll`。Host 实机轨迹尚未直接读 AssetManager Bundle/Asset 缓存计数，也未测试多个 Bundle 同时驻留的内存基线。
-- 内置 `resources` release 已在 `web-host-cli-01` 实际 Web-Mobile 预览中验证 JSONL Host 重启后从持久 build/release 记录重建会话，并在重新打开新 URL 后重新应用资源；详见 `content-preview-web-0.1.md`。Asset Bundle 自身的 Host/运行时进程重启恢复尚未验收；多 Bundle 并存的缓存计数与峰值内存也未测。外置/远端下载、CDN、小游戏、JSB、原生增量更新或其他资源类型仍是后续独立切片。
+- 2026-10-09 的 2.4 Web-Mobile 实测将 Bundle → built-in resources → Bundle 往返两轮。旧 Texture 清理后均读回 `refCount=0`、`valid=false`、Asset Cache 不含 UUID；Asset Cache 数稳定为 30，Bundle Cache 在不含/含 `cocos-agent-smoke` 时分别为 3/4。Bundle Texture 在零引用且 UUID 匹配时显式 `bundle.release`，不为零时跳过强制释放；缓存与引用计数轨迹见 `traces/cocos-agent-content-runtime-diagnostics-2.4-web.jsonl`。
+- 内置 `resources` release 已在 `web-host-cli-01` 实际 Web-Mobile 预览中验证 JSONL Host 重启后从持久 build/release 记录重建会话，并在重新打开新 URL 后重新应用资源；详见 `content-preview-web-0.1.md`。Asset Bundle 自身的 Host/运行时进程重启恢复尚未验收；多个 Bundle 同时驻留、共享依赖与峰值内存仍未测。外置/远端下载、CDN、小游戏、JSB、原生增量更新或其他资源类型仍是后续独立切片。

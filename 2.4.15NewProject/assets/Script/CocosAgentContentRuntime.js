@@ -37,6 +37,43 @@
             var bundle = cc.assetManager.getBundle(bundleName);
             if (bundle) cc.assetManager.removeBundle(bundle);
         }
+        function releaseBundleAsset(bundleName, runtimePath, expectedUuid) {
+            var bundle = cc.assetManager.getBundle(bundleName);
+            if (!bundle || typeof bundle.get !== 'function' || typeof bundle.release !== 'function')
+                throw Error('BUNDLE_NOT_AVAILABLE');
+            var texture = bundle.get(runtimePath, cc.Texture2D);
+            if (!texture || texture._uuid !== expectedUuid) throw Error('BUNDLE_RESOURCE_ID_MISMATCH');
+            bundle.release(runtimePath, cc.Texture2D);
+            var cache = cc.assetManager.assets;
+            if (cache && typeof cache.has === 'function' && cache.has(expectedUuid)) throw Error('BUNDLE_ASSET_STILL_CACHED');
+            return true;
+        }
+        function runtimeDiagnostics() {
+            var manager = cc.assetManager;
+            var assets = manager && manager.assets;
+            var bundles = manager && manager.bundles;
+            var bundleNames = [];
+            if (bundles && typeof bundles.forEach === 'function') {
+                bundles.forEach(function (_bundle, name) {
+                    if (typeof name === 'string' && name.length <= 64 && bundleNames.length < 32) bundleNames.push(name);
+                });
+            }
+            bundleNames.sort();
+            var memory = root.performance && root.performance.memory;
+            return {
+                sampledAt: new Date().toISOString(),
+                assetCacheCount: assets && Number.isInteger(assets.count) ? assets.count : null,
+                bundleCacheCount: bundles && Number.isInteger(bundles.count) ? bundles.count : null,
+                bundleNames: bundleNames,
+                bundleNamesTruncated: !!(bundles && Number.isInteger(bundles.count) && bundles.count > bundleNames.length),
+                jsHeap: memory ? {
+                    usedBytes: Number.isFinite(memory.usedJSHeapSize) ? memory.usedJSHeapSize : null,
+                    totalBytes: Number.isFinite(memory.totalJSHeapSize) ? memory.totalJSHeapSize : null,
+                    limitBytes: Number.isFinite(memory.jsHeapSizeLimit) ? memory.jsHeapSizeLimit : null,
+                    source: 'performance.memory',
+                } : null,
+            };
+        }
         var runtime = core.create({
             creatorVersion: '2.4.15',
             load: options.load || loadAsset,
@@ -46,9 +83,18 @@
             confirmFrame: function () { return new Promise(function (resolve) {
                 cc.director.once(cc.Director.EVENT_AFTER_DRAW, resolve);
             }); },
+            afterCleanup: function () { return new Promise(function (resolve) {
+                cc.director.once(cc.Director.EVENT_AFTER_DRAW, resolve);
+            }); },
             releaseUnused: function () { cc.assetManager.releaseUnusedAssets(); },
             removeBundle: removeBundle,
+            releaseBundleAsset: releaseBundleAsset,
+            diagnostics: runtimeDiagnostics,
             isValid: function (asset) { return cc.isValid(asset); },
+            isCached: function (asset) {
+                var cache = cc.assetManager.assets;
+                return !!(cache && typeof cache.has === 'function' && cache.has(asset._uuid));
+            },
             assetId: function (asset) { return asset._uuid; },
             report: options.report,
         });

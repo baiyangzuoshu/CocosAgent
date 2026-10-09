@@ -9,13 +9,15 @@ function harness(creatorVersion = '3.8.7') {
     const events = [];
     const textures = [];
     const removedBundles = [];
+    const releasedBundleAssets = [];
+    let diagnostics = { assetCacheCount: 2, bundleCacheCount: 1, bundleNames: ['resources'], jsHeap: null };
     let visible = null;
     let failDraw = false;
     const adapter = {
         creatorVersion,
         load: async (path) => {
             if (path === 'missing/texture') throw Error('LOAD_FAILED');
-            const texture = { uuid: `${path}-uuid`, refCount: 0, valid: true,
+            const texture = { uuid: `${path}-uuid`, path, refCount: 0, valid: true,
                 addRef() { this.refCount++; events.push(`hold:${path}`); },
                 decRef() { this.refCount--; events.push(`release:${path}`); } };
             textures.push(texture);
@@ -24,30 +26,57 @@ function harness(creatorVersion = '3.8.7') {
         createFrame: (texture) => ({ texture, disposed: false }),
         installFrame: (frame) => { visible = frame; events.push(`show:${frame ? frame.texture.uuid : 'none'}`); },
         confirmFrame: async () => { if (failDraw) throw Error('DRAW_FAILED'); events.push('draw'); },
+        afterCleanup: async () => { events.push('cleanup-tick'); },
         disposeFrame: (frame) => { frame.disposed = true; events.push(`dispose:${frame.texture.uuid}`); },
         releaseUnused: () => { for (const texture of textures) if (texture.refCount === 0) texture.valid = false; },
         removeBundle: (name) => { removedBundles.push(name); events.push(`removeBundle:${name}`); },
+        releaseBundleAsset: (name, path, uuid) => {
+            const texture = textures.find((item) => item.uuid === uuid && item.path === path);
+            if (!texture) throw Error('BUNDLE_RESOURCE_ID_MISMATCH');
+            texture.valid = false;
+            releasedBundleAssets.push({ name, path, uuid });
+            events.push(`releaseBundleAsset:${name}:${path}`);
+        },
+        diagnostics: () => diagnostics,
         isValid: (texture) => texture.valid,
+        isCached: (texture) => texture.valid,
         assetId: (texture) => texture.uuid,
     };
     const controller = create(adapter);
     const release = (id, path) => ({ contractVersion: '0.1', creatorVersion,
         delivery: 'built-in-resources', releaseId: id, fingerprint: `${id}-fingerprint`,
         assets: [{ id: 'visual', runtimePath: path, resourceUuid: `${path}-uuid` }] });
-    return { controller, release, events, textures, removedBundles, visible: () => visible, failDraw: (value) => { failDraw = value; } };
+    return { controller, release, events, textures, removedBundles, releasedBundleAssets, visible: () => visible,
+        failDraw: (value) => { failDraw = value; }, setDiagnostics: (value) => { diagnostics = value; } };
 }
 
 test('applies after draw and only then releases the old texture', async () => {
     const h = harness();
     assert.equal((await h.controller.apply(h.release('red', 'red/texture'), 'visual')).outcome, 'applied');
-    assert.equal((await h.controller.apply(h.release('blue', 'blue/texture'), 'visual')).outcome, 'applied');
+    const blue = await h.controller.apply(h.release('blue', 'blue/texture'), 'visual');
+    assert.equal(blue.outcome, 'applied');
     assert.ok(h.events.indexOf('draw') < h.events.indexOf('release:red/texture'));
     assert.equal(h.textures[0].valid, false);
     assert.equal(h.textures[1].refCount, 1);
+    assert.equal(blue.previousAssetRefCount, 0);
+    assert.equal(blue.previousAssetValid, false);
+    assert.equal(blue.previousAssetCached, false);
+    assert.ok(h.events.indexOf('release:red/texture') < h.events.indexOf('cleanup-tick'));
     assert.equal(h.controller.snapshot().activeReleaseId, 'blue');
+    assert.equal(h.controller.snapshot().assetCached, true);
     assert.equal((await h.controller.apply(h.release('blue', 'blue/texture'), 'visual')).outcome, 'already-active');
     assert.equal(h.controller.dispose().outcome, 'disposed');
     assert.equal(h.textures[1].valid, false);
+});
+
+test('returns an engine diagnostics snapshot with runtime receipts and readback', async () => {
+    const h = harness('2.4.15');
+    const expected = { assetCacheCount: 7, bundleCacheCount: 2, bundleNames: ['cocos-agent-smoke', 'resources'], jsHeap: null };
+    h.setDiagnostics(expected);
+    const result = await h.controller.apply(h.release('blue', 'blue/texture'), 'visual');
+    assert.equal(result.outcome, 'applied');
+    assert.deepEqual(result.runtimeDiagnostics, expected);
+    assert.deepEqual(h.controller.snapshot().runtimeDiagnostics, expected);
 });
 
 test('failed load and failed draw retain the previous visible frame', async () => {
@@ -91,10 +120,27 @@ test('Creator 2.4 Bundle swaps keep the previous release through draw and remove
     assert.equal((await h.controller.apply(bundleRelease('blue', 'blue', 'bundle-blue'), 'visual')).outcome, 'applied');
     assert.notEqual(h.visible(), red);
     assert.deepEqual(h.removedBundles, ['bundle-red']);
+    assert.deepEqual(h.releasedBundleAssets, [{ name: 'bundle-red', path: 'red', uuid: 'red-uuid' }]);
     assert.ok(h.events.indexOf('draw') < h.events.indexOf('removeBundle:bundle-red'));
+    assert.ok(h.events.indexOf('draw') < h.events.indexOf('releaseBundleAsset:bundle-red:red'));
     assert.equal(h.controller.snapshot().activeReleaseId, 'blue');
     assert.equal(h.controller.dispose().outcome, 'disposed');
     assert.deepEqual(h.removedBundles, ['bundle-red', 'bundle-blue']);
+});
+
+test('does not force-release a Bundle asset while another reference remains', async () => {
+    const h = harness('2.4.15');
+    const bundleRelease = (id, path, bundleName) => ({ ...h.release(id, path), delivery: 'asset-bundle', bundleName,
+        assets: [{ id: 'visual', runtimePath: path, resourceUuid: `${path}-uuid`,
+            spriteFrameUuid: '3f0ad80b-bafa-4818-a000-7dfeb8aa80f5' }] });
+    await h.controller.apply(bundleRelease('red', 'red', 'bundle-red'), 'visual');
+    h.textures[0].addRef();
+    const replacement = await h.controller.apply(h.release('blue', 'blue/texture'), 'visual');
+    assert.equal(replacement.previousAssetRefCount, 1);
+    assert.equal(replacement.previousAssetValid, true);
+    assert.equal(replacement.previousAssetCached, true);
+    assert.deepEqual(h.releasedBundleAssets, []);
+    assert.deepEqual(h.removedBundles, ['bundle-red']);
 });
 
 test('a failed 2.4 Bundle load removes only the candidate Bundle and retains the displayed frame', async () => {

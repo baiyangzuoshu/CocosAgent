@@ -13,11 +13,24 @@
         let current = null;
         let busy = false;
         let closed = false;
+        function runtimeDiagnostics() {
+            if (typeof adapter.diagnostics !== 'function') return null;
+            try {
+                const value = adapter.diagnostics();
+                return value && typeof value === 'object' ? value : null;
+            } catch (_) { return { available: false }; }
+        }
+        function assetCached(asset) {
+            if (!asset || typeof adapter.isCached !== 'function') return null;
+            try { return !!adapter.isCached(asset); } catch (_) { return null; }
+        }
         function receipt(outcome, request, extra) {
             const result = Object.assign({ outcome, releaseId: request && request.releaseId || null,
                 assetId: request && request.assetId || null, activeReleaseId: current && current.releaseId || null,
                 activeAssetId: current && current.assetId || null,
                 activeFingerprint: current && current.fingerprint || null }, extra || {});
+            const diagnostics = runtimeDiagnostics();
+            if (diagnostics) result.runtimeDiagnostics = diagnostics;
             if (adapter.report) try { adapter.report(result); } catch (_) { /* reporting cannot roll back a committed frame */ }
             return result;
         }
@@ -63,21 +76,32 @@
                 if (!adapter.isValid(candidate)) throw Error('CANDIDATE_INVALID_AFTER_DRAW');
                 current = { releaseId: release.releaseId, fingerprint: release.fingerprint,
                     assetId, resourceUuid: asset.resourceUuid, delivery: release.delivery,
-                    bundleName: release.bundleName || null, texture: candidate, frame };
+                    bundleName: release.bundleName || null, runtimePath: asset.runtimePath, texture: candidate, frame };
                 try {
                     if (previous) {
                         adapter.disposeFrame(previous.frame);
                         previous.texture.decRef();
                     }
+                    if (previous && previous.delivery === 'asset-bundle' && previous.texture.refCount === 0
+                        && adapter.releaseBundleAsset) {
+                        adapter.releaseBundleAsset(previous.bundleName, previous.runtimePath, previous.resourceUuid);
+                    }
                     adapter.releaseUnused();
                     if (previous && previous.delivery === 'asset-bundle' && previous.bundleName !== release.bundleName
                         && adapter.removeBundle) adapter.removeBundle(previous.bundleName);
+                    if (previous && typeof adapter.afterCleanup === 'function') await adapter.afterCleanup();
                 } catch (error) {
                     return receipt('needs-review', request, { code: 'OLD_RESOURCE_CLEANUP_FAILED', cause: String(error),
                         previousReleaseId: previous && previous.releaseId || null });
                 }
+                const previousState = previous ? {
+                    previousResourceUuid: previous.resourceUuid,
+                    previousAssetRefCount: previous.texture.refCount,
+                    previousAssetValid: adapter.isValid(previous.texture),
+                    previousAssetCached: assetCached(previous.texture),
+                } : {};
                 return receipt('applied', request, { previousReleaseId: previous && previous.releaseId || null,
-                    resourceUuid: current.resourceUuid, currentRefCount: candidate.refCount });
+                    ...previousState, resourceUuid: current.resourceUuid, currentRefCount: candidate.refCount });
             } catch (error) {
                 if (installed) {
                     try { adapter.installFrame(previous ? previous.frame : null); }
@@ -96,7 +120,8 @@
             activeAssetId: current && current.assetId || null,
             resourceUuid: current && current.resourceUuid || null,
             valid: current ? adapter.isValid(current.texture) : false,
-            refCount: current ? current.texture.refCount : null }; }
+            refCount: current ? current.texture.refCount : null,
+            assetCached: current ? assetCached(current.texture) : false, runtimeDiagnostics: runtimeDiagnostics() }; }
         function dispose() {
             if (busy) return { outcome: 'rejected', code: 'BUSY' };
             if (closed) return { outcome: 'disposed', idempotent: true };
