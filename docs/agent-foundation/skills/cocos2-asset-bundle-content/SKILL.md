@@ -19,6 +19,8 @@ Creator 2.4 会按 Bundle 名缓存对象。同名 Bundle 的已有缓存不会�
 
 不同 Bundle 的资源仍进入同一个 AssetManager Asset Cache。对于无共享依赖的唯一 Texture，先分别加载 Bundle 与资源、`addRef()` 持有，再在目标 Sprite 不再使用后将本次持有计数降到 0；核对 UUID、路径和类型后调用该 Bundle 的 `release`，最后才 `removeBundle`。释放一侧后必须读回另一侧的 Bundle 与 Texture 仍有效，再检查全部释放后 Bundle/Asset 缓存回到会话基线。双独立 PNG Bundle 的两种卸载顺序已在 Web-Mobile 验证，见[双 Bundle 轨迹](../../traces/cocos-agent-multi-bundle-residency-2.4-web.json)和[探针](../../probes/cocos-bundle-residency-2.4.mjs)。
 
-**共享依赖状态：未验证。** 不要把独立资源的结果推广到共享 Texture/SpriteFrame。2.4 官方手册规定不同优先级共享资源归较高优先级 Bundle，加载低优先级 Bundle 前须先加载高优先级 Bundle；`releaseAll` 会覆盖 Bundle 外部依赖。先用真实依赖构建和 Bundle config 证明归属，再分别观察两个消费者释放前后的依赖引用、Asset Cache 与画面；引用关系未查清时，不对共享资源做强制释放或 `releaseAll`。
+**共享依赖运行状态：未验证。** 不要把独立资源的结果推广到共享 Texture/SpriteFrame。2.4 官方手册说明不同优先级共享资源归较高优先级 Bundle，低优先级 Bundle 加载前须先加载高优先级 Bundle；官方也说明 `releaseAll` 释放 Bundle 内资源和外部相关依赖。源码补充了需要实测的边界：`Bundle.releaseAll()` 遍历全局 Asset Cache 并跳过当前 Bundle 中直接标为 `redirect` 的缓存项；自有资源根节点释放时仍可能递归减少依赖引用；`SceneAsset` 不进入该全局缓存，运行场景依赖则由 Director 切场景和 `autoReleaseAssets` 处理。因此不要把“跳过重定向条目”解读成外部依赖一概不释放，也不要在消费场景仍运行时强制释放共享资源。
+
+这一段是源码结论，尚无运行证据。先用两个低优先级 Bundle 的真实场景构建，确认 config 的 `deps`/`redirect`、依赖 Bundle 加载门槛、两个场景是否持有相同 SpriteFrame/Texture 对象，再分别调用 `releaseAll` 与切换场景，记录引用计数、缓存、有效性和画面。可复跑的夹具与探针见[双场景文件](../../../../2.4.15NewProject/assets/CocosAgentBundleSmoke/BundleSharedA.fire)、[侧车场景文件](../../../../2.4.15NewProject/assets/CocosAgentBundleSidecar/BundleSharedB.fire)和[探针](../../probes/cocos-bundle-shared-dependency-2.4.mjs)。
 
 **验证状态：** Creator 2.4.15 Web-Mobile 已实测 plan/stage、隔离构建、Texture/SpriteFrame 身份校验、运行时按需加载和画面替换、缺少 Bundle PNG 时 404/`retained` 并保留旧画面、恢复文件后的显式重选、跨 Bundle 与 built-in resources 的回滚，以及两个独立 PNG Bundle 的同时驻留和双向释放。Asset Bundle 重启恢复、共享依赖、逐帧耗时/峰值内存、外置 Bundle、原生和 3.8 未验证；详情见[单次切换轨迹](../../traces/cocos-agent-asset-bundle-host-2.4-web.jsonl)和[多 Bundle 轨迹](../../traces/cocos-agent-multi-bundle-residency-2.4-web.json)。

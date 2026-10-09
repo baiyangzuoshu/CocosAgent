@@ -54,6 +54,16 @@ Host 用 `content.bundle.plan/stage` 登记 `cocos-agent-smoke` 的红蓝 PNG，
 
 该样本只证明两个**互不共享依赖**的 PNG Bundle 在当前 2.4.15 Web-Mobile 构建里可并行驻留、按各自 Bundle 释放且缓存回基线。尚未验证多个 Bundle 引用同一资源、不同优先级依赖、`releaseAll` 的跨 Bundle 影响、动态新增/替换两个 Bundle 的产品合同、帧耗时或内存预算。官网指出不同优先级共享资源由较高优先级 Bundle 持有，低优先级 Bundle 加载前须先加载高优先级 Bundle；下一试验将用两个 Bundle 内的场景依赖同一 `resources` SpriteFrame，观察依赖引用与卸载顺序。
 
+### 共享依赖源码核对（运行时仍待验收）
+
+Creator 2.4 官方[释放 Asset Bundle 手册](https://docs.cocos.com/creator/2.4/manual/zh/scripting/asset-bundle.html)说明 `releaseAll()` 会释放 Bundle 内资源及其外部相关依赖；[优先级手册](https://docs.cocos.com/creator/2.4/manual/zh/asset-manager/bundle.html)说明低优先级 Bundle 对高优先级共享资源保存重定向，并要求先加载高优先级 Bundle。对照本仓库 2.4.15 源码后，这两条描述需要结合资源根节点和引用路径理解：
+
+- `2.4.15engine/cocos2d/core/asset-manager/bundle.js` 的 `releaseAll()` 遍历全局 Asset Cache，再查询当前 Bundle 的资源信息；当前 Bundle 将资源标为 `redirect` 时会跳过该缓存项。对于 Bundle 自有的缓存资源，`releaseManager.tryRelease(asset, true)` 会强制释放该根资源，并递归处理它的依赖；`releaseManager._free()` 对递归依赖执行 `decRef(false)` 与非强制释放，所以仍有其它引用的依赖不会因此被强制销毁。不要把“跳过重定向条目”泛化为“releaseAll 永不处理外部依赖”，也不要把官方的“包括外部相关依赖”泛化为“无视依赖引用强制销毁”。
+- `bundle.js` 的 `loadScene()` 返回 `SceneAsset`，但 `2.4.15engine/cocos2d/core/asset-manager/utilities.js` 的 `cache()` 不把 SceneAsset 放进全局 Asset Cache。场景依赖的 SpriteFrame 会在反序列化时建立对象引用；运行中的场景切换则经过 `CCDirector.js` 的 `runSceneImmediate()` 和 `releaseManager._autoRelease()`，旧场景的 `autoReleaseAssets` 决定依赖 `decRef()` 是否触发释放尝试。因此场景 Bundle 的资源回收不能只用 `Bundle.releaseAll()` 推断，还要记录 Director 切场景时的引用变化。
+- 低优先级加载门槛可在 `urlTransformer.js` 看到：若某资源在当前 Bundle 的配置中重定向到尚未加载的 Bundle，转换路径直接返回“先加载依赖 Bundle”的错误。这仍待本实验用真实 Creator 构建包实测。
+
+以上是**源码结论，不是运行证据**。Creator AssetDB 尚未读入新增场景，首轮 GUI 构建没有包含它们；共享实例、引用计数和卸载顺序未验收。双场景夹具及待运行探针在 `assets/CocosAgentBundleSmoke/BundleSharedA.fire`、`assets/CocosAgentBundleSidecar/BundleSharedB.fire`、`probes/cocos-bundle-shared-dependency-2.4.mjs`。
+
 ## 暂缓事项
 
 首轮不制作通用跨资源类型 AssetDB 导入器，不写 Editor 私有 IPC，不覆盖脚本分包和场景分包，不宣称热更新/CDN/线上发布，不改 2.x 引擎源码，也不补 3.8。外置远程 Bundle、`version` hash 更新、下载缓存与 JSB 用户目录加载属于后续独立切片；本地 Bundle 已验收，不代表这些分发路径已具备。
