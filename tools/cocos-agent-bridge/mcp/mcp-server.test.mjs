@@ -55,13 +55,14 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
             'cocos_2x_assets_scene_validate', 'cocos_2x_capabilities_list', 'cocos_2x_command_execute',
             'cocos_2x_content_build_execute',
             'cocos_2x_content_build_get', 'cocos_2x_content_build_plan', 'cocos_2x_content_build_reconcile',
+            'cocos_2x_content_bundle_plan', 'cocos_2x_content_bundle_stage',
             'cocos_2x_content_from_scene_plan', 'cocos_2x_content_from_scene_stage', 'cocos_2x_content_get',
             'cocos_2x_content_preview_get', 'cocos_2x_content_preview_start', 'cocos_2x_content_preview_stop',
             'cocos_2x_content_rollback', 'cocos_2x_content_select',
             'cocos_2x_instances_get', 'cocos_2x_instances_list', 'cocos_2x_operation_get',
             'cocos_2x_operation_preview_accept', 'cocos_2x_operation_reconcile',
         ]);
-        assert.equal(tools.length, 27);
+        assert.equal(tools.length, 29);
         const commandTool = tools.find((tool) => tool.name === 'cocos_2x_command_execute');
         assert.equal(commandTool.annotations.readOnlyHint, false);
         assert.equal(commandTool.annotations.destructiveHint, true);
@@ -217,6 +218,22 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         const contentStage = await client.callTool({ name: 'cocos_2x_content_from_scene_stage', arguments: fromSceneInput });
         assert.equal(contentStage.structuredContent.method, 'content.fromScene.stage');
         assert.equal(calls.at(-1).params.releaseId, releaseId);
+
+        const bundleInput = { projectRoot: value.projects[0], releaseId: 'bundle-release-01',
+            bundleRoot: 'assets/CocosAgentBundleSmoke', bundleName: 'cocos-agent-smoke',
+            entryAssetName: 'BlueReleaseOct09.png', assets: [
+                { assetName: 'RedReleaseOct09.png', id: 'red' },
+                { assetName: 'BlueReleaseOct09.png', id: 'blue', dependsOn: ['red'] },
+            ] };
+        const bundlePlan = await client.callTool({ name: 'cocos_2x_content_bundle_plan', arguments: bundleInput });
+        assert.equal(bundlePlan.structuredContent.method, 'content.bundle.plan');
+        assert.equal(calls.at(-1).params.creatorVersion, '2.4.15');
+        assert.equal(calls.at(-1).params.bundleName, 'cocos-agent-smoke');
+        assert.deepEqual(calls.at(-1).params.assets, bundleInput.assets);
+
+        const bundleStage = await client.callTool({ name: 'cocos_2x_content_bundle_stage', arguments: bundleInput });
+        assert.equal(bundleStage.structuredContent.method, 'content.bundle.stage');
+        assert.equal(calls.at(-1).params.bundleRoot, 'assets/CocosAgentBundleSmoke');
 
         const contentRead = await client.callTool({ name: 'cocos_2x_content_get', arguments: {
             projectRoot: value.projects[0], releaseId,

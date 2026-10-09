@@ -1,6 +1,6 @@
 # Cocos Creator 2.4 Asset Bundle 切片计划
 
-状态：Creator 2.4.15 Web-Mobile 本地 Asset Bundle 烟雾验收已完成；Host 合同与产品入口尚未实现。本文描述后续实现边界，不代表 CocosAgent 已提供 Bundle 发布能力。
+状态：Creator 2.4.15 Web-Mobile 本地 Asset Bundle 的 Host release、隔离构建、包校验、运行时应用、失败保留、显式重选恢复和回滚已完成实机验收。范围仍限于 2.4.15 PNG Bundle 与本机 Web-Mobile，不代表远端、原生或 3.8 能力。
 
 ## 目标
 
@@ -19,8 +19,8 @@
 - `2.4.15engine/cocos2d/core/asset-manager/CCAssetManager.js`：`loadBundle` 先按 `basename(nameOrUrl)` 检查 Bundle 缓存，命中后直接返回缓存对象；不会用本次 `options.version` 替换已缓存的同名 Bundle。`removeBundle` 调用 `bundle._destroy()` 并从 Bundle 缓存删除，但引擎注释明确资源不会自动释放。
 - `2.4.15engine/cocos2d/core/asset-manager/downloader.js`：非 URL 名称解析到 `assets/<bundleName>`；按 Bundle 版本请求 `config.<version>.json` 和 `index.<version>.js`。
 - `2.4.15engine/cocos2d/core/asset-manager/bundle.js`：`release(path,type)` 通过 `releaseManager` 释放具体资产；`releaseAll()` 遍历属于此 Bundle 的资产并尝试释放。
-- 当前 `tools/cocos-agent-bridge/content-release.schema.json` 只定义 `delivery: built-in-resources`，`content-release.js` 与 `CocosAgentContentRuntime.js` 也固定走 `cc.resources.load`。Asset Bundle 必须使用独立版本合同或显式扩展合同，不可把 `bundleName` 塞进现有 `runtimePath` 后假装兼容。
-- 当前 PNG 导入和资源场景命令将目标限制在 `assets/resources/`。Bundle 文件夹导入、文件夹 `.meta` 配置和构建输出检查都需要明确的 2.4 适配器与能力声明。
+- `content-release.schema.json` 现在通过显式的 `delivery: asset-bundle` 扩展合同表示 2.4 Bundle，并要求 `bundleRoot`、唯一 `bundleName`、源摘要、Texture UUID、SpriteFrame UUID 与依赖图；3.8 请求被拒绝。
+- `content.bundle.plan/stage` 只读取已导入 PNG 与文件夹 `.meta`，检查本地 Bundle 身份与 UUID 链；不会导入资源或修改 Creator 场景。Host 在已有 release、build、preview 路径上复用所选版本、隔离输出和运行时回执合同。
 
 ## 2.4.15 Web-Mobile 烟雾验收（2026-10-09）
 
@@ -38,26 +38,23 @@
 - 恢复旧画面后，`removeBundle` 清空 Bundle 缓存，但红、蓝 SpriteFrame 仍有效并留在 Asset 缓存。再次 `loadBundle` 返回新 Bundle 对象。
 - `bundle.release("BlueReleaseOct09", cc.SpriteFrame)` 后，等待 100 ms 再读回，该 SpriteFrame 已无效且不在 Asset 缓存。`releaseAll()` 后，红色 Bundle SpriteFrame 也已无效并从缓存移除。释放前目标节点已恢复到 Bundle 外的场景资源。
 
-上述结果只证明本机 Web-Mobile 包内 PNG Bundle 的构建、按需加载、Sprite 替换、缺失资源失败保留、Bundle 缓存移除与显式释放。没有 Host release/构建/预览合同，没有 CDN、外置 Bundle、小游戏、JSB、原生或 3.8 验收；页面探针构建用于确认引擎运行时 API，不是产品构建记录。完整轨迹见 `traces/cocos-agent-asset-bundle-smoke-2.4-web.jsonl`。
+上述结果证明本机 Web-Mobile 包内 PNG Bundle 的构建、按需加载、Sprite 替换、缺失资源失败保留、Bundle 缓存移除与显式释放。页面探针构建用于确认引擎 API，不是 Host 构建记录。完整轨迹见 `traces/cocos-agent-asset-bundle-smoke-2.4-web.jsonl`。
 
-## 建议先跑的实机烟雾切片
+## Host 接入与运行时验收（2026-10-09）
 
-1. 在隔离或明确标记的 2.4 示例资源目录配置一个自定义 Bundle；资源只使用两张独立副本 PNG，保留真实的 Texture 与 SpriteFrame 子资源关系。不得把 Bundle 放在已有 `resources` 根目录里，也不得更改该目录已有 bundle 设置。
-2. 用 2.4.15 Creator 构建新的唯一 Web-Mobile 输出目录，核对 `assets/<bundleName>/` 下的 config、import 和 native 文件；从 config 与 `.meta` 读回每张图的路径、类型和 UUID。
-3. 启动此构建，在运行时调用 `loadBundle(bundleName)` 与 `bundle.load(path, cc.SpriteFrame)`，核对返回对象 UUID、依赖关系、引用数和画面。失败路径加载一个缺失资源，确认当前画面与有效版本保留。
-4. 成功替换后再释放旧 SpriteFrame 与 Bundle 资源，调用 `removeBundle` 后读回 Bundle 缓存和 Asset 缓存；单独记录 `release`、`releaseAll`、`removeBundle` 的效果。不要在资源仍被场景节点使用时做强制释放。
-5. 生成只含版本/Bundle/资源身份的运行轨迹；记录 Creator 版本、平台、构建目录、Bundle 配置 hash、资源 UUID、回执和视觉观察。构建目录、会话 URL token 不写入公开 trace。
+Host 用 `content.bundle.plan/stage` 登记 `cocos-agent-smoke` 的红蓝 PNG，选中 `bundle-host-web-20261009`，再经 `content.build.plan/execute/get` 构建唯一输出。Creator 2.4.15 的包校验读回 config SHA-256 `3bcfecacdbb409dd945276e941cf4e477e2d217abb8e4c2f6f3d5c443f090da0`、两张纹理 UUID、两张 SpriteFrame UUID、Texture import、SpriteFrame import 依赖及 native PNG。
 
-下一步开发 Host 入口。Bundle release 至少包含：`creatorVersion`、独立 `releaseId`、`bundleName`、Creator Bundle config hash、入口 `assetId`，以及逐资产的相对路径、资源 UUID、源摘要与明确依赖。首个 Agent 执行合同应分为只读 plan、隔离 build、包校验、preview/运行时应用、get/reconcile 与 rollback；每个版本用唯一 Bundle 名或独立输出 URL，以避开 2.4 同名 Bundle 的进程缓存命中。发布期间保留旧 Bundle 与其资源，等新 Bundle 资源通过 UUID 校验并完成一帧绘制后才切换和释放旧引用。
+真实 `content.preview.start/get/stop` 会话中，运行时按 Bundle 名加载蓝色入口纹理并应用 SpriteFrame；Host 收到 `applied`、资源 UUID 匹配、引用数为 1 的回执并写入 `effective`。浏览器画面可见新蓝色覆盖图。将 selected 指针回滚至 `web-content-ui-2026-10-08` 后，运行时改载旧 `resources` release，收到第二个 `applied`，画面保留旧内容；preview 状态同时读回 `buildReleaseId`、当前 `selectedReleaseId` 和 `effectiveReleaseId`，三者不再混为一谈。
+
+失败分支通过对运行中的隔离构建临时移走蓝色 Bundle native PNG 实测：显式重新选择 Bundle 后，加载返回 404，运行时回执为 `retained`，有效画面与 `effective` 仍是旧 `resources` release，preview 状态为 `needs-review`。恢复 PNG 后，Host 不会自动重试同一指纹；通过明确切回旧 release 再选择 Bundle 才重新应用成功，最后再次回滚并确认 selected/effective 都恢复到旧 release。构建文件在验收后恢复原位，预览服务和浏览器标签已关闭。轨迹见 `traces/cocos-agent-asset-bundle-host-2.4-web.jsonl`。
 
 ## 暂缓事项
 
-首轮不制作通用跨资源类型 AssetDB 导入器，不写 Editor 私有 IPC，不覆盖脚本分包和场景分包，不宣称热更新/CDN/线上发布，不改 2.x 引擎源码，也不补 3.8。外置远程 Bundle、`version` hash 更新、下载缓存与 JSB 用户目录加载属于下一步独立切片，先等 Web 本地 Bundle 的构建与生命周期证据齐全。
+首轮不制作通用跨资源类型 AssetDB 导入器，不写 Editor 私有 IPC，不覆盖脚本分包和场景分包，不宣称热更新/CDN/线上发布，不改 2.x 引擎源码，也不补 3.8。外置远程 Bundle、`version` hash 更新、下载缓存与 JSB 用户目录加载属于后续独立切片；本地 Bundle 已验收，不代表这些分发路径已具备。
 
 ## 验收完成条件
 
-- Creator 2.4.15 真实生成的独立 Bundle 通过 package-level config/UUID/导入文件校验。
-- Web-Mobile 构建真实加载 bundle 资源并显示；Host 读取到与声明一致的 bundle、release 和资源身份。
-- 构造的 Bundle/资源加载失败不会覆盖有效画面；重复加载不会意外重复建立 Bundle 或多持有纹理。
-- 成功替换后旧资源按引用关系释放，`removeBundle` 与资源释放效果分别读回；运行时重启后可通过持久 release 重新核对并恢复。
-- 轨迹、合同和 2.4 专属候选 skill 将实际覆盖范围与未测分支分开记录。
+- Creator 2.4.15 实际构建通过 Bundle config、资源 UUID、SpriteFrame 依赖和文件校验；Host release 选择、运行时 applied、effective、视觉观察、缺失资源 retained、显式重选和 rollback 均已实测。
+- 单元测试验证不同 Bundle 替换在新帧确认后清理旧 Bundle、候选失败时保留当前 SpriteFrame，以及 3.8 拒绝 Bundle 合同；实际预览另验证 Bundle 与 built-in-resources 双向切换。
+- 本地手册烟雾实验分别核对 `removeBundle`、`release`、`releaseAll`。Host 实机轨迹尚未直接读 AssetManager Bundle/Asset 缓存计数，也未测试多个 Bundle 同时驻留的内存基线。
+- 尚未验收 Host/运行时进程重启恢复、外置/远端下载、CDN、小游戏、JSB、原生增量更新或其他资源类型；这些是后续独立切片。轨迹、合同与 2.4 专属 skill 必须保持对应边界。

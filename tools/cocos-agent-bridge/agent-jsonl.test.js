@@ -45,6 +45,9 @@ assert.deepStrictEqual(handle({ id: 15, method: 'assets.scene.validate', params:
 assert.deepStrictEqual(handle({ id: 16, method: 'assets.scene.repair', params: { creatorVersion: '2.4.15', pipelineId: operationId } },
     { assetSceneRepair: (params) => ({ method: 'repair', params }) }),
 { id: 16, result: { method: 'repair', params: { creatorVersion: '2.4.15', pipelineId: operationId } } });
+assert.deepStrictEqual(handle({ id: 18, method: 'content.bundle.plan', params: { creatorVersion: '2.4.15', bundleName: 'sample' } },
+    { contentBundleRelease: (method, params) => ({ method, params }) }),
+{ id: 18, result: { method: 'content.bundle.plan', params: { creatorVersion: '2.4.15', bundleName: 'sample' } } });
 assert.deepStrictEqual(handle({ id: 13, method: 'operation.reconcile', params: { projectRoot, creatorVersion: '2.4.15',
     operationId, targets: [{ projectRoot, creatorVersion: '2.4.15' }] } },
 { dispatch: (value) => value }), { id: 13, result: { targets: [{ projectRoot, creatorVersion: '2.4.15' }], projectRoot,

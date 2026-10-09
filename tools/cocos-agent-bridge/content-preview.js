@@ -129,9 +129,16 @@ function snapshot(session) {
     }
     const status = lastReceipt && lastReceipt.acceptance?.success
         ? 'runtime-observed' : lastReceipt ? 'needs-review' : connected ? 'connected' : 'waiting-for-runtime';
+    let selectedReleaseId = null;
+    try {
+        const selected = session.releaseTools.get({ projectRoot: session.projectRoot, creatorVersion: session.creatorVersion });
+        if (selected.success) selectedReleaseId = selected.selected?.releaseId || null;
+    } catch (_) { /* The preview status remains readable if the pointer cannot be read. */ }
+    const effectiveReleaseId = lastReceipt?.acceptance?.effective?.releaseId
+        || lastReceipt?.receipt?.activeReleaseId || lastReceipt?.receipt?.releaseId || null;
     return { success: true, outcome: 'read', previewId: session.previewId, buildId: session.buildId,
         creatorVersion: session.creatorVersion, status, connected, baseUrl: session.baseUrl, previewUrl: session.runtime.previewUrl,
-        selectedReleaseId: session.releaseId, fingerprint: session.fingerprint,
+        buildReleaseId: session.releaseId, selectedReleaseId, effectiveReleaseId, fingerprint: session.fingerprint,
         ...(lastReceipt ? { lastReceipt } : {}), ...(lastError ? { lastError } : {}),
         recentEvents: session.recentEvents.slice(-20) };
 }
@@ -179,8 +186,16 @@ async function start(params, options = {}) {
     catch (_) { return failure('BUILD_OUTPUT_CHANGED', 'Build package could not be revalidated safely.'); }
     if (!artifact.success || artifact.fingerprint !== record.fingerprint)
         return failure('BUILD_OUTPUT_CHANGED', 'Build package no longer matches its verified release record.');
+    if (record.releaseManifest.delivery === 'asset-bundle') {
+        const verified = record.artifact;
+        if (!verified || verified.delivery !== 'asset-bundle' || artifact.delivery !== 'asset-bundle'
+            || verified.bundleName !== record.releaseManifest.bundleName || artifact.bundleName !== verified.bundleName
+            || verified.bundleConfigHash !== artifact.bundleConfigHash || verified.configPath !== artifact.configPath
+            || JSON.stringify(verified.resources) !== JSON.stringify(artifact.resources))
+            return failure('BUILD_OUTPUT_CHANGED', 'Asset Bundle package identity differs from the completed build record.');
+    }
     const webRoot = findWebRoot(expectedOutputRoot, artifact.configPath);
-    if (!webRoot) return failure('PREVIEW_ENTRY_NOT_FOUND', 'A safe Web-Mobile index.html matching the verified resources bundle was not found.');
+    if (!webRoot) return failure('PREVIEW_ENTRY_NOT_FOUND', 'A safe Web-Mobile index.html matching the verified content bundle was not found.');
     let selected; let selectedRelease; let revalidated;
     try {
         selected = releaseTools.get({ projectRoot, creatorVersion });
@@ -203,7 +218,7 @@ async function start(params, options = {}) {
         runtime = await runtimeTools.start({ projectRoot, creatorVersion, platform: 'web-preview', previewUrl: baseUrl });
         const session = { previewId: crypto.randomBytes(16).toString('hex'), projectRoot, creatorVersion,
             buildId, releaseId: record.releaseId, fingerprint: record.fingerprint, webRoot, baseUrl,
-            server, runtime, recentEvents: [], startedAt: new Date().toISOString() };
+            server, runtime, releaseTools, recentEvents: [], startedAt: new Date().toISOString() };
         session.drainTimer = setInterval(() => drainEvents(session), 100);
         sessions.set(sessionKey, session);
         return { ...snapshot(session), outcome: 'ready' };

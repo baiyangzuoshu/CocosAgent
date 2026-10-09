@@ -361,6 +361,26 @@ function createServer(projectRoots, options = {}) {
         'Stage an immutable Creator 2.4 built-in resources release derived from a completed, preview-accepted scene pipeline. This writes a local release record but does not change the selected release or build output.',
         contentFromSceneInput, 'content.fromScene.stage', ({ projectRoot: selected, ...params }) => contentFromSceneParams(selected, params),
         { title: 'Stage content release from an accepted scene', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+
+    const contentBundleInput = z.object({
+        projectRoot,
+        releaseId: RELEASE_ID,
+        bundleRoot: z.string().regex(/^assets\/[A-Za-z0-9_-]{1,64}$/),
+        bundleName: z.string().regex(/^[a-z][a-z0-9_-]{0,31}$/),
+        entryAssetName: contentAssetName,
+        assets: contentAssets,
+    }).strict();
+    register('cocos_2x_content_bundle_plan',
+        'Plan a Creator 2.4 Asset Bundle release from already imported PNG assets in one local Bundle folder. Reads folder and asset .meta UUIDs and source digests; does not write a release record or build output.',
+        contentBundleInput, 'content.bundle.plan', ({ projectRoot: selected, ...params }) => ({
+            projectRoot: selected, creatorVersion: CREATOR_VERSION, ...params,
+        }), { title: 'Plan a Creator 2.4 Asset Bundle release', readOnlyHint: true, destructiveHint: false, openWorldHint: false });
+    register('cocos_2x_content_bundle_stage',
+        'Stage an immutable Creator 2.4 Asset Bundle release after revalidating its local Bundle folder, PNG bytes, Texture/SpriteFrame UUIDs and dependency list. This writes a Host release record only.',
+        contentBundleInput, 'content.bundle.stage', ({ projectRoot: selected, ...params }) => ({
+            projectRoot: selected, creatorVersion: CREATOR_VERSION, ...params,
+        }), { title: 'Stage a Creator 2.4 Asset Bundle release', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+
     register('cocos_2x_content_get',
         'Read the selected/effective content pointers, or one immutable staged Creator 2.4 release.',
         z.object({ projectRoot, releaseId: RELEASE_ID.optional() }).strict(), 'content.get',

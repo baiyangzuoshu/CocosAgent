@@ -8,6 +8,9 @@ const releaseIdPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const assetIdPattern = /^[a-z][a-z0-9_-]{0,63}$/;
 const sourcePattern = /^assets\/resources\/([a-z0-9][a-z0-9._-]{0,94}\.png)$/i;
 const digestPattern = /^[a-f0-9]{64}$/;
+const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+const bundleRootPattern = /^assets\/[A-Za-z0-9_-]{1,64}$/;
+const bundleNamePattern = /^[a-z][a-z0-9_-]{0,31}$/;
 const reservedIds = new Set(['selected', 'effective']);
 const fail = (code, message) => ({ success: false, outcome: 'failed', error: { code, message } });
 const sha256 = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -36,17 +39,45 @@ function validate(params) {
     const target = project(params);
     if (!target.success) return target;
     const { manifest } = params;
+    const isBundle = manifest?.delivery === 'asset-bundle';
     if (!manifest || manifest.contractVersion !== '0.1' || manifest.creatorVersion !== params.creatorVersion
         || !releaseIdPattern.test(manifest.releaseId || '') || reservedIds.has(manifest.releaseId)
-        || manifest.delivery !== 'built-in-resources'
+        || !['built-in-resources', 'asset-bundle'].includes(manifest.delivery)
+        || (isBundle && (manifest.creatorVersion !== '2.4.15' || !bundleRootPattern.test(manifest.bundleRoot || '')
+            || !bundleNamePattern.test(manifest.bundleName || '')))
+        || (!isBundle && (manifest.bundleRoot !== undefined || manifest.bundleName !== undefined))
         || !Array.isArray(manifest.assets) || manifest.assets.length < 1 || manifest.assets.length > 16
-        || !assetIdPattern.test(manifest.entryAssetId || '')) return fail('INVALID_MANIFEST', 'Invalid local built-in resources manifest.');
+        || !assetIdPattern.test(manifest.entryAssetId || '')) return fail('INVALID_MANIFEST', 'Invalid local content release manifest.');
+    let bundleDirectory = null;
+    if (isBundle) {
+        const bundleRelative = manifest.bundleRoot.slice('assets/'.length);
+        const bundleMetaFile = path.join(target.root, `${manifest.bundleRoot}.meta`);
+        try {
+            const rootReal = fs.realpathSync(target.root);
+            const assetsRoot = fs.realpathSync(path.join(target.root, 'assets'));
+            bundleDirectory = path.join(assetsRoot, bundleRelative);
+            const dirStat = fs.lstatSync(bundleDirectory);
+            const metaStat = fs.lstatSync(bundleMetaFile);
+            if (!assetsRoot.startsWith(rootReal + path.sep) || !dirStat.isDirectory() || dirStat.isSymbolicLink()
+                || !metaStat.isFile() || metaStat.isSymbolicLink()
+                || !fs.realpathSync(bundleDirectory).startsWith(assetsRoot + path.sep)) throw Error('unsafe bundle folder');
+            const folderMeta = JSON.parse(fs.readFileSync(bundleMetaFile, 'utf8'));
+            if (folderMeta.importer !== 'folder' || folderMeta.isBundle !== true
+                || folderMeta.bundleName !== manifest.bundleName || folderMeta.isRemoteBundle === true)
+                return fail('BUNDLE_CONFIGURATION_MISMATCH', 'Bundle folder metadata must declare the requested local 2.4 Bundle name.');
+        } catch (_) { return fail('BUNDLE_NOT_READY', 'Bundle folder, metadata, or project path is missing or unsafe.'); }
+    }
     const ids = new Set();
     const sources = new Set();
     const records = [];
     for (const asset of manifest.assets) {
+        const sourceName = typeof asset?.source === 'string' ? asset.source.slice(`${manifest.bundleRoot || ''}/`.length) : '';
+        const validSource = isBundle
+            ? typeof asset?.source === 'string' && asset.source.startsWith(`${manifest.bundleRoot}/`)
+                && !sourceName.includes('/') && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/i.test(sourceName)
+            : sourcePattern.test(asset?.source || '');
         if (!asset || !assetIdPattern.test(asset.id || '') || ids.has(asset.id)
-            || !sourcePattern.test(asset.source || '') || sources.has(asset.source.toLowerCase())
+            || !validSource || sources.has(asset.source.toLowerCase())
             || !digestPattern.test(asset.sha256 || '') || !Array.isArray(asset.dependsOn)
             || !asset.dependsOn.every((id) => assetIdPattern.test(id))
             || new Set(asset.dependsOn).size !== asset.dependsOn.length) return fail('INVALID_ASSET', 'Invalid asset identity, source, digest or dependencies.');
@@ -55,15 +86,17 @@ function validate(params) {
         const base = path.basename(asset.source).replace(/\.png$/i, '');
         const runtimePath = params.creatorVersion === '2.4.15' ? base : `${base}/texture`;
         if (asset.runtimePath !== runtimePath) return fail('RUNTIME_PATH_MISMATCH', `Expected ${runtimePath} for ${asset.id}.`);
-        const filename = path.join(target.root, asset.source);
+        const filename = path.join(target.root, ...asset.source.split('/'));
         const metaFile = `${filename}.meta`;
         let bytes; let meta;
         try {
-            if (!fs.lstatSync(filename).isFile() || !fs.lstatSync(metaFile).isFile()) throw Error('not regular');
+            const sourceStat = fs.lstatSync(filename);
+            const metaStat = fs.lstatSync(metaFile);
+            if (!sourceStat.isFile() || sourceStat.isSymbolicLink() || !metaStat.isFile() || metaStat.isSymbolicLink()) throw Error('not regular');
             const realRoot = fs.realpathSync(target.root) + path.sep;
-            const allowed = fs.realpathSync(path.join(target.root, 'assets', 'resources')) + path.sep;
-            if (!allowed.startsWith(realRoot)) throw Error('resources outside project');
-            if (!fs.realpathSync(filename).startsWith(allowed) || !fs.realpathSync(metaFile).startsWith(allowed)) throw Error('outside project resources');
+            const allowed = fs.realpathSync(isBundle ? bundleDirectory : path.join(target.root, 'assets', 'resources')) + path.sep;
+            if (!allowed.startsWith(realRoot)) throw Error('asset directory outside project');
+            if (!fs.realpathSync(filename).startsWith(allowed) || !fs.realpathSync(metaFile).startsWith(allowed)) throw Error('outside allowed asset directory');
             bytes = fs.readFileSync(filename);
             meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
         } catch (_) { return fail('ASSET_NOT_READY', `Asset or Creator meta is missing: ${asset.source}`); }
@@ -73,10 +106,20 @@ function validate(params) {
         if (sha256(bytes) !== asset.sha256) return fail('DIGEST_MISMATCH', `Digest differs: ${asset.source}`);
         const resourceUuid = params.creatorVersion === '2.4.15' && meta.importer === 'texture' ? meta.uuid
             : Object.values(meta.subMetas || {}).find((subMeta) => subMeta.importer === 'texture' && subMeta.imported === true)?.uuid;
-        if (!resourceUuid || (params.creatorVersion === '3.8.7' && meta.imported !== true))
+        let spriteFrameUuid;
+        if (isBundle) {
+            const frames = Object.values(meta.subMetas || {}).filter((subMeta) => subMeta.importer === 'sprite-frame'
+                && subMeta.rawTextureUuid === meta.uuid && uuidPattern.test(subMeta.uuid || ''));
+            if (!uuidPattern.test(meta.uuid || '') || frames.length !== 1
+                || (asset.spriteFrameUuid && asset.spriteFrameUuid !== frames[0].uuid))
+                return fail('BUNDLE_SPRITE_FRAME_MISMATCH', `Expected one SpriteFrame linked to the imported Texture: ${asset.source}`);
+            spriteFrameUuid = frames[0].uuid;
+        }
+        if (!resourceUuid || (asset.resourceUuid && asset.resourceUuid !== resourceUuid)
+            || (params.creatorVersion === '3.8.7' && meta.imported !== true))
             return fail('ASSET_NOT_READY', `Expected imported Texture2D metadata: ${asset.source}`);
         records.push({ id: asset.id, source: asset.source, sha256: asset.sha256, runtimePath,
-            dependsOn: [...asset.dependsOn], resourceUuid });
+            dependsOn: [...asset.dependsOn], resourceUuid, ...(isBundle ? { spriteFrameUuid } : {}) });
     }
     if (!ids.has(manifest.entryAssetId)) return fail('MISSING_ENTRY', 'Entry asset is absent.');
     const graph = new Map(records.map((asset) => [asset.id, asset.dependsOn]));
@@ -92,13 +135,34 @@ function validate(params) {
     }
     for (const id of ids) { const error = visit(id); if (error) return fail(error, `Invalid dependency graph at ${id}.`); }
     const release = { contractVersion: '0.1', releaseId: manifest.releaseId, creatorVersion: params.creatorVersion,
-        delivery: 'built-in-resources', entryAssetId: manifest.entryAssetId, assets: records };
+        delivery: manifest.delivery, ...(isBundle ? { bundleRoot: manifest.bundleRoot, bundleName: manifest.bundleName } : {}),
+        entryAssetId: manifest.entryAssetId, assets: records };
     return { success: true, outcome: 'ready', projectRoot: target.root, release,
         fingerprint: sha256(Buffer.from(JSON.stringify(release))) };
 }
 function stage(params) {
     const plan = validate(params);
     if (!plan.success) return plan;
+    if (plan.release.delivery === 'asset-bundle') {
+        try {
+            const releaseDir = directory(plan.projectRoot);
+            if (fs.existsSync(releaseDir)) {
+                const stat = fs.lstatSync(releaseDir);
+                if (!stat.isDirectory() || stat.isSymbolicLink())
+                    return fail('INVALID_RECORD_DIRECTORY', 'Content release directory is not a regular project directory.');
+                for (const name of fs.readdirSync(releaseDir)) {
+                    if (!name.endsWith('.json') || name === 'selected.json' || name === 'effective.json') continue;
+                    const priorFile = path.join(releaseDir, name);
+                    const priorStat = fs.lstatSync(priorFile);
+                    if (!priorStat.isFile() || priorStat.isSymbolicLink()) continue;
+                    const prior = JSON.parse(fs.readFileSync(priorFile, 'utf8'));
+                    if (prior.releaseId !== plan.release.releaseId && prior.delivery === 'asset-bundle'
+                        && prior.bundleName === plan.release.bundleName)
+                        return fail('BUNDLE_NAME_CONFLICT', 'Each staged Bundle release needs a unique bundleName to avoid 2.4 runtime cache collisions.');
+                }
+            }
+        } catch (_) { return fail('RELEASE_SCAN_FAILED', 'Could not safely inspect staged Bundle releases.'); }
+    }
     const filename = releaseFile(plan.projectRoot, plan.release.releaseId);
     if (fs.existsSync(filename)) {
         const prior = JSON.parse(fs.readFileSync(filename, 'utf8'));
@@ -191,8 +255,8 @@ function rollback(params) {
         releaseId: pointer.previousReleaseId, expectedCurrent: pointer.releaseId });
 }
 function handle(method, params) {
-    if (method === 'content.plan') return validate(params);
-    if (method === 'content.stage') return stage(params);
+    if (method === 'content.plan' || method === 'content.bundle.plan') return validate(params);
+    if (method === 'content.stage' || method === 'content.bundle.stage') return stage(params);
     if (method === 'content.select') return select(params);
     if (method === 'content.rollback') return rollback(params);
     if (method === 'content.get') return get(params);

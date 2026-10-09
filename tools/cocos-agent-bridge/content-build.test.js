@@ -11,6 +11,7 @@ const buildTools = require('./content-build');
 const { handle: agentHandle } = require('./agent-jsonl');
 
 const sourcePng = path.resolve(__dirname, '../../2.4.15NewProject/assets/resources/cocos-agent-batch-red.png');
+const sourceBundle = path.resolve(__dirname, '../../2.4.15NewProject/assets/CocosAgentBundleSmoke');
 const textureUuid = '07fe9a99-7f87-4bd8-ace2-39ac085c3624';
 const sceneUuid = '2d2f792f-a40c-49bb-a189-ed176a246e49';
 
@@ -72,6 +73,66 @@ function writeWebBuild(outputRoot, release, options = {}) {
     return { webRoot, bundleRoot };
 }
 
+function bundleFixture() {
+    const value = fixture();
+    const bundleDir = path.join(value.root, 'assets/CocosAgentBundleSmoke');
+    fs.cpSync(sourceBundle, bundleDir, { recursive: true });
+    fs.copyFileSync(path.join(path.dirname(sourceBundle), 'CocosAgentBundleSmoke.meta'), `${bundleDir}.meta`);
+    const assets = [
+        { id: 'red', assetName: 'RedReleaseOct09.png' },
+        { id: 'blue', assetName: 'BlueReleaseOct09.png' },
+    ].map(({ id, assetName }) => {
+        const filename = path.join(bundleDir, assetName);
+        const bytes = fs.readFileSync(filename);
+        return { id, source: `assets/CocosAgentBundleSmoke/${assetName}`,
+            sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+            runtimePath: assetName.replace(/\.png$/i, ''), dependsOn: [] };
+    });
+    const manifest = { contractVersion: '0.1', releaseId: 'bundle-release-a', creatorVersion: '2.4.15',
+        delivery: 'asset-bundle', bundleRoot: 'assets/CocosAgentBundleSmoke', bundleName: 'cocos-agent-smoke',
+        entryAssetId: 'blue', assets };
+    const staged = releaseTools.stage({ projectRoot: value.root, creatorVersion: '2.4.15', manifest });
+    assert.equal(staged.success, true);
+    assert.equal(releaseTools.select({ projectRoot: value.root, creatorVersion: '2.4.15',
+        releaseId: manifest.releaseId, expectedCurrent: 'release-a' }).success, true);
+    return { ...value, manifest, params: { ...value.params, releaseId: manifest.releaseId,
+        expectedFingerprint: staged.fingerprint, buildId: 'bundle-smoke-01' } };
+}
+
+function writeAssetBundleBuild(outputRoot, release, options = {}) {
+    const webRoot = path.join(outputRoot, 'web-mobile');
+    const bundleRoot = path.join(webRoot, 'assets', release.bundleName);
+    fs.mkdirSync(bundleRoot, { recursive: true });
+    fs.writeFileSync(path.join(webRoot, 'index.html'), '<!doctype html>');
+    const config = { name: release.bundleName, paths: {}, types: ['cc.Texture2D', 'cc.SpriteFrame'], uuids: [],
+        importBase: 'import', nativeBase: 'native', versions: { import: [], native: [] } };
+    release.assets.forEach((asset, index) => {
+        const textureIndex = index * 2;
+        const spriteFrameIndex = textureIndex + 1;
+        const textureImport = path.join(bundleRoot, 'import', asset.resourceUuid.slice(0, 2));
+        const frameImport = path.join(bundleRoot, 'import', asset.spriteFrameUuid.slice(0, 2));
+        const native = path.join(bundleRoot, 'native', asset.resourceUuid.slice(0, 2));
+        fs.mkdirSync(textureImport, { recursive: true });
+        fs.mkdirSync(frameImport, { recursive: true });
+        fs.mkdirSync(native, { recursive: true });
+        fs.writeFileSync(path.join(textureImport, `${asset.resourceUuid}.tex123.json`), JSON.stringify({ type: 'cc.Texture2D' }));
+        fs.writeFileSync(path.join(frameImport, `${asset.spriteFrameUuid}.frame123.json`),
+            JSON.stringify([1, [buildTools.compactUuid(asset.resourceUuid)], ['_textureSetter'], ['cc.SpriteFrame']]));
+        fs.writeFileSync(path.join(native, `${asset.resourceUuid}.nat123.png`), 'png');
+        config.paths[textureIndex] = [asset.runtimePath, 0];
+        config.paths[spriteFrameIndex] = [asset.runtimePath, 1, 1];
+        config.uuids[textureIndex] = options.textureUuidMismatch && index === 0
+            ? '00/not-the-uuid' : buildTools.compactUuid(asset.resourceUuid);
+        config.uuids[spriteFrameIndex] = options.spriteFrameUuidMismatch && index === 0
+            ? '00/not-the-spriteframe' : buildTools.compactUuid(asset.spriteFrameUuid);
+        config.versions.import.push(textureIndex, 'tex123', spriteFrameIndex, 'frame123');
+        config.versions.native.push(textureIndex, 'nat123');
+    });
+    const configFile = path.join(bundleRoot, 'config.abc123.json');
+    fs.writeFileSync(configFile, JSON.stringify(config));
+    return { webRoot, bundleRoot, configFile };
+}
+
 test('plans an isolated 2.4 Web-Mobile build from the selected, revalidated release', () => {
     assert.equal(buildTools.compactUuid(textureUuid), '07/pqZf4dL2KziOawIXDYk');
     assert.equal(buildTools.compactUuid('a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5'), 'a4rUXYa+dFtrLGINVrr0z1');
@@ -93,6 +154,52 @@ test('plans an isolated 2.4 Web-Mobile build from the selected, revalidated rele
         assert.deepEqual(plan.includedResources.map((asset) => asset.resourceUuid), [textureUuid]);
         assert.equal(buildTools.plan({ ...value.params, creatorVersion: '3.8.7' }, { creatorExecutable: value.executable }).error.code,
             'INVALID_TARGET');
+    } finally { fs.rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test('plans and verifies a Creator 2.4 Asset Bundle build including both Texture and SpriteFrame identities', () => {
+    const value = bundleFixture();
+    try {
+        const plan = buildTools.plan(value.params, { creatorExecutable: value.executable });
+        assert.equal(plan.success, true);
+        assert.equal(plan.delivery, 'asset-bundle');
+        assert.equal(plan.bundleName, 'cocos-agent-smoke');
+        assert.deepEqual(plan.includedResources.map((asset) => asset.spriteFrameUuid), [
+            '69e2f032-7739-49aa-b9f0-6b6eb820984f', '3f0ad80b-bafa-4818-a000-7dfeb8aa80f5',
+        ]);
+
+        const executed = buildTools.execute(value.params, { creatorExecutable: value.executable,
+            spawnSync() {
+                const selected = releaseTools.get({ projectRoot: value.root, creatorVersion: '2.4.15', releaseId: 'bundle-release-a' }).release;
+                writeAssetBundleBuild(path.join(value.root, 'build', 'cocos-agent', value.params.buildId), selected);
+                return { status: 0, stdout: '', stderr: '', signal: null };
+            } });
+        assert.equal(executed.success, true);
+        assert.equal(executed.delivery, 'asset-bundle');
+        assert.equal(executed.bundleName, 'cocos-agent-smoke');
+        assert.equal(executed.resourceCount, 2);
+        assert.equal(executed.bundleConfigHash.length, 64);
+        assert.equal(executed.resources[1].spriteFrameUuid, '3f0ad80b-bafa-4818-a000-7dfeb8aa80f5');
+        assert.equal(buildTools.get(value.params).build.artifact.bundleConfigHash, executed.bundleConfigHash);
+    } finally { fs.rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test('rejects an Asset Bundle package with a missing or mismatched SpriteFrame import identity', () => {
+    const value = bundleFixture();
+    try {
+        const release = releaseTools.get({ projectRoot: value.root, creatorVersion: '2.4.15', releaseId: 'bundle-release-a' }).release;
+        const verifiedOutput = path.join(value.root, 'bundle-output');
+        const built = writeAssetBundleBuild(verifiedOutput, release);
+        assert.equal(buildTools.verifyOutput(verifiedOutput, release).success, true);
+        const first = release.assets[0];
+        const frameImport = path.join(built.bundleRoot, 'import', first.spriteFrameUuid.slice(0, 2), `${first.spriteFrameUuid}.frame123.json`);
+        fs.writeFileSync(frameImport, JSON.stringify([1, ['wrong-texture-uuid'], ['_textureSetter'], ['cc.SpriteFrame']]));
+        assert.equal(buildTools.verifyOutput(verifiedOutput, release).error.code, 'BUILD_ASSET_MISSING');
+        fs.writeFileSync(frameImport, JSON.stringify([1, [buildTools.compactUuid(first.resourceUuid)], ['_textureSetter'], ['cc.SpriteFrame']]));
+        const config = JSON.parse(fs.readFileSync(built.configFile, 'utf8'));
+        config.uuids[1] = '00/not-the-spriteframe';
+        fs.writeFileSync(built.configFile, JSON.stringify(config));
+        assert.equal(buildTools.verifyOutput(verifiedOutput, release).error.code, 'BUILD_ASSET_MISSING');
     } finally { fs.rmSync(value.root, { recursive: true, force: true }); }
 });
 

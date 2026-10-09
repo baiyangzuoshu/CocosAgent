@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://cocos-agent.local/schema/content-release-0.1.json",
-  "title": "Local built-in content release 0.1",
+  "title": "Local content release 0.1",
   "type": "object",
   "additionalProperties": false,
   "required": ["contractVersion", "releaseId", "creatorVersion", "delivery", "entryAssetId", "assets"],
@@ -9,7 +9,9 @@
     "contractVersion": { "const": "0.1" },
     "releaseId": { "type": "string", "pattern": "^(?!(selected|effective)$)[a-z0-9][a-z0-9._-]{0,63}$" },
     "creatorVersion": { "enum": ["2.4.15", "3.8.7"] },
-    "delivery": { "const": "built-in-resources" },
+    "delivery": { "enum": ["built-in-resources", "asset-bundle"] },
+    "bundleRoot": { "type": "string", "pattern": "^assets/[A-Za-z0-9_-]{1,64}$" },
+    "bundleName": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,31}$" },
     "entryAssetId": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" },
     "assets": {
       "type": "array", "minItems": 1, "maxItems": 16,
@@ -18,12 +20,29 @@
         "required": ["id", "source", "sha256", "runtimePath", "dependsOn"],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" },
-          "source": { "type": "string", "pattern": "^assets/resources/[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.[pP][nN][gG]$" },
+          "source": { "type": "string", "pattern": "^assets/(?:resources|[A-Za-z0-9_-]{1,64})/[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.[pP][nN][gG]$" },
           "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
           "runtimePath": { "type": "string" },
+          "resourceUuid": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$" },
+          "spriteFrameUuid": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$" },
           "dependsOn": { "type": "array", "uniqueItems": true, "items": { "type": "string" } }
         }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "delivery": { "const": "asset-bundle" } } },
+      "then": {
+        "required": ["bundleRoot", "bundleName"],
+        "properties": {
+          "creatorVersion": { "const": "2.4.15" },
+          "assets": { "items": { "required": ["spriteFrameUuid"] } }
+        }
+      },
+      "else": {
+        "not": { "anyOf": [{ "required": ["bundleRoot"] }, { "required": ["bundleName"] }] }
+      }
+    }
+  ]
 }

@@ -1,13 +1,13 @@
 # Creator 2.4 Web-Mobile 内容构建合同 0.1
 
-此切片把已选中的 `built-in-resources` 内容版本交给 Creator 2.4.15 构建成 Web-Mobile 包，并核对输出是否包含清单中每张 Texture2D。它只支持 2.4.15 与 `web-mobile`；不处理 Creator 3.8、Asset Bundle、原生包、远端发布或热更新。
+此切片把已选中的 `built-in-resources` 或 2.4 专属 `asset-bundle` 内容版本交给 Creator 2.4.15 构建成 Web-Mobile 包，并按交付类型核对输出。它只支持 2.4.15 与 `web-mobile`；不处理 Creator 3.8、原生包、远端发布或热更新。
 
 ## 方法
 
 | 方法 | 输入 | 行为 |
 | --- | --- | --- |
 | `content.build.plan` | `projectRoot`、`creatorVersion: "2.4.15"`、`releaseId`、`expectedFingerprint`、`buildId` | 只读重验当前 selected release、PNG 字节、meta UUID 和 Creator 安装版本；生成隔离输出路径及 CLI 参数 |
-| `content.build.execute` | 与 plan 相同 | 先原子占用 buildId，再以参数数组经 Launch Services 启动 Creator 命令行构建并等待；随后扫描 Web 包，逐项核对 resources 配置、压缩 UUID、import JSON 与 PNG native 文件 |
+| `content.build.execute` | 与 plan 相同 | 先原子占用 buildId，再以参数数组经 Launch Services 启动 Creator 命令行构建并等待；随后扫描 Web 包，逐项核对目标 Bundle 配置、压缩 UUID、import JSON 与 PNG native 文件 |
 | `content.build.get` | `projectRoot`、`creatorVersion`、`buildId` | 读取 `.cocos-agent/content-builds/<buildId>.json` 的持久结果 |
 | `content.build.reconcile` | 与 get 相同 | 对 Host 中断后仍为 `running` 或 `needs-review` 的记录，只读校验已有包；不重启 Creator、不重做构建 |
 
@@ -15,7 +15,7 @@
 
 请求 schema 见 [`content-build.schema.json`](../../tools/cocos-agent-bridge/content-build.schema.json)。
 
-Host 等待 `/usr/bin/open -n -W` 返回后检查产物；Launch Services 的退出码本身不作为 Creator 构建成功证明。还须找到 Web `index.html` 与 `name: "resources"` 的 bundle 配置。每个资源需同时满足：路径项等于 release 的 `runtimePath`、type 为 `cc.Texture2D`、UUID 与 2.4 压缩 UUID 一致，并且导入 JSON 和 PNG native 文件均存在于此输出包中。导入 JSON 可由独立资源文件提供，也可由 `config.packs` 与 `versions.import` 指向的 pack 文件提供；UUID 压缩时，只有编码首字符为 `/` 才用斜线作分隔符。Launch Services 返回错误、任何资源校验缺失或进程超时后结果不确定时，都不会报告构建验收成功；超时保留为 `needs-review`，由 reconcile 只读对账。失败输出保留用于诊断；应使用新 buildId 重试。
+Host 等待 `/usr/bin/open -n -W` 返回后检查产物；Launch Services 的退出码本身不作为 Creator 构建成功证明。`built-in-resources` 必须找到 `name: "resources"` 配置；`asset-bundle` 必须在 `web-mobile/assets/<bundleName>` 找到名称和路径都精确匹配的 Bundle config。每个资源需同时满足：路径项等于 release 的 `runtimePath`、Texture type/压缩 UUID 一致，并且导入 JSON 和 PNG native 文件均存在于此输出包中。Asset Bundle 还须在同一个 Bundle config 找到 SpriteFrame UUID 与 SpriteFrame import JSON，并确认其 Texture 依赖与 release UUID 对应。导入 JSON 可由独立资源文件提供，也可由 `config.packs` 与 `versions.import` 指向的 pack 文件提供；UUID 压缩时，只有编码首字符为 `/` 才用斜线作分隔符。Launch Services 返回错误、任何资源校验缺失或进程超时后结果不确定时，都不会报告构建验收成功；超时保留为 `needs-review`，由 reconcile 只读对账。失败输出保留用于诊断；应使用新 buildId 重试。
 
 示例调用顺序：
 
@@ -38,3 +38,5 @@ Host 等待 `/usr/bin/open -n -W` 返回后检查产物；Launch Services 的退
 - 2026-10-09，`content.fromScene` 生成的新红蓝 release `cocosagent-p1-20261009` 通过 `content.build.plan/execute/get` 构建为 `p1-web-20261009`；Host 校验完成态和包内两张 Texture2D 的 UUID、pack import JSON 与 PNG native 文件。浏览器实际运行新包并应用蓝色入口资源，引用数为 2。之后 Host 将 selected 回滚到旧 release `web-content-ui-2026-10-08`，旧构建 `web-host-cli-01` 也重新运行并回执 `applied`；旧指纹进入 `effective`，引用数为 1，截图显示蓝色方块与 Hello World。两套预览都已停止。逐步记录见[发布、构建和回滚轨迹](traces/cocos-agent-p1-release-build-2.4-web.jsonl)。
 
 本合同验收“当前选中的内容版本进入 Web 构建包”、本机浏览器启动该包以及带有本地会话参数时的运行时应用。构建与预览是两个显式 Agent 操作：`content.preview.start/get/stop` 会复验已完成构建、启动 loopback 静态服务与运行时 Host，并返回会话 URL；见[本机 Web-Mobile 预览合同](content-preview-web-0.1.md)及[真实预览轨迹](traces/cocos-agent-content-preview-2.4.jsonl)。它不自动启动浏览器；远端部署和发布也仍是后续工作。
+
+Asset Bundle 的实际 Host 闭环见[Bundle 内容合同](content-bundle-web-0.1.md)及[实机轨迹](traces/cocos-agent-asset-bundle-host-2.4-web.jsonl)。该合同只处理本地 PNG Bundle，不改变 built-in release 流程的既有路径。

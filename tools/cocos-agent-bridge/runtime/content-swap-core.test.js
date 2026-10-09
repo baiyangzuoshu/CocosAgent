@@ -3,14 +3,16 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { create } = require('./content-swap-core');
+const creator24Core = require('../../../2.4.15NewProject/assets/Script/CocosAgentContentSwapCore.js');
 
-function harness() {
+function harness(creatorVersion = '3.8.7') {
     const events = [];
     const textures = [];
+    const removedBundles = [];
     let visible = null;
     let failDraw = false;
     const adapter = {
-        creatorVersion: '3.8.7',
+        creatorVersion,
         load: async (path) => {
             if (path === 'missing/texture') throw Error('LOAD_FAILED');
             const texture = { uuid: `${path}-uuid`, refCount: 0, valid: true,
@@ -24,14 +26,15 @@ function harness() {
         confirmFrame: async () => { if (failDraw) throw Error('DRAW_FAILED'); events.push('draw'); },
         disposeFrame: (frame) => { frame.disposed = true; events.push(`dispose:${frame.texture.uuid}`); },
         releaseUnused: () => { for (const texture of textures) if (texture.refCount === 0) texture.valid = false; },
+        removeBundle: (name) => { removedBundles.push(name); events.push(`removeBundle:${name}`); },
         isValid: (texture) => texture.valid,
         assetId: (texture) => texture.uuid,
     };
     const controller = create(adapter);
-    const release = (id, path) => ({ contractVersion: '0.1', creatorVersion: '3.8.7',
+    const release = (id, path) => ({ contractVersion: '0.1', creatorVersion,
         delivery: 'built-in-resources', releaseId: id, fingerprint: `${id}-fingerprint`,
         assets: [{ id: 'visual', runtimePath: path, resourceUuid: `${path}-uuid` }] });
-    return { controller, release, events, textures, visible: () => visible, failDraw: (value) => { failDraw = value; } };
+    return { controller, release, events, textures, removedBundles, visible: () => visible, failDraw: (value) => { failDraw = value; } };
 }
 
 test('applies after draw and only then releases the old texture', async () => {
@@ -72,4 +75,83 @@ test('rejects version mismatch and resource identity mismatch without releasing 
     assert.equal((await h.controller.apply(wrongUuid, 'visual')).code, 'RESOURCE_ID_MISMATCH');
     assert.equal(h.textures[0].refCount, 0);
     assert.equal(h.controller.snapshot().activeReleaseId, null);
+});
+
+test('Creator 2.4 Bundle swaps keep the previous release through draw and remove only the replaced Bundle', async () => {
+    const h = harness('2.4.15');
+    const bundleRelease = (id, path, bundleName) => ({
+        ...h.release(id, path),
+        delivery: 'asset-bundle',
+        bundleName,
+        assets: [{ id: 'visual', runtimePath: path, resourceUuid: `${path}-uuid`,
+            spriteFrameUuid: '3f0ad80b-bafa-4818-a000-7dfeb8aa80f5' }],
+    });
+    assert.equal((await h.controller.apply(bundleRelease('red', 'red', 'bundle-red'), 'visual')).outcome, 'applied');
+    const red = h.visible();
+    assert.equal((await h.controller.apply(bundleRelease('blue', 'blue', 'bundle-blue'), 'visual')).outcome, 'applied');
+    assert.notEqual(h.visible(), red);
+    assert.deepEqual(h.removedBundles, ['bundle-red']);
+    assert.ok(h.events.indexOf('draw') < h.events.indexOf('removeBundle:bundle-red'));
+    assert.equal(h.controller.snapshot().activeReleaseId, 'blue');
+    assert.equal(h.controller.dispose().outcome, 'disposed');
+    assert.deepEqual(h.removedBundles, ['bundle-red', 'bundle-blue']);
+});
+
+test('a failed 2.4 Bundle load removes only the candidate Bundle and retains the displayed frame', async () => {
+    const h = harness('2.4.15');
+    const bundleRelease = (id, path, bundleName) => ({
+        ...h.release(id, path),
+        delivery: 'asset-bundle',
+        bundleName,
+        assets: [{ id: 'visual', runtimePath: path, resourceUuid: `${path}-uuid`,
+            spriteFrameUuid: '3f0ad80b-bafa-4818-a000-7dfeb8aa80f5' }],
+    });
+    await h.controller.apply(bundleRelease('red', 'red', 'bundle-red'), 'visual');
+    const red = h.visible();
+    const result = await h.controller.apply(bundleRelease('bad', 'missing/texture', 'bundle-bad'), 'visual');
+    assert.equal(result.outcome, 'retained');
+    assert.equal(h.visible(), red);
+    assert.deepEqual(h.removedBundles, ['bundle-bad']);
+    assert.equal(h.controller.snapshot().activeReleaseId, 'red');
+});
+
+test('asset-bundle delivery is rejected for Creator 3.8', async () => {
+    const h = harness('3.8.7');
+    const release = { ...h.release('bundle', 'blue/texture'), delivery: 'asset-bundle', bundleName: 'bundle-blue',
+        assets: [{ id: 'visual', runtimePath: 'blue/texture', resourceUuid: 'blue/texture-uuid',
+            spriteFrameUuid: '3f0ad80b-bafa-4818-a000-7dfeb8aa80f5' }] };
+    const result = await h.controller.apply(release, 'visual');
+    assert.equal(result.outcome, 'rejected');
+    assert.equal(result.code, 'RELEASE_MISMATCH');
+    assert.deepEqual(h.removedBundles, []);
+});
+
+test('the project runtime core accepts and releases the 2.4 Asset Bundle contract', async () => {
+    const calls = [];
+    const texture = { _uuid: 'cdc0901f-6059-4519-9abd-dff51521abea', refCount: 0,
+        addRef() { this.refCount++; }, decRef() { this.refCount--; } };
+    const runtime = creator24Core.create({
+        creatorVersion: '2.4.15',
+        async load(runtimePath, asset, release) {
+            calls.push(['load', runtimePath, asset.spriteFrameUuid, release.bundleName]);
+            return texture;
+        },
+        createFrame: (value) => ({ value }),
+        installFrame: (frame) => calls.push(['install', frame ? 'frame' : 'none']),
+        disposeFrame: () => calls.push(['disposeFrame']),
+        confirmFrame: async () => calls.push(['draw']),
+        releaseUnused: () => calls.push(['releaseUnused']),
+        removeBundle: (bundleName) => calls.push(['removeBundle', bundleName]),
+        isValid: () => true,
+        assetId: (value) => value._uuid,
+    });
+    const release = { contractVersion: '0.1', creatorVersion: '2.4.15', delivery: 'asset-bundle',
+        bundleName: 'cocos-agent-smoke', releaseId: 'bundle-runtime-test', fingerprint: 'f'.repeat(64),
+        assets: [{ id: 'blue', runtimePath: 'BlueReleaseOct09',
+            resourceUuid: 'cdc0901f-6059-4519-9abd-dff51521abea',
+            spriteFrameUuid: '69e2f032-7739-49aa-b9f0-6b6eb820984f' }] };
+    assert.equal((await runtime.apply(release, 'blue')).outcome, 'applied');
+    assert.deepEqual(calls[0], ['load', 'BlueReleaseOct09', release.assets[0].spriteFrameUuid, 'cocos-agent-smoke']);
+    assert.equal(runtime.dispose().outcome, 'disposed');
+    assert.ok(calls.some((call) => call[0] === 'removeBundle' && call[1] === 'cocos-agent-smoke'));
 });

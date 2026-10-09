@@ -25,6 +25,7 @@ function fixture() {
     const record = { contractVersion: '0.1', buildId, creatorVersion: '2.4.15', projectRoot,
         releaseId: 'release-a', fingerprint, outputRoot, state: 'completed', releaseManifest };
     const events = [];
+    let selectedReleaseId = 'release-a';
     const fake = {
         contentBuild: {
             get: () => ({ success: true, build: record }),
@@ -32,8 +33,8 @@ function fixture() {
         },
         contentRelease: {
             get: (params) => params.releaseId
-                ? { success: true, release: releaseManifest, selected: { releaseId: 'release-a', fingerprint } }
-                : { success: true, selected: { releaseId: 'release-a', fingerprint } },
+                ? { success: true, release: releaseManifest, selected: { releaseId: selectedReleaseId, fingerprint } }
+                : { success: true, selected: { releaseId: selectedReleaseId, fingerprint } },
             validate: () => ({ success: true, fingerprint }),
         },
         contentRuntimeHost: {
@@ -46,6 +47,7 @@ function fixture() {
         },
     };
     return { projectRoot, buildId, outputRoot, webRoot, fingerprint, releaseManifest, record, events, fake,
+        setSelectedReleaseId: (value) => { selectedReleaseId = value; },
         params: { projectRoot, creatorVersion: '2.4.15', buildId } };
 }
 
@@ -54,9 +56,11 @@ test('serves only the verified package on loopback and exposes runtime session s
     let current;
     try {
         current = await preview.start(value.params, value.fake);
-        assert.equal(current.success, true);
+        assert.equal(current.success, true, JSON.stringify(current));
         assert.equal(current.outcome, 'ready');
         assert.equal(current.status, 'waiting-for-runtime');
+        assert.equal(current.buildReleaseId, 'release-a');
+        assert.equal(current.selectedReleaseId, 'release-a');
         assert.match(current.previewUrl, /^http:\/\/127\.0\.0\.1:\d+\/\?cocosAgentPort=50321&cocosAgentToken=/);
         const page = await fetch(current.previewUrl);
         assert.equal(page.status, 200);
@@ -77,6 +81,10 @@ test('serves only the verified package on loopback and exposes runtime session s
         assert.equal(accepted.status, 'runtime-observed');
         assert.equal(accepted.connected, true);
         assert.equal(accepted.lastReceipt.acceptance.outcome, 'runtime-observed');
+        assert.equal(accepted.effectiveReleaseId, 'release-a');
+        value.setSelectedReleaseId('release-b');
+        assert.equal(preview.get(value.params).selectedReleaseId, 'release-b');
+        assert.equal(preview.get(value.params).buildReleaseId, 'release-a');
         value.events.push({ type: 'disconnected' });
         assert.equal(preview.get(value.params).connected, false);
         const stopped = await preview.stop(value.params);
@@ -103,6 +111,26 @@ test('rejects unverified builds, release drift, and unsafe package roots before 
         value.fake.contentBuild.get = () => ({ success: true, build: { ...value.record,
             outputRoot: path.join(os.tmpdir(), 'outside-build') } });
         assert.equal((await preview.start(value.params, value.fake)).error.code, 'BUILD_RECORD_MISMATCH');
+    } finally {
+        await preview.stop(value.params);
+        fs.rmSync(value.projectRoot, { recursive: true, force: true });
+    }
+});
+
+test('rejects a changed Creator 2.4 Asset Bundle config after a completed build', async () => {
+    const value = fixture();
+    const bundleName = 'bundle-a';
+    value.record.releaseManifest = { ...value.releaseManifest, delivery: 'asset-bundle', bundleName };
+    value.record.artifact = { delivery: 'asset-bundle', bundleName, bundleConfigHash: 'a'.repeat(64),
+        configPath: 'web-mobile/assets/bundle-a/config.123abc.json', resources: [] };
+    value.fake.contentBuild.get = () => ({ success: true, build: value.record });
+    value.fake.contentBuild.verifyOutput = () => ({ success: true, fingerprint: value.fingerprint,
+        delivery: 'asset-bundle', bundleName, bundleConfigHash: 'b'.repeat(64),
+        configPath: 'web-mobile/assets/bundle-a/config.123abc.json', resources: [] });
+    try {
+        const result = await preview.start(value.params, value.fake);
+        assert.equal(result.error.code, 'BUILD_OUTPUT_CHANGED');
+        assert.equal(value.fake.runtimeClosed, undefined);
     } finally {
         await preview.stop(value.params);
         fs.rmSync(value.projectRoot, { recursive: true, force: true });

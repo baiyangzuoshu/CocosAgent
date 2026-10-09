@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -8,6 +9,7 @@ const contentRelease = require('./content-release');
 const buildIdPattern = /^[a-z0-9][a-z0-9-]{2,31}$/;
 const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const fail = (code, message) => ({ success: false, outcome: 'failed', error: { code, message } });
+const sha256 = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 const recordDir = (root) => path.join(root, '.cocos-agent', 'content-builds');
 const recordFile = (root, id) => path.join(recordDir(root), `${id}.json`);
 
@@ -122,10 +124,11 @@ function plan(params, options = {}) {
         : args;
     return { success: true, outcome: 'ready', creatorVersion: '2.4.15', platform: 'web-mobile',
         projectRoot: target.root, releaseId, fingerprint: selected.fingerprint, buildId,
+        delivery: selected.release.delivery, ...(selected.release.delivery === 'asset-bundle' ? { bundleName: selected.release.bundleName } : {}),
         outputRoot, executable: executable.executable, appBundle: executable.appBundle,
         launcher, launchArgs, startScene: startScene.uuid, args,
         includedResources: selected.release.assets.map((asset) => ({ id: asset.id, runtimePath: asset.runtimePath,
-            resourceUuid: asset.resourceUuid })) };
+            resourceUuid: asset.resourceUuid, ...(asset.spriteFrameUuid ? { spriteFrameUuid: asset.spriteFrameUuid } : {}) })) };
 }
 
 function compactUuid(uuid) {
@@ -159,6 +162,15 @@ function findImportFile(outputRoot, bundleRoot, config, index, resourceUuid) {
     return null;
 }
 
+function spriteFrameImportsTexture(filename, textureUuid) {
+    if (!filename) return false;
+    try {
+        const imported = JSON.parse(fs.readFileSync(filename, 'utf8'));
+        const dependencies = Array.isArray(imported) && Array.isArray(imported[1]) ? imported[1] : [];
+        return dependencies.includes(compactUuid(textureUuid)) || dependencies.includes(textureUuid);
+    } catch (_) { return false; }
+}
+
 function walk(root, visit, maxEntries = 50000) {
     const stack = [{ directory: root, depth: 0 }];
     let visited = 0;
@@ -189,44 +201,63 @@ function verifyOutput(outputRoot, release) {
         if (/^config(?:\.[a-f0-9]+)?\.json$/i.test(path.basename(filename))) {
             try {
                 const value = JSON.parse(fs.readFileSync(filename, 'utf8'));
-                if (value && value.name === 'resources' && value.paths && value.uuids && value.types) configs.push({ filename, value });
+                if (value && typeof value.name === 'string' && value.paths && value.uuids && value.types) configs.push({ filename, value });
             } catch (_) { /* Ignore unrelated or non-JSON config files. */ }
         }
     });
     if (!completeWalk) return fail('BUILD_OUTPUT_TOO_LARGE', 'Build output exceeds the bounded inspection limit.');
     if (!hasIndex) return fail('BUILD_OUTPUT_INCOMPLETE', 'No Web-Mobile index.html was found in the output.');
+    const expectedBundleName = release.delivery === 'asset-bundle' ? release.bundleName : 'resources';
     for (const candidate of configs) {
         const { filename, value } = candidate;
+        if (value.name !== expectedBundleName) continue;
         const bundleRoot = path.dirname(filename);
+        if (release.delivery === 'asset-bundle'
+            && path.relative(outputRoot, bundleRoot).split(path.sep).join('/') !== `web-mobile/assets/${release.bundleName}`) continue;
         const verified = [];
         let allAssetsPresent = true;
         for (const asset of release.assets) {
-            const index = Object.keys(value.paths).find((key) => {
+            const textureIndex = Object.keys(value.paths).find((key) => {
                 const entry = value.paths[key];
-                return Array.isArray(entry) && entry[0] === asset.runtimePath;
+                return Array.isArray(entry) && entry[0] === asset.runtimePath
+                    && value.types[entry[1]] === 'cc.Texture2D';
             });
-            const pathEntry = index === undefined ? null : value.paths[index];
-            const typeIndex = pathEntry && Number.isInteger(pathEntry[1]) ? pathEntry[1] : -1;
-            const uuid = index === undefined ? null : value.uuids[Number(index)];
-            const importHash = index === undefined ? null : fileVersion(value.versions?.import, Number(index));
-            const nativeHash = index === undefined ? null : fileVersion(value.versions?.native, Number(index));
+            const textureUuid = textureIndex === undefined ? null : value.uuids[Number(textureIndex)];
+            const spriteFrameIndex = release.delivery === 'asset-bundle' ? Object.keys(value.paths).find((key) => {
+                const entry = value.paths[key];
+                return Array.isArray(entry) && entry[0] === asset.runtimePath
+                    && value.types[entry[1]] === 'cc.SpriteFrame';
+            }) : undefined;
+            const spriteFrameUuid = spriteFrameIndex === undefined ? null : value.uuids[Number(spriteFrameIndex)];
+            const nativeHash = textureIndex === undefined ? null : fileVersion(value.versions?.native, Number(textureIndex));
             const nativeBase = typeof value.nativeBase === 'string' ? value.nativeBase : 'native';
-            const importFile = index === undefined ? null : findImportFile(outputRoot, bundleRoot, value, Number(index), asset.resourceUuid);
+            const importFile = textureIndex === undefined ? null : findImportFile(outputRoot, bundleRoot, value, Number(textureIndex), asset.resourceUuid);
+            const spriteFrameImport = spriteFrameIndex === undefined ? null
+                : findImportFile(outputRoot, bundleRoot, value, Number(spriteFrameIndex), asset.spriteFrameUuid);
             const nativeFile = nativeHash && path.resolve(bundleRoot, nativeBase, asset.resourceUuid.slice(0, 2), `${asset.resourceUuid}.${nativeHash}.png`);
-            const matches = value.types[typeIndex] === 'cc.Texture2D' && uuid === compactUuid(asset.resourceUuid)
-                && importFile
+            const matches = textureIndex !== undefined && textureUuid === compactUuid(asset.resourceUuid) && importFile
                 && nativeFile && realPathWithin(outputRoot, nativeFile) && fs.existsSync(nativeFile);
-            if (!matches) { allAssetsPresent = false; break; }
+            const bundleMatches = release.delivery !== 'asset-bundle'
+                || (spriteFrameIndex !== undefined && spriteFrameUuid === compactUuid(asset.spriteFrameUuid)
+                    && spriteFrameImport && fs.existsSync(spriteFrameImport)
+                    && spriteFrameImportsTexture(spriteFrameImport, asset.resourceUuid));
+            if (!matches || !bundleMatches) { allAssetsPresent = false; break; }
             verified.push({ id: asset.id, runtimePath: asset.runtimePath, resourceUuid: asset.resourceUuid,
-                importFile: path.relative(outputRoot, importFile), nativeFile: path.relative(outputRoot, nativeFile) });
+                importFile: path.relative(outputRoot, importFile), nativeFile: path.relative(outputRoot, nativeFile),
+                ...(release.delivery === 'asset-bundle' ? { spriteFrameUuid: asset.spriteFrameUuid,
+                    spriteFrameImport: path.relative(outputRoot, spriteFrameImport) } : {}) });
         }
-        if (allAssetsPresent) return { success: true, outcome: 'verified', platform: 'web-mobile',
-            outputRoot, configPath: path.relative(outputRoot, filename), fingerprint: release.fingerprint,
-            resourceCount: verified.length, resources: verified };
+        if (allAssetsPresent) {
+            const configHash = sha256(fs.readFileSync(filename));
+            return { success: true, outcome: 'verified', platform: 'web-mobile', delivery: release.delivery,
+                outputRoot, configPath: path.relative(outputRoot, filename), fingerprint: release.fingerprint,
+                ...(release.delivery === 'asset-bundle' ? { bundleName: release.bundleName, bundleConfigHash: configHash } : {}),
+                resourceCount: verified.length, resources: verified };
+        }
     }
     return fail(configs.length ? 'BUILD_ASSET_MISSING' : 'BUILD_RESOURCE_CONFIG_MISSING',
-        configs.length ? 'Built resources bundle does not contain every release texture identity and file.'
-            : 'No resources bundle configuration was found in the Web-Mobile output.');
+        configs.length ? 'Expected content Bundle does not contain every release texture/SpriteFrame identity and file.'
+            : 'No matching content bundle configuration was found in the Web-Mobile output.');
 }
 
 function writeRecord(filename, value, exclusive = false) {

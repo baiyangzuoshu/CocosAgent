@@ -23,10 +23,15 @@
         }
         function checked(release, assetId) {
             if (!release || release.contractVersion !== '0.1' || release.creatorVersion !== adapter.creatorVersion
-                || release.delivery !== 'built-in-resources' || !release.releaseId || !release.fingerprint
+                || !['built-in-resources', 'asset-bundle'].includes(release.delivery)
+                || (release.delivery === 'asset-bundle' && (release.creatorVersion !== '2.4.15'
+                    || !/^[a-z][a-z0-9_-]{0,31}$/.test(release.bundleName || '')))
+                || !release.releaseId || !release.fingerprint
                 || !Array.isArray(release.assets)) throw Error('RELEASE_MISMATCH');
             const asset = release.assets.find((item) => item.id === assetId);
             if (!asset || !asset.runtimePath || !asset.resourceUuid) throw Error('ASSET_NOT_IN_RELEASE');
+            if (release.delivery === 'asset-bundle' && !/^[a-f0-9-]{36}$/i.test(asset.spriteFrameUuid || ''))
+                throw Error('ASSET_NOT_IN_RELEASE');
             return asset;
         }
         async function apply(release, assetId) {
@@ -46,7 +51,7 @@
             let installed = false;
             let owned = false;
             try {
-                candidate = await adapter.load(asset.runtimePath);
+                candidate = await adapter.load(asset.runtimePath, asset, release);
                 if (!candidate || !adapter.isValid(candidate) || adapter.assetId(candidate) !== asset.resourceUuid)
                     throw Error('RESOURCE_ID_MISMATCH');
                 candidate.addRef();
@@ -57,13 +62,16 @@
                 await adapter.confirmFrame(frame);
                 if (!adapter.isValid(candidate)) throw Error('CANDIDATE_INVALID_AFTER_DRAW');
                 current = { releaseId: release.releaseId, fingerprint: release.fingerprint,
-                    assetId, resourceUuid: asset.resourceUuid, texture: candidate, frame };
+                    assetId, resourceUuid: asset.resourceUuid, delivery: release.delivery,
+                    bundleName: release.bundleName || null, texture: candidate, frame };
                 try {
                     if (previous) {
                         adapter.disposeFrame(previous.frame);
                         previous.texture.decRef();
                     }
                     adapter.releaseUnused();
+                    if (previous && previous.delivery === 'asset-bundle' && previous.bundleName !== release.bundleName
+                        && adapter.removeBundle) adapter.removeBundle(previous.bundleName);
                 } catch (error) {
                     return receipt('needs-review', request, { code: 'OLD_RESOURCE_CLEANUP_FAILED', cause: String(error),
                         previousReleaseId: previous && previous.releaseId || null });
@@ -78,6 +86,8 @@
                 if (frame) adapter.disposeFrame(frame);
                 if (owned && candidate && adapter.isValid(candidate)) candidate.decRef();
                 adapter.releaseUnused();
+                if (release.delivery === 'asset-bundle' && release.bundleName !== (previous && previous.bundleName)
+                    && adapter.removeBundle) adapter.removeBundle(release.bundleName);
                 return receipt('retained', request, { code: String(error.message || error),
                     retainedReleaseId: previous && previous.releaseId || null });
             } finally { busy = false; }
@@ -92,8 +102,10 @@
             if (closed) return { outcome: 'disposed', idempotent: true };
             adapter.installFrame(null);
             closed = true;
-            if (current) { adapter.disposeFrame(current.frame); current.texture.decRef(); current = null; }
+            const previous = current;
+            if (previous) { adapter.disposeFrame(previous.frame); previous.texture.decRef(); current = null; }
             adapter.releaseUnused();
+            if (previous && previous.delivery === 'asset-bundle' && adapter.removeBundle) adapter.removeBundle(previous.bundleName);
             return { outcome: 'disposed', idempotent: false };
         }
         return { apply, snapshot, dispose };
