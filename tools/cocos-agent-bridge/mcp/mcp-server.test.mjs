@@ -71,11 +71,13 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         assert.equal(commandTool.annotations.readOnlyHint, false);
         assert.equal(commandTool.annotations.destructiveHint, true);
         const commandBranches = commandTool.inputSchema.oneOf || commandTool.inputSchema.anyOf;
-        assert.equal(commandBranches.length, 10);
+        assert.equal(commandBranches.length, 11);
         const inspectBranch = commandBranches.find((branch) => branch.properties?.command?.const === 'scene.node.inspect');
         assert.deepEqual(inspectBranch.properties.input.required, ['nodePath']);
         const searchBranch = commandBranches.find((branch) => branch.properties?.command?.const === 'asset.searchPng');
         assert.deepEqual(searchBranch.properties.input.required, ['query']);
+        const patchBranch = commandBranches.find((branch) => branch.properties?.command?.const === 'scene.node.patch');
+        assert.deepEqual(patchBranch.properties.input.required, ['targetNodePath', 'targetNodeUuid', 'action', 'expectedDiff']);
         assert.equal(tools.find((tool) => tool.name === 'cocos_2x_instances_list').annotations.readOnlyHint, true);
         for (const name of ['cocos_2x_scene_snapshot', 'cocos_2x_scene_node_inspect',
             'cocos_2x_asset_search_png', 'cocos_2x_asset_validate_png']) {
@@ -117,6 +119,31 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         const selected = await client.callTool({ name: 'cocos_2x_capabilities_list', arguments: { projectRoot: value.projects[1] } });
         assert.equal(selected.structuredContent.data.instance.projectRoot, value.projects[1]);
         assert.equal(calls.at(-1).params.creatorVersion, '2.4.15');
+        const patchDiff = [{ path: 'node.position.x', before: 0, after: 12 }];
+        const patched = await client.callTool({ name: 'cocos_2x_command_execute', arguments: {
+            projectRoot: value.projects[0], command: 'scene.node.patch', input: {
+                targetNodePath: 'helloworld/Canvas/Probe', targetNodeUuid: '11111111-1111-4111-8111-111111111111',
+                action: 'apply', expectedDiff: patchDiff,
+            },
+        } });
+        assert.equal(patched.structuredContent.method, 'command.execute');
+        assert.deepEqual(calls.at(-1).params.input.expectedDiff, patchDiff);
+        const clearSpriteFrame = await client.callTool({ name: 'cocos_2x_command_execute', arguments: {
+            projectRoot: value.projects[0], command: 'scene.node.patch', input: {
+                targetNodePath: 'helloworld/Canvas/Probe', targetNodeUuid: '11111111-1111-4111-8111-111111111111',
+                action: 'apply', expectedDiff: [{ path: 'component.cc.Sprite.spriteFrameUuid',
+                    before: '22222222-2222-4222-8222-222222222222', after: null }],
+            },
+        } });
+        assert.equal(clearSpriteFrame.structuredContent.method, 'command.execute');
+        assert.equal(calls.at(-1).params.input.expectedDiff[0].after, null);
+        const invalidPatch = await client.callTool({ name: 'cocos_2x_command_execute', arguments: {
+            projectRoot: value.projects[0], command: 'scene.node.patch', input: {
+                targetNodePath: 'helloworld/Canvas/Probe', targetNodeUuid: '11111111-1111-4111-8111-111111111111',
+                action: 'apply', expectedDiff: [{ path: 'node.rotation.z', before: 0, after: 10 }],
+            },
+        } });
+        assert.equal(invalidPatch.isError, true);
 
         const workflowSteps = [
             { id: 'root', name: 'AgentShowcase', parent: { path: 'Canvas', uuid: 'a286bbGknJLZpRpxROV6M94' } },
@@ -344,7 +371,7 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
             projectRoot: value.projects[0], command: 'scene.node.inspect', input: {},
         } });
         assert.equal(invalidCommandInput.isError, true);
-        assert.equal(calls.filter((call) => call.method === 'command.execute').length, 4);
+        assert.equal(calls.filter((call) => call.method === 'command.execute').length, 6);
     } finally {
         await client.close();
         await server.close();

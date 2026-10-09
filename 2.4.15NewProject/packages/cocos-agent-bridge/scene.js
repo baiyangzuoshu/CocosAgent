@@ -6,6 +6,68 @@ const MAX_NAME_LENGTH = 32;
 const MAX_PATH_LENGTH = 80;
 
 module.exports = {
+    'node-prefab-create-name'(event, params) {
+        const node = findNodeByUuid(cc.director.getScene(), params && params.nodeUuid);
+        if (!node || node.name !== params.beforeName || !/^[A-Za-z0-9_ -]{1,64}$/.test(params.afterName || '')
+            || (node.parent.children || []).some((sibling) => sibling !== node && sibling.name === params.afterName)) {
+            event.reply({ code: 'PREFAB_NODE_CHANGED', message: 'Prefab root identity or name changed.' }); return;
+        }
+        node.name = params.afterName;
+        event.reply(null, { nodeUuid: node.uuid, name: node.name });
+    },
+    'node-patch-preflight'(event, params) {
+        const node = findPatchTarget(params);
+        if (!node) { event.reply({ code: 'TARGET_CHANGED', message: 'Node path and UUID no longer identify the same scene node.' }); return; }
+        const actual = nodePatchSnapshot(node, params.targetNodePath);
+        const diff = params.expectedDiff || [];
+        if (!validPatchDiff(diff) || !patchMatches(actual, diff, 'before')) {
+            event.reply({ code: 'EXPECTED_STATE_MISMATCH', message: 'One or more fields differ from the expected before values.' }); return;
+        }
+        if (patchNameConflict(node, diff)) { event.reply({ code: 'SCENE_NODE_CONFLICT', message: 'The requested name already belongs to a sibling.' }); return; }
+        event.reply(null, { sceneName: cc.director.getScene().name || '', node: actual, expectedDiff: diff });
+    },
+
+    'node-patch-mutate'(event, params) {
+        const node = findPatchTarget(params);
+        if (!node) { event.reply({ code: 'TARGET_CHANGED', message: 'Node path and UUID no longer identify the same scene node.' }); return; }
+        const diff = params.expectedDiff || [];
+        const before = nodePatchSnapshot(node, params.targetNodePath);
+        if (!validPatchDiff(diff) || !patchMatches(before, diff, 'before')) {
+            event.reply({ code: 'EXPECTED_STATE_MISMATCH', message: 'Scene changed after preflight; no properties were written.' }); return;
+        }
+        if (patchNameConflict(node, diff)) { event.reply({ code: 'SCENE_NODE_CONFLICT', message: 'A sibling with the requested name appeared after preflight.' }); return; }
+        const spriteReferences = diff.filter((item) => item.path === 'component.cc.Sprite.spriteFrameUuid' && item.after !== null);
+        const apply = (loadedFrames) => {
+            try {
+                diff.forEach((item) => setPatchValue(node, item, loadedFrames));
+                event.reply(null, { sceneName: cc.director.getScene().name || '', node: nodePatchSnapshot(node, null), expectedDiff: diff });
+            } catch (error) {
+                event.reply({ code: 'PROPERTY_WRITE_FAILED', message: String(error && error.message || error) });
+            }
+        };
+        if (!spriteReferences.length) { apply({}); return; }
+        const loaded = Object.create(null);
+        let remaining = spriteReferences.length;
+        let settled = false;
+        spriteReferences.forEach((item) => cc.assetManager.loadAny({ uuid: item.after }, (error, asset) => {
+            if (settled) return;
+            if (error || !(asset instanceof cc.SpriteFrame)) {
+                settled = true;
+                event.reply({ code: 'SPRITE_FRAME_LOAD_FAILED', message: String(error && error.message || error || 'Resource is not a SpriteFrame.') });
+                return;
+            }
+            loaded[item.after] = asset;
+            remaining -= 1;
+            if (!remaining) { settled = true; apply(loaded); }
+        }));
+    },
+
+    'node-patch-snapshot'(event, params) {
+        const node = findNodeByUuid(cc.director.getScene(), params && params.nodeUuid);
+        if (!node) { event.reply(null, { status: 'not-found', nodeUuid: params && params.nodeUuid }); return; }
+        event.reply(null, Object.assign({ status: 'found', sceneName: cc.director.getScene().name || '' }, nodePatchSnapshot(node, getNodePath(node))));
+    },
+
     'node-create-preflight'(event, params) {
         const scene = cc.director.getScene();
         const parts = params && typeof params.parentPath === 'string' ? params.parentPath.split('/') : [];
@@ -64,11 +126,31 @@ module.exports = {
             event.reply(null, { nodeName: params.nodeName, nodeUuid: params.targetNodeUuid, removed: true }); return;
         }
         if (children.length) { event.reply({ code: 'SCENE_NODE_CONFLICT', message: 'A child with this name appeared after preflight.' }); return; }
+        const attach = (node) => {
+            if (!node || !(node instanceof cc.Node)) { event.reply({ code: 'PREFAB_INSTANTIATE_FAILED', message: 'Prefab did not create a Node.' }); return; }
+            node.name = params.nodeName;
+            if (params.transform && params.transform.position) node.setPosition(params.transform.position.x, params.transform.position.y);
+            if (params.transform && params.transform.scale) node.setScale(params.transform.scale.x, params.transform.scale.y, 1);
+            try { parent.addChild(node); }
+            catch (attachError) {
+                node.destroy(); event.reply({ code: 'NODE_ATTACH_FAILED', message: String(attachError && attachError.message || attachError) }); return;
+            }
+            event.reply(null, { nodeName: node.name, nodeUuid: node.uuid, created: true,
+                components: componentDetails(node), transform: transformDetails(node), prefabUuid: prefabUuidOf(node) });
+        };
+        if (params.prefabMode === 'instantiate') {
+            cc.assetManager.loadAny({ uuid: params.prefabUuid }, (error, asset) => {
+                if (error || !(asset instanceof cc.Prefab)) {
+                    event.reply({ code: 'PREFAB_LOAD_FAILED', message: String(error && error.message || error || 'UUID does not identify a Prefab.') }); return;
+                }
+                try { attach(cc.instantiate(asset)); }
+                catch (instantiateError) { event.reply({ code: 'PREFAB_INSTANTIATE_FAILED', message: String(instantiateError && instantiateError.message || instantiateError) }); }
+            });
+            return;
+        }
         loadSpriteFrames(params.components, (error, loaded) => {
             if (error) { event.reply(error); return; }
             const node = new cc.Node(params.nodeName);
-            if (params.transform && params.transform.position) node.setPosition(params.transform.position.x, params.transform.position.y);
-            if (params.transform && params.transform.scale) node.setScale(params.transform.scale.x, params.transform.scale.y, 1);
             try {
                 for (const spec of params.components || []) {
                     if (spec.classId === 'cc.Sprite') {
@@ -79,14 +161,10 @@ module.exports = {
                         component.string = spec.text;
                     }
                 }
-                parent.addChild(node);
             } catch (componentError) {
-                node.destroy();
-                event.reply({ code: 'COMPONENT_ATTACH_FAILED', message: String(componentError && componentError.message || componentError) });
-                return;
+                node.destroy(); event.reply({ code: 'COMPONENT_ATTACH_FAILED', message: String(componentError && componentError.message || componentError) }); return;
             }
-            event.reply(null, { nodeName: node.name, nodeUuid: node.uuid, created: true,
-                components: componentDetails(node), transform: transformDetails(node) });
+            attach(node);
         });
     },
     'catalog-context'(event) {
@@ -200,7 +278,7 @@ module.exports = {
                 targetNode = { status: 'found', path: targetNodePath, uuid: node.uuid, name: node.name,
                     active: node.active !== false, childCount: node.children.length,
                     components: (node._components || []).slice(0, 32).map((component) => cc.js.getClassName(component)).filter(Boolean),
-                    componentDetails: componentDetails(node), transform: transformDetails(node) };
+                    componentDetails: componentDetails(node), transform: transformDetails(node), prefabUuid: prefabUuidOf(node) };
             } else targetNode = { status: matches.length > 1 ? 'ambiguous' : 'not-found', path: targetNodePath };
         }
         event.reply(null, {
@@ -317,6 +395,13 @@ function validObjectSpec(params) {
                 || Math.abs(transform[key].x) > 4096 || Math.abs(transform[key].y) > 4096)) return false;
         }
     }
+    const prefabMode = params.prefabMode === undefined ? null : params.prefabMode;
+    if (prefabMode !== null && !['create', 'instantiate'].includes(prefabMode)) return false;
+    const hasPrefabUuid = params.prefabUuid !== undefined && params.prefabUuid !== null;
+    if (prefabMode === 'create' && hasPrefabUuid
+        && (params.action !== 'compensate' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.prefabUuid || ''))) return false;
+    if (prefabMode === 'instantiate' && (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.prefabUuid || '') || components.length)) return false;
+    if (prefabMode === null && hasPrefabUuid) return false;
     return true;
 }
 
@@ -343,10 +428,98 @@ function loadSpriteFrames(components, callback) {
 function componentDetails(node) {
     return (node._components || []).map((component) => {
         const classId = cc.js.getClassName(component);
-        if (classId === 'cc.Sprite') return { classId, spriteFrameUuid: component.spriteFrame && component.spriteFrame._uuid || null };
-        if (classId === 'cc.Label') return { classId, text: component.string };
+        if (classId === 'cc.Sprite') return { classId, enabled: component.enabled !== false,
+            spriteFrameUuid: component.spriteFrame && component.spriteFrame._uuid || null };
+        if (classId === 'cc.Label') return { classId, enabled: component.enabled !== false, text: component.string };
         return { classId };
     }).filter((item) => item.classId);
+}
+
+function findNodeByUuid(root, uuid) {
+    if (!root || typeof uuid !== 'string') return null;
+    if (root.uuid === uuid) return root;
+    for (const child of root.children || []) { const found = findNodeByUuid(child, uuid); if (found) return found; }
+    return null;
+}
+
+function getNodePath(node) {
+    const names = [];
+    for (let current = node; current; current = current.parent) names.unshift(current.name);
+    return names.join('/');
+}
+
+function findTargetNode(nodePath, nodeUuid) {
+    const scene = cc.director.getScene();
+    if (!scene || typeof nodePath !== 'string' || typeof nodeUuid !== 'string') return null;
+    const parts = nodePath.split('/');
+    let matches = parts.length <= 32 && parts[0] === scene.name ? [scene] : [];
+    for (const part of parts.slice(1)) matches = matches.flatMap((parent) => (parent.children || []).filter((child) => child.name === part)).slice(0, 3);
+    return matches.length === 1 && matches[0].uuid === nodeUuid ? matches[0] : null;
+}
+
+function findPatchTarget(params) {
+    if (!params || typeof params.targetNodePath !== 'string') return null;
+    const parts = params.targetNodePath.split('/');
+    const rename = Array.isArray(params.expectedDiff) && params.expectedDiff.find((item) => item.path === 'node.name');
+    if (rename) parts[parts.length - 1] = rename.before;
+    return findTargetNode(parts.join('/'), params.targetNodeUuid);
+}
+
+function patchNameConflict(node, diff) {
+    const rename = diff.find((item) => item.path === 'node.name');
+    return !!(rename && node.parent && node.parent.children.some((child) => child !== node && child.name === rename.after));
+}
+
+function nodePatchSnapshot(node, nodePath) {
+    return { status: 'found', path: getNodePath(node), uuid: node.uuid, name: node.name, active: node.active !== false,
+        transform: transformDetails(node), componentDetails: componentDetails(node), prefabUuid: prefabUuidOf(node) };
+}
+
+function prefabUuidOf(node) {
+    const info = node && node._prefab;
+    const asset = info && info.asset;
+    return asset && typeof asset._uuid === 'string' ? asset._uuid : null;
+}
+
+function validPatchDiff(diff) {
+    return Array.isArray(diff) && diff.length > 0 && diff.length <= 16 && diff.every((item) => item
+        && typeof item.path === 'string' && ['node.name', 'node.active', 'node.position.x', 'node.position.y', 'node.scale.x', 'node.scale.y',
+            'component.cc.Sprite.enabled', 'component.cc.Sprite.spriteFrameUuid', 'component.cc.Label.enabled'].includes(item.path));
+}
+
+function patchValue(snapshot, fieldPath) {
+    if (fieldPath === 'node.name') return snapshot.name;
+    if (fieldPath === 'node.active') return snapshot.active;
+    const transform = fieldPath.match(/^node\.(position|scale)\.(x|y)$/);
+    if (transform) return snapshot.transform[transform[1]][transform[2]];
+    const component = fieldPath.match(/^component\.(cc\.(?:Sprite|Label))\.(enabled|spriteFrameUuid)$/);
+    if (!component) return undefined;
+    const found = (snapshot.componentDetails || []).filter((item) => item.classId === component[1]);
+    if (found.length !== 1) return undefined;
+    return found[0][component[2]];
+}
+
+function patchMatches(snapshot, diff, side) { return diff.every((item) => Object.is(patchValue(snapshot, item.path), item[side])); }
+
+function setPatchValue(node, item, loadedFrames) {
+    const path = item.path; const value = item.after;
+    if (path === 'node.name') { node.name = value; return; }
+    if (path === 'node.active') { node.active = value; return; }
+    const transform = path.match(/^node\.(position|scale)\.(x|y)$/);
+    if (transform) {
+        const key = transform[1] === 'position' ? transform[2] : `scale${transform[2].toUpperCase()}`;
+        if (transform[1] === 'position') node.setPosition(transform[2] === 'x' ? value : node.x, transform[2] === 'y' ? value : node.y);
+        else if (key === 'scaleX') node.setScale(value, node.scaleY, node.scaleZ);
+        else node.setScale(node.scaleX, value, node.scaleZ);
+        return;
+    }
+    const componentPath = path.match(/^component\.(cc\.(?:Sprite|Label))\.(enabled|spriteFrameUuid)$/);
+    if (!componentPath) throw new Error('Unsupported property path.');
+    const matches = (node._components || []).filter((component) => cc.js.getClassName(component) === componentPath[1]);
+    if (matches.length !== 1) throw new Error('Component path is missing or ambiguous.');
+    const component = matches[0];
+    if (componentPath[2] === 'enabled') component.enabled = value;
+    else if (componentPath[2] === 'spriteFrameUuid') component.spriteFrame = value === null ? null : loadedFrames[value];
 }
 
 function transformDetails(node) {
@@ -356,11 +529,19 @@ function transformDetails(node) {
 function nodeMatchesSpec(node, params) {
     const expected = params.components || [];
     const actual = componentDetails(node);
-    if (actual.length !== expected.length) return false;
-    for (let i = 0; i < expected.length; i++) {
+    if (params.prefabMode !== 'instantiate' && actual.length !== expected.length) return false;
+    for (let i = 0; params.prefabMode !== 'instantiate' && i < expected.length; i++) {
         if (actual[i].classId !== expected[i].classId) return false;
         if (expected[i].classId === 'cc.Sprite' && actual[i].spriteFrameUuid !== expected[i].spriteFrameUuid) return false;
         if (expected[i].classId === 'cc.Label' && actual[i].text !== expected[i].text) return false;
+    }
+    if (params.prefabMode === 'instantiate' || params.prefabMode === 'create') {
+        if (prefabUuidOf(node) !== params.prefabUuid) return false;
+    }
+    const actualTransform = transformDetails(node);
+    for (const key of ['position', 'scale']) {
+        const expectedTransform = params.transform && params.transform[key];
+        if (expectedTransform && ['x', 'y'].some((axis) => Math.abs(actualTransform[key][axis] - expectedTransform[axis]) > 1e-5)) return false;
     }
     return true;
 }

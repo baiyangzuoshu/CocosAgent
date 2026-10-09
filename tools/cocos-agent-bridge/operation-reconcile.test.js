@@ -75,6 +75,20 @@ test('rejects mismatched live scene, parent UUID, and disk node presence without
     } finally { f.cleanup(); }
 });
 
+test('does not reconcile a Prefab creation as no-effect when its generated asset remains', () => {
+    const f = fixture();
+    try {
+        const record = store.read(f.projectRoot, operationId);
+        record.manifest.prefabMode = 'create';
+        record.manifest.prefabUrl = `db://assets/CocosAgentPrefab_${operationId}.prefab`;
+        store.write(f.projectRoot, record);
+        fs.writeFileSync(path.join(f.projectRoot, 'assets', `CocosAgentPrefab_${operationId}.prefab`), 'orphan');
+        const result = reconcileNoEffect({ ...f, creatorVersion: '2.4.15', operationId });
+        assert.equal(result.error.code, 'DISK_STATE_NOT_CONFIRMED');
+        assert.equal(store.read(f.projectRoot, operationId).phases.recovery, 'pending');
+    } finally { f.cleanup(); }
+});
+
 test('dispatcher selects the recorded scene and reports a reconciled failure as no-effect', () => {
     const f = fixture();
     try {

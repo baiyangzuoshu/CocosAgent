@@ -17,7 +17,7 @@ const COCOS_2X_COMPOSITION_SKILL_URI = 'cocos://2x/skills/scene-composition';
 const COCOS_2X_COMPOSITION_SKILL_PATH = path.join(REPOSITORY_ROOT, 'plugins/cocos-agent-2x/skills/cocos2-scene-composition/SKILL.md');
 const COMMANDS_2X = [
     'scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng',
-    'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.pngSprite', 'scene.node.create',
+    'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.pngSprite', 'scene.node.create', 'scene.node.patch',
 ];
 const CONTENT_BUILD_ID = z.string().regex(/^[a-z0-9][a-z0-9-]{2,31}$/);
 const RELEASE_ID = z.string().regex(/^(?!(selected|effective)$)[a-z0-9][a-z0-9._-]{0,63}$/);
@@ -59,6 +59,26 @@ function commandInputSchema(projectRoot) {
                 z.object({ classId: z.literal('cc.Label'), text: z.string().max(256) }).strict(),
             ])).max(1).optional(),
             transform: z.object({ position: positionSchema().optional(), scale: positionSchema().optional() }).strict().optional(),
+            prefabMode: z.enum(['create', 'instantiate']).optional(),
+            prefabUuid: UUID.optional(),
+            sourceOperationId: UUID.optional(),
+            operationId: UUID.optional(),
+        }).strict().superRefine((input, context) => {
+            if (input.prefabMode === 'create' && input.prefabUuid) context.addIssue({ code: 'custom', path: ['prefabUuid'], message: 'Prefab creation assigns its own UUID.' });
+            if (input.prefabMode === 'instantiate' && input.action === 'apply' && !input.prefabUuid) context.addIssue({ code: 'custom', path: ['prefabUuid'], message: 'Instantiation requires an imported Prefab UUID.' });
+            if (input.prefabMode !== 'instantiate' && input.prefabUuid) context.addIssue({ code: 'custom', path: ['prefabUuid'], message: 'Prefab UUID is only accepted for instantiation.' });
+            if (input.prefabMode === 'instantiate' && input.components && input.components.length) context.addIssue({ code: 'custom', path: ['components'], message: 'Prefab instances take their components from the Prefab asset.' });
+        }),
+        'scene.node.patch': z.object({
+            targetNodePath: z.string().min(1).max(240),
+            targetNodeUuid: z.string().min(1).max(64).regex(/^[A-Za-z0-9_+/=-]+$/),
+            action: z.enum(['apply', 'compensate', 'replay']),
+            expectedDiff: z.array(z.object({
+                path: z.enum(['node.name', 'node.active', 'node.position.x', 'node.position.y', 'node.scale.x', 'node.scale.y',
+                    'component.cc.Sprite.enabled', 'component.cc.Sprite.spriteFrameUuid', 'component.cc.Label.enabled']),
+                before: z.union([z.string(), z.number(), z.boolean(), z.null()]),
+                after: z.union([z.string(), z.number(), z.boolean(), z.null()]),
+            }).strict()).min(1).max(16),
             sourceOperationId: UUID.optional(),
             operationId: UUID.optional(),
         }).strict(),
@@ -162,6 +182,7 @@ function createServer(projectRoots, options = {}) {
             'For a uniquely identified existing PNG, call cocos_2x_scene_node_inspect for the requested parent and use its exact node path and UUID. When the user requested scene placement, call cocos_2x_command_execute with scene.node.create, a cc.Sprite component that references the returned spriteFrameUuid, and only the requested transform.',
             'When the request provides new local PNG files, call cocos_2x_assets_scene_plan. Review the returned pipelineId, asset identities, target Canvas, node names, and positions before calling cocos_2x_assets_scene_execute once.',
             'After scene.node.create, inspect the operation phases and matching local Web preview; record visual acceptance only after viewing the requested Sprite. If the write outcome is uncertain, inspect operation state and never repeat the write blindly.',
+            'For an existing scene node, inspect its exact path and UUID. Use scene.node.patch only with explicit before/after values for supported node, Sprite, or Label fields. Preserve the returned expectedDiff and operationId; compensate only if the current fields still equal the recorded after values.',
             'After execution, read cocos_2x_assets_scene_get and cocos_2x_assets_scene_validate. If a call times out or returns an uncertain state, do not retry execute; inspect the pipeline, exact nodes, and operation records, then compensate only with the required live and disk evidence.',
             'Call cocos_2x_assets_scene_cancel only when the user explicitly asks to cancel an active resource-to-scene execution. Cancellation waits for the current Host call, stops at a safe write boundary, and attempts compensation; inspect the final pipeline receipt.',
             'Inspect each Sprite in the matching local Web preview before calling cocos_2x_assets_scene_preview_accept. Never invent visual evidence or treat source, disk, or headless-only observations as visual acceptance.',

@@ -125,8 +125,34 @@
           "position": { "$ref": "#/$defs/canvasPosition" },
           "scale": { "$ref": "#/$defs/canvasPosition" }
         } },
+        "prefabMode": { "enum": ["create", "instantiate"] },
+        "prefabUuid": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$" },
         "sourceOperationId": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" },
         "operationId": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" }
+      },
+      "allOf": [
+        { "if": { "properties": { "prefabMode": { "const": "instantiate" } }, "required": ["prefabMode"] }, "then": { "required": ["prefabUuid"] } },
+        { "if": { "properties": { "prefabMode": { "const": "create" } }, "required": ["prefabMode"] }, "then": { "not": { "required": ["prefabUuid"] } } }
+      ]
+    },
+    "nodePatchInput2x": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetNodePath", "targetNodeUuid", "action", "expectedDiff"],
+      "properties": {
+        "targetNodePath": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "targetNodeUuid": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9_+/=-]+$" },
+        "action": { "enum": ["apply", "compensate", "replay"] },
+        "expectedDiff": { "type": "array", "minItems": 1, "maxItems": 16, "items": {
+          "type": "object", "additionalProperties": false, "required": ["path", "before", "after"],
+          "properties": {
+            "path": { "enum": ["node.name", "node.active", "node.position.x", "node.position.y", "node.scale.x", "node.scale.y",
+              "component.cc.Sprite.enabled", "component.cc.Sprite.spriteFrameUuid", "component.cc.Label.enabled"] },
+            "before": {}, "after": {}
+          }
+        } },
+        "sourceOperationId": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$" },
+        "operationId": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$" }
       }
     },
     "command": {
@@ -134,7 +160,7 @@
       "additionalProperties": false,
       "required": ["id", "contractVersion", "access", "inputSchema", "input", "preconditions", "status", "reason"],
       "properties": {
-        "id": { "enum": ["scene.snapshot", "scene.node.inspect", "asset.searchPng", "asset.importPng", "asset.removeImportedPng", "asset.validatePng", "asset.refreshPng", "asset.refreshFolder", "scene.pngSprite", "scene.node.create"] },
+        "id": { "enum": ["scene.snapshot", "scene.node.inspect", "asset.searchPng", "asset.importPng", "asset.removeImportedPng", "asset.validatePng", "asset.refreshPng", "asset.refreshFolder", "scene.pngSprite", "scene.node.create", "scene.node.patch"] },
         "contractVersion": { "const": "0.1" },
         "access": { "enum": ["read", "write"] },
         "inputSchema": { "type": "string" },

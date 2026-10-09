@@ -6,7 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const store = require('./operation-store');
-const { acceptPreview, acceptRuntimePreview } = require('./operation-preview');
+const { acceptPreview, acceptRuntimePreview, runtimeStateMatches } = require('./operation-preview');
 
 const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-agent-preview-'));
 const operationId = crypto.randomUUID();
@@ -71,5 +71,28 @@ try {
     assert.strictEqual(acceptPreview({ projectRoot, creatorVersion: '2.4.15', operationId: nodeOperationId, evidence: manualEvidence }).alreadyAccepted, true);
     assert.strictEqual(acceptRuntimePreview({ ...runtimeRequest, previewUrl: 'https://example.com/' }).error.code,
         'INVALID_PREVIEW_EVIDENCE');
+    const patchRecord = { ...nodeRecord, capabilityId: 'scene.node.patch', operationId: crypto.randomUUID(),
+        receipts: [], phases: { disk: 'passed', preview: 'pending' },
+        manifest: { action: 'apply', targetNodePath: 'helloworld/Canvas/P1Probe', targetNodeUuid: nodeUuid,
+            expectedDiff: [{ path: 'node.name', before: 'P1Probe', after: 'Renamed' },
+                { path: 'node.active', before: true, after: false },
+                { path: 'component.cc.Sprite.enabled', before: true, after: false },
+                { path: 'component.cc.Sprite.spriteFrameUuid', before: spriteFrameUuid, after: null }] } };
+    const patchState = { ...runtimeState, nodePath: 'helloworld/Canvas/Renamed', name: 'Renamed', active: false,
+        components: [{ classId: 'cc.Sprite', enabled: false, spriteFrameUuid: null }] };
+    assert.strictEqual(runtimeStateMatches(patchRecord, patchState), true);
+    assert.strictEqual(runtimeStateMatches(patchRecord, { ...patchState, active: true }), false);
+    assert.strictEqual(runtimeStateMatches(patchRecord, { ...patchState, components: [{ classId: 'cc.Sprite', enabled: true, spriteFrameUuid: null }] }), false);
+    store.write(projectRoot, patchRecord, true);
+    assert.strictEqual(acceptRuntimePreview({ ...runtimeRequest, operationId: patchRecord.operationId, runtimeState: patchState }).success, true);
+    assert.strictEqual(acceptPreview({ projectRoot, creatorVersion: '2.4.15', operationId: patchRecord.operationId, evidence: manualEvidence }).success, true);
+    const prefabRecord = { ...nodeRecord, operationId: crypto.randomUUID(), receipts: [], phases: { disk: 'passed', preview: 'pending' },
+        manifest: { ...nodeRecord.manifest, prefabMode: 'instantiate', prefabUuid: crypto.randomUUID(), components: [] },
+        previewComponents: nodeRecord.manifest.components };
+    assert.strictEqual(runtimeStateMatches(prefabRecord, runtimeState), true);
+    assert.strictEqual(runtimeStateMatches({ ...prefabRecord, previewComponents: undefined }, runtimeState), false);
+    store.write(projectRoot, prefabRecord, true);
+    assert.strictEqual(acceptRuntimePreview({ ...runtimeRequest, operationId: prefabRecord.operationId }).success, true);
+    assert.strictEqual(acceptPreview({ projectRoot, creatorVersion: '2.4.15', operationId: prefabRecord.operationId, evidence: manualEvidence }).success, true);
     process.stdout.write('preview evidence validation and idempotent persistence passed\n');
 } finally { fs.rmSync(projectRoot, { recursive: true, force: true }); }

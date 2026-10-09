@@ -2,12 +2,14 @@
 
 const path = require('path');
 const store = require('./operation-store');
+const patchContract = require('./scene-patch-contract');
 
 function failure(code, message) { return { success: false, error: { code, message } }; }
 
 function sceneObject(record) { return record && record.capabilityId === 'scene.node.create'; }
 function hasPreviewTarget(record) {
-    return sceneObject(record) ? (record.manifest.components || []).length > 0
+    if (record && record.capabilityId === 'scene.node.patch') return ['apply', 'replay'].includes(record.manifest.action);
+    return sceneObject(record) ? ((record.manifest.components || []).length > 0 || !!record.manifest.prefabMode)
         && ['apply', 'replay'].includes(record.manifest.action)
         : record && record.manifest && ['apply', 'replay'].includes(record.manifest.sceneAction);
 }
@@ -42,8 +44,8 @@ function acceptPreview({ projectRoot, creatorVersion, operationId, evidence }) {
     if (!hasPreviewTarget(record)) return failure('PREVIEW_NOT_APPLICABLE', 'This operation has no visible scene object to preview.');
     if (record.phases.disk !== 'passed') return failure('DISK_NOT_VERIFIED', 'Preview cannot pass before disk readback.');
     const visualEvidence = { kind: 'visual-preview', source: 'Agent visual inspection in local Web preview',
-        sceneName: record.sceneName, nodeName: record.manifest.nodeName, assetUuid: record.manifest.assetUuid || firstSpriteUuid(record),
-        nodeUuid: record.createdNodeUuid || undefined, previewUrl: evidence.url,
+        sceneName: record.sceneName, nodeName: previewNodeName(record), assetUuid: record.manifest.assetUuid || firstSpriteUuid(record),
+        nodeUuid: record.createdNodeUuid || record.manifest.targetNodeUuid || undefined, previewUrl: evidence.url,
         observedAt: new Date(evidence.observedAt).toISOString(), note: evidence.note.trim() };
     if (record.phases.preview === 'passed') {
         const previous = record.receipts.find((item) => item.phase === 'preview' && item.status === 'passed');
@@ -69,21 +71,36 @@ function acceptPreview({ projectRoot, creatorVersion, operationId, evidence }) {
 }
 
 function firstSpriteUuid(record) {
-    const sprite = record && record.manifest && Array.isArray(record.manifest.components)
-        && record.manifest.components.find((component) => component.classId === 'cc.Sprite');
+    const patch = record && record.capabilityId === 'scene.node.patch' && record.manifest.expectedDiff
+        .find((item) => item.path === 'component.cc.Sprite.spriteFrameUuid');
+    if (patch) return patch.after;
+    const sprite = record && record.manifest && (record.previewComponents || record.manifest.components || [])
+        .find((component) => component.classId === 'cc.Sprite');
     return sprite && sprite.spriteFrameUuid;
 }
 
+function previewNodeName(record) {
+    return record.capabilityId === 'scene.node.patch'
+        ? patchContract.targetPathAt(record.manifest.targetNodePath, record.manifest.expectedDiff, 'after').split('/').pop()
+        : record.manifest.nodeName;
+}
+
 function runtimeStateMatches(record, observed) {
+    if (record.capabilityId === 'scene.node.patch') return !!observed
+        && observed.sceneName === record.sceneName && observed.nodeUuid === record.manifest.targetNodeUuid
+        && observed.nodePath === patchContract.targetPathAt(record.manifest.targetNodePath, record.manifest.expectedDiff, 'after')
+        && patchContract.matchesDiff({ ...observed, componentDetails: observed.components }, record.manifest.expectedDiff, 'after');
     if (!sceneObject(record) || !observed || observed.sceneName !== record.sceneName
         || observed.nodePath !== `${record.manifest.parentPath}/${record.manifest.nodeName}`
         || observed.nodeUuid !== record.createdNodeUuid || !Array.isArray(observed.components)) return false;
-    const expected = record.manifest.components || [];
+    const expected = record.previewComponents || record.manifest.components || [];
+    if (record.manifest.prefabMode === 'instantiate' && !Array.isArray(record.previewComponents)) return false;
     if (observed.components.length !== expected.length) return false;
     for (let i = 0; i < expected.length; i++) {
         if (observed.components[i].classId !== expected[i].classId) return false;
         if (expected[i].classId === 'cc.Sprite' && observed.components[i].spriteFrameUuid !== expected[i].spriteFrameUuid) return false;
         if (expected[i].classId === 'cc.Label' && observed.components[i].text !== expected[i].text) return false;
+        if (typeof expected[i].enabled === 'boolean' && observed.components[i].enabled !== expected[i].enabled) return false;
     }
     const transform = record.manifest.transform || {};
     for (const key of ['position', 'scale']) {
@@ -111,7 +128,7 @@ function acceptRuntimePreview({ projectRoot, creatorVersion, operationId, previe
     catch (error) { return failure(error.code === 'ENOENT' ? 'OPERATION_NOT_FOUND' : 'OPERATION_READ_FAILED', 'Cannot read operation record.'); }
     if (record.projectRoot !== project || record.creatorVersion !== creatorVersion || record.operationId !== operationId)
         return failure('OPERATION_TARGET_MISMATCH', 'Operation record does not match the requested target.');
-    if (!hasPreviewTarget(record) || record.phases.disk !== 'passed' || !record.createdNodeUuid)
+    if (!hasPreviewTarget(record) || record.phases.disk !== 'passed' || !(record.createdNodeUuid || record.manifest.targetNodeUuid))
         return failure('PREVIEW_NOT_APPLICABLE', 'A saved component-bearing node is required for runtime preview.');
     const observationTime = Date.parse(observedAt);
     if (observationTime < Date.parse(record.createdAt) || observationTime > Date.now() + 60000)
@@ -127,7 +144,7 @@ function acceptRuntimePreview({ projectRoot, creatorVersion, operationId, previe
     }
     if (record.phases.preview !== 'pending') return failure('PREVIEW_STATE_CONFLICT', 'Preview is not pending.');
     const evidence = { kind: 'runtime-preview', source: 'isolated Chrome DevTools runtime readback',
-        sceneName: record.sceneName, nodeName: record.manifest.nodeName, nodeUuid: record.createdNodeUuid,
+        sceneName: record.sceneName, nodeName: previewNodeName(record), nodeUuid: record.createdNodeUuid || record.manifest.targetNodeUuid,
         ...(firstSpriteUuid(record) ? { assetUuid: firstSpriteUuid(record) } : {}), previewUrl,
         observedAt: new Date(observedAt).toISOString(), runtimeState,
         note: 'Runtime scene node, whitelisted component values, resource UUIDs, and requested transform matched the saved operation.' };

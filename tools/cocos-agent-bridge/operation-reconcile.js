@@ -53,6 +53,20 @@ function diskAbsence(projectRoot, creatorVersion, record) {
     return { filename, sha256: crypto.createHash('sha256').update(bytes).digest('hex') };
 }
 
+function createdPrefabAbsent(projectRoot, record) {
+    if (!record.manifest || record.manifest.prefabMode !== 'create') return true;
+    const relative = `CocosAgentPrefab_${record.operationId}.prefab`;
+    const filename = path.join(projectRoot, 'assets', relative);
+    try {
+        fs.lstatSync(filename);
+        return false;
+    } catch (error) { if (error.code !== 'ENOENT') return false; }
+    try {
+        fs.lstatSync(`${filename}.meta`);
+        return false;
+    } catch (error) { return error.code === 'ENOENT'; }
+}
+
 function allowedRecord(record, projectRoot, creatorVersion, operationId) {
     if (record.projectRoot !== projectRoot || record.creatorVersion !== creatorVersion || record.operationId !== operationId
         || record.capabilityId !== 'scene.node.create' || !record.sceneName || !record.manifest
@@ -90,6 +104,7 @@ function reconcileNoEffect({ projectRoot, creatorVersion, operationId, liveObser
     }
     const disk = diskAbsence(project, creatorVersion, record);
     if (!disk) return failure('DISK_STATE_NOT_CONFIRMED', 'The saved scene must contain the recorded parent and no matching direct child.');
+    if (!createdPrefabAbsent(project, record)) return failure('DISK_STATE_NOT_CONFIRMED', 'A Prefab creation may have left an asset; inspect or compensate that exact asset before reconciling no effect.');
     const relativeScene = path.relative(project, disk.filename).split(path.sep).join('/');
     if (relativeScene.length > 512) return failure('DISK_STATE_NOT_CONFIRMED', 'Saved scene path exceeds the persisted evidence limit.');
     const recoveryEvidence = { kind: 'recovery-readback', source: 'Same Creator session scene snapshots and serialized scene readback',
@@ -106,4 +121,4 @@ function reconcileNoEffect({ projectRoot, creatorVersion, operationId, liveObser
     return { success: true, data: record, alreadyReconciled: false };
 }
 
-module.exports = { reconcileNoEffect, diskAbsence, allowedRecord };
+module.exports = { reconcileNoEffect, diskAbsence, allowedRecord, createdPrefabAbsent };

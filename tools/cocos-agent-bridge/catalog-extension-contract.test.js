@@ -20,10 +20,10 @@ const catalog2 = loadCatalog('2.4.15NewProject/packages/cocos-agent-bridge/main.
 const catalog3 = loadCatalog('3.8,7NewProject/extensions/cocos-agent-bridge/dist/main.js');
 for (const [version, catalog] of [['2.4.15', catalog2], ['3.8.7', catalog3]]) {
     const commands = catalog({ sceneName: 'example', hasCanvas: true, assetDbReady: true });
-    const expectedIds = ['scene.snapshot', 'scene.node.inspect', ...(version === '2.4.15' ? ['asset.searchPng'] : []), 'asset.importPng', ...(version === '2.4.15' ? ['asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder'] : []), 'scene.pngSprite', 'scene.node.create'];
+    const expectedIds = ['scene.snapshot', 'scene.node.inspect', ...(version === '2.4.15' ? ['asset.searchPng'] : []), 'asset.importPng', ...(version === '2.4.15' ? ['asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder'] : []), 'scene.pngSprite', 'scene.node.create', ...(version === '2.4.15' ? ['scene.node.patch'] : [])];
     assert.deepStrictEqual(commands.map((item) => item.id), expectedIds);
     assert.ok(commands.every((item) => item.contractVersion === '0.1'));
-    assert.deepStrictEqual(commands.map((item) => item.access), ['read', 'read', ...(version === '2.4.15' ? ['read'] : []), 'write', ...(version === '2.4.15' ? ['write', 'read', 'write', 'write'] : []), 'write', 'write']);
+    assert.deepStrictEqual(commands.map((item) => item.access), ['read', 'read', ...(version === '2.4.15' ? ['read'] : []), 'write', ...(version === '2.4.15' ? ['write', 'read', 'write', 'write'] : []), 'write', 'write', ...(version === '2.4.15' ? ['write'] : [])]);
     assert.ok(isDeepStrictEqual(commands[0].input, inputs.snapshotInput));
     assert.ok(isDeepStrictEqual(commands[1].input, inputs.nodeInspectInput));
     assert.ok(isDeepStrictEqual(commands.find((item) => item.id === 'asset.importPng').input, inputs.importPngInput));
@@ -42,8 +42,14 @@ for (const [version, catalog] of [['2.4.15', catalog2], ['3.8.7', catalog3]]) {
     }
     const spriteCommand = commands.find((item) => item.id === 'scene.pngSprite');
     const nodeCommand = commands.find((item) => item.id === 'scene.node.create');
+    const patchCommand = commands.find((item) => item.id === 'scene.node.patch');
     assert.ok(isDeepStrictEqual(spriteCommand.input, version === '2.4.15' ? inputs.pngSpriteInput2x : inputs.pngSpriteInput));
     assert.ok(isDeepStrictEqual(nodeCommand.input, version === '2.4.15' ? inputs.nodeCreateInput2x : inputs.nodeCreateInput));
+    if (version === '2.4.15') {
+        assert.ok(isDeepStrictEqual(patchCommand.input, inputs.nodePatchInput2x));
+        assert.deepStrictEqual(patchCommand.preconditions, ['activeScene', 'nodePathAndUuidMatch', 'expectedBeforeValues', 'propertyWhitelist', 'resourceReferencesResolvable']);
+        assert.strictEqual(patchCommand.status, 'available');
+    } else assert.strictEqual(patchCommand, undefined, '3.8 must not advertise the 2.4 patch command');
     assert.strictEqual(nodeCommand.status, 'available', version);
     assert.strictEqual(catalog({ sceneName: null, hasCanvas: false }).find((item) => item.id === 'scene.node.create').reason, 'NO_OPEN_SCENE');
     assert.strictEqual(spriteCommand.status, 'available', version);

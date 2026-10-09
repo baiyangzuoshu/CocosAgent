@@ -7,6 +7,7 @@ const path = require('path');
 const WebSocket = require('./vendor/ws');
 const store = require('./operation-store');
 const reconcile = require('./operation-reconcile');
+const nodeCreateContract = require('./scene-node-create-contract');
 
 const arg = (name) => { const index = process.argv.indexOf(name); return index < 0 ? undefined : process.argv[index + 1]; };
 const fail = (message) => { process.stderr.write(`${message}\n`); process.exit(2); };
@@ -30,8 +31,14 @@ function parseObjectArg(flag, fallback) {
 }
 let components = parseObjectArg('--components', []);
 let transform = parseObjectArg('--transform', {});
+let prefabMode = arg('--prefab-mode') || null;
+let prefabUuid = arg('--prefab-uuid') || null;
+let prefabSha256 = arg('--prefab-sha256') || null;
 const componentsProvided = arg('--components') !== undefined;
 const transformProvided = arg('--transform') !== undefined;
+const prefabModeProvided = arg('--prefab-mode') !== undefined;
+const prefabUuidProvided = arg('--prefab-uuid') !== undefined;
+const prefabUrlArg = arg('--prefab-url');
 const interruptAfterEditor = process.argv.includes('--interrupt-after-editor');
 if (!['2.4.15', '3.8.7'].includes(creatorVersion) || !fs.existsSync(projectRoot)) fail('INVALID_TARGET');
 if (!uuidPattern.test(operationGetId || operationReconcileId || operationId) || (expectedInstanceId && !uuidPattern.test(expectedInstanceId))) fail('INVALID_OPERATION_ID');
@@ -65,12 +72,49 @@ function diskState(record) {
     const matches = objects.filter((item) => item && item.__type__ === 'cc.Node' && item._name === name
         && item._parent && Number.isInteger(item._parent.__id__)
         && objects[item._parent.__id__] && objects[item._parent.__id__]._id === parentId);
-    if (sceneAction === 'compensate') return matches.length === 0
-        && !objects.some((item) => item && item.__type__ === 'cc.Node' && item._id === record.manifest.targetNodeUuid)
-        ? { filename, nodeUuid: record.manifest.targetNodeUuid } : null;
+    if (sceneAction === 'compensate') {
+        const sceneAbsent = matches.length === 0
+            && !objects.some((item) => item && item.__type__ === 'cc.Node' && item._id === record.manifest.targetNodeUuid);
+        return sceneAbsent && (record.manifest.prefabMode !== 'create' || prefabAssetState(record, 'absent'))
+            ? { filename, nodeUuid: record.manifest.targetNodeUuid } : null;
+    }
+    if (record.manifest.prefabMode === 'create' && !prefabAssetState(record, 'present')) return null;
     if (matches.length !== 1 || (record.createdNodeUuid && matches[0]._id !== record.createdNodeUuid)
         || !serializedObjectMatches(objects, matches[0], record.manifest)) return null;
     return { filename, nodeUuid: matches[0]._id, components: record.manifest.components || [] };
+}
+function prefabFilename(manifest) {
+    if (!manifest || manifest.prefabMode !== 'create' || typeof manifest.prefabUrl !== 'string'
+        || !/^db:\/\/assets\/CocosAgentPrefab_[0-9a-f-]{36}\.prefab$/i.test(manifest.prefabUrl)) return null;
+    return path.join(projectRoot, 'assets', `${manifest.prefabUrl.slice('db://assets/'.length)}`);
+}
+function prefabAssetState(record, expected) {
+    const filename = prefabFilename(record.manifest);
+    if (!filename) return false;
+    const metaFilename = `${filename}.meta`;
+    if (expected === 'absent') return !fs.existsSync(filename) && !fs.existsSync(metaFilename);
+    try {
+        const stat = fs.lstatSync(filename); const metaStat = fs.lstatSync(metaFilename);
+        if (!stat.isFile() || stat.isSymbolicLink() || !metaStat.isFile() || metaStat.isSymbolicLink()) return false;
+        const content = fs.readFileSync(filename); const meta = JSON.parse(fs.readFileSync(metaFilename, 'utf8'));
+        const objects = JSON.parse(content.toString('utf8'));
+        const root = Array.isArray(objects) && objects[0];
+        const rootNode = root && root.__type__ === 'cc.Prefab' && root.data && Number.isInteger(root.data.__id__)
+            ? objects[root.data.__id__] : null;
+        if (!rootNode || rootNode.__type__ !== 'cc.Node' || rootNode._name !== nodeCreateContract.prefabRootName(record.manifest)
+            || meta.importer !== 'prefab' || !uuidPattern.test(meta.uuid || '') || record.prefabUuid && meta.uuid !== record.prefabUuid) return false;
+        const sha256 = crypto.createHash('sha256').update(content).digest('hex');
+        if (record.prefabSha256 && sha256 !== record.prefabSha256) return false;
+        if (record.manifest.action === 'compensate') return false;
+        record.prefabUuid = meta.uuid; record.prefabSha256 = sha256; record.manifest.prefabUuid = meta.uuid;
+        if (record.manifest.expectedDiff) {
+            if (record.manifest.expectedDiff.node && record.manifest.expectedDiff.node.after
+                && record.manifest.expectedDiff.node.after.prefabUuid === '$assetdb-generated') record.manifest.expectedDiff.node.after.prefabUuid = meta.uuid;
+            if (record.manifest.expectedDiff.prefabAsset && record.manifest.expectedDiff.prefabAsset.after
+                && record.manifest.expectedDiff.prefabAsset.after.uuid === '$assetdb-generated') record.manifest.expectedDiff.prefabAsset.after.uuid = meta.uuid;
+        }
+        return true;
+    } catch (_) { return false; }
 }
 function validObjectComponents(value) {
     if (!Array.isArray(value) || value.length > 1) return false;
@@ -96,8 +140,8 @@ function validTransform(value) {
 function serializedObjectMatches(objects, node, manifest) {
     const expected = manifest.components || [];
     const refs = Array.isArray(node._components) ? node._components : [];
-    if (refs.length !== expected.length) return false;
-    for (let i = 0; i < expected.length; i++) {
+    if (manifest.prefabMode !== 'instantiate' && refs.length !== expected.length) return false;
+    for (let i = 0; manifest.prefabMode !== 'instantiate' && i < expected.length; i++) {
         const ref = refs[i];
         const component = ref && Number.isInteger(ref.__id__) ? objects[ref.__id__] : null;
         if (!component || component.__type__ !== expected[i].classId) return false;
@@ -109,6 +153,12 @@ function serializedObjectMatches(objects, node, manifest) {
     const scale = manifest.transform && manifest.transform.scale;
     if (position && (!Array.isArray(array) || Math.abs(array[0] - position.x) > 1e-5 || Math.abs(array[1] - position.y) > 1e-5)) return false;
     if (scale && (!Array.isArray(array) || Math.abs(array[7] - scale.x) > 1e-5 || Math.abs(array[8] - scale.y) > 1e-5)) return false;
+    if (manifest.prefabMode === 'instantiate' || manifest.prefabMode === 'create') {
+        const prefabInfoRef = node._prefab && Number.isInteger(node._prefab.__id__) ? node._prefab : null;
+        const prefabInfo = prefabInfoRef && objects[prefabInfoRef.__id__];
+        if (!prefabInfo || prefabInfo.__type__ !== 'cc.PrefabInfo' || !prefabInfo.asset
+            || prefabInfo.asset.__uuid__ !== manifest.prefabUuid) return false;
+    }
     return true;
 }
 function receipt(record, phase, status, evidence = [], error) {
@@ -121,7 +171,8 @@ function receipt(record, phase, status, evidence = [], error) {
     store.write(projectRoot, record);
 }
 if (operationGetId) {
-    if (action || parentPath || parentUuid || nodeName || sourceOperationId || arg('--components') !== undefined || arg('--transform') !== undefined) fail('READ_ONLY_OPERATION_GET');
+    if (action || parentPath || parentUuid || nodeName || sourceOperationId || componentsProvided || transformProvided
+        || prefabModeProvided || prefabUuidProvided || prefabUrlArg || arg('--prefab-sha256')) fail('READ_ONLY_OPERATION_GET');
     let record;
     try { record = store.read(projectRoot, operationGetId); } catch (_) { fail('OPERATION_NOT_FOUND'); }
     if (record.projectRoot !== projectRoot || record.creatorVersion !== creatorVersion || record.capabilityId !== 'scene.node.create') fail('OPERATION_TARGET_MISMATCH');
@@ -140,7 +191,8 @@ if (operationGetId) {
 let reconciliationRecord = null;
 if (operationReconcileId) {
     if (operationGetId || arg('--operation-id') || action || parentPath || parentUuid || nodeName || sourceOperationId
-        || componentsProvided || transformProvided || interruptAfterEditor) {
+        || componentsProvided || transformProvided || prefabModeProvided || prefabUuidProvided || prefabUrlArg
+        || arg('--prefab-sha256') || interruptAfterEditor) {
         fail('OPERATION_RECONCILE_READ_ONLY');
     }
     try { reconciliationRecord = store.read(projectRoot, operationReconcileId); } catch (_) { fail('OPERATION_NOT_FOUND'); }
@@ -166,13 +218,40 @@ if (!operationReconcileId && sourceOperationId) {
     else if (JSON.stringify(components) !== JSON.stringify(source.manifest.components || [])) fail('SOURCE_OBJECT_SPEC_MISMATCH');
     if (!transformProvided) transform = source.manifest.transform || {};
     else if (JSON.stringify(transform) !== JSON.stringify(source.manifest.transform || {})) fail('SOURCE_OBJECT_SPEC_MISMATCH');
+    const sourcePrefabMode = source.manifest.prefabMode || null;
+    if (prefabModeProvided && prefabMode !== sourcePrefabMode) fail('SOURCE_PREFAB_MODE_MISMATCH');
+    prefabMode = sourcePrefabMode;
+    if (prefabMode === 'instantiate') {
+        if (prefabUuidProvided && prefabUuid !== source.manifest.prefabUuid) fail('SOURCE_PREFAB_UUID_MISMATCH');
+        prefabUuid = source.manifest.prefabUuid;
+    } else if (prefabMode === 'create' && action === 'compensate') {
+        prefabUuid = source.manifest.prefabUuid;
+        prefabSha256 = source.prefabSha256;
+    }
 }
+if (prefabMode !== null && !['create', 'instantiate'].includes(prefabMode)) fail('INVALID_PREFAB_MODE');
+if ((prefabMode === 'instantiate' && (!uuidPattern.test(prefabUuid || '') || components.length > 0))
+    || (prefabMode === 'instantiate' && action === 'apply' && !prefabUuidProvided)
+    || (prefabMode === 'create' && action !== 'compensate' && prefabUuidProvided)
+    || (prefabMode !== 'instantiate' && prefabUuidProvided && prefabMode !== 'create')
+    || (prefabMode === 'create' && action === 'compensate' && (!uuidPattern.test(prefabUuid || '') || !/^[a-f0-9]{64}$/.test(prefabSha256 || '')))
+    || (prefabMode !== 'create' && (prefabUrlArg || arg('--prefab-sha256')))) fail('INVALID_PREFAB_INPUT');
 let record = reconciliationRecord;
 if (!operationReconcileId) {
+    const prefabUrl = prefabMode === 'create'
+        ? (action === 'compensate' ? source.manifest.prefabUrl : `db://assets/CocosAgentPrefab_${operationId}.prefab`) : null;
+    const expectedDiff = nodeCreateContract.expectedDiffFor({ action, parentPath, parentUuid, nodeName,
+        components, transform, prefabMode, prefabUuid, prefabUrl });
+    if (prefabMode === 'create' && action === 'compensate' && prefabUrlArg && prefabUrlArg !== prefabUrl) fail('SOURCE_PREFAB_URL_MISMATCH');
     const manifest = { parentPath, parentUuid, nodeName, action, sourceOperationId: sourceOperationId || null,
-        targetNodeUuid: action === 'compensate' ? source.createdNodeUuid : null, components, transform };
+        targetNodeUuid: action === 'compensate' ? source.createdNodeUuid : null, components, transform,
+        prefabMode, prefabUuid: prefabMode === 'instantiate' || action === 'compensate' ? prefabUuid : null, prefabUrl,
+        prefabSha256: action === 'compensate' && prefabMode === 'create' ? prefabSha256 : null, expectedDiff };
     record = { contractVersion: '0.1', capabilityId: 'scene.node.create', operationId, projectRoot, creatorVersion,
-        manifest, sceneName: null, createdNodeUuid: null, intent: 'created', receipts: [],
+        manifest, sceneName: null, createdNodeUuid: null,
+        prefabUuid: action === 'compensate' ? prefabUuid : null,
+        prefabSha256: action === 'compensate' ? prefabSha256 : null,
+        intent: 'created', receipts: [],
         phases: { capability: 'pending', preflight: 'pending', editor: 'pending', disk: 'pending', preview: 'pending', recovery: 'pending' },
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     try { store.write(projectRoot, record, true); } catch (error) { fail(error.code === 'EEXIST' ? 'OPERATION_ALREADY_EXISTS' : error.message); }
@@ -234,8 +313,15 @@ async function run() {
     const changed = await request('scene.node.create', params);
     if (!changed || changed.nonce !== nonce || changed.operationId !== operationId || changed.saved !== true
         || changed.parentUuid !== parentUuid || changed.nodeName !== nodeName || typeof changed.nodeUuid !== 'string'
-        || (action !== 'compensate' && !runtimeObjectMatches(changed, manifest))
         || (action === 'compensate' && changed.nodeUuid !== manifest.targetNodeUuid)) throw new Error('EDITOR_RESULT_MISMATCH');
+    if (prefabMode === 'create' && action !== 'compensate') {
+        if (!uuidPattern.test(changed.prefabUuid || '') || !/^[a-f0-9]{64}$/.test(changed.prefabSha256 || '')) throw new Error('PREFAB_RESULT_MISSING');
+        record.prefabUuid = changed.prefabUuid; record.prefabSha256 = changed.prefabSha256;
+        manifest.prefabUuid = changed.prefabUuid;
+        if (manifest.expectedDiff.node.after.prefabUuid === '$assetdb-generated') manifest.expectedDiff.node.after.prefabUuid = changed.prefabUuid;
+        if (manifest.expectedDiff.prefabAsset.after.uuid === '$assetdb-generated') manifest.expectedDiff.prefabAsset.after.uuid = changed.prefabUuid;
+    }
+    if (action !== 'compensate' && !runtimeObjectMatches(changed, manifest)) throw new Error('EDITOR_RESULT_MISMATCH');
     if (action !== 'compensate') record.createdNodeUuid = changed.nodeUuid;
     receipt(record, 'editor', 'passed', [{ kind: 'editor-result', source: 'Creator scene script', sceneName: record.sceneName, nodeName, nodeUuid: changed.nodeUuid }]);
     if (interruptAfterEditor) { process.stderr.write('Interrupted after editor receipt.\n'); close(75); return; }
@@ -248,11 +334,20 @@ async function run() {
             || after.targetNode.uuid !== record.createdNodeUuid || !runtimeObjectMatches(after.targetNode, manifest))) throw new Error('POST_WRITE_SNAPSHOT_MISMATCH');
     receipt(record, 'disk', 'passed', [{ kind: 'disk-readback', source: disk.filename, sceneName: record.sceneName, nodeName, nodeUuid: disk.nodeUuid, parentUuid }]);
     record.intent = 'disk-verified';
-    record.phases.preview = components.length && action !== 'compensate' ? 'pending' : 'skipped';
+    record.phases.preview = (components.length || prefabMode) && action !== 'compensate' ? 'pending' : 'skipped';
     record.phases.recovery = action === 'compensate' ? 'passed' : 'pending';
     store.write(projectRoot, record);
     process.stdout.write(`command.result ${JSON.stringify({ command: 'scene.node.create', operationId, sceneName: record.sceneName, action, nodeName, nodeUuid: disk.nodeUuid })}\n`);
-    if (components.length && action !== 'compensate') await verifyRuntimePreview();
+    if ((components.length || prefabMode) && action !== 'compensate') {
+        const previewComponents = prefabMode === 'instantiate'
+            ? (after.targetNode.componentDetails || []).map((item) => item.classId === 'cc.Sprite'
+                ? { classId: item.classId, spriteFrameUuid: item.spriteFrameUuid }
+                : item.classId === 'cc.Label' ? { classId: item.classId, text: item.text } : { classId: item.classId })
+            : components;
+        record.previewComponents = previewComponents;
+        store.write(projectRoot, record);
+        await verifyRuntimePreview(previewComponents);
+    }
     close(0);
 }
 async function runReconciliation() {
@@ -280,8 +375,8 @@ async function runReconciliation() {
 function runtimeObjectMatches(observed, expected) {
     const actual = observed && (observed.componentDetails || observed.components);
     const components = expected.components || [];
-    if (!Array.isArray(actual) || actual.length !== components.length) return false;
-    for (let i = 0; i < components.length; i++) {
+    if (!Array.isArray(actual) || expected.prefabMode !== 'instantiate' && actual.length !== components.length) return false;
+    for (let i = 0; expected.prefabMode !== 'instantiate' && i < components.length; i++) {
         if (actual[i].classId !== components[i].classId) return false;
         if (components[i].classId === 'cc.Sprite' && actual[i].spriteFrameUuid !== components[i].spriteFrameUuid) return false;
         if (components[i].classId === 'cc.Label' && actual[i].text !== components[i].text) return false;
@@ -291,9 +386,10 @@ function runtimeObjectMatches(observed, expected) {
         || Math.abs(observed.transform.position.y - transform.position.y) > 1e-5)) return false;
     if (transform.scale && (!observed.transform || Math.abs(observed.transform.scale.x - transform.scale.x) > 1e-5
         || Math.abs(observed.transform.scale.y - transform.scale.y) > 1e-5)) return false;
+    if (expected.prefabMode && observed.prefabUuid !== expected.prefabUuid) return false;
     return true;
 }
-async function verifyRuntimePreview() {
+async function verifyRuntimePreview(previewComponents) {
     const nodePath = `${parentPath}/${nodeName}`;
     try {
         const started = await request('scene.preview.start', { nonce, sessionId });
@@ -301,7 +397,7 @@ async function verifyRuntimePreview() {
             || path.resolve(started.projectRoot || '') !== projectRoot) throw new Error('PREVIEW_START_MISMATCH');
         const observed = await require('./preview-runtime').verify({ creatorVersion, projectRoot,
             sceneName: record.sceneName, nodePath, nodeUuid: record.createdNodeUuid,
-            components, transform });
+            components: previewComponents || components, transform });
         const accepted = require('./operation-preview').acceptRuntimePreview({ projectRoot, creatorVersion,
             operationId, previewUrl: observed.previewUrl, observedAt: observed.observedAt, runtimeState: observed.runtimeState });
         if (!accepted || accepted.success !== true) throw new Error(accepted && accepted.error && accepted.error.code || 'PREVIEW_RECEIPT_REJECTED');

@@ -6,8 +6,9 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const operationStore = require('./operation-store');
 const operationReconcile = require('./operation-reconcile');
+const scenePatchContract = require('./scene-patch-contract');
 
-const commands = new Set(['scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.pngSprite', 'scene.node.create']);
+const commands = new Set(['scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.pngSprite', 'scene.node.create', 'scene.node.patch']);
 const versions = new Set(['2.4.15', '3.8.7']);
 
 function dispatchError(code, message, phase = 'selection', sideEffect = 'none', retryable = false) {
@@ -31,6 +32,9 @@ function validOperationRecord(record) {
     if (record && record.capabilityId === 'scene.node.create') return record.manifest && typeof record.manifest.action === 'string'
         && typeof record.manifest.parentPath === 'string' && typeof record.manifest.parentUuid === 'string'
         && typeof record.manifest.nodeName === 'string' && record.phases && typeof record.phases.disk === 'string';
+    if (record && record.capabilityId === 'scene.node.patch') return record.manifest && typeof record.manifest.action === 'string'
+        && typeof record.manifest.targetNodePath === 'string' && typeof record.manifest.targetNodeUuid === 'string'
+        && scenePatchContract.validateDiff(record.manifest.expectedDiff) && record.phases && typeof record.phases.disk === 'string';
     return record && record.manifest && typeof record.manifest.sceneAction === 'string'
         && typeof record.manifest.assetName === 'string' && typeof record.manifest.nodeName === 'string'
         && typeof record.manifest.assetUuid === 'string' && record.phases
@@ -103,15 +107,28 @@ function validInput(command, input, creatorVersion) {
         && /^[0-9a-f-]{36}$/i.test(input.pipelineId || '') && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/i.test(input.assetName || '');
     if (command === 'asset.refreshFolder') return keys.length === 1 && validAssetFolderPath(input.folderPath);
     if (command === 'scene.node.create') return keys.every((key) => ['parentPath', 'parentUuid', 'nodeName', 'action', 'sourceOperationId', 'operationId',
-        ...(creatorVersion === '2.4.15' ? ['components', 'transform'] : [])].includes(key))
+        ...(creatorVersion === '2.4.15' ? ['components', 'transform', 'prefabMode', 'prefabUuid'] : [])].includes(key))
         && (creatorVersion === '2.4.15' || (input.components === undefined && input.transform === undefined))
         && (input.components === undefined || validObjectComponents(input.components))
         && (input.transform === undefined || (creatorVersion === '2.4.15' && validTransform(input.transform)))
+        && (creatorVersion !== '2.4.15' || (input.prefabMode === undefined || ['create', 'instantiate'].includes(input.prefabMode)))
+        && (creatorVersion !== '2.4.15' || (input.prefabUuid === undefined || input.prefabMode === 'instantiate' && /^[0-9a-f-]{36}$/i.test(input.prefabUuid)))
+        && (creatorVersion !== '2.4.15' || (input.prefabMode !== 'instantiate' || input.prefabUuid !== undefined
+            || input.action !== 'apply' && typeof input.sourceOperationId === 'string'))
+        && (creatorVersion !== '2.4.15' || (input.prefabMode !== 'create' || input.prefabUuid === undefined))
         && typeof input.parentPath === 'string' && input.parentPath.length > 0 && input.parentPath.length <= 240
         && !input.parentPath.includes('//') && !input.parentPath.includes('\\')
         && typeof input.parentUuid === 'string' && input.parentUuid.length > 0 && input.parentUuid.length <= 64
         && typeof input.nodeName === 'string' && /^[A-Za-z0-9_ -]{1,64}$/.test(input.nodeName)
         && ['apply', 'compensate', 'replay'].includes(input.action)
+        && (input.action === 'apply' ? input.sourceOperationId === undefined : typeof input.sourceOperationId === 'string' && /^[0-9a-f-]{36}$/i.test(input.sourceOperationId))
+        && (input.operationId === undefined || /^[0-9a-f-]{36}$/i.test(input.operationId));
+    if (command === 'scene.node.patch') return creatorVersion === '2.4.15'
+        && keys.every((key) => ['targetNodePath', 'targetNodeUuid', 'action', 'expectedDiff', 'sourceOperationId', 'operationId'].includes(key))
+        && typeof input.targetNodePath === 'string' && input.targetNodePath.length > 0 && input.targetNodePath.length <= 240
+        && !input.targetNodePath.includes('\\') && !input.targetNodePath.includes('//')
+        && scenePatchContract.NODE_ID.test(input.targetNodeUuid || '') && ['apply', 'compensate', 'replay'].includes(input.action)
+        && scenePatchContract.validateDiff(input.expectedDiff)
         && (input.action === 'apply' ? input.sourceOperationId === undefined : typeof input.sourceOperationId === 'string' && /^[0-9a-f-]{36}$/i.test(input.sourceOperationId))
         && (input.operationId === undefined || /^[0-9a-f-]{36}$/i.test(input.operationId));
     return keys.every((key) => ['assetName', 'action', 'operationId', ...(creatorVersion === '2.4.15' ? ['position'] : [])].includes(key))
@@ -187,8 +204,18 @@ function dispatchCommand(request, invoke) {
         if (input.sourceOperationId) executionArgs.push('--source-operation-id', input.sourceOperationId);
         if (input.components !== undefined) executionArgs.push('--components', JSON.stringify(input.components));
         if (input.transform !== undefined) executionArgs.push('--transform', JSON.stringify(input.transform));
+        if (input.prefabMode !== undefined) executionArgs.push('--prefab-mode', input.prefabMode);
+        if (input.prefabUuid !== undefined) executionArgs.push('--prefab-uuid', input.prefabUuid);
     }
-    const hostScript = command === 'scene.node.create' ? 'node-create-host.js' : 'bridge-host.js';
+    if (command === 'scene.node.patch') {
+        operationId = input.operationId || crypto.randomUUID();
+        executionArgs.push('--target-node-path', input.targetNodePath, '--target-node-uuid', input.targetNodeUuid,
+            '--action', input.action, '--expected-diff', JSON.stringify(input.expectedDiff), '--operation-id', operationId);
+        if (input.sourceOperationId) executionArgs.push('--source-operation-id', input.sourceOperationId);
+    }
+    const patchOperation = command === 'scene.node.patch';
+    const hostScript = command === 'scene.node.create' ? 'node-create-host.js'
+        : patchOperation ? 'scene-node-patch-host.js' : 'bridge-host.js';
     const execution = invoke(hostScript, executionArgs);
     const base = { instance: selected, command, ...(operationId ? { operationId } : {}) };
     if (!operationId) {
@@ -208,23 +235,30 @@ function dispatchCommand(request, invoke) {
         return problem('OPERATION_TARGET_MISMATCH', 'Operation record does not match the selected target.', base, 'record', 'unknown');
     }
     const nodeOperation = command === 'scene.node.create';
+    const patchOperationResult = command === 'scene.node.patch';
+    const nodeNeedsPreview = nodeOperation && ((record.manifest.components || []).length > 0 || !!record.manifest.prefabMode);
     const state = { ...base, phases: record.phases, intent: record.intent,
         result: nodeOperation ? { sceneName: record.sceneName, action: record.manifest.action, nodeName: record.manifest.nodeName,
             nodeUuid: record.createdNodeUuid || record.manifest.targetNodeUuid, parentPath: record.manifest.parentPath, parentUuid: record.manifest.parentUuid,
-            components: record.manifest.components || [], transform: record.manifest.transform || {} }
+            components: record.manifest.components || [], transform: record.manifest.transform || {},
+            ...(record.manifest.prefabMode ? { prefabMode: record.manifest.prefabMode,
+                prefabUuid: record.prefabUuid || record.manifest.prefabUuid || null,
+                ...(record.manifest.prefabUrl ? { prefabUrl: record.manifest.prefabUrl } : {}) } : {}) }
+            : patchOperationResult ? { sceneName: record.sceneName, action: record.manifest.action, targetNodePath: record.manifest.targetNodePath,
+                targetNodeUuid: record.manifest.targetNodeUuid, expectedDiff: record.manifest.expectedDiff }
             : { sceneName: record.sceneName, action: record.manifest.sceneAction, assetName: record.manifest.assetName,
                 nodeName: record.manifest.nodeName, assetUuid: record.manifest.assetUuid,
                 ...(record.manifest.position ? { position: record.manifest.position } : {}) },
         ...(record.previewAttempt ? { previewAttempt: record.previewAttempt } : {}) };
     if (record.phases.disk === 'passed') {
-        return { success: true, outcome: (nodeOperation && record.phases.preview === 'passed') || (nodeOperation && !(record.manifest.components || []).length)
+        return { success: true, outcome: (nodeOperation && record.phases.preview === 'passed') || (nodeOperation && !nodeNeedsPreview)
             || (!nodeOperation && record.phases.preview === 'passed') || input.action === 'compensate' ? 'completed' : 'needs-preview', ...state };
     }
     if (record.intent === 'editor-write-sent' || record.phases.editor === 'passed') {
         return { success: false, outcome: 'needs-review', ...state,
             error: dispatchError('WRITE_OUTCOME_UNCERTAIN', 'Inspect the saved scene and operation record before any retry.', 'record', 'possible') };
     }
-    if (nodeOperation) {
+    if (nodeOperation || patchOperationResult) {
         const failure = [...record.receipts].reverse().find((item) => item.status === 'failed' && item.error);
         if (failure) return { success: false, outcome: 'failed', ...state,
             error: dispatchError(typeof failure.error.code === 'string' ? failure.error.code : 'EXECUTION_FAILED',
@@ -244,7 +278,9 @@ function operationStatus(request, invoke) {
     let knownRecord;
     try { knownRecord = operationStore.read(project, operationId); } catch (_) { /* Host reports the missing record. */ }
     const nodeOperation = knownRecord && knownRecord.capabilityId === 'scene.node.create';
-    if (nodeOperation && previewAcceptId && !(knownRecord.manifest.components || []).length)
+    const patchOperation = knownRecord && knownRecord.capabilityId === 'scene.node.patch';
+    const nodeNeedsPreview = nodeOperation && ((knownRecord.manifest.components || []).length > 0 || !!knownRecord.manifest.prefabMode);
+    if (nodeOperation && previewAcceptId && !nodeNeedsPreview)
         return problem('PREVIEW_NOT_APPLICABLE', 'Empty node creation is verified by scene readback.', null, 'preview');
     if (previewAcceptId) {
         const accepted = parseJson(invoke('operation-preview.js', ['--project', project, '--creator-version', creatorVersion,
@@ -254,17 +290,23 @@ function operationStatus(request, invoke) {
                 accepted && accepted.error && accepted.error.message || 'Could not record preview evidence.', null, 'preview');
         }
     }
-    const readback = parseJson(invoke(nodeOperation ? 'node-create-host.js' : 'bridge-host.js', ['--project', project, '--creator-version', creatorVersion, '--operation-get', operationId]));
+    const operationHost = nodeOperation ? 'node-create-host.js' : patchOperation ? 'scene-node-patch-host.js' : 'bridge-host.js';
+    const readback = parseJson(invoke(operationHost, ['--project', project, '--creator-version', creatorVersion, '--operation-get', operationId]));
     if (!readback || readback.success !== true || !readback.data) return problem('OPERATION_STATUS_UNKNOWN', 'Cannot read operation record.', null, 'record', 'unknown');
     const record = readback.data;
     if (!validOperationRecord(record)) return problem('OPERATION_RECORD_INVALID', 'Operation record is incomplete.', null, 'record', 'unknown');
     if (record.operationId !== operationId || record.projectRoot !== project || record.creatorVersion !== creatorVersion) {
         return problem('OPERATION_TARGET_MISMATCH', 'Operation record does not match the requested target.', null, 'record', 'unknown');
     }
-    const base = { command: nodeOperation ? 'scene.node.create' : 'scene.pngSprite', operationId, phases: record.phases, intent: record.intent,
+    const base = { command: patchOperation ? 'scene.node.patch' : nodeOperation ? 'scene.node.create' : 'scene.pngSprite', operationId, phases: record.phases, intent: record.intent,
         result: nodeOperation ? { sceneName: record.sceneName, action: record.manifest.action, nodeName: record.manifest.nodeName,
             nodeUuid: record.createdNodeUuid || record.manifest.targetNodeUuid, parentPath: record.manifest.parentPath, parentUuid: record.manifest.parentUuid,
-            components: record.manifest.components || [], transform: record.manifest.transform || {} }
+            components: record.manifest.components || [], transform: record.manifest.transform || {},
+            ...(record.manifest.prefabMode ? { prefabMode: record.manifest.prefabMode,
+                prefabUuid: record.prefabUuid || record.manifest.prefabUuid || null,
+                ...(record.manifest.prefabUrl ? { prefabUrl: record.manifest.prefabUrl } : {}) } : {}) }
+            : patchOperation ? { sceneName: record.sceneName, action: record.manifest.action, targetNodePath: record.manifest.targetNodePath,
+                targetNodeUuid: record.manifest.targetNodeUuid, expectedDiff: record.manifest.expectedDiff }
             : { sceneName: record.sceneName, action: record.manifest.sceneAction, assetName: record.manifest.assetName,
                 nodeName: record.manifest.nodeName, assetUuid: record.manifest.assetUuid,
                 ...(record.manifest.position ? { position: record.manifest.position } : {}) },
@@ -275,21 +317,57 @@ function operationStatus(request, invoke) {
             error: dispatchError('WRITE_RECONCILED_NO_EFFECT', 'The editor write failed and live plus disk readback confirmed no scene change.', 'recovery', 'none') };
     }
     if (record.phases.disk === 'passed') {
-        return { success: true, outcome: (nodeOperation && record.phases.preview === 'passed') || (nodeOperation && !(record.manifest.components || []).length)
-            || (nodeOperation && record.manifest.action === 'compensate') || record.manifest.sceneAction === 'compensate'
+        return { success: true, outcome: (nodeOperation && record.phases.preview === 'passed') || (nodeOperation && !nodeNeedsPreview)
+            || record.manifest.action === 'compensate' || record.manifest.sceneAction === 'compensate'
             || record.phases.preview === 'passed' ? 'completed' : 'needs-preview', ...base };
     }
     if (record.intent === 'editor-write-sent' || record.phases.editor === 'passed') {
         return { success: false, outcome: 'needs-review', ...base,
             error: dispatchError('WRITE_OUTCOME_UNCERTAIN', 'Inspect the saved scene before any retry.', 'record', 'possible') };
     }
-    if (nodeOperation) {
+    if (nodeOperation || patchOperation) {
         const failure = [...record.receipts].reverse().find((item) => item.status === 'failed' && item.error);
         if (failure) return { success: false, outcome: 'failed', ...base,
             error: dispatchError(typeof failure.error.code === 'string' ? failure.error.code : 'OPERATION_INCOMPLETE',
                 failure.error.message || 'Node creation was rejected.', 'record', 'none') };
     }
     return problem('OPERATION_INCOMPLETE', 'Operation did not reach a verified disk write.', null, 'record', 'possible');
+}
+
+function reconcileNodePatchOperation({ targets, project, creatorVersion, operationId, record }, invoke) {
+    if (creatorVersion !== '2.4.15' || record.creatorVersion !== creatorVersion || record.projectRoot !== project
+        || record.capabilityId !== 'scene.node.patch' || record.phases.disk === 'passed'
+        || record.intent !== 'editor-write-sent' || !record.sceneName) {
+        return problem('OPERATION_NOT_RECONCILABLE', 'Only an interrupted 2.4 node patch with a persisted scene and pending disk receipt can be reconciled.', null, 'recovery');
+    }
+    const targetArgs = targets.flatMap((target) => ['--target', `${target.creatorVersion}=${path.resolve(target.projectRoot)}`]);
+    const listed = parseJson(invoke('catalog-host.js', [...targetArgs, '--query', 'instances.list']));
+    if (!listed || listed.success !== true || !Array.isArray(listed.data)) return problem('CATALOG_FAILED', 'Cannot list Creator instances.', null, 'selection');
+    const matches = listed.data.filter((item) => item.projectRoot === project);
+    if (matches.length !== 1) return problem(matches.length ? 'AMBIGUOUS_EDITOR' : 'EDITOR_NOT_FOUND', 'Project must select one Creator instance.');
+    const instance = matches[0];
+    if (instance.creatorVersion !== creatorVersion) return problem('CREATOR_VERSION_MISMATCH', 'Selected Creator version differs from the operation.');
+    if (instance.state !== 'ready') return problem(instance.error || 'EDITOR_NOT_CONNECTED', 'Selected Creator instance is not ready.');
+    const catalog = parseJson(invoke('catalog-host.js', [...targetArgs, '--query', 'capabilities.list', '--project', project, '--creator-version', creatorVersion]));
+    const selected = catalog && catalog.data && catalog.data.instance;
+    const patchCapability = catalog && catalog.data && Array.isArray(catalog.data.commands)
+        && catalog.data.commands.find((command) => command.id === 'scene.node.patch');
+    if (!catalog || catalog.success !== true || !selected || !patchCapability || patchCapability.status !== 'available'
+        || selected.instanceId !== instance.instanceId || selected.catalogRevision !== instance.catalogRevision
+        || selected.activeScene !== instance.activeScene || selected.activeScene !== record.sceneName) {
+        return problem('RECONCILE_TARGET_CHANGED', 'The exact Creator instance and recorded scene must still be active.', null, 'recovery');
+    }
+    const execution = invoke('scene-node-patch-reconcile-host.js', ['--project', project, '--creator-version', creatorVersion,
+        '--expected-instance-id', selected.instanceId, '--expected-scene', record.sceneName, '--operation-id', operationId]);
+    if (execution.status !== 0) return problem('RECONCILE_NOT_CONFIRMED', 'Live and disk state do not agree on either the before or after diff; review the operation manually.',
+        { operationId, stderr: execution.stderr.trim() }, 'recovery', 'possible');
+    const line = execution.stdout.split('\n').find((item) => item.startsWith('reconcile.result '));
+    let result;
+    try { result = JSON.parse(line.slice('reconcile.result '.length)); } catch (_) { result = null; }
+    if (!result || result.operationId !== operationId || !['no-effect', 'write-verified'].includes(result.disposition)) {
+        return problem('RECONCILE_RESULT_MISSING', 'Host did not return a verified reconciliation disposition.', { operationId }, 'recovery', 'unknown');
+    }
+    return operationStatus({ projectRoot: project, creatorVersion, operationGetId: operationId }, invoke);
 }
 
 function reconcileOperation(request, invoke = runProcess) {
@@ -307,6 +385,8 @@ function reconcileOperation(request, invoke = runProcess) {
     if (record.reconciliation && record.reconciliation.disposition === 'no-effect') {
         return operationStatus({ projectRoot: project, creatorVersion, operationGetId: operationReconcileId }, invoke);
     }
+    if (record.capabilityId === 'scene.node.patch') return reconcileNodePatchOperation({ targets, project, creatorVersion,
+        operationId: operationReconcileId, record }, invoke);
     if (!operationReconcile.allowedRecord(record, project, creatorVersion, operationReconcileId)) {
         return problem('OPERATION_NOT_RECONCILABLE', 'Only an uncertain failed apply/replay with no recorded node can be reconciled.', null, 'recovery');
     }

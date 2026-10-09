@@ -156,6 +156,16 @@ assert.strictEqual(result.outcome, 'needs-preview');
 assert.deepStrictEqual(result.result.components, nodeComponents);
 assert(nodeInvokeCalls.some((call) => call.script === 'node-create-host.js' && call.args.includes('--components')
     && call.args.includes(JSON.stringify(nodeComponents)) && call.args.includes('--transform') && call.args.includes(JSON.stringify(nodeTransform))));
+const prefabUuid = 'a95b3432-8b0f-41a5-83d7-4485249126b5';
+const prefabInput = { ...nodeRequest.input, components: undefined, transform: { position: { x: 32, y: -16 } },
+    prefabMode: 'instantiate', prefabUuid };
+result = dispatch({ ...nodeRequest, input: prefabInput }, nodeInvoke);
+assert.strictEqual(result.outcome, 'needs-preview');
+assert(nodeInvokeCalls.some((call) => call.script === 'node-create-host.js' && call.args.includes('--prefab-mode')
+    && call.args.includes('instantiate') && call.args.includes('--prefab-uuid') && call.args.includes(prefabUuid)));
+assert.strictEqual(dispatch({ ...nodeRequest, input: { ...prefabInput, prefabUuid: undefined } }, nodeInvoke).error.code, 'INVALID_ARGUMENT');
+assert.strictEqual(dispatch({ ...nodeRequest, input: { ...nodeRequest.input, prefabMode: 'create', prefabUuid } }, nodeInvoke).error.code, 'INVALID_ARGUMENT');
+assert.strictEqual(dispatch({ ...request, input: { ...request.input, prefabMode: 'instantiate', prefabUuid } }, mock().invoke).error.code, 'INVALID_ARGUMENT');
 assert.strictEqual(dispatch({ ...nodeRequest, input: { ...nodeRequest.input, components: [{ classId: 'cc.Camera' }] } }, nodeInvoke).error.code,
     'INVALID_ARGUMENT');
 const labelComponents = [{ classId: 'cc.Label', text: 'P1 label' }];
@@ -187,6 +197,49 @@ const callsBeforeInvalidSet = nodeInvokeCalls.length;
 assert.strictEqual(dispatch({ ...nodeRequest, input: { ...nodeRequest.input,
     components: [...nodeComponents, ...labelComponents] } }, nodeInvoke).error.code, 'INVALID_ARGUMENT');
 assert.strictEqual(nodeInvokeCalls.length, callsBeforeInvalidSet, 'invalid component sets are rejected before target discovery');
+
+const patchProject = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-agent-dispatch-patch-'));
+const patchInstance = { ...instance, projectRoot: patchProject, creatorVersion: '2.4.15' };
+const patchOperationId = 'b6e210b5-8cd8-4955-b4a5-4df1710b5d91';
+const patchDiff = [{ path: 'node.position.x', before: 0, after: 12 }];
+const patchRecord = { capabilityId: 'scene.node.patch', operationId: patchOperationId, projectRoot: patchProject,
+    creatorVersion: '2.4.15', intent: 'disk-verified', sceneName: 'helloworld',
+    manifest: { action: 'apply', targetNodePath: 'helloworld/Canvas/Probe',
+        targetNodeUuid: 'f8caa20c-2e39-4c1d-8aeb-03cc9b0b505d', expectedDiff: patchDiff },
+    phases: { editor: 'passed', disk: 'passed', recovery: 'pending' } };
+operationStore.write(patchProject, patchRecord, true);
+const patchCalls = [];
+const patchInvoke = (script, args) => {
+    patchCalls.push({ script, args });
+    if (script === 'catalog-host.js' && args.includes('instances.list'))
+        return { status: 0, stdout: JSON.stringify({ success: true, data: [patchInstance] }) };
+    if (script === 'catalog-host.js') return { status: 0, stdout: JSON.stringify({ success: true, data: {
+        instance: patchInstance, commands: [{ id: 'scene.node.patch', contractVersion: '0.1', status: 'available', reason: null }],
+    } }) };
+    if (script === 'scene-node-patch-host.js' && args.includes('--operation-get'))
+        return { status: 0, stdout: JSON.stringify({ success: true, data: patchRecord }) };
+    return { status: 0, stdout: `command.result ${JSON.stringify({ command: 'scene.node.patch', result: { verified: true } })}\n` };
+};
+const patchRequest = { targets: [{ creatorVersion: '2.4.15', projectRoot: patchProject }], projectRoot: patchProject,
+    creatorVersion: '2.4.15', command: 'scene.node.patch', input: { targetNodePath: patchRecord.manifest.targetNodePath,
+        targetNodeUuid: patchRecord.manifest.targetNodeUuid, action: 'apply', expectedDiff: patchDiff, operationId: patchOperationId } };
+result = dispatch(patchRequest, patchInvoke);
+assert.strictEqual(result.outcome, 'needs-preview', JSON.stringify(result));
+assert.deepStrictEqual(result.result.expectedDiff, patchDiff);
+assert(patchCalls.some((call) => call.script === 'scene-node-patch-host.js' && call.args.includes('--expected-diff')
+    && call.args.includes(JSON.stringify(patchDiff))));
+const patchInvalidCalls = patchCalls.length;
+assert.strictEqual(dispatch({ ...patchRequest, creatorVersion: '3.8.7', targets: [{ creatorVersion: '3.8.7', projectRoot: patchProject }] }, patchInvoke).error.code,
+    'INVALID_ARGUMENT');
+assert.strictEqual(patchCalls.length, patchInvalidCalls, '2.4-only scene patch must be rejected before discovery on 3.8');
+result = dispatch({ projectRoot: patchProject, creatorVersion: '2.4.15', operationGetId: patchOperationId }, patchInvoke);
+assert.strictEqual(result.command, 'scene.node.patch');
+assert.strictEqual(result.outcome, 'needs-preview');
+patchRecord.phases.preview = 'passed';
+result = dispatch({ projectRoot: patchProject, creatorVersion: '2.4.15', operationGetId: patchOperationId }, patchInvoke);
+assert.strictEqual(result.outcome, 'completed');
+assert(patchCalls.some((call) => call.script === 'scene-node-patch-host.js' && call.args.includes('--operation-get')));
+fs.rmSync(patchProject, { recursive: true, force: true });
 
 const removalProject = '/tmp/cocos-agent-removal-project';
 const removalInstance = { instanceId, projectRoot: removalProject, creatorVersion: '2.4.15', state: 'ready',

@@ -137,7 +137,7 @@ function unavailable(target, code) {
 }
 
 function validCatalog(target, result) {
-    const expectedCommandCount = target.creatorVersion === '2.4.15' ? 10 : 5;
+    const expectedCommandCount = target.creatorVersion === '2.4.15' ? 11 : 5;
     if (!Array.isArray(result.commands) || result.commands.length !== expectedCommandCount
         || !(result.activeScene === null || typeof result.activeScene === 'string')
         || !/^[0-9a-f]{64}$/.test(result.catalogRevision || '')) return false;
@@ -165,8 +165,10 @@ function validCatalog(target, result) {
             ? 'catalog.schema.json#/$defs/nodeCreateInput2x' : 'catalog.schema.json#/$defs/nodeCreateInput',
             input: target.creatorVersion === '2.4.15' ? catalogSchema.$defs.nodeCreateInput2x : catalogSchema.$defs.nodeCreateInput,
             preconditions: target.creatorVersion === '2.4.15'
-                ? ['activeScene', 'parentIdentity', 'componentTypesWhitelisted', 'componentSetCompatible', 'resourceReferencesResolvable']
+                ? ['activeScene', 'parentIdentity', 'componentTypesWhitelisted', 'componentSetCompatible', 'resourceReferencesResolvable', 'prefabAssetResolvableIfRequested']
                 : ['activeScene', 'parentIdentity'] },
+        ...(target.creatorVersion === '2.4.15' ? { 'scene.node.patch': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/nodePatchInput2x',
+            input: catalogSchema.$defs.nodePatchInput2x, preconditions: ['activeScene', 'nodePathAndUuidMatch', 'expectedBeforeValues', 'propertyWhitelist', 'resourceReferencesResolvable'] } } : {}),
     };
     const seen = new Set();
     for (const command of result.commands) {
@@ -189,6 +191,8 @@ function validCatalog(target, result) {
         || commands['scene.node.inspect'].reason !== (sceneReady ? null : 'NO_OPEN_SCENE')) return false;
     if (commands['scene.node.create'].status !== (sceneReady ? 'available' : 'unavailable')
         || commands['scene.node.create'].reason !== (sceneReady ? null : 'NO_OPEN_SCENE')) return false;
+    if (target.creatorVersion === '2.4.15' && (commands['scene.node.patch'].status !== (sceneReady ? 'available' : 'unavailable')
+        || commands['scene.node.patch'].reason !== (sceneReady ? null : 'NO_OPEN_SCENE'))) return false;
     if (!sceneReady && (commands['scene.pngSprite'].status !== 'unavailable' || commands['scene.pngSprite'].reason !== 'NO_OPEN_SCENE')) return false;
     if (sceneReady && target.creatorVersion === '3.8.7' && commands['scene.pngSprite'].status !== 'available') return false;
     if (sceneReady && target.creatorVersion === '2.4.15' && commands['scene.pngSprite'].status === 'unavailable'

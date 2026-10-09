@@ -75,8 +75,12 @@ async function mockEditor(index, options = {}) {
                     { id: 'scene.node.create', contractVersion: '0.1', access: 'write',
                         inputSchema: index === 0 ? 'catalog.schema.json#/$defs/nodeCreateInput2x' : 'catalog.schema.json#/$defs/nodeCreateInput',
                         input: index === 0 ? inputs.nodeCreateInput2x : inputs.nodeCreateInput,
-                        preconditions: index === 0 ? ['activeScene', 'parentIdentity', 'componentTypesWhitelisted', 'componentSetCompatible', 'resourceReferencesResolvable'] : ['activeScene', 'parentIdentity'],
+                        preconditions: index === 0 ? ['activeScene', 'parentIdentity', 'componentTypesWhitelisted', 'componentSetCompatible', 'resourceReferencesResolvable', 'prefabAssetResolvableIfRequested'] : ['activeScene', 'parentIdentity'],
                         status: index === 0 ? 'available' : 'unavailable', reason: index === 0 ? null : 'NO_OPEN_SCENE' },
+                    ...(index === 0 ? [{ id: 'scene.node.patch', contractVersion: '0.1', access: 'write',
+                        inputSchema: 'catalog.schema.json#/$defs/nodePatchInput2x', input: inputs.nodePatchInput2x,
+                        preconditions: ['activeScene', 'nodePathAndUuidMatch', 'expectedBeforeValues', 'propertyWhitelist', 'resourceReferencesResolvable'],
+                        status: 'available', reason: null }] : []),
                 ],
             } }));
         } else if (message.method === 'scene.snapshot') {

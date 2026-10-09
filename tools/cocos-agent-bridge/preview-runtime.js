@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 const WebSocket = require('./vendor/ws');
+const patchContract = require('./scene-patch-contract');
 
 const PREVIEW_URL = 'http://127.0.0.1:7456/';
 const CHROME_CANDIDATES = [
@@ -22,8 +23,8 @@ function expressionFor(expected) {
       var parts=${pathParts};if(parts[0]!==scene.name)return {sceneName:scene.name,nodePath:parts.join('/'),missing:'scene'};
       var node=scene;
       for(var i=1;i<parts.length;i++){var found=(node.children||[]).filter(function(child){return child.name===parts[i];});if(found.length!==1)return {sceneName:scene.name,nodePath:parts.join('/'),missing:found.length?'ambiguous':'node'};node=found[0];}
-      var components=(node._components||[]).map(function(component){var classId=cc.js.getClassName(component);if(classId==='cc.Sprite')return {classId:classId,spriteFrameUuid:component.spriteFrame&&component.spriteFrame._uuid||null};if(classId==='cc.Label')return {classId:classId,text:component.string};return {classId:classId};});
-      return {sceneName:scene.name,nodePath:parts.join('/'),nodeUuid:node.uuid,components:components,transform:{position:{x:node.x,y:node.y},scale:{x:node.scaleX,y:node.scaleY}}};
+      var components=(node._components||[]).map(function(component){var classId=cc.js.getClassName(component);if(classId==='cc.Sprite')return {classId:classId,enabled:component.enabled,spriteFrameUuid:component.spriteFrame&&component.spriteFrame._uuid||null};if(classId==='cc.Label')return {classId:classId,enabled:component.enabled,text:component.string};return {classId:classId,enabled:component.enabled};});
+      return {sceneName:scene.name,nodePath:parts.join('/'),nodeUuid:node.uuid,name:node.name,active:node.active,components:components,transform:{position:{x:node.x,y:node.y},scale:{x:node.scaleX,y:node.scaleY}}};
     })()`;
 }
 
@@ -89,7 +90,10 @@ async function verify(expected, options = {}) {
                 const transform = expected.transform || {};
                 const matches = state.sceneName === expected.sceneName && state.nodePath === expected.nodePath
                     && state.nodeUuid === expected.nodeUuid
-                    && JSON.stringify(state.components) === JSON.stringify(expected.components || [])
+                    && (expected.expectedDiff
+                        ? patchContract.matchesDiff({ ...state, componentDetails: state.components }, expected.expectedDiff, 'after')
+                        : state.components.length === (expected.components || []).length && (expected.components || []).every((component, i) =>
+                            Object.keys(component).every((key) => Object.is(component[key], state.components[i][key]))))
                     && (!transform.position || (Math.abs(state.transform.position.x - transform.position.x) <= 1e-5
                         && Math.abs(state.transform.position.y - transform.position.y) <= 1e-5))
                     && (!transform.scale || (Math.abs(state.transform.scale.x - transform.scale.x) <= 1e-5
