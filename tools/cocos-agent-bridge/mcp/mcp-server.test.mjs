@@ -50,9 +50,11 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         const { tools } = await client.listTools();
         const names = tools.map((tool) => tool.name).sort();
         assert.deepEqual(names, [
-            'cocos_2x_assets_scene_cancel', 'cocos_2x_assets_scene_compensate', 'cocos_2x_assets_scene_execute', 'cocos_2x_assets_scene_get',
+            'cocos_2x_asset_search_png', 'cocos_2x_asset_validate_png', 'cocos_2x_assets_scene_cancel',
+            'cocos_2x_assets_scene_compensate', 'cocos_2x_assets_scene_execute', 'cocos_2x_assets_scene_get',
             'cocos_2x_assets_scene_plan', 'cocos_2x_assets_scene_preview_accept', 'cocos_2x_assets_scene_repair',
-            'cocos_2x_assets_scene_validate', 'cocos_2x_capabilities_list', 'cocos_2x_command_execute',
+            'cocos_2x_assets_scene_validate',
+            'cocos_2x_capabilities_list', 'cocos_2x_command_execute',
             'cocos_2x_content_build_execute',
             'cocos_2x_content_build_get', 'cocos_2x_content_build_plan', 'cocos_2x_content_build_reconcile',
             'cocos_2x_content_bundle_plan', 'cocos_2x_content_bundle_stage',
@@ -61,8 +63,9 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
             'cocos_2x_content_rollback', 'cocos_2x_content_select',
             'cocos_2x_instances_get', 'cocos_2x_instances_list', 'cocos_2x_operation_get',
             'cocos_2x_operation_preview_accept', 'cocos_2x_operation_reconcile',
+            'cocos_2x_scene_node_inspect', 'cocos_2x_scene_snapshot',
         ]);
-        assert.equal(tools.length, 29);
+        assert.equal(tools.length, 33);
         const commandTool = tools.find((tool) => tool.name === 'cocos_2x_command_execute');
         assert.equal(commandTool.annotations.readOnlyHint, false);
         assert.equal(commandTool.annotations.destructiveHint, true);
@@ -73,6 +76,12 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         const searchBranch = commandBranches.find((branch) => branch.properties?.command?.const === 'asset.searchPng');
         assert.deepEqual(searchBranch.properties.input.required, ['query']);
         assert.equal(tools.find((tool) => tool.name === 'cocos_2x_instances_list').annotations.readOnlyHint, true);
+        for (const name of ['cocos_2x_scene_snapshot', 'cocos_2x_scene_node_inspect',
+            'cocos_2x_asset_search_png', 'cocos_2x_asset_validate_png']) {
+            const tool = tools.find((candidate) => candidate.name === name);
+            assert.equal(tool.annotations.readOnlyHint, true, `${name} must stay read-only`);
+            assert.equal(tool.annotations.destructiveHint, false, `${name} must not be destructive`);
+        }
 
         const { resources } = await client.listResources();
         assert.deepEqual(resources.map((resource) => resource.uri), ['cocos://2x/agent/mcp-tools']);
@@ -88,7 +97,8 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         assert.match(workflow.messages[0].content.text, new RegExp(value.projects[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
         assert.match(workflow.messages[0].content.text, /do not retry execute/i);
         assert.match(workflow.messages[0].content.text, /Never invent visual evidence/);
-        assert.match(workflow.messages[0].content.text, /asset\.searchPng/);
+        assert.match(workflow.messages[0].content.text, /cocos_2x_asset_search_png/);
+        assert.match(workflow.messages[0].content.text, /cocos_2x_scene_node_inspect/);
         assert.match(workflow.messages[0].content.text, /metadataStatus is valid/);
         assert.match(workflow.messages[0].content.text, /scene\.node\.create/);
         assert.match(workflow.messages[0].content.text, /multiple candidates fit.*stop and ask/i);
@@ -103,6 +113,17 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         const selected = await client.callTool({ name: 'cocos_2x_capabilities_list', arguments: { projectRoot: value.projects[1] } });
         assert.equal(selected.structuredContent.data.instance.projectRoot, value.projects[1]);
         assert.equal(calls.at(-1).params.creatorVersion, '2.4.15');
+
+        const snapshot = await client.callTool({ name: 'cocos_2x_scene_snapshot', arguments: {
+            projectRoot: value.projects[0], input: { targetNodeName: 'Canvas' },
+        } });
+        assert.equal(snapshot.structuredContent.method, 'command.execute');
+        assert.equal(calls.at(-1).params.command, 'scene.snapshot');
+        assert.deepEqual(calls.at(-1).params.input, { targetNodeName: 'Canvas' });
+        const invalidSnapshot = await client.callTool({ name: 'cocos_2x_scene_snapshot', arguments: {
+            projectRoot: value.projects[0], input: { command: 'scene.node.create' },
+        } });
+        assert.equal(invalidSnapshot.isError, true);
 
         const searched = await client.callTool({ name: 'cocos_2x_command_execute', arguments: {
             projectRoot: value.projects[0], command: 'asset.searchPng', input: { query: 'smoke', limit: 10, offset: 0 },
@@ -276,7 +297,7 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
             projectRoot: value.projects[0], command: 'scene.node.inspect', input: {},
         } });
         assert.equal(invalidCommandInput.isError, true);
-        assert.equal(calls.filter((call) => call.method === 'command.execute').length, 3);
+        assert.equal(calls.filter((call) => call.method === 'command.execute').length, 4);
     } finally {
         await client.close();
         await server.close();

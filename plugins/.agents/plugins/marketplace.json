@@ -1,0 +1,20 @@
+{
+  "name": "cocos-agent-local",
+  "interface": {
+    "displayName": "CocosAgent 本地开发插件"
+  },
+  "plugins": [
+    {
+      "name": "cocos-agent-2x",
+      "source": {
+        "source": "local",
+        "path": "./cocos-agent-2x"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

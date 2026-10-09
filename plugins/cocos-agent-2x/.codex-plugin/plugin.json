@@ -1,0 +1,24 @@
+{
+  "name": "cocos-agent-2x",
+  "version": "0.1.0",
+  "description": "为 Cocos Creator 2.4.15 提供本地编辑器、资源管线、运行时预览与构建工具。",
+  "author": {
+    "name": "CocosAgent"
+  },
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "requires_local_executor": true,
+  "interface": {
+    "displayName": "CocosAgent 2.x",
+    "shortDescription": "用 Agent 驱动 Cocos Creator 2.4.15",
+    "longDescription": "查询 Creator 实例与能力，通过本地 MCP Host 导入资源、编辑场景、校验、预览和构建。当前仅支持 2.4.15。",
+    "developerName": "CocosAgent",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write"],
+    "brandColor": "#28A6A1",
+    "defaultPrompt": [
+      "把这个项目里的 PNG 资源放进当前场景，预览确认后生成 Web-Mobile 构建。",
+      "检查当前 Creator 2.4.15 项目有哪些 Agent 命令可用，并解释每项的限制。"
+    ]
+  }
+}

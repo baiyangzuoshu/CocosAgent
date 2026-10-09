@@ -150,8 +150,8 @@ function createServer(projectRoots, options = {}) {
         messages: [{ role: 'user', content: { type: 'text', text: [
             `Target the registered Creator 2.4.15 project ${selectedProject}. User request: ${request}`,
             'Start with cocos_2x_instances_get and cocos_2x_capabilities_list. Continue only if this exact project is ready.',
-            'When the requested PNG already exists in the project, call cocos_2x_command_execute with asset.searchPng. Use only an item whose metadataStatus is valid. If no valid match exists or multiple candidates fit the request, stop and ask which asset to use.',
-            'For a uniquely identified existing PNG, call scene.node.inspect for the requested parent and use its exact node path and UUID. When the user requested scene placement, call cocos_2x_command_execute with scene.node.create, a cc.Sprite component that references the returned spriteFrameUuid, and only the requested transform.',
+            'When the requested PNG already exists in the project, call cocos_2x_asset_search_png with input.query. Use only an item whose metadataStatus is valid. If no valid match exists or multiple candidates fit the request, stop and ask which asset to use.',
+            'For a uniquely identified existing PNG, call cocos_2x_scene_node_inspect for the requested parent and use its exact node path and UUID. When the user requested scene placement, call cocos_2x_command_execute with scene.node.create, a cc.Sprite component that references the returned spriteFrameUuid, and only the requested transform.',
             'When the request provides new local PNG files, call cocos_2x_assets_scene_plan. Review the returned pipelineId, asset identities, target Canvas, node names, and positions before calling cocos_2x_assets_scene_execute once.',
             'After scene.node.create, inspect the operation phases and matching local Web preview; record visual acceptance only after viewing the requested Sprite. If the write outcome is uncertain, inspect operation state and never repeat the write blindly.',
             'After execution, read cocos_2x_assets_scene_get and cocos_2x_assets_scene_validate. If a call times out or returns an uncertain state, do not retry execute; inspect the pipeline, exact nodes, and operation records, then compensate only with the required live and disk evidence.',
@@ -259,6 +259,41 @@ function createServer(projectRoots, options = {}) {
         z.object({ projectRoot }).strict(), 'capabilities.list', ({ projectRoot: selected }) => ({
             targets: targetList, projectRoot: selected, creatorVersion: CREATOR_VERSION,
         }), { title: 'List Creator 2.4.15 capabilities', readOnlyHint: true, destructiveHint: false, openWorldHint: false });
+
+    const readOnlyCommandTools = [
+        {
+            name: 'cocos_2x_scene_snapshot',
+            command: 'scene.snapshot',
+            description: 'Read the active Creator 2.4.15 scene hierarchy and summary. This dedicated read-only tool cannot execute scene or asset writes.',
+            input: z.object({ targetNodeName: z.string().min(1).max(64).optional() }).strict(),
+        },
+        {
+            name: 'cocos_2x_scene_node_inspect',
+            command: 'scene.node.inspect',
+            description: 'Read one node by its exact scene path in Creator 2.4.15. This dedicated read-only tool cannot execute scene or asset writes.',
+            input: z.object({ nodePath: z.string().min(1).max(240) }).strict(),
+        },
+        {
+            name: 'cocos_2x_asset_search_png',
+            command: 'asset.searchPng',
+            description: 'Search Creator 2.4.15 project PNG assets and their imported metadata. This dedicated read-only tool cannot execute scene or asset writes.',
+            input: z.object({ query: z.string().min(1).max(80).regex(/^[^\u0000-\u001f\u007f]+$/),
+                limit: z.number().int().min(1).max(50).optional(), offset: z.number().int().min(0).max(100000).optional() }).strict(),
+        },
+        {
+            name: 'cocos_2x_asset_validate_png',
+            command: 'asset.validatePng',
+            description: 'Read and validate one PNG owned by a Creator 2.4.15 resource pipeline. This dedicated read-only tool cannot execute scene or asset writes.',
+            input: z.object({ pipelineId: OPERATION_ID, assetName: RESOURCE_NAME }).strict(),
+        },
+    ];
+    for (const tool of readOnlyCommandTools) {
+        register(tool.name, tool.description, z.object({ projectRoot, input: tool.input }).strict(), 'command.execute',
+            ({ projectRoot: selected, input }) => ({
+                targets: targetList, projectRoot: selected, creatorVersion: CREATOR_VERSION,
+                command: tool.command, input,
+            }), { title: tool.name, readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+    }
 
     register('cocos_2x_command_execute',
         'Execute one semantic command from the selected Creator 2.4.15 project catalog. Query capabilities first and use only a command currently marked available. The input schema varies by command and matches the 2.4 catalog. This tool may change the project; its result carries CocosAgent status, phases and error codes.',
