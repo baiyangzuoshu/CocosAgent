@@ -34,6 +34,7 @@ const removeSpriteFrameUuid = argument('--sprite-frame-uuid');
 const removeSha256 = argument('--source-sha256');
 const assetValidateName = argument('--asset-validate');
 const assetRefreshName = argument('--asset-refresh');
+const assetFolderRefreshPath = argument('--asset-refresh-folder');
 const assetPipelineId = argument('--asset-pipeline-id');
 const sceneAssetName = argument('--scene-asset');
 const sceneAction = argument('--scene-action');
@@ -57,30 +58,38 @@ if (assetSearchQuery !== undefined) {
 } else if (assetSearchLimitArg !== undefined || assetSearchOffsetArg !== undefined) {
     fail('--asset-search-limit/offset require --asset-search-png.');
 }
-if (operationGetId && (sceneAssetName || sceneAction || scenePositionArg || pngSourceArg || assetSearch || removeAssetName || assetValidateName || assetRefreshName || requestedOperationId || interruptAfterEditor)) {
+if (operationGetId && (sceneAssetName || sceneAction || scenePositionArg || pngSourceArg || assetSearch || removeAssetName || assetValidateName || assetRefreshName || assetFolderRefreshPath || requestedOperationId || interruptAfterEditor)) {
     fail('--operation-get is read-only and cannot be combined with write options.');
 }
-if (nodePath && (sceneAssetName || sceneAction || pngSourceArg || assetSearch || removeAssetName || assetValidateName || assetRefreshName || operationGetId)
+if (nodePath && (sceneAssetName || sceneAction || pngSourceArg || assetSearch || removeAssetName || assetValidateName || assetRefreshName || assetFolderRefreshPath || operationGetId)
     || (nodePath && (nodePath.length > 240 || nodePath.includes('\\') || nodePath.includes('//')))) {
     fail('--node-path requires a bounded scene path and cannot be combined with writes.');
 }
 if (requestedOperationId && !sceneAssetName) fail('--operation-id requires a scene operation.');
 if (interruptAfterEditor && !sceneAssetName) fail('--interrupt-after-editor requires a scene operation.');
 if (assetSearch && (pngSourceArg || removeAssetName || assetValidateName || assetRefreshName || sceneAssetName || sceneAction
-    || scenePositionArg || requestedOperationId || interruptAfterEditor || operationGetId || nodePath))
+    || assetFolderRefreshPath || scenePositionArg || requestedOperationId || interruptAfterEditor || operationGetId || nodePath))
     fail('--asset-search-png is a read-only action and cannot be combined with another command.');
-if (removeAssetName && (pngSourceArg || assetSearch || sceneAssetName || sceneAction || scenePositionArg || requestedOperationId || interruptAfterEditor
+if (removeAssetName && (pngSourceArg || assetSearch || assetFolderRefreshPath || sceneAssetName || sceneAction || scenePositionArg || requestedOperationId || interruptAfterEditor
     || creatorVersion !== '2.4.15' || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/i.test(removeAssetName)
     || !/^[0-9a-f-]{36}$/i.test(removeTextureUuid || '') || !/^[0-9a-f-]{36}$/i.test(removeSpriteFrameUuid || '')
     || !/^[0-9a-f]{64}$/.test(removeSha256 || ''))) fail('--asset-remove requires one exact Creator 2.4.15 PNG identity and cannot be combined with another action.');
 if (!removeAssetName && (removeTextureUuid || removeSpriteFrameUuid || removeSha256)) fail('Asset removal identity flags require --asset-remove.');
 const assetActionCount = [assetValidateName, assetRefreshName].filter(Boolean).length;
 if (assetActionCount && (assetActionCount !== 1 || pngSourceArg || assetSearch || removeAssetName || sceneAssetName || sceneAction || scenePositionArg
-    || requestedOperationId || interruptAfterEditor || creatorVersion !== '2.4.15' || !assetPipelineId
+    || assetFolderRefreshPath || requestedOperationId || interruptAfterEditor || creatorVersion !== '2.4.15' || !assetPipelineId
     || !/^[0-9a-f-]{36}$/i.test(assetPipelineId)
     || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/i.test(assetValidateName || assetRefreshName)))
     fail('--asset-validate or --asset-refresh requires one pipeline-owned PNG and a Creator 2.4.15 pipeline ID.');
 if (!assetActionCount && assetPipelineId) fail('--asset-pipeline-id requires --asset-validate or --asset-refresh.');
+const assetFolderRefresh = assetFolderRefreshPath === undefined ? null : { folderPath: assetFolderRefreshPath };
+if (assetFolderRefresh && (pngSourceArg || assetSearch || removeAssetName || assetActionCount || sceneAssetName || sceneAction
+    || scenePositionArg || requestedOperationId || interruptAfterEditor || operationGetId || nodePath
+    || creatorVersion !== '2.4.15' || assetFolderRefreshPath.length > 240
+    || !/^[A-Za-z0-9][A-Za-z0-9_.-]*(?:\/[A-Za-z0-9][A-Za-z0-9_.-]*){0,7}$/.test(assetFolderRefreshPath)
+    || assetFolderRefreshPath.split('/').some((part) => part === '.' || part === '..'))) {
+    fail('--asset-refresh-folder requires one bounded relative folder under the assets directory and Creator 2.4.15.');
+}
 if (expectedInstanceId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(expectedInstanceId)) fail('Invalid expected instance ID.');
 if (expectedScene && !/^[A-Za-z0-9_-]{1,64}$/.test(expectedScene)) fail('Invalid expected scene name.');
 if (!projectRootArg || !creatorVersion) {
@@ -107,6 +116,18 @@ if (scenePositionArg !== undefined) {
 const projectRoot = path.resolve(projectRootArg);
 if (!fs.existsSync(projectRoot) || !fs.statSync(projectRoot).isDirectory()) {
     fail(`Project directory does not exist: ${projectRoot}`);
+}
+if (assetFolderRefresh) {
+    let current = path.join(projectRoot, 'assets');
+    try {
+        const root = fs.lstatSync(current);
+        if (!root.isDirectory() || root.isSymbolicLink()) throw new Error('invalid assets directory');
+        for (const part of assetFolderRefresh.folderPath.split('/')) {
+            current = path.join(current, part);
+            const stat = fs.lstatSync(current);
+            if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('invalid folder path');
+        }
+    } catch (_) { fail('ASSET_FOLDER_UNAVAILABLE: refresh target must be an existing project assets folder without symlinks.'); }
 }
 
 function readSceneAssetManifest(assetName) {
@@ -294,6 +315,8 @@ const assetActionRequestId = crypto.randomUUID();
 const assetActionNonce = crypto.randomBytes(12).toString('hex');
 const assetSearchRequestId = crypto.randomUUID();
 const assetSearchNonce = crypto.randomBytes(12).toString('hex');
+const assetFolderRefreshRequestId = crypto.randomUUID();
+const assetFolderRefreshNonce = crypto.randomBytes(12).toString('hex');
 const sceneRequestId = crypto.randomUUID();
 const sceneNonce = crypto.randomBytes(12).toString('hex');
 const preflightRequestId = crypto.randomUUID();
@@ -458,6 +481,7 @@ webSocketServer.on('connection', (socket) => {
                 && (!assetRemoval || message.capabilities.includes('asset.removeImportedPng'))
                 && (!assetAction || (message.capabilities.includes('asset.validatePng')
                     && (assetAction.kind !== 'refresh' || message.capabilities.includes('asset.refreshPng'))))
+                && (!assetFolderRefresh || message.capabilities.includes('asset.refreshFolder'))
                 && (!sceneManifest || (message.capabilities.includes('scene.preflightPngSprite')
                     && message.capabilities.includes('scene.placePngSprite') && message.capabilities.includes('scene.removePngSprite')));
             const contract = message.operationContract;
@@ -484,13 +508,19 @@ webSocketServer.on('connection', (socket) => {
                 && assetSearchContract.contractVersion === '0.1' && assetSearchContract.creatorVersion === creatorVersion
                 && assetSearchContract.access === 'read' && assetSearchContract.implementation === 'Editor.assetdb.queryAssets'
                 && assetSearchContract.maximumPageSize === 50);
-            if (!projectMatches || !versionMatches || !protocolMatches || !extensionMatches || !instanceMatches || !capabilityMatches || !contractMatches || !removalContractMatches || !assetValidationContractMatches || !assetSearchContractMatches) {
+            const assetFolderRefreshContract = message.assetFolderRefreshContract;
+            const assetFolderRefreshContractMatches = !assetFolderRefresh || (assetFolderRefreshContract
+                && assetFolderRefreshContract.id === 'asset.refreshFolder' && assetFolderRefreshContract.contractVersion === '0.1'
+                && assetFolderRefreshContract.creatorVersion === creatorVersion && assetFolderRefreshContract.access === 'write'
+                && assetFolderRefreshContract.implementation === 'Editor.assetdb.refresh'
+                && assetFolderRefreshContract.target === 'db://assets/<relative-folder>/');
+            if (!projectMatches || !versionMatches || !protocolMatches || !extensionMatches || !instanceMatches || !capabilityMatches || !contractMatches || !removalContractMatches || !assetValidationContractMatches || !assetSearchContractMatches || !assetFolderRefreshContractMatches) {
                 send(socket, {
                     type: 'helloAck',
                     accepted: false,
-                    reason: !projectMatches ? 'project-mismatch' : !versionMatches ? 'creator-version-mismatch' : !protocolMatches ? 'protocol-version-mismatch' : !extensionMatches ? 'extension-mismatch' : !instanceMatches ? 'instance-mismatch' : !capabilityMatches ? 'capability-mismatch' : !contractMatches ? 'operation-contract-mismatch' : !removalContractMatches ? 'asset-removal-contract-mismatch' : !assetValidationContractMatches ? 'asset-validation-contract-mismatch' : 'asset-search-contract-mismatch',
+                    reason: !projectMatches ? 'project-mismatch' : !versionMatches ? 'creator-version-mismatch' : !protocolMatches ? 'protocol-version-mismatch' : !extensionMatches ? 'extension-mismatch' : !instanceMatches ? 'instance-mismatch' : !capabilityMatches ? 'capability-mismatch' : !contractMatches ? 'operation-contract-mismatch' : !removalContractMatches ? 'asset-removal-contract-mismatch' : !assetValidationContractMatches ? 'asset-validation-contract-mismatch' : !assetSearchContractMatches ? 'asset-search-contract-mismatch' : 'asset-folder-refresh-contract-mismatch',
                 });
-                process.stderr.write(`Handshake rejected (project=${projectMatches}, creator=${versionMatches}, protocol=${protocolMatches}, extension=${extensionMatches}, instance=${instanceMatches}, required capabilities=${capabilityMatches}, contract=${contractMatches}, assetRemoval=${removalContractMatches}, assetValidation=${assetValidationContractMatches}, assetSearch=${assetSearchContractMatches}).\n`);
+                process.stderr.write(`Handshake rejected (project=${projectMatches}, creator=${versionMatches}, protocol=${protocolMatches}, extension=${extensionMatches}, instance=${instanceMatches}, required capabilities=${capabilityMatches}, contract=${contractMatches}, assetRemoval=${removalContractMatches}, assetValidation=${assetValidationContractMatches}, assetSearch=${assetSearchContractMatches}, assetFolderRefresh=${assetFolderRefreshContractMatches}).\n`);
                 cleanUp(1);
                 return;
             }
@@ -520,6 +550,15 @@ webSocketServer.on('connection', (socket) => {
                 return;
             }
             process.stdout.write(`bridge.ping verified: ${result.creatorVersion}, project identity confirmed, nonce echoed.\n`);
+            if (assetFolderRefresh) {
+                send(socket, { type: 'request', id: assetFolderRefreshRequestId, method: 'asset.refreshFolder',
+                    params: { nonce: assetFolderRefreshNonce, sessionId, folderPath: assetFolderRefresh.folderPath } });
+                requestTimer = setTimeout(() => {
+                    process.stderr.write('asset.refreshFolder timed out.\n');
+                    cleanUp(1);
+                }, 60000);
+                return;
+            }
             if (assetSearch) {
                 send(socket, { type: 'request', id: assetSearchRequestId, method: 'asset.searchPng',
                     params: { nonce: assetSearchNonce, sessionId, query: assetSearch.query, limit: assetSearch.limit, offset: assetSearch.offset } });
@@ -629,6 +668,44 @@ webSocketServer.on('connection', (socket) => {
                 process.stdout.write(`command.result ${JSON.stringify({ command: 'scene.snapshot', result })}\n`);
                 cleanUp(0);
             }
+            return;
+        }
+
+        if (message.type === 'response' && message.id === assetFolderRefreshRequestId) {
+            clearTimeout(requestTimer);
+            const result = message.result || {};
+            const expectedUrl = `db://assets/${assetFolderRefresh.folderPath}/`;
+            const valid = message.ok === true && result.nonce === assetFolderRefreshNonce
+                && result.sessionId === sessionId && result.creatorVersion === creatorVersion
+                && path.resolve(result.projectRoot || '') === projectRoot
+                && result.folderPath === assetFolderRefresh.folderPath && result.url === expectedUrl
+                && result.refreshed === true && Number.isSafeInteger(result.resultCount)
+                && result.resultCount >= 0 && result.resultCount <= 20000
+                && Array.isArray(result.results) && result.results.length <= 16
+                && typeof result.truncated === 'boolean' && result.truncated === (result.resultCount > result.results.length)
+                && result.results.every((row) => {
+                    const rootUrl = `db://assets/${assetFolderRefresh.folderPath}`;
+                    const rowUrlValid = row && typeof row.url === 'string'
+                        && (row.url === rootUrl || row.url === `${rootUrl}/` || row.url.startsWith(`${rootUrl}/`))
+                        && row.url.length <= 512 && !/[\\\u0000-\u001f\u007f?#]/.test(row.url)
+                        && row.url.slice('db://assets/'.length).replace(/\/$/, '').split('/').every((part) => part && part !== '.' && part !== '..');
+                    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:@[0-9a-f]+)?$/i;
+                    return row && ['create', 'change', 'delete', 'uuid-change'].includes(row.command)
+                        && uuidPattern.test(row.uuid || '') && rowUrlValid
+                        && typeof row.type === 'string' && /^[A-Za-z0-9._-]{1,96}$/.test(row.type)
+                        && (row.command !== 'uuid-change' || uuidPattern.test(row.oldUuid || ''));
+                });
+            if (!valid) {
+                const errorCode = message.error && message.error.code || 'ASSET_FOLDER_REFRESH_UNVERIFIED';
+                process.stderr.write(`asset.refreshFolder response failed validation (ok=${message.ok === true}, error=${String(errorCode)}).\n`);
+                cleanUp(1);
+                return;
+            }
+            process.stdout.write(`command.result ${JSON.stringify({ command: 'asset.refreshFolder', result: {
+                folderPath: result.folderPath, url: result.url, refreshed: true,
+                resultCount: result.resultCount, truncated: result.truncated, results: result.results,
+            } })}\n`);
+            cleanUp(0);
             return;
         }
 
@@ -993,6 +1070,7 @@ server.listen(0, '127.0.0.1', () => {
         expiresAt: Date.now() + 1800000,
         assetImport: stagedPng ? Object.assign({}, stagedPng) : null,
         assetSearch: assetSearch ? { ...assetSearch, nonce: assetSearchNonce } : null,
+        assetFolderRefresh: assetFolderRefresh ? { ...assetFolderRefresh, nonce: assetFolderRefreshNonce } : null,
         assetRemoval,
         assetAction,
         sceneOperation: sceneManifest,
@@ -1006,7 +1084,7 @@ server.listen(0, '127.0.0.1', () => {
     fs.writeFileSync(temporaryPath, JSON.stringify(session), { mode: 0o600 });
     fs.renameSync(temporaryPath, sessionPath);
     try { fs.chmodSync(sessionPath, 0o600); } catch (_) { /* ACLs apply on platforms without POSIX modes. */ }
-    process.stdout.write(`Bridge ready for Creator ${creatorVersion}${stagedPng ? ' with one PNG import request' : assetRemoval ? ' with one identity-checked asset removal' : assetAction ? ` with one asset ${assetAction.kind}` : ''}. Open or refresh the matching project extension.\n`);
+    process.stdout.write(`Bridge ready for Creator ${creatorVersion}${stagedPng ? ' with one PNG import request' : assetRemoval ? ' with one identity-checked asset removal' : assetAction ? ` with one asset ${assetAction.kind}` : assetFolderRefresh ? ` with one AssetDB folder refresh (${assetFolderRefresh.folderPath})` : ''}. Open or refresh the matching project extension.\n`);
     if (operationRecord) process.stdout.write(`operationId: ${operationId}\n`);
     process.stdout.write(`Session discovery file: ${sessionPath}\n`);
 });

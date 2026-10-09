@@ -62,7 +62,11 @@ async function mockEditor(index, options = {}) {
                         preconditions: ['pipelineOwnedAsset', 'importedMetadata'], status: 'available', reason: null },
                     { id: 'asset.refreshPng', contractVersion: '0.1', access: 'write',
                         inputSchema: 'catalog.schema.json#/$defs/pipelinePngInput', input: inputs.pipelinePngInput,
-                        preconditions: ['pipelineOwnedAsset', 'assetDbMappingStale', 'stableUuid'], status: 'available', reason: null }] : []),
+                        preconditions: ['pipelineOwnedAsset', 'assetDbMappingStale', 'stableUuid'], status: 'available', reason: null },
+                    { id: 'asset.refreshFolder', contractVersion: '0.1', access: 'write',
+                        inputSchema: 'catalog.schema.json#/$defs/assetFolderRefreshInput', input: inputs.assetFolderRefreshInput,
+                        preconditions: ['folderUnderAssets', 'assetDbRefreshAvailable'], status: options.refreshFolderUnavailable ? 'unavailable' : 'available',
+                        reason: options.refreshFolderUnavailable ? 'ASSETDB_REFRESH_UNAVAILABLE' : null }] : []),
                     { id: 'scene.pngSprite', contractVersion: '0.1', access: 'write',
                         inputSchema: index === 0 ? 'catalog.schema.json#/$defs/pngSpriteInput2x' : 'catalog.schema.json#/$defs/pngSpriteInput',
                         input: options.wrongInput && index === 0 ? {} : index === 0 ? inputs.pngSpriteInput2x : inputs.pngSpriteInput,
@@ -114,6 +118,7 @@ async function run(query, project, options = {}) {
     assert.strictEqual(catalog.exit, 0);
     assert.strictEqual(catalog.data.data.instance.projectRoot, projects[1]);
     assert.strictEqual(catalog.data.data.commands.find((item) => item.id === 'scene.pngSprite').status, 'unavailable');
+    assert.strictEqual(catalog.data.data.commands.some((item) => item.id === 'asset.refreshFolder'), false, '3.8 must not inherit the 2.4 AssetDB folder command');
     assert.deepStrictEqual(catalog.data.data.commands.find((item) => item.id === 'scene.pngSprite').input.required, ['assetName', 'action']);
     const exact = await run('instances.get', projects[0], { selectedVersion: versions[0] });
     assert.strictEqual(exact.data.data.creatorVersion, versions[0]);
@@ -122,6 +127,10 @@ async function run(query, project, options = {}) {
     assert.notStrictEqual(first.data.data.instance.catalogRevision, switched.data.data.instance.catalogRevision);
     assert.notStrictEqual(first.data.data.instance.instanceId, switched.data.data.instance.instanceId);
     assert.strictEqual(switched.data.data.commands.find((item) => item.id === 'scene.pngSprite').reason, 'CANVAS_NOT_FOUND');
+    const refreshUnavailable = await run('capabilities.list', projects[0], { refreshFolderUnavailable: true });
+    const folderRefreshCommand = refreshUnavailable.data.data.commands.find((item) => item.id === 'asset.refreshFolder');
+    assert.strictEqual(folderRefreshCommand.status, 'unavailable');
+    assert.strictEqual(folderRefreshCommand.reason, 'ASSETDB_REFRESH_UNAVAILABLE');
     const changedDuringRead = await run('instances.get', projects[0], { snapshotSceneName: 'another-scene' });
     assert.strictEqual(changedDuringRead.data.error.code, 'SCENE_CHANGED');
     const missing = spawnSync(process.execPath, ['catalog-host.js', '--target', `2.4.15=${projects[0]}`, '--query', 'instances.get', '--project', temporary], { cwd: __dirname, encoding: 'utf8' });

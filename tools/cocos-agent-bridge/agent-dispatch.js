@@ -1,12 +1,13 @@
 'use strict';
 
 const crypto = require('crypto');
+const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const operationStore = require('./operation-store');
 const operationReconcile = require('./operation-reconcile');
 
-const commands = new Set(['scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'scene.pngSprite', 'scene.node.create']);
+const commands = new Set(['scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.pngSprite', 'scene.node.create']);
 const versions = new Set(['2.4.15', '3.8.7']);
 
 function dispatchError(code, message, phase = 'selection', sideEffect = 'none', retryable = false) {
@@ -62,6 +63,25 @@ function validTransform(transform) {
         && Object.keys(transform).every((key) => ['position', 'scale'].includes(key))
         && ['position', 'scale'].every((key) => transform[key] === undefined || validPosition(transform[key]));
 }
+function validAssetFolderPath(folderPath) {
+    return typeof folderPath === 'string' && folderPath.length <= 240
+        && /^[A-Za-z0-9][A-Za-z0-9_.-]*(?:\/[A-Za-z0-9][A-Za-z0-9_.-]*){0,7}$/.test(folderPath)
+        && !folderPath.split('/').some((part) => part === '.' || part === '..');
+}
+function existingAssetFolder(projectRoot, folderPath) {
+    if (!validAssetFolderPath(folderPath)) return false;
+    let current = path.join(projectRoot, 'assets');
+    try {
+        const root = fs.lstatSync(current);
+        if (!root.isDirectory() || root.isSymbolicLink()) return false;
+        for (const part of folderPath.split('/')) {
+            current = path.join(current, part);
+            const stat = fs.lstatSync(current);
+            if (!stat.isDirectory() || stat.isSymbolicLink()) return false;
+        }
+        return true;
+    } catch (_) { return false; }
+}
 function validInput(command, input, creatorVersion) {
     if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
     const keys = Object.keys(input);
@@ -81,6 +101,7 @@ function validInput(command, input, creatorVersion) {
         && /^[0-9a-f]{64}$/.test(input.sha256 || '');
     if (command === 'asset.validatePng' || command === 'asset.refreshPng') return creatorVersion === '2.4.15' && keys.length === 2
         && /^[0-9a-f-]{36}$/i.test(input.pipelineId || '') && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/i.test(input.assetName || '');
+    if (command === 'asset.refreshFolder') return keys.length === 1 && validAssetFolderPath(input.folderPath);
     if (command === 'scene.node.create') return keys.every((key) => ['parentPath', 'parentUuid', 'nodeName', 'action', 'sourceOperationId', 'operationId',
         ...(creatorVersion === '2.4.15' ? ['components', 'transform'] : [])].includes(key))
         && (creatorVersion === '2.4.15' || (input.components === undefined && input.transform === undefined))
@@ -109,10 +130,14 @@ function dispatchCommand(request, invoke) {
     }
     if (command === 'asset.searchPng' && creatorVersion !== '2.4.15')
         return problem('COMMAND_UNAVAILABLE', 'PNG asset search is currently supported only by Creator 2.4.15.');
+    if (command === 'asset.refreshFolder' && creatorVersion !== '2.4.15')
+        return problem('COMMAND_UNAVAILABLE', 'Asset folder refresh is currently supported only by Creator 2.4.15.');
     if (!validInput(command, input, creatorVersion)) return problem('INVALID_ARGUMENT', 'Provide valid input for the selected command and Creator version.');
     const project = path.resolve(projectRoot);
     if (['asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng'].includes(command) && creatorVersion !== '2.4.15')
         return problem('COMMAND_UNAVAILABLE', 'Pipeline-owned PNG validation, refresh, and removal are currently supported only by Creator 2.4.15.');
+    if (command === 'asset.refreshFolder' && !existingAssetFolder(project, input.folderPath))
+        return problem('ASSET_FOLDER_UNAVAILABLE', 'The selected folder must already exist under the project assets directory and contain no symlink path components.');
     const targetArgs = targets.flatMap((target) => ['--target', `${target.creatorVersion}=${path.resolve(target.projectRoot)}`]);
     const listed = parseJson(invoke('catalog-host.js', [...targetArgs, '--query', 'instances.list']));
     if (!listed || listed.success !== true || !Array.isArray(listed.data)) {
@@ -138,13 +163,14 @@ function dispatchCommand(request, invoke) {
         return problem('COMMAND_UNAVAILABLE', 'Command is not currently available.', { reason: capability && capability.reason || null });
     }
     const executionArgs = ['--project', project, '--creator-version', creatorVersion, '--expected-instance-id', selected.instanceId];
-    if (selected.activeScene && command !== 'asset.searchPng') executionArgs.push('--expected-scene', selected.activeScene);
+    if (selected.activeScene && !['asset.searchPng', 'asset.refreshFolder'].includes(command)) executionArgs.push('--expected-scene', selected.activeScene);
     let operationId = null;
     if (command === 'asset.importPng') executionArgs.push('--png', path.resolve(input.sourcePath));
     if (command === 'asset.removeImportedPng') executionArgs.push('--asset-remove', input.assetName,
         '--texture-uuid', input.textureUuid, '--sprite-frame-uuid', input.spriteFrameUuid, '--source-sha256', input.sha256);
     if (command === 'asset.validatePng') executionArgs.push('--asset-validate', input.assetName, '--asset-pipeline-id', input.pipelineId);
     if (command === 'asset.refreshPng') executionArgs.push('--asset-refresh', input.assetName, '--asset-pipeline-id', input.pipelineId);
+    if (command === 'asset.refreshFolder') executionArgs.push('--asset-refresh-folder', input.folderPath);
     if (command === 'scene.node.inspect') executionArgs.push('--node-path', input.nodePath);
     if (command === 'asset.searchPng') executionArgs.push('--asset-search-png', input.query,
         '--asset-search-limit', String(input.limit === undefined ? 20 : input.limit),

@@ -9,6 +9,8 @@ description: Stage, build, preview, recover, and roll back local PNG Asset Bundl
 
 先调用 `content.bundle.plan`；确认 Bundle 文件夹 `.meta`、Bundle 名、PNG 字节摘要、Texture UUID 和唯一 SpriteFrame UUID 均符合预期。只有用户目标 Bundle 名尚未被另一 release 占用且计划结果明确时，再调用 `content.bundle.stage`。该步骤只保存不可变清单，不隐式选择或构建。
 
+若资源或 `.fire` 文件是通过文件系统新生成到项目 `assets/` 下，先查询 `asset.refreshFolder` 能力，并只对目标目录执行一次 `asset.refreshFolder`（`folderPath` 相对 `assets/`）。检查变更回执，再读回 `.meta`、AssetDB UUID 和构建输出；该命令会触发 Creator 导入，不代表构建或运行时验收已经通过。它当前仅 2.4.15 可用。
+
 选择 release 前先读取当前指针并传入 `expectedCurrent`。继续用新的 `buildId` 执行 `content.build.plan` 和 `content.build.execute`；只有 `content.build.get` 为 `completed` 且包校验为 `verified` 才能开始预览。包检查应匹配 Bundle config、两类 UUID、SpriteFrame 对 Texture 的 import 依赖和 PNG native 文件。
 
 调用 `content.preview.start` 后，在本机浏览器打开 URL，再用 `content.preview.get` 分别查看 `buildReleaseId`、当前 `selectedReleaseId`、最近运行时的 `effectiveReleaseId` 和最后回执。需看到 `runtime-observed`，并检查实际画面。`retained`/`needs-review` 代表候选加载失败，当前帧与旧 effective 保留；不要自动重试。修复问题后显式选择另一个 release，再选择目标 release，确认新的 applied 回执后再继续。需要恢复时调用 `content.rollback`，随后等待运行时旧 release 的应用回执，并核对 selected/effective 一致。

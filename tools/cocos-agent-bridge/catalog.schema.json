@@ -54,6 +54,15 @@
         "assetName": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$" }
       }
     },
+    "assetFolderRefreshInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["folderPath"],
+      "properties": {
+        "folderPath": { "type": "string", "minLength": 1, "maxLength": 240,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*(?:/[A-Za-z0-9][A-Za-z0-9_.-]*){0,7}$" }
+      }
+    },
     "pngSpriteInput": {
       "type": "object",
       "additionalProperties": false,
@@ -125,7 +134,7 @@
       "additionalProperties": false,
       "required": ["id", "contractVersion", "access", "inputSchema", "input", "preconditions", "status", "reason"],
       "properties": {
-        "id": { "enum": ["scene.snapshot", "scene.node.inspect", "asset.searchPng", "asset.importPng", "asset.removeImportedPng", "asset.validatePng", "asset.refreshPng", "scene.pngSprite", "scene.node.create"] },
+        "id": { "enum": ["scene.snapshot", "scene.node.inspect", "asset.searchPng", "asset.importPng", "asset.removeImportedPng", "asset.validatePng", "asset.refreshPng", "asset.refreshFolder", "scene.pngSprite", "scene.node.create"] },
         "contractVersion": { "const": "0.1" },
         "access": { "enum": ["read", "write"] },
         "inputSchema": { "type": "string" },

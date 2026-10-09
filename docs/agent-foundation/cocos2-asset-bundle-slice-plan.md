@@ -64,6 +64,10 @@ Creator 2.4 官方[释放 Asset Bundle 手册](https://docs.cocos.com/creator/2.
 
 以上是**源码结论，不是运行证据**。Creator AssetDB 尚未读入新增场景，首轮 GUI 构建没有包含它们；共享实例、引用计数和卸载顺序未验收。双场景夹具及待运行探针在 `assets/CocosAgentBundleSmoke/BundleSharedA.fire`、`assets/CocosAgentBundleSidecar/BundleSharedB.fire`、`probes/cocos-bundle-shared-dependency-2.4.mjs`。
 
+为消除新生成目录必须手动点选导入的步骤，2.4 扩展/Host/MCP 已加入 `asset.refreshFolder`：它只接受已存在的 `assets/` 相对目录，拒绝 traversal 和路径中的符号链接，调用官方 `Editor.assetdb.refresh`，并将结果限制为最多 16 条不含绝对路径的变更记录。Schema、MCP 路由、目录合同和 Host WebSocket 协议模拟测试通过；Creator 仍需重载扩展才能公布新能力。锁屏会话当前仍是旧目录，因此这不是 AssetDB 实机证据。
+
+**下一步：** 在 Creator 2.4.15 解锁并重载扩展后，查询 `asset.refreshFolder` 能力，分别刷新 `CocosAgentBundleSmoke` 与 `CocosAgentBundleSidecar`；读回两个场景 UUID 和构建 Bundle config 的 `deps/redirect`。只有这些资源被 Creator 正式导入且构建包含两个场景后，再运行共享 SpriteFrame/Texture 的双场景加载、`releaseAll` 和切场景探针。
+
 ## 暂缓事项
 
 首轮不制作通用跨资源类型 AssetDB 导入器，不写 Editor 私有 IPC，不覆盖脚本分包和场景分包，不宣称热更新/CDN/线上发布，不改 2.x 引擎源码，也不补 3.8。外置远程 Bundle、`version` hash 更新、下载缓存与 JSB 用户目录加载属于后续独立切片；本地 Bundle 已验收，不代表这些分发路径已具备。

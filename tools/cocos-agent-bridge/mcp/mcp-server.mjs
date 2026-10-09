@@ -15,7 +15,7 @@ const COCOS_2X_SKILL_URI = 'cocos://2x/agent/mcp-tools';
 const COCOS_2X_SKILL_PATH = path.join(REPOSITORY_ROOT, 'docs/agent-foundation/skills/cocos2-mcp-tools/SKILL.md');
 const COMMANDS_2X = [
     'scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng',
-    'asset.validatePng', 'asset.refreshPng', 'scene.pngSprite', 'scene.node.create',
+    'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.pngSprite', 'scene.node.create',
 ];
 const CONTENT_BUILD_ID = z.string().regex(/^[a-z0-9][a-z0-9-]{2,31}$/);
 const RELEASE_ID = z.string().regex(/^(?!(selected|effective)$)[a-z0-9][a-z0-9._-]{0,63}$/);
@@ -23,6 +23,7 @@ const SHA256 = z.string().regex(/^[a-f0-9]{64}$/);
 const UUID = z.string().regex(/^[0-9a-fA-F-]{36}$/);
 const OPERATION_ID = z.string().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/);
 const RESOURCE_NAME = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/);
+const ASSET_FOLDER_PATH = z.string().min(1).max(240).regex(/^[A-Za-z0-9][A-Za-z0-9_.-]*(?:\/[A-Za-z0-9][A-Za-z0-9_.-]*){0,7}$/);
 const SERVER_VERSION = '0.1.0';
 
 function positionSchema() {
@@ -43,6 +44,7 @@ function commandInputSchema(projectRoot) {
             spriteFrameUuid: UUID, sha256: SHA256 }).strict(),
         'asset.validatePng': z.object({ pipelineId: UUID, assetName: RESOURCE_NAME }).strict(),
         'asset.refreshPng': z.object({ pipelineId: UUID, assetName: RESOURCE_NAME }).strict(),
+        'asset.refreshFolder': z.object({ folderPath: ASSET_FOLDER_PATH }).strict(),
         'scene.pngSprite': z.object({ assetName: RESOURCE_NAME, action: z.enum(['apply', 'compensate', 'replay']),
             operationId: UUID.optional(), position: positionSchema().optional() }).strict(),
         'scene.node.create': z.object({

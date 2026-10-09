@@ -67,7 +67,7 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         assert.equal(commandTool.annotations.readOnlyHint, false);
         assert.equal(commandTool.annotations.destructiveHint, true);
         const commandBranches = commandTool.inputSchema.oneOf || commandTool.inputSchema.anyOf;
-        assert.equal(commandBranches.length, 9);
+        assert.equal(commandBranches.length, 10);
         const inspectBranch = commandBranches.find((branch) => branch.properties?.command?.const === 'scene.node.inspect');
         assert.deepEqual(inspectBranch.properties.input.required, ['nodePath']);
         const searchBranch = commandBranches.find((branch) => branch.properties?.command?.const === 'asset.searchPng');
@@ -114,6 +114,17 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
             projectRoot: value.projects[0], command: 'asset.searchPng', input: { query: '' },
         } });
         assert.equal(invalidSearch.isError, true);
+
+        const refreshedFolder = await client.callTool({ name: 'cocos_2x_command_execute', arguments: {
+            projectRoot: value.projects[0], command: 'asset.refreshFolder', input: { folderPath: 'CocosAgentBundleSmoke' },
+        } });
+        assert.equal(refreshedFolder.structuredContent.method, 'command.execute');
+        assert.equal(calls.at(-1).params.command, 'asset.refreshFolder');
+        assert.deepEqual(calls.at(-1).params.input, { folderPath: 'CocosAgentBundleSmoke' });
+        const invalidFolder = await client.callTool({ name: 'cocos_2x_command_execute', arguments: {
+            projectRoot: value.projects[0], command: 'asset.refreshFolder', input: { folderPath: '../outside' },
+        } });
+        assert.equal(invalidFolder.isError, true);
 
         const executed = await client.callTool({ name: 'cocos_2x_command_execute', arguments: {
             projectRoot: value.projects[0], command: 'scene.snapshot', input: {},
@@ -265,7 +276,7 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
             projectRoot: value.projects[0], command: 'scene.node.inspect', input: {},
         } });
         assert.equal(invalidCommandInput.isError, true);
-        assert.equal(calls.filter((call) => call.method === 'command.execute').length, 2);
+        assert.equal(calls.filter((call) => call.method === 'command.execute').length, 3);
     } finally {
         await client.close();
         await server.close();

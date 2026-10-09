@@ -137,7 +137,7 @@ function unavailable(target, code) {
 }
 
 function validCatalog(target, result) {
-    const expectedCommandCount = target.creatorVersion === '2.4.15' ? 9 : 5;
+    const expectedCommandCount = target.creatorVersion === '2.4.15' ? 10 : 5;
     if (!Array.isArray(result.commands) || result.commands.length !== expectedCommandCount
         || !(result.activeScene === null || typeof result.activeScene === 'string')
         || !/^[0-9a-f]{64}$/.test(result.catalogRevision || '')) return false;
@@ -154,7 +154,9 @@ function validCatalog(target, result) {
             inputSchema: 'catalog.schema.json#/$defs/pipelinePngInput', input: catalogSchema.$defs.pipelinePngInput,
             preconditions: ['pipelineOwnedAsset', 'importedMetadata'] },
         'asset.refreshPng': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/pipelinePngInput',
-            input: catalogSchema.$defs.pipelinePngInput, preconditions: ['pipelineOwnedAsset', 'assetDbMappingStale', 'stableUuid'] } } : {}),
+            input: catalogSchema.$defs.pipelinePngInput, preconditions: ['pipelineOwnedAsset', 'assetDbMappingStale', 'stableUuid'] },
+        'asset.refreshFolder': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/assetFolderRefreshInput',
+            input: catalogSchema.$defs.assetFolderRefreshInput, preconditions: ['folderUnderAssets', 'assetDbRefreshAvailable'] } } : {}),
         'scene.pngSprite': { access: 'write', inputSchema: target.creatorVersion === '2.4.15'
             ? 'catalog.schema.json#/$defs/pngSpriteInput2x' : 'catalog.schema.json#/$defs/pngSpriteInput',
             input: target.creatorVersion === '2.4.15' ? catalogSchema.$defs.pngSpriteInput2x : catalogSchema.$defs.pngSpriteInput,
@@ -175,6 +177,7 @@ function validCatalog(target, result) {
             || !['available', 'unavailable'].includes(command.status)
             || (command.status === 'available' ? command.reason !== null : typeof command.reason !== 'string')) return false;
         if (command.id === 'asset.searchPng' && (command.status === 'unavailable' ? command.reason !== 'ASSETDB_UNAVAILABLE' : command.reason !== null)) return false;
+        if (command.id === 'asset.refreshFolder' && (command.status === 'unavailable' ? command.reason !== 'ASSETDB_REFRESH_UNAVAILABLE' : command.reason !== null)) return false;
         seen.add(command.id);
     }
     const commands = Object.fromEntries(result.commands.map((command) => [command.id, command]));

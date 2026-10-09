@@ -42,6 +42,9 @@ const COMMAND_INPUTS = {
     validatePng: { type: 'object', additionalProperties: false, required: ['pipelineId', 'assetName'],
         properties: { pipelineId: { type: 'string', format: 'uuid' },
             assetName: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$' } } },
+    refreshFolder: { type: 'object', additionalProperties: false, required: ['folderPath'],
+        properties: { folderPath: { type: 'string', minLength: 1, maxLength: 240,
+            pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]*(?:/[A-Za-z0-9][A-Za-z0-9_.-]*){0,7}$' } } },
     refreshPng: { type: 'object', additionalProperties: false, required: ['pipelineId', 'assetName'],
         properties: { pipelineId: { type: 'string', format: 'uuid' },
             assetName: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$' } } },
@@ -98,6 +101,11 @@ function commandCatalog(context) {
         { id: 'asset.refreshPng', contractVersion: '0.1', access: 'write',
             inputSchema: 'catalog.schema.json#/$defs/pipelinePngInput', input: COMMAND_INPUTS.refreshPng,
             preconditions: ['pipelineOwnedAsset', 'assetDbMappingStale', 'stableUuid'], status: 'available', reason: null },
+        { id: 'asset.refreshFolder', contractVersion: '0.1', access: 'write',
+            inputSchema: 'catalog.schema.json#/$defs/assetFolderRefreshInput', input: COMMAND_INPUTS.refreshFolder,
+            preconditions: ['folderUnderAssets', 'assetDbRefreshAvailable'],
+            status: context.assetFolderRefreshReady === true ? 'available' : 'unavailable',
+            reason: context.assetFolderRefreshReady === true ? null : 'ASSETDB_REFRESH_UNAVAILABLE' },
         { id: 'scene.pngSprite', contractVersion: '0.1', access: 'write',
             inputSchema: 'catalog.schema.json#/$defs/pngSpriteInput2x', input: COMMAND_INPUTS.pngSprite, preconditions: ['activeScene', 'canvasExisting', 'spriteFrameImported'],
             status: spriteReady ? 'available' : 'unavailable', reason: spriteReady ? null : sceneReady ? 'CANVAS_NOT_FOUND' : 'NO_OPEN_SCENE' },
@@ -127,7 +135,8 @@ function onMessage(raw) {
     if (message.method === 'capabilities.list') {
         Editor.Scene.callSceneScript('cocos-agent-bridge', 'catalog-context', {}, (error, context) => {
             const sceneContext = error || !context ? { sceneName: null, hasCanvas: false } : context;
-            const commands = commandCatalog({ ...sceneContext, assetDbReady: !!(Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function') });
+            const commands = commandCatalog({ ...sceneContext, assetDbReady: !!(Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
+                assetFolderRefreshReady: !!(Editor.assetdb && typeof Editor.assetdb.refresh === 'function') });
             send({ type: 'response', id: message.id, ok: true, result: {
                 nonce: message.params && message.params.nonce, instanceId: INSTANCE_ID,
                 projectRoot: PROJECT_ROOT, creatorVersion: CREATOR_VERSION,
@@ -178,6 +187,10 @@ function onMessage(raw) {
     }
     if (message.method === 'asset.refreshPng') {
         validateOwnedPng(message, true);
+        return;
+    }
+    if (message.method === 'asset.refreshFolder') {
+        refreshAssetFolder(message);
         return;
     }
     if (message.method === 'scene.snapshot') {
@@ -585,6 +598,69 @@ function validateOwnedPng(message, refresh) {
     });
 }
 
+function refreshAssetFolder(message) {
+    const params = message.params || {};
+    const request = activeSession && activeSession.assetFolderRefresh;
+    if (!request || params.sessionId !== activeSession.sessionId || params.nonce !== request.nonce
+        || params.folderPath !== request.folderPath) {
+        send({ type: 'response', id: message.id, ok: false, error: { code: 'INVALID_ASSET_FOLDER_REFRESH_SESSION' } });
+        return;
+    }
+    const segments = request.folderPath.split('/');
+    if (!segments.length || segments.length > 8 || segments.some((part) => !/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(part) || part === '.' || part === '..')) {
+        send({ type: 'response', id: message.id, ok: false, error: { code: 'INVALID_ASSET_FOLDER_PATH' } });
+        return;
+    }
+    let currentPath = path.join(PROJECT_ROOT, 'assets');
+    try {
+        const rootStat = fs.lstatSync(currentPath);
+        if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) throw new Error('assets root is not a regular directory');
+        for (const segment of segments) {
+            currentPath = path.join(currentPath, segment);
+            const stat = fs.lstatSync(currentPath);
+            if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('target path contains a non-directory or symbolic link');
+        }
+    } catch (_) {
+        send({ type: 'response', id: message.id, ok: false, error: { code: 'ASSET_FOLDER_UNAVAILABLE' } });
+        return;
+    }
+    const url = `db://assets/${request.folderPath}/`;
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:@[0-9a-f]+)?$/i;
+    Editor.assetdb.refresh(url, (error, results) => {
+        if (error) {
+            send({ type: 'response', id: message.id, ok: false,
+                error: { code: 'ASSETDB_REFRESH_FAILED', message: String(error.message || error).slice(0, 400) } });
+            return;
+        }
+        if (!Array.isArray(results) || results.length > 20000) {
+            send({ type: 'response', id: message.id, ok: false, error: { code: 'ASSETDB_REFRESH_RESULT_INVALID' } });
+            return;
+        }
+        const sanitized = [];
+        for (const row of results.slice(0, 16)) {
+            const rootUrl = `db://assets/${request.folderPath}`;
+            const rowUrlValid = row && typeof row.url === 'string'
+                && (row.url === rootUrl || row.url === `${rootUrl}/` || row.url.startsWith(`${rootUrl}/`))
+                && row.url.length <= 512 && !/[\\\u0000-\u001f\u007f?#]/.test(row.url)
+                && row.url.slice('db://assets/'.length).replace(/\/$/, '').split('/').every((part) => part && part !== '.' && part !== '..');
+            if (!row || !['create', 'change', 'delete', 'uuid-change'].includes(row.command)
+                || !uuidPattern.test(row.uuid || '') || typeof row.url !== 'string' || row.url.length > 512
+                || !rowUrlValid || typeof row.type !== 'string' || !/^[A-Za-z0-9._-]{1,96}$/.test(row.type)
+                || (row.command === 'uuid-change' && !uuidPattern.test(row.oldUuid || ''))) {
+                send({ type: 'response', id: message.id, ok: false, error: { code: 'ASSETDB_REFRESH_RESULT_INVALID' } });
+                return;
+            }
+            sanitized.push({ command: row.command, uuid: row.uuid, ...(row.command === 'uuid-change' ? { oldUuid: row.oldUuid } : {}), url: row.url, type: row.type });
+        }
+        send({ type: 'response', id: message.id, ok: true, result: {
+            nonce: params.nonce, sessionId: activeSession.sessionId, creatorVersion: CREATOR_VERSION,
+            projectRoot: PROJECT_ROOT, folderPath: request.folderPath, url,
+            refreshed: true, resultCount: results.length, truncated: results.length > sanitized.length,
+            results: sanitized,
+        } });
+    });
+}
+
 function connectFromSession() {
     if (connecting || (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING))) return;
     let session;
@@ -619,7 +695,7 @@ function connectFromSession() {
             projectRoot: PROJECT_ROOT,
             extension: 'cocos-agent-bridge',
             instanceId: INSTANCE_ID,
-            capabilities: ['bridge.ping', 'scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'scene.preflightPngSprite', 'scene.placePngSprite', 'scene.removePngSprite', 'scene.node.create.preflight', 'scene.node.create'],
+            capabilities: ['bridge.ping', 'scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.preflightPngSprite', 'scene.placePngSprite', 'scene.removePngSprite', 'scene.node.create.preflight', 'scene.node.create'],
             operationContract: { id: 'scene.pngSprite', contractVersion: '0.1', creatorVersion: CREATOR_VERSION, access: 'scene-write', actions: ['apply', 'compensate', 'replay'], previewVerification: 'manual-web', compensation: 'identity-checked-node-removal', positionSpace: 'canvas-local-design-pixels' },
             assetRemovalContract: { id: 'asset.removeImportedPng', contractVersion: '0.1', creatorVersion: CREATOR_VERSION,
                 access: 'write', implementation: 'Editor.assetdb.delete', verify: 'matching-texture-uuid-and-deleted-result' },
@@ -627,6 +703,8 @@ function connectFromSession() {
                 refreshImplementation: 'Editor.assetdb.refresh', refreshRequires: 'matching-pipeline-owned-file-meta-and-scene-reference' },
             assetSearchContract: { id: 'asset.searchPng', contractVersion: '0.1', creatorVersion: CREATOR_VERSION,
                 access: 'read', implementation: 'Editor.assetdb.queryAssets', maximumPageSize: 50 },
+            assetFolderRefreshContract: { id: 'asset.refreshFolder', contractVersion: '0.1', creatorVersion: CREATOR_VERSION,
+                access: 'write', implementation: 'Editor.assetdb.refresh', target: 'db://assets/<relative-folder>/' },
         }));
         console.log(`[COCOS_AGENT_BRIDGE_2] connected to local Agent session ${session.sessionId}`);
     });

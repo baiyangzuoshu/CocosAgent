@@ -59,6 +59,8 @@ Resource 只读取固定仓库 skill 文件，不接受任意文件路径。Prom
 
 2.4 能力目录还提供只读 `asset.searchPng` 命令：输入 PNG 名称或路径片段，返回分页 AssetDB 结果、项目相对 URL、Texture UUID、经 `.meta` 核对的 SpriteFrame UUID、尺寸和 `metadataStatus`。它不依赖活动场景，也不写资源或场景；后续 Sprite 操作只应使用 `metadataStatus: valid` 的 `spriteFrameUuid`。查询依据 Creator 2.4 的 [`Editor.assetdb.queryAssets`](https://docs.cocos.com/creator/2.4/manual/zh/extension/api/asset-db/asset-db-renderer.html) API，3.8 目录不暴露此命令。
 
+2.4 命令目录另提供 `asset.refreshFolder`：对已经存在的项目 `assets/` 相对目录调用官方 [`Editor.assetdb.refresh`](https://docs.cocos.com/creator/2.4/manual/zh/extension/api/asset-db/asset-db-renderer.html) API。Host 和扩展会拒绝路径穿越及符号链接，回执不含绝对文件路径。MCP schema、调度器、能力合同和 Host 协议模拟均已覆盖；Creator 扩展热重载后的真实 AssetDB 刷新仍待验收。
+
 资源到场景的建议顺序为 `assets_scene_plan → assets_scene_execute → assets_scene_get/validate → 浏览器逐项检查 → assets_scene_preview_accept → assets_scene_get`。如果结果不满足预期，调用 `assets_scene_compensate`；它会先恢复场景引用，再经 AssetDB 清理由该流水线导入且确认无引用的资源。`assets_scene_repair` 只用于验证返回 `repairable` 的陈旧 AssetDB 映射。完成视觉验收后，调用 `content_from_scene_plan`，明确检查 release ID、入口资源、稳定 asset ID、依赖关系、派生 UUID 和 fingerprint，再调用 `content_from_scene_stage`。随后通过 `content_select` 并携带 `expectedCurrent` 选择版本；此步骤只改 Host 指针。要将内容交给 Web 包，继续按 `content_build_plan/execute` 构建，再用 `content_preview_start/get/stop` 检查运行时回执；若需恢复之前版本，使用 `content_rollback` 并检查运行时回执。工具使用 2.4.15 Host 的既有合同；详细前置条件见[资源到场景合同](cocos-agent-resource-scene-pipeline-0.1.md)、[内容 release 合同](content-release-0.1.md)、[Web-Mobile 构建合同](content-build-web-0.1.md)和[本机预览合同](content-preview-web-0.1.md)。
 
 `cocos_2x_operation_preview_accept` 只接受 loopback HTTP URL。preview 阶段仍待验收时，它创建视觉回执；自动运行态检查已通过时，它会把视觉观察作为额外证据追加到现有 preview 回执，不覆盖原有 runtime 状态证据。相同视觉证据重复提交幂等；每个回执最多保留 8 条证据。

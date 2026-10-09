@@ -245,4 +245,41 @@ assert.equal(dispatch({ ...validateRequest, creatorVersion: '3.8.7',
     targets: [{ creatorVersion: '3.8.7', projectRoot: validationProject }] }, validationInvoke).error.code, 'INVALID_ARGUMENT');
 assert.equal(validationCalls.length, 3, '2.4 validation and refresh are unavailable to 3.8 before instance discovery');
 
+const folderProject = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-agent-folder-refresh-'));
+const folderPath = 'CocosAgentBundleSmoke';
+fs.mkdirSync(path.join(folderProject, 'assets', folderPath), { recursive: true });
+const folderInstance = { ...removalInstance, projectRoot: folderProject, activeScene: null };
+const folderCalls = [];
+const folderInvoke = (script, args) => {
+    folderCalls.push({ script, args });
+    if (script === 'catalog-host.js' && args.includes('instances.list'))
+        return { status: 0, stdout: JSON.stringify({ success: true, data: [folderInstance] }) };
+    if (script === 'catalog-host.js') return { status: 0, stdout: JSON.stringify({ success: true, data: {
+        instance: folderInstance, commands: [{ id: 'asset.refreshFolder', contractVersion: '0.1', access: 'write', status: 'available', reason: null }],
+    } }) };
+    return { status: 0, stdout: `command.result ${JSON.stringify({ command: 'asset.refreshFolder', result: {
+        folderPath, url: `db://assets/${folderPath}/`, refreshed: true, resultCount: 1, truncated: false,
+        results: [{ command: 'create', uuid: 'b3864af7-bb13-40c9-8f73-3ef22bd8e307', url: `db://assets/${folderPath}/BundleSharedA`, type: 'scene' }],
+    } })}\n`, stderr: '' };
+};
+const folderRequest = { targets: [{ creatorVersion: '2.4.15', projectRoot: folderProject }], projectRoot: folderProject,
+    creatorVersion: '2.4.15', command: 'asset.refreshFolder', input: { folderPath } };
+try {
+    const folderResult = dispatch(folderRequest, folderInvoke);
+    assert.equal(folderResult.outcome, 'completed');
+    assert.equal(folderResult.result.results[0].type, 'scene');
+    assert.deepEqual(folderCalls[2].args.slice(-2), ['--asset-refresh-folder', folderPath]);
+    const beforeInvalidFolder = folderCalls.length;
+    assert.equal(dispatch({ ...folderRequest, input: { folderPath: '../outside' } }, folderInvoke).error.code, 'INVALID_ARGUMENT');
+    assert.equal(folderCalls.length, beforeInvalidFolder, 'path traversal is rejected before target discovery');
+    assert.equal(dispatch({ ...folderRequest, input: { folderPath: 'MissingFolder' } }, folderInvoke).error.code, 'ASSET_FOLDER_UNAVAILABLE');
+    assert.equal(folderCalls.length, beforeInvalidFolder, 'missing target folder is rejected before editor discovery');
+    fs.symlinkSync(path.join(folderProject, 'assets', folderPath), path.join(folderProject, 'assets', 'LinkedFolder'));
+    assert.equal(dispatch({ ...folderRequest, input: { folderPath: 'LinkedFolder' } }, folderInvoke).error.code, 'ASSET_FOLDER_UNAVAILABLE');
+    assert.equal(folderCalls.length, beforeInvalidFolder, 'symlink target is rejected before editor discovery');
+    assert.equal(dispatch({ ...folderRequest, creatorVersion: '3.8.7',
+        targets: [{ creatorVersion: '3.8.7', projectRoot: folderProject }] }, folderInvoke).error.code, 'COMMAND_UNAVAILABLE');
+    assert.equal(folderCalls.length, beforeInvalidFolder, 'folder refresh remains 2.4-only');
+} finally { fs.rmSync(folderProject, { recursive: true, force: true }); }
+
 process.stdout.write('agent dispatch selection, guards, and receipt decisions passed\n');
