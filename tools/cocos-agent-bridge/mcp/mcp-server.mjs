@@ -13,6 +13,8 @@ const CREATOR_VERSION = '2.4.15';
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const COCOS_2X_SKILL_URI = 'cocos://2x/agent/mcp-tools';
 const COCOS_2X_SKILL_PATH = path.join(REPOSITORY_ROOT, 'docs/agent-foundation/skills/cocos2-mcp-tools/SKILL.md');
+const COCOS_2X_COMPOSITION_SKILL_URI = 'cocos://2x/skills/scene-composition';
+const COCOS_2X_COMPOSITION_SKILL_PATH = path.join(REPOSITORY_ROOT, 'plugins/cocos-agent-2x/skills/cocos2-scene-composition/SKILL.md');
 const COMMANDS_2X = [
     'scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng',
     'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.pngSprite', 'scene.node.create',
@@ -141,6 +143,12 @@ function createServer(projectRoots, options = {}) {
         description: 'Version-specific instructions for selecting Creator 2.4.15, executing semantic tools, recovering writes, and validating resources and content.',
         mimeType: 'text/markdown',
     }, async (uri) => ({ contents: [{ uri: uri.href, mimeType: 'text/markdown', text: fs.readFileSync(COCOS_2X_SKILL_PATH, 'utf8') }] }));
+
+    server.registerResource('cocos2-scene-composition-skill', COCOS_2X_COMPOSITION_SKILL_URI, {
+        title: 'CocosAgent Creator 2.4 scene composition skill',
+        description: 'Version-specific instructions for composing multiple nodes and components with the durable workflow tools.',
+        mimeType: 'text/markdown',
+    }, async (uri) => ({ contents: [{ uri: uri.href, mimeType: 'text/markdown', text: fs.readFileSync(COCOS_2X_COMPOSITION_SKILL_PATH, 'utf8') }] }));
 
     server.registerPrompt('cocos_2x_resource_to_scene_workflow', {
         title: 'Find or import PNGs into a Creator 2.4 scene',
@@ -300,6 +308,55 @@ function createServer(projectRoots, options = {}) {
         commandInputSchema(projectRoot), 'command.execute', ({ projectRoot: selected, command, input }) => ({
             targets: targetList, projectRoot: selected, creatorVersion: CREATOR_VERSION, command, input,
         }), { title: 'Execute a Creator 2.4.15 command', readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
+
+    const workflowId = OPERATION_ID;
+    const stepId = z.string().regex(/^[a-z][a-z0-9_-]{0,31}$/);
+    const nodeName = z.string().regex(/^[A-Za-z0-9_ -]{1,64}$/);
+    const workflowParent = z.union([
+        z.object({ path: z.string().min(1).max(170).refine((value) => !value.includes('//') && !value.includes(String.fromCharCode(92))), uuid: z.string().min(1).max(64) }).strict(),
+        z.object({ ref: stepId }).strict(),
+    ]);
+    const workflowComponent = z.union([
+        z.object({ classId: z.literal('cc.Sprite'), spriteFrameUuid: UUID }).strict(),
+        z.object({ classId: z.literal('cc.Label'), text: z.string().max(256) }).strict(),
+    ]);
+    const workflowStep = z.object({
+        id: stepId,
+        name: nodeName,
+        parent: workflowParent,
+        components: z.array(workflowComponent).max(1).optional(),
+        transform: z.object({ position: positionSchema().optional(), scale: positionSchema().optional() }).strict().optional(),
+    }).strict();
+    const workflowSteps = z.array(workflowStep).min(2).max(8);
+    function workflowParams(selected, params = {}) {
+        return { targets: targetList, projectRoot: selected, creatorVersion: CREATOR_VERSION, ...params };
+    }
+    register('cocos_2x_workflow_plan',
+        'Read-only preflight for a durable Creator 2.4.15 multi-step scene composition. Checks the exact editor instance, active scene, existing parent path/UUID, and target names; accepts 2–8 ordered steps.',
+        z.object({ projectRoot, steps: workflowSteps }).strict(), 'workflow.plan',
+        ({ projectRoot: selected, ...params }) => workflowParams(selected, params),
+        { title: 'Plan a Creator 2.4 scene composition', readOnlyHint: true, destructiveHint: false, openWorldHint: false });
+    register('cocos_2x_workflow_execute',
+        'Execute a planned Creator 2.4.15 multi-step scene composition with durable per-step operation receipts, editor instance checks, serialized-scene readback, and rollback on a definite partial failure. This writes the active scene; use a new workflowId for a new write.',
+        z.object({ projectRoot, workflowId, steps: workflowSteps }).strict(), 'workflow.execute',
+        ({ projectRoot: selected, ...params }) => workflowParams(selected, params),
+        { title: 'Execute a Creator 2.4 scene composition', readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
+    const workflowReceiptInput = z.object({ projectRoot, workflowId }).strict();
+    register('cocos_2x_workflow_get',
+        'Read one durable Creator 2.4.15 scene composition receipt by workflowId.',
+        workflowReceiptInput, 'workflow.get', ({ projectRoot: selected, workflowId: selectedWorkflow }) => workflowParams(selected,
+            { workflowId: selectedWorkflow }),
+        { title: 'Read a Creator 2.4 scene composition receipt', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+    register('cocos_2x_workflow_compensate',
+        'Reverse a fully resolved Creator 2.4.15 scene composition in reverse order. Uncertain steps remain needs-review and are not blindly removed.',
+        workflowReceiptInput, 'workflow.compensate', ({ projectRoot: selected, workflowId: selectedWorkflow }) => workflowParams(selected,
+            { workflowId: selectedWorkflow }),
+        { title: 'Compensate a Creator 2.4 scene composition', readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
+    register('cocos_2x_workflow_replay',
+        'Replay a fully compensated Creator 2.4.15 scene composition with a new workflowId and new per-step operation IDs. The replay is a fresh scene write.',
+        z.object({ projectRoot, sourceWorkflowId: workflowId, workflowId }).strict(), 'workflow.replay',
+        ({ projectRoot: selected, ...params }) => workflowParams(selected, params),
+        { title: 'Replay a Creator 2.4 scene composition', readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
 
     const operationInput = z.object({ projectRoot, operationId: OPERATION_ID }).strict();
     register('cocos_2x_operation_get',

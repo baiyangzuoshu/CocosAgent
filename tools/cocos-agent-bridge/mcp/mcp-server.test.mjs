@@ -63,9 +63,10 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
             'cocos_2x_content_rollback', 'cocos_2x_content_select',
             'cocos_2x_instances_get', 'cocos_2x_instances_list', 'cocos_2x_operation_get',
             'cocos_2x_operation_preview_accept', 'cocos_2x_operation_reconcile',
-            'cocos_2x_scene_node_inspect', 'cocos_2x_scene_snapshot',
+            'cocos_2x_scene_node_inspect', 'cocos_2x_scene_snapshot', 'cocos_2x_workflow_compensate',
+            'cocos_2x_workflow_execute', 'cocos_2x_workflow_get', 'cocos_2x_workflow_plan', 'cocos_2x_workflow_replay',
         ]);
-        assert.equal(tools.length, 33);
+        assert.equal(tools.length, 38);
         const commandTool = tools.find((tool) => tool.name === 'cocos_2x_command_execute');
         assert.equal(commandTool.annotations.readOnlyHint, false);
         assert.equal(commandTool.annotations.destructiveHint, true);
@@ -84,10 +85,13 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         }
 
         const { resources } = await client.listResources();
-        assert.deepEqual(resources.map((resource) => resource.uri), ['cocos://2x/agent/mcp-tools']);
-        const skill = await client.readResource({ uri: resources[0].uri });
+        assert.deepEqual(resources.map((resource) => resource.uri), ['cocos://2x/agent/mcp-tools', 'cocos://2x/skills/scene-composition']);
+        const skill = await client.readResource({ uri: 'cocos://2x/agent/mcp-tools' });
         assert.match(skill.contents[0].text, /Creator \*\*2\.4\.15\*\*/);
         assert.match(skill.contents[0].text, /Do not repeat a possibly completed write/);
+        const compositionSkill = await client.readResource({ uri: 'cocos://2x/skills/scene-composition' });
+        assert.match(compositionSkill.contents[0].text, /cocos_2x_workflow_plan/);
+        assert.match(compositionSkill.contents[0].text, /visually inspect/i);
 
         const { prompts } = await client.listPrompts();
         assert.deepEqual(prompts.map((prompt) => prompt.name), ['cocos_2x_resource_to_scene_workflow']);
@@ -113,6 +117,49 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         const selected = await client.callTool({ name: 'cocos_2x_capabilities_list', arguments: { projectRoot: value.projects[1] } });
         assert.equal(selected.structuredContent.data.instance.projectRoot, value.projects[1]);
         assert.equal(calls.at(-1).params.creatorVersion, '2.4.15');
+
+        const workflowSteps = [
+            { id: 'root', name: 'AgentShowcase', parent: { path: 'Canvas', uuid: 'a286bbGknJLZpRpxROV6M94' } },
+            { id: 'red', name: 'RedSprite', parent: { ref: 'root' }, components: [
+                { classId: 'cc.Sprite', spriteFrameUuid: '0683b14a-8790-4ecd-9ee5-4b83163e34ff' },
+            ], transform: { position: { x: -64, y: 0 } } },
+        ];
+        const workflowPlan = await client.callTool({ name: 'cocos_2x_workflow_plan', arguments: {
+            projectRoot: value.projects[0], steps: workflowSteps,
+        } });
+        assert.equal(workflowPlan.structuredContent.method, 'workflow.plan');
+        assert.deepEqual(calls.at(-1).params.targets, value.projects.map((projectRoot) => ({ creatorVersion: '2.4.15', projectRoot })));
+        assert.equal(calls.at(-1).params.creatorVersion, '2.4.15');
+        assert.deepEqual(calls.at(-1).params.steps, workflowSteps);
+        const invalidWorkflow = await client.callTool({ name: 'cocos_2x_workflow_plan', arguments: {
+            projectRoot: value.projects[0], steps: [workflowSteps[0]],
+        } });
+        assert.equal(invalidWorkflow.isError, true);
+
+        const workflowId = '85f27a88-8757-487a-8c4c-6e9d34b334d3';
+        const workflowExecute = await client.callTool({ name: 'cocos_2x_workflow_execute', arguments: {
+            projectRoot: value.projects[0], workflowId, steps: workflowSteps,
+        } });
+        assert.equal(workflowExecute.structuredContent.method, 'workflow.execute');
+        assert.equal(calls.at(-1).params.workflowId, workflowId);
+        assert.equal(calls.at(-1).params.creatorVersion, '2.4.15');
+        const workflowGet = await client.callTool({ name: 'cocos_2x_workflow_get', arguments: {
+            projectRoot: value.projects[0], workflowId,
+        } });
+        assert.equal(workflowGet.structuredContent.method, 'workflow.get');
+        assert.equal(calls.at(-1).params.workflowId, workflowId);
+        const workflowCompensate = await client.callTool({ name: 'cocos_2x_workflow_compensate', arguments: {
+            projectRoot: value.projects[0], workflowId,
+        } });
+        assert.equal(workflowCompensate.structuredContent.method, 'workflow.compensate');
+        assert.equal(calls.at(-1).params.workflowId, workflowId);
+        const replayId = 'a75953e1-c0ce-4e5f-9526-4971df74fe52';
+        const workflowReplay = await client.callTool({ name: 'cocos_2x_workflow_replay', arguments: {
+            projectRoot: value.projects[0], sourceWorkflowId: workflowId, workflowId: replayId,
+        } });
+        assert.equal(workflowReplay.structuredContent.method, 'workflow.replay');
+        assert.equal(calls.at(-1).params.sourceWorkflowId, workflowId);
+        assert.equal(calls.at(-1).params.workflowId, replayId);
 
         const snapshot = await client.callTool({ name: 'cocos_2x_scene_snapshot', arguments: {
             projectRoot: value.projects[0], input: { targetNodeName: 'Canvas' },

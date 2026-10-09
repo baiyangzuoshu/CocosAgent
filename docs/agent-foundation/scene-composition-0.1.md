@@ -30,3 +30,9 @@
 随后用新的临时 workflow `d9c55b30-0c51-4a0c-9d52-cdc5789e0ca1` 完成组合重开验收：Creator UI 从 `helloworld` 切到 `stage4-empty`，再重新打开 `helloworld`；层级面板重新读到根节点与 Sprite、Label 子节点。属性面板读回 Sprite 的 SpriteFrame 与位置/缩放 `(-180,0)/(50,50)`，以及 Label 文本 `CocosAgent UI Reopen` 与位置/缩放 `(0,-100)/(2,2)`；同一编辑器实例的 `scene.node.inspect` 读回精确 UUID、组件和变换。工作流逆序补偿后，层级面板与 Host 均确认目标节点消失。Creator 重开时重写了 `.fire` 序列化格式；测试结束后将原先干净的场景文件按 Git HEAD 字节恢复，SHA-256 为 `0963cd0a52e25cdfa3edda47a6e998053885d2b93753da7a5c0da2562728d1a8`。实机轨迹见[组合验收记录](traces/cocos-agent-scene-composition-live-0.1.jsonl)。
 
 实机操作 ID 与节点身份见[结构化记录](traces/cocos-agent-scene-composition-live-0.1.jsonl)。
+
+2026-10-09 增加 Creator 2.4.15 专属 MCP 入口：`cocos_2x_workflow_plan/execute/get/compensate/replay` 与 Resource `cocos://2x/skills/scene-composition`。任务 skill 要求查询实例、能力和场景身份，按顺序创建父节点及多个 Sprite/Label 子节点，核对磁盘与运行态读回，再检查实际 Web 预览；发现裁切时先补偿，不接受截图。
+
+同日由本地 CocosAgent 经 MCP 发起四步组合：`AgentCompositionOct09` 父节点、红蓝 `cc.Sprite` 子节点和 `cc.Label`。Agent 的首轮布局实际截图显示两张 Sprite 被左右边缘裁切；未记录视觉接受，随后逆序补偿，所有目标路径读为 `not-found`。随后 MCP stdio 验收客户端把 Sprite 子节点位置调整为 ±210、缩放 0.6，标题放在父节点上方；四步 Host/磁盘读回通过，红蓝图与标题在 `http://127.0.0.1:7456/` 的实际预览中均完整可见，未被现有样本或 Cocos logo 遮挡。三个带组件操作分别登记了视觉验收。再补偿源 workflow 并逐路径确认缺席，以全新 workflow 与操作 ID 重放、再次检查画面并登记视觉验收；最终补偿重放，四个节点均缺席且 `.fire` 文件字节恢复为原 SHA-256 `0cdc7dd5424e2c4414f6b58caff1cd74142f77a7caaa075df08df280d7a4df94`。操作 ID、UUID、截图结论和时间见[结构化轨迹](traces/cocos-agent-scene-composition-live-0.1.jsonl)。
+
+此验收覆盖 Creator 2.4.15 Web 预览、既有 `assets/resources/` 红蓝 PNG、父子节点组合、磁盘读回、像素可见性、逆序补偿与新 ID 重放；不代表 Creator 3.8、构建包或原生运行时能力。工作流返回的组件 `phases.preview=passed` 仍是结构性运行时读回；像素级结论以单独打开的预览截图和 `preview.accept` 回执为准。

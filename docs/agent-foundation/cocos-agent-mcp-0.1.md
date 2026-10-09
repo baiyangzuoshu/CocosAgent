@@ -23,6 +23,11 @@
 | `cocos_2x_operation_get` | 只读 | 查询持久操作记录，供重新连接和不确定结果检查 |
 | `cocos_2x_operation_reconcile` | 写 Host 恢复证据 | 对账符合条件的中断操作；不重放编辑器写入 |
 | `cocos_2x_operation_preview_accept` | 写预览回执 | 登记本地预览中的可见结果；保留同阶段已有的运行态读回证据 |
+| `cocos_2x_workflow_plan` | 只读 | 预检 2–8 个有序节点步骤、父节点身份和目标名称 |
+| `cocos_2x_workflow_execute` | 写入场景 | 持久化并执行多节点组合，逐项读回；确定失败时逆序补偿 |
+| `cocos_2x_workflow_get` | 只读 | 查询组合计划和逐项操作状态 |
+| `cocos_2x_workflow_compensate` | 写入场景 | 对已解决的组合按逆序补偿创建的节点 |
+| `cocos_2x_workflow_replay` | 写入场景 | 从完整补偿的组合创建新 workflow 与新操作 ID |
 | `cocos_2x_assets_scene_plan` | 只读 | 预检 2–16 张 PNG 的导入身份、活动场景 Canvas 与目标节点 |
 | `cocos_2x_assets_scene_execute` | 导入资源并写场景 | 用 AssetDB 导入 PNG、核对 UUID，再创建 Sprite 节点并读回场景 |
 | `cocos_2x_assets_scene_cancel` | 合作取消并可能触发补偿 | 请求活动流水线在安全写入边界停止，等待当前 Host 命令完成，并补偿本流水线的场景节点与导入资源 |
@@ -49,6 +54,7 @@
 | MCP 能力 | 名称/URI | 用途 |
 | --- | --- | --- |
 | Resource | `cocos://2x/agent/mcp-tools` | 返回仓库内 Creator 2.4 专属 MCP skill，包含实例选择、写入恢复、预览验收与 release 工作流 |
+| Resource | `cocos://2x/skills/scene-composition` | 返回 Creator 2.4 专属的多节点层级、Sprite/Label、预览、补偿与重放任务 skill |
 | Prompt | `cocos_2x_resource_to_scene_workflow` | 接收注册项目路径和用户请求，指导 Agent 查询实例与能力，再按计划、执行、读回、视觉验收的顺序处理 PNG 场景操作 |
 
 Resource 只读取固定仓库 skill 文件，不接受任意文件路径。Prompt 的 `projectRoot` 由 MCP 启动时的项目白名单限制，并明确禁止对超时写入盲目重试、伪造视觉证据，或在用户未请求 release staging 时提交内容。Prompt 为用户请求提供可复用指引；它不启动模型，也不绕过各工具自己的 schema、实例检查和 Host 前置条件。
