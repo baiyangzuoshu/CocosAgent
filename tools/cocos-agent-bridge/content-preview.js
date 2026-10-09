@@ -111,7 +111,9 @@ function serve(root, request, response) {
 
 function drainEvents(session) {
     while (session.runtime.events.length) {
-        session.recentEvents.push(session.runtime.events.shift());
+        const event = session.runtime.events.shift();
+        if (event.type === 'receipt' && event.acceptance?.success) session.runtimeConfirmed = true;
+        session.recentEvents.push(event);
         if (session.recentEvents.length > 50) session.recentEvents.shift();
     }
 }
@@ -136,9 +138,14 @@ function snapshot(session) {
     } catch (_) { /* The preview status remains readable if the pointer cannot be read. */ }
     const effectiveReleaseId = lastReceipt?.acceptance?.effective?.releaseId
         || lastReceipt?.receipt?.activeReleaseId || lastReceipt?.receipt?.releaseId || null;
+    const recoveryState = !session.previousEffective ? 'not-required'
+        : session.runtimeConfirmed ? 'confirmed'
+            : lastReceipt ? 'needs-review' : connected ? 'awaiting-receipt' : 'awaiting-runtime';
     return { success: true, outcome: 'read', previewId: session.previewId, buildId: session.buildId,
         creatorVersion: session.creatorVersion, status, connected, baseUrl: session.baseUrl, previewUrl: session.runtime.previewUrl,
         buildReleaseId: session.releaseId, selectedReleaseId, effectiveReleaseId, fingerprint: session.fingerprint,
+        recovery: { state: recoveryState, previousAcceptedReleaseId: session.previousEffective?.releaseId || null,
+            selectedReleaseId, confirmedInSession: session.runtimeConfirmed },
         ...(lastReceipt ? { lastReceipt } : {}), ...(lastError ? { lastError } : {}),
         recentEvents: session.recentEvents.slice(-20) };
 }
@@ -216,9 +223,13 @@ async function start(params, options = {}) {
         const port = await listen(server);
         const baseUrl = `http://127.0.0.1:${port}/`;
         runtime = await runtimeTools.start({ projectRoot, creatorVersion, platform: 'web-preview', previewUrl: baseUrl });
+        const previousEffective = selected.effective && typeof selected.effective.releaseId === 'string'
+            ? { releaseId: selected.effective.releaseId, fingerprint: selected.effective.fingerprint || null }
+            : null;
         const session = { previewId: crypto.randomBytes(16).toString('hex'), projectRoot, creatorVersion,
             buildId, releaseId: record.releaseId, fingerprint: record.fingerprint, webRoot, baseUrl,
-            server, runtime, releaseTools, recentEvents: [], startedAt: new Date().toISOString() };
+            server, runtime, releaseTools, recentEvents: [], previousEffective, runtimeConfirmed: false,
+            startedAt: new Date().toISOString() };
         session.drainTimer = setInterval(() => drainEvents(session), 100);
         sessions.set(sessionKey, session);
         return { ...snapshot(session), outcome: 'ready' };

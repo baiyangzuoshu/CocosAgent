@@ -27,11 +27,11 @@
 - 启动时当前 selected release 的 ID 与 fingerprint 必须和构建记录相同，且当前项目资源重新校验通过。若启动前内容版本已切换，返回 `BUILD_RELEASE_NOT_SELECTED`，应先恢复构建时版本或重新构建。预览启动后，显式变更 selected release 会经同一运行时 Host 推送新内容。
 - 静态服务器和运行时 Host 均只绑定 `127.0.0.1` 的临时端口。静态服务只响应 GET/HEAD，不列目录，不允许路径逃逸或跟随指向包外的符号链接。
 - `previewUrl` 包含运行时 Host 临时令牌。只在本机预览时使用，不应贴到公共日志、远端浏览器或可分享链接。
-- `get/stop` 查找当前 Agent 进程中的会话。重启后旧会话不存在；进程退出会释放监听端口。
+- `get/stop` 查找当前 Agent 进程中的会话。进程退出会释放监听端口，旧 URL 的会话令牌随之失效。新 Host 可用原 `projectRoot/buildId` 重新校验持久构建与 release 记录并创建会话；浏览器须打开新返回的 `previewUrl`，运行时随后会再次应用持久 selected release。
 
 `runtime-observed` 表示运行时 Host 收到了已认证客户端的资源应用回执，并接受了 `content.runtime.accept`。没有浏览器打开时状态会保持 `waiting-for-runtime`；该合同不会自动启动浏览器或模拟用户验收。
 
-`content.preview.get` 返回 `buildReleaseId`（此包构建自哪个 release）、`selectedReleaseId`（当前 Host 指针）和 `effectiveReleaseId`（最后一次被接受的运行时 release）。运行中的 rollback 后，这三个字段可能不同，应分别读取，不要把构建来源当作运行时当前版本。
+`content.preview.get` 返回 `buildReleaseId`（此包构建自哪个 release）、`selectedReleaseId`（当前 Host 指针）和 `effectiveReleaseId`（本次会话已收到的运行时回执）。运行中的 rollback 后，这三个字段可能不同，应分别读取，不要把构建来源当作运行时当前版本。新会话在收到回执前 `effectiveReleaseId` 为空；`recovery.previousAcceptedReleaseId` 只表示磁盘上上次被 Host 接受的记录，不能证明新运行时已恢复。`recovery.state` 为 `awaiting-runtime` / `awaiting-receipt` 时等待打开新 URL 和运行时重放，接受当前会话回执后为 `confirmed`；失败时为 `needs-review`。
 
 ## 错误状态
 
@@ -48,7 +48,7 @@
 
 ## 验收范围
 
-单元集成测试覆盖构建记录拒绝、release 漂移拒绝、静态资源服务、路径/方法限制、构建/selected/effective 状态分别读取及关闭。2026-10-09，本机 `web-host-cli-01` 实际构建包启动预览，浏览器画面显示蓝色方块和 Hello World；Host 收到蓝色资源 `applied`、引用数为 1 的回执，并接受为 `runtime-observed`。随后显式停止 Host 和静态服务器并关闭标签页；完整记录见 [`预览轨迹`](traces/cocos-agent-content-preview-2.4.jsonl)。
+单元集成测试覆盖构建记录拒绝、release 漂移拒绝、静态资源服务、路径/方法限制、构建/selected/effective 状态分别读取、恢复状态和关闭。2026-10-09，本机 `web-host-cli-01` 实际构建包启动预览，浏览器画面显示蓝色方块和 Hello World；Host 收到蓝色资源 `applied`、引用数为 1 的回执，并接受为 `runtime-observed`。随后重启 JSONL Host，从同一持久 build/release 记录创建新预览，打开新 URL 后游戏重新应用蓝色资源；新 Host 再次收到匹配 UUID、引用数为 1 的 `applied` 回执，`recovery.state` 从 `awaiting-runtime` 转为 `confirmed`。测试仅覆盖 Creator 2.4.15 Web-Mobile 内置 `resources` release，不代表 Asset Bundle、原生或未重新加载浏览器页时可恢复；记录见 [`Host 重启恢复轨迹`](traces/cocos-agent-content-preview-restart-2.4-web.jsonl)。
 
 同日继续从已验收的场景流水线生成 `cocosagent-p1-20261009`，构建并打开 `p1-web-20261009`。Host 收到蓝色入口资源的 `applied` 回执并确认 `runtime-observed`；浏览器同时显示场景红、蓝 Sprite 与运行时蓝色 Sprite。执行 `content.rollback` 后打开原 `web-host-cli-01`，Host 对旧 release 的蓝色资源再次收到 `applied`，`effective` 回到旧指纹，浏览器显示蓝色方块和 Hello World。完整操作序列见[发布、构建和回滚轨迹](traces/cocos-agent-p1-release-build-2.4-web.jsonl)。
 

@@ -26,6 +26,7 @@ function fixture() {
         releaseId: 'release-a', fingerprint, outputRoot, state: 'completed', releaseManifest };
     const events = [];
     let selectedReleaseId = 'release-a';
+    let effective = null;
     const fake = {
         contentBuild: {
             get: () => ({ success: true, build: record }),
@@ -33,12 +34,13 @@ function fixture() {
         },
         contentRelease: {
             get: (params) => params.releaseId
-                ? { success: true, release: releaseManifest, selected: { releaseId: selectedReleaseId, fingerprint } }
-                : { success: true, selected: { releaseId: selectedReleaseId, fingerprint } },
+                ? { success: true, release: releaseManifest, selected: { releaseId: selectedReleaseId, fingerprint }, effective }
+                : { success: true, selected: { releaseId: selectedReleaseId, fingerprint }, effective },
             validate: () => ({ success: true, fingerprint }),
         },
         contentRuntimeHost: {
             async start({ previewUrl }) {
+                events.length = 0;
                 const url = new URL(previewUrl);
                 url.searchParams.set('cocosAgentPort', '50321');
                 url.searchParams.set('cocosAgentToken', 'b'.repeat(64));
@@ -48,6 +50,7 @@ function fixture() {
     };
     return { projectRoot, buildId, outputRoot, webRoot, fingerprint, releaseManifest, record, events, fake,
         setSelectedReleaseId: (value) => { selectedReleaseId = value; },
+        setEffective: (value) => { effective = value; },
         params: { projectRoot, creatorVersion: '2.4.15', buildId } };
 }
 
@@ -61,6 +64,8 @@ test('serves only the verified package on loopback and exposes runtime session s
         assert.equal(current.status, 'waiting-for-runtime');
         assert.equal(current.buildReleaseId, 'release-a');
         assert.equal(current.selectedReleaseId, 'release-a');
+        assert.deepEqual(current.recovery, { state: 'not-required', previousAcceptedReleaseId: null,
+            selectedReleaseId: 'release-a', confirmedInSession: false });
         assert.match(current.previewUrl, /^http:\/\/127\.0\.0\.1:\d+\/\?cocosAgentPort=50321&cocosAgentToken=/);
         const page = await fetch(current.previewUrl);
         assert.equal(page.status, 200);
@@ -75,6 +80,7 @@ test('serves only the verified package on loopback and exposes runtime session s
         value.events.push({ type: 'connected', creatorVersion: '2.4.15', scene: 'helloworld' });
         assert.equal(preview.get(value.params).status, 'connected');
         assert.equal(preview.get(value.params).connected, true);
+        value.setEffective({ releaseId: 'release-a', fingerprint: value.fingerprint });
         value.events.push({ type: 'receipt', receipt: { outcome: 'applied', releaseId: 'release-a' },
             acceptance: { success: true, outcome: 'runtime-observed' } });
         const accepted = preview.get(value.params);
@@ -82,6 +88,8 @@ test('serves only the verified package on loopback and exposes runtime session s
         assert.equal(accepted.connected, true);
         assert.equal(accepted.lastReceipt.acceptance.outcome, 'runtime-observed');
         assert.equal(accepted.effectiveReleaseId, 'release-a');
+        assert.equal(accepted.recovery.state, 'not-required');
+        assert.equal(accepted.recovery.confirmedInSession, true);
         value.setSelectedReleaseId('release-b');
         assert.equal(preview.get(value.params).selectedReleaseId, 'release-b');
         assert.equal(preview.get(value.params).buildReleaseId, 'release-a');
@@ -93,6 +101,40 @@ test('serves only the verified package on loopback and exposes runtime session s
         assert.equal(preview.get(value.params).error.code, 'PREVIEW_NOT_FOUND');
     } finally {
         if (preview.get(value.params).success) await preview.stop(value.params);
+        fs.rmSync(value.projectRoot, { recursive: true, force: true });
+    }
+});
+
+test('a fresh preview session rebuilds recovery state from the persisted effective pointer', async () => {
+    const value = fixture();
+    let restartedPreview;
+    let current;
+    try {
+        value.setEffective({ releaseId: 'release-a', fingerprint: value.fingerprint });
+        current = await preview.start(value.params, value.fake);
+        assert.equal(current.success, true, JSON.stringify(current));
+        assert.equal(current.recovery.state, 'awaiting-runtime');
+        assert.equal(current.recovery.previousAcceptedReleaseId, 'release-a');
+        assert.equal(current.effectiveReleaseId, null);
+
+        value.events.push({ type: 'connected', creatorVersion: '2.4.15', scene: 'helloworld' });
+        assert.equal(preview.get(value.params).recovery.state, 'awaiting-receipt');
+        value.events.push({ type: 'receipt', receipt: { outcome: 'applied', releaseId: 'release-a' },
+            acceptance: { success: true, outcome: 'runtime-observed', effective: { releaseId: 'release-a' } } });
+        assert.equal(preview.get(value.params).recovery.state, 'confirmed');
+        await preview.stop(value.params);
+
+        delete require.cache[require.resolve('./content-preview')];
+        restartedPreview = require('./content-preview');
+        current = await restartedPreview.start(value.params, value.fake);
+        assert.equal(current.success, true, JSON.stringify(current));
+        assert.equal(current.status, 'waiting-for-runtime');
+        assert.equal(current.effectiveReleaseId, null);
+        assert.deepEqual(current.recovery, { state: 'awaiting-runtime', previousAcceptedReleaseId: 'release-a',
+            selectedReleaseId: 'release-a', confirmedInSession: false });
+    } finally {
+        if (restartedPreview?.get(value.params).success) await restartedPreview.stop(value.params);
+        else if (preview.get(value.params).success) await preview.stop(value.params);
         fs.rmSync(value.projectRoot, { recursive: true, force: true });
     }
 });

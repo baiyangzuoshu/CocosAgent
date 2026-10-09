@@ -95,6 +95,65 @@ test('local runtime channel sends selected release and accepts its receipt', asy
     }
 });
 
+test('a new runtime Host replays the persisted selected release after the old Host closes', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-runtime-restart-'));
+    const dir = path.join(root, 'assets/resources');
+    fs.mkdirSync(dir, { recursive: true });
+    const bytes = fs.readFileSync(path.resolve(__dirname, '../../../2.4.15NewProject/assets/resources/cocos-agent-batch-red.png'));
+    fs.writeFileSync(path.join(dir, 'red.png'), bytes);
+    fs.writeFileSync(path.join(dir, 'red.png.meta'), JSON.stringify({ importer: 'texture', uuid: 'restart-red-texture' }));
+    const manifest = { contractVersion: '0.1', releaseId: 'restart-red', creatorVersion: '2.4.15',
+        delivery: 'built-in-resources', entryAssetId: 'visual', assets: [{ id: 'visual', source: 'assets/resources/red.png',
+            sha256: crypto.createHash('sha256').update(bytes).digest('hex'), runtimePath: 'red', dependsOn: [] }] };
+    let host; let socket;
+    const connect = async (previewUrl) => {
+        const preview = new URL(previewUrl);
+        const clientSocket = new WebSocket(`ws://127.0.0.1:${preview.searchParams.get('cocosAgentPort')}/runtime?token=${preview.searchParams.get('cocosAgentToken')}`,
+            { origin: preview.origin });
+        const next = () => new Promise((resolve) => clientSocket.once('message', (raw) => resolve(JSON.parse(String(raw)))));
+        await new Promise((resolve, reject) => { clientSocket.once('open', resolve); clientSocket.once('error', reject); });
+        clientSocket.send(JSON.stringify({ type: 'hello', creatorVersion: '2.4.15', scene: 'helloworld' }));
+        return { socket: clientSocket, next };
+    };
+    try {
+        assert.equal(content.stage({ projectRoot: root, creatorVersion: '2.4.15', manifest }).success, true);
+        assert.equal(content.select({ projectRoot: root, creatorVersion: '2.4.15', releaseId: 'restart-red', expectedCurrent: null }).success, true);
+        host = await start({ projectRoot: root, creatorVersion: '2.4.15', previewUrl: 'http://127.0.0.1:50469/' });
+        let client = await connect(host.previewUrl);
+        socket = client.socket;
+        let request = await client.next();
+        assert.equal(request.type, 'apply');
+        assert.equal(request.release.releaseId, 'restart-red');
+        socket.send(JSON.stringify({ type: 'receipt', id: request.id, receipt: { outcome: 'applied', releaseId: 'restart-red',
+            activeReleaseId: 'restart-red', activeFingerprint: request.release.fingerprint, assetId: 'visual',
+            activeAssetId: 'visual', resourceUuid: 'restart-red-texture', currentRefCount: 1 } }));
+        assert.equal((await client.next()).acceptance.success, true);
+        assert.equal(content.get({ projectRoot: root, creatorVersion: '2.4.15' }).effective.releaseId, 'restart-red');
+        socket.close();
+        await new Promise((resolve) => socket.once('close', resolve));
+        socket = null;
+        await host.close();
+        host = null;
+
+        host = await start({ projectRoot: root, creatorVersion: '2.4.15', previewUrl: 'http://127.0.0.1:50470/' });
+        client = await connect(host.previewUrl);
+        socket = client.socket;
+        request = await client.next();
+        assert.equal(request.type, 'apply');
+        assert.equal(request.id, 1);
+        assert.equal(request.release.releaseId, 'restart-red');
+        socket.send(JSON.stringify({ type: 'receipt', id: request.id, receipt: { outcome: 'applied', releaseId: 'restart-red',
+            activeReleaseId: 'restart-red', activeFingerprint: request.release.fingerprint, assetId: 'visual',
+            activeAssetId: 'visual', resourceUuid: 'restart-red-texture', currentRefCount: 1 } }));
+        assert.equal((await client.next()).acceptance.success, true);
+        assert.equal(content.get({ projectRoot: root, creatorVersion: '2.4.15' }).effective.releaseId, 'restart-red');
+    } finally {
+        if (socket) socket.close();
+        if (host) await host.close();
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
 test('Mac native runtime uses a private writable-path session and loopback Origin handshake', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-runtime-native-'));
     const writable = path.join(root, 'native-writable');
