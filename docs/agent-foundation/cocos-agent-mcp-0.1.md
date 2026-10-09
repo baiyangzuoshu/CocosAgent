@@ -120,3 +120,13 @@ node /absolute/path/Cocos_Engine/tools/cocos-agent-bridge/mcp/mcp-server.mjs \
 失败边界也有实机证据：灰度/透明 PNG 测试夹具触发 2.4 导入失败，AssetDB 留下宽高为零、无 SpriteFrame 子 UUID 的不完整 `.meta`；流水线返回 `needs-review/IMPORT_OUTCOME_UNCERTAIN` 并阻止自动删除，场景未写入。测试后按精确文件摘要、元数据 UUID 和完整无引用扫描移除了这两个专属临时文件。该结果不应外推为 Creator 对所有灰度 PNG 的限制；它记录的是该夹具与当前编辑器的导入结果。完整进度、取消、回滚及失败清理边界见 [`MCP 取消实机轨迹`](traces/cocos-agent-mcp-cancel-2.4.jsonl)。
 
 后续只读诊断确认 2.4 Creator 的活动场景不是空场景：`scene.snapshot` 读回 `helloworld` 下 12 个节点，包括 Canvas、Main Camera、background、cocos 与 label。7456 预览服务返回 HTTP 200，`settings.js` 指向 `db://assets/Scene/helloworld.fire`，quick-compile 与预览引擎脚本也均返回 200。Mac 当前再次锁屏；为区分页面启动问题，在隔离 Chrome headless + SwiftShader 中打开同一 URL，脚本编译并打印 `Cocos Creator v2.4.15`，但截图停在 splash，控制台伴随 `CVDisplayLinkCreateWithCGDisplay` 错误。该 headless 结果不能代表实际桌面浏览器，不能用作预览验收；还需要在解锁桌面后读取实际浏览器运行状态/控制台，再决定是否调用 `assets_scene_preview_accept`。诊断轨迹为第 50–52 条。
+
+### 2026-10-09：完成 MCP 资源到场景验收
+
+解锁后重新通过真实 MCP stdio 选择 Creator 2.4.15 `helloworld` 实例，完成了两条写入路径。首先，`asset.searchPng` 找到现有 `HelloWorld.png` 的 SpriteFrame UUID `31bc895a-c003-4566-a9f3-2e54ae1c17dc`；MCP 在 Canvas 下创建 `CocosAgentExistingPngMcp`，保存并重新打开 `helloworld.fire` 后，`scene.node.inspect` 读回节点及资源引用。桌面 Web 预览可见缩小的 Cocos logo 与原始场景内容；`operation.preview.accept` 记录视觉证据，随后补偿成功，节点已移除。
+
+随后使用两张 128×128 临时 PNG（红、蓝）启动流水线 `fc804836-9bd9-44db-afee-b28b0912fcdb`。AssetDB 为每张图生成 Texture 与 SpriteFrame UUID；`assets.scene.validate` 对字节哈希、PNG 维度、`.meta` UUID 链、AssetDB、活动场景、序列化场景引用和批次记录的检查均返回有效。两张 Sprite 分别位于 Canvas 本地坐标 `(-160, 0)` 和 `(160, 0)`。重新打开 `helloworld.fire` 后，MCP 对两个节点的 inspect 均读回正确位置与 SpriteFrame UUID；Chrome 中可见左红方块、右蓝方块、Cocos logo 和 Hello World。随后分别为两项记录 `assets.scene.preview.accept`，父流水线 `get` 为 `completed`。
+
+这轮也验证了超时恢复。一次较早的流水线在操作记录已持久化、编辑器写入尚未开始时中断；先前恢复代码只识别完全缺失的操作记录，因此本轮增加严格的预写记录匹配，并要求活动场景、`.fire`、目标实例和资源身份共同证明无副作用后才能记为 `WRITE_RECONCILED_NO_EFFECT`，该项不会自动重试。另一轮 MCP 客户端等待超时发生时，第二项仍是 `pending` 且无单项操作记录；确认没有活动写入、Creator 场景和磁盘目标均缺席并清理精确的空会话租约后，在同一个 `pipelineId` 安全续跑，未重复导入或写入第一项。测试覆盖了已落盘预写操作记录的恢复分支。
+
+预览验收后，`content.fromScene.plan` 只读生成 release 计划并返回 `ready`，release ID 为 `cocosagent-p1-png-demo-20261009`、入口资源为蓝图；本轮没有调用 `stage`、`select` 或构建。随后对流水线执行补偿，场景引用先移除，资源与 `.meta` 再清理，最终 `rollbackStatus=passed`。测试后确认两个节点和导入资源均不存在，并将 Creator 改写过的 `helloworld.fire` 恢复为提交版 SHA-256 `0963cd0a52e25cdfa3edda47a6e998053885d2b93753da7a5c0da2562728d1a8`。因此这轮完成的是 2.4.15 PNG/Web 的 MCP 写入、读回、视觉验收、release 计划和补偿闭环；它没有验收发布包、原生更新或 3.x。完整事件见 [MCP 实机轨迹](traces/cocos-agent-mcp-2.4.jsonl) 第 54 条起。

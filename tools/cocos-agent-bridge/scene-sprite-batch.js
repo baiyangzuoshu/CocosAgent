@@ -122,8 +122,7 @@ function operationRecordMissing(projectRoot, operationId) {
     try { fs.lstatSync(path.join(directory, `${operationId}.json`)); return false; }
     catch (error) { return error.code === 'ENOENT'; }
 }
-function reconcileMissingOperation(record, item, action, operationId, run) {
-    if (!operationRecordMissing(record.projectRoot, operationId)) return false;
+function reconcileNoEffect(record, item, action, operationId, run) {
     const asset = readAsset(record.projectRoot, item.assetName);
     if (!asset.success || asset.assetUuid !== item.assetUuid || asset.sha256 !== item.sha256) return false;
     if (!contextStillMatches(record, run)) return false;
@@ -151,6 +150,24 @@ function reconcileMissingOperation(record, item, action, operationId, run) {
     save(record);
     return true;
 }
+function preWriteOperationMatches(record, item, operationId, operation) {
+    const manifest = operation && operation.manifest;
+    const phases = operation && operation.phases;
+    const position = item.position || { x: 0, y: 0 };
+    return operation && operation.projectRoot === record.projectRoot && operation.creatorVersion === record.creatorVersion
+        && operation.operationId === operationId
+        && (operation.capabilityId === undefined || operation.capabilityId === 'scene.pngSprite')
+        && operation.sceneName === null && operation.intent === 'created' && !operation.createdNodeUuid && !operation.reconciliation
+        && Array.isArray(operation.receipts) && operation.receipts.length === 0
+        && phases && ['capability', 'preflight', 'editor', 'disk', 'preview', 'recovery'].every((phase) => phases[phase] === 'pending')
+        && manifest && manifest.sceneAction === 'apply' && manifest.assetName === item.assetName
+        && manifest.nodeName === item.nodeName && manifest.assetUuid === item.assetUuid
+        && JSON.stringify(manifest.position || { x: 0, y: 0 }) === JSON.stringify(position);
+}
+function reconcileMissingOperation(record, item, action, operationId, run) {
+    if (!operationRecordMissing(record.projectRoot, operationId)) return false;
+    return reconcileNoEffect(record, item, action, operationId, run);
+}
 function publicRecord(record) {
     const items = record.items.map((item) => {
         const operation = operationState(record.projectRoot, item.operationId);
@@ -176,6 +193,12 @@ function reconcile(record, run) {
         const expectedAction = item.status === 'applying' ? 'apply' : 'compensate';
         if (operationRecordMissing(record.projectRoot, operationId)) {
             if (reconcileMissingOperation(record, item, expectedAction, operationId, run)) continue;
+            record.state = 'needs-review'; record.error = { code: 'ITEM_OUTCOME_UNCERTAIN', assetName: item.assetName, operationId };
+            save(record); return false;
+        }
+        const pendingOperation = operationState(record.projectRoot, operationId);
+        if (expectedAction === 'apply' && preWriteOperationMatches(record, item, operationId, pendingOperation)) {
+            if (reconcileNoEffect(record, item, expectedAction, operationId, run)) continue;
             record.state = 'needs-review'; record.error = { code: 'ITEM_OUTCOME_UNCERTAIN', assetName: item.assetName, operationId };
             save(record); return false;
         }

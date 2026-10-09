@@ -373,7 +373,9 @@ function compensate(params, run = dispatch) {
     if (record.state === 'compensated' || record.state === 'failed' && record.rollbackStatus === 'passed') return publicRecord(record);
     if (record.state === 'needs-review') {
         const reconciled = reconcileAbsentRemovals(record);
-        return reconciled || fail('PIPELINE_NEEDS_REVIEW', 'Resolve uncertain scene or asset state before compensation.');
+        if (reconciled) return reconciled;
+        if (record.error?.code !== 'SCENE_COMPENSATION_UNVERIFIED' || record.rollbackStatus !== 'blocked')
+            return fail('PIPELINE_NEEDS_REVIEW', 'Resolve uncertain scene or asset state before compensation.');
     }
     if (record.sceneBatchId) {
         const scene = sceneBatch.get({ projectRoot, creatorVersion: '2.4.15', batchId: record.sceneBatchId });

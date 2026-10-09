@@ -80,6 +80,16 @@ function fixture() {
             failureMode = null;
             throw new Error('INJECTED_HOST_INTERRUPTION_BEFORE_OPERATION_RECORD');
         }
+        if (assetName === 'Two.png' && action === 'apply' && failureMode === 'interrupt-after-created') {
+            failureMode = null;
+            operationStore.write(projectRoot, { contractVersion: '0.1',
+                operationId: request.input.operationId, sessionId: crypto.randomUUID(), projectRoot, creatorVersion: '2.4.15',
+                manifest: { assetName, nodeName: targetNodeName, assetUuid: spriteFrameUuid, sceneAction: 'apply', position: request.input.position },
+                sceneName: null, intent: 'created', receipts: [],
+                phases: { capability: 'pending', preflight: 'pending', editor: 'pending', disk: 'pending', preview: 'pending', recovery: 'pending' },
+                createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }, true);
+            throw new Error('INJECTED_HOST_INTERRUPTION_AFTER_OPERATION_CREATED');
+        }
         if (action === 'apply') nodes.set(targetNodeName, crypto.randomUUID());
         else nodes.delete(targetNodeName);
         writeScene();
@@ -182,6 +192,37 @@ test('compensation resumes an interrupted apply only when live and serialized sc
         const recovered = JSON.parse(fs.readFileSync(batchFile, 'utf8'));
         assert.equal(recovered.items[1].reconciliations[0].disposition, 'no-effect');
         assert.equal(recovered.items[1].reconciliations[0].action, 'apply');
+        assert.equal(recovered.error.code, 'WRITE_RECONCILED_NO_EFFECT');
+    } finally { f.cleanup(); }
+});
+
+test('compensation reconciles a persisted pre-write operation only after live and serialized scene confirm no effect', () => {
+    const f = fixture();
+    const batchId = crypto.randomUUID();
+    try {
+        f.setFailure('interrupt-after-created');
+        assert.throws(() => execute({ ...f.params, batchId }, f.run), /INJECTED_HOST_INTERRUPTION_AFTER_OPERATION_CREATED/);
+        const batchFile = path.join(f.projectRoot, '.cocos-agent', 'scene-batches', `${batchId}.json`);
+        const interrupted = JSON.parse(fs.readFileSync(batchFile, 'utf8'));
+        assert.equal(interrupted.state, 'executing');
+        assert.deepEqual(interrupted.items.map((item) => item.status), ['applied', 'applying']);
+        const pendingOperation = operationStore.read(f.projectRoot, interrupted.items[1].operationId);
+        assert.equal(pendingOperation.intent, 'created');
+        assert.equal(pendingOperation.sceneName, null);
+        assert.deepEqual(pendingOperation.receipts, []);
+        assert.equal(f.nodes.size, 1);
+
+        const compensated = compensate({ projectRoot: f.projectRoot, creatorVersion: '2.4.15', batchId }, f.run);
+        assert.equal(compensated.outcome, 'failed');
+        assert.deepEqual(compensated.items.map((item) => item.status), ['compensated', 'rejected']);
+        assert.equal(f.nodes.size, 0);
+        assert.deepEqual(f.sceneCalls.map((call) => [call.assetName, call.action]), [
+            ['One.png', 'apply'], ['Two.png', 'apply'], ['One.png', 'compensate'],
+        ]);
+        const recovered = JSON.parse(fs.readFileSync(batchFile, 'utf8'));
+        assert.equal(recovered.items[1].reconciliations[0].disposition, 'no-effect');
+        assert.equal(recovered.items[1].reconciliations[0].action, 'apply');
+        assert.match(recovered.items[1].reconciliations[0].diskSha256, /^[a-f0-9]{64}$/);
         assert.equal(recovered.error.code, 'WRITE_RECONCILED_NO_EFFECT');
     } finally { f.cleanup(); }
 });
