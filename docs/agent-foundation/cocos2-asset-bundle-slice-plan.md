@@ -48,6 +48,12 @@ Host 用 `content.bundle.plan/stage` 登记 `cocos-agent-smoke` 的红蓝 PNG，
 
 失败分支通过对运行中的隔离构建临时移走蓝色 Bundle native PNG 实测：显式重新选择 Bundle 后，加载返回 404，运行时回执为 `retained`，有效画面与 `effective` 仍是旧 `resources` release，preview 状态为 `needs-review`。恢复 PNG 后，Host 不会自动重试同一指纹；通过明确切回旧 release 再选择 Bundle 才重新应用成功，最后再次回滚并确认 selected/effective 都恢复到旧 release。构建文件在验收后恢复原位，预览服务和浏览器标签已关闭。轨迹见 `traces/cocos-agent-asset-bundle-host-2.4-web.jsonl`。
 
+## 多 Bundle 并行驻留（2026-10-09）
+
+按 [2.4 Asset Bundle 介绍手册](https://docs.cocos.com/creator/2.4/manual/zh/asset-manager/bundle.html)和[配置、加载与释放手册](https://docs.cocos.com/creator/2.4/manual/zh/scripting/asset-bundle.html)的按需加载方式，在示例增加独立 `cocos-agent-sidecar` PNG Bundle。`bundle-dual-residency-20261009` 实际 Web-Mobile 输出同时包含 `cocos-agent-smoke` 与 `cocos-agent-sidecar` 两个自定义包和 Creator 的三个内置 Bundle。无头浏览器先后两次同时加载两个唯一 Texture 并各自持有一个 `addRef()`；分别以 A→B 和 B→A 顺序 `decRef`、调用准确 Bundle 的 `release(path, cc.Texture2D)`、再 `removeBundle`。释放 A 后 B 的 Texture 仍有效、UUID 仍在 Asset Cache、B Bundle 仍在 Bundle Cache；反向顺序也成立。每次全部释放后，Asset Cache 和 Bundle Cache 都精确回到同一页面基线：29 个缓存资产、3 个内置 Bundle。逐次读回见[双 Bundle 并行驻留轨迹](traces/cocos-agent-multi-bundle-residency-2.4-web.json)；可重复脚本为 `probes/cocos-bundle-residency-2.4.mjs`。
+
+该样本只证明两个**互不共享依赖**的 PNG Bundle 在当前 2.4.15 Web-Mobile 构建里可并行驻留、按各自 Bundle 释放且缓存回基线。尚未验证多个 Bundle 引用同一资源、不同优先级依赖、`releaseAll` 的跨 Bundle 影响、动态新增/替换两个 Bundle 的产品合同、帧耗时或内存预算。官网指出不同优先级共享资源由较高优先级 Bundle 持有，低优先级 Bundle 加载前须先加载高优先级 Bundle；下一试验将用两个 Bundle 内的场景依赖同一 `resources` SpriteFrame，观察依赖引用与卸载顺序。
+
 ## 暂缓事项
 
 首轮不制作通用跨资源类型 AssetDB 导入器，不写 Editor 私有 IPC，不覆盖脚本分包和场景分包，不宣称热更新/CDN/线上发布，不改 2.x 引擎源码，也不补 3.8。外置远程 Bundle、`version` hash 更新、下载缓存与 JSB 用户目录加载属于后续独立切片；本地 Bundle 已验收，不代表这些分发路径已具备。
@@ -57,4 +63,5 @@ Host 用 `content.bundle.plan/stage` 登记 `cocos-agent-smoke` 的红蓝 PNG，
 - Creator 2.4.15 实际构建通过 Bundle config、资源 UUID、SpriteFrame 依赖和文件校验；Host release 选择、运行时 applied、effective、视觉观察、缺失资源 retained、显式重选和 rollback 均已实测。
 - 单元测试验证不同 Bundle 替换在新帧确认后清理旧 Bundle、候选失败时保留当前 SpriteFrame，以及 3.8 拒绝 Bundle 合同；实际预览另验证 Bundle 与 built-in-resources 双向切换。
 - 2026-10-09 的 2.4 Web-Mobile 实测将 Bundle → built-in resources → Bundle 往返两轮。旧 Texture 清理后均读回 `refCount=0`、`valid=false`、Asset Cache 不含 UUID；Asset Cache 数稳定为 30，Bundle Cache 在不含/含 `cocos-agent-smoke` 时分别为 3/4。Bundle Texture 在零引用且 UUID 匹配时显式 `bundle.release`，不为零时跳过强制释放；缓存与引用计数轨迹见 `traces/cocos-agent-content-runtime-diagnostics-2.4-web.jsonl`。
-- 内置 `resources` release 已在 `web-host-cli-01` 实际 Web-Mobile 预览中验证 JSONL Host 重启后从持久 build/release 记录重建会话，并在重新打开新 URL 后重新应用资源；详见 `content-preview-web-0.1.md`。Asset Bundle 自身的 Host/运行时进程重启恢复尚未验收；多个 Bundle 同时驻留、共享依赖与峰值内存仍未测。外置/远端下载、CDN、小游戏、JSB、原生增量更新或其他资源类型仍是后续独立切片。
+- 同日双独立 Bundle 并行驻留和双向卸载顺序已在构建包中重复验证，缓存计数 29/3 → 31/5 → 29/3；释放一个 Bundle 后另一个 Texture 与 Bundle 保持有效。共享依赖、不同优先级和 `releaseAll` 影响仍待单独实测，见本计划的“多 Bundle 并行驻留”与 `traces/cocos-agent-multi-bundle-residency-2.4-web.json`。
+- 内置 `resources` release 已在 `web-host-cli-01` 实际 Web-Mobile 预览中验证 JSONL Host 重启后从持久 build/release 记录重建会话，并在重新打开新 URL 后重新应用资源；详见 `content-preview-web-0.1.md`。Asset Bundle 自身的 Host/运行时进程重启恢复、共享依赖释放、逐帧耗时与峰值内存尚未验收。无共享依赖的双 Bundle 同时驻留和双向卸载已验证。外置/远端下载、CDN、小游戏、JSB、原生增量更新或其他资源类型仍是后续独立切片。

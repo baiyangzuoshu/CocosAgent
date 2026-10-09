@@ -15,4 +15,10 @@ description: Stage, build, preview, recover, and roll back local PNG Asset Bundl
 
 Creator 2.4 会按 Bundle 名缓存对象。同名 Bundle 的已有缓存不会被新的版本参数替换；保持 release 的 Bundle 名唯一。新帧绘制确认前不得移除旧 Bundle 或减少旧纹理引用。`removeBundle` 只移除 Bundle 缓存；资源释放依赖纹理引用、SpriteFrame 生命周期与 AssetManager 清理，不能将二者视为同一个动作。
 
-**验证状态：** Creator 2.4.15 Web-Mobile 已实测 plan/stage、隔离构建、Texture/SpriteFrame 身份校验、运行时按需加载和画面替换、缺少 Bundle PNG 时 404/`retained` 并保留旧画面、恢复文件后的显式重选，以及跨 Bundle 与 built-in resources 的回滚。真实预览结束后静态服务与运行时 Host 已停止。进程重启恢复、直接 Bundle 缓存读回、内存基线、外置 Bundle、原生和 3.8 未验证；细节见[运行轨迹](../../traces/cocos-agent-asset-bundle-host-2.4-web.jsonl)。
+## 并行 Bundle 的诊断规则
+
+不同 Bundle 的资源仍进入同一个 AssetManager Asset Cache。对于无共享依赖的唯一 Texture，先分别加载 Bundle 与资源、`addRef()` 持有，再在目标 Sprite 不再使用后将本次持有计数降到 0；核对 UUID、路径和类型后调用该 Bundle 的 `release`，最后才 `removeBundle`。释放一侧后必须读回另一侧的 Bundle 与 Texture 仍有效，再检查全部释放后 Bundle/Asset 缓存回到会话基线。双独立 PNG Bundle 的两种卸载顺序已在 Web-Mobile 验证，见[双 Bundle 轨迹](../../traces/cocos-agent-multi-bundle-residency-2.4-web.json)和[探针](../../probes/cocos-bundle-residency-2.4.mjs)。
+
+**共享依赖状态：未验证。** 不要把独立资源的结果推广到共享 Texture/SpriteFrame。2.4 官方手册规定不同优先级共享资源归较高优先级 Bundle，加载低优先级 Bundle 前须先加载高优先级 Bundle；`releaseAll` 会覆盖 Bundle 外部依赖。先用真实依赖构建和 Bundle config 证明归属，再分别观察两个消费者释放前后的依赖引用、Asset Cache 与画面；引用关系未查清时，不对共享资源做强制释放或 `releaseAll`。
+
+**验证状态：** Creator 2.4.15 Web-Mobile 已实测 plan/stage、隔离构建、Texture/SpriteFrame 身份校验、运行时按需加载和画面替换、缺少 Bundle PNG 时 404/`retained` 并保留旧画面、恢复文件后的显式重选、跨 Bundle 与 built-in resources 的回滚，以及两个独立 PNG Bundle 的同时驻留和双向释放。Asset Bundle 重启恢复、共享依赖、逐帧耗时/峰值内存、外置 Bundle、原生和 3.8 未验证；详情见[单次切换轨迹](../../traces/cocos-agent-asset-bundle-host-2.4-web.jsonl)和[多 Bundle 轨迹](../../traces/cocos-agent-multi-bundle-residency-2.4-web.json)。
