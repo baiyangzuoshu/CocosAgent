@@ -1,0 +1,13 @@
+{
+  "ver": "1.1.3",
+  "uuid": "f243240e-f491-417e-8115-4bc42bf7c040",
+  "importer": "folder",
+  "isBundle": true,
+  "bundleName": "cocos-agent-smoke",
+  "priority": 1,
+  "compressionType": {},
+  "optimizeHotUpdate": {},
+  "inlineSpriteFrames": {},
+  "isRemoteBundle": {},
+  "subMetas": {}
+}
