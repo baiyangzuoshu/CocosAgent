@@ -48,4 +48,6 @@
 
 单元集成测试覆盖构建记录拒绝、release 漂移拒绝、静态资源服务、路径/方法限制、运行时状态读取及关闭。2026-10-09，本机 `web-host-cli-01` 实际构建包启动预览，浏览器画面显示蓝色方块和 Hello World；Host 收到蓝色资源 `applied`、引用数为 1 的回执，并接受为 `runtime-observed`。随后显式停止 Host 和静态服务器并关闭标签页；完整记录见 [`预览轨迹`](traces/cocos-agent-content-preview-2.4.jsonl)。
 
+同日继续从已验收的场景流水线生成 `cocosagent-p1-20261009`，构建并打开 `p1-web-20261009`。Host 收到蓝色入口资源的 `applied` 回执并确认 `runtime-observed`；浏览器同时显示场景红、蓝 Sprite 与运行时蓝色 Sprite。执行 `content.rollback` 后打开原 `web-host-cli-01`，Host 对旧 release 的蓝色资源再次收到 `applied`，`effective` 回到旧指纹，浏览器显示蓝色方块和 Hello World。完整操作序列见[发布、构建和回滚轨迹](traces/cocos-agent-p1-release-build-2.4-web.jsonl)。
+
 这不是远程部署或原生启动服务；也不负责构建。Web-Mobile 静态资源服务和运行时 Host 由显式 `content.preview.start` 启动，Agent 调用方负责打开返回 URL。
