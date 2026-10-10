@@ -35,7 +35,7 @@
                 if (message.type !== 'apply' || !Number.isSafeInteger(message.id) || !message.release) return;
                 queue = queue.then(function () {
                     if (closed) return;
-                    return options.runtime.apply(message.release, message.assetId).then(function (receipt) {
+                    return options.runtime.apply(message.release, message.assetId, message.dependencyContract || null).then(function (receipt) {
                         if (!closed && active.readyState === WebSocket.OPEN) active.send(JSON.stringify({ type: 'receipt', id: message.id, receipt: receipt }));
                     }, function (error) {
                         if (options.onError) options.onError(error);

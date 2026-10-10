@@ -47,7 +47,7 @@
                 throw Error('ASSET_NOT_IN_RELEASE');
             return asset;
         }
-        async function apply(release, assetId) {
+        async function apply(release, assetId, dependencyContract) {
             const request = { releaseId: release && release.releaseId, assetId };
             if (closed) return receipt('rejected', request, { code: 'CLOSED' });
             if (busy) return receipt('rejected', request, { code: 'BUSY' });
@@ -55,15 +55,23 @@
             try { asset = checked(release, assetId); }
             catch (error) { return receipt('rejected', request, { code: String(error.message || error) }); }
             if (current && current.releaseId === release.releaseId && current.assetId === assetId
-                && current.fingerprint === release.fingerprint) return receipt('already-active', request,
-                    { resourceUuid: current.resourceUuid, currentRefCount: current.texture.refCount });
+                && current.fingerprint === release.fingerprint
+                && (current.dependencyContractId || null) === (dependencyContract && dependencyContract.contractId || null))
+                return receipt('already-active', request,
+                    { resourceUuid: current.resourceUuid, currentRefCount: current.texture.refCount,
+                        dependencySchedule: current.dependencyLease && current.dependencyLease.receipt || null });
             busy = true;
             const previous = current;
             let candidate = null;
             let frame = null;
+            let dependencyLease = null;
             let installed = false;
             let owned = false;
             try {
+                if (dependencyContract) {
+                    if (typeof adapter.acquireDependencies !== 'function') throw Error('DEPENDENCY_SCHEDULER_UNAVAILABLE');
+                    dependencyLease = await adapter.acquireDependencies(dependencyContract, asset, release);
+                }
                 candidate = await adapter.load(asset.runtimePath, asset, release);
                 if (!candidate || !adapter.isValid(candidate) || adapter.assetId(candidate) !== asset.resourceUuid)
                     throw Error('RESOURCE_ID_MISMATCH');
@@ -76,7 +84,8 @@
                 if (!adapter.isValid(candidate)) throw Error('CANDIDATE_INVALID_AFTER_DRAW');
                 current = { releaseId: release.releaseId, fingerprint: release.fingerprint,
                     assetId, resourceUuid: asset.resourceUuid, delivery: release.delivery,
-                    bundleName: release.bundleName || null, runtimePath: asset.runtimePath, texture: candidate, frame };
+                    bundleName: release.bundleName || null, runtimePath: asset.runtimePath, texture: candidate, frame,
+                    dependencyLease, dependencyContractId: dependencyContract && dependencyContract.contractId || null };
                 try {
                     if (previous) {
                         adapter.disposeFrame(previous.frame);
@@ -88,11 +97,14 @@
                     }
                     adapter.releaseUnused();
                     if (previous && previous.delivery === 'asset-bundle' && previous.bundleName !== release.bundleName
-                        && adapter.removeBundle) adapter.removeBundle(previous.bundleName);
+                        && adapter.removeBundle && !previous.dependencyLease) adapter.removeBundle(previous.bundleName);
                     if (previous && typeof adapter.afterCleanup === 'function') await adapter.afterCleanup();
+                    if (previous && previous.dependencyLease && adapter.releaseDependencies)
+                        previous.dependencySchedule = await adapter.releaseDependencies(previous.dependencyLease);
                 } catch (error) {
                     return receipt('needs-review', request, { code: 'OLD_RESOURCE_CLEANUP_FAILED', cause: String(error),
-                        previousReleaseId: previous && previous.releaseId || null });
+                        previousReleaseId: previous && previous.releaseId || null,
+                        dependencySchedule: dependencyLease && dependencyLease.receipt || null });
                 }
                 const previousState = previous ? {
                     previousResourceUuid: previous.resourceUuid,
@@ -101,7 +113,9 @@
                     previousAssetCached: assetCached(previous.texture),
                 } : {};
                 return receipt('applied', request, { previousReleaseId: previous && previous.releaseId || null,
-                    ...previousState, resourceUuid: current.resourceUuid, currentRefCount: candidate.refCount });
+                    ...previousState, resourceUuid: current.resourceUuid, currentRefCount: candidate.refCount,
+                    dependencySchedule: dependencyLease && dependencyLease.receipt || null,
+                    previousDependencySchedule: previous && previous.dependencySchedule || null });
             } catch (error) {
                 if (installed) {
                     try { adapter.installFrame(previous ? previous.frame : null); }
@@ -110,10 +124,14 @@
                 if (frame) adapter.disposeFrame(frame);
                 if (owned && candidate && adapter.isValid(candidate)) candidate.decRef();
                 adapter.releaseUnused();
-                if (release.delivery === 'asset-bundle' && release.bundleName !== (previous && previous.bundleName)
+                if (dependencyLease && adapter.releaseDependencies) {
+                    try { await adapter.releaseDependencies(dependencyLease); } catch (_) { /* Keep the scheduler's safety record. */ }
+                }
+                if (!dependencyLease && release.delivery === 'asset-bundle' && release.bundleName !== (previous && previous.bundleName)
                     && adapter.removeBundle) adapter.removeBundle(release.bundleName);
                 return receipt('retained', request, { code: String(error.message || error),
-                    retainedReleaseId: previous && previous.releaseId || null });
+                    retainedReleaseId: previous && previous.releaseId || null,
+                    dependencySchedule: dependencyLease && dependencyLease.receipt || null });
             } finally { busy = false; }
         }
         function snapshot() { return { busy, closed, activeReleaseId: current && current.releaseId || null,
@@ -130,7 +148,12 @@
             const previous = current;
             if (previous) { adapter.disposeFrame(previous.frame); previous.texture.decRef(); current = null; }
             adapter.releaseUnused();
-            if (previous && previous.delivery === 'asset-bundle' && adapter.removeBundle) adapter.removeBundle(previous.bundleName);
+            if (previous && previous.dependencyLease && adapter.releaseDependencies) {
+                try { previous.dependencySchedule = adapter.releaseDependencies(previous.dependencyLease); }
+                catch (_) { /* Safe behavior is to keep tracked Bundle leases. */ }
+            }
+            if (previous && previous.delivery === 'asset-bundle' && adapter.removeBundle && !previous.dependencyLease)
+                adapter.removeBundle(previous.bundleName);
             return { outcome: 'disposed', idempotent: false };
         }
         return { apply, snapshot, dispose };

@@ -127,7 +127,7 @@ const COMMAND_INPUTS = {
     prefabSourceInspect: { type: 'object', additionalProperties: false, required: ['prefabUuid'],
         properties: { prefabUuid: { type: 'string', pattern: '^[0-9a-fA-F-]{36}$' } } },
     contentStressRun: { type: 'object', additionalProperties: false,
-        required: ['buildId', 'resourcePaths', 'parseFixturePaths', 'failureResourcePath', 'cycles', 'nodeCount', 'packable', 'profileId', 'budgets'],
+        required: ['buildId', 'resourcePaths', 'parseFixturePaths', 'failureResourcePath', 'cycles', 'nodeCount', 'packable', 'profileId', 'loadMode', 'budgetProfileId', 'budgets'],
         properties: {
             buildId: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{2,31}$' },
             resourcePaths: { type: 'array', minItems: 2, maxItems: 16, uniqueItems: true,
@@ -139,14 +139,18 @@ const COMMAND_INPUTS = {
             nodeCount: { type: 'integer', minimum: 32, maximum: 1024 },
             packable: { type: 'boolean' },
             profileId: { const: 'macos-arm64-chrome-headless-swiftshader-1280x800' },
+            loadMode: { const: 'cold-and-warm' },
+            budgetProfileId: { const: 'macos-arm64-headless-swiftshader-host-screening-v1' },
             budgets: { type: 'object', additionalProperties: false,
-                required: ['targetFps', 'maxResourceLoadP95Ms', 'maxImportParserP95Ms', 'maxPngParserP95Ms', 'maxReleaseCallP95Ms'],
+                required: ['targetFps', 'maxColdResourceLoadP95Ms', 'maxWarmResourceLoadP95Ms', 'maxImportParserP95Ms', 'maxPngParserP95Ms', 'maxReleaseCallP95Ms', 'maxEstimatedRgbaWorkingSetBytes'],
                 properties: {
                     targetFps: { type: 'number', minimum: 1, maximum: 360 },
-                    maxResourceLoadP95Ms: { type: 'number', minimum: 0.01, maximum: 60000 },
+                    maxColdResourceLoadP95Ms: { type: 'number', minimum: 0.01, maximum: 60000 },
+                    maxWarmResourceLoadP95Ms: { type: 'number', minimum: 0.01, maximum: 60000 },
                     maxImportParserP95Ms: { type: 'number', minimum: 0.01, maximum: 60000 },
                     maxPngParserP95Ms: { type: 'number', minimum: 0.01, maximum: 60000 },
                     maxReleaseCallP95Ms: { type: 'number', minimum: 0.01, maximum: 60000 },
+                    maxEstimatedRgbaWorkingSetBytes: { type: 'integer', minimum: 1048576, maximum: 1073741824 },
                 } },
         } },
 };
@@ -202,9 +206,9 @@ function commandCatalog(context) {
             preconditions: ['prefabUuidResolvable', 'serializedPrefabReadable'],
             status: context.assetDbReady === true ? 'available' : 'unavailable',
             reason: context.assetDbReady === true ? null : 'ASSETDB_UNAVAILABLE' },
-        { id: 'content.stress.run', contractVersion: '0.1', access: 'read',
+        { id: 'content.stress.run', contractVersion: '0.2', access: 'read',
             inputSchema: 'catalog.schema.json#/$defs/contentStressRunInput2x', input: COMMAND_INPUTS.contentStressRun,
-            preconditions: ['completedWebMobileBuild', 'packagedPngResources', 'headlessChromeProfile', 'explicitBudgets'],
+            preconditions: ['completedWebMobileBuild', 'complexPackagedPngResources', 'coldCacheProfile', 'explicitDeviceScreeningBudget'],
             status: 'available', reason: null },
     ];
 }

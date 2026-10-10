@@ -142,9 +142,10 @@ function validInput(command, input, creatorVersion) {
     if (command === 'prefab.source.inspect') return creatorVersion === '2.4.15' && keys.length === 1
         && /^[0-9a-f-]{36}$/i.test(input.prefabUuid || '');
     if (command === 'content.stress.run') {
-        const budgetKeys = ['targetFps', 'maxResourceLoadP95Ms', 'maxImportParserP95Ms', 'maxPngParserP95Ms', 'maxReleaseCallP95Ms'];
+        const budgetKeys = ['targetFps', 'maxColdResourceLoadP95Ms', 'maxWarmResourceLoadP95Ms', 'maxImportParserP95Ms',
+            'maxPngParserP95Ms', 'maxReleaseCallP95Ms', 'maxEstimatedRgbaWorkingSetBytes'];
         const budgets = input.budgets;
-        return creatorVersion === '2.4.15' && keys.length === 9
+        return creatorVersion === '2.4.15' && keys.length === 11
             && /^[a-z0-9][a-z0-9-]{2,31}$/.test(input.buildId || '')
             && Array.isArray(input.resourcePaths) && input.resourcePaths.length >= 2 && input.resourcePaths.length <= 16
             && input.resourcePaths.every((item) => typeof item === 'string' && /^[A-Za-z0-9_-]{1,64}(?:\/[A-Za-z0-9_-]{1,64}){0,7}$/.test(item))
@@ -159,10 +160,14 @@ function validInput(command, input, creatorVersion) {
             && Number.isInteger(input.nodeCount) && input.nodeCount >= 32 && input.nodeCount <= 1024
             && typeof input.packable === 'boolean'
             && input.profileId === 'macos-arm64-chrome-headless-swiftshader-1280x800'
+            && input.loadMode === 'cold-and-warm'
+            && input.budgetProfileId === 'macos-arm64-headless-swiftshader-host-screening-v1'
             && budgets && typeof budgets === 'object' && !Array.isArray(budgets)
             && Object.keys(budgets).length === budgetKeys.length && budgetKeys.every((key) => Number.isFinite(budgets[key]))
             && budgets.targetFps >= 1 && budgets.targetFps <= 360
-            && budgetKeys.slice(1).every((key) => budgets[key] >= 0.01 && budgets[key] <= 60000);
+            && budgetKeys.slice(1, -1).every((key) => budgets[key] >= 0.01 && budgets[key] <= 60000)
+            && Number.isInteger(budgets.maxEstimatedRgbaWorkingSetBytes)
+            && budgets.maxEstimatedRgbaWorkingSetBytes >= 1048576 && budgets.maxEstimatedRgbaWorkingSetBytes <= 1073741824;
     }
     return keys.every((key) => ['assetName', 'action', 'operationId', ...(creatorVersion === '2.4.15' ? ['position'] : [])].includes(key))
         && typeof input.assetName === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/i.test(input.assetName)
@@ -215,7 +220,8 @@ function dispatchCommand(request, invoke) {
         return problem('CATALOG_CHANGED', 'Creator instance or scene changed during selection. Query again.');
     }
     const capability = catalog.data.commands.find((item) => item.id === command);
-    if (!capability || capability.contractVersion !== '0.1' || capability.status !== 'available') {
+    const expectedContractVersion = command === 'content.stress.run' ? '0.2' : '0.1';
+    if (!capability || capability.contractVersion !== expectedContractVersion || capability.status !== 'available') {
         return problem('COMMAND_UNAVAILABLE', 'Command is not currently available.', { reason: capability && capability.reason || null });
     }
     const executionArgs = ['--project', project, '--creator-version', creatorVersion, '--expected-instance-id', selected.instanceId];

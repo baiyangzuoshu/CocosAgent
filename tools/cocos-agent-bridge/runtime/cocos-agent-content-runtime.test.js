@@ -4,12 +4,13 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const runtime = require('../../../2.4.15NewProject/assets/Script/CocosAgentContentRuntime.js');
 
-function harness() {
+function harness(options = {}) {
     const calls = [];
     const bundles = new Map();
     let capturedAdapter;
     const canvas = { children: [], addChild(node) { this.children.push(node); } };
-    const scene = { getChildByName(name) { return name === 'Canvas' ? canvas : null; } };
+    const scene = { _id: options.sceneUuid || 'scene-main', getChildByName(name) { return name === 'Canvas' ? canvas : null; } };
+    let sceneLaunch;
     class Node {
         constructor(name) { this.name = name; this.children = []; }
         setPosition(x, y) { this.position = { x, y }; }
@@ -31,8 +32,8 @@ function harness() {
         Sprite,
         Texture2D,
         SpriteFrame: class SpriteFrame { constructor(texture) { this.texture = texture; } },
-        Director: { EVENT_AFTER_DRAW: 'after-draw' },
-        director: { getScene: () => scene, once() {} },
+        Director: { EVENT_AFTER_DRAW: 'after-draw', EVENT_AFTER_SCENE_LAUNCH: 'after-scene-launch' },
+        director: { getScene: () => scene, once() {}, on(event, callback) { if (event === 'after-scene-launch') sceneLaunch = callback; } },
         isValid: (asset) => !!asset,
         resources: { load(path, type, callback) { calls.push(['resources.load', path, type]); callback(null, { _uuid: `${path}-uuid` }); } },
         assetManager: {
@@ -70,7 +71,9 @@ function harness() {
         return { apply() {}, snapshot() { return {}; }, dispose() { return { outcome: 'disposed' }; } };
     } };
     const instance = runtime.mount({ cc, core, scene });
-    return { instance, calls, Texture2D, captured: () => capturedAdapter };
+    return { instance, calls, Texture2D, captured: () => capturedAdapter,
+        setSceneUuid(uuid) { scene._id = uuid; if (sceneLaunch) sceneLaunch(); },
+        dropCached(uuid) { cachedUuids.delete(uuid); } };
 }
 
 test('Creator 2.4 runtime loads a Bundle texture through AssetManager and removes its cached Bundle', async () => {
@@ -113,4 +116,79 @@ test('Creator 2.4 runtime reports bounded AssetManager cache counts and Bundle n
     const adapter = harness().captured();
     assert.equal(adapter.isCached({ _uuid: 'texture-uuid' }), true);
     assert.equal(adapter.isCached({ _uuid: 'missing' }), false);
+});
+
+test('dependency scheduler loads owner before the active consumer and defers release while its scene is active', async () => {
+    const h = harness({ sceneUuid: 'scene-a' });
+    const adapter = h.captured();
+    const contract = { schema: 'cocos.asset-bundle-dependency', version: '0.2', creatorVersion: '2.4.15', platform: 'web-mobile',
+        contractId: 'shared-contract', buildId: 'shared-build-01',
+        deliveries: [
+            { id: 'owner-resources', kind: 'builtin-bundle', bundleName: 'resources', role: 'owner', dependsOn: [] },
+            { id: 'consumer-smoke', kind: 'bundle', bundleName: 'cocos-agent-smoke', role: 'consumer', dependsOn: ['owner-resources'] },
+        ],
+        assets: [
+            { uuid: 'frame-uuid', type: 'cc.SpriteFrame', ownerDeliveryId: 'owner-resources', dependsOn: ['texture-uuid'] },
+            { uuid: 'texture-uuid', type: 'cc.Texture2D', ownerDeliveryId: 'owner-resources', dependsOn: [] },
+        ],
+        references: [{ consumerDeliveryId: 'consumer-smoke', sceneUuid: 'scene-a', assetUuid: 'frame-uuid' }],
+        loadOrder: ['owner-resources', 'consumer-smoke'], unloadOrder: ['consumer-smoke', 'owner-resources'] };
+    const lease = await adapter.acquireDependencies(contract, { resourceUuid: 'texture-uuid' });
+    assert.equal(lease.receipt.outcome, 'acquired');
+    assert.deepEqual(h.calls.filter((call) => call[0] === 'loadBundle').map((call) => call[1]), ['resources', 'cocos-agent-smoke']);
+    assert.equal(lease.receipt.ownerLoaded, true);
+    assert.equal(lease.receipt.consumerLoaded, true);
+    assert.equal(lease.receipt.consumerSceneAlreadyActive, true);
+    assert.deepEqual(lease.receipt.redirectTargets, [{ assetUuid: 'frame-uuid', ownerDeliveryId: 'owner-resources' }]);
+    const deferred = adapter.releaseDependencies(lease);
+    assert.equal(deferred.outcome, 'OWNER_RELEASE_DEFERRED');
+    assert.equal(deferred.activeSceneUuid, 'scene-a');
+    assert.equal(h.calls.some((call) => call[0] === 'releaseUnusedAssets'), false);
+    h.dropCached('texture-uuid');
+    h.setSceneUuid('scene-main');
+    assert.equal(lease.receipt.outcome, 'released');
+    assert.equal(lease.receipt.ownerBundleRetained, true);
+    assert.equal(h.calls.some((call) => call[0] === 'releaseUnusedAssets'), true);
+});
+
+test('dependency lease protects static Bundle references independently of the selected dynamic asset UUID', async () => {
+    const h = harness({ sceneUuid: 'scene-a' });
+    const contract = { schema: 'cocos.asset-bundle-dependency', version: '0.2',
+        creatorVersion: '2.4.15', platform: 'web-mobile',
+        assets: [{ uuid: 'shared-texture', type: 'cc.Texture2D', ownerDeliveryId: 'owner-resources', dependsOn: [] }],
+        deliveries: [
+            { id: 'owner-resources', kind: 'builtin-bundle', bundleName: 'resources', role: 'owner', dependsOn: [] },
+            { id: 'consumer-smoke', kind: 'bundle', bundleName: 'cocos-agent-smoke', role: 'consumer', dependsOn: ['owner-resources'] },
+        ],
+        references: [{ consumerDeliveryId: 'consumer-smoke', sceneUuid: 'scene-a', assetUuid: 'shared-frame' }],
+        loadOrder: ['owner-resources', 'consumer-smoke'], unloadOrder: ['consumer-smoke', 'owner-resources'],
+    };
+    const lease = await h.captured().acquireDependencies(contract, { resourceUuid: 'other-texture' });
+    assert.equal(lease.receipt.outcome, 'acquired');
+    assert.equal(lease.receipt.candidateAssetInDependencyContract, false);
+    assert.equal(lease.receipt.candidateAssetUuid, 'other-texture');
+});
+
+test('a live lease in another consumer prevents release of their shared owner', async () => {
+    const h = harness({ sceneUuid: 'scene-a' });
+    const adapter = h.captured();
+    const contract = { schema: 'cocos.asset-bundle-dependency', version: '0.2', creatorVersion: '2.4.15', platform: 'web-mobile',
+        assets: [{ uuid: 'texture-uuid', type: 'cc.Texture2D', ownerDeliveryId: 'owner-resources', dependsOn: [] }],
+        deliveries: [
+            { id: 'owner-resources', kind: 'builtin-bundle', bundleName: 'resources', role: 'owner', dependsOn: [] },
+            { id: 'consumer-smoke', kind: 'bundle', bundleName: 'cocos-agent-smoke', role: 'consumer', dependsOn: ['owner-resources'] },
+        ],
+        references: [{ consumerDeliveryId: 'consumer-smoke', sceneUuid: 'scene-a', assetUuid: 'frame-uuid' }],
+        loadOrder: ['owner-resources', 'consumer-smoke'], unloadOrder: ['consumer-smoke', 'owner-resources'] };
+    const first = await adapter.acquireDependencies(contract, { resourceUuid: 'texture-uuid' });
+    const second = await adapter.acquireDependencies(contract, { resourceUuid: 'texture-uuid' });
+    adapter.releaseDependencies(first);
+    h.setSceneUuid('scene-main');
+    assert.equal(first.receipt.outcome, 'OWNER_RELEASE_DEFERRED');
+    assert.equal(h.calls.some((call) => call[0] === 'releaseUnusedAssets'), false);
+    adapter.releaseDependencies(second);
+    h.dropCached('texture-uuid');
+    h.setSceneUuid('scene-other');
+    assert.equal(first.receipt.outcome, 'released');
+    assert.equal(second.receipt.outcome, 'released');
 });

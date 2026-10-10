@@ -8,6 +8,7 @@ const path = require('node:path');
 const test = require('node:test');
 const releaseTools = require('./content-release');
 const buildTools = require('./content-build');
+const bundleDependencies = require('./content-bundle-dependencies');
 const { handle: agentHandle } = require('./agent-jsonl');
 
 const sourcePng = path.resolve(__dirname, '../../2.4.15NewProject/assets/resources/cocos-agent-batch-red.png');
@@ -154,6 +155,69 @@ test('plans an isolated 2.4 Web-Mobile build from the selected, revalidated rele
         assert.deepEqual(plan.includedResources.map((asset) => asset.resourceUuid), [textureUuid]);
         assert.equal(buildTools.plan({ ...value.params, creatorVersion: '3.8.7' }, { creatorExecutable: value.executable }).error.code,
             'INVALID_TARGET');
+    } finally { fs.rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test('binds a selected cross-Bundle dependency contract to the exact build identity', () => {
+    const value = fixture();
+    try {
+        const sharedFrameUuid = 'c133a000-0000-4000-8000-000000000001';
+        const assetMetaPath = path.join(value.root, 'assets/resources/GeneratedBlue.png.meta');
+        const assetMeta = JSON.parse(fs.readFileSync(assetMetaPath, 'utf8'));
+        assetMeta.subMetas = { GeneratedBlue: { importer: 'sprite-frame', uuid: sharedFrameUuid,
+            rawTextureUuid: textureUuid } };
+        fs.writeFileSync(assetMetaPath, JSON.stringify(assetMeta));
+        const consumerDir = path.join(value.root, 'assets/Consumer');
+        fs.mkdirSync(consumerDir, { recursive: true });
+        fs.writeFileSync(path.join(value.root, 'assets/Consumer.meta'), JSON.stringify({ importer: 'folder', isBundle: true,
+            bundleName: 'consumer-demo', isRemoteBundle: false }));
+        fs.writeFileSync(path.join(consumerDir, 'shared.fire'), JSON.stringify({ spriteFrame: { __uuid__: sharedFrameUuid } }));
+        fs.writeFileSync(path.join(consumerDir, 'shared.fire.meta'), JSON.stringify({ importer: 'scene', uuid: sceneUuid }));
+        const staged = bundleDependencies.stage({ projectRoot: value.root, creatorVersion: '2.4.15',
+            contractId: 'shared-contract-01', buildId: value.params.buildId,
+            assetSources: ['assets/resources/GeneratedBlue.png'] });
+        assert.equal(staged.success, true);
+        const plan = buildTools.plan({ ...value.params, dependencyContractId: 'shared-contract-01',
+            expectedDependencyFingerprint: staged.fingerprint }, { creatorExecutable: value.executable });
+        assert.equal(plan.success, true);
+        assert.equal(plan.dependencyFingerprint, staged.fingerprint);
+        assert.equal(plan.dependencyContract.deliveries.find((item) => item.role === 'owner').bundleName, 'resources');
+        assert.equal(buildTools.plan({ ...value.params, buildId: 'other-build-01', dependencyContractId: 'shared-contract-01' },
+            { creatorExecutable: value.executable }).error.code, 'DEPENDENCY_CONTRACT_MISMATCH');
+        const execute = buildTools.execute({ ...value.params, dependencyContractId: 'shared-contract-01',
+            expectedDependencyFingerprint: staged.fingerprint }, { creatorExecutable: value.executable,
+            spawnSync() {
+                const output = path.join(value.root, 'build/cocos-agent', value.params.buildId, 'web-mobile');
+                const ownerRoot = path.join(output, 'assets/resources');
+                const consumerRoot = path.join(output, 'assets/consumer-demo');
+                fs.mkdirSync(output, { recursive: true });
+                fs.writeFileSync(path.join(output, 'index.html'), '<!doctype html>');
+                for (const uuid of [textureUuid, sharedFrameUuid])
+                    fs.mkdirSync(path.join(ownerRoot, 'import', uuid.slice(0, 2)), { recursive: true });
+                fs.mkdirSync(path.join(ownerRoot, 'native', textureUuid.slice(0, 2)), { recursive: true });
+                const frameImport = path.join(ownerRoot, 'import', sharedFrameUuid.slice(0, 2), `${sharedFrameUuid}.framev.json`);
+                const textureImport = path.join(ownerRoot, 'import', textureUuid.slice(0, 2), `${textureUuid}.texv.json`);
+                fs.writeFileSync(frameImport, JSON.stringify([1, [buildTools.compactUuid(textureUuid)], ['_textureSetter'], ['cc.SpriteFrame']]));
+                fs.writeFileSync(textureImport, '{}');
+                fs.writeFileSync(path.join(ownerRoot, 'native', textureUuid.slice(0, 2), `${textureUuid}.nativev.png`), 'png');
+                const ownerConfig = { name: 'resources', paths: { 0: ['GeneratedBlue', 0], 1: ['GeneratedBlue', 1] },
+                    types: ['cc.SpriteFrame', 'cc.Texture2D'], uuids: [buildTools.compactUuid(sharedFrameUuid), buildTools.compactUuid(textureUuid)],
+                    importBase: 'import', nativeBase: 'native', versions: { import: [0, 'framev', 1, 'texv'], native: [1, 'nativev'] } };
+                fs.writeFileSync(path.join(ownerRoot, 'config.abc123.json'), JSON.stringify(ownerConfig));
+                fs.mkdirSync(consumerRoot, { recursive: true });
+                const consumerConfig = { name: 'consumer-demo', paths: {}, types: ['cc.SceneAsset', 'cc.SpriteFrame'],
+                    uuids: [buildTools.compactUuid(sceneUuid), buildTools.compactUuid(sharedFrameUuid)], deps: ['resources'],
+                    redirect: [1, 0], scenes: { 'db://assets/Consumer/shared.fire': 0 } };
+                fs.writeFileSync(path.join(consumerRoot, 'config.def456.json'), JSON.stringify(consumerConfig));
+                return { status: 0, stdout: '', stderr: '', signal: null };
+            } });
+        assert.equal(execute.success, true, JSON.stringify(execute));
+        assert.equal(execute.outcome, 'verified');
+        assert.equal(execute.dependencyContractId, 'shared-contract-01');
+        assert.equal(execute.dependencyVerification.length, 3);
+        const savedBuild = buildTools.get(value.params).build;
+        assert.equal(savedBuild.dependencyFingerprint, staged.fingerprint);
+        assert.equal(savedBuild.artifact.dependencyVerification.length, 3);
     } finally { fs.rmSync(value.root, { recursive: true, force: true }); }
 });
 

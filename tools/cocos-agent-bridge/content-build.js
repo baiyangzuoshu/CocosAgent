@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const contentRelease = require('./content-release');
+const bundleDependencies = require('./content-bundle-dependencies');
 
 const buildIdPattern = /^[a-z0-9][a-z0-9-]{2,31}$/;
 const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -39,6 +40,16 @@ function selectedRelease(root, releaseId, expectedFingerprint) {
     if (release.assets.some((asset) => !uuidPattern.test(asset.resourceUuid || '')))
         return fail('INVALID_RESOURCE_IDENTITY', 'A release asset has no valid Creator texture UUID.');
     return { success: true, release, fingerprint: checked.fingerprint };
+}
+
+function selectedDependencyContract(root, buildId, contractId, expectedFingerprint) {
+    if (contractId === undefined) return { success: true, contract: null, fingerprint: null };
+    const checked = bundleDependencies.get({ projectRoot: root, creatorVersion: '2.4.15', contractId });
+    if (!checked.success) return checked;
+    if (checked.contract.buildId !== buildId || checked.contract.platform !== 'web-mobile'
+        || (expectedFingerprint !== undefined && checked.fingerprint !== expectedFingerprint))
+        return fail('DEPENDENCY_CONTRACT_MISMATCH', 'Dependency contract build, platform, or expected fingerprint does not match this build.');
+    return { success: true, contract: checked.contract, fingerprint: checked.fingerprint };
 }
 
 function realPathWithin(root, candidate) {
@@ -102,12 +113,15 @@ function configuredStartScene(root) {
 function plan(params, options = {}) {
     const target = project(params);
     if (!target.success) return target;
-    const { buildId, releaseId, expectedFingerprint } = params;
+    const { buildId, releaseId, expectedFingerprint, dependencyContractId, expectedDependencyFingerprint } = params;
     if (!buildIdPattern.test(buildId || '') || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(releaseId || '')
-        || ['selected', 'effective'].includes(releaseId))
+        || ['selected', 'effective'].includes(releaseId)
+        || (expectedDependencyFingerprint !== undefined && dependencyContractId === undefined))
         return fail('INVALID_ARGUMENT', 'Provide safe buildId and selected releaseId values.');
     const selected = selectedRelease(target.root, releaseId, expectedFingerprint);
     if (!selected.success) return selected;
+    const dependency = selectedDependencyContract(target.root, buildId, dependencyContractId, expectedDependencyFingerprint);
+    if (!dependency.success) return dependency;
     const startScene = configuredStartScene(target.root);
     if (!startScene.success) return startScene;
     const relativeBuildPath = `build/cocos-agent/${buildId}`;
@@ -124,6 +138,8 @@ function plan(params, options = {}) {
         : args;
     return { success: true, outcome: 'ready', creatorVersion: '2.4.15', platform: 'web-mobile',
         projectRoot: target.root, releaseId, fingerprint: selected.fingerprint, buildId,
+        ...(dependency.contract ? { dependencyContractId: dependency.contract.contractId,
+            dependencyFingerprint: dependency.fingerprint, dependencyContract: dependency.contract } : {}),
         delivery: selected.release.delivery, ...(selected.release.delivery === 'asset-bundle' ? { bundleName: selected.release.bundleName } : {}),
         outputRoot, executable: executable.executable, appBundle: executable.appBundle,
         launcher, launchArgs, startScene: startScene.uuid, args,
@@ -191,22 +207,25 @@ function walk(root, visit, maxEntries = 50000) {
     return true;
 }
 
-function verifyOutput(outputRoot, release) {
+function verifyOutput(outputRoot, release, dependencyContract = null) {
     if (!fs.existsSync(outputRoot) || !fs.statSync(outputRoot).isDirectory())
         return fail('BUILD_OUTPUT_MISSING', 'Creator did not produce the planned output directory.');
     let hasIndex = false;
     const configs = [];
+    const invalidConfigFiles = [];
     const completeWalk = walk(outputRoot, (filename) => {
         if (path.basename(filename).toLowerCase() === 'index.html') hasIndex = true;
         if (/^config(?:\.[a-f0-9]+)?\.json$/i.test(path.basename(filename))) {
             try {
                 const value = JSON.parse(fs.readFileSync(filename, 'utf8'));
                 if (value && typeof value.name === 'string' && value.paths && value.uuids && value.types) configs.push({ filename, value });
-            } catch (_) { /* Ignore unrelated or non-JSON config files. */ }
+            } catch (_) { invalidConfigFiles.push(path.relative(outputRoot, filename)); }
         }
     });
     if (!completeWalk) return fail('BUILD_OUTPUT_TOO_LARGE', 'Build output exceeds the bounded inspection limit.');
     if (!hasIndex) return fail('BUILD_OUTPUT_INCOMPLETE', 'No Web-Mobile index.html was found in the output.');
+    if (dependencyContract && invalidConfigFiles.length)
+        return fail('DEPENDENCY_CONFIG_INVALID', `Dependency verification found unreadable Bundle config files: ${invalidConfigFiles.slice(0, 8).join(', ')}`);
     const expectedBundleName = release.delivery === 'asset-bundle' ? release.bundleName : 'resources';
     for (const candidate of configs) {
         const { filename, value } = candidate;
@@ -249,15 +268,119 @@ function verifyOutput(outputRoot, release) {
         }
         if (allAssetsPresent) {
             const configHash = sha256(fs.readFileSync(filename));
-            return { success: true, outcome: 'verified', platform: 'web-mobile', delivery: release.delivery,
+            const result = { success: true, outcome: 'verified', platform: 'web-mobile', delivery: release.delivery,
                 outputRoot, configPath: path.relative(outputRoot, filename), fingerprint: release.fingerprint,
                 ...(release.delivery === 'asset-bundle' ? { bundleName: release.bundleName, bundleConfigHash: configHash } : {}),
                 resourceCount: verified.length, resources: verified };
+            if (!dependencyContract) return result;
+            const dependencyResult = verifyDependencyContract(outputRoot, configs, dependencyContract);
+            if (!dependencyResult.success) return dependencyResult;
+            return { ...result, dependencyContractId: dependencyContract.contractId,
+                dependencyFingerprint: dependencyResult.fingerprint, dependencyVerification: dependencyResult.checks };
         }
     }
     return fail(configs.length ? 'BUILD_ASSET_MISSING' : 'BUILD_RESOURCE_CONFIG_MISSING',
         configs.length ? 'Expected content Bundle does not contain every release texture/SpriteFrame identity and file.'
             : 'No matching content bundle configuration was found in the Web-Mobile output.');
+}
+
+function verifyDependencyContract(outputRoot, configs, contract) {
+    if (!contract || contract.schema !== 'cocos.asset-bundle-dependency' || contract.version !== '0.2'
+        || contract.creatorVersion !== '2.4.15' || contract.platform !== 'web-mobile'
+        || !Array.isArray(contract.deliveries) || !Array.isArray(contract.assets) || !Array.isArray(contract.references))
+        return fail('DEPENDENCY_CONTRACT_INVALID', 'Dependency contract does not match the supported 2.4.15 Web-Mobile schema.');
+    const byName = new Map();
+    configs.forEach((candidate) => {
+        const list = byName.get(candidate.value.name) || [];
+        list.push(candidate);
+        byName.set(candidate.value.name, list);
+    });
+    const deliveries = new Map(contract.deliveries.map((delivery) => [delivery.id, delivery]));
+    const checks = [];
+    const redirectTarget = (config, uuidIndex) => {
+        const redirect = Array.isArray(config.redirect) ? config.redirect : [];
+        for (let i = 0; i + 1 < redirect.length; i += 2) {
+            if (redirect[i] !== uuidIndex) continue;
+            const dep = config.deps && config.deps[redirect[i + 1]];
+            return typeof dep === 'string' ? dep : null;
+        }
+        return null;
+    };
+    for (const asset of contract.assets) {
+        const owner = deliveries.get(asset.ownerDeliveryId);
+        if (!owner) return fail('DEPENDENCY_OWNER_MISSING', `No owner delivery is declared for ${asset.uuid}.`);
+        const localOwners = [];
+        for (const { filename, value } of configs) {
+            const matches = [];
+            (value.uuids || []).forEach((uuid, index) => {
+                const entry = value.paths && value.paths[String(index)];
+                if (uuid === compactUuid(asset.uuid) && Array.isArray(entry)
+                    && value.types[entry[1]] === asset.type) matches.push(index);
+            });
+            for (const index of matches) {
+                const target = redirectTarget(value, index);
+                if (target === null) localOwners.push({ filename, config: value, index });
+                else if (value.name === owner.bundleName) return fail('DEPENDENCY_OWNER_REDIRECTED', `Owner ${owner.bundleName} redirects its declared asset ${asset.uuid}.`);
+            }
+        }
+        if (localOwners.length !== 1 || localOwners[0].config.name !== owner.bundleName
+            || path.relative(outputRoot, path.dirname(localOwners[0].filename)).split(path.sep).join('/')
+                !== `web-mobile/assets/${owner.bundleName}`)
+            return fail('DEPENDENCY_OWNER_NOT_UNIQUE', `Asset ${asset.uuid} must have exactly one local owner entry in ${owner.bundleName}.`);
+        const ownerEntry = localOwners[0];
+        const ownerConfig = ownerEntry.config;
+        const ownerRoot = path.dirname(ownerEntry.filename);
+        const ownerImport = findImportFile(outputRoot, ownerRoot, ownerConfig, ownerEntry.index, asset.uuid);
+        if (!ownerImport || !fs.existsSync(ownerImport))
+            return fail(asset.type === 'cc.Texture2D' ? 'DEPENDENCY_TEXTURE_IMPORT_INVALID' : 'DEPENDENCY_FRAME_IMPORT_INVALID',
+                `Owner import data for ${asset.type} ${asset.uuid} is missing.`);
+        if (asset.type === 'cc.Texture2D') {
+            const nativeHash = fileVersion(ownerConfig.versions?.native, ownerEntry.index);
+            const nativeBase = typeof ownerConfig.nativeBase === 'string' ? ownerConfig.nativeBase : 'native';
+            const nativeFile = nativeHash && path.resolve(ownerRoot, nativeBase, asset.uuid.slice(0, 2), `${asset.uuid}.${nativeHash}.png`);
+            if (!nativeFile || !realPathWithin(outputRoot, nativeFile) || !fs.existsSync(nativeFile))
+                return fail('DEPENDENCY_TEXTURE_NATIVE_MISSING', `Owner native PNG for Texture ${asset.uuid} is missing.`);
+        }
+        if (asset.type === 'cc.SpriteFrame') {
+            const raw = asset.meta && asset.meta.rawTextureUuid;
+            if (!uuidPattern.test(raw || '') || !asset.dependsOn?.includes(raw))
+                return fail('DEPENDENCY_META_CHAIN_INVALID', `SpriteFrame ${asset.uuid} has no matching Texture UUID edge.`);
+            const texture = contract.assets.find((item) => item.uuid === raw && item.type === 'cc.Texture2D');
+            if (!texture || texture.ownerDeliveryId !== asset.ownerDeliveryId)
+                return fail('DEPENDENCY_TEXTURE_MISSING', `SpriteFrame ${asset.uuid} does not resolve to a Texture owned by the same delivery.`);
+            if (!spriteFrameImportsTexture(ownerImport, raw))
+                return fail('DEPENDENCY_FRAME_IMPORT_INVALID', `Owner import data for SpriteFrame ${asset.uuid} does not reference its declared Texture.`);
+        }
+        checks.push({ assetUuid: asset.uuid, type: asset.type, owner: owner.bundleName,
+            ownerConfig: path.relative(outputRoot, ownerEntry.filename), ownerConfigHash: sha256(fs.readFileSync(ownerEntry.filename)),
+            ownerIndex: ownerEntry.index });
+    }
+    for (const reference of contract.references) {
+        const consumer = deliveries.get(reference.consumerDeliveryId);
+        const owner = contract.assets.find((asset) => asset.uuid === reference.assetUuid);
+        if (!consumer || !owner) return fail('DEPENDENCY_REFERENCE_INVALID', 'A static reference names an undeclared consumer or asset.');
+        const candidates = byName.get(consumer.bundleName) || [];
+        if (!candidates.length) return fail('DEPENDENCY_CONSUMER_MISSING', `Consumer config ${consumer.bundleName} is missing from build output.`);
+        if (candidates.length !== 1) return fail('DEPENDENCY_CONSUMER_AMBIGUOUS', `More than one config claims consumer name ${consumer.bundleName}.`);
+        const candidate = candidates[0];
+        const { filename, value } = candidate;
+        const sceneKey = `db://assets/${reference.scenePath.replace(/^assets\//, '')}`;
+        const sceneIndex = value.scenes && value.scenes[sceneKey];
+        if (!Number.isInteger(sceneIndex) || value.uuids[sceneIndex] !== compactUuid(reference.sceneUuid))
+            return fail('DEPENDENCY_SCENE_IDENTITY_MISMATCH', `Consumer ${consumer.bundleName} does not contain the declared scene UUID/path ${reference.scenePath}.`);
+        const frameIndices = [];
+        value.uuids.forEach((uuid, index) => { if (uuid === compactUuid(reference.assetUuid)) frameIndices.push(index); });
+        const ownerName = deliveries.get(owner.ownerDeliveryId).bundleName;
+        if (frameIndices.length !== 1 || redirectTarget(value, frameIndices[0]) !== ownerName
+            || path.relative(outputRoot, path.dirname(filename)).split(path.sep).join('/') !== `web-mobile/assets/${consumer.bundleName}`)
+            return fail('DEPENDENCY_REDIRECT_MISMATCH', `Consumer ${consumer.bundleName} does not redirect ${reference.assetUuid} to its owner.`);
+        if (!Array.isArray(value.deps) || !value.deps.includes(ownerName))
+            return fail('DEPENDENCY_DECLARATION_MISSING', `Consumer ${consumer.bundleName} does not declare dependency on ${ownerName}.`);
+        checks.push({ reference: reference.assetUuid, sceneUuid: reference.sceneUuid,
+            consumer: consumer.bundleName, owner: ownerName, consumerConfig: path.relative(outputRoot, filename),
+            consumerConfigHash: sha256(fs.readFileSync(filename)), redirectTarget: ownerName });
+    }
+    return { success: true, fingerprint: sha256(JSON.stringify(contract)), checks };
 }
 
 function writeRecord(filename, value, exclusive = false) {
@@ -277,10 +400,15 @@ function execute(params, options = {}) {
     if (fs.existsSync(filename)) return fail('BUILD_ID_CONFLICT', 'Build ID already has a persisted operation record.');
     const releaseResult = selectedRelease(planned.projectRoot, planned.releaseId, planned.fingerprint);
     if (!releaseResult.success) return releaseResult;
+    const dependencyResult = selectedDependencyContract(planned.projectRoot, planned.buildId,
+        planned.dependencyContractId, planned.dependencyFingerprint);
+    if (!dependencyResult.success) return dependencyResult;
     const record = { contractVersion: '0.1', buildId: planned.buildId, creatorVersion: planned.creatorVersion,
         platform: planned.platform, projectRoot: planned.projectRoot, releaseId: planned.releaseId,
         fingerprint: planned.fingerprint, outputRoot: planned.outputRoot, state: 'running',
         releaseManifest: releaseResult.release,
+        ...(dependencyResult.contract ? { dependencyContractId: planned.dependencyContractId,
+            dependencyFingerprint: dependencyResult.fingerprint, dependencyContract: dependencyResult.contract } : {}),
         invocation: { launcher: planned.launcher, args: planned.launchArgs,
             creatorExecutable: planned.executable, creatorArgs: planned.args }, startedAt: new Date().toISOString() };
     try { writeRecord(filename, record, true); }
@@ -316,7 +444,14 @@ function execute(params, options = {}) {
         writeRecord(filename, failed);
         return fail(code, 'Creator Web-Mobile build did not exit successfully.');
     }
-    result = verifyOutput(planned.outputRoot, releaseResult.release);
+    const finalDependency = selectedDependencyContract(planned.projectRoot, planned.buildId,
+        planned.dependencyContractId, planned.dependencyFingerprint);
+    if (!finalDependency.success) {
+        const uncertain = { ...record, state: 'needs-review', finishedAt: new Date().toISOString(), error: finalDependency.error };
+        writeRecord(filename, uncertain);
+        return finalDependency;
+    }
+    result = verifyOutput(planned.outputRoot, releaseResult.release, finalDependency.contract);
     const completed = result.success
         ? { ...record, state: 'completed', finishedAt: new Date().toISOString(), artifact: result }
         : { ...record, state: 'needs-review', finishedAt: new Date().toISOString(), error: result.error };
@@ -352,7 +487,18 @@ function reconcile(params) {
         writeRecord(recordFile(record.projectRoot, record.buildId), needsReview);
         return fail('RELEASE_CHANGED', 'Current project assets no longer match the build record.');
     }
-    const verified = verifyOutput(record.outputRoot, checked.release);
+    let dependencyContract = null;
+    if (record.dependencyContractId) {
+        const currentDependency = selectedDependencyContract(record.projectRoot, record.buildId,
+            record.dependencyContractId, record.dependencyFingerprint);
+        if (!currentDependency.success) {
+            const needsReview = { ...record, state: 'needs-review', finishedAt: new Date().toISOString(), error: currentDependency.error };
+            writeRecord(recordFile(record.projectRoot, record.buildId), needsReview);
+            return currentDependency;
+        }
+        dependencyContract = currentDependency.contract;
+    }
+    const verified = verifyOutput(record.outputRoot, checked.release, dependencyContract);
     const reconciled = verified.success
         ? { ...record, state: 'completed', finishedAt: new Date().toISOString(), artifact: verified, error: undefined }
         : { ...record, state: 'needs-review', finishedAt: new Date().toISOString(), error: verified.error };
@@ -369,4 +515,4 @@ function handle(method, params, options = {}) {
     return fail('UNKNOWN_METHOD', 'Unknown content build method.');
 }
 
-module.exports = { handle, plan, execute, get, reconcile, verifyOutput, compactUuid, configuredStartScene };
+module.exports = { handle, plan, execute, get, reconcile, verifyOutput, verifyDependencyContract, compactUuid, configuredStartScene };

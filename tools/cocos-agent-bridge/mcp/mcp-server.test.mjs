@@ -54,6 +54,7 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
             'cocos_2x_assets_scene_compensate', 'cocos_2x_assets_scene_execute', 'cocos_2x_assets_scene_get',
             'cocos_2x_assets_scene_plan', 'cocos_2x_assets_scene_preview_accept', 'cocos_2x_assets_scene_repair',
             'cocos_2x_assets_scene_validate',
+            'cocos_2x_bundle_dependencies_get', 'cocos_2x_bundle_dependencies_plan', 'cocos_2x_bundle_dependencies_stage',
             'cocos_2x_capabilities_list', 'cocos_2x_command_execute',
             'cocos_2x_content_build_execute',
             'cocos_2x_content_build_get', 'cocos_2x_content_build_plan', 'cocos_2x_content_build_reconcile',
@@ -66,7 +67,7 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
             'cocos_2x_scene_node_inspect', 'cocos_2x_scene_snapshot', 'cocos_2x_workflow_compensate',
             'cocos_2x_workflow_execute', 'cocos_2x_workflow_get', 'cocos_2x_workflow_plan', 'cocos_2x_workflow_replay',
         ]);
-        assert.equal(tools.length, 39);
+        assert.equal(tools.length, 42);
         const commandTool = tools.find((tool) => tool.name === 'cocos_2x_command_execute');
         assert.equal(commandTool.annotations.readOnlyHint, false);
         assert.equal(commandTool.annotations.destructiveHint, true);
@@ -85,7 +86,8 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         assert.deepEqual(prefabInspectBranch.properties.input.required, ['prefabUuid']);
         const stressBranch = commandBranches.find((branch) => branch.properties?.command?.const === 'content.stress.run');
         assert.deepEqual(stressBranch.properties.input.required,
-            ['buildId', 'resourcePaths', 'parseFixturePaths', 'failureResourcePath', 'cycles', 'nodeCount', 'packable', 'profileId', 'budgets']);
+            ['buildId', 'resourcePaths', 'parseFixturePaths', 'failureResourcePath', 'cycles', 'nodeCount', 'packable',
+                'profileId', 'loadMode', 'budgetProfileId', 'budgets']);
         assert.equal(tools.find((tool) => tool.name === 'cocos_2x_instances_list').annotations.readOnlyHint, true);
         for (const name of ['cocos_2x_scene_snapshot', 'cocos_2x_scene_node_inspect',
             'cocos_2x_asset_search_png', 'cocos_2x_asset_validate_png']) {
@@ -263,8 +265,10 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
             parseFixturePaths: ['cocos-agent-batch-red', 'cocos-agent-batch-blue'], failureResourcePath: 'cocos-agent-batch-blue',
             cycles: 96, nodeCount: 512, packable: true,
             profileId: 'macos-arm64-chrome-headless-swiftshader-1280x800',
-            budgets: { targetFps: 30, maxResourceLoadP95Ms: 100, maxImportParserP95Ms: 20,
-                maxPngParserP95Ms: 20, maxReleaseCallP95Ms: 8 },
+            loadMode: 'cold-and-warm', budgetProfileId: 'macos-arm64-headless-swiftshader-host-screening-v1',
+            budgets: { targetFps: 30, maxColdResourceLoadP95Ms: 150, maxWarmResourceLoadP95Ms: 10,
+                maxImportParserP95Ms: 30, maxPngParserP95Ms: 60, maxReleaseCallP95Ms: 8,
+                maxEstimatedRgbaWorkingSetBytes: 33554432 },
         };
         const performance = await client.callTool({ name: 'cocos_2x_content_stress_run', arguments: {
             projectRoot: value.projects[0], input: performanceInput,
@@ -298,10 +302,12 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
 
         const planned = await client.callTool({ name: 'cocos_2x_content_build_plan', arguments: {
             projectRoot: value.projects[0], releaseId: 'release-a', expectedFingerprint: 'a'.repeat(64), buildId: 'web-build-01',
+            dependencyContractId: 'shared-dependency-01', expectedDependencyFingerprint: 'b'.repeat(64),
         } });
         assert.equal(planned.structuredContent.method, 'content.build.plan');
         assert.equal(calls.at(-1).params.creatorVersion, '2.4.15');
         assert.equal(calls.at(-1).params.projectRoot, value.projects[0]);
+        assert.equal(calls.at(-1).params.dependencyContractId, 'shared-dependency-01');
 
         const operationId = '5858dc80-32d0-4610-8291-f057fa13151e';
         const history = await client.callTool({ name: 'cocos_2x_operation_get', arguments: {
@@ -407,6 +413,19 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         const bundleStage = await client.callTool({ name: 'cocos_2x_content_bundle_stage', arguments: bundleInput });
         assert.equal(bundleStage.structuredContent.method, 'content.bundle.stage');
         assert.equal(calls.at(-1).params.bundleRoot, 'assets/CocosAgentBundleSmoke');
+
+        const dependencyInput = { projectRoot: value.projects[0], contractId: 'shared-dependency-01',
+            buildId: 'shared-build-01', assetSources: ['assets/resources/RedReleaseOct09.png'] };
+        const dependencyPlan = await client.callTool({ name: 'cocos_2x_bundle_dependencies_plan', arguments: dependencyInput });
+        assert.equal(dependencyPlan.structuredContent.method, 'content.bundle.dependencies.plan');
+        assert.equal(calls.at(-1).params.creatorVersion, '2.4.15');
+        assert.deepEqual(calls.at(-1).params.assetSources, dependencyInput.assetSources);
+        const dependencyStage = await client.callTool({ name: 'cocos_2x_bundle_dependencies_stage', arguments: dependencyInput });
+        assert.equal(dependencyStage.structuredContent.method, 'content.bundle.dependencies.stage');
+        const dependencyGet = await client.callTool({ name: 'cocos_2x_bundle_dependencies_get', arguments: {
+            projectRoot: value.projects[0], contractId: dependencyInput.contractId,
+        } });
+        assert.equal(dependencyGet.structuredContent.method, 'content.bundle.dependencies.get');
 
         const contentRead = await client.callTool({ name: 'cocos_2x_content_get', arguments: {
             projectRoot: value.projects[0], releaseId,

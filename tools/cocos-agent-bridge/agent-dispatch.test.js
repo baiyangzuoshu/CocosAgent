@@ -174,15 +174,17 @@ const stressInput = { buildId: 'p1-web-20261009', resourcePaths: ['RedReleaseOct
     parseFixturePaths: ['cocos-agent-batch-red', 'cocos-agent-batch-blue'], failureResourcePath: 'cocos-agent-batch-blue',
     cycles: 96, nodeCount: 512, packable: true,
     profileId: 'macos-arm64-chrome-headless-swiftshader-1280x800',
-    budgets: { targetFps: 30, maxResourceLoadP95Ms: 100, maxImportParserP95Ms: 20,
-        maxPngParserP95Ms: 20, maxReleaseCallP95Ms: 8 } };
+    loadMode: 'cold-and-warm', budgetProfileId: 'macos-arm64-headless-swiftshader-host-screening-v1',
+    budgets: { targetFps: 30, maxColdResourceLoadP95Ms: 150, maxWarmResourceLoadP95Ms: 10,
+        maxImportParserP95Ms: 30, maxPngParserP95Ms: 60, maxReleaseCallP95Ms: 8,
+        maxEstimatedRgbaWorkingSetBytes: 33554432 } };
 const stressCalls = [];
 const stressInvoke = (script, args) => {
     stressCalls.push({ script, args });
     if (script === 'catalog-host.js' && args.includes('instances.list'))
         return { status: 0, stdout: JSON.stringify({ success: true, data: [stressInstance] }) };
     if (script === 'catalog-host.js') return { status: 0, stdout: JSON.stringify({ success: true, data: {
-        instance: stressInstance, commands: [{ id: 'content.stress.run', contractVersion: '0.1', access: 'read', status: 'available', reason: null }],
+        instance: stressInstance, commands: [{ id: 'content.stress.run', contractVersion: '0.2', access: 'read', status: 'available', reason: null }],
     } }) };
     return { status: 0, stdout: `command.result ${JSON.stringify({ command: 'content.stress.run', result: { acceptance: { success: true } } })}\n` };
 };

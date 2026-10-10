@@ -6,6 +6,7 @@ const path = require('path');
 const crypto = require('crypto');
 const contentBuild = require('./content-build');
 const contentRelease = require('./content-release');
+const bundleDependencies = require('./content-bundle-dependencies');
 const contentRuntimeHost = require('./runtime/content-runtime-host');
 
 const BUILD_ID_PATTERN = /^[a-z0-9][a-z0-9-]{2,31}$/;
@@ -189,7 +190,15 @@ async function start(params, options = {}) {
     catch (_) { return failure('BUILD_OUTPUT_MISSING', 'Verified Web-Mobile build output is missing.'); }
     if (!inside(realProject, realOutput)) return failure('UNSAFE_BUILD_PATH', 'Build output resolves outside the project.');
     let artifact;
-    try { artifact = buildTools.verifyOutput(expectedOutputRoot, record.releaseManifest); }
+    let dependencyContract = null;
+    if (record.dependencyContractId) {
+        const dependency = bundleDependencies.get({ projectRoot, creatorVersion, contractId: record.dependencyContractId });
+        if (!dependency.success || dependency.fingerprint !== record.dependencyFingerprint
+            || JSON.stringify(dependency.contract) !== JSON.stringify(record.dependencyContract))
+            return failure('DEPENDENCY_CONTRACT_CHANGED', 'Staged cross-Bundle dependency contract no longer matches the completed build record.');
+        dependencyContract = dependency.contract;
+    }
+    try { artifact = buildTools.verifyOutput(expectedOutputRoot, record.releaseManifest, dependencyContract); }
     catch (_) { return failure('BUILD_OUTPUT_CHANGED', 'Build package could not be revalidated safely.'); }
     if (!artifact.success || artifact.fingerprint !== record.fingerprint)
         return failure('BUILD_OUTPUT_CHANGED', 'Build package no longer matches its verified release record.');
@@ -200,6 +209,13 @@ async function start(params, options = {}) {
             || verified.bundleConfigHash !== artifact.bundleConfigHash || verified.configPath !== artifact.configPath
             || JSON.stringify(verified.resources) !== JSON.stringify(artifact.resources))
             return failure('BUILD_OUTPUT_CHANGED', 'Asset Bundle package identity differs from the completed build record.');
+    }
+    if (dependencyContract) {
+        const verified = record.artifact;
+        if (!verified || verified.dependencyContractId !== dependencyContract.contractId
+            || verified.dependencyFingerprint !== record.dependencyFingerprint
+            || JSON.stringify(verified.dependencyVerification) !== JSON.stringify(artifact.dependencyVerification))
+            return failure('BUILD_DEPENDENCY_OUTPUT_CHANGED', 'Cross-Bundle owner, consumer, UUID, or redirect evidence differs from the completed build record.');
     }
     const webRoot = findWebRoot(expectedOutputRoot, artifact.configPath);
     if (!webRoot) return failure('PREVIEW_ENTRY_NOT_FOUND', 'A safe Web-Mobile index.html matching the verified content bundle was not found.');
@@ -222,12 +238,13 @@ async function start(params, options = {}) {
     try {
         const port = await listen(server);
         const baseUrl = `http://127.0.0.1:${port}/`;
-        runtime = await runtimeTools.start({ projectRoot, creatorVersion, platform: 'web-preview', previewUrl: baseUrl });
+        runtime = await runtimeTools.start({ projectRoot, creatorVersion, platform: 'web-preview', previewUrl: baseUrl,
+            dependencyContract });
         const previousEffective = selected.effective && typeof selected.effective.releaseId === 'string'
             ? { releaseId: selected.effective.releaseId, fingerprint: selected.effective.fingerprint || null }
             : null;
         const session = { previewId: crypto.randomBytes(16).toString('hex'), projectRoot, creatorVersion,
-            buildId, releaseId: record.releaseId, fingerprint: record.fingerprint, webRoot, baseUrl,
+            buildId, releaseId: record.releaseId, fingerprint: record.fingerprint, webRoot, baseUrl, dependencyContract,
             server, runtime, releaseTools, recentEvents: [], previousEffective, runtimeConfirmed: false,
             startedAt: new Date().toISOString() };
         session.drainTimer = setInterval(() => drainEvents(session), 100);

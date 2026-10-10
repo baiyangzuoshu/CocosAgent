@@ -20,6 +20,8 @@ const resourcePaths = jsonFlag('--resource-paths');
 const parseFixturePaths = jsonFlag('--parse-fixture-paths');
 const failurePath = value('--failure-resource-path');
 const testProfile = value('--test-profile');
+const loadMode = value('--load-mode');
+const budgetProfileId = value('--budget-profile');
 const budgets = jsonFlag('--budgets');
 if (!/^[a-z0-9][a-z0-9-]{2,31}$/.test(buildId || '')
     || !Array.isArray(resourcePaths) || resourcePaths.length < 2 || resourcePaths.length > 16
@@ -32,12 +34,16 @@ if (!/^[a-z0-9][a-z0-9-]{2,31}$/.test(buildId || '')
     || typeof failurePath !== 'string' || !parseFixturePaths.includes(failurePath) || resourcePaths.includes(failurePath)
     || cycles < resourcePaths.length + 1
     || testProfile !== 'macos-arm64-chrome-headless-swiftshader-1280x800'
+    || loadMode !== 'cold-and-warm' || budgetProfileId !== 'macos-arm64-headless-swiftshader-host-screening-v1'
     || !budgets || typeof budgets !== 'object' || Array.isArray(budgets)
-    || Object.keys(budgets).length !== 5
-    || !['targetFps', 'maxResourceLoadP95Ms', 'maxImportParserP95Ms', 'maxPngParserP95Ms', 'maxReleaseCallP95Ms'].every((key) => Number.isFinite(budgets[key]))
+    || Object.keys(budgets).length !== 7
+    || !['targetFps', 'maxColdResourceLoadP95Ms', 'maxWarmResourceLoadP95Ms', 'maxImportParserP95Ms', 'maxPngParserP95Ms',
+        'maxReleaseCallP95Ms', 'maxEstimatedRgbaWorkingSetBytes'].every((key) => Number.isFinite(budgets[key]))
     || budgets.targetFps < 1 || budgets.targetFps > 360
-    || ['maxResourceLoadP95Ms', 'maxImportParserP95Ms', 'maxPngParserP95Ms', 'maxReleaseCallP95Ms']
-        .some((key) => budgets[key] < 0.01 || budgets[key] > 60000)) {
+    || ['maxColdResourceLoadP95Ms', 'maxWarmResourceLoadP95Ms', 'maxImportParserP95Ms', 'maxPngParserP95Ms', 'maxReleaseCallP95Ms']
+        .some((key) => budgets[key] < 0.01 || budgets[key] > 60000)
+    || !Number.isInteger(budgets.maxEstimatedRgbaWorkingSetBytes)
+    || budgets.maxEstimatedRgbaWorkingSetBytes < 1048576 || budgets.maxEstimatedRgbaWorkingSetBytes > 1073741824) {
     throw Error('INVALID_STRESS_PROFILE');
 }
 if (process.platform !== 'darwin' || process.arch !== 'arm64') throw Error('TEST_PROFILE_UNAVAILABLE');
@@ -58,10 +64,13 @@ function readPngInfo(filename) {
     const bytes = fs.readFileSync(filename);
     if (bytes.length < 24 || bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a'
         || bytes.toString('ascii', 12, 16) !== 'IHDR') throw Error(`PNG_INVALID:${filename}`);
-    return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20), bytes: bytes.length,
+    const width = bytes.readUInt32BE(16);
+    const height = bytes.readUInt32BE(20);
+    return { width, height, bytes: bytes.length, estimatedRgbaBytes: width * height * 4,
+        bitDepth: bytes[24], colorType: bytes[25],
         sha256: crypto.createHash('sha256').update(bytes).digest('hex') };
 }
-function readResource(resourcePath, requireRepresentativeSize) {
+function readResource(resourcePath) {
     const imagePath = path.join(projectRoot, 'assets/resources', `${resourcePath}.png`);
     const metaPath = `${imagePath}.meta`;
     if (!fs.existsSync(imagePath) || !fs.existsSync(metaPath)) throw Error(`RESOURCE_SOURCE_OR_META_MISSING:${resourcePath}`);
@@ -70,16 +79,21 @@ function readResource(resourcePath, requireRepresentativeSize) {
     const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
     if (typeof meta.uuid !== 'string' || !meta.uuid) throw Error(`RESOURCE_UUID_MISSING:${resourcePath}`);
     const png = readPngInfo(imagePath);
-    if (requireRepresentativeSize && (png.width < 64 || png.height < 64)) throw Error(`STRESS_ASSET_TOO_SMALL:${resourcePath}`);
+    if (png.width < 512 || png.height < 512 || png.bytes < 262144)
+        throw Error(`STRESS_ASSET_NOT_COMPLEX_ENOUGH:${resourcePath}`);
     return { name: resourcePath, uuid: meta.uuid, png };
 }
-const resourceAssets = resourcePaths.map((resourcePath) => readResource(resourcePath, true));
-const parseFixtureAssets = parseFixturePaths.map((resourcePath) => readResource(resourcePath, false));
+const resourceAssets = resourcePaths.map(readResource);
+const parseFixtureAssets = parseFixturePaths.map(readResource);
 const failureAsset = parseFixtureAssets.find((item) => item.name === failurePath);
 const allAssets = [...resourceAssets, ...parseFixtureAssets];
 if (!failureAsset || new Set(allAssets.map((item) => item.uuid)).size !== allAssets.length) throw Error('STRESS_ASSET_UUID_COLLISION_OR_FAILURE_FIXTURE_MISSING');
 const allResourcePaths = allAssets.map((item) => item.name);
 const resourceUuids = Object.fromEntries(resourceAssets.map((item) => [item.name, item.uuid]));
+const resourceInfo = Object.fromEntries(allAssets.map((item) => [item.name, {
+    width: item.png.width, height: item.png.height, encodedBytes: item.png.bytes,
+    estimatedRgbaBytes: item.png.estimatedRgbaBytes,
+}]));
 for (const asset of parseFixtureAssets) resourceUuids[asset.name] = asset.uuid;
 const runId = `${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomBytes(3).toString('hex')}`;
 const outputPath = path.join(root, 'docs/agent-foundation/traces', `cocos-agent-content-stress-2.4-web-${runId}.json`);
@@ -284,8 +298,8 @@ try {
     runtime = await attachBrowser(staticUrl);
     await evaluate(probeSource);
     const runPromise = evaluate(`window.CocosAgentDynamicStress24.run(${JSON.stringify({
-        cycles, nodeCount, packable, paths: resourcePaths, parseFixturePaths, resourceUuids,
-        failurePath, failureUuid: resourceUuids[failurePath], budgets,
+        cycles, nodeCount, packable, paths: resourcePaths, parseFixturePaths, resourceUuids, resourceInfo,
+        failurePath, failureUuid: resourceUuids[failurePath], loadMode, budgetProfileId, budgets,
     })})`)
         .then((value) => { result = value; runFinished = true; return { value }; },
             (error) => { runFailure = error; runFinished = true; return { error }; });
@@ -300,7 +314,7 @@ try {
 }
 
 const trace = {
-    schemaVersion: '0.1', runId, creatorVersion: '2.4.15', platform: 'web-mobile',
+    schemaVersion: '0.2', runId, creatorVersion: '2.4.15', platform: 'web-mobile',
     buildId, releaseId: buildRecord.releaseId, buildFingerprint: buildRecord.fingerprint,
     buildOutputRoot: buildRecord.outputRoot,
     environment: { host: process.platform, architecture: process.arch, osRelease: os.release(),
@@ -317,8 +331,9 @@ const trace = {
         servedBundlePatchedSha256: runtimePatchState.patchedSha256,
         note: 'Experimental in-memory patch for comparison; the immutable build output on disk was not modified.',
     } : null,
-    workload: { cycles, nodeCount, packable, assets: resourceAssets, parseFixtureAssets, failureAsset,
-        budgets, targetFps: budgets.targetFps ?? null, budgetVerdict: result?.budgetEvaluation?.verdict || 'not-set' },
+    workload: { cycles, nodeCount, packable, loadMode, budgetProfileId,
+        assets: resourceAssets, parseFixtureAssets, failureAsset, budgets, targetFps: budgets.targetFps ?? null,
+        budgetVerdict: result?.budgetEvaluation?.verdict || 'not-set' },
     screenshots,
     result: result || null,
     httpRequestCount: httpRequests.length,
@@ -330,6 +345,15 @@ const trace = {
             return counts;
         }, {}),
         assetRequests: httpResponses.filter((item) => allResourcePaths.some((name) => item.path.includes(resourceUuids[name]))),
+        coldLoadEvidence: allAssets.map((asset) => {
+            const requests = httpResponses.filter((item) => item.path.includes(asset.uuid));
+            const firstSuccess = requests.find((item) => item.status === 200);
+            return { name: asset.name, uuid: asset.uuid, coldCacheMiss: result?.resourceCache?.coldCacheReadback?.some((item) =>
+                    item.phase === 'preflight' && item.path === asset.name && item.cached === false) === true,
+                firstNativeResponseStatus: firstSuccess?.status ?? null,
+                firstNativeResponseBytes: firstSuccess?.responseBytes ?? null,
+                confirmed: firstSuccess?.status === 200 && firstSuccess.responseBytes === asset.png.bytes };
+        }),
         failureHttpStatus,
         injectedFailureRequests: httpResponses.filter((item) => item.status === failureHttpStatus
             && allResourcePaths.some((name) => item.path.includes(resourceUuids[name]))),
@@ -343,6 +367,10 @@ trace.network.failureTargetUuid = expectedFailureUuid;
 trace.network.failureTransportConfirmed = trace.network.injectedFailureRequests.some((item) => item.path.includes(expectedFailureUuid));
 if (!traceError && !trace.network.failureTransportConfirmed) {
     trace.error = 'STRESS_NETWORK_FAILURE_NOT_OBSERVED';
+    traceError = trace.error;
+}
+if (!traceError && !trace.network.coldLoadEvidence.every((item) => item.confirmed && item.coldCacheMiss)) {
+    trace.error = 'STRESS_COLD_NETWORK_EVIDENCE_MISSING';
     traceError = trace.error;
 }
 fs.writeFileSync(outputPath, `${JSON.stringify(trace, null, 2)}\n`, { flag: 'wx' });

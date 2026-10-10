@@ -68,17 +68,17 @@ Web-Mobile 探针按两个卸载顺序重复测试：Smoke→Sidecar、Sidecar�
 
 原始双向卸载轨迹为区分自动释放分支，曾将 Scene 对象的 `autoReleaseAssets` 临时设为 `true`，只适用于该轨迹；它没有用于本轮边界结果。新增探针在加载后读到两个场景的运行时 `autoReleaseAssets=false`，不修改该字段：切换 Scene 后 Frame 引用数降为 1，资源仍有效并留在缓存；两个 consumer 被释放/移除、owner 对象被移除时，当前 Sidecar 画面和共享资源仍有效。活动 Scene 中调用 owner `releaseUnusedAssets()` 后资源仍保留；退出测试场景后 Frame 降到 `refCount=0` 但仍在缓存，之后 owner 再调用 `releaseUnusedAssets()`，Frame 与 Texture 都从缓存移除。另记录到两份源 `.fire.meta` 值为 `false`，但 `.fire` JSON 的序列化 Scene 字段为 `true`，本构建实际加载值仍为 `false`；此处以运行时实测为准，不从单一源文件推断导入器的处理过程。构建 5 份 Bundle config 的全量扫描显示共享 Frame/Texture 各只有一个未重定向 owner（`resources`），其它出现 Frame UUID 的 Bundle 均重定向到它。轨迹和截图见[边界轨迹](traces/cocos-agent-shared-bundle-boundaries-2.4-web.json)与[视觉检查点](traces/visual/cocos-agent-shared-boundary-auto-release-false.png)。2.4.15 的 SpriteFrame 没有公开 `texture` 属性；运行时仍需区分 `frame._original._texture` 源 Texture 与可能被动态合图替换的 `frame._texture` 渲染对象。本结论限于该 Web-Mobile 构建。
 
-### 跨 Bundle 依赖合同 0.2 设计基线
+### 跨 Bundle 依赖合同 0.2 实现状态
 
-当前 `content-release` 0.1 的 `dependsOn` 只表示同一 release 内 asset ID 的有向无环图，不能表达多个 Bundle 交付中的资源所有权与 redirect。依照本轮构建和运行证据，正式设计见[跨 Bundle 依赖合同 0.2](asset-bundle-cross-dependency-0.2-design.md)。合同明确定义 owner、consumer 和 runtime lease；构建时交叉校验 `.meta` 完整 UUID 链、构建压缩 UUID、owner 资源映射、consumer `deps` 与 `redirect`；运行时先加载 owner，再加载 consumer，按逆序退出。
+`content-release` 0.1 的 `dependsOn` 仍只表示同一 release 内 asset ID 的有向无环图。独立的跨 Bundle 合同 0.2 已实现：MCP 工具从 PNG `.meta` 与场景 `.fire` 推导 owner、consumer、UUID 引用和依赖顺序；构建阶段核对唯一 owner、Scene UUID、consumer `deps`/`redirect` 与 Frame→Texture 导入依赖；预览将合同送入 2.4 动态内容 runtime，由它在候选资源加载前 owner-first 加载并追踪 Agent lease。该适配器在当前场景启动后运行；首次场景加载仍须由调用方预载 owner，通用游戏代码的 `loadBundle/loadScene` 不受拦截。正式合同与自动验证边界见[跨 Bundle 依赖合同 0.2](asset-bundle-cross-dependency-0.2-design.md)。
 
 边界证据已齐备：未加载 owner 时 consumer 的 UUID 资源请求返回 `Please load bundle resources first`；加载 owner 后成功重试。`autoReleaseAssets=false` 下退出 Scene 会降低引用计数但不安排自动释放，owner `releaseUnusedAssets()` 在活动 consumer 引用时保留 Frame/Texture；清空活动 Scene 后可将二者从缓存清除。`removeBundle()` 只移除 Bundle 对象缓存，不能作为资源已释放的证明。引擎源码中 owner `releaseAll()` 对自有根资源采用强制释放，因此合同要求先停 consumer、核验所有动态 lease 和静态引用，再使用非强制清理并读回。
 
-这份 0.2 是 Host/MCP 的设计基线，尚未实现为 CocosAgent 的可调用合同。实现时需增加依赖清单、构建校验结果、owner-first 调度、卸载决策与错误状态；既有 `content-release` 0.1 的字段语义保持不变。
+MCP、Host、构建和运行时路径均有自动化覆盖；已有共享依赖 Web-Mobile 包也通过只读合同校验。新合同绑定构建 `cross-bundle-web-1010` 的 Creator CLI 尝试返回 exit code 1，未生成新包，浏览器端到端验收仍待完成；本地失败记录保存在项目忽略数据 `.cocos-agent/content-builds/cross-bundle-web-1010.json`。Owner Bundle 对象目前保留，清理仅走非强制 `releaseUnusedAssets()` 并在 UUID 仍缓存时延迟，不自动 `removeBundle` 或调用 `releaseAll()`。
 
 为消除新生成目录必须手动点选导入的步骤，2.4 扩展/Host/MCP 已加入 `asset.refreshFolder`：它只接受已存在的 `assets/` 相对目录，拒绝 traversal 和路径中的符号链接，调用官方 `Editor.assetdb.refresh`，并将结果限制为最多 16 条不含绝对路径的变更记录。Schema、MCP 路由、目录合同和 Host WebSocket 协议模拟测试通过。2026-10-09 对运行中的 Creator 执行只读 `capabilities.list`，实际扩展版本为 `0.1.0`，仅返回原有 9 条命令且缺少 `asset.refreshFolder`；因此能力目录被新 Host 拒绝，尚未执行 AssetDB 刷新。原始只读回执见[扩展目录轨迹](traces/cocos-agent-asset-refresh-folder-catalog-2.4.jsonl)。当前 Mac 锁屏，无法在编辑器中重载扩展；这不是 AssetDB 实机证据。
 
-**后续缺口：** 将 0.2 设计基线实现进 2.4 Host/MCP 命令合同和 Agent 调度；扩展更多资源类型与 delivery 组合前先分别验收。远端/CDN 版本一致性、小游戏、JSB、原生释放行为、性能预算和 3.8 仍未验证。不能把文档设计或现有 0.1 release 内部 `dependsOn` 当成跨 Bundle 产品能力已交付。
+**后续缺口：** 查明此次 Creator launcher exit code 1 的原因后，用正式合同完成构建与浏览器 runtime 端到端验收；之后再扩展更多资源类型与 delivery 组合。远端/CDN 版本一致性、小游戏、JSB、原生释放行为、性能预算和 3.8 仍未验证。不得把 0.1 release 内部 `dependsOn` 解释为跨 Bundle 依赖。
 
 ## 暂缓事项
 

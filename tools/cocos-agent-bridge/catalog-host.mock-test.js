@@ -88,9 +88,9 @@ async function mockEditor(index, options = {}) {
                     { id: 'prefab.source.inspect', contractVersion: '0.1', access: 'read',
                         inputSchema: 'catalog.schema.json#/$defs/prefabSourceInspectInput2x', input: inputs.prefabSourceInspectInput2x,
                         preconditions: ['prefabUuidResolvable', 'serializedPrefabReadable'], status: 'available', reason: null },
-                    { id: 'content.stress.run', contractVersion: '0.1', access: 'read',
+                    { id: 'content.stress.run', contractVersion: '0.2', access: 'read',
                         inputSchema: 'catalog.schema.json#/$defs/contentStressRunInput2x', input: inputs.contentStressRunInput2x,
-                        preconditions: ['completedWebMobileBuild', 'packagedPngResources', 'headlessChromeProfile', 'explicitBudgets'],
+                        preconditions: ['completedWebMobileBuild', 'complexPackagedPngResources', 'coldCacheProfile', 'explicitDeviceScreeningBudget'],
                         status: 'available', reason: null }] : []),
                 ],
             } }));

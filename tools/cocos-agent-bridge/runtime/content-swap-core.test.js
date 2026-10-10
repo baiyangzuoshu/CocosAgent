@@ -201,3 +201,31 @@ test('the project runtime core accepts and releases the 2.4 Asset Bundle contrac
     assert.equal(runtime.dispose().outcome, 'disposed');
     assert.ok(calls.some((call) => call[0] === 'removeBundle' && call[1] === 'cocos-agent-smoke'));
 });
+
+test('a verified dependency contract is acquired before asset load and its dynamic lease is released after cleanup', async () => {
+    const calls = [];
+    const texture = { uuid: 'texture-uuid', refCount: 0, valid: true,
+        addRef() { this.refCount += 1; }, decRef() { this.refCount -= 1; } };
+    const runtime = create({ creatorVersion: '2.4.15',
+        acquireDependencies: async (contract, asset) => {
+            calls.push(['acquire', contract.contractId, asset.resourceUuid]);
+            return { id: 'lease-1', receipt: { outcome: 'acquired', loadOrder: ['owner-resources', 'consumer-smoke'] } };
+        },
+        releaseDependencies: (lease) => { calls.push(['release-dependencies', lease.id]); return { outcome: 'released' }; },
+        load: async () => { calls.push(['load']); return texture; },
+        createFrame: (value) => ({ value }), installFrame: () => calls.push(['install']), disposeFrame: () => calls.push(['dispose']),
+        confirmFrame: async () => calls.push(['draw']), afterCleanup: async () => calls.push(['after-draw']),
+        releaseUnused: () => calls.push(['release-unused']), isValid: () => texture.valid,
+        assetId: () => texture.uuid,
+    });
+    const release = { contractVersion: '0.1', creatorVersion: '2.4.15', delivery: 'built-in-resources',
+        releaseId: 'release-with-dependencies', fingerprint: 'f'.repeat(64),
+        assets: [{ id: 'visual', runtimePath: 'Shared', resourceUuid: 'texture-uuid' }] };
+    const contract = { contractId: 'shared-contract-01' };
+    const applied = await runtime.apply(release, 'visual', contract);
+    assert.equal(applied.outcome, 'applied');
+    assert.deepEqual(calls.slice(0, 2), [['acquire', 'shared-contract-01', 'texture-uuid'], ['load']]);
+    assert.deepEqual(applied.dependencySchedule.loadOrder, ['owner-resources', 'consumer-smoke']);
+    runtime.dispose();
+    assert.ok(calls.some((call) => call[0] === 'release-dependencies' && call[1] === 'lease-1'));
+});

@@ -173,14 +173,14 @@ function validCatalog(target, result) {
             input: catalogSchema.$defs.prefabSourcePatchInput2x, preconditions: ['activeScene', 'prefabUuidResolvable', 'sourceShaMatches', 'prefabEditModeAvailable', 'nodePathAndUuidMatch', 'expectedBeforeValues'] },
         'prefab.source.inspect': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/prefabSourceInspectInput2x',
             input: catalogSchema.$defs.prefabSourceInspectInput2x, preconditions: ['prefabUuidResolvable', 'serializedPrefabReadable'] },
-        'content.stress.run': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/contentStressRunInput2x',
+        'content.stress.run': { contractVersion: '0.2', access: 'read', inputSchema: 'catalog.schema.json#/$defs/contentStressRunInput2x',
             input: catalogSchema.$defs.contentStressRunInput2x,
-            preconditions: ['completedWebMobileBuild', 'packagedPngResources', 'headlessChromeProfile', 'explicitBudgets'] } } : {}),
+            preconditions: ['completedWebMobileBuild', 'complexPackagedPngResources', 'coldCacheProfile', 'explicitDeviceScreeningBudget'] } } : {}),
     };
     const seen = new Set();
     for (const command of result.commands) {
         const rule = command && expected[command.id];
-        if (!rule || seen.has(command.id) || command.contractVersion !== '0.1' || command.access !== rule.access
+        if (!rule || seen.has(command.id) || command.contractVersion !== (rule.contractVersion || '0.1') || command.access !== rule.access
             || command.inputSchema !== rule.inputSchema || !isDeepStrictEqual(command.input, rule.input)
             || !isDeepStrictEqual(command.preconditions, rule.preconditions)
             || !['available', 'unavailable'].includes(command.status)

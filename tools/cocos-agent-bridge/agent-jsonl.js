@@ -11,6 +11,7 @@ const assetScenePipeline = require('./asset-scene-pipeline');
 const assetSceneValidation = require('./asset-scene-validation');
 const contentRelease = require('./content-release');
 const contentBundleRelease = require('./content-bundle-release');
+const contentBundleDependencies = require('./content-bundle-dependencies');
 const contentSceneRelease = require('./content-scene-release');
 const contentBuild = require('./content-build');
 const contentPreview = require('./content-preview');
@@ -23,10 +24,11 @@ const assetScenePipelineMethods = new Set(['assets.scene.plan', 'assets.scene.ex
 const assetSceneValidationMethods = new Set(['assets.scene.validate', 'assets.scene.repair']);
 const contentSceneReleaseMethods = new Set(['content.fromScene.plan', 'content.fromScene.stage']);
 const contentBundleReleaseMethods = new Set(['content.bundle.plan', 'content.bundle.stage']);
+const contentBundleDependencyMethods = new Set(['content.bundle.dependencies.plan', 'content.bundle.dependencies.stage', 'content.bundle.dependencies.get']);
 const contentMethods = new Set(['content.plan', 'content.stage', 'content.get', 'content.select', 'content.rollback', 'content.runtime.accept']);
 const contentBuildMethods = new Set(['content.build.plan', 'content.build.execute', 'content.build.get', 'content.build.reconcile']);
 const contentPreviewMethods = new Set(['content.preview.start', 'content.preview.get', 'content.preview.stop']);
-const methods = new Set([...catalogMethods, ...workflowMethods, ...batchMethods, ...sceneSpriteBatchMethods, ...assetScenePipelineMethods, ...assetSceneValidationMethods, ...contentSceneReleaseMethods, ...contentBundleReleaseMethods, ...contentMethods, ...contentBuildMethods,
+const methods = new Set([...catalogMethods, ...workflowMethods, ...batchMethods, ...sceneSpriteBatchMethods, ...assetScenePipelineMethods, ...assetSceneValidationMethods, ...contentSceneReleaseMethods, ...contentBundleReleaseMethods, ...contentBundleDependencyMethods, ...contentMethods, ...contentBuildMethods,
     ...contentPreviewMethods, 'command.execute', 'operation.get', 'operation.reconcile', 'preview.accept']);
 const versions = new Set(['2.4.15', '3.8.7']);
 
@@ -79,6 +81,8 @@ function handle(request, adapters = {}) {
         }) };
     if (contentBundleReleaseMethods.has(method)) return { id: request.id,
         result: (adapters.contentBundleRelease || contentBundleRelease.handle)(method, params) };
+    if (contentBundleDependencyMethods.has(method)) return { id: request.id,
+        result: (adapters.contentBundleDependencies || contentBundleDependencies.handle)(method, params) };
     if (contentMethods.has(method)) return { id: request.id,
         result: (adapters.contentRelease || contentRelease.handle)(method, params) };
     if (contentBuildMethods.has(method)) return { id: request.id,

@@ -125,7 +125,8 @@ function start(options) {
         const id = ++sequence;
         pending = { id, releaseId: release.releaseId, fingerprint: release.fingerprint };
         lastSent = release.fingerprint;
-        client.socket.send(JSON.stringify({ type: 'apply', id, release, assetId: release.entryAssetId }));
+        client.socket.send(JSON.stringify({ type: 'apply', id, release, assetId: release.entryAssetId,
+            ...(options.dependencyContract ? { dependencyContract: options.dependencyContract } : {}) }));
         events.push({ type: 'dispatched', id, releaseId: release.releaseId });
     }
     sockets.on('connection', (socket) => {

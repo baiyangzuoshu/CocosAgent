@@ -6,7 +6,9 @@ const { spawnSync } = require('child_process');
 
 const REPOSITORY_ROOT = path.resolve(__dirname, '../..');
 const PROFILE_ID = 'macos-arm64-chrome-headless-swiftshader-1280x800';
-const BUDGET_KEYS = ['targetFps', 'maxResourceLoadP95Ms', 'maxImportParserP95Ms', 'maxPngParserP95Ms', 'maxReleaseCallP95Ms'];
+const BUDGET_PROFILE_ID = 'macos-arm64-headless-swiftshader-host-screening-v1';
+const BUDGET_KEYS = ['targetFps', 'maxColdResourceLoadP95Ms', 'maxWarmResourceLoadP95Ms', 'maxImportParserP95Ms',
+    'maxPngParserP95Ms', 'maxReleaseCallP95Ms', 'maxEstimatedRgbaWorkingSetBytes'];
 
 function readInput(argv) {
     const index = argv.indexOf('--input');
@@ -16,7 +18,7 @@ function readInput(argv) {
 
 function validInput(input) {
     if (!input || typeof input !== 'object' || Array.isArray(input)
-        || Object.keys(input).length !== 9
+        || Object.keys(input).length !== 11
         || !/^[a-z0-9][a-z0-9-]{2,31}$/.test(input.buildId || '')
         || !Array.isArray(input.resourcePaths) || input.resourcePaths.length < 2 || input.resourcePaths.length > 16
         || !input.resourcePaths.every((item) => typeof item === 'string' && /^[A-Za-z0-9_-]{1,64}(?:\/[A-Za-z0-9_-]{1,64}){0,7}$/.test(item))
@@ -30,11 +32,15 @@ function validInput(input) {
         || !Number.isInteger(input.cycles) || input.cycles < 8 || input.cycles > 256 || input.cycles < input.resourcePaths.length + 1
         || !Number.isInteger(input.nodeCount) || input.nodeCount < 32 || input.nodeCount > 1024
         || typeof input.packable !== 'boolean' || input.profileId !== PROFILE_ID
+        || input.loadMode !== 'cold-and-warm' || input.budgetProfileId !== BUDGET_PROFILE_ID
         || !input.budgets || typeof input.budgets !== 'object' || Array.isArray(input.budgets)
         || Object.keys(input.budgets).length !== BUDGET_KEYS.length
         || !BUDGET_KEYS.every((key) => Number.isFinite(input.budgets[key]))) return false;
     return input.budgets.targetFps >= 1 && input.budgets.targetFps <= 360
-        && BUDGET_KEYS.slice(1).every((key) => input.budgets[key] >= 0.01 && input.budgets[key] <= 60000);
+        && BUDGET_KEYS.slice(1, -1).every((key) => input.budgets[key] >= 0.01 && input.budgets[key] <= 60000)
+        && Number.isInteger(input.budgets.maxEstimatedRgbaWorkingSetBytes)
+        && input.budgets.maxEstimatedRgbaWorkingSetBytes >= 1048576
+        && input.budgets.maxEstimatedRgbaWorkingSetBytes <= 1073741824;
 }
 
 function percentile(result, parserType) {
@@ -65,11 +71,15 @@ function resultFromTrace(tracePath, trace) {
             deviceClass: trace.environment?.deviceClass || null,
         },
         workload: trace.workload,
+        budgetProfile: { id: trace.workload?.budgetProfileId || null, scope: 'host-screening-only', targetDeviceValidated: false },
         metrics: {
-            resourceLoadP95Ms: timings.resourceLoadTotalMs?.p95Ms ?? null,
-            parserFixtureResourceLoadP95Ms: timings.parserFixtureResourceLoadMs?.p95Ms ?? null,
+            coldResourceLoadP95Ms: timings.coldResourceLoadMs?.p95Ms ?? null,
+            warmResourceLoadP95Ms: timings.warmResourceLoadMs?.p95Ms ?? null,
+            parserFixtureColdLoadP95Ms: timings.parserFixtureColdLoadMs?.p95Ms ?? null,
+            parserFixtureWarmLoadP95Ms: timings.parserFixtureWarmLoadMs?.p95Ms ?? null,
             importDeserializeP95Ms: percentile(result, 'import'),
             pngParseP95Ms: percentile(result, '.png'),
+            peakEstimatedRgbaWorkingSetBytes: result.memory?.peakEstimatedRgbaWorkingSetBytes ?? null,
             frameIntervalP95Ms: frame.intervalMs?.p95Ms ?? null,
             frameIntervalMaxMs: frame.intervalMs?.maxMs ?? null,
             ownerReferenceDeltaPerRelease: result.acceptance?.ownerReferencesBalanced === true ? 1 : null,
@@ -85,10 +95,12 @@ function resultFromTrace(tracePath, trace) {
             releaseObservedP95Ms: timings.releaseObservedMs?.p95Ms ?? null,
         },
         resourceCache: {
-            beforePreload: result.resourceCache?.beforePreload || [],
-            afterPreload: result.resourceCache?.afterPreload || [],
+            beforeColdLoad: result.resourceCache?.beforeColdLoad || [],
+            coldCacheReadback: result.resourceCache?.coldCacheReadback || [],
         },
         budgetEvaluation: result.budgetEvaluation || null,
+        lifecycleFindings: result.acceptance?.lifecycleFindings || [],
+        diagnostics: [...(result.budgetEvaluation?.diagnostics || []), ...(result.acceptance?.lifecycleFindings || [])],
         acceptance: trace.error
             ? { success: false, code: result.acceptance?.code || trace.error, invariantsMet: result.acceptance?.invariantsMet ?? false }
             : result.acceptance || { success: false, code: 'STRESS_RESULT_MISSING' },
@@ -113,7 +125,8 @@ function run(projectRoot, input, runner = spawnSync) {
     const args = [runnerPath, '--build', input.buildId, '--cycles', String(input.cycles), '--node-count', String(input.nodeCount),
         '--packable', String(input.packable), '--resource-paths', JSON.stringify(input.resourcePaths),
         '--parse-fixture-paths', JSON.stringify(input.parseFixturePaths), '--failure-resource-path', input.failureResourcePath,
-        '--test-profile', input.profileId, '--budgets', JSON.stringify(input.budgets)];
+        '--test-profile', input.profileId, '--load-mode', input.loadMode, '--budget-profile', input.budgetProfileId,
+        '--budgets', JSON.stringify(input.budgets)];
     const execution = runner(process.execPath, args, { cwd: REPOSITORY_ROOT, encoding: 'utf8', timeout: 270000, maxBuffer: 4 * 1024 * 1024 });
     const output = `${execution.stdout || ''}\n${execution.stderr || ''}`;
     const match = output.match(/(?:CONTENT_STRESS_ACCEPTED|CONTENT_STRESS_FAILED) (.+\.json)/);
@@ -142,4 +155,4 @@ if (require.main === module) {
     }
 }
 
-module.exports = { PROFILE_ID, validInput, resultFromTrace, run };
+module.exports = { PROFILE_ID, BUDGET_PROFILE_ID, validInput, resultFromTrace, run };

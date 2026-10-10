@@ -22,7 +22,7 @@ for (const [version, catalog] of [['2.4.15', catalog2], ['3.8.7', catalog3]]) {
     const commands = catalog({ sceneName: 'example', hasCanvas: true, assetDbReady: true, prefabSourcePatchApiReady: true });
     const expectedIds = ['scene.snapshot', 'scene.node.inspect', ...(version === '2.4.15' ? ['asset.searchPng'] : []), 'asset.importPng', ...(version === '2.4.15' ? ['asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder'] : []), 'scene.pngSprite', 'scene.node.create', ...(version === '2.4.15' ? ['scene.node.patch', 'prefab.source.patch', 'prefab.source.inspect', 'content.stress.run'] : [])];
     assert.deepStrictEqual(commands.map((item) => item.id), expectedIds);
-    assert.ok(commands.every((item) => item.contractVersion === '0.1'));
+    assert.ok(commands.every((item) => item.contractVersion === (item.id === 'content.stress.run' ? '0.2' : '0.1')));
     assert.deepStrictEqual(commands.map((item) => item.access), ['read', 'read', ...(version === '2.4.15' ? ['read'] : []), 'write', ...(version === '2.4.15' ? ['write', 'read', 'write', 'write'] : []), 'write', 'write', ...(version === '2.4.15' ? ['write', 'write', 'read', 'read'] : [])]);
     assert.ok(isDeepStrictEqual(commands[0].input, inputs.snapshotInput));
     assert.ok(isDeepStrictEqual(commands[1].input, inputs.nodeInspectInput));
@@ -59,7 +59,7 @@ for (const [version, catalog] of [['2.4.15', catalog2], ['3.8.7', catalog3]]) {
         assert.strictEqual(prefabInspect.status, 'available');
         const stress = commands.find((item) => item.id === 'content.stress.run');
         assert.ok(isDeepStrictEqual(stress.input, inputs.contentStressRunInput2x));
-        assert.deepStrictEqual(stress.preconditions, ['completedWebMobileBuild', 'packagedPngResources', 'headlessChromeProfile', 'explicitBudgets']);
+        assert.deepStrictEqual(stress.preconditions, ['completedWebMobileBuild', 'complexPackagedPngResources', 'coldCacheProfile', 'explicitDeviceScreeningBudget']);
         assert.strictEqual(stress.access, 'read');
         assert.strictEqual(stress.status, 'available');
         assert.strictEqual(catalog({ sceneName: 'example', hasCanvas: true, assetDbReady: true }).find((item) => item.id === 'prefab.source.patch').reason, 'PREFAB_EDIT_MODE_API_UNAVAILABLE');

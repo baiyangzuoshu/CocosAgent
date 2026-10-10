@@ -757,7 +757,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "CocosAgentAsset_RepairRedA202610",
+    "_name": "AgentAcceptanceSprite",
     "_objFlags": 0,
     "_parent": {
       "__id__": 2
@@ -780,8 +780,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 128,
-      "height": 128
+      "width": 175,
+      "height": 226
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -792,15 +792,15 @@
       "__type__": "TypedArray",
       "ctor": "Float64Array",
       "array": [
-        -220,
-        0,
+        -150,
+        180,
         0,
         0,
         0,
         0,
         1,
-        1,
-        1,
+        0.5,
+        0.5,
         1
       ]
     },
@@ -815,7 +815,7 @@
     "_is3DNode": false,
     "_groupIndex": 0,
     "groupIndex": 0,
-    "_id": "beZMSkwZhAUL6+jX4TfLiP"
+    "_id": "596pYOww9MqobiatZyhu6v"
   },
   {
     "__type__": "cc.Sprite",
@@ -833,7 +833,7 @@
     "_srcBlendFactor": 770,
     "_dstBlendFactor": 771,
     "_spriteFrame": {
-      "__uuid__": "e80b2ec0-d2c0-4940-8231-997739ac5f31"
+      "__uuid__": "31bc895a-c003-4566-a9f3-2e54ae1c17dc"
     },
     "_type": 0,
     "_sizeMode": 1,
@@ -847,7 +847,7 @@
     "_fillRange": 0,
     "_isTrimmedMode": true,
     "_atlas": null,
-    "_id": "8b9kLAds9EXI/0pOQ7UKL5"
+    "_id": "cbeQ4x+l1HMJ7Z90J83nJQ"
   },
   {
     "__type__": "cc.Canvas",

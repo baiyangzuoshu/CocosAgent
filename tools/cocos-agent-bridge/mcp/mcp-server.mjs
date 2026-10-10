@@ -121,12 +121,16 @@ function commandInputSchema(projectRoot) {
             nodeCount: z.number().int().min(32).max(1024),
             packable: z.boolean(),
             profileId: z.literal('macos-arm64-chrome-headless-swiftshader-1280x800'),
+            loadMode: z.literal('cold-and-warm'),
+            budgetProfileId: z.literal('macos-arm64-headless-swiftshader-host-screening-v1'),
             budgets: z.object({
                 targetFps: z.number().min(1).max(360),
-                maxResourceLoadP95Ms: z.number().min(0.01).max(60000),
+                maxColdResourceLoadP95Ms: z.number().min(0.01).max(60000),
+                maxWarmResourceLoadP95Ms: z.number().min(0.01).max(60000),
                 maxImportParserP95Ms: z.number().min(0.01).max(60000),
                 maxPngParserP95Ms: z.number().min(0.01).max(60000),
                 maxReleaseCallP95Ms: z.number().min(0.01).max(60000),
+                maxEstimatedRgbaWorkingSetBytes: z.number().int().min(1048576).max(1073741824),
             }).strict(),
         }).strict().superRefine((input, context) => {
             if (input.cycles < input.resourcePaths.length + 1)
@@ -385,7 +389,7 @@ function createServer(projectRoots, options = {}) {
         {
             name: 'cocos_2x_content_stress_run',
             command: 'content.stress.run',
-            description: 'Run the Creator 2.4.15 Web-Mobile content stress diagnostic on a verified build. Requires 32–1024 temporary Sprite nodes, 8–256 resource replacement cycles, the supported Mac Chrome/SwiftShader profile, and explicit P95 budgets. It writes only a JSON trace and screenshots under docs/agent-foundation/traces; it does not change the project build, scene, or release.',
+            description: 'Run the Creator 2.4.15 Web-Mobile content stress diagnostic on a verified build. Requires 512px+ complex PNGs, cold-cache and warm-cache loads, 32–1024 temporary Sprite nodes, 8–256 replacement cycles, an explicit host screening budget profile and explicit frame/load/parser/release/estimated-RGBA limits. It records lifecycle findings and explanations in a JSON trace and screenshots; it does not change the project build, scene, or release.',
             input: z.object({
                 buildId: CONTENT_BUILD_ID,
                 resourcePaths: z.array(z.string().regex(/^[A-Za-z0-9_-]{1,64}(?:\/[A-Za-z0-9_-]{1,64}){0,7}$/)).min(2).max(16)
@@ -397,12 +401,16 @@ function createServer(projectRoots, options = {}) {
                 nodeCount: z.number().int().min(32).max(1024),
                 packable: z.boolean(),
                 profileId: z.literal('macos-arm64-chrome-headless-swiftshader-1280x800'),
+                loadMode: z.literal('cold-and-warm'),
+                budgetProfileId: z.literal('macos-arm64-headless-swiftshader-host-screening-v1'),
                 budgets: z.object({
                     targetFps: z.number().min(1).max(360),
-                    maxResourceLoadP95Ms: z.number().min(0.01).max(60000),
+                    maxColdResourceLoadP95Ms: z.number().min(0.01).max(60000),
+                    maxWarmResourceLoadP95Ms: z.number().min(0.01).max(60000),
                     maxImportParserP95Ms: z.number().min(0.01).max(60000),
                     maxPngParserP95Ms: z.number().min(0.01).max(60000),
                     maxReleaseCallP95Ms: z.number().min(0.01).max(60000),
+                    maxEstimatedRgbaWorkingSetBytes: z.number().int().min(1048576).max(1073741824),
                 }).strict(),
             }).strict().superRefine((input, context) => {
                 if (input.cycles < input.resourcePaths.length + 1)
@@ -597,6 +605,26 @@ function createServer(projectRoots, options = {}) {
             projectRoot: selected, creatorVersion: CREATOR_VERSION, ...params,
         }), { title: 'Stage a Creator 2.4 Asset Bundle release', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
 
+    const dependencyContractInput = z.object({ projectRoot, contractId: RELEASE_ID,
+        buildId: CONTENT_BUILD_ID, platform: z.literal('web-mobile').optional(),
+        assetSources: z.array(z.string().regex(/^assets\/[A-Za-z0-9_./-]+\.png$/i)).min(1).max(32)
+            .refine((items) => new Set(items).size === items.length, 'assetSources must be unique.') }).strict();
+    register('cocos_2x_bundle_dependencies_plan',
+        'Derive a Creator 2.4.15 Web-Mobile cross-Bundle contract from imported PNG .meta UUID chains and serialized .fire references. Owner and consumer deliveries, dependency edges, and load/unload order are inferred and validated; this is read-only.',
+        dependencyContractInput, 'content.bundle.dependencies.plan', ({ projectRoot: selected, ...params }) => ({
+            projectRoot: selected, creatorVersion: CREATOR_VERSION, ...params,
+        }), { title: 'Plan a Creator 2.4 cross-Bundle dependency contract', readOnlyHint: true, destructiveHint: false, openWorldHint: false });
+    register('cocos_2x_bundle_dependencies_stage',
+        'Persist an immutable Creator 2.4.15 Web-Mobile cross-Bundle dependency contract after deriving owner/consumer relationships from project metadata and scenes. It writes only a Host record under .cocos-agent.',
+        dependencyContractInput, 'content.bundle.dependencies.stage', ({ projectRoot: selected, ...params }) => ({
+            projectRoot: selected, creatorVersion: CREATOR_VERSION, ...params,
+        }), { title: 'Stage a Creator 2.4 cross-Bundle dependency contract', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+    register('cocos_2x_bundle_dependencies_get',
+        'Read and revalidate a staged Creator 2.4.15 dependency contract against current PNG bytes, .meta UUIDs, and serialized scene references.',
+        z.object({ projectRoot, contractId: RELEASE_ID }).strict(), 'content.bundle.dependencies.get',
+        ({ projectRoot: selected, contractId }) => ({ projectRoot: selected, creatorVersion: CREATOR_VERSION, contractId }),
+        { title: 'Read a Creator 2.4 cross-Bundle dependency contract', readOnlyHint: true, destructiveHint: false, openWorldHint: false });
+
     register('cocos_2x_content_get',
         'Read the selected/effective content pointers, or one immutable staged Creator 2.4 release.',
         z.object({ projectRoot, releaseId: RELEASE_ID.optional() }).strict(), 'content.get',
@@ -618,15 +646,17 @@ function createServer(projectRoots, options = {}) {
         releaseId: RELEASE_ID,
         expectedFingerprint: SHA256,
         buildId: CONTENT_BUILD_ID,
+        dependencyContractId: RELEASE_ID.optional(),
+        expectedDependencyFingerprint: SHA256.optional(),
     }).strict();
     register('cocos_2x_content_build_plan',
-        'Validate a selected Creator 2.4.15 content release and return a Web-Mobile build plan without starting Creator or writing the build output.',
+        'Validate a selected Creator 2.4.15 content release and optional staged cross-Bundle dependency contract, returning a Web-Mobile build plan without starting Creator or writing build output.',
         buildInput, 'content.build.plan', ({ projectRoot: selected, ...params }) => ({
             projectRoot: selected, creatorVersion: CREATOR_VERSION, ...params,
         }), { title: 'Plan a Creator 2.4.15 content build', readOnlyHint: true, destructiveHint: false, openWorldHint: false });
 
     register('cocos_2x_content_build_execute',
-        'Build the selected release for Creator 2.4.15 Web-Mobile into the verified isolated build path. This writes build output and persists a Host build record.',
+        'Build the selected release for Creator 2.4.15 Web-Mobile into the verified isolated build path. When dependencyContractId is provided, verify owner UUIDs, consumer scene IDs, deps/redirect mappings, and import dependencies before marking the artifact verified. This writes build output and persists a Host build record.',
         buildInput, 'content.build.execute', ({ projectRoot: selected, ...params }) => ({
             projectRoot: selected, creatorVersion: CREATOR_VERSION, ...params,
         }), { title: 'Build Creator 2.4.15 Web-Mobile content', readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false });

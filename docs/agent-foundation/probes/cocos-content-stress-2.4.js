@@ -18,32 +18,48 @@
     function evaluateBudgets(result, budgets) {
         budgets = budgets || {};
         var checks = [];
-        function add(name, limit, observed) {
+        var diagnostics = [];
+        function add(name, limit, observed, unit, likelyLoci) {
             if (!Number.isFinite(limit)) return;
-            checks.push({ metric: name, limitMs: round(limit), observedMs: observed,
+            var check = { metric: name, limit: round(limit), observed: Number.isFinite(observed) ? round(observed) : null, unit: unit,
                 status: !Number.isFinite(observed) ? 'unobserved' : observed <= limit ? 'passed' : 'exceeded',
-                passed: Number.isFinite(observed) && observed <= limit });
+                passed: Number.isFinite(observed) && observed <= limit };
+            checks.push(check);
+            if (check.status === 'exceeded') diagnostics.push({ code: 'BUDGET_EXCEEDED_' + name.replace(/[^A-Za-z0-9]+/g, '_').toUpperCase(),
+                severity: 'warning', metric: name, observed: check.observed, limit: check.limit, unit: unit,
+                explanation: 'The measured percentile is above the caller-provided host screening limit.',
+                likelyLoci: likelyLoci, nextChecks: ['repeat on the same profile and build', 'compare the adjacent phase measurements before attributing a cause'] });
+            else if (check.status === 'unobserved') diagnostics.push({ code: 'METRIC_UNOBSERVED_' + name.replace(/[^A-Za-z0-9]+/g, '_').toUpperCase(),
+                severity: 'needs-review', metric: name, limit: check.limit, unit: unit,
+                explanation: 'No valid sample was collected; this metric cannot pass by default.',
+                nextChecks: ['confirm a cold cache miss and successful parser callback', 'repeat with a supported build and profile'] });
         }
         if (Number.isFinite(budgets.targetFps) && budgets.targetFps > 0)
-            add('frameIntervalP95', 1000 / budgets.targetFps, result.frame.intervalMs.p95Ms);
-        add('resourceLoadTotalP95', budgets.maxResourceLoadP95Ms, result.timings.resourceLoadTotalMs.p95Ms);
+            add('frameIntervalP95', 1000 / budgets.targetFps, result.frame.intervalMs.p95Ms, 'ms', ['render submission', 'Sprite/node workload', 'headless browser scheduling']);
+        add('coldResourceLoadP95', budgets.maxColdResourceLoadP95Ms, result.timings.coldResourceLoadMs.p95Ms, 'ms', ['native file transfer', 'image decode', 'asset import/deserialize']);
+        add('warmResourceLoadP95', budgets.maxWarmResourceLoadP95Ms, result.timings.warmResourceLoadMs.p95Ms, 'ms', ['AssetManager cache lookup', 'callback scheduling']);
         add('importDeserializeParserP95', budgets.maxImportParserP95Ms,
-            result.parse.samplesByType.import && result.parse.samplesByType.import.duration.p95Ms);
+            result.parse.samplesByType.import && result.parse.samplesByType.import.duration.p95Ms, 'ms', ['asset import JSON', 'dependency traversal', 'deserialize']);
         add('pngImageParserP95', budgets.maxPngParserP95Ms,
-            result.parse.samplesByType['.png'] && result.parse.samplesByType['.png'].duration.p95Ms);
-        add('releaseCallP95', budgets.maxReleaseCallP95Ms, result.timings.releaseCallMs.p95Ms);
+            result.parse.samplesByType['.png'] && result.parse.samplesByType['.png'].duration.p95Ms, 'ms', ['PNG decode', 'texture upload preparation']);
+        add('releaseCallP95', budgets.maxReleaseCallP95Ms, result.timings.releaseCallMs.p95Ms, 'ms', ['releaseUnusedAssets traversal', 'reference graph cleanup']);
+        add('estimatedRgbaWorkingSet', budgets.maxEstimatedRgbaWorkingSetBytes, result.memory.peakEstimatedRgbaWorkingSetBytes, 'bytes', ['texture dimensions', 'number of simultaneously retained textures']);
         var hasExceeded = checks.some(function (check) { return check.status === 'exceeded'; });
         var hasUnobserved = checks.some(function (check) { return check.status === 'unobserved'; });
         return { verdict: !checks.length ? 'not-set' : hasExceeded ? 'exceeded' : hasUnobserved ? 'insufficient-data' : 'passed',
-            checks: checks };
+            checks: checks, diagnostics: diagnostics,
+            interpretation: 'Likely loci are debugging leads inferred from phase-level measurements, not confirmed root causes.' };
     }
     function validBudgets(budgets) {
         return !!budgets && typeof budgets === 'object'
             && Number.isFinite(budgets.targetFps) && budgets.targetFps >= 1 && budgets.targetFps <= 360
-            && Number.isFinite(budgets.maxResourceLoadP95Ms) && budgets.maxResourceLoadP95Ms >= 0.01 && budgets.maxResourceLoadP95Ms <= 60000
+            && Number.isFinite(budgets.maxColdResourceLoadP95Ms) && budgets.maxColdResourceLoadP95Ms >= 0.01 && budgets.maxColdResourceLoadP95Ms <= 60000
+            && Number.isFinite(budgets.maxWarmResourceLoadP95Ms) && budgets.maxWarmResourceLoadP95Ms >= 0.01 && budgets.maxWarmResourceLoadP95Ms <= 60000
             && Number.isFinite(budgets.maxImportParserP95Ms) && budgets.maxImportParserP95Ms >= 0.01 && budgets.maxImportParserP95Ms <= 60000
             && Number.isFinite(budgets.maxPngParserP95Ms) && budgets.maxPngParserP95Ms >= 0.01 && budgets.maxPngParserP95Ms <= 60000
-            && Number.isFinite(budgets.maxReleaseCallP95Ms) && budgets.maxReleaseCallP95Ms >= 0.01 && budgets.maxReleaseCallP95Ms <= 60000;
+            && Number.isFinite(budgets.maxReleaseCallP95Ms) && budgets.maxReleaseCallP95Ms >= 0.01 && budgets.maxReleaseCallP95Ms <= 60000
+            && Number.isInteger(budgets.maxEstimatedRgbaWorkingSetBytes) && budgets.maxEstimatedRgbaWorkingSetBytes >= 1048576
+            && budgets.maxEstimatedRgbaWorkingSetBytes <= 1073741824;
     }
     function onceAfterDraw(cc, timeoutMs) {
         return new Promise(function (resolve, reject) {
@@ -64,13 +80,6 @@
         return new Promise(function (resolve, reject) {
             cc.resources.load(path, cc.Texture2D, function (error, texture) {
                 if (error) reject(error); else resolve(texture);
-            });
-        });
-    }
-    function preloadTexture(cc, path) {
-        return new Promise(function (resolve, reject) {
-            cc.resources.preload(path, cc.Texture2D, function (error) {
-                if (error) reject(error); else resolve();
             });
         });
     }
@@ -121,6 +130,7 @@
         var parseFixturePaths = options.parseFixturePaths || [];
         var failurePath = options.failurePath;
         var resourceUuids = options.resourceUuids || {};
+        var resourceInfo = options.resourceInfo || {};
         if (!Number.isInteger(cycles) || cycles < 4 || cycles > 256
             || !Number.isInteger(nodeCount) || nodeCount < 1 || nodeCount > 1024
             || typeof packable !== 'boolean'
@@ -132,7 +142,16 @@
             || new Set(parseFixturePaths).size !== parseFixturePaths.length
             || parseFixturePaths.some(function (path) { return paths.indexOf(path) !== -1; })
             || typeof failurePath !== 'string' || parseFixturePaths.indexOf(failurePath) === -1
-            || !resourceUuids[failurePath] || !validBudgets(options.budgets)) {
+            || !resourceUuids[failurePath] || options.loadMode !== 'cold-and-warm'
+            || options.budgetProfileId !== 'macos-arm64-headless-swiftshader-host-screening-v1'
+            || !validBudgets(options.budgets)
+            || !paths.concat(parseFixturePaths).every(function (path) {
+                var info = resourceInfo[path];
+                return !!resourceUuids[path] && !!info && Number.isInteger(info.width) && info.width >= 512
+                    && Number.isInteger(info.height) && info.height >= 512 && Number.isInteger(info.encodedBytes)
+                    && info.encodedBytes >= 262144 && Number.isInteger(info.estimatedRgbaBytes)
+                    && info.estimatedRgbaBytes === info.width * info.height * 4;
+            })) {
             throw Error('INVALID_STRESS_OPTIONS');
         }
         if (root.__cocosAgentStress24Running) throw Error('STRESS_ALREADY_RUNNING');
@@ -149,10 +168,12 @@
         var tap = parserTap(cc);
         var frameIntervals = [];
         var lastDrawAt = null;
-        var loadMs = [];
-        var preloadMs = [];
-        var parserFixtureLoadMs = [];
+        var coldLoadMs = [];
+        var warmLoadMs = [];
+        var parserFixtureColdLoadMs = [];
+        var parserFixtureWarmLoadMs = [];
         var parserFixtureReadback = [];
+        var coldCacheReadback = [];
         var createFrameMs = [];
         var nodeMutationMs = [];
         var spriteFrameInstallMs = [];
@@ -163,6 +184,7 @@
         var ownerReferenceReleases = [];
         var failure = null;
         var cleanup = null;
+        var peakEstimatedRgbaWorkingSetBytes = 0;
         var errors = [];
         root.__cocosAgentStress24Running = true;
         root.__cocosAgentStress24State = { phase: 'starting', cycle: 0 };
@@ -191,19 +213,36 @@
             var uuid = resourceUuids[path];
             var cache = cc.assetManager.assets;
             var asset = uuid && cache && typeof cache.get === 'function' ? cache.get(uuid) : null;
-            return { path: path, expectedUuid: uuid || null, cachedBeforeOrAfterPreload: !!asset,
+            return { path: path, expectedUuid: uuid || null, cached: !!asset,
                 refCount: asset && Number.isFinite(asset.refCount) ? asset.refCount : null,
                 valid: !!(asset && cc.isValid(asset)) };
         }
 
         function loadMeasured(path) {
+            var before = cacheLookup(path);
+            coldCacheReadback.push({ phase: 'before-cold-load', path: path, cached: before.cached, refCount: before.refCount });
+            if (before.cached) throw Error('STRESS_RESOURCE_NOT_COLD:' + path);
             var started = now();
             return loadTexture(cc, path).then(function (texture) {
                 var duration = now() - started;
-            if (resourceUuids[path] && texture._uuid !== resourceUuids[path]) throw Error('RESOURCE_UUID_MISMATCH:' + path);
-                loadMs.push(duration);
-                return { texture: texture, durationMs: duration };
+                if (resourceUuids[path] && texture._uuid !== resourceUuids[path]) throw Error('RESOURCE_UUID_MISMATCH:' + path);
+                coldLoadMs.push(duration);
+                var after = cacheLookup(path);
+                coldCacheReadback.push({ phase: 'after-cold-load', path: path, cached: after.cached, refCount: after.refCount });
+                return { texture: texture, durationMs: duration, cacheBefore: before, cacheAfter: after };
             });
+        }
+        async function loadWarmMeasured(path, expectedTexture) {
+            var started = now();
+            var loaded = await loadTexture(cc, path);
+            var duration = now() - started;
+            var sameObject = loaded === expectedTexture;
+            var cache = cacheLookup(path);
+            warmLoadMs.push(duration);
+            if (!sameObject) throw Error('STRESS_WARM_LOAD_IDENTITY_MISMATCH:' + path);
+            // load() adds one reference even on a cache hit; release only this warm callback's hold.
+            loaded.decRef();
+            return { durationMs: duration, sameObject: sameObject, cached: cache.cached, refCountAfterWarmRelease: loaded.refCount };
         }
         function replaceSprites(frame, cycleIndex) {
             var startInstall = now();
@@ -248,23 +287,28 @@
             }
 
         var measuredPaths = paths.concat(parseFixturePaths);
-        var resourceCacheBeforePreload = measuredPaths.map(cacheLookup);
-            var preloadSamplesStart = tap.samples.length;
-        for (var pathIndex = 0; pathIndex < measuredPaths.length; pathIndex++) {
-                var preloadStart = now();
-            await preloadTexture(cc, measuredPaths[pathIndex]);
-                preloadMs.push(now() - preloadStart);
-            }
-            var preloadParseSamples = tap.samples.slice(preloadSamplesStart);
-        var resourceCacheAfterPreload = measuredPaths.map(cacheLookup);
+        var resourceCacheBeforeColdLoad = measuredPaths.map(cacheLookup);
+        resourceCacheBeforeColdLoad.forEach(function (entry) {
+            coldCacheReadback.push({ phase: 'preflight', path: entry.path, cached: entry.cached, refCount: entry.refCount });
+            if (entry.cached) throw Error('STRESS_RESOURCE_NOT_COLD:' + entry.path);
+        });
         for (var fixtureIndex = 0; fixtureIndex < parseFixturePaths.length; fixtureIndex++) {
             var fixturePath = parseFixturePaths[fixtureIndex];
+            var fixtureCacheBefore = cacheLookup(fixturePath);
+            coldCacheReadback.push({ phase: 'before-cold-load', path: fixturePath, cached: fixtureCacheBefore.cached,
+                refCount: fixtureCacheBefore.refCount });
+            if (fixtureCacheBefore.cached) throw Error('STRESS_RESOURCE_NOT_COLD:' + fixturePath);
             var fixtureStarted = now();
             var fixtureTexture = await loadTexture(cc, fixturePath);
             var fixtureLoadMs = now() - fixtureStarted;
             if (resourceUuids[fixturePath] && fixtureTexture._uuid !== resourceUuids[fixturePath])
                 throw Error('RESOURCE_UUID_MISMATCH:' + fixturePath);
-            parserFixtureLoadMs.push(fixtureLoadMs);
+            parserFixtureColdLoadMs.push(fixtureLoadMs);
+            var fixtureCacheAfter = cacheLookup(fixturePath);
+            coldCacheReadback.push({ phase: 'after-cold-load', path: fixturePath, cached: fixtureCacheAfter.cached,
+                refCount: fixtureCacheAfter.refCount });
+            var fixtureWarm = await loadWarmMeasured(fixturePath, fixtureTexture);
+            parserFixtureWarmLoadMs.push(fixtureWarm.durationMs);
             var fixtureRefCountBeforeOwner = fixtureTexture.refCount;
             fixtureTexture.addRef();
             fixtureTexture.decRef();
@@ -272,12 +316,15 @@
             await onceAfterDraw(cc);
             var fixtureAfterRelease = cacheSnapshot(cc, fixtureTexture);
             parserFixtureReadback.push({ path: fixturePath, uuid: fixtureTexture._uuid,
-                loadMs: round(fixtureLoadMs), refCountBeforeOwner: fixtureRefCountBeforeOwner,
+                coldLoadMs: round(fixtureLoadMs), warmLoadMs: round(fixtureWarm.durationMs),
+                warmSameObject: fixtureWarm.sameObject, refCountBeforeOwner: fixtureRefCountBeforeOwner,
                 final: fixtureAfterRelease, released: fixtureAfterRelease.refCount === 0
                     && !fixtureAfterRelease.valid && !fixtureAfterRelease.cached });
         }
 
             var initial = await loadMeasured(paths[0]);
+            var initialWarm = await loadWarmMeasured(paths[0], initial.texture);
+            warmLoadMs.push(initialWarm.durationMs);
             var initialRefCountBeforeOwner = initial.texture.refCount;
             initial.texture.addRef();
             var initialRefCountAfterOwner = initial.texture.refCount;
@@ -296,6 +343,7 @@
                 root.__cocosAgentStress24State = { phase: 'cycle', cycle: cycle };
                 var nextPath = paths[cycle % paths.length];
                 var loaded = await loadMeasured(nextPath);
+                var warmSample = await loadWarmMeasured(nextPath, loaded.texture);
                 var refCountBeforeOwner = loaded.texture.refCount;
                 loaded.texture.addRef();
                 var refCountAfterOwner = loaded.texture.refCount;
@@ -313,6 +361,8 @@
                 visibleDrawWaitMs.push(now() - drawStarted);
 
                 var previousBeforeRelease = cacheSnapshot(cc, previous.texture);
+                var activeWorkingSet = resourceInfo[nextPath].estimatedRgbaBytes + resourceInfo[previous.path].estimatedRgbaBytes;
+                peakEstimatedRgbaWorkingSetBytes = Math.max(peakEstimatedRgbaWorkingSetBytes, activeWorkingSet);
                 var releaseStarted = now();
                 previous.frame.destroy();
                 previous.texture.decRef();
@@ -330,6 +380,8 @@
                 cyclesTrace.push({ cycle: cycle, path: nextPath, resourceUuid: loaded.texture._uuid,
                     resourceRefCountBeforeOwner: refCountBeforeOwner, resourceRefCountAfterOwner: refCountAfterOwner,
                     loadMs: round(loaded.durationMs), createFrameMs: round(createFrameMs[createFrameMs.length - 1]),
+                    warmLoadMs: round(warmSample.durationMs), warmSameObject: warmSample.sameObject,
+                    estimatedRgbaWorkingSetBytes: activeWorkingSet,
                     frameInstallAndNodeMutationMs: round(installAndMutationMs),
                     spriteFrameInstallMs: round(spriteFrameInstallMs[spriteFrameInstallMs.length - 1]),
                     nodeMutationMs: round(nodeMutationMs[nodeMutationMs.length - 1]),
@@ -412,8 +464,8 @@
                     texturePackable: packable,
                     operations: ['Texture2D load', 'SpriteFrame creation and assignment', 'Node position/scale updates',
                         'EVENT_AFTER_DRAW visibility wait', 'decRef plus releaseUnusedAssets'] },
-                timings: { preloadDownloadOnlyMs: summary(preloadMs), resourceLoadTotalMs: summary(loadMs),
-                    parserFixtureResourceLoadMs: summary(parserFixtureLoadMs),
+                timings: { coldResourceLoadMs: summary(coldLoadMs), warmResourceLoadMs: summary(warmLoadMs),
+                    parserFixtureColdLoadMs: summary(parserFixtureColdLoadMs), parserFixtureWarmLoadMs: summary(parserFixtureWarmLoadMs),
                     spriteFrameCreateMs: summary(createFrameMs), spriteFrameInstallMs: summary(spriteFrameInstallMs),
                     nodeMutationMs: summary(nodeMutationMs), visibleDrawWaitMs: summary(visibleDrawWaitMs),
                     releaseCallMs: summary(releaseCallMs), releaseObservedMs: summary(releaseObservedMs) },
@@ -421,15 +473,18 @@
                     over16_667MsCount: over16, over16_667MsRatio: measuredFrameIntervals.length ? round(over16 / measuredFrameIntervals.length) : null,
                     over33_333MsCount: over33, over33_333MsRatio: measuredFrameIntervals.length ? round(over33 / measuredFrameIntervals.length) : null,
                     targetFps: null, budgetVerdict: 'not-set' },
-                resourceCache: { beforePreload: resourceCacheBeforePreload, afterPreload: resourceCacheAfterPreload,
-                    cacheCountBefore: beforeCacheCount },
-                parse: { tapAvailable: tap.available, preloadProducedParserCalls: preloadParseSamples.length,
+                resourceCache: { beforeColdLoad: resourceCacheBeforeColdLoad,
+                    coldCacheReadback: coldCacheReadback, cacheCountBefore: beforeCacheCount },
+                memory: { peakEstimatedRgbaWorkingSetBytes: peakEstimatedRgbaWorkingSetBytes,
+                    estimate: 'sum of the RGBA8 width×height payloads for active and candidate textures; not GPU, native, compressed, or measured resident memory',
+                    resourceInfo: paths.map(function (path) { return Object.assign({ name: path }, resourceInfo[path]); }) },
+                parse: { tapAvailable: tap.available,
                     parserFixtureReadback: parserFixtureReadback,
                     samplesByType: parserByType, samples: tap.samples.slice(0, 64), truncated: tap.samples.length > 64,
-                    fixturePaths: parseFixturePaths, fixtureCacheBeforePreload: resourceCacheBeforePreload.filter(function (item) {
+                    fixturePaths: parseFixturePaths, fixtureCacheBeforeColdLoad: resourceCacheBeforeColdLoad.filter(function (item) {
                         return parseFixturePaths.indexOf(item.path) !== -1;
                     }),
-                    interpretation: 'The import parser callback includes Creator 2.4 deserialize(); .png parser time includes image parse/decode. A zero sample count means the selected resource was already parsed/cached or the parser hook was not reached; do not infer zero deserialization cost.' },
+                    interpretation: 'The import parser callback includes Creator 2.4 deserialize(); .png parser time includes image parse/decode. Parser metrics are valid only when cold-cache misses and successful callbacks are observed.' },
                 failureRetention: failure, cleanup: cleanup, ownerReferenceReleases: ownerReferenceReleases,
                 perCycle: cyclesTrace,
                 errors: errors,
@@ -441,10 +496,38 @@
             var ownerReferencesBalanced = ownerReferenceReleases.every(function (item) {
                 return item.ownerReferenceDelta === 1;
             });
-            var invariantsMet = !!failure && failure.outcome === 'retained' && failure.sameFrameOnAllSprites
+            var beforeColdReadbacks = coldCacheReadback.filter(function (item) { return item.phase === 'before-cold-load'; });
+            var afterColdReadbacks = coldCacheReadback.filter(function (item) { return item.phase === 'after-cold-load'; });
+            var expectedColdLoads = parseFixturePaths.length + cycles + 1;
+            var coldCacheMissesConfirmed = beforeColdReadbacks.length === expectedColdLoads
+                && beforeColdReadbacks.every(function (item) { return item.cached === false; })
+                && afterColdReadbacks.length === expectedColdLoads
+                && afterColdReadbacks.every(function (item) { return item.cached === true; });
+            var warmCacheHitsConfirmed = parserFixtureReadback.every(function (item) { return item.warmSameObject; })
+                && cyclesTrace.every(function (item) { return item.warmSameObject; }) && initialWarm.sameObject;
+            var parserFixturesReleased = parserFixtureReadback.length === parseFixturePaths.length
+                && parserFixtureReadback.every(function (item) { return item.released; });
+            var lifecycleFindings = [];
+            function lifecycle(code, passed, explanation) {
+                lifecycleFindings.push({ code: code, severity: passed ? 'info' : 'error', passed: passed, explanation: explanation });
+            }
+            lifecycle('COLD_CACHE_MISS_CONFIRMED', coldCacheMissesConfirmed, 'Each measured cold load began with the UUID absent from Asset Cache and returned with it present.');
+            lifecycle('WARM_CACHE_IDENTITY_CONFIRMED', warmCacheHitsConfirmed, 'Warm loads returned the same Texture object as the preceding cold load.');
+            lifecycle('PARSER_FIXTURES_RELEASED', parserFixturesReleased, 'All parser fixture textures reached refCount zero and left Asset Cache after release.');
+            lifecycle('OWNER_REFERENCES_BALANCED', ownerReferencesBalanced, 'Each replaced texture lost exactly the test-owned reference.');
+            lifecycle('FAILED_LOAD_RETAINED_OLD_FRAME', !!failure && failure.outcome === 'retained' && failure.sameFrameOnAllSprites
+                && failure.after.resourceUuid === failure.retainedUuid && failure.after.valid && failure.after.cached,
+                'The injected transport failure left every Sprite on the same valid, cached prior frame.');
+            lifecycle('TEMP_CONTENT_RELEASED', cleanup.ownerReferenceDelta === 1 && !cleanup.rootValid
+                && cleanup.finalTexture && cleanup.resourceResidencyAfterOwnerRelease === 'released',
+                'Temporary nodes and the final test-owned texture reference were removed and read back.');
+            lifecycle('ESTIMATED_WORKING_SET_AVAILABLE', Number.isFinite(peakEstimatedRgbaWorkingSetBytes) && peakEstimatedRgbaWorkingSetBytes > 0,
+                'The peak RGBA8 estimate was computed from the active/candidate texture pair.');
+            var lifecyclePassed = lifecycleFindings.every(function (item) { return item.passed; });
+            var invariantsMet = lifecyclePassed
                 && failure.after.resourceUuid === failure.retainedUuid && failure.after.valid && failure.after.cached
-                && ownerReferencesBalanced && cleanup.ownerReferenceDelta === 1 && !cleanup.rootValid
-                && cleanup.finalTexture && cleanup.resourceResidencyAfterOwnerRelease !== 'inconsistent-readback';
+                && cleanup.ownerReferenceDelta === 1 && !cleanup.rootValid
+                && cleanup.finalTexture && cleanup.resourceResidencyAfterOwnerRelease === 'released';
             if (!invariantsMet) {
                 result.acceptance = { success: false, code: 'STRESS_INVARIANT_FAILED', invariantsMet: false };
             } else if (result.budgetEvaluation.verdict === 'exceeded') {
@@ -457,6 +540,7 @@
                     invariantsMet: true };
             }
             result.acceptance.ownerReferencesBalanced = ownerReferencesBalanced;
+            result.acceptance.lifecycleFindings = lifecycleFindings;
             root.__cocosAgentStress24State = { phase: 'completed', cycle: cycles, acceptance: result.acceptance };
             return result;
         } catch (error) {

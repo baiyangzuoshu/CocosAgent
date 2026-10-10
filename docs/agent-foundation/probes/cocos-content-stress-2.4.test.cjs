@@ -11,17 +11,34 @@ test('performance summaries report nearest-rank percentiles and empty samples', 
     });
 });
 
-test('optional budgets compare configured p95 gates without inventing defaults', () => {
+test('host screening budget separates cold/warm load and RGBA estimate with actionable findings', () => {
     const metrics = {
         frame: { intervalMs: { p95Ms: 17 } },
-        timings: { resourceLoadTotalMs: { p95Ms: 3.5 }, releaseCallMs: { p95Ms: 0.1 } },
+        timings: { coldResourceLoadMs: { p95Ms: 42 }, warmResourceLoadMs: { p95Ms: 1 }, releaseCallMs: { p95Ms: 0.1 } },
+        memory: { peakEstimatedRgbaWorkingSetBytes: 8388608 },
         parse: { samplesByType: { import: { duration: { p95Ms: 0.1 } }, '.png': { duration: { p95Ms: 0.3 } } } },
     };
     assert.deepEqual(stress.evaluateBudgets(metrics, {}).verdict, 'not-set');
-    assert.equal(stress.evaluateBudgets(metrics, { targetFps: 58, maxResourceLoadP95Ms: 4 }).verdict, 'passed');
-    const exceeded = stress.evaluateBudgets(metrics, { targetFps: 60, maxResourceLoadP95Ms: 3 });
+    const budgets = { targetFps: 58, maxColdResourceLoadP95Ms: 50, maxWarmResourceLoadP95Ms: 2,
+        maxImportParserP95Ms: 2, maxPngParserP95Ms: 2, maxReleaseCallP95Ms: 2,
+        maxEstimatedRgbaWorkingSetBytes: 16777216 };
+    assert.equal(stress.evaluateBudgets(metrics, budgets).verdict, 'passed');
+    const exceeded = stress.evaluateBudgets(metrics, { ...budgets, maxColdResourceLoadP95Ms: 30 });
     assert.equal(exceeded.verdict, 'exceeded');
-    assert.deepEqual(exceeded.checks.map((check) => check.passed), [false, false]);
+    assert.equal(exceeded.checks.find((check) => check.metric === 'coldResourceLoadP95').status, 'exceeded');
+    const coldFinding = exceeded.diagnostics.find((finding) => finding.metric === 'coldResourceLoadP95');
+    assert.equal(coldFinding.metric, 'coldResourceLoadP95');
+    assert.match(coldFinding.likelyLoci.join(' '), /image decode/);
+    const insufficient = stress.evaluateBudgets({ ...metrics, parse: { samplesByType: {} } }, budgets);
+    assert.equal(insufficient.verdict, 'insufficient-data');
+    assert.ok(insufficient.diagnostics.some((finding) => finding.code === 'METRIC_UNOBSERVED_IMPORTDESERIALIZEPARSERP95'));
+});
+
+test('host screening budgets require explicit cold, warm and estimated working-set bounds', () => {
+    assert.equal(stress.validBudgets({ targetFps: 30, maxColdResourceLoadP95Ms: 150, maxWarmResourceLoadP95Ms: 10,
+        maxImportParserP95Ms: 30, maxPngParserP95Ms: 60, maxReleaseCallP95Ms: 8,
+        maxEstimatedRgbaWorkingSetBytes: 33554432 }), true);
+    assert.equal(stress.validBudgets({ targetFps: 30 }), false);
 });
 
 test('workload bounds reject invalid cycles, node counts, and resource paths before touching Creator', async () => {
