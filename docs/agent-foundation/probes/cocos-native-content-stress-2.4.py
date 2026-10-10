@@ -39,10 +39,110 @@ def solid_png(size: int, rgba: tuple[int, int, int, int]) -> bytes:
     )
 
 
-def probe_js(port: int, cycles: int) -> str:
+def probe_js(port: int, cycles: int, disable_image_bitmap: bool) -> str:
+    image_bitmap_override = "cc.macro.ALLOW_IMAGE_BITMAP = false;" if disable_image_bitmap else ""
     return f'''\n(function () {{
-  var seq = 0, startedAt = Date.now(), index = 0, held = null;
+  var seq = 0, startedAt = Date.now(), index = 0, held = null, currentStages = null;
   var base = "http://127.0.0.1:{port}/";
+  {image_bitmap_override}
+  function now() {{ return Date.now(); }}
+  function byteLength(value) {{
+    if (!value) return null;
+    if (typeof value.size === "number") return value.size;
+    if (typeof value.byteLength === "number") return value.byteLength;
+    return null;
+  }}
+  function instrument(target, method, label, before, after) {{
+    if (!target || typeof target[method] !== "function") return false;
+    var original = target[method];
+    target[method] = function () {{
+      var args = Array.prototype.slice.call(arguments);
+      var stage = currentStages;
+      var started = now();
+      if (before) before(stage, args);
+      var callbackIndex = after && after.callbackIndex;
+      if (callbackIndex !== undefined && typeof args[callbackIndex] === "function") {{
+        var callback = args[callbackIndex];
+        args[callbackIndex] = function () {{
+          var callbackArgs = Array.prototype.slice.call(arguments);
+          if (stage) after.finish(stage, started, callbackArgs);
+          return callback.apply(this, arguments);
+        }};
+      }}
+      var result = original.apply(this, args);
+      if (after && after.sync) after.sync(stage, now() - started);
+      return result;
+    }};
+    return true;
+  }}
+  function instrumentPipeline(pipeline, name) {{
+    if (!pipeline || !Array.isArray(pipeline.pipes)) return false;
+    pipeline.pipes = pipeline.pipes.map(function (pipe, index) {{
+      var pipeName = pipe.name || ("pipe" + index);
+      return function (task, done) {{
+        var stage = currentStages, started = now();
+        return pipe.call(this, task, function () {{
+          if (stage) {{
+            var finished = now();
+            stage[name + "." + index + "." + pipeName + "Ms"] = finished - started;
+            if (name === "loadPipeline" && index === 1) stage.loadPipelineFinishedAt = finished;
+          }}
+          return done.apply(this, arguments);
+        }});
+      }};
+    }});
+    return true;
+  }}
+  var stageHooks = {{
+    downloader: instrument(cc.assetManager.downloader, "download", "download", null, {{
+      callbackIndex: 4,
+      finish: function (stage, started, args) {{
+        stage.downloadMs = now() - started;
+        stage.downloadStartOffsetMs = started - stage.requestStartedAt;
+        stage.downloadBytes = byteLength(args[1]);
+        stage.downloadError = args[0] ? String(args[0]) : null;
+      }}
+    }}),
+    parser: instrument(cc.assetManager.parser, "parse", "parse", function (stage, args) {{
+      if (stage) stage.parseType = args[2];
+    }}, {{
+      callbackIndex: 4,
+      finish: function (stage, started, args) {{
+        stage.parseMs = now() - started;
+        stage.parseError = args[0] ? String(args[0]) : null;
+      }}
+    }}),
+    factory: instrument(cc.assetManager.factory, "create", "create", function (stage) {{
+      if (stage && stage.loadPipelineFinishedAt) {{
+        stage.factoryAfterPipelineMs = now() - stage.loadPipelineFinishedAt;
+      }}
+    }}, {{
+      callbackIndex: 4,
+      finish: function (stage, started, args) {{
+        stage.factoryMs = now() - started;
+        stage.factoryError = args[0] ? String(args[0]) : null;
+      }}
+    }}),
+    textureInit: instrument(cc.Texture2D.prototype, "initWithElement", "texture-init", null, {{
+      sync: function (stage, elapsed) {{ if (stage) stage.textureInitMs = elapsed; }}
+    }}),
+    textureUpload: instrument(cc.Texture2D.prototype, "handleLoadedTexture", "texture-upload", null, {{
+      sync: function (stage, elapsed) {{ if (stage) stage.textureUploadMs = elapsed; }}
+    }}),
+    pipeline: instrumentPipeline(cc.assetManager.pipeline, "loadPipeline"),
+    fetchPipeline: instrumentPipeline(cc.assetManager.fetchPipeline, "fetchPipeline"),
+    transformPipeline: instrumentPipeline(cc.assetManager.transformPipeline, "transformPipeline")
+  }};
+  var schedulerStartedAt = now();
+  setTimeout(function () {{
+    write("scheduler", {{setTimeoutZeroMs:now() - schedulerStartedAt}});
+  }}, 0);
+  if (typeof Promise === "function") {{
+    var microtaskStartedAt = now();
+    Promise.resolve().then(function () {{
+      write("scheduler", {{promiseMicrotaskMs:now() - microtaskStartedAt}});
+    }});
+  }}
   function write(phase, extra) {{
     var item = {{version:"2.4.15", phase:phase, seq:++seq, elapsedMs:Date.now()-startedAt,
       extra:extra||{{}}}};
@@ -55,6 +155,8 @@ def probe_js(port: int, cycles: int) -> str:
   }}
   cc.director.once(cc.Director.EVENT_AFTER_SCENE_LAUNCH, function () {{
     write("started", {{isNative:cc.sys.isNative, scene:cc.director.getScene().name,
+      imageBitmapCapability:!!cc.sys.capabilities.imageBitmap,
+      allowImageBitmap:cc.macro.ALLOW_IMAGE_BITMAP,
       bridgeAvailable:!!(jsb && jsb.getProcessMemoryInfo), assetCacheCount:cacheCount()}});
     function finish() {{
       if (held) held.decRef();
@@ -68,18 +170,24 @@ def probe_js(port: int, cycles: int) -> str:
       if (index >= {cycles}) return finish();
       var cycle = index++, color = cycle % 2 ? "blue" : "red";
       var url = base + color + ".png?cycle=" + cycle;
-      var requestAt = Date.now();
+      currentStages = {{cycle:cycle, color:color}};
+      var requestAt = now();
+      currentStages.requestStartedAt = requestAt;
       cc.assetManager.loadRemote(url, {{ext:".png"}}, function (err, texture) {{
         if (err) {{ write("load-error", {{cycle:cycle, message:String(err)}}); return finish(); }}
+        var loadCompletedAt = now();
+        var loadMs = loadCompletedAt - requestAt;
         texture.addRef();
         var previous = held;
         held = texture;
         if (previous) previous.decRef();
         cc.assetManager.releaseUnusedAssets();
         setTimeout(function () {{
-          write("swap", {{cycle:cycle, color:color, loadMs:Date.now()-requestAt,
+          write("swap", {{cycle:cycle, color:color, loadMs:loadMs,
+            postLoadHoldMs:now()-loadCompletedAt,
             width:texture.width, height:texture.height, refCount:texture.refCount,
             previousValid:previous&&cc.isValid(previous), assetCacheCount:cacheCount(),
+            stages:currentStages, stageHooks:stageHooks,
             nativeMemory:jsb.getProcessMemoryInfo ? jsb.getProcessMemoryInfo() : null}});
           next();
         }}, 80);
@@ -97,6 +205,8 @@ def main() -> None:
     parser.add_argument("--cycles", type=int, default=24)
     parser.add_argument("--size", type=int, default=1024)
     parser.add_argument("--app-path", type=Path, default=APP)
+    parser.add_argument("--disable-image-bitmap", action="store_true",
+                        help="force the legacy native Image path instead of ImageBitmap")
     args = parser.parse_args()
     if args.cycles < 2 or args.size < 16:
         raise SystemExit("cycles must be >=2 and size must be >=16")
@@ -139,7 +249,7 @@ def main() -> None:
     if source.count(needle) != 1:
         server.shutdown()
         raise RuntimeError(f"Expected one boot hook; found {source.count(needle)}")
-    modified = source.replace(needle, needle + probe_js(port, args.cycles), 1)
+    modified = source.replace(needle, needle + probe_js(port, args.cycles, args.disable_image_bitmap), 1)
     process = None
     rss_samples = []
     started_wall = time.time()
@@ -187,6 +297,7 @@ def main() -> None:
         rss_path.write_text(json.dumps({
             "version": "2.4.15", "platform": "macOS native", "cycles": args.cycles,
             "textureSize": args.size, "pngBytes": {"red": len(red), "blue": len(blue)},
+            "disableImageBitmap": args.disable_image_bitmap,
             "rssSamples": rss_samples,
         }, ensure_ascii=False, indent=2) + "\n")
         print(json.dumps({"trace": str(trace_path), "rssTrace": str(rss_path),

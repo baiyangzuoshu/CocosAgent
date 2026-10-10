@@ -9,7 +9,7 @@ const inputs = require('./catalog.schema.json').$defs;
 function loadCatalog(relativePath) {
     const filename = path.resolve(__dirname, '..', '..', relativePath);
     const module = { exports: {} };
-    const localRequire = (name) => name === 'ws' ? {} : name === './asset-search'
+    const localRequire = (name) => name === 'ws' ? {} : name.startsWith('./')
         ? require(path.resolve(path.dirname(filename), name)) : require(name);
     const source = `${fs.readFileSync(filename, 'utf8')}\nmodule.exports.testCatalog = commandCatalog;`;
     new Function('require', 'module', 'exports', '__dirname', source)(localRequire, module, module.exports, path.dirname(filename));
@@ -19,11 +19,11 @@ function loadCatalog(relativePath) {
 const catalog2 = loadCatalog('2.4.15NewProject/packages/cocos-agent-bridge/main.js');
 const catalog3 = loadCatalog('3.8,7NewProject/extensions/cocos-agent-bridge/dist/main.js');
 for (const [version, catalog] of [['2.4.15', catalog2], ['3.8.7', catalog3]]) {
-    const commands = catalog({ sceneName: 'example', hasCanvas: true, assetDbReady: true });
-    const expectedIds = ['scene.snapshot', 'scene.node.inspect', ...(version === '2.4.15' ? ['asset.searchPng'] : []), 'asset.importPng', ...(version === '2.4.15' ? ['asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder'] : []), 'scene.pngSprite', 'scene.node.create', ...(version === '2.4.15' ? ['scene.node.patch'] : [])];
+    const commands = catalog({ sceneName: 'example', hasCanvas: true, assetDbReady: true, prefabSourcePatchApiReady: true });
+    const expectedIds = ['scene.snapshot', 'scene.node.inspect', ...(version === '2.4.15' ? ['asset.searchPng'] : []), 'asset.importPng', ...(version === '2.4.15' ? ['asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder'] : []), 'scene.pngSprite', 'scene.node.create', ...(version === '2.4.15' ? ['scene.node.patch', 'prefab.source.patch', 'prefab.source.inspect', 'content.stress.run'] : [])];
     assert.deepStrictEqual(commands.map((item) => item.id), expectedIds);
     assert.ok(commands.every((item) => item.contractVersion === '0.1'));
-    assert.deepStrictEqual(commands.map((item) => item.access), ['read', 'read', ...(version === '2.4.15' ? ['read'] : []), 'write', ...(version === '2.4.15' ? ['write', 'read', 'write', 'write'] : []), 'write', 'write', ...(version === '2.4.15' ? ['write'] : [])]);
+    assert.deepStrictEqual(commands.map((item) => item.access), ['read', 'read', ...(version === '2.4.15' ? ['read'] : []), 'write', ...(version === '2.4.15' ? ['write', 'read', 'write', 'write'] : []), 'write', 'write', ...(version === '2.4.15' ? ['write', 'write', 'read', 'read'] : [])]);
     assert.ok(isDeepStrictEqual(commands[0].input, inputs.snapshotInput));
     assert.ok(isDeepStrictEqual(commands[1].input, inputs.nodeInspectInput));
     assert.ok(isDeepStrictEqual(commands.find((item) => item.id === 'asset.importPng').input, inputs.importPngInput));
@@ -49,7 +49,26 @@ for (const [version, catalog] of [['2.4.15', catalog2], ['3.8.7', catalog3]]) {
         assert.ok(isDeepStrictEqual(patchCommand.input, inputs.nodePatchInput2x));
         assert.deepStrictEqual(patchCommand.preconditions, ['activeScene', 'nodePathAndUuidMatch', 'expectedBeforeValues', 'propertyWhitelist', 'resourceReferencesResolvable']);
         assert.strictEqual(patchCommand.status, 'available');
-    } else assert.strictEqual(patchCommand, undefined, '3.8 must not advertise the 2.4 patch command');
+        const prefabPatch = commands.find((item) => item.id === 'prefab.source.patch');
+        const prefabInspect = commands.find((item) => item.id === 'prefab.source.inspect');
+        assert.ok(isDeepStrictEqual(prefabPatch.input, inputs.prefabSourcePatchInput2x));
+        assert.deepStrictEqual(prefabPatch.preconditions, ['activeScene', 'prefabUuidResolvable', 'sourceShaMatches', 'prefabEditModeAvailable', 'nodePathAndUuidMatch', 'expectedBeforeValues']);
+        assert.strictEqual(prefabPatch.status, 'available');
+        assert.ok(isDeepStrictEqual(prefabInspect.input, inputs.prefabSourceInspectInput2x));
+        assert.deepStrictEqual(prefabInspect.preconditions, ['prefabUuidResolvable', 'serializedPrefabReadable']);
+        assert.strictEqual(prefabInspect.status, 'available');
+        const stress = commands.find((item) => item.id === 'content.stress.run');
+        assert.ok(isDeepStrictEqual(stress.input, inputs.contentStressRunInput2x));
+        assert.deepStrictEqual(stress.preconditions, ['completedWebMobileBuild', 'packagedPngResources', 'headlessChromeProfile', 'explicitBudgets']);
+        assert.strictEqual(stress.access, 'read');
+        assert.strictEqual(stress.status, 'available');
+        assert.strictEqual(catalog({ sceneName: 'example', hasCanvas: true, assetDbReady: true }).find((item) => item.id === 'prefab.source.patch').reason, 'PREFAB_EDIT_MODE_API_UNAVAILABLE');
+    } else {
+        assert.strictEqual(patchCommand, undefined, '3.8 must not advertise the 2.4 patch command');
+        assert.strictEqual(commands.find((item) => item.id === 'prefab.source.patch'), undefined, '3.8 must not advertise 2.4 Prefab editing');
+        assert.strictEqual(commands.find((item) => item.id === 'prefab.source.inspect'), undefined, '3.8 must not advertise 2.4 Prefab inspection');
+        assert.strictEqual(commands.find((item) => item.id === 'content.stress.run'), undefined, '3.8 must not advertise the 2.4 runtime diagnostic');
+    }
     assert.strictEqual(nodeCommand.status, 'available', version);
     assert.strictEqual(catalog({ sceneName: null, hasCanvas: false }).find((item) => item.id === 'scene.node.create').reason, 'NO_OPEN_SCENE');
     assert.strictEqual(spriteCommand.status, 'available', version);

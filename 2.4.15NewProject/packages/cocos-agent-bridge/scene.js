@@ -6,6 +6,90 @@ const MAX_NAME_LENGTH = 32;
 const MAX_PATH_LENGTH = 80;
 
 module.exports = {
+    'prefab-source-patch-mode'(event) {
+        event.reply(null, prefabSourceRootInfo());
+    },
+
+    'prefab-source-patch-preflight'(event, params) {
+        const rootInfo = prefabSourceRootInfo();
+        if (rootInfo.prefabUuid !== params.prefabUuid) {
+            event.reply({ code: 'PREFAB_MODE_TARGET_MISMATCH', message: 'The requested Prefab is not the active Prefab edit target.' }); return;
+        }
+        const node = findNodeByUuid(cc.director.getScene(), params.targetNodeUuid);
+        const snapshot = node && nodePatchSnapshot(node, getNodePath(node));
+        if (!snapshot || !matchesPrefabTargetPath(snapshot.path, params.targetNodePath)) {
+            event.reply({ code: 'PREFAB_NODE_IDENTITY_MISMATCH', message: 'Prefab node path and UUID no longer identify the same node.' }); return;
+        }
+        if (!validPatchDiff(params.expectedDiff) || !patchMatches(snapshot, params.expectedDiff, 'before')) {
+            event.reply({ code: 'EXPECTED_STATE_MISMATCH', message: 'One or more Prefab source fields differ from expected before values.' }); return;
+        }
+        if (patchNameConflict(node, params.expectedDiff)) {
+            event.reply({ code: 'PREFAB_NODE_CONFLICT', message: 'The requested node name already belongs to a sibling.' }); return;
+        }
+        event.reply(null, { prefabUuid: rootInfo.prefabUuid, node: snapshot, expectedDiff: params.expectedDiff });
+    },
+
+    'prefab-source-patch-snapshot'(event, params) {
+        const rootInfo = prefabSourceRootInfo();
+        if (rootInfo.prefabUuid !== params.prefabUuid) {
+            event.reply({ code: 'PREFAB_MODE_TARGET_MISMATCH', message: 'The requested Prefab is not the active Prefab edit target.' }); return;
+        }
+        const node = findNodeByUuid(cc.director.getScene(), params.targetNodeUuid);
+        const snapshot = node && nodePatchSnapshot(node, getNodePath(node));
+        if (!snapshot || !matchesPrefabTargetPath(snapshot.path, params.targetNodePath)) {
+            event.reply({ code: 'PREFAB_NODE_IDENTITY_MISMATCH', message: 'Prefab node path and UUID no longer identify the same node.' }); return;
+        }
+        if (!validPatchDiff(params.expectedDiff) || !patchMatches(snapshot, params.expectedDiff, params.side)) {
+            event.reply({ code: 'PREFAB_READBACK_MISMATCH', message: `Prefab fields do not match the expected ${params.side} values.` }); return;
+        }
+        event.reply(null, { prefabUuid: rootInfo.prefabUuid, node: snapshot,
+            expectedDiff: params.expectedDiff, verifiedSide: params.side });
+    },
+
+    'prefab-source-patch-mutate'(event, params) {
+        const rootInfo = prefabSourceRootInfo();
+        if (rootInfo.prefabUuid !== params.prefabUuid) {
+            event.reply({ code: 'PREFAB_MODE_TARGET_MISMATCH', message: 'The requested Prefab is not the active Prefab edit target.' }); return;
+        }
+        const node = findNodeByUuid(cc.director.getScene(), params.targetNodeUuid);
+        const before = node && nodePatchSnapshot(node, getNodePath(node));
+        if (!node || !matchesPrefabTargetPath(before.path, params.targetNodePath)
+            || !validPatchDiff(params.expectedDiff) || !patchMatches(before, params.expectedDiff, 'before')) {
+            event.reply({ code: 'EXPECTED_STATE_MISMATCH', message: 'Prefab source changed after preflight; no properties were written.' }); return;
+        }
+        if (patchNameConflict(node, params.expectedDiff)) {
+            event.reply({ code: 'PREFAB_NODE_CONFLICT', message: 'A sibling with the requested name appeared after preflight.' }); return;
+        }
+        const spriteReferences = params.expectedDiff.filter((item) => item.path === 'component.cc.Sprite.spriteFrameUuid' && item.after !== null);
+        const apply = (loadedFrames) => {
+            try {
+                params.expectedDiff.forEach((item) => setPatchValue(node, item, loadedFrames));
+                const changed = nodePatchSnapshot(node, getNodePath(node));
+                if (!patchMatches(changed, params.expectedDiff, 'after')) {
+                    event.reply({ code: 'PREFAB_WRITE_READBACK_MISMATCH', message: 'The live Prefab node did not match the requested after values.' }); return;
+                }
+                event.reply(null, { prefabUuid: rootInfo.prefabUuid, node: changed, expectedDiff: params.expectedDiff });
+            } catch (error) {
+                event.reply({ code: 'PROPERTY_WRITE_FAILED', message: String(error && error.message || error) });
+            }
+        };
+        if (!spriteReferences.length) { apply({}); return; }
+        const loaded = Object.create(null);
+        let remaining = spriteReferences.length;
+        let settled = false;
+        spriteReferences.forEach((item) => cc.assetManager.loadAny({ uuid: item.after }, (error, asset) => {
+            if (settled) return;
+            if (error || !(asset instanceof cc.SpriteFrame)) {
+                settled = true;
+                event.reply({ code: 'SPRITE_FRAME_LOAD_FAILED', message: String(error && error.message || error || 'Resource is not a SpriteFrame.') });
+                return;
+            }
+            loaded[item.after] = asset;
+            remaining -= 1;
+            if (!remaining) { settled = true; apply(loaded); }
+        }));
+    },
+
     'node-prefab-create-name'(event, params) {
         const node = findNodeByUuid(cc.director.getScene(), params && params.nodeUuid);
         if (!node || node.name !== params.beforeName || !/^[A-Za-z0-9_ -]{1,64}$/.test(params.afterName || '')
@@ -440,6 +524,24 @@ function findNodeByUuid(root, uuid) {
     if (root.uuid === uuid) return root;
     for (const child of root.children || []) { const found = findNodeByUuid(child, uuid); if (found) return found; }
     return null;
+}
+
+function prefabSourceRootInfo() {
+    const scene = cc.director.getScene();
+    const roots = scene && scene.children && scene.children.length ? scene.children : scene ? [scene] : [];
+    const candidates = new Set();
+    roots.forEach((node) => {
+        const asset = node && node._prefab && node._prefab.asset;
+        const uuid = asset && (asset._uuid || asset.uuid);
+        if (typeof uuid === 'string' && /^[0-9a-f-]{36}$/i.test(uuid)) candidates.add(uuid);
+    });
+    return { prefabUuid: candidates.size === 1 ? [...candidates][0] : null };
+}
+
+function matchesPrefabTargetPath(actualPath, expectedPath) {
+    if (typeof actualPath !== 'string' || typeof expectedPath !== 'string') return false;
+    const actual = actualPath.split('/'); const expected = expectedPath.split('/');
+    return actual.length >= expected.length && expected.every((part, index) => actual[actual.length - expected.length + index] === part);
 }
 
 function getNodePath(node) {

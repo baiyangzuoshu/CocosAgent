@@ -137,7 +137,7 @@ function unavailable(target, code) {
 }
 
 function validCatalog(target, result) {
-    const expectedCommandCount = target.creatorVersion === '2.4.15' ? 11 : 5;
+    const expectedCommandCount = target.creatorVersion === '2.4.15' ? 14 : 5;
     if (!Array.isArray(result.commands) || result.commands.length !== expectedCommandCount
         || !(result.activeScene === null || typeof result.activeScene === 'string')
         || !/^[0-9a-f]{64}$/.test(result.catalogRevision || '')) return false;
@@ -169,6 +169,13 @@ function validCatalog(target, result) {
                 : ['activeScene', 'parentIdentity'] },
         ...(target.creatorVersion === '2.4.15' ? { 'scene.node.patch': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/nodePatchInput2x',
             input: catalogSchema.$defs.nodePatchInput2x, preconditions: ['activeScene', 'nodePathAndUuidMatch', 'expectedBeforeValues', 'propertyWhitelist', 'resourceReferencesResolvable'] } } : {}),
+        ...(target.creatorVersion === '2.4.15' ? { 'prefab.source.patch': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/prefabSourcePatchInput2x',
+            input: catalogSchema.$defs.prefabSourcePatchInput2x, preconditions: ['activeScene', 'prefabUuidResolvable', 'sourceShaMatches', 'prefabEditModeAvailable', 'nodePathAndUuidMatch', 'expectedBeforeValues'] },
+        'prefab.source.inspect': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/prefabSourceInspectInput2x',
+            input: catalogSchema.$defs.prefabSourceInspectInput2x, preconditions: ['prefabUuidResolvable', 'serializedPrefabReadable'] },
+        'content.stress.run': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/contentStressRunInput2x',
+            input: catalogSchema.$defs.contentStressRunInput2x,
+            preconditions: ['completedWebMobileBuild', 'packagedPngResources', 'headlessChromeProfile', 'explicitBudgets'] } } : {}),
     };
     const seen = new Set();
     for (const command of result.commands) {
@@ -193,6 +200,15 @@ function validCatalog(target, result) {
         || commands['scene.node.create'].reason !== (sceneReady ? null : 'NO_OPEN_SCENE')) return false;
     if (target.creatorVersion === '2.4.15' && (commands['scene.node.patch'].status !== (sceneReady ? 'available' : 'unavailable')
         || commands['scene.node.patch'].reason !== (sceneReady ? null : 'NO_OPEN_SCENE'))) return false;
+    if (target.creatorVersion === '2.4.15') {
+        if (commands['prefab.source.patch'].status === 'available' && commands['prefab.source.patch'].reason !== null) return false;
+        if (commands['prefab.source.patch'].status === 'unavailable'
+            && commands['prefab.source.patch'].reason !== (sceneReady ? 'PREFAB_EDIT_MODE_API_UNAVAILABLE' : 'NO_OPEN_SCENE')) return false;
+        if (commands['prefab.source.inspect'].status !== 'available'
+            && commands['prefab.source.inspect'].reason !== 'ASSETDB_UNAVAILABLE') return false;
+        if (commands['prefab.source.inspect'].status === 'available' && commands['prefab.source.inspect'].reason !== null) return false;
+        if (commands['content.stress.run'].status !== 'available' || commands['content.stress.run'].reason !== null) return false;
+    }
     if (!sceneReady && (commands['scene.pngSprite'].status !== 'unavailable' || commands['scene.pngSprite'].reason !== 'NO_OPEN_SCENE')) return false;
     if (sceneReady && target.creatorVersion === '3.8.7' && commands['scene.pngSprite'].status !== 'available') return false;
     if (sceneReady && target.creatorVersion === '2.4.15' && commands['scene.pngSprite'].status === 'unavailable'

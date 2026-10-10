@@ -15,9 +15,14 @@ const COCOS_2X_SKILL_URI = 'cocos://2x/agent/mcp-tools';
 const COCOS_2X_SKILL_PATH = path.join(REPOSITORY_ROOT, 'docs/agent-foundation/skills/cocos2-mcp-tools/SKILL.md');
 const COCOS_2X_COMPOSITION_SKILL_URI = 'cocos://2x/skills/scene-composition';
 const COCOS_2X_COMPOSITION_SKILL_PATH = path.join(REPOSITORY_ROOT, 'plugins/cocos-agent-2x/skills/cocos2-scene-composition/SKILL.md');
+const COCOS_2X_PREFAB_SOURCE_SKILL_URI = 'cocos://2x/skills/prefab-source-edit';
+const COCOS_2X_PREFAB_SOURCE_SKILL_PATH = path.join(REPOSITORY_ROOT, 'docs/agent-foundation/skills/cocos2-prefab-source-edit/SKILL.md');
+const COCOS_2X_PERFORMANCE_SKILL_URI = 'cocos://2x/skills/runtime-performance';
+const COCOS_2X_PERFORMANCE_SKILL_PATH = path.join(REPOSITORY_ROOT, 'docs/agent-foundation/skills/cocos2-runtime-performance/SKILL.md');
 const COMMANDS_2X = [
     'scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng',
     'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.pngSprite', 'scene.node.create', 'scene.node.patch',
+    'prefab.source.patch', 'prefab.source.inspect', 'content.stress.run',
 ];
 const CONTENT_BUILD_ID = z.string().regex(/^[a-z0-9][a-z0-9-]{2,31}$/);
 const RELEASE_ID = z.string().regex(/^(?!(selected|effective)$)[a-z0-9][a-z0-9._-]{0,63}$/);
@@ -82,6 +87,55 @@ function commandInputSchema(projectRoot) {
             sourceOperationId: UUID.optional(),
             operationId: UUID.optional(),
         }).strict(),
+        'prefab.source.patch': z.object({
+            prefabUuid: UUID,
+            targetNodePath: z.string().min(1).max(240),
+            targetNodeUuid: z.string().min(1).max(64).regex(/^[A-Za-z0-9_+/=-]+$/),
+            expectedPrefabSha256: SHA256.optional(),
+            action: z.enum(['apply', 'compensate', 'replay']),
+            expectedDiff: z.array(z.object({
+                path: z.enum(['node.name', 'node.active', 'node.position.x', 'node.position.y', 'node.scale.x', 'node.scale.y',
+                    'component.cc.Sprite.enabled', 'component.cc.Sprite.spriteFrameUuid', 'component.cc.Label.enabled']),
+                before: z.union([z.string(), z.number(), z.boolean(), z.null()]),
+                after: z.union([z.string(), z.number(), z.boolean(), z.null()]),
+            }).strict()).min(1).max(16),
+            sourceOperationId: UUID.optional(),
+            operationId: UUID.optional(),
+        }).strict().superRefine((input, context) => {
+            if (input.action === 'apply' && !input.expectedPrefabSha256)
+                context.addIssue({ code: 'custom', path: ['expectedPrefabSha256'], message: 'Apply requires the source hash returned by prefab.source.inspect.' });
+            if (input.action === 'apply' && input.sourceOperationId)
+                context.addIssue({ code: 'custom', path: ['sourceOperationId'], message: 'Apply does not accept a source operation.' });
+            if (input.action !== 'apply' && !input.sourceOperationId)
+                context.addIssue({ code: 'custom', path: ['sourceOperationId'], message: 'Compensation and replay require a completed source operation.' });
+        }),
+        'prefab.source.inspect': z.object({ prefabUuid: UUID }).strict(),
+        'content.stress.run': z.object({
+            buildId: CONTENT_BUILD_ID,
+            resourcePaths: z.array(z.string().regex(/^[A-Za-z0-9_-]{1,64}(?:\/[A-Za-z0-9_-]{1,64}){0,7}$/)).min(2).max(16)
+                .refine((values) => new Set(values).size === values.length),
+            parseFixturePaths: z.array(z.string().regex(/^[A-Za-z0-9_-]{1,64}(?:\/[A-Za-z0-9_-]{1,64}){0,7}$/)).min(2).max(16)
+                .refine((values) => new Set(values).size === values.length),
+            failureResourcePath: z.string().regex(/^[A-Za-z0-9_-]{1,64}(?:\/[A-Za-z0-9_-]{1,64}){0,7}$/),
+            cycles: z.number().int().min(8).max(256),
+            nodeCount: z.number().int().min(32).max(1024),
+            packable: z.boolean(),
+            profileId: z.literal('macos-arm64-chrome-headless-swiftshader-1280x800'),
+            budgets: z.object({
+                targetFps: z.number().min(1).max(360),
+                maxResourceLoadP95Ms: z.number().min(0.01).max(60000),
+                maxImportParserP95Ms: z.number().min(0.01).max(60000),
+                maxPngParserP95Ms: z.number().min(0.01).max(60000),
+                maxReleaseCallP95Ms: z.number().min(0.01).max(60000),
+            }).strict(),
+        }).strict().superRefine((input, context) => {
+            if (input.cycles < input.resourcePaths.length + 1)
+                context.addIssue({ code: 'custom', path: ['cycles'], message: 'Cycles must revisit and release every selected resource before injecting the failure case.' });
+            if (input.resourcePaths.some((item) => input.parseFixturePaths.includes(item)))
+                context.addIssue({ code: 'custom', path: ['parseFixturePaths'], message: 'Parser fixtures must be separate from the render stress resources.' });
+            if (!input.parseFixturePaths.includes(input.failureResourcePath) || input.resourcePaths.includes(input.failureResourcePath))
+                context.addIssue({ code: 'custom', path: ['failureResourcePath'], message: 'The failure path must be one of the separate parser fixtures.' });
+        }),
     };
     return z.discriminatedUnion('command', COMMANDS_2X.map((command) => z.object({
         projectRoot,
@@ -170,6 +224,18 @@ function createServer(projectRoots, options = {}) {
         mimeType: 'text/markdown',
     }, async (uri) => ({ contents: [{ uri: uri.href, mimeType: 'text/markdown', text: fs.readFileSync(COCOS_2X_COMPOSITION_SKILL_PATH, 'utf8') }] }));
 
+    server.registerResource('cocos2-prefab-source-edit-skill', COCOS_2X_PREFAB_SOURCE_SKILL_URI, {
+        title: 'CocosAgent Creator 2.4 Prefab source editing skill',
+        description: 'Version-specific workflow for inspecting, editing, reading back, compensating, and replaying existing Prefab source content.',
+        mimeType: 'text/markdown',
+    }, async (uri) => ({ contents: [{ uri: uri.href, mimeType: 'text/markdown', text: fs.readFileSync(COCOS_2X_PREFAB_SOURCE_SKILL_PATH, 'utf8') }] }));
+
+    server.registerResource('cocos2-runtime-performance-skill', COCOS_2X_PERFORMANCE_SKILL_URI, {
+        title: 'CocosAgent Creator 2.4 runtime performance diagnostic skill',
+        description: 'Runs a bounded Creator 2.4.15 Web-Mobile stress diagnostic with an explicit test profile and P95 budgets. It does not modify project content, but writes a trace and screenshots to the repository.',
+        mimeType: 'text/markdown',
+    }, async (uri) => ({ contents: [{ uri: uri.href, mimeType: 'text/markdown', text: fs.readFileSync(COCOS_2X_PERFORMANCE_SKILL_PATH, 'utf8') }] }));
+
     server.registerPrompt('cocos_2x_resource_to_scene_workflow', {
         title: 'Find or import PNGs into a Creator 2.4 scene',
         description: 'Guide a requested existing or new PNG-to-scene operation through discovery or import, readback, visual acceptance, and optional content release staging.',
@@ -183,6 +249,7 @@ function createServer(projectRoots, options = {}) {
             'When the request provides new local PNG files, call cocos_2x_assets_scene_plan. Review the returned pipelineId, asset identities, target Canvas, node names, and positions before calling cocos_2x_assets_scene_execute once.',
             'After scene.node.create, inspect the operation phases and matching local Web preview; record visual acceptance only after viewing the requested Sprite. If the write outcome is uncertain, inspect operation state and never repeat the write blindly.',
             'For an existing scene node, inspect its exact path and UUID. Use scene.node.patch only with explicit before/after values for supported node, Sprite, or Label fields. Preserve the returned expectedDiff and operationId; compensate only if the current fields still equal the recorded after values.',
+            'For an existing Prefab source, call prefab.source.inspect with its exact UUID. Select the intended node from the returned path/UUID and current field values. Call prefab.source.patch with the inspected sourceSha256 and explicit before/after values. After each successful operation, inspect again before the next round. Compensate or replay only by passing the completed source operationId and inverse diff; never overwrite a newer Prefab state.',
             'After execution, read cocos_2x_assets_scene_get and cocos_2x_assets_scene_validate. If a call times out or returns an uncertain state, do not retry execute; inspect the pipeline, exact nodes, and operation records, then compensate only with the required live and disk evidence.',
             'Call cocos_2x_assets_scene_cancel only when the user explicitly asks to cancel an active resource-to-scene execution. Cancellation waits for the current Host call, stops at a safe write boundary, and attempts compensation; inspect the final pipeline receipt.',
             'Inspect each Sprite in the matching local Web preview before calling cocos_2x_assets_scene_preview_accept. Never invent visual evidence or treat source, disk, or headless-only observations as visual acceptance.',
@@ -289,7 +356,7 @@ function createServer(projectRoots, options = {}) {
             targets: targetList, projectRoot: selected, creatorVersion: CREATOR_VERSION,
         }), { title: 'List Creator 2.4.15 capabilities', readOnlyHint: true, destructiveHint: false, openWorldHint: false });
 
-    const readOnlyCommandTools = [
+    const dedicatedCommandTools = [
         {
             name: 'cocos_2x_scene_snapshot',
             command: 'scene.snapshot',
@@ -315,13 +382,45 @@ function createServer(projectRoots, options = {}) {
             description: 'Read and validate one PNG owned by a Creator 2.4.15 resource pipeline. This dedicated read-only tool cannot execute scene or asset writes.',
             input: z.object({ pipelineId: OPERATION_ID, assetName: RESOURCE_NAME }).strict(),
         },
+        {
+            name: 'cocos_2x_content_stress_run',
+            command: 'content.stress.run',
+            description: 'Run the Creator 2.4.15 Web-Mobile content stress diagnostic on a verified build. Requires 32–1024 temporary Sprite nodes, 8–256 resource replacement cycles, the supported Mac Chrome/SwiftShader profile, and explicit P95 budgets. It writes only a JSON trace and screenshots under docs/agent-foundation/traces; it does not change the project build, scene, or release.',
+            input: z.object({
+                buildId: CONTENT_BUILD_ID,
+                resourcePaths: z.array(z.string().regex(/^[A-Za-z0-9_-]{1,64}(?:\/[A-Za-z0-9_-]{1,64}){0,7}$/)).min(2).max(16)
+                    .refine((values) => new Set(values).size === values.length),
+                parseFixturePaths: z.array(z.string().regex(/^[A-Za-z0-9_-]{1,64}(?:\/[A-Za-z0-9_-]{1,64}){0,7}$/)).min(2).max(16)
+                    .refine((values) => new Set(values).size === values.length),
+                failureResourcePath: z.string().regex(/^[A-Za-z0-9_-]{1,64}(?:\/[A-Za-z0-9_-]{1,64}){0,7}$/),
+                cycles: z.number().int().min(8).max(256),
+                nodeCount: z.number().int().min(32).max(1024),
+                packable: z.boolean(),
+                profileId: z.literal('macos-arm64-chrome-headless-swiftshader-1280x800'),
+                budgets: z.object({
+                    targetFps: z.number().min(1).max(360),
+                    maxResourceLoadP95Ms: z.number().min(0.01).max(60000),
+                    maxImportParserP95Ms: z.number().min(0.01).max(60000),
+                    maxPngParserP95Ms: z.number().min(0.01).max(60000),
+                    maxReleaseCallP95Ms: z.number().min(0.01).max(60000),
+                }).strict(),
+            }).strict().superRefine((input, context) => {
+                if (input.cycles < input.resourcePaths.length + 1)
+                    context.addIssue({ code: 'custom', path: ['cycles'], message: 'Cycles must revisit and release every selected resource before the failure case.' });
+                if (input.resourcePaths.some((item) => input.parseFixturePaths.includes(item)))
+                    context.addIssue({ code: 'custom', path: ['parseFixturePaths'], message: 'Parser fixtures must be separate from render stress resources.' });
+                if (!input.parseFixturePaths.includes(input.failureResourcePath) || input.resourcePaths.includes(input.failureResourcePath))
+                    context.addIssue({ code: 'custom', path: ['failureResourcePath'], message: 'Failure path must use a separate parser fixture.' });
+            }),
+        },
     ];
-    for (const tool of readOnlyCommandTools) {
+    for (const tool of dedicatedCommandTools) {
         register(tool.name, tool.description, z.object({ projectRoot, input: tool.input }).strict(), 'command.execute',
             ({ projectRoot: selected, input }) => ({
                 targets: targetList, projectRoot: selected, creatorVersion: CREATOR_VERSION,
                 command: tool.command, input,
-            }), { title: tool.name, readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+            }), { title: tool.name, readOnlyHint: tool.command !== 'content.stress.run', destructiveHint: false,
+                idempotentHint: tool.command !== 'content.stress.run', openWorldHint: false });
     }
 
     register('cocos_2x_command_execute',

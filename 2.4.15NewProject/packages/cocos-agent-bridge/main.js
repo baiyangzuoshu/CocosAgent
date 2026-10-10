@@ -29,6 +29,7 @@ let assistantStartSequence = 0;
 let assistantForgetSequence = 0;
 let assistantCredentialError = null;
 const assistantCredentialStore = new CredentialStore();
+let pendingSceneReady = null;
 const instanceBytes = crypto.randomBytes(16);
 instanceBytes[6] = (instanceBytes[6] & 0x0f) | 0x40;
 instanceBytes[8] = (instanceBytes[8] & 0x3f) | 0x80;
@@ -103,6 +104,51 @@ const COMMAND_INPUTS = {
             sourceOperationId: { type: 'string', pattern: '^[0-9a-fA-F-]{36}$' },
             operationId: { type: 'string', pattern: '^[0-9a-fA-F-]{36}$' },
         } },
+    prefabSourcePatch: { type: 'object', additionalProperties: false,
+        required: ['prefabUuid', 'targetNodePath', 'targetNodeUuid', 'action', 'expectedDiff'],
+        properties: {
+            prefabUuid: { type: 'string', pattern: '^[0-9a-fA-F-]{36}$' },
+            targetNodePath: { type: 'string', minLength: 1, maxLength: 240 },
+            targetNodeUuid: { type: 'string', minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_+/=-]+$' },
+            expectedPrefabSha256: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+            action: { enum: ['apply', 'compensate', 'replay'] },
+            expectedDiff: { type: 'array', minItems: 1, maxItems: 16, items: { type: 'object', additionalProperties: false,
+                required: ['path', 'before', 'after'], properties: { path: { enum: ['node.name', 'node.active', 'node.position.x', 'node.position.y',
+                    'node.scale.x', 'node.scale.y', 'component.cc.Sprite.enabled', 'component.cc.Sprite.spriteFrameUuid',
+                    'component.cc.Label.enabled'] }, before: {}, after: {} } } },
+            sourceOperationId: { type: 'string', pattern: '^[0-9a-fA-F-]{36}$' },
+            operationId: { type: 'string', pattern: '^[0-9a-fA-F-]{36}$' },
+        }, allOf: [
+            { if: { properties: { action: { const: 'apply' } }, required: ['action'] },
+                then: { required: ['expectedPrefabSha256'], not: { required: ['sourceOperationId'] } } },
+            { if: { properties: { action: { enum: ['compensate', 'replay'] } }, required: ['action'] },
+                then: { required: ['sourceOperationId'] } },
+        ] },
+    prefabSourceInspect: { type: 'object', additionalProperties: false, required: ['prefabUuid'],
+        properties: { prefabUuid: { type: 'string', pattern: '^[0-9a-fA-F-]{36}$' } } },
+    contentStressRun: { type: 'object', additionalProperties: false,
+        required: ['buildId', 'resourcePaths', 'parseFixturePaths', 'failureResourcePath', 'cycles', 'nodeCount', 'packable', 'profileId', 'budgets'],
+        properties: {
+            buildId: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{2,31}$' },
+            resourcePaths: { type: 'array', minItems: 2, maxItems: 16, uniqueItems: true,
+                items: { type: 'string', pattern: '^[A-Za-z0-9_-]{1,64}(?:/[A-Za-z0-9_-]{1,64}){0,7}$' } },
+            parseFixturePaths: { type: 'array', minItems: 2, maxItems: 16, uniqueItems: true,
+                items: { type: 'string', pattern: '^[A-Za-z0-9_-]{1,64}(?:/[A-Za-z0-9_-]{1,64}){0,7}$' } },
+            failureResourcePath: { type: 'string', pattern: '^[A-Za-z0-9_-]{1,64}(?:/[A-Za-z0-9_-]{1,64}){0,7}$' },
+            cycles: { type: 'integer', minimum: 8, maximum: 256 },
+            nodeCount: { type: 'integer', minimum: 32, maximum: 1024 },
+            packable: { type: 'boolean' },
+            profileId: { const: 'macos-arm64-chrome-headless-swiftshader-1280x800' },
+            budgets: { type: 'object', additionalProperties: false,
+                required: ['targetFps', 'maxResourceLoadP95Ms', 'maxImportParserP95Ms', 'maxPngParserP95Ms', 'maxReleaseCallP95Ms'],
+                properties: {
+                    targetFps: { type: 'number', minimum: 1, maximum: 360 },
+                    maxResourceLoadP95Ms: { type: 'number', minimum: 0.01, maximum: 60000 },
+                    maxImportParserP95Ms: { type: 'number', minimum: 0.01, maximum: 60000 },
+                    maxPngParserP95Ms: { type: 'number', minimum: 0.01, maximum: 60000 },
+                    maxReleaseCallP95Ms: { type: 'number', minimum: 0.01, maximum: 60000 },
+                } },
+        } },
 };
 
 function commandCatalog(context) {
@@ -146,6 +192,20 @@ function commandCatalog(context) {
             inputSchema: 'catalog.schema.json#/$defs/nodePatchInput2x', input: COMMAND_INPUTS.nodePatch,
             preconditions: ['activeScene', 'nodePathAndUuidMatch', 'expectedBeforeValues', 'propertyWhitelist', 'resourceReferencesResolvable'],
             status: sceneReady ? 'available' : 'unavailable', reason: sceneReady ? null : 'NO_OPEN_SCENE' },
+        { id: 'prefab.source.patch', contractVersion: '0.1', access: 'write',
+            inputSchema: 'catalog.schema.json#/$defs/prefabSourcePatchInput2x', input: COMMAND_INPUTS.prefabSourcePatch,
+            preconditions: ['activeScene', 'prefabUuidResolvable', 'sourceShaMatches', 'prefabEditModeAvailable', 'nodePathAndUuidMatch', 'expectedBeforeValues'],
+            status: sceneReady && context.prefabSourcePatchApiReady === true ? 'available' : 'unavailable',
+            reason: !sceneReady ? 'NO_OPEN_SCENE' : context.prefabSourcePatchApiReady === true ? null : 'PREFAB_EDIT_MODE_API_UNAVAILABLE' },
+        { id: 'prefab.source.inspect', contractVersion: '0.1', access: 'read',
+            inputSchema: 'catalog.schema.json#/$defs/prefabSourceInspectInput2x', input: COMMAND_INPUTS.prefabSourceInspect,
+            preconditions: ['prefabUuidResolvable', 'serializedPrefabReadable'],
+            status: context.assetDbReady === true ? 'available' : 'unavailable',
+            reason: context.assetDbReady === true ? null : 'ASSETDB_UNAVAILABLE' },
+        { id: 'content.stress.run', contractVersion: '0.1', access: 'read',
+            inputSchema: 'catalog.schema.json#/$defs/contentStressRunInput2x', input: COMMAND_INPUTS.contentStressRun,
+            preconditions: ['completedWebMobileBuild', 'packagedPngResources', 'headlessChromeProfile', 'explicitBudgets'],
+            status: 'available', reason: null },
     ];
 }
 
@@ -170,7 +230,8 @@ function onMessage(raw) {
         Editor.Scene.callSceneScript('cocos-agent-bridge', 'catalog-context', {}, (error, context) => {
             const sceneContext = error || !context ? { sceneName: null, hasCanvas: false } : context;
             const commands = commandCatalog({ ...sceneContext, assetDbReady: !!(Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
-                assetFolderRefreshReady: !!(Editor.assetdb && typeof Editor.assetdb.refresh === 'function') });
+                assetFolderRefreshReady: !!(Editor.assetdb && typeof Editor.assetdb.refresh === 'function'),
+                prefabSourcePatchApiReady: prefabEditModeApiReady() });
             send({ type: 'response', id: message.id, ok: true, result: {
                 nonce: message.params && message.params.nonce, instanceId: INSTANCE_ID,
                 projectRoot: PROJECT_ROOT, creatorVersion: CREATOR_VERSION,
@@ -195,6 +256,10 @@ function onMessage(raw) {
     }
     if (message.method === 'scene.node.patch.preflight' || message.method === 'scene.node.patch') {
         runNodePatch(message);
+        return;
+    }
+    if (message.method === 'prefab.source.patch.preflight' || message.method === 'prefab.source.patch.execute') {
+        runPrefabSourcePatch(message);
         return;
     }
     if (message.method === 'scene.node.patch.snapshot') {
@@ -463,6 +528,253 @@ function runNodePatch(message) {
         else saveActiveScene((saveError) => {
             if (saveError) { send({ type: 'response', id: message.id, ok: false, error: { code: 'SCENE_SAVE_UNVERIFIED', message: String(saveError.message || saveError) } }); return; }
             result.saved = true; reply();
+        });
+    });
+}
+
+function prefabSourcePath(url) {
+    if (typeof url !== 'string' || !url.startsWith('db://assets/')) return null;
+    const relative = url.slice('db://assets/'.length);
+    const segments = relative.split('/');
+    if (!relative.toLowerCase().endsWith('.prefab') || segments.some((part) => !part || part === '.' || part === '..')) return null;
+    const assetsRoot = path.resolve(PROJECT_ROOT, 'assets');
+    const filename = path.resolve(assetsRoot, ...segments);
+    if (!filename.startsWith(`${assetsRoot}${path.sep}`)) return null;
+    let current = assetsRoot;
+    try {
+        for (const segment of segments) {
+            current = path.join(current, segment);
+            if (fs.lstatSync(current).isSymbolicLink()) return null;
+        }
+        if (!fs.lstatSync(filename).isFile() || !fs.lstatSync(`${filename}.meta`).isFile()
+            || fs.lstatSync(`${filename}.meta`).isSymbolicLink()) return null;
+        return filename;
+    } catch (_) { return null; }
+}
+
+function prefabSourceIdentity(url) {
+    const filename = prefabSourcePath(url);
+    if (!filename) return null;
+    try {
+        const content = fs.readFileSync(filename);
+        const meta = JSON.parse(fs.readFileSync(`${filename}.meta`, 'utf8'));
+        if (meta.importer !== 'prefab' || !/^[0-9a-f-]{36}$/i.test(meta.uuid || '')) return null;
+        return { filename, uuid: meta.uuid, sha256: crypto.createHash('sha256').update(content).digest('hex') };
+    } catch (_) { return null; }
+}
+
+function verifyPrefabSourceAsset(operation, callback) {
+    const identity = prefabSourceIdentity(operation.prefabUrl);
+    if (!identity || identity.uuid !== operation.prefabUuid || identity.sha256 !== operation.expectedPrefabSha256
+        || Editor.assetdb.urlToUuid(operation.prefabUrl) !== operation.prefabUuid) {
+        callback(Object.assign(new Error('Prefab UUID or source hash changed after planning.'), { code: 'PREFAB_SOURCE_STALE' })); return;
+    }
+    Editor.assetdb.queryAssets(operation.prefabUrl, 'prefab', (error, rows) => {
+        if (error || !Array.isArray(rows) || !rows.some((row) => row && row.url === operation.prefabUrl
+            && row.uuid === operation.prefabUuid && row.type === 'prefab')) {
+            callback(Object.assign(new Error('AssetDB no longer maps the requested UUID to this Prefab URL.'), { code: 'PREFAB_ASSET_IDENTITY_MISMATCH' })); return;
+        }
+        callback(null, identity);
+    });
+}
+
+function callPrefabSceneScript(method, params, callback) {
+    Editor.Scene.callSceneScript('cocos-agent-bridge', method, params || {}, (error, result) => callback(error || null, result));
+}
+
+function prefabEditModeModule() {
+    try {
+        const editMode = Editor.require('scene://edit-mode');
+        return editMode && typeof editMode.curMode === 'function'
+            && typeof editMode.save === 'function' && typeof editMode.pop === 'function' ? editMode : null;
+    } catch (_) { return null; }
+}
+
+function prefabEditModeApiReady() { return !!prefabEditModeModule(); }
+
+function waitForNextSceneReady(callback) {
+    if (pendingSceneReady) { callback(new Error('A scene-ready wait is already in progress.')); return () => {}; }
+    let settled = false;
+    const finish = (error) => {
+        if (settled) return;
+        settled = true; clearTimeout(timeout); pendingSceneReady = null; callback(error || null);
+    };
+    const timeout = setTimeout(() => finish(new Error('Timed out waiting for scene:ready.')), 20000);
+    pendingSceneReady = finish;
+    return finish;
+}
+
+function currentPrefabMode(callback) {
+    const editMode = prefabEditModeModule();
+    if (!editMode) {
+        callback(Object.assign(new Error('Prefab edit mode save/exit APIs are unavailable in the Creator main process.'), { code: 'PREFAB_EDIT_MODE_API_UNAVAILABLE' })); return;
+    }
+    let mode;
+    try { mode = editMode.curMode(); }
+    catch (error) { callback(Object.assign(error, { code: 'PREFAB_EDIT_MODE_QUERY_FAILED' })); return; }
+    if (!mode || typeof mode.name !== 'string') {
+        callback(Object.assign(new Error('Creator did not return the current editor mode.'), { code: 'PREFAB_EDIT_MODE_QUERY_FAILED' })); return;
+    }
+    callPrefabSceneScript('prefab-source-patch-mode', {}, (error, rootInfo) => {
+        if (error) { callback(error); return; }
+        const modeUuids = new Set();
+        const visited = new Set();
+        const addUuid = (value) => {
+            if (typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value)) modeUuids.add(value);
+            else if (value && typeof value === 'object' && !visited.has(value)) {
+                visited.add(value);
+                for (const key of ['uuid', '_uuid', 'assetUuid', 'prefabUuid']) addUuid(value[key]);
+            }
+        };
+        Object.keys(mode).forEach((key) => { if (/prefab|asset|uuid/i.test(key)) addUuid(mode[key]); });
+        if (mode.name === 'prefab' && rootInfo && rootInfo.prefabUuid) modeUuids.add(rootInfo.prefabUuid);
+        const prefabUuid = modeUuids.size === 1 ? [...modeUuids][0] : null;
+        callback(null, { modeName: mode.name, prefabUuid,
+            saveAvailable: typeof editMode.save === 'function', popAvailable: typeof editMode.pop === 'function' });
+    });
+}
+
+function enterPrefabSourceMode(uuid, callback) {
+    const finishReady = waitForNextSceneReady((error) => {
+        if (error) { callback(error); return; }
+        currentPrefabMode((modeError, mode) => {
+            if (modeError || mode.modeName !== 'prefab' || mode.prefabUuid !== uuid) {
+                callback(modeError || Object.assign(new Error('Editor did not enter the requested Prefab edit mode.'), { code: 'PREFAB_MODE_TARGET_MISMATCH' })); return;
+            }
+            callback(null, mode);
+        });
+    });
+    try { Editor.Ipc.sendToAll('scene:enter-prefab-edit-mode', uuid); }
+    catch (error) { finishReady(error); }
+}
+
+function exitPrefabSourceMode(uuid, callback) {
+    currentPrefabMode((modeError, current) => {
+        if (modeError || !current || current.modeName !== 'prefab' || current.prefabUuid !== uuid) {
+            callback(modeError || Object.assign(new Error('Refusing to exit a different editor mode or Prefab.'), { code: 'PREFAB_EXIT_TARGET_MISMATCH' })); return;
+        }
+        const finishReady = waitForNextSceneReady((error) => {
+            if (error) { callback(error); return; }
+            currentPrefabMode((afterError, mode) => {
+                if (afterError || mode.modeName === 'prefab') {
+                    callback(afterError || Object.assign(new Error('Editor remained in Prefab edit mode after exit.'), { code: 'PREFAB_EXIT_UNVERIFIED' })); return;
+                }
+                callback(null, mode);
+            });
+        });
+        const editMode = prefabEditModeModule();
+        if (!editMode) { finishReady(Object.assign(new Error('Prefab edit mode exit is unavailable.'), { code: 'PREFAB_EXIT_UNAVAILABLE' })); return; }
+        try { editMode.pop(); }
+        catch (error) { finishReady(Object.assign(error, { code: 'PREFAB_EXIT_FAILED' })); }
+    });
+}
+
+function savePrefabSource(uuid, callback) {
+    if (pendingSceneSave) { callback(new Error('A scene save is already in progress.')); return; }
+    let scriptDone = false; let eventDone = false; let settled = false; let failure = null;
+    const finish = (error) => {
+        if (settled) return;
+        settled = true; clearTimeout(timeout); pendingSceneSave = null; callback(error || null);
+    };
+    const maybeFinish = () => { if (failure) finish(failure); else if (scriptDone && eventDone) finish(null); };
+    const timeout = setTimeout(() => finish(Object.assign(new Error('Timed out waiting for Prefab save and scene:saved.'), { code: 'PREFAB_SAVE_UNVERIFIED' })), 20000);
+    pendingSceneSave = (error) => { if (error) failure = error; else eventDone = true; maybeFinish(); };
+    currentPrefabMode((modeError, mode) => {
+        if (modeError || !mode || mode.modeName !== 'prefab' || mode.prefabUuid !== uuid) {
+            failure = modeError || Object.assign(new Error('Refusing to save a different Prefab edit target.'), { code: 'PREFAB_SAVE_TARGET_MISMATCH' });
+            maybeFinish(); return;
+        }
+        const editMode = prefabEditModeModule();
+        if (!editMode) { failure = Object.assign(new Error('Prefab edit mode save is unavailable.'), { code: 'PREFAB_SAVE_UNAVAILABLE' }); maybeFinish(); return; }
+        try {
+            editMode.save((error) => {
+                if (error) failure = Object.assign(error, { code: 'PREFAB_SAVE_FAILED' });
+                else scriptDone = true;
+                maybeFinish();
+            });
+        } catch (error) {
+            failure = Object.assign(error, { code: 'PREFAB_SAVE_FAILED' });
+            maybeFinish();
+        }
+    });
+}
+
+function runPrefabSourcePatch(message) {
+    const params = message.params || {};
+    const operation = activeSession && activeSession.prefabSourcePatchOperation;
+    if (!operation || params.sessionId !== activeSession.sessionId || params.operationId !== activeSession.operationId
+        || params.nonce !== operation.nonce || params.prefabUuid !== operation.prefabUuid
+        || params.targetNodePath !== operation.targetNodePath || params.targetNodeUuid !== operation.targetNodeUuid
+        || params.action !== operation.action || params.expectedPrefabSha256 !== operation.expectedPrefabSha256
+        || JSON.stringify(params.expectedDiff) !== JSON.stringify(operation.expectedDiff)) {
+        send({ type: 'response', id: message.id, ok: false, error: { code: 'INVALID_PREFAB_SOURCE_PATCH_SESSION' } }); return;
+    }
+    const preflight = message.method.endsWith('.preflight');
+    const fail = (error, sideEffect = 'none') => send({ type: 'response', id: message.id, ok: false,
+        error: { code: error && error.code || 'PREFAB_SOURCE_PATCH_FAILED', message: String(error && error.message || error), sideEffect } });
+    verifyPrefabSourceAsset(operation, (assetError, identity) => {
+        if (assetError) { fail(assetError); return; }
+        currentPrefabMode((modeError, mode) => {
+            if (modeError) { fail(modeError); return; }
+            if (mode.modeName !== 'scene') {
+                fail(Object.assign(new Error('Close the current editor sub-mode before editing a Prefab source.'), { code: 'EDITOR_BUSY' })); return;
+            }
+            enterPrefabSourceMode(operation.prefabUuid, (enterError) => {
+                if (enterError) { fail(enterError); return; }
+                callPrefabSceneScript('prefab-source-patch-preflight', operation, (editorError, before) => {
+                    if (editorError || !before || before.prefabUuid !== operation.prefabUuid
+                        || !before.node || before.node.uuid !== operation.targetNodeUuid) {
+                        exitPrefabSourceMode(operation.prefabUuid, () => fail(editorError || new Error('Prefab preflight did not identify the target node.')));
+                        return;
+                    }
+                    if (preflight) {
+                        exitPrefabSourceMode(operation.prefabUuid, (exitError) => {
+                            if (exitError) { fail(exitError); return; }
+                            send({ type: 'response', id: message.id, ok: true, result: Object.assign({
+                                nonce: params.nonce, operationId: params.operationId, creatorVersion: CREATOR_VERSION,
+                                projectRoot: PROJECT_ROOT, prefabUuid: operation.prefabUuid, sourceSha256: identity.sha256,
+                            }, before) });
+                        });
+                        return;
+                    }
+                    callPrefabSceneScript('prefab-source-patch-mutate', operation, (mutateError, changed) => {
+                        if (mutateError || !changed || changed.prefabUuid !== operation.prefabUuid
+                            || !changed.node || changed.node.uuid !== operation.targetNodeUuid) {
+                            fail(mutateError || new Error('Prefab mutation did not return the target node.'), 'possible'); return;
+                        }
+                        savePrefabSource(operation.prefabUuid, (saveError) => {
+                            if (saveError) { fail(saveError, 'possible'); return; }
+                            const afterIdentity = prefabSourceIdentity(operation.prefabUrl);
+                            if (!afterIdentity || afterIdentity.uuid !== operation.prefabUuid
+                                || afterIdentity.sha256 === operation.expectedPrefabSha256
+                                || Editor.assetdb.urlToUuid(operation.prefabUrl) !== operation.prefabUuid) {
+                                fail(Object.assign(new Error('Saved Prefab did not preserve its UUID and produce a new source hash.'), { code: 'PREFAB_DISK_READBACK_MISMATCH' }), 'possible'); return;
+                            }
+                            exitPrefabSourceMode(operation.prefabUuid, (exitError) => {
+                                if (exitError) { fail(exitError, 'possible'); return; }
+                                enterPrefabSourceMode(operation.prefabUuid, (reopenError) => {
+                                    if (reopenError) { fail(reopenError, 'possible'); return; }
+                                    callPrefabSceneScript('prefab-source-patch-snapshot', { prefabUuid: operation.prefabUuid,
+                                        targetNodePath: operation.targetNodePath, targetNodeUuid: operation.targetNodeUuid,
+                                        expectedDiff: operation.expectedDiff, side: 'after' }, (readbackError, reopened) => {
+                                        exitPrefabSourceMode(operation.prefabUuid, (finalExitError) => {
+                                            if (readbackError || finalExitError) { fail(readbackError || finalExitError, 'possible'); return; }
+                                            send({ type: 'response', id: message.id, ok: true, result: {
+                                                nonce: params.nonce, operationId: params.operationId, creatorVersion: CREATOR_VERSION,
+                                                projectRoot: PROJECT_ROOT, action: operation.action, prefabUuid: operation.prefabUuid,
+                                                targetNodePath: operation.targetNodePath, targetNodeUuid: operation.targetNodeUuid,
+                                                expectedDiff: operation.expectedDiff, saved: true, reopened: true,
+                                                beforeSha256: identity.sha256, afterSha256: afterIdentity.sha256,
+                                                node: reopened.node,
+                                            } });
+                                        });
+                                    });
+                                });
+                            });
+                        });
+                    });
+                });
+            });
         });
     });
 }
@@ -911,7 +1223,7 @@ function connectFromSession() {
             projectRoot: PROJECT_ROOT,
             extension: 'cocos-agent-bridge',
             instanceId: INSTANCE_ID,
-            capabilities: ['bridge.ping', 'scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.preflightPngSprite', 'scene.placePngSprite', 'scene.removePngSprite', 'scene.node.create.preflight', 'scene.node.create', 'scene.node.patch.preflight', 'scene.node.patch', 'scene.node.patch.snapshot'],
+            capabilities: ['bridge.ping', 'scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.preflightPngSprite', 'scene.placePngSprite', 'scene.removePngSprite', 'scene.node.create.preflight', 'scene.node.create', 'scene.node.patch.preflight', 'scene.node.patch', 'scene.node.patch.snapshot', 'prefab.source.patch.preflight', 'prefab.source.patch.execute'],
             operationContract: { id: 'scene.pngSprite', contractVersion: '0.1', creatorVersion: CREATOR_VERSION, access: 'scene-write', actions: ['apply', 'compensate', 'replay'], previewVerification: 'manual-web', compensation: 'identity-checked-node-removal', positionSpace: 'canvas-local-design-pixels' },
             assetRemovalContract: { id: 'asset.removeImportedPng', contractVersion: '0.1', creatorVersion: CREATOR_VERSION,
                 access: 'write', implementation: 'Editor.assetdb.delete', verify: 'matching-texture-uuid-and-deleted-result' },
@@ -1109,6 +1421,9 @@ module.exports = {
         },
         'scene:saved'() {
             if (pendingSceneSave) pendingSceneSave(null);
+        },
+        'scene:ready'() {
+            if (pendingSceneReady) pendingSceneReady(null);
         },
     },
     load() {

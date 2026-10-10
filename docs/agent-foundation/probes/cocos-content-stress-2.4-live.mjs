@@ -1,5 +1,5 @@
 // Measures the immutable Creator 2.4.15 Web-Mobile build without opening or mutating the editor project.
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -8,19 +8,39 @@ import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '../../..');
 const projectRoot = path.join(root, '2.4.15NewProject');
-const buildId = value('--build') || 'p1-web-20261009';
-const cycles = numberFlag('--cycles', 48, 4, 256);
-const nodeCount = numberFlag('--node-count', 32, 1, 128);
+const buildId = value('--build');
+const cycles = numberFlag('--cycles', Number.NaN, 8, 256);
+const nodeCount = numberFlag('--node-count', Number.NaN, 32, 1024);
+const failureHttpStatus = numberFlag('--failure-http-status', 503, 400, 599);
+const experimentalPermanent4xxPatch = process.argv.includes('--experimental-permanent-4xx-retry-patch');
 const packableFlag = value('--packable');
 const packable = packableFlag === null ? true : packableFlag === 'true' ? true : packableFlag === 'false' ? false : null;
-if (packable === null) throw Error('INVALID_PACKABLE_FLAG');
-const budgets = {
-    targetFps: optionalNumberFlag('--target-fps', 1, 360),
-    maxResourceLoadP95Ms: optionalNumberFlag('--max-resource-load-p95-ms', 0.01, 60000),
-    maxImportParserP95Ms: optionalNumberFlag('--max-import-parser-p95-ms', 0.01, 60000),
-    maxPngParserP95Ms: optionalNumberFlag('--max-png-parser-p95-ms', 0.01, 60000),
-    maxReleaseCallP95Ms: optionalNumberFlag('--max-release-call-p95-ms', 0.01, 60000),
-};
+if (packable === null || packableFlag === null) throw Error('INVALID_PACKABLE_FLAG');
+const resourcePaths = jsonFlag('--resource-paths');
+const parseFixturePaths = jsonFlag('--parse-fixture-paths');
+const failurePath = value('--failure-resource-path');
+const testProfile = value('--test-profile');
+const budgets = jsonFlag('--budgets');
+if (!/^[a-z0-9][a-z0-9-]{2,31}$/.test(buildId || '')
+    || !Array.isArray(resourcePaths) || resourcePaths.length < 2 || resourcePaths.length > 16
+    || !resourcePaths.every((item) => typeof item === 'string' && /^[A-Za-z0-9_-]{1,64}(?:\/[A-Za-z0-9_-]{1,64}){0,7}$/.test(item))
+    || new Set(resourcePaths).size !== resourcePaths.length
+    || !Array.isArray(parseFixturePaths) || parseFixturePaths.length < 2 || parseFixturePaths.length > 16
+    || !parseFixturePaths.every((item) => typeof item === 'string' && /^[A-Za-z0-9_-]{1,64}(?:\/[A-Za-z0-9_-]{1,64}){0,7}$/.test(item))
+    || new Set(parseFixturePaths).size !== parseFixturePaths.length
+    || parseFixturePaths.some((item) => resourcePaths.includes(item))
+    || typeof failurePath !== 'string' || !parseFixturePaths.includes(failurePath) || resourcePaths.includes(failurePath)
+    || cycles < resourcePaths.length + 1
+    || testProfile !== 'macos-arm64-chrome-headless-swiftshader-1280x800'
+    || !budgets || typeof budgets !== 'object' || Array.isArray(budgets)
+    || Object.keys(budgets).length !== 5
+    || !['targetFps', 'maxResourceLoadP95Ms', 'maxImportParserP95Ms', 'maxPngParserP95Ms', 'maxReleaseCallP95Ms'].every((key) => Number.isFinite(budgets[key]))
+    || budgets.targetFps < 1 || budgets.targetFps > 360
+    || ['maxResourceLoadP95Ms', 'maxImportParserP95Ms', 'maxPngParserP95Ms', 'maxReleaseCallP95Ms']
+        .some((key) => budgets[key] < 0.01 || budgets[key] > 60000)) {
+    throw Error('INVALID_STRESS_PROFILE');
+}
+if (process.platform !== 'darwin' || process.arch !== 'arm64') throw Error('TEST_PROFILE_UNAVAILABLE');
 const recordPath = path.join(projectRoot, '.cocos-agent', 'content-builds', `${buildId}.json`);
 const buildRecord = JSON.parse(fs.readFileSync(recordPath, 'utf8'));
 if (buildRecord.creatorVersion !== '2.4.15' || buildRecord.platform !== 'web-mobile'
@@ -33,17 +53,34 @@ const indexPath = path.join(webRoot, 'index.html');
 if (!fs.existsSync(indexPath)) throw Error('BUILD_INDEX_MISSING');
 const probePath = path.join(root, 'docs/agent-foundation/probes/cocos-content-stress-2.4.js');
 const probeSource = fs.readFileSync(probePath, 'utf8');
-const resourcePaths = ['cocos-agent-batch-red', 'cocos-agent-batch-blue'];
-const resourceUuids = Object.fromEntries(resourcePaths.map((resourcePath) => {
-    const meta = JSON.parse(fs.readFileSync(path.join(projectRoot, 'assets/resources', `${resourcePath}.png.meta`), 'utf8'));
-    if (typeof meta.uuid !== 'string') throw Error(`RESOURCE_UUID_MISSING:${resourcePath}`);
-    return [resourcePath, meta.uuid];
-}));
 const buildConfig = JSON.parse(fs.readFileSync(path.join(buildRecord.outputRoot, buildRecord.artifact.configPath), 'utf8'));
-for (const resourcePath of resourcePaths) {
+function readPngInfo(filename) {
+    const bytes = fs.readFileSync(filename);
+    if (bytes.length < 24 || bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a'
+        || bytes.toString('ascii', 12, 16) !== 'IHDR') throw Error(`PNG_INVALID:${filename}`);
+    return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20), bytes: bytes.length,
+        sha256: crypto.createHash('sha256').update(bytes).digest('hex') };
+}
+function readResource(resourcePath, requireRepresentativeSize) {
+    const imagePath = path.join(projectRoot, 'assets/resources', `${resourcePath}.png`);
+    const metaPath = `${imagePath}.meta`;
+    if (!fs.existsSync(imagePath) || !fs.existsSync(metaPath)) throw Error(`RESOURCE_SOURCE_OR_META_MISSING:${resourcePath}`);
     if (!Object.values(buildConfig.paths || {}).some((entry) => Array.isArray(entry) && entry[0] === resourcePath))
         throw Error(`STRESS_ASSET_NOT_IN_BUILD:${resourcePath}`);
+    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+    if (typeof meta.uuid !== 'string' || !meta.uuid) throw Error(`RESOURCE_UUID_MISSING:${resourcePath}`);
+    const png = readPngInfo(imagePath);
+    if (requireRepresentativeSize && (png.width < 64 || png.height < 64)) throw Error(`STRESS_ASSET_TOO_SMALL:${resourcePath}`);
+    return { name: resourcePath, uuid: meta.uuid, png };
 }
+const resourceAssets = resourcePaths.map((resourcePath) => readResource(resourcePath, true));
+const parseFixtureAssets = parseFixturePaths.map((resourcePath) => readResource(resourcePath, false));
+const failureAsset = parseFixtureAssets.find((item) => item.name === failurePath);
+const allAssets = [...resourceAssets, ...parseFixtureAssets];
+if (!failureAsset || new Set(allAssets.map((item) => item.uuid)).size !== allAssets.length) throw Error('STRESS_ASSET_UUID_COLLISION_OR_FAILURE_FIXTURE_MISSING');
+const allResourcePaths = allAssets.map((item) => item.name);
+const resourceUuids = Object.fromEntries(resourceAssets.map((item) => [item.name, item.uuid]));
+for (const asset of parseFixtureAssets) resourceUuids[asset.name] = asset.uuid;
 const runId = `${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomBytes(3).toString('hex')}`;
 const outputPath = path.join(root, 'docs/agent-foundation/traces', `cocos-agent-content-stress-2.4-web-${runId}.json`);
 const visualDir = path.join(root, 'docs/agent-foundation/traces/visual');
@@ -59,8 +96,24 @@ const mime = new Map([
     ['.webp', 'image/webp'], ['.wasm', 'application/wasm'], ['.mp3', 'audio/mpeg'],
 ]);
 const httpRequests = [];
-const serverState = { failUuid: null };
+const serverState = { failUuid: null, failureHttpStatus };
 const httpResponses = [];
+const runtimePatchState = { applied: false, originalSha256: null, patchedSha256: null };
+function patchPermanentHttpErrors(sourceBytes) {
+    const source = sourceBytes.toString('utf8');
+    const originalRetry = 'retry:function(t,e,i,n,r){t(r=r||0,(function(s,a){r++,!s||r>e?n&&n(s,a):setTimeout((function(){l.retry(t,e,i,n,r)}),i)}))}';
+    const patchedRetry = 'retry:function(t,e,i,n,r){t(r=r||0,(function(s,a){r++;var o=s&&s.status,c=o>=400&&o<500&&408!==o&&425!==o&&429!==o;!s||r>e||c?n&&n(s,a):setTimeout((function(){l.retry(t,e,i,n,r)}),i)}))}';
+    const originalHttpError = 'r&&r(new Error(o+a.status+"(no response)"))';
+    const patchedHttpError = 'r&&(function(t){t.status=a.status,r(t)})(new Error(o+a.status+"(no response)"))';
+    if (source.split(originalRetry).length !== 2 || source.split(originalHttpError).length !== 2)
+        throw Error('EXPERIMENTAL_RETRY_PATCH_SOURCE_MISMATCH');
+    const patched = source.replace(originalRetry, patchedRetry).replace(originalHttpError, patchedHttpError);
+    if (patched === source) throw Error('EXPERIMENTAL_RETRY_PATCH_NOT_APPLIED');
+    runtimePatchState.applied = true;
+    runtimePatchState.originalSha256 = crypto.createHash('sha256').update(sourceBytes).digest('hex');
+    runtimePatchState.patchedSha256 = crypto.createHash('sha256').update(patched).digest('hex');
+    return Buffer.from(patched);
+}
 const server = http.createServer((request, response) => {
     let pathname;
     try { pathname = decodeURIComponent(new URL(request.url, 'http://127.0.0.1').pathname); }
@@ -79,9 +132,9 @@ const server = http.createServer((request, response) => {
         if (httpResponses.length > 10000) httpResponses.shift();
     };
     if (serverState.failUuid && pathname.includes(serverState.failUuid)) {
-        response.writeHead(503, { 'cache-control': 'no-store', 'access-control-allow-origin': '*' });
+        response.writeHead(serverState.failureHttpStatus, { 'cache-control': 'no-store', 'access-control-allow-origin': '*' });
         response.end('Injected stress-test transport failure');
-        finish(503, 37);
+        finish(serverState.failureHttpStatus, 37);
         return;
     }
     fs.readFile(filename, (error, bytes) => {
@@ -91,6 +144,9 @@ const server = http.createServer((request, response) => {
             response.end();
             finish(status, 0);
             return;
+        }
+        if (experimentalPermanent4xxPatch && /^\/cocos2d-js-min\.[a-f0-9]+\.js$/.test(pathname)) {
+            bytes = patchPermanentHttpErrors(bytes);
         }
         response.writeHead(200, { 'content-type': mime.get(path.extname(filename)) || 'application/octet-stream',
             'cache-control': 'no-store', 'access-control-allow-origin': '*' });
@@ -111,17 +167,15 @@ function value(flag) {
     const index = process.argv.indexOf(flag);
     return index < 0 ? null : process.argv[index + 1];
 }
+function jsonFlag(flag) {
+    const raw = value(flag);
+    if (raw === null) return null;
+    try { return JSON.parse(raw); } catch (_) { throw Error(`INVALID_${flag.toUpperCase().slice(2).replace(/-/g, '_')}`); }
+}
 function numberFlag(flag, fallback, min, max) {
     const raw = value(flag);
     const parsed = raw === null ? fallback : Number(raw);
     if (!Number.isInteger(parsed) || parsed < min || parsed > max) throw Error(`INVALID_${flag.toUpperCase().slice(2).replace(/-/g, '_')}`);
-    return parsed;
-}
-function optionalNumberFlag(flag, min, max) {
-    const raw = value(flag);
-    if (raw === null) return undefined;
-    const parsed = Number(raw);
-    if (!Number.isFinite(parsed) || parsed < min || parsed > max) throw Error(`INVALID_${flag.toUpperCase().slice(2).replace(/-/g, '_')}`);
     return parsed;
 }
 function send(method, params = {}) {
@@ -181,9 +235,11 @@ async function attachBrowser(url) {
     await send('Runtime.enable');
     await send('Page.enable');
     await send('Network.enable');
+    const browserVersion = spawnSync('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--version'], { encoding: 'utf8' });
+    if (browserVersion.status !== 0) throw Error('CHROME_VERSION_UNAVAILABLE');
     for (let i = 0; i < 400; i++) {
         const ready = await evaluate('typeof cc !== "undefined" && !!cc.director && !!cc.director.getScene() && !cc.game.isPaused()');
-        if (ready) return { pageUrl: page.url, profile };
+        if (ready) return { pageUrl: page.url, profile, browserVersion: browserVersion.stdout.trim() };
         await delay(100);
     }
     throw Error('CREATOR_24_WEB_MOBILE_RUNTIME_NOT_READY');
@@ -200,8 +256,7 @@ async function waitForPhase(phase, screenshots) {
         if (state && state.phase === phase) {
             screenshots[phase] = await capture(phase === 'after-cycles' ? screenshotPaths.afterCycles : screenshotPaths.failureRetained);
             if (phase === 'after-cycles') {
-                const inactiveIndex = cycles % 2 === 0 ? 1 : 0;
-                serverState.failUuid = resourceUuids[resourcePaths[inactiveIndex]];
+                serverState.failUuid = resourceUuids[failurePath];
             } else {
                 serverState.failUuid = null;
             }
@@ -228,10 +283,8 @@ try {
     staticUrl = `http://127.0.0.1:${server.address().port}/`;
     runtime = await attachBrowser(staticUrl);
     await evaluate(probeSource);
-    const inactiveIndex = cycles % 2 === 0 ? 1 : 0;
-    const failurePath = resourcePaths[inactiveIndex];
     const runPromise = evaluate(`window.CocosAgentDynamicStress24.run(${JSON.stringify({
-        cycles, nodeCount, packable, paths: resourcePaths, resourceUuids,
+        cycles, nodeCount, packable, paths: resourcePaths, parseFixturePaths, resourceUuids,
         failurePath, failureUuid: resourceUuids[failurePath], budgets,
     })})`)
         .then((value) => { result = value; runFinished = true; return { value }; },
@@ -250,9 +303,21 @@ const trace = {
     schemaVersion: '0.1', runId, creatorVersion: '2.4.15', platform: 'web-mobile',
     buildId, releaseId: buildRecord.releaseId, buildFingerprint: buildRecord.fingerprint,
     buildOutputRoot: buildRecord.outputRoot,
-    environment: { host: process.platform, architecture: process.arch, browser: 'Google Chrome headless + SwiftShader',
+    environment: { host: process.platform, architecture: process.arch, osRelease: os.release(),
+        deviceClass: 'development-host-headless-screening', cpuModel: os.cpus()[0]?.model || null,
+        logicalCpuCount: os.cpus().length, totalMemoryBytes: os.totalmem(),
+        browser: runtime?.browserVersion || 'Google Chrome headless', renderer: 'SwiftShader',
+        viewport: { width: 1280, height: 800 }, profileId: testProfile,
         baseUrl: staticUrl || null, testedAt: new Date().toISOString() },
-    workload: { cycles, nodeCount, packable, assets: resourcePaths.map((name) => ({ name, uuid: resourceUuids[name] })),
+    runtimePatch: experimentalPermanent4xxPatch ? {
+        kind: 'permanent-http-4xx-no-retry', applied: runtimePatchState.applied,
+        sourceFiles: ['2.4.15engine/cocos2d/core/asset-manager/download-file.js',
+            '2.4.15engine/cocos2d/core/asset-manager/utilities.js'],
+        servedBundleOriginalSha256: runtimePatchState.originalSha256,
+        servedBundlePatchedSha256: runtimePatchState.patchedSha256,
+        note: 'Experimental in-memory patch for comparison; the immutable build output on disk was not modified.',
+    } : null,
+    workload: { cycles, nodeCount, packable, assets: resourceAssets, parseFixtureAssets, failureAsset,
         budgets, targetFps: budgets.targetFps ?? null, budgetVerdict: result?.budgetEvaluation?.verdict || 'not-set' },
     screenshots,
     result: result || null,
@@ -264,15 +329,16 @@ const trace = {
             counts[key] = (counts[key] || 0) + 1;
             return counts;
         }, {}),
-        assetRequests: httpResponses.filter((item) => resourcePaths.some((name) => item.path.includes(resourceUuids[name]))),
-        injectedFailureRequests: httpResponses.filter((item) => item.status === 503
-            && resourcePaths.some((name) => item.path.includes(resourceUuids[name]))),
+        assetRequests: httpResponses.filter((item) => allResourcePaths.some((name) => item.path.includes(resourceUuids[name]))),
+        failureHttpStatus,
+        injectedFailureRequests: httpResponses.filter((item) => item.status === failureHttpStatus
+            && allResourcePaths.some((name) => item.path.includes(resourceUuids[name]))),
         missingResourceResponses: httpResponses.filter((item) => /CocosAgentStressMissingResource/.test(item.path)),
     },
     browserEvents: browserEvents.slice(0, 100),
     error: traceError,
 };
-const expectedFailureUuid = resourceUuids[resourcePaths[cycles % 2 === 0 ? 1 : 0]];
+const expectedFailureUuid = resourceUuids[failurePath];
 trace.network.failureTargetUuid = expectedFailureUuid;
 trace.network.failureTransportConfirmed = trace.network.injectedFailureRequests.some((item) => item.path.includes(expectedFailureUuid));
 if (!traceError && !trace.network.failureTransportConfirmed) {

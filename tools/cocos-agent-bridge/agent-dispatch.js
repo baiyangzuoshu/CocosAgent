@@ -8,7 +8,7 @@ const operationStore = require('./operation-store');
 const operationReconcile = require('./operation-reconcile');
 const scenePatchContract = require('./scene-patch-contract');
 
-const commands = new Set(['scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.pngSprite', 'scene.node.create', 'scene.node.patch']);
+const commands = new Set(['scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.pngSprite', 'scene.node.create', 'scene.node.patch', 'prefab.source.patch', 'prefab.source.inspect', 'content.stress.run']);
 const versions = new Set(['2.4.15', '3.8.7']);
 
 function dispatchError(code, message, phase = 'selection', sideEffect = 'none', retryable = false) {
@@ -35,13 +35,19 @@ function validOperationRecord(record) {
     if (record && record.capabilityId === 'scene.node.patch') return record.manifest && typeof record.manifest.action === 'string'
         && typeof record.manifest.targetNodePath === 'string' && typeof record.manifest.targetNodeUuid === 'string'
         && scenePatchContract.validateDiff(record.manifest.expectedDiff) && record.phases && typeof record.phases.disk === 'string';
+    if (record && record.capabilityId === 'prefab.source.patch') return record.manifest && typeof record.manifest.action === 'string'
+        && /^[0-9a-f-]{36}$/i.test(record.manifest.prefabUuid || '') && typeof record.manifest.prefabUrl === 'string'
+        && typeof record.manifest.targetNodePath === 'string' && typeof record.manifest.targetNodeUuid === 'string'
+        && scenePatchContract.validateDiff(record.manifest.expectedDiff) && /^[a-f0-9]{64}$/.test(record.beforeSha256 || '')
+        && record.phases && typeof record.phases.disk === 'string';
     return record && record.manifest && typeof record.manifest.sceneAction === 'string'
         && typeof record.manifest.assetName === 'string' && typeof record.manifest.nodeName === 'string'
         && typeof record.manifest.assetUuid === 'string' && record.phases
         && typeof record.phases.disk === 'string' && typeof record.phases.preview === 'string';
 }
 function runProcess(script, args) {
-    const result = spawnSync(process.execPath, [path.join(__dirname, script), ...args], { encoding: 'utf8', maxBuffer: 1024 * 1024 });
+    const result = spawnSync(process.execPath, [path.join(__dirname, script), ...args], { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024,
+        ...(script === 'content-stress-host.js' ? { timeout: 5 * 60 * 1000 } : {}) });
     return { status: result.status, stdout: result.stdout || '', stderr: result.stderr || '', error: result.error };
 }
 function validPosition(position) {
@@ -131,6 +137,33 @@ function validInput(command, input, creatorVersion) {
         && scenePatchContract.validateDiff(input.expectedDiff)
         && (input.action === 'apply' ? input.sourceOperationId === undefined : typeof input.sourceOperationId === 'string' && /^[0-9a-f-]{36}$/i.test(input.sourceOperationId))
         && (input.operationId === undefined || /^[0-9a-f-]{36}$/i.test(input.operationId));
+    if (command === 'prefab.source.patch') return creatorVersion === '2.4.15'
+        && require('./prefab-source-patch-contract').validInput(input);
+    if (command === 'prefab.source.inspect') return creatorVersion === '2.4.15' && keys.length === 1
+        && /^[0-9a-f-]{36}$/i.test(input.prefabUuid || '');
+    if (command === 'content.stress.run') {
+        const budgetKeys = ['targetFps', 'maxResourceLoadP95Ms', 'maxImportParserP95Ms', 'maxPngParserP95Ms', 'maxReleaseCallP95Ms'];
+        const budgets = input.budgets;
+        return creatorVersion === '2.4.15' && keys.length === 9
+            && /^[a-z0-9][a-z0-9-]{2,31}$/.test(input.buildId || '')
+            && Array.isArray(input.resourcePaths) && input.resourcePaths.length >= 2 && input.resourcePaths.length <= 16
+            && input.resourcePaths.every((item) => typeof item === 'string' && /^[A-Za-z0-9_-]{1,64}(?:\/[A-Za-z0-9_-]{1,64}){0,7}$/.test(item))
+            && new Set(input.resourcePaths).size === input.resourcePaths.length
+            && Array.isArray(input.parseFixturePaths) && input.parseFixturePaths.length >= 2 && input.parseFixturePaths.length <= 16
+            && input.parseFixturePaths.every((item) => typeof item === 'string' && /^[A-Za-z0-9_-]{1,64}(?:\/[A-Za-z0-9_-]{1,64}){0,7}$/.test(item))
+            && new Set(input.parseFixturePaths).size === input.parseFixturePaths.length
+            && input.parseFixturePaths.every((item) => !input.resourcePaths.includes(item))
+            && typeof input.failureResourcePath === 'string' && input.parseFixturePaths.includes(input.failureResourcePath)
+            && !input.resourcePaths.includes(input.failureResourcePath)
+            && Number.isInteger(input.cycles) && input.cycles >= 8 && input.cycles <= 256 && input.cycles >= input.resourcePaths.length + 1
+            && Number.isInteger(input.nodeCount) && input.nodeCount >= 32 && input.nodeCount <= 1024
+            && typeof input.packable === 'boolean'
+            && input.profileId === 'macos-arm64-chrome-headless-swiftshader-1280x800'
+            && budgets && typeof budgets === 'object' && !Array.isArray(budgets)
+            && Object.keys(budgets).length === budgetKeys.length && budgetKeys.every((key) => Number.isFinite(budgets[key]))
+            && budgets.targetFps >= 1 && budgets.targetFps <= 360
+            && budgetKeys.slice(1).every((key) => budgets[key] >= 0.01 && budgets[key] <= 60000);
+    }
     return keys.every((key) => ['assetName', 'action', 'operationId', ...(creatorVersion === '2.4.15' ? ['position'] : [])].includes(key))
         && typeof input.assetName === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/i.test(input.assetName)
         && ['apply', 'compensate', 'replay'].includes(input.action)
@@ -149,6 +182,12 @@ function dispatchCommand(request, invoke) {
         return problem('COMMAND_UNAVAILABLE', 'PNG asset search is currently supported only by Creator 2.4.15.');
     if (command === 'asset.refreshFolder' && creatorVersion !== '2.4.15')
         return problem('COMMAND_UNAVAILABLE', 'Asset folder refresh is currently supported only by Creator 2.4.15.');
+    if (command === 'prefab.source.patch' && creatorVersion !== '2.4.15')
+        return problem('COMMAND_UNAVAILABLE', 'Prefab source editing is currently supported only by Creator 2.4.15.');
+    if (command === 'prefab.source.inspect' && creatorVersion !== '2.4.15')
+        return problem('COMMAND_UNAVAILABLE', 'Prefab source inspection is currently supported only by Creator 2.4.15.');
+    if (command === 'content.stress.run' && creatorVersion !== '2.4.15')
+        return problem('COMMAND_UNAVAILABLE', 'Runtime content stress diagnostics are currently supported only by Creator 2.4.15.');
     if (!validInput(command, input, creatorVersion)) return problem('INVALID_ARGUMENT', 'Provide valid input for the selected command and Creator version.');
     const project = path.resolve(projectRoot);
     if (['asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng'].includes(command) && creatorVersion !== '2.4.15')
@@ -213,9 +252,22 @@ function dispatchCommand(request, invoke) {
             '--action', input.action, '--expected-diff', JSON.stringify(input.expectedDiff), '--operation-id', operationId);
         if (input.sourceOperationId) executionArgs.push('--source-operation-id', input.sourceOperationId);
     }
+    if (command === 'prefab.source.patch') {
+        operationId = input.operationId || crypto.randomUUID();
+        executionArgs.push('--prefab-uuid', input.prefabUuid, '--target-node-path', input.targetNodePath,
+            '--target-node-uuid', input.targetNodeUuid, '--action', input.action,
+            '--expected-diff', JSON.stringify(input.expectedDiff), '--operation-id', operationId);
+        if (input.expectedPrefabSha256) executionArgs.push('--expected-prefab-sha256', input.expectedPrefabSha256);
+        if (input.sourceOperationId) executionArgs.push('--source-operation-id', input.sourceOperationId);
+    }
+    if (command === 'prefab.source.inspect') executionArgs.push('--prefab-uuid', input.prefabUuid);
+    if (command === 'content.stress.run') executionArgs.push('--input', JSON.stringify(input));
     const patchOperation = command === 'scene.node.patch';
+    const prefabSourcePatch = command === 'prefab.source.patch';
     const hostScript = command === 'scene.node.create' ? 'node-create-host.js'
-        : patchOperation ? 'scene-node-patch-host.js' : 'bridge-host.js';
+        : patchOperation ? 'scene-node-patch-host.js' : prefabSourcePatch ? 'prefab-source-patch-host.js'
+            : command === 'prefab.source.inspect' ? 'prefab-source-inspect-host.js'
+                : command === 'content.stress.run' ? 'content-stress-host.js' : 'bridge-host.js';
     const execution = invoke(hostScript, executionArgs);
     const base = { instance: selected, command, ...(operationId ? { operationId } : {}) };
     if (!operationId) {
@@ -236,6 +288,7 @@ function dispatchCommand(request, invoke) {
     }
     const nodeOperation = command === 'scene.node.create';
     const patchOperationResult = command === 'scene.node.patch';
+    const prefabSourcePatchResult = command === 'prefab.source.patch';
     const nodeNeedsPreview = nodeOperation && ((record.manifest.components || []).length > 0 || !!record.manifest.prefabMode);
     const state = { ...base, phases: record.phases, intent: record.intent,
         result: nodeOperation ? { sceneName: record.sceneName, action: record.manifest.action, nodeName: record.manifest.nodeName,
@@ -244,6 +297,10 @@ function dispatchCommand(request, invoke) {
             ...(record.manifest.prefabMode ? { prefabMode: record.manifest.prefabMode,
                 prefabUuid: record.prefabUuid || record.manifest.prefabUuid || null,
                 ...(record.manifest.prefabUrl ? { prefabUrl: record.manifest.prefabUrl } : {}) } : {}) }
+            : prefabSourcePatchResult ? { action: record.manifest.action, prefabUuid: record.manifest.prefabUuid,
+                prefabUrl: record.manifest.prefabUrl, targetNodePath: record.manifest.targetNodePath,
+                targetNodeUuid: record.manifest.targetNodeUuid, expectedDiff: record.manifest.expectedDiff,
+                beforeSha256: record.beforeSha256, afterSha256: record.afterSha256, reopened: record.phases.disk === 'passed' }
             : patchOperationResult ? { sceneName: record.sceneName, action: record.manifest.action, targetNodePath: record.manifest.targetNodePath,
                 targetNodeUuid: record.manifest.targetNodeUuid, expectedDiff: record.manifest.expectedDiff }
             : { sceneName: record.sceneName, action: record.manifest.sceneAction, assetName: record.manifest.assetName,
@@ -252,13 +309,13 @@ function dispatchCommand(request, invoke) {
         ...(record.previewAttempt ? { previewAttempt: record.previewAttempt } : {}) };
     if (record.phases.disk === 'passed') {
         return { success: true, outcome: (nodeOperation && record.phases.preview === 'passed') || (nodeOperation && !nodeNeedsPreview)
-            || (!nodeOperation && record.phases.preview === 'passed') || input.action === 'compensate' ? 'completed' : 'needs-preview', ...state };
+            || prefabSourcePatchResult || (!nodeOperation && record.phases.preview === 'passed') || input.action === 'compensate' ? 'completed' : 'needs-preview', ...state };
     }
     if (record.intent === 'editor-write-sent' || record.phases.editor === 'passed') {
         return { success: false, outcome: 'needs-review', ...state,
             error: dispatchError('WRITE_OUTCOME_UNCERTAIN', 'Inspect the saved scene and operation record before any retry.', 'record', 'possible') };
     }
-    if (nodeOperation || patchOperationResult) {
+    if (nodeOperation || patchOperationResult || prefabSourcePatchResult) {
         const failure = [...record.receipts].reverse().find((item) => item.status === 'failed' && item.error);
         if (failure) return { success: false, outcome: 'failed', ...state,
             error: dispatchError(typeof failure.error.code === 'string' ? failure.error.code : 'EXECUTION_FAILED',
@@ -279,6 +336,9 @@ function operationStatus(request, invoke) {
     try { knownRecord = operationStore.read(project, operationId); } catch (_) { /* Host reports the missing record. */ }
     const nodeOperation = knownRecord && knownRecord.capabilityId === 'scene.node.create';
     const patchOperation = knownRecord && knownRecord.capabilityId === 'scene.node.patch';
+    const prefabSourcePatch = knownRecord && knownRecord.capabilityId === 'prefab.source.patch';
+    if (previewAcceptId && prefabSourcePatch)
+        return problem('PREVIEW_NOT_APPLICABLE', 'Prefab source patches are verified by saving, reopening the Prefab in Creator, and serialized asset readback.', null, 'preview');
     const nodeNeedsPreview = nodeOperation && ((knownRecord.manifest.components || []).length > 0 || !!knownRecord.manifest.prefabMode);
     if (nodeOperation && previewAcceptId && !nodeNeedsPreview)
         return problem('PREVIEW_NOT_APPLICABLE', 'Empty node creation is verified by scene readback.', null, 'preview');
@@ -290,7 +350,8 @@ function operationStatus(request, invoke) {
                 accepted && accepted.error && accepted.error.message || 'Could not record preview evidence.', null, 'preview');
         }
     }
-    const operationHost = nodeOperation ? 'node-create-host.js' : patchOperation ? 'scene-node-patch-host.js' : 'bridge-host.js';
+    const operationHost = nodeOperation ? 'node-create-host.js' : patchOperation ? 'scene-node-patch-host.js'
+        : prefabSourcePatch ? 'prefab-source-patch-host.js' : 'bridge-host.js';
     const readback = parseJson(invoke(operationHost, ['--project', project, '--creator-version', creatorVersion, '--operation-get', operationId]));
     if (!readback || readback.success !== true || !readback.data) return problem('OPERATION_STATUS_UNKNOWN', 'Cannot read operation record.', null, 'record', 'unknown');
     const record = readback.data;
@@ -298,13 +359,17 @@ function operationStatus(request, invoke) {
     if (record.operationId !== operationId || record.projectRoot !== project || record.creatorVersion !== creatorVersion) {
         return problem('OPERATION_TARGET_MISMATCH', 'Operation record does not match the requested target.', null, 'record', 'unknown');
     }
-    const base = { command: patchOperation ? 'scene.node.patch' : nodeOperation ? 'scene.node.create' : 'scene.pngSprite', operationId, phases: record.phases, intent: record.intent,
+    const base = { command: prefabSourcePatch ? 'prefab.source.patch' : patchOperation ? 'scene.node.patch' : nodeOperation ? 'scene.node.create' : 'scene.pngSprite', operationId, phases: record.phases, intent: record.intent,
         result: nodeOperation ? { sceneName: record.sceneName, action: record.manifest.action, nodeName: record.manifest.nodeName,
             nodeUuid: record.createdNodeUuid || record.manifest.targetNodeUuid, parentPath: record.manifest.parentPath, parentUuid: record.manifest.parentUuid,
             components: record.manifest.components || [], transform: record.manifest.transform || {},
             ...(record.manifest.prefabMode ? { prefabMode: record.manifest.prefabMode,
                 prefabUuid: record.prefabUuid || record.manifest.prefabUuid || null,
                 ...(record.manifest.prefabUrl ? { prefabUrl: record.manifest.prefabUrl } : {}) } : {}) }
+            : prefabSourcePatch ? { action: record.manifest.action, prefabUuid: record.manifest.prefabUuid,
+                prefabUrl: record.manifest.prefabUrl, targetNodePath: record.manifest.targetNodePath,
+                targetNodeUuid: record.manifest.targetNodeUuid, expectedDiff: record.manifest.expectedDiff,
+                beforeSha256: record.beforeSha256, afterSha256: record.afterSha256, reopened: record.phases.disk === 'passed' }
             : patchOperation ? { sceneName: record.sceneName, action: record.manifest.action, targetNodePath: record.manifest.targetNodePath,
                 targetNodeUuid: record.manifest.targetNodeUuid, expectedDiff: record.manifest.expectedDiff }
             : { sceneName: record.sceneName, action: record.manifest.sceneAction, assetName: record.manifest.assetName,
@@ -318,7 +383,7 @@ function operationStatus(request, invoke) {
     }
     if (record.phases.disk === 'passed') {
         return { success: true, outcome: (nodeOperation && record.phases.preview === 'passed') || (nodeOperation && !nodeNeedsPreview)
-            || record.manifest.action === 'compensate' || record.manifest.sceneAction === 'compensate'
+            || prefabSourcePatch || record.manifest.action === 'compensate' || record.manifest.sceneAction === 'compensate'
             || record.phases.preview === 'passed' ? 'completed' : 'needs-preview', ...base };
     }
     if (record.intent === 'editor-write-sent' || record.phases.editor === 'passed') {

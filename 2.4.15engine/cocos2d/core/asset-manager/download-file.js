@@ -46,7 +46,9 @@ function downloadFile (url, options, onProgress, onComplete) {
         if ( xhr.status === 200 || xhr.status === 0 ) {
             onComplete && onComplete(null, xhr.response);
         } else {
-            onComplete && onComplete(new Error(errInfo + xhr.status + '(no response)'));
+            var error = new Error(errInfo + xhr.status + '(no response)');
+            error.status = xhr.status;
+            onComplete && onComplete(error);
         }
 
     };

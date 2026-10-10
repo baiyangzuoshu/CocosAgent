@@ -1,0 +1,1054 @@
+{
+  "schemaVersion": "0.1",
+  "runId": "2026-10-10T03-21-20-429Z-76b892",
+  "creatorVersion": "2.4.15",
+  "platform": "web-mobile",
+  "buildId": "p1-web-20261009",
+  "releaseId": "cocosagent-p1-20261009",
+  "buildFingerprint": "39a00781269dcce421a1f1bbf802b7524879cc93c97a0d525bc758404e52fc96",
+  "buildOutputRoot": "/Users/youjunmao/WORK/Cocos_Engine/2.4.15NewProject/build/cocos-agent/p1-web-20261009",
+  "environment": {
+    "host": "darwin",
+    "architecture": "arm64",
+    "osRelease": "25.5.0",
+    "deviceClass": "development-host-headless-screening",
+    "cpuModel": "Apple M2 Pro",
+    "logicalCpuCount": 12,
+    "totalMemoryBytes": 17179869184,
+    "browser": "Google Chrome 154.0.8037.98",
+    "renderer": "SwiftShader",
+    "viewport": {
+      "width": 1280,
+      "height": 800
+    },
+    "profileId": "macos-arm64-chrome-headless-swiftshader-1280x800",
+    "baseUrl": "http://127.0.0.1:55367/",
+    "testedAt": "2026-10-10T03:21:24.645Z"
+  },
+  "runtimePatch": {
+    "kind": "permanent-http-4xx-no-retry",
+    "applied": true,
+    "sourceFiles": [
+      "2.4.15engine/cocos2d/core/asset-manager/download-file.js",
+      "2.4.15engine/cocos2d/core/asset-manager/utilities.js"
+    ],
+    "servedBundleOriginalSha256": "7404d0178586b8203e97b68d29a9660f267d69d2017ae1de2b8cb662624f95ac",
+    "servedBundlePatchedSha256": "a796b2f413b64d291dd995d117536eb7c7a10c7f1d810fe8d7e4a637791bd60f",
+    "note": "Experimental in-memory patch for comparison; the immutable build output on disk was not modified."
+  },
+  "workload": {
+    "cycles": 8,
+    "nodeCount": 32,
+    "packable": true,
+    "assets": [
+      {
+        "name": "RedReleaseOct09",
+        "uuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+        "png": {
+          "width": 128,
+          "height": 128,
+          "bytes": 361,
+          "sha256": "fe63bb651818495e7a6130dd1ece234dfa4ee29368c7cc907e5615c4569bbc16"
+        }
+      },
+      {
+        "name": "BlueReleaseOct09",
+        "uuid": "6ed544d0-c0a4-48a3-9374-1ad22683e13d",
+        "png": {
+          "width": 128,
+          "height": 128,
+          "bytes": 360,
+          "sha256": "f585e076137ea41bae73074065b30325d80feead2a82712d770c6f5ac4a7bb22"
+        }
+      }
+    ],
+    "parseFixtureAssets": [
+      {
+        "name": "cocos-agent-batch-red",
+        "uuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "png": {
+          "width": 2,
+          "height": 2,
+          "bytes": 74,
+          "sha256": "d28c139bba718d60154960eaca75535a5cc5b59fe2153e998a29251e8e5f4667"
+        }
+      },
+      {
+        "name": "cocos-agent-batch-blue",
+        "uuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "png": {
+          "width": 2,
+          "height": 2,
+          "bytes": 73,
+          "sha256": "45d23cee87293ea99af26093ec3ad3acde66cb7969d3d3fd73798642d6453845"
+        }
+      }
+    ],
+    "failureAsset": {
+      "name": "cocos-agent-batch-blue",
+      "uuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+      "png": {
+        "width": 2,
+        "height": 2,
+        "bytes": 73,
+        "sha256": "45d23cee87293ea99af26093ec3ad3acde66cb7969d3d3fd73798642d6453845"
+      }
+    },
+    "budgets": {
+      "targetFps": 30,
+      "maxResourceLoadP95Ms": 100,
+      "maxImportParserP95Ms": 20,
+      "maxPngParserP95Ms": 20,
+      "maxReleaseCallP95Ms": 8
+    },
+    "targetFps": 30,
+    "budgetVerdict": "exceeded"
+  },
+  "screenshots": {
+    "after-cycles": "docs/agent-foundation/traces/visual/cocos-agent-content-stress-2.4-2026-10-10T03-21-20-429Z-76b892-after-cycles.png",
+    "failure-retained": "docs/agent-foundation/traces/visual/cocos-agent-content-stress-2.4-2026-10-10T03-21-20-429Z-76b892-failure-retained.png"
+  },
+  "result": {
+    "creatorVersion": "2.4.15",
+    "platform": "web-mobile",
+    "workload": {
+      "cycles": 8,
+      "nodeCount": 32,
+      "resourcePaths": [
+        "RedReleaseOct09",
+        "BlueReleaseOct09"
+      ],
+      "texturePackable": true,
+      "operations": [
+        "Texture2D load",
+        "SpriteFrame creation and assignment",
+        "Node position/scale updates",
+        "EVENT_AFTER_DRAW visibility wait",
+        "decRef plus releaseUnusedAssets"
+      ]
+    },
+    "timings": {
+      "preloadDownloadOnlyMs": {
+        "count": 4,
+        "minMs": 0,
+        "p50Ms": 0.2,
+        "p95Ms": 2,
+        "maxMs": 2,
+        "meanMs": 0.8
+      },
+      "resourceLoadTotalMs": {
+        "count": 9,
+        "minMs": 0,
+        "p50Ms": 0.1,
+        "p95Ms": 0.3,
+        "maxMs": 0.3,
+        "meanMs": 0.133
+      },
+      "parserFixtureResourceLoadMs": {
+        "count": 2,
+        "minMs": 0.4,
+        "p50Ms": 0.4,
+        "p95Ms": 0.6,
+        "maxMs": 0.6,
+        "meanMs": 0.5
+      },
+      "spriteFrameCreateMs": {
+        "count": 9,
+        "minMs": 0,
+        "p50Ms": 0,
+        "p95Ms": 0.1,
+        "maxMs": 0.1,
+        "meanMs": 0.011
+      },
+      "spriteFrameInstallMs": {
+        "count": 9,
+        "minMs": 0,
+        "p50Ms": 0.1,
+        "p95Ms": 0.1,
+        "maxMs": 0.1,
+        "meanMs": 0.056
+      },
+      "nodeMutationMs": {
+        "count": 9,
+        "minMs": 0,
+        "p50Ms": 0,
+        "p95Ms": 0.1,
+        "maxMs": 0.1,
+        "meanMs": 0.011
+      },
+      "visibleDrawWaitMs": {
+        "count": 9,
+        "minMs": 14.9,
+        "p50Ms": 15.9,
+        "p95Ms": 18.5,
+        "maxMs": 18.5,
+        "meanMs": 16.467
+      },
+      "releaseCallMs": {
+        "count": 8,
+        "minMs": 0,
+        "p50Ms": 0,
+        "p95Ms": 0.2,
+        "maxMs": 0.2,
+        "meanMs": 0.05
+      },
+      "releaseObservedMs": {
+        "count": 8,
+        "minMs": 15,
+        "p50Ms": 16.1,
+        "p95Ms": 18.3,
+        "maxMs": 18.3,
+        "meanMs": 16.35
+      }
+    },
+    "frame": {
+      "sampleCount": 19,
+      "intervalMs": {
+        "count": 19,
+        "minMs": 15,
+        "p50Ms": 16.2,
+        "p95Ms": 35,
+        "maxMs": 35,
+        "meanMs": 17.468
+      },
+      "over16_667MsCount": 8,
+      "over16_667MsRatio": 0.421,
+      "over33_333MsCount": 1,
+      "over33_333MsRatio": 0.053,
+      "targetFps": 30,
+      "budgetVerdict": "exceeded"
+    },
+    "resourceCache": {
+      "beforePreload": [
+        {
+          "path": "RedReleaseOct09",
+          "expectedUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+          "cachedBeforeOrAfterPreload": true,
+          "refCount": 1,
+          "valid": true
+        },
+        {
+          "path": "BlueReleaseOct09",
+          "expectedUuid": "6ed544d0-c0a4-48a3-9374-1ad22683e13d",
+          "cachedBeforeOrAfterPreload": true,
+          "refCount": 1,
+          "valid": true
+        },
+        {
+          "path": "cocos-agent-batch-red",
+          "expectedUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "cachedBeforeOrAfterPreload": false,
+          "refCount": null,
+          "valid": false
+        },
+        {
+          "path": "cocos-agent-batch-blue",
+          "expectedUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "cachedBeforeOrAfterPreload": false,
+          "refCount": null,
+          "valid": false
+        }
+      ],
+      "afterPreload": [
+        {
+          "path": "RedReleaseOct09",
+          "expectedUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+          "cachedBeforeOrAfterPreload": true,
+          "refCount": 1,
+          "valid": true
+        },
+        {
+          "path": "BlueReleaseOct09",
+          "expectedUuid": "6ed544d0-c0a4-48a3-9374-1ad22683e13d",
+          "cachedBeforeOrAfterPreload": true,
+          "refCount": 1,
+          "valid": true
+        },
+        {
+          "path": "cocos-agent-batch-red",
+          "expectedUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "cachedBeforeOrAfterPreload": false,
+          "refCount": null,
+          "valid": false
+        },
+        {
+          "path": "cocos-agent-batch-blue",
+          "expectedUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "cachedBeforeOrAfterPreload": false,
+          "refCount": null,
+          "valid": false
+        }
+      ],
+      "cacheCountBefore": 29
+    },
+    "parse": {
+      "tapAvailable": true,
+      "preloadProducedParserCalls": 0,
+      "parserFixtureReadback": [
+        {
+          "path": "cocos-agent-batch-red",
+          "uuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "loadMs": 0.4,
+          "refCountBeforeOwner": 0,
+          "final": {
+            "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+            "refCount": 0,
+            "packable": true,
+            "valid": false,
+            "cached": false,
+            "assetCacheCount": 29,
+            "bundleCacheCount": 3,
+            "dynamicAtlasEnabled": true,
+            "jsHeapUsedBytes": 14637291
+          },
+          "released": true
+        },
+        {
+          "path": "cocos-agent-batch-blue",
+          "uuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "loadMs": 0.6,
+          "refCountBeforeOwner": 0,
+          "final": {
+            "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+            "refCount": 0,
+            "packable": true,
+            "valid": false,
+            "cached": false,
+            "assetCacheCount": 29,
+            "bundleCacheCount": 3,
+            "dynamicAtlasEnabled": true,
+            "jsHeapUsedBytes": 14637291
+          },
+          "released": true
+        }
+      ],
+      "samplesByType": {
+        "import": {
+          "count": 3,
+          "totalMs": 0.1,
+          "maxMs": 0.1,
+          "ids": [
+            "07fe9a99-7f87-4bd8-ace2-39ac085c3624@import",
+            "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@import"
+          ],
+          "duration": {
+            "count": 3,
+            "minMs": 0,
+            "p50Ms": 0,
+            "p95Ms": 0.1,
+            "maxMs": 0.1,
+            "meanMs": 0.033
+          }
+        },
+        ".png": {
+          "count": 2,
+          "totalMs": 0.5,
+          "maxMs": 0.4,
+          "ids": [
+            "07fe9a99-7f87-4bd8-ace2-39ac085c3624@native",
+            "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@native"
+          ],
+          "duration": {
+            "count": 2,
+            "minMs": 0.1,
+            "p50Ms": 0.1,
+            "p95Ms": 0.4,
+            "maxMs": 0.4,
+            "meanMs": 0.25
+          }
+        }
+      },
+      "samples": [
+        {
+          "parserType": "import",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@native",
+          "durationMs": 0.1,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@native",
+          "durationMs": 0.4,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@import",
+          "durationMs": 0.1,
+          "success": true
+        }
+      ],
+      "truncated": false,
+      "fixturePaths": [
+        "cocos-agent-batch-red",
+        "cocos-agent-batch-blue"
+      ],
+      "fixtureCacheBeforePreload": [
+        {
+          "path": "cocos-agent-batch-red",
+          "expectedUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "cachedBeforeOrAfterPreload": false,
+          "refCount": null,
+          "valid": false
+        },
+        {
+          "path": "cocos-agent-batch-blue",
+          "expectedUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "cachedBeforeOrAfterPreload": false,
+          "refCount": null,
+          "valid": false
+        }
+      ],
+      "interpretation": "The import parser callback includes Creator 2.4 deserialize(); .png parser time includes image parse/decode. A zero sample count means the selected resource was already parsed/cached or the parser hook was not reached; do not infer zero deserialization cost."
+    },
+    "failureRetention": {
+      "outcome": "retained",
+      "code": "download failed: assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png, status: 404(no response)",
+      "elapsedMs": 2.6,
+      "sameFrameOnAllSprites": true,
+      "attemptedPath": "cocos-agent-batch-blue",
+      "attemptedUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+      "attemptedAssetBefore": {
+        "path": "cocos-agent-batch-blue",
+        "expectedUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "cachedBeforeOrAfterPreload": false,
+        "refCount": null,
+        "valid": false
+      },
+      "retainedUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+      "before": {
+        "resourceUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+        "refCount": 2,
+        "packable": true,
+        "valid": true,
+        "cached": true,
+        "assetCacheCount": 29,
+        "bundleCacheCount": 3,
+        "dynamicAtlasEnabled": true,
+        "jsHeapUsedBytes": 14102363
+      },
+      "after": {
+        "resourceUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+        "refCount": 2,
+        "packable": true,
+        "valid": true,
+        "cached": true,
+        "assetCacheCount": 29,
+        "bundleCacheCount": 3,
+        "dynamicAtlasEnabled": true,
+        "jsHeapUsedBytes": 14102363
+      }
+    },
+    "cleanup": {
+      "beforeCacheCount": 29,
+      "activeBeforeCleanup": {
+        "resourceUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+        "refCount": 2,
+        "packable": true,
+        "valid": true,
+        "cached": true,
+        "assetCacheCount": 29,
+        "bundleCacheCount": 3,
+        "dynamicAtlasEnabled": true,
+        "jsHeapUsedBytes": 14316519
+      },
+      "nodeCount": 32,
+      "nodeDestroyObservedMs": 12.3,
+      "rootValidAfterDraw": false,
+      "releaseCallMs": 17.1,
+      "elapsedMs": 17.1,
+      "rootValid": false,
+      "finalTexture": {
+        "resourceUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+        "refCount": 1,
+        "packable": true,
+        "valid": true,
+        "cached": true,
+        "assetCacheCount": 29,
+        "bundleCacheCount": 3,
+        "dynamicAtlasEnabled": true,
+        "jsHeapUsedBytes": 14316519
+      },
+      "ownerReferenceDelta": 1,
+      "resourceResidencyAfterOwnerRelease": "retained-by-reference",
+      "finalAssetCacheCount": 29,
+      "cacheDelta": 0
+    },
+    "ownerReferenceReleases": [
+      {
+        "cycle": 1,
+        "beforeRefCount": 2,
+        "afterRefCount": 1,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 2,
+        "beforeRefCount": 2,
+        "afterRefCount": 1,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 3,
+        "beforeRefCount": 2,
+        "afterRefCount": 1,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 4,
+        "beforeRefCount": 2,
+        "afterRefCount": 1,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 5,
+        "beforeRefCount": 2,
+        "afterRefCount": 1,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 6,
+        "beforeRefCount": 2,
+        "afterRefCount": 1,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 7,
+        "beforeRefCount": 2,
+        "afterRefCount": 1,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 8,
+        "beforeRefCount": 2,
+        "afterRefCount": 1,
+        "ownerReferenceDelta": 1
+      }
+    ],
+    "perCycle": [
+      {
+        "cycle": 1,
+        "path": "BlueReleaseOct09",
+        "resourceUuid": "6ed544d0-c0a4-48a3-9374-1ad22683e13d",
+        "resourceRefCountBeforeOwner": 1,
+        "resourceRefCountAfterOwner": 2,
+        "loadMs": 0.1,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 18.5,
+        "releaseCallMs": 0.2,
+        "releaseObservedMs": 16.1,
+        "current": {
+          "resourceUuid": "6ed544d0-c0a4-48a3-9374-1ad22683e13d",
+          "refCount": 2,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 12673443
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+          "refCount": 2,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 12673443
+        },
+        "previous": {
+          "resourceUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 12673443
+        }
+      },
+      {
+        "cycle": 2,
+        "path": "RedReleaseOct09",
+        "resourceUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+        "resourceRefCountBeforeOwner": 1,
+        "resourceRefCountAfterOwner": 2,
+        "loadMs": 0.1,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 15.9,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 16.1,
+        "current": {
+          "resourceUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+          "refCount": 2,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 12673443
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "6ed544d0-c0a4-48a3-9374-1ad22683e13d",
+          "refCount": 2,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 12673443
+        },
+        "previous": {
+          "resourceUuid": "6ed544d0-c0a4-48a3-9374-1ad22683e13d",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 12673443
+        }
+      },
+      {
+        "cycle": 3,
+        "path": "BlueReleaseOct09",
+        "resourceUuid": "6ed544d0-c0a4-48a3-9374-1ad22683e13d",
+        "resourceRefCountBeforeOwner": 1,
+        "resourceRefCountAfterOwner": 2,
+        "loadMs": 0.1,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0.1,
+        "visibleDrawWaitMs": 17.7,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 15.4,
+        "current": {
+          "resourceUuid": "6ed544d0-c0a4-48a3-9374-1ad22683e13d",
+          "refCount": 2,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13525611
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+          "refCount": 2,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13525611
+        },
+        "previous": {
+          "resourceUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13525611
+        }
+      },
+      {
+        "cycle": 4,
+        "path": "RedReleaseOct09",
+        "resourceUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+        "resourceRefCountBeforeOwner": 1,
+        "resourceRefCountAfterOwner": 2,
+        "loadMs": 0.1,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 17.4,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 15,
+        "current": {
+          "resourceUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+          "refCount": 2,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13525611
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "6ed544d0-c0a4-48a3-9374-1ad22683e13d",
+          "refCount": 2,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13525611
+        },
+        "previous": {
+          "resourceUuid": "6ed544d0-c0a4-48a3-9374-1ad22683e13d",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13525611
+        }
+      },
+      {
+        "cycle": 5,
+        "path": "BlueReleaseOct09",
+        "resourceUuid": "6ed544d0-c0a4-48a3-9374-1ad22683e13d",
+        "resourceRefCountBeforeOwner": 1,
+        "resourceRefCountAfterOwner": 2,
+        "loadMs": 0.1,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 17.2,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 16.8,
+        "current": {
+          "resourceUuid": "6ed544d0-c0a4-48a3-9374-1ad22683e13d",
+          "refCount": 2,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13435863
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+          "refCount": 2,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13435863
+        },
+        "previous": {
+          "resourceUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13435863
+        }
+      },
+      {
+        "cycle": 6,
+        "path": "RedReleaseOct09",
+        "resourceUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+        "resourceRefCountBeforeOwner": 1,
+        "resourceRefCountAfterOwner": 2,
+        "loadMs": 0,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 15.6,
+        "releaseCallMs": 0.1,
+        "releaseObservedMs": 18.3,
+        "current": {
+          "resourceUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+          "refCount": 2,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14230811
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "6ed544d0-c0a4-48a3-9374-1ad22683e13d",
+          "refCount": 2,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13435863
+        },
+        "previous": {
+          "resourceUuid": "6ed544d0-c0a4-48a3-9374-1ad22683e13d",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14230811
+        }
+      },
+      {
+        "cycle": 7,
+        "path": "BlueReleaseOct09",
+        "resourceUuid": "6ed544d0-c0a4-48a3-9374-1ad22683e13d",
+        "resourceRefCountBeforeOwner": 1,
+        "resourceRefCountAfterOwner": 2,
+        "loadMs": 0.2,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 15.9,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 17.1,
+        "current": {
+          "resourceUuid": "6ed544d0-c0a4-48a3-9374-1ad22683e13d",
+          "refCount": 2,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14230811
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+          "refCount": 2,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14230811
+        },
+        "previous": {
+          "resourceUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14230811
+        }
+      },
+      {
+        "cycle": 8,
+        "path": "RedReleaseOct09",
+        "resourceUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+        "resourceRefCountBeforeOwner": 1,
+        "resourceRefCountAfterOwner": 2,
+        "loadMs": 0.2,
+        "createFrameMs": 0.1,
+        "frameInstallAndNodeMutationMs": 0,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 15.1,
+        "releaseCallMs": 0.1,
+        "releaseObservedMs": 16,
+        "current": {
+          "resourceUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+          "refCount": 2,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13936235
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "6ed544d0-c0a4-48a3-9374-1ad22683e13d",
+          "refCount": 2,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14230811
+        },
+        "previous": {
+          "resourceUuid": "6ed544d0-c0a4-48a3-9374-1ad22683e13d",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 29,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13936235
+        }
+      }
+    ],
+    "errors": [],
+    "budgetEvaluation": {
+      "verdict": "exceeded",
+      "checks": [
+        {
+          "metric": "frameIntervalP95",
+          "limitMs": 33.333,
+          "observedMs": 35,
+          "status": "exceeded",
+          "passed": false
+        },
+        {
+          "metric": "resourceLoadTotalP95",
+          "limitMs": 100,
+          "observedMs": 0.3,
+          "status": "passed",
+          "passed": true
+        },
+        {
+          "metric": "importDeserializeParserP95",
+          "limitMs": 20,
+          "observedMs": 0.1,
+          "status": "passed",
+          "passed": true
+        },
+        {
+          "metric": "pngImageParserP95",
+          "limitMs": 20,
+          "observedMs": 0.4,
+          "status": "passed",
+          "passed": true
+        },
+        {
+          "metric": "releaseCallP95",
+          "limitMs": 8,
+          "observedMs": 0.2,
+          "status": "passed",
+          "passed": true
+        }
+      ]
+    },
+    "acceptance": {
+      "success": false,
+      "code": "STRESS_BUDGET_EXCEEDED",
+      "invariantsMet": true,
+      "ownerReferencesBalanced": true
+    }
+  },
+  "httpRequestCount": 30,
+  "network": {
+    "responseCount": 30,
+    "statusCounts": {
+      "200": 29,
+      "404": 1
+    },
+    "assetRequests": [
+      {
+        "path": "/assets/resources/native/bf/bf8602ca-5561-4eb5-8c63-9653d4c32a4f.fbc47.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 1,
+        "responseBytes": 361
+      },
+      {
+        "path": "/assets/resources/native/6e/6ed544d0-c0a4-48a3-9374-1ad22683e13d.c61e8.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 1,
+        "responseBytes": 360
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 1,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 1,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 404,
+        "durationMs": 1,
+        "responseBytes": 37
+      }
+    ],
+    "failureHttpStatus": 404,
+    "injectedFailureRequests": [
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 404,
+        "durationMs": 1,
+        "responseBytes": 37
+      }
+    ],
+    "missingResourceResponses": [],
+    "failureTargetUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+    "failureTransportConfirmed": true
+  },
+  "browserEvents": [
+    {
+      "type": "console",
+      "level": "log",
+      "text": "Cocos Creator v2.4.15"
+    },
+    {
+      "type": "console",
+      "level": "log",
+      "text": "Success to load scene: db://assets/Scene/helloworld.fire"
+    },
+    {
+      "type": "console",
+      "level": "error",
+      "text": "download failed: assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png, status: 404(no response) Error: download failed: assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png, status: 404(no response)\n    at a.onload (http://127.0.0.1:55367/cocos2d-js-min.7038f.js:1:358151)"
+    },
+    {
+      "type": "console",
+      "level": "error",
+      "text": "download failed: assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png, status: 404(no response) Error: download failed: assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png, status: 404(no response)\n    at a.onload (http://127.0.0.1:55367/cocos2d-js-min.7038f.js:1:358151)"
+    }
+  ],
+  "error": "STRESS_ACCEPTANCE_FAILED"
+}

@@ -124,7 +124,10 @@ var utils = {
         index = index || 0;
         process(index, function (err, result) {
             index++;
-            if (!err || index > times) {
+            var status = err && err.status;
+            var permanentHttpError = status >= 400 && status < 500
+                && status !== 408 && status !== 425 && status !== 429;
+            if (!err || index > times || permanentHttpError) {
                 onComplete && onComplete(err, result);
             }
             else {

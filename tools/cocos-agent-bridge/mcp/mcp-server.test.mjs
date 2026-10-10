@@ -60,24 +60,32 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
             'cocos_2x_content_bundle_plan', 'cocos_2x_content_bundle_stage',
             'cocos_2x_content_from_scene_plan', 'cocos_2x_content_from_scene_stage', 'cocos_2x_content_get',
             'cocos_2x_content_preview_get', 'cocos_2x_content_preview_start', 'cocos_2x_content_preview_stop',
-            'cocos_2x_content_rollback', 'cocos_2x_content_select',
+            'cocos_2x_content_rollback', 'cocos_2x_content_select', 'cocos_2x_content_stress_run',
             'cocos_2x_instances_get', 'cocos_2x_instances_list', 'cocos_2x_operation_get',
             'cocos_2x_operation_preview_accept', 'cocos_2x_operation_reconcile',
             'cocos_2x_scene_node_inspect', 'cocos_2x_scene_snapshot', 'cocos_2x_workflow_compensate',
             'cocos_2x_workflow_execute', 'cocos_2x_workflow_get', 'cocos_2x_workflow_plan', 'cocos_2x_workflow_replay',
         ]);
-        assert.equal(tools.length, 38);
+        assert.equal(tools.length, 39);
         const commandTool = tools.find((tool) => tool.name === 'cocos_2x_command_execute');
         assert.equal(commandTool.annotations.readOnlyHint, false);
         assert.equal(commandTool.annotations.destructiveHint, true);
         const commandBranches = commandTool.inputSchema.oneOf || commandTool.inputSchema.anyOf;
-        assert.equal(commandBranches.length, 11);
+        assert.equal(commandBranches.length, 14);
         const inspectBranch = commandBranches.find((branch) => branch.properties?.command?.const === 'scene.node.inspect');
         assert.deepEqual(inspectBranch.properties.input.required, ['nodePath']);
         const searchBranch = commandBranches.find((branch) => branch.properties?.command?.const === 'asset.searchPng');
         assert.deepEqual(searchBranch.properties.input.required, ['query']);
         const patchBranch = commandBranches.find((branch) => branch.properties?.command?.const === 'scene.node.patch');
         assert.deepEqual(patchBranch.properties.input.required, ['targetNodePath', 'targetNodeUuid', 'action', 'expectedDiff']);
+        const prefabPatchBranch = commandBranches.find((branch) => branch.properties?.command?.const === 'prefab.source.patch');
+        assert.deepEqual(prefabPatchBranch.properties.input.required,
+            ['prefabUuid', 'targetNodePath', 'targetNodeUuid', 'action', 'expectedDiff']);
+        const prefabInspectBranch = commandBranches.find((branch) => branch.properties?.command?.const === 'prefab.source.inspect');
+        assert.deepEqual(prefabInspectBranch.properties.input.required, ['prefabUuid']);
+        const stressBranch = commandBranches.find((branch) => branch.properties?.command?.const === 'content.stress.run');
+        assert.deepEqual(stressBranch.properties.input.required,
+            ['buildId', 'resourcePaths', 'parseFixturePaths', 'failureResourcePath', 'cycles', 'nodeCount', 'packable', 'profileId', 'budgets']);
         assert.equal(tools.find((tool) => tool.name === 'cocos_2x_instances_list').annotations.readOnlyHint, true);
         for (const name of ['cocos_2x_scene_snapshot', 'cocos_2x_scene_node_inspect',
             'cocos_2x_asset_search_png', 'cocos_2x_asset_validate_png']) {
@@ -85,15 +93,28 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
             assert.equal(tool.annotations.readOnlyHint, true, `${name} must stay read-only`);
             assert.equal(tool.annotations.destructiveHint, false, `${name} must not be destructive`);
         }
+        const stressTool = tools.find((candidate) => candidate.name === 'cocos_2x_content_stress_run');
+        assert.equal(stressTool.annotations.readOnlyHint, false, 'stress diagnostic writes evidence artifacts');
+        assert.equal(stressTool.annotations.destructiveHint, false, 'stress diagnostic does not alter project content');
+        assert.equal(stressTool.annotations.idempotentHint, false, 'each stress run creates new evidence artifacts');
 
         const { resources } = await client.listResources();
-        assert.deepEqual(resources.map((resource) => resource.uri), ['cocos://2x/agent/mcp-tools', 'cocos://2x/skills/scene-composition']);
+        assert.deepEqual(resources.map((resource) => resource.uri), [
+            'cocos://2x/agent/mcp-tools', 'cocos://2x/skills/scene-composition', 'cocos://2x/skills/prefab-source-edit',
+            'cocos://2x/skills/runtime-performance',
+        ]);
         const skill = await client.readResource({ uri: 'cocos://2x/agent/mcp-tools' });
         assert.match(skill.contents[0].text, /Creator \*\*2\.4\.15\*\*/);
         assert.match(skill.contents[0].text, /Do not repeat a possibly completed write/);
         const compositionSkill = await client.readResource({ uri: 'cocos://2x/skills/scene-composition' });
         assert.match(compositionSkill.contents[0].text, /cocos_2x_workflow_plan/);
         assert.match(compositionSkill.contents[0].text, /visually inspect/i);
+        const prefabSkill = await client.readResource({ uri: 'cocos://2x/skills/prefab-source-edit' });
+        assert.match(prefabSkill.contents[0].text, /expectedPrefabSha256/);
+        assert.match(prefabSkill.contents[0].text, /每轮都必须检查回执/);
+        const performanceSkill = await client.readResource({ uri: 'cocos://2x/skills/runtime-performance' });
+        assert.match(performanceSkill.contents[0].text, /cocos_2x_content_stress_run/);
+        assert.match(performanceSkill.contents[0].text, /SwiftShader/);
 
         const { prompts } = await client.listPrompts();
         assert.deepEqual(prompts.map((prompt) => prompt.name), ['cocos_2x_resource_to_scene_workflow']);
@@ -108,6 +129,8 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         assert.match(workflow.messages[0].content.text, /metadataStatus is valid/);
         assert.match(workflow.messages[0].content.text, /scene\.node\.create/);
         assert.match(workflow.messages[0].content.text, /multiple candidates fit.*stop and ask/i);
+        assert.match(workflow.messages[0].content.text, /prefab\.source\.inspect/);
+        assert.match(workflow.messages[0].content.text, /After each successful operation, inspect again/);
 
         const listed = await client.callTool({ name: 'cocos_2x_instances_list', arguments: {} });
         assert.equal(listed.structuredContent.data.length, 2);
@@ -144,6 +167,31 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
             },
         } });
         assert.equal(invalidPatch.isError, true);
+
+        const prefabUuid = '33333333-3333-4333-8333-333333333333';
+        const inspectedPrefab = await client.callTool({ name: 'cocos_2x_command_execute', arguments: {
+            projectRoot: value.projects[0], command: 'prefab.source.inspect', input: { prefabUuid },
+        } });
+        assert.equal(inspectedPrefab.structuredContent.method, 'command.execute');
+        assert.equal(calls.at(-1).params.command, 'prefab.source.inspect');
+        assert.deepEqual(calls.at(-1).params.input, { prefabUuid });
+        const prefabDiff = [{ path: 'node.position.x', before: 0, after: 24 }];
+        const patchedPrefab = await client.callTool({ name: 'cocos_2x_command_execute', arguments: {
+            projectRoot: value.projects[0], command: 'prefab.source.patch', input: {
+                prefabUuid, targetNodePath: 'AgentPrefab', targetNodeUuid: '11111111-1111-4111-8111-111111111111',
+                action: 'apply', expectedPrefabSha256: 'a'.repeat(64), expectedDiff: prefabDiff,
+            },
+        } });
+        assert.equal(patchedPrefab.structuredContent.method, 'command.execute');
+        assert.equal(calls.at(-1).params.command, 'prefab.source.patch');
+        assert.deepEqual(calls.at(-1).params.input.expectedDiff, prefabDiff);
+        const staleUnsafePrefabPatch = await client.callTool({ name: 'cocos_2x_command_execute', arguments: {
+            projectRoot: value.projects[0], command: 'prefab.source.patch', input: {
+                prefabUuid, targetNodePath: 'AgentPrefab', targetNodeUuid: '11111111-1111-4111-8111-111111111111',
+                action: 'apply', expectedDiff: prefabDiff,
+            },
+        } });
+        assert.equal(staleUnsafePrefabPatch.isError, true);
 
         const workflowSteps = [
             { id: 'root', name: 'AgentShowcase', parent: { path: 'Canvas', uuid: 'a286bbGknJLZpRpxROV6M94' } },
@@ -209,6 +257,25 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
             projectRoot: value.projects[0], command: 'asset.searchPng', input: { query: '' },
         } });
         assert.equal(invalidSearch.isError, true);
+
+        const performanceInput = {
+            buildId: 'p1-web-20261009', resourcePaths: ['RedReleaseOct09', 'BlueReleaseOct09'],
+            parseFixturePaths: ['cocos-agent-batch-red', 'cocos-agent-batch-blue'], failureResourcePath: 'cocos-agent-batch-blue',
+            cycles: 96, nodeCount: 512, packable: true,
+            profileId: 'macos-arm64-chrome-headless-swiftshader-1280x800',
+            budgets: { targetFps: 30, maxResourceLoadP95Ms: 100, maxImportParserP95Ms: 20,
+                maxPngParserP95Ms: 20, maxReleaseCallP95Ms: 8 },
+        };
+        const performance = await client.callTool({ name: 'cocos_2x_content_stress_run', arguments: {
+            projectRoot: value.projects[0], input: performanceInput,
+        } });
+        assert.equal(performance.structuredContent.method, 'command.execute');
+        assert.equal(calls.at(-1).params.command, 'content.stress.run');
+        assert.deepEqual(calls.at(-1).params.input, performanceInput);
+        const invalidPerformance = await client.callTool({ name: 'cocos_2x_content_stress_run', arguments: {
+            projectRoot: value.projects[0], input: { ...performanceInput, budgets: { targetFps: 30 } },
+        } });
+        assert.equal(invalidPerformance.isError, true);
 
         const refreshedFolder = await client.callTool({ name: 'cocos_2x_command_execute', arguments: {
             projectRoot: value.projects[0], command: 'asset.refreshFolder', input: { folderPath: 'CocosAgentBundleSmoke' },
@@ -371,7 +438,7 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
             projectRoot: value.projects[0], command: 'scene.node.inspect', input: {},
         } });
         assert.equal(invalidCommandInput.isError, true);
-        assert.equal(calls.filter((call) => call.method === 'command.execute').length, 6);
+        assert.equal(calls.filter((call) => call.method === 'command.execute').length, 9);
     } finally {
         await client.close();
         await server.close();

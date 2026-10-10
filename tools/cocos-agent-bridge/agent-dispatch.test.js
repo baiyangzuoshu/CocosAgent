@@ -168,6 +168,39 @@ assert.strictEqual(dispatch({ ...nodeRequest, input: { ...nodeRequest.input, pre
 assert.strictEqual(dispatch({ ...request, input: { ...request.input, prefabMode: 'instantiate', prefabUuid } }, mock().invoke).error.code, 'INVALID_ARGUMENT');
 assert.strictEqual(dispatch({ ...nodeRequest, input: { ...nodeRequest.input, components: [{ classId: 'cc.Camera' }] } }, nodeInvoke).error.code,
     'INVALID_ARGUMENT');
+const stressProject = '/tmp/cocos-agent-dispatch-performance-2x';
+const stressInstance = { ...instance, creatorVersion: '2.4.15', projectRoot: stressProject, activeScene: 'helloworld' };
+const stressInput = { buildId: 'p1-web-20261009', resourcePaths: ['RedReleaseOct09', 'BlueReleaseOct09'],
+    parseFixturePaths: ['cocos-agent-batch-red', 'cocos-agent-batch-blue'], failureResourcePath: 'cocos-agent-batch-blue',
+    cycles: 96, nodeCount: 512, packable: true,
+    profileId: 'macos-arm64-chrome-headless-swiftshader-1280x800',
+    budgets: { targetFps: 30, maxResourceLoadP95Ms: 100, maxImportParserP95Ms: 20,
+        maxPngParserP95Ms: 20, maxReleaseCallP95Ms: 8 } };
+const stressCalls = [];
+const stressInvoke = (script, args) => {
+    stressCalls.push({ script, args });
+    if (script === 'catalog-host.js' && args.includes('instances.list'))
+        return { status: 0, stdout: JSON.stringify({ success: true, data: [stressInstance] }) };
+    if (script === 'catalog-host.js') return { status: 0, stdout: JSON.stringify({ success: true, data: {
+        instance: stressInstance, commands: [{ id: 'content.stress.run', contractVersion: '0.1', access: 'read', status: 'available', reason: null }],
+    } }) };
+    return { status: 0, stdout: `command.result ${JSON.stringify({ command: 'content.stress.run', result: { acceptance: { success: true } } })}\n` };
+};
+const stressRequest = { targets: [{ creatorVersion: '2.4.15', projectRoot: stressProject }], projectRoot: stressProject,
+    creatorVersion: '2.4.15', command: 'content.stress.run', input: stressInput };
+result = dispatch(stressRequest, stressInvoke);
+assert.strictEqual(result.outcome, 'completed');
+assert.deepStrictEqual(result.result.acceptance, { success: true });
+const stressExecution = stressCalls.find((call) => call.script === 'content-stress-host.js');
+assert(stressExecution, 'diagnostic command must route to its local host runner');
+assert.deepStrictEqual(JSON.parse(stressExecution.args[stressExecution.args.indexOf('--input') + 1]), stressInput);
+for (const invalid of [
+    { ...stressInput, resourcePaths: ['same', 'same'] },
+    { ...stressInput, cycles: 8, resourcePaths: Array.from({ length: 8 }, (_, index) => `asset-${index}`) },
+    { ...stressInput, budgets: { targetFps: 30 } },
+]) assert.strictEqual(dispatch({ ...stressRequest, input: invalid }, stressInvoke).error.code, 'INVALID_ARGUMENT');
+assert.strictEqual(dispatch({ ...stressRequest, creatorVersion: '3.8.7', targets: [{ creatorVersion: '3.8.7', projectRoot: stressProject }] }, stressInvoke).error.code,
+    'COMMAND_UNAVAILABLE');
 const labelComponents = [{ classId: 'cc.Label', text: 'P1 label' }];
 const labelRecord = { ...nodeRecord, manifest: { ...nodeRecord.manifest, components: labelComponents, transform: {} } };
 result = dispatch({ ...nodeRequest, input: { ...nodeRequest.input, components: labelComponents, transform: undefined } },
@@ -240,6 +273,53 @@ result = dispatch({ projectRoot: patchProject, creatorVersion: '2.4.15', operati
 assert.strictEqual(result.outcome, 'completed');
 assert(patchCalls.some((call) => call.script === 'scene-node-patch-host.js' && call.args.includes('--operation-get')));
 fs.rmSync(patchProject, { recursive: true, force: true });
+
+const prefabProject = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-agent-dispatch-prefab-'));
+const prefabInstance = { ...instance, projectRoot: prefabProject, creatorVersion: '2.4.15' };
+const sourcePrefabUuid = '33333333-3333-4333-8333-333333333333';
+const prefabOperationId = 'c5b0eb39-1b83-4e80-bce8-dc0ac7c9a004';
+const prefabDiff = [{ path: 'node.position.x', before: 0, after: 24 }];
+const prefabRecord = { capabilityId: 'prefab.source.patch', operationId: prefabOperationId, projectRoot: prefabProject,
+    creatorVersion: '2.4.15', intent: 'disk-verified', beforeSha256: 'a'.repeat(64), afterSha256: 'b'.repeat(64),
+    manifest: { action: 'apply', prefabUuid: sourcePrefabUuid, prefabUrl: 'db://assets/Agent.prefab', targetNodePath: 'AgentPrefab/Badge',
+        targetNodeUuid: 'AgentNode_01', expectedDiff: prefabDiff },
+    phases: { capability: 'passed', preflight: 'passed', editor: 'passed', disk: 'passed', preview: 'skipped', recovery: 'pending' } };
+operationStore.write(prefabProject, prefabRecord, true);
+const prefabCalls = [];
+const prefabInvoke = (script, args) => {
+    prefabCalls.push({ script, args });
+    if (script === 'catalog-host.js' && args.includes('instances.list'))
+        return { status: 0, stdout: JSON.stringify({ success: true, data: [prefabInstance] }) };
+    if (script === 'catalog-host.js') return { status: 0, stdout: JSON.stringify({ success: true, data: {
+        instance: prefabInstance, commands: [
+            { id: 'prefab.source.patch', contractVersion: '0.1', status: 'available', reason: null },
+            { id: 'prefab.source.inspect', contractVersion: '0.1', status: 'available', reason: null },
+        ],
+    } }) };
+    if (script === 'prefab-source-patch-host.js' && args.includes('--operation-get'))
+        return { status: 0, stdout: JSON.stringify({ success: true, data: prefabRecord }) };
+    return { status: 0, stdout: `command.result ${JSON.stringify({ command: script === 'prefab-source-inspect-host.js'
+        ? 'prefab.source.inspect' : 'prefab.source.patch', result: { verified: true } })}\n` };
+};
+result = dispatch({ targets: [{ creatorVersion: '2.4.15', projectRoot: prefabProject }], projectRoot: prefabProject,
+    creatorVersion: '2.4.15', command: 'prefab.source.patch', input: { prefabUuid: sourcePrefabUuid,
+        targetNodePath: prefabRecord.manifest.targetNodePath, targetNodeUuid: prefabRecord.manifest.targetNodeUuid,
+        action: 'apply', expectedPrefabSha256: 'a'.repeat(64), expectedDiff: prefabDiff, operationId: prefabOperationId } }, prefabInvoke);
+assert.strictEqual(result.outcome, 'completed', JSON.stringify(result));
+assert.strictEqual(result.result.reopened, true);
+assert(prefabCalls.some((call) => call.script === 'prefab-source-patch-host.js'
+    && call.args.includes('--expected-prefab-sha256') && call.args.includes('a'.repeat(64))));
+result = dispatch({ targets: [{ creatorVersion: '2.4.15', projectRoot: prefabProject }], projectRoot: prefabProject,
+    creatorVersion: '2.4.15', command: 'prefab.source.inspect', input: { prefabUuid: sourcePrefabUuid } }, prefabInvoke);
+assert.strictEqual(result.outcome, 'completed');
+assert(prefabCalls.some((call) => call.script === 'prefab-source-inspect-host.js' && call.args.includes('--prefab-uuid')));
+const prefabInvalidCalls = prefabCalls.length;
+assert.strictEqual(dispatch({ targets: [{ creatorVersion: '3.8.7', projectRoot: prefabProject }], projectRoot: prefabProject,
+    creatorVersion: '3.8.7', command: 'prefab.source.patch', input: { prefabUuid: sourcePrefabUuid,
+        targetNodePath: prefabRecord.manifest.targetNodePath, targetNodeUuid: prefabRecord.manifest.targetNodeUuid,
+        action: 'apply', expectedPrefabSha256: 'a'.repeat(64), expectedDiff: prefabDiff } }, prefabInvoke).error.code, 'COMMAND_UNAVAILABLE');
+assert.strictEqual(prefabCalls.length, prefabInvalidCalls, 'Prefab source patch must remain unavailable on 3.8 before discovery');
+fs.rmSync(prefabProject, { recursive: true, force: true });
 
 const removalProject = path.resolve(os.tmpdir(), 'cocos-agent-removal-project');
 const removalInstance = { instanceId, projectRoot: removalProject, creatorVersion: '2.4.15', state: 'ready',
