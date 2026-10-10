@@ -4,11 +4,13 @@ const assert = require('assert');
 const { spawnSync } = require('child_process');
 const test = require('node:test');
 const path = require('path');
-const { handle, handleAsync } = require('./agent-jsonl');
+const { handle, handleAsync, catalog } = require('./agent-jsonl');
 const { dispatch } = require('./agent-dispatch');
 
 const projectRoot = '/tmp/cocos-agent-jsonl-test';
 const operationId = '5858dc80-32d0-4610-8291-f057fa13151e';
+const mcpRuntime = { version: '0.2.0', pluginVersion: '0.2.0', pluginFingerprint: 'c'.repeat(64),
+    sourceFingerprint: 'a'.repeat(64), contractSchemaFingerprint: 'b'.repeat(64) };
 const request = { id: 7, method: 'operation.get', params: { projectRoot, creatorVersion: '3.8.7', operationId } };
 const invoked = [];
 const invoke = (script, args) => {
@@ -22,6 +24,20 @@ const expected = dispatch({ projectRoot, creatorVersion: '3.8.7', operationGetId
 assert.deepStrictEqual(handle(request, { dispatch: (value) => dispatch(value, invoke) }), { id: 7, result: expected });
 assert.strictEqual(invoked.length, 2);
 assert.deepStrictEqual(invoked[0], invoked[1]);
+
+test('catalog forwards the MCP process fingerprint to the Host for runtime alignment checks', () => {
+    let args;
+    const response = catalog({ id: 20, method: 'instances.list', params: {
+        targets: [{ creatorVersion: '2.4.15', projectRoot }], mcpRuntime,
+    } }, (_executable, values) => {
+        args = values;
+        return { status: 0, stdout: JSON.stringify({ success: true, data: [] }) };
+    });
+    assert.deepStrictEqual(response, { success: true, data: [] });
+    const index = args.indexOf('--mcp-runtime');
+    assert.notEqual(index, -1);
+    assert.deepStrictEqual(JSON.parse(args[index + 1]), mcpRuntime);
+});
 
 const invalid = handle({ id: 8, method: 'command.execute', params: { command: 'unknown' } },
     { dispatch: (value) => dispatch(value, invoke) });

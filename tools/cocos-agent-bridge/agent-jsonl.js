@@ -47,6 +47,7 @@ function catalog(request, run = spawnSync) {
         ...params.targets.flatMap((target) => ['--target', `${target.creatorVersion}=${target.projectRoot}`]), '--query', method];
     if (params.projectRoot !== undefined) args.push('--project', params.projectRoot);
     if (params.creatorVersion !== undefined) args.push('--creator-version', params.creatorVersion);
+    if (params.mcpRuntime !== undefined) args.push('--mcp-runtime', JSON.stringify(params.mcpRuntime));
     const child = run(process.execPath, args, { encoding: 'utf8', maxBuffer: 1024 * 1024 });
     try {
         const result = JSON.parse((child.stdout || '').trim());

@@ -9,7 +9,7 @@ Use this skill only for the CocosAgent Creator 2.4.15 Mac JSB path. It covers an
 
 ## Source and build
 
-- Read [the native bridge case](../../../../docs/agent-foundation/native-jsb-memory-bridge-2.4.md) for provenance, measured results, and evidence limits.
+- Read [the native bridge case](../../references/agent-foundation/native-jsb-memory-bridge-2.4.md) for provenance, measured results, and evidence limits.
 - The Creator installation supplies `cocos2d-x-lite` 2.4.15 native sources and prebuilt Mac dependencies. The installation source has no Git metadata, so do not claim an upstream commit.
 - Keep authored C++ in the repository. The build helper creates a disposable native-source overlay under the ignored project `build/` directory, points the generated Xcode project at it temporarily, and restores generated project files after the build.
 - Build with `python3 docs/agent-foundation/probes/build-cocos-agent-memory-bridge-2.4.py`. The installed Mac libraries are x86_64; keep `ARCHS=x86_64` unless the dependency set is replaced and revalidated.

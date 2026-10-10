@@ -9,16 +9,11 @@ import * as z from 'zod/v4';
 
 const require = createRequire(import.meta.url);
 const { handleAsync } = require('../agent-jsonl.js');
+const { fingerprintFiles, listFiles } = require('../runtime-fingerprint.js');
+const catalogSchema = require('../catalog.schema.json');
+const mcpPackage = require('./package.json');
 const CREATOR_VERSION = '2.4.15';
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-const COCOS_2X_SKILL_URI = 'cocos://2x/agent/mcp-tools';
-const COCOS_2X_SKILL_PATH = path.join(REPOSITORY_ROOT, 'docs/agent-foundation/skills/cocos2-mcp-tools/SKILL.md');
-const COCOS_2X_COMPOSITION_SKILL_URI = 'cocos://2x/skills/scene-composition';
-const COCOS_2X_COMPOSITION_SKILL_PATH = path.join(REPOSITORY_ROOT, 'plugins/cocos-agent-2x/skills/cocos2-scene-composition/SKILL.md');
-const COCOS_2X_PREFAB_SOURCE_SKILL_URI = 'cocos://2x/skills/prefab-source-edit';
-const COCOS_2X_PREFAB_SOURCE_SKILL_PATH = path.join(REPOSITORY_ROOT, 'docs/agent-foundation/skills/cocos2-prefab-source-edit/SKILL.md');
-const COCOS_2X_PERFORMANCE_SKILL_URI = 'cocos://2x/skills/runtime-performance';
-const COCOS_2X_PERFORMANCE_SKILL_PATH = path.join(REPOSITORY_ROOT, 'docs/agent-foundation/skills/cocos2-runtime-performance/SKILL.md');
 const COMMANDS_2X = [
     'scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng',
     'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.pngSprite', 'scene.node.create', 'scene.node.patch',
@@ -31,7 +26,135 @@ const UUID = z.string().regex(/^[0-9a-fA-F-]{36}$/);
 const OPERATION_ID = z.string().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/);
 const RESOURCE_NAME = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/);
 const ASSET_FOLDER_PATH = z.string().min(1).max(240).regex(/^[A-Za-z0-9][A-Za-z0-9_.-]*(?:\/[A-Za-z0-9][A-Za-z0-9_.-]*){0,7}$/);
-const SERVER_VERSION = '0.1.0';
+const SERVER_VERSION = mcpPackage.version;
+const MCP_ROOT = path.dirname(fileURLToPath(import.meta.url));
+const PLUGIN_ROOT = path.join(REPOSITORY_ROOT, 'plugins/cocos-agent-2x');
+const SKILL_PACKAGE = require(path.join(PLUGIN_ROOT, 'skill-package.json'));
+const MCP_SOURCE_FINGERPRINT = fingerprintFiles(MCP_ROOT, ['mcp-server.mjs', 'package.json', 'package-lock.json']);
+const MCP_CONTRACT_SCHEMA_FINGERPRINT = hashBytes(fs.readFileSync(path.join(REPOSITORY_ROOT, 'tools/cocos-agent-bridge/catalog.schema.json')));
+const PLUGIN_MANIFEST = require(path.join(PLUGIN_ROOT, '.codex-plugin/plugin.json'));
+const PLUGIN_SOURCE_FINGERPRINT = fingerprintFiles(PLUGIN_ROOT, [
+    '.codex-plugin/plugin.json', '.mcp.json', 'README.md', 'skill-package.json',
+    ...listFiles(PLUGIN_ROOT, 'scripts'), ...listFiles(PLUGIN_ROOT, 'skills'), ...listFiles(PLUGIN_ROOT, 'references'),
+]);
+const MCP_RUNTIME = Object.freeze({
+    version: SERVER_VERSION,
+    pluginVersion: PLUGIN_MANIFEST.version,
+    pluginFingerprint: PLUGIN_SOURCE_FINGERPRINT,
+    sourceFingerprint: MCP_SOURCE_FINGERPRINT,
+    contractSchemaFingerprint: MCP_CONTRACT_SCHEMA_FINGERPRINT,
+});
+
+function hashBytes(value) {
+    return require('node:crypto').createHash('sha256').update(value).digest('hex');
+}
+
+function packageFile(relativePath) {
+    const target = path.resolve(PLUGIN_ROOT, relativePath);
+    if (!target.startsWith(`${PLUGIN_ROOT}${path.sep}`)) throw new Error(`Package path escapes the plugin: ${relativePath}`);
+    const bytes = fs.readFileSync(target);
+    return { target, bytes, sha256: hashBytes(bytes) };
+}
+
+function packageSkillIndex() {
+    const references = new Map(SKILL_PACKAGE.references.map((reference) => [reference.id, reference]));
+    return {
+        schemaVersion: SKILL_PACKAGE.schemaVersion,
+        plugin: {
+            name: PLUGIN_MANIFEST.name,
+            version: PLUGIN_MANIFEST.version,
+            sourceFingerprint: PLUGIN_SOURCE_FINGERPRINT,
+        },
+        mcp: { version: SERVER_VERSION, sourceFingerprint: MCP_SOURCE_FINGERPRINT },
+        skills: SKILL_PACKAGE.skills.map((skill) => {
+            const { bytes } = packageFile(path.join('skills', skill.name, 'SKILL.md'));
+            return {
+                name: skill.name,
+                uri: skill.uri,
+                sha256: hashBytes(bytes),
+                references: skill.references.map((id) => {
+                    const reference = references.get(id);
+                    if (!reference) throw new Error(`Unknown skill package reference: ${id}`);
+                    return {
+                        id,
+                        uri: `cocos://2x/references/${id}`,
+                        sha256: packageFile(path.join('references', id)).sha256,
+                    };
+                }),
+            };
+        }),
+    };
+}
+
+function packageSkillText(skill) {
+    const { bytes, sha256 } = packageFile(path.join('skills', skill.name, 'SKILL.md'));
+    const referenceRows = skill.references.map((id) => {
+        const reference = packageFile(path.join('references', id));
+        return `- cocos://2x/references/${id} (sha256 ${reference.sha256})`;
+    });
+    const provenance = [
+        `<!-- CocosAgent package ${PLUGIN_MANIFEST.name}@${PLUGIN_MANIFEST.version}`,
+        `plugin-sha256 ${PLUGIN_SOURCE_FINGERPRINT}`,
+        `skill ${skill.name} sha256 ${sha256}`,
+        'references:',
+        ...(referenceRows.length ? referenceRows : ['- none']),
+        '-->',
+        '',
+    ].join('\n');
+    return `${provenance}${bytes.toString('utf8')}`;
+}
+
+function registerSkillPackageResources(server) {
+    const references = new Map(SKILL_PACKAGE.references.map((reference) => [reference.id, reference]));
+    const indexUri = 'cocos://2x/skills/index';
+    server.registerResource('cocos2-skills-index', indexUri, {
+        title: 'CocosAgent 2.x skill and reference index',
+        description: 'Lists packaged Creator 2.4.15 task skills, their read URIs, plugin/MCP versions, source fingerprint and content hashes.',
+        mimeType: 'application/json',
+    }, async (uri) => ({ contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(packageSkillIndex(), null, 2) }] }));
+
+    for (const skill of SKILL_PACKAGE.skills) {
+        server.registerResource(`cocos2-skill-${skill.name}`, skill.uri, {
+            title: `CocosAgent skill: ${skill.name}`,
+            description: `Creator 2.4.15 task instructions. Read the skill index to verify plugin version, content hash, and supporting references.`,
+            mimeType: 'text/markdown',
+        }, async (uri) => ({ contents: [{ uri: uri.href, mimeType: 'text/markdown', text: packageSkillText(skill) }] }));
+    }
+
+    for (const reference of SKILL_PACKAGE.references) {
+        const uri = `cocos://2x/references/${reference.id}`;
+        const extension = path.extname(reference.id).toLowerCase();
+        const mimeType = extension === '.png' ? 'image/png'
+            : extension === '.json' ? 'application/json'
+                : extension === '.jsonl' ? 'application/x-ndjson'
+                    : extension === '.mjs' || extension === '.py' || extension === '.h' ? 'text/plain'
+                        : 'text/markdown';
+        server.registerResource(`cocos2-reference-${reference.id.replace(/[^a-z0-9-]/gi, '-')}`, uri, {
+            title: `CocosAgent reference: ${reference.id}`,
+            description: `Versioned package reference ${reference.id}; its SHA-256 is listed in cocos://2x/skills/index.`,
+            mimeType,
+        }, async (requestedUri) => {
+            const packaged = packageFile(path.join('references', reference.id));
+            const content = mimeType === 'image/png'
+                ? { uri: requestedUri.href, mimeType, blob: packaged.bytes.toString('base64') }
+                : { uri: requestedUri.href, mimeType, text: packaged.bytes.toString('utf8') };
+            return { contents: [content] };
+        });
+    }
+}
+
+function contentStressRunInputSchema() {
+    return z.fromJSONSchema(catalogSchema.$defs.contentStressRunInput2x).superRefine((input, context) => {
+        if (input.cycles < input.resourcePaths.length + 1)
+            context.addIssue({ code: 'custom', path: ['cycles'], message: 'Cycles must revisit and release every selected resource before injecting the failure case.' });
+        if (input.resourcePaths.some((item) => input.parseFixturePaths.includes(item)))
+            context.addIssue({ code: 'custom', path: ['parseFixturePaths'], message: 'Parser fixtures must be separate from the render stress resources.' });
+        if (!input.parseFixturePaths.includes(input.failureResourcePath) || input.resourcePaths.includes(input.failureResourcePath))
+            context.addIssue({ code: 'custom', path: ['failureResourcePath'], message: 'The failure path must be one of the separate parser fixtures.' });
+    });
+}
+
+const CONTENT_STRESS_RUN_INPUT = contentStressRunInputSchema();
 
 function positionSchema() {
     return z.object({
@@ -110,36 +233,7 @@ function commandInputSchema(projectRoot) {
                 context.addIssue({ code: 'custom', path: ['sourceOperationId'], message: 'Compensation and replay require a completed source operation.' });
         }),
         'prefab.source.inspect': z.object({ prefabUuid: UUID }).strict(),
-        'content.stress.run': z.object({
-            buildId: CONTENT_BUILD_ID,
-            resourcePaths: z.array(z.string().regex(/^[A-Za-z0-9_-]{1,64}(?:\/[A-Za-z0-9_-]{1,64}){0,7}$/)).min(2).max(16)
-                .refine((values) => new Set(values).size === values.length),
-            parseFixturePaths: z.array(z.string().regex(/^[A-Za-z0-9_-]{1,64}(?:\/[A-Za-z0-9_-]{1,64}){0,7}$/)).min(2).max(16)
-                .refine((values) => new Set(values).size === values.length),
-            failureResourcePath: z.string().regex(/^[A-Za-z0-9_-]{1,64}(?:\/[A-Za-z0-9_-]{1,64}){0,7}$/),
-            cycles: z.number().int().min(8).max(256),
-            nodeCount: z.number().int().min(32).max(1024),
-            packable: z.boolean(),
-            profileId: z.literal('macos-arm64-chrome-headless-swiftshader-1280x800'),
-            loadMode: z.literal('cold-and-warm'),
-            budgetProfileId: z.literal('macos-arm64-headless-swiftshader-host-screening-v1'),
-            budgets: z.object({
-                targetFps: z.number().min(1).max(360),
-                maxColdResourceLoadP95Ms: z.number().min(0.01).max(60000),
-                maxWarmResourceLoadP95Ms: z.number().min(0.01).max(60000),
-                maxImportParserP95Ms: z.number().min(0.01).max(60000),
-                maxPngParserP95Ms: z.number().min(0.01).max(60000),
-                maxReleaseCallP95Ms: z.number().min(0.01).max(60000),
-                maxEstimatedRgbaWorkingSetBytes: z.number().int().min(1048576).max(1073741824),
-            }).strict(),
-        }).strict().superRefine((input, context) => {
-            if (input.cycles < input.resourcePaths.length + 1)
-                context.addIssue({ code: 'custom', path: ['cycles'], message: 'Cycles must revisit and release every selected resource before injecting the failure case.' });
-            if (input.resourcePaths.some((item) => input.parseFixturePaths.includes(item)))
-                context.addIssue({ code: 'custom', path: ['parseFixturePaths'], message: 'Parser fixtures must be separate from the render stress resources.' });
-            if (!input.parseFixturePaths.includes(input.failureResourcePath) || input.resourcePaths.includes(input.failureResourcePath))
-                context.addIssue({ code: 'custom', path: ['failureResourcePath'], message: 'The failure path must be one of the separate parser fixtures.' });
-        }),
+        'content.stress.run': CONTENT_STRESS_RUN_INPUT,
     };
     return z.discriminatedUnion('command', COMMANDS_2X.map((command) => z.object({
         projectRoot,
@@ -216,29 +310,7 @@ function createServer(projectRoots, options = {}) {
     let requestId = 0;
     const server = new McpServer({ name: 'cocos-agent-2x', version: SERVER_VERSION });
 
-    server.registerResource('cocos2-mcp-tools', COCOS_2X_SKILL_URI, {
-        title: 'CocosAgent MCP tools for Creator 2.4',
-        description: 'Version-specific instructions for selecting Creator 2.4.15, executing semantic tools, recovering writes, and validating resources and content.',
-        mimeType: 'text/markdown',
-    }, async (uri) => ({ contents: [{ uri: uri.href, mimeType: 'text/markdown', text: fs.readFileSync(COCOS_2X_SKILL_PATH, 'utf8') }] }));
-
-    server.registerResource('cocos2-scene-composition-skill', COCOS_2X_COMPOSITION_SKILL_URI, {
-        title: 'CocosAgent Creator 2.4 scene composition skill',
-        description: 'Version-specific instructions for composing multiple nodes and components with the durable workflow tools.',
-        mimeType: 'text/markdown',
-    }, async (uri) => ({ contents: [{ uri: uri.href, mimeType: 'text/markdown', text: fs.readFileSync(COCOS_2X_COMPOSITION_SKILL_PATH, 'utf8') }] }));
-
-    server.registerResource('cocos2-prefab-source-edit-skill', COCOS_2X_PREFAB_SOURCE_SKILL_URI, {
-        title: 'CocosAgent Creator 2.4 Prefab source editing skill',
-        description: 'Version-specific workflow for inspecting, editing, reading back, compensating, and replaying existing Prefab source content.',
-        mimeType: 'text/markdown',
-    }, async (uri) => ({ contents: [{ uri: uri.href, mimeType: 'text/markdown', text: fs.readFileSync(COCOS_2X_PREFAB_SOURCE_SKILL_PATH, 'utf8') }] }));
-
-    server.registerResource('cocos2-runtime-performance-skill', COCOS_2X_PERFORMANCE_SKILL_URI, {
-        title: 'CocosAgent Creator 2.4 runtime performance diagnostic skill',
-        description: 'Runs a bounded Creator 2.4.15 Web-Mobile stress diagnostic with an explicit test profile and P95 budgets. It does not modify project content, but writes a trace and screenshots to the repository.',
-        mimeType: 'text/markdown',
-    }, async (uri) => ({ contents: [{ uri: uri.href, mimeType: 'text/markdown', text: fs.readFileSync(COCOS_2X_PERFORMANCE_SKILL_PATH, 'utf8') }] }));
+    registerSkillPackageResources(server);
 
     server.registerPrompt('cocos_2x_resource_to_scene_workflow', {
         title: 'Find or import PNGs into a Creator 2.4 scene',
@@ -345,19 +417,19 @@ function createServer(projectRoots, options = {}) {
 
     register('cocos_2x_instances_list',
         'List only the Creator 2.4.15 projects registered when this MCP process starts. Call this first to see which editor instances are reachable.',
-        z.object({}).strict(), 'instances.list', () => ({ targets: targetList }),
+        z.object({}).strict(), 'instances.list', () => ({ targets: targetList, mcpRuntime: MCP_RUNTIME }),
         { title: 'List Creator 2.4.15 instances', readOnlyHint: true, destructiveHint: false, openWorldHint: false });
 
     register('cocos_2x_instances_get',
         'Get the live state for one registered Creator 2.4.15 project. Choose projectRoot from cocos_2x_instances_list.',
         z.object({ projectRoot }).strict(), 'instances.get', ({ projectRoot: selected }) => ({
-            targets: targetList, projectRoot: selected, creatorVersion: CREATOR_VERSION,
+            targets: targetList, projectRoot: selected, creatorVersion: CREATOR_VERSION, mcpRuntime: MCP_RUNTIME,
         }), { title: 'Get a Creator 2.4.15 instance', readOnlyHint: true, destructiveHint: false, openWorldHint: false });
 
     register('cocos_2x_capabilities_list',
         'List the live command contracts and availability for one registered Creator 2.4.15 project. Query this before command execution.',
         z.object({ projectRoot }).strict(), 'capabilities.list', ({ projectRoot: selected }) => ({
-            targets: targetList, projectRoot: selected, creatorVersion: CREATOR_VERSION,
+            targets: targetList, projectRoot: selected, creatorVersion: CREATOR_VERSION, mcpRuntime: MCP_RUNTIME,
         }), { title: 'List Creator 2.4.15 capabilities', readOnlyHint: true, destructiveHint: false, openWorldHint: false });
 
     const dedicatedCommandTools = [
@@ -390,36 +462,7 @@ function createServer(projectRoots, options = {}) {
             name: 'cocos_2x_content_stress_run',
             command: 'content.stress.run',
             description: 'Run the Creator 2.4.15 Web-Mobile content stress diagnostic on a verified build. Requires 512px+ complex PNGs, cold-cache and warm-cache loads, 32–1024 temporary Sprite nodes, 8–256 replacement cycles, an explicit host screening budget profile and explicit frame/load/parser/release/estimated-RGBA limits. It records lifecycle findings and explanations in a JSON trace and screenshots; it does not change the project build, scene, or release.',
-            input: z.object({
-                buildId: CONTENT_BUILD_ID,
-                resourcePaths: z.array(z.string().regex(/^[A-Za-z0-9_-]{1,64}(?:\/[A-Za-z0-9_-]{1,64}){0,7}$/)).min(2).max(16)
-                    .refine((values) => new Set(values).size === values.length),
-                parseFixturePaths: z.array(z.string().regex(/^[A-Za-z0-9_-]{1,64}(?:\/[A-Za-z0-9_-]{1,64}){0,7}$/)).min(2).max(16)
-                    .refine((values) => new Set(values).size === values.length),
-                failureResourcePath: z.string().regex(/^[A-Za-z0-9_-]{1,64}(?:\/[A-Za-z0-9_-]{1,64}){0,7}$/),
-                cycles: z.number().int().min(8).max(256),
-                nodeCount: z.number().int().min(32).max(1024),
-                packable: z.boolean(),
-                profileId: z.literal('macos-arm64-chrome-headless-swiftshader-1280x800'),
-                loadMode: z.literal('cold-and-warm'),
-                budgetProfileId: z.literal('macos-arm64-headless-swiftshader-host-screening-v1'),
-                budgets: z.object({
-                    targetFps: z.number().min(1).max(360),
-                    maxColdResourceLoadP95Ms: z.number().min(0.01).max(60000),
-                    maxWarmResourceLoadP95Ms: z.number().min(0.01).max(60000),
-                    maxImportParserP95Ms: z.number().min(0.01).max(60000),
-                    maxPngParserP95Ms: z.number().min(0.01).max(60000),
-                    maxReleaseCallP95Ms: z.number().min(0.01).max(60000),
-                    maxEstimatedRgbaWorkingSetBytes: z.number().int().min(1048576).max(1073741824),
-                }).strict(),
-            }).strict().superRefine((input, context) => {
-                if (input.cycles < input.resourcePaths.length + 1)
-                    context.addIssue({ code: 'custom', path: ['cycles'], message: 'Cycles must revisit and release every selected resource before the failure case.' });
-                if (input.resourcePaths.some((item) => input.parseFixturePaths.includes(item)))
-                    context.addIssue({ code: 'custom', path: ['parseFixturePaths'], message: 'Parser fixtures must be separate from render stress resources.' });
-                if (!input.parseFixturePaths.includes(input.failureResourcePath) || input.resourcePaths.includes(input.failureResourcePath))
-                    context.addIssue({ code: 'custom', path: ['failureResourcePath'], message: 'Failure path must use a separate parser fixture.' });
-            }),
+            input: CONTENT_STRESS_RUN_INPUT,
         },
     ];
     for (const tool of dedicatedCommandTools) {

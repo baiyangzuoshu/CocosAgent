@@ -5,7 +5,7 @@ description: Import user-selected PNG files into a Cocos Creator 2.4.15 project,
 
 # Creator 2.4.15 PNG resource-to-scene workflow
 
-Use only with the `cocos-agent-2x` MCP tools and an explicitly selected Creator **2.4.15** project. Read the [pipeline contract](../../../../docs/agent-foundation/cocos-agent-resource-scene-pipeline-0.1.md) and the official [2.4 sprite workflow](https://docs.cocos.com/creator/2.4/manual/zh/asset-workflow/sprite.html) when making resource-format or editor-behavior claims. This workflow currently supports PNG → Texture → SpriteFrame → Canvas Sprite on the local Web preview; it does not imply support for arbitrary formats, native builds, Asset Bundle delivery, or Creator 3.8.
+Use only with the `cocos-agent-2x` MCP tools and an explicitly selected Creator **2.4.15** project. Read the [pipeline contract](../../references/agent-foundation/cocos-agent-resource-scene-pipeline-0.1.md) and the official [2.4 sprite workflow](https://docs.cocos.com/creator/2.4/manual/zh/asset-workflow/sprite.html) when making resource-format or editor-behavior claims. This workflow currently supports PNG → Texture → SpriteFrame → Canvas Sprite on the local Web preview; it does not imply support for arbitrary formats, native builds, Asset Bundle delivery, or Creator 3.8.
 
 ## Import and place
 

@@ -225,7 +225,7 @@
       "required": ["id", "contractVersion", "access", "inputSchema", "input", "preconditions", "status", "reason"],
       "properties": {
         "id": { "enum": ["scene.snapshot", "scene.node.inspect", "asset.searchPng", "asset.importPng", "asset.removeImportedPng", "asset.validatePng", "asset.refreshPng", "asset.refreshFolder", "scene.pngSprite", "scene.node.create", "scene.node.patch", "prefab.source.inspect", "prefab.source.patch", "content.stress.run"] },
-        "contractVersion": { "const": "0.1" },
+        "contractVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
         "access": { "enum": ["read", "write"] },
         "inputSchema": { "type": "string" },
         "input": { "type": "object" },

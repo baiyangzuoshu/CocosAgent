@@ -7,8 +7,10 @@ const childProcess = require('child_process');
 const WebSocket = require('ws');
 const { searchPngAssets } = require('./asset-search');
 const { CredentialStore } = require('./credential-store.cjs');
+const extensionPackage = require('./package.json');
 
 const CREATOR_VERSION = '2.4.15';
+const EXTENSION_VERSION = extensionPackage.version;
 const PROTOCOL_VERSION = '0.1';
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 const SESSION_PATH = path.join(PROJECT_ROOT, 'temp', 'cocos-agent-bridge', 'session.json');
@@ -35,6 +37,17 @@ instanceBytes[6] = (instanceBytes[6] & 0x0f) | 0x40;
 instanceBytes[8] = (instanceBytes[8] & 0x3f) | 0x80;
 const instanceHex = instanceBytes.toString('hex');
 const INSTANCE_ID = `${instanceHex.slice(0, 8)}-${instanceHex.slice(8, 12)}-${instanceHex.slice(12, 16)}-${instanceHex.slice(16, 20)}-${instanceHex.slice(20)}`;
+const EXTENSION_SOURCE_FILES = ['main.js', 'package-lock.json', 'package.json', 'scene.js'];
+const EXTENSION_SOURCE_FINGERPRINT = (() => {
+    const hash = crypto.createHash('sha256');
+    for (const relativePath of EXTENSION_SOURCE_FILES) {
+        hash.update(relativePath);
+        hash.update('\0');
+        hash.update(fs.readFileSync(path.join(__dirname, relativePath)));
+        hash.update('\0');
+    }
+    return hash.digest('hex');
+})();
 const COMMAND_INPUTS = {
     snapshot: { type: 'object', additionalProperties: false,
         properties: { targetNodeName: { type: 'string', minLength: 1, maxLength: 64 } } },
@@ -213,6 +226,17 @@ function commandCatalog(context) {
     ];
 }
 
+function commandContractFingerprint(commands) {
+    return crypto.createHash('sha256').update(JSON.stringify(commands.map((command) => ({
+        id: command.id,
+        contractVersion: command.contractVersion,
+        access: command.access,
+        inputSchema: command.inputSchema,
+        input: command.input,
+        preconditions: command.preconditions,
+    })))).digest('hex');
+}
+
 function send(value) {
     if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(value));
 }
@@ -239,7 +263,10 @@ function onMessage(raw) {
             send({ type: 'response', id: message.id, ok: true, result: {
                 nonce: message.params && message.params.nonce, instanceId: INSTANCE_ID,
                 projectRoot: PROJECT_ROOT, creatorVersion: CREATOR_VERSION,
-                extensionVersion: '0.1.0', activeScene: sceneContext.sceneName,
+                extensionVersion: EXTENSION_VERSION,
+                extensionSourceFingerprint: EXTENSION_SOURCE_FINGERPRINT,
+                commandContractFingerprint: commandContractFingerprint(commands),
+                activeScene: sceneContext.sceneName,
                 catalogRevision: crypto.createHash('sha256').update(JSON.stringify({ scene: sceneContext.sceneName, commands })).digest('hex'),
                 commands,
             } });

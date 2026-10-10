@@ -2,6 +2,14 @@
 
 This plugin packages the Creator 2.4.15 workflow skill and connects Codex to the existing local MCP stdio Host. The Host supplies no model and asks for no LLM key. The plugin is local-only because its MCP process communicates with the user’s local Creator editor and project files.
 
+The plugin package is the single maintained source for its 2.4 task skills. It currently contains 11 task skills and ships their linked contracts, probes and acceptance records under `references/`. Docs entries for packaged skills point back to the plugin source. Before installing or updating, validate the package and its reference hashes:
+
+```sh
+node plugins/cocos-agent-2x/scripts/package-skills.mjs --check
+```
+
+The MCP server exposes `cocos://2x/skills/index`, each task skill URI, and the listed reference URIs. The index reports plugin/MCP versions, the plugin source fingerprint, and SHA-256 for each skill and reference. Read the index before relying on an installed skill snapshot.
+
 ## Prepare this checkout
 
 From the repository root, install the pinned MCP dependencies and generate a machine-local server configuration:
@@ -15,7 +23,7 @@ node plugins/cocos-agent-2x/scripts/configure-local-plugin.mjs
 
 Pass additional registered Creator 2.4.15 projects with repeated `--project /absolute/path` arguments. The generated `.mcp.json` is local configuration and is ignored by Git. It uses the current Node executable and an explicit project allowlist. The local marketplace manifest is `plugins/.agents/plugins/marketplace.json`.
 
-Register the local marketplace with `codex plugin marketplace add ./plugins`, restart Codex desktop, and install **CocosAgent 2.x**. Instance discovery and four dedicated read-only inspection tools are pre-approved in the generated local config; the mixed semantic command executor and all other state-changing tools remain subject to the host’s approval policy.
+Register the local marketplace with `codex plugin marketplace add ./plugins`, then install or update **CocosAgent 2.x** from `cocos-agent-local`. The installed package is versioned; verify it with `codex plugin list` and check that its cache contains every skill folder from `skill-package.json`. A running Codex task can retain the skill/tool registry it loaded at startup; package installation alone does not prove that an already-running task has refreshed its view. Instance discovery and four dedicated read-only inspection tools are pre-approved in the generated local config; the mixed semantic command executor and all other state-changing tools remain subject to the host’s approval policy.
 
 ## Verify the connection
 

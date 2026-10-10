@@ -5,7 +5,7 @@ description: Modify whitelisted Cocos Creator 2.4.15 scene-node properties, crea
 
 # Cocos Creator 2.4.15 scene-node operations
 
-Use only with the `cocos-agent-2x` MCP tools and the exact ready Creator 2.4.15 project. Read [the operation contract](../../../../docs/agent-foundation/scene-node-patch-prefab-0.1.md) and the [official 2.4 Prefab manual](https://docs.cocos.com/creator/2.4/manual/zh/asset-workflow/prefab.html). Creator 3.8 is out of scope for these commands.
+Use only with the `cocos-agent-2x` MCP tools and the exact ready Creator 2.4.15 project. Read [the operation contract](../../references/agent-foundation/scene-node-patch-prefab-0.1.md) and the [official 2.4 Prefab manual](https://docs.cocos.com/creator/2.4/manual/zh/asset-workflow/prefab.html). Creator 3.8 is out of scope for these commands.
 
 ## Patch an existing node
 

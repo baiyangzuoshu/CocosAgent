@@ -7,10 +7,50 @@ const path = require('path');
 const { isDeepStrictEqual } = require('util');
 const WebSocket = require('./vendor/ws');
 const catalogSchema = require('./catalog.schema.json');
+const { fingerprintFiles, listFiles } = require('./runtime-fingerprint');
+const HOST_VERSION = '0.2.0';
+const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
+function readMcpRuntime(value) {
+    if (!value) return null;
+    try {
+        const parsed = JSON.parse(value);
+        if (!parsed || typeof parsed !== 'object' || typeof parsed.version !== 'string'
+            || !/^[0-9a-f]{64}$/.test(parsed.sourceFingerprint || '')
+            || !/^[0-9a-f]{64}$/.test(parsed.pluginFingerprint || '')
+            || !/^[0-9a-f]{64}$/.test(parsed.contractSchemaFingerprint || '')
+            || typeof parsed.pluginVersion !== 'string') return null;
+        return parsed;
+    } catch (_) { return null; }
+}
+const MCP_PACKAGE_PATH = path.join(__dirname, 'mcp', 'package.json');
+const MCP_SOURCE_PATH = path.join(__dirname, 'mcp', 'mcp-server.mjs');
+const PLUGIN_ROOT_PATH = path.resolve(__dirname, '../../plugins/cocos-agent-2x');
+const PLUGIN_MANIFEST_PATH = path.join(PLUGIN_ROOT_PATH, '.codex-plugin/plugin.json');
+const mcpPackage = JSON.parse(fs.readFileSync(MCP_PACKAGE_PATH, 'utf8'));
+const pluginManifest = JSON.parse(fs.readFileSync(PLUGIN_MANIFEST_PATH, 'utf8'));
+const expectedMcpSourceFingerprint = fingerprintFiles(path.dirname(MCP_SOURCE_PATH), ['mcp-server.mjs', 'package.json', 'package-lock.json']);
+const expectedSchemaFingerprint = sha256(fs.readFileSync(path.join(__dirname, 'catalog.schema.json')));
+const expectedHostFingerprint = fingerprintFiles(__dirname, [
+    'catalog-host.js', 'agent-jsonl.js', 'agent-dispatch.js', 'catalog.schema.json', 'runtime-fingerprint.js',
+]);
+const hostRuntime = { version: HOST_VERSION, sourceFingerprint: expectedHostFingerprint, contractSchemaFingerprint: expectedSchemaFingerprint };
+const expectedPluginVersion = pluginManifest.version;
+const expectedPluginFingerprint = fingerprintFiles(PLUGIN_ROOT_PATH, [
+    '.codex-plugin/plugin.json', '.mcp.json', 'README.md', 'skill-package.json',
+    ...listFiles(PLUGIN_ROOT_PATH, 'scripts'), ...listFiles(PLUGIN_ROOT_PATH, 'skills'), ...listFiles(PLUGIN_ROOT_PATH, 'references'),
+]);
+function expectedExtensionFingerprint(projectRoot) {
+    const extensionRoot = path.join(projectRoot, 'packages', 'cocos-agent-bridge');
+    const relativeFiles = ['main.js', 'scene.js', 'package.json', 'package-lock.json'];
+    const files = relativeFiles.map((name) => path.join(extensionRoot, name));
+    if (!files.every((file) => fs.existsSync(file))) return null;
+    return fingerprintFiles(extensionRoot, relativeFiles);
+}
 
 const args = process.argv.slice(2);
 const values = (flag) => args.flatMap((value, index) => value === flag ? [args[index + 1]] : []);
 const one = (flag) => values(flag)[0];
+const mcpRuntime = readMcpRuntime(one('--mcp-runtime'));
 const query = one('--query') || 'instances.list';
 const selectedProject = one('--project') && path.resolve(one('--project'));
 const selectedVersion = one('--creator-version');
@@ -55,7 +95,10 @@ for (const arg of targetArgs) {
         return;
     }
     seen.add(projectRoot);
-    targets.push({ creatorVersion, projectRoot, instanceId: null, state: 'disconnected', activeScene: null, catalogRevision: null, commands: [], error: null,
+    targets.push({ creatorVersion, projectRoot, instanceId: null, state: 'disconnected', activeScene: null, catalogRevision: null,
+        extensionVersion: null, extensionSourceFingerprint: null, commandContractFingerprint: null,
+        contractCompatibility: null, contractDiagnostics: [], commands: [], error: null,
+        mcpRuntime, hostRuntime,
         sessionId: crypto.randomUUID(), token: crypto.randomBytes(32).toString('hex'), socket: null, requestId: null, nonce: null });
 }
 if (query !== 'instances.list') {
@@ -89,9 +132,22 @@ let finished = false;
 
 function sessionPath(target) { return path.join(target.projectRoot, 'temp', 'cocos-agent-bridge', 'session.json'); }
 function publicInstance(target) {
+    let extensionVersion = null;
+    try { extensionVersion = JSON.parse(fs.readFileSync(path.join(target.projectRoot, 'packages/cocos-agent-bridge/package.json'), 'utf8')).version; }
+    catch (_) { /* Keep expected version unavailable for projects without the extension package. */ }
     return { instanceId: target.instanceId, projectRoot: target.projectRoot, creatorVersion: target.creatorVersion,
         extensionVersion: target.extensionVersion || null, state: target.state,
-        activeScene: target.activeScene, catalogRevision: target.catalogRevision, error: target.error };
+        extensionSourceFingerprint: target.extensionSourceFingerprint || null,
+        commandContractFingerprint: target.commandContractFingerprint || null,
+        activeScene: target.activeScene, catalogRevision: target.catalogRevision,
+        hostRuntime: target.hostRuntime,
+        expectedRuntime: { plugin: { version: expectedPluginVersion, fingerprint: expectedPluginFingerprint },
+            mcp: { version: mcpPackage.version, sourceFingerprint: expectedMcpSourceFingerprint,
+                contractSchemaFingerprint: expectedSchemaFingerprint },
+            creatorExtension: { version: extensionVersion, sourceFingerprint: expectedExtensionFingerprint(target.projectRoot) } },
+        mcpRuntime: target.mcpRuntime ? { ...target.mcpRuntime, status: 'reported' } : { status: 'unreported' },
+        contractCompatibility: target.contractCompatibility, contractDiagnostics: target.contractDiagnostics,
+        error: target.error };
 }
 function cleanup() {
     if (finished) return;
@@ -136,37 +192,119 @@ function unavailable(target, code) {
     maybeFinish();
 }
 
+function commandContractFingerprint(commands) {
+    return sha256(JSON.stringify(commands.map((command) => ({ id: command.id, contractVersion: command.contractVersion,
+        access: command.access, inputSchema: command.inputSchema, input: command.input, preconditions: command.preconditions }))));
+}
+
+function runtimeCompatibility(target, result, actualContractFingerprint) {
+    if (target.creatorVersion !== '2.4.15') return { status: 'legacy-unverified', blockers: [], diagnostics: [] };
+    const diagnostics = [];
+    const blockers = [];
+    const extensionRoot = path.join(target.projectRoot, 'packages', 'cocos-agent-bridge');
+    let expectedExtensionVersion = null;
+    try { expectedExtensionVersion = JSON.parse(fs.readFileSync(path.join(extensionRoot, 'package.json'), 'utf8')).version; }
+    catch (_) { /* Report the missing local build metadata. */ }
+    const expectedExtFingerprint = expectedExtensionFingerprint(target.projectRoot);
+    if (!result.extensionSourceFingerprint) {
+        diagnostics.push({ component: 'creatorExtension', status: 'unattested', code: 'EXTENSION_FINGERPRINT_UNREPORTED',
+            expected: expectedExtFingerprint, actual: null });
+        blockers.push('EXTENSION_FINGERPRINT_UNREPORTED');
+    } else if (result.extensionSourceFingerprint !== expectedExtFingerprint) {
+        diagnostics.push({ component: 'creatorExtension', status: 'mismatch', code: 'CREATOR_EXTENSION_STALE',
+            expected: expectedExtFingerprint, actual: result.extensionSourceFingerprint });
+        blockers.push('CREATOR_EXTENSION_STALE');
+    }
+    if (!result.extensionVersion || result.extensionVersion !== expectedExtensionVersion) {
+        diagnostics.push({ component: 'creatorExtension', status: 'mismatch', code: 'EXTENSION_VERSION_MISMATCH',
+            expected: expectedExtensionVersion, actual: result.extensionVersion || null });
+        blockers.push('EXTENSION_VERSION_MISMATCH');
+    }
+    if (!result.commandContractFingerprint || result.commandContractFingerprint !== actualContractFingerprint) {
+        diagnostics.push({ component: 'creatorExtension', status: 'mismatch', code: 'EXTENSION_CONTRACT_FINGERPRINT_MISMATCH',
+            expected: actualContractFingerprint, actual: result.commandContractFingerprint || null });
+        blockers.push('EXTENSION_CONTRACT_FINGERPRINT_MISMATCH');
+    }
+    if (!target.mcpRuntime) {
+        diagnostics.push({ component: 'mcp', status: 'unattested', code: 'MCP_RUNTIME_UNREPORTED', expected: {
+            version: mcpPackage.version, pluginVersion: expectedPluginVersion,
+            pluginFingerprint: expectedPluginFingerprint, sourceFingerprint: expectedMcpSourceFingerprint,
+            contractSchemaFingerprint: expectedSchemaFingerprint,
+        }, actual: null });
+        blockers.push('MCP_RUNTIME_UNREPORTED');
+    } else {
+        const mcpChecks = [
+            ['MCP_VERSION_MISMATCH', mcpPackage.version, target.mcpRuntime.version],
+            ['PLUGIN_VERSION_MISMATCH', expectedPluginVersion, target.mcpRuntime.pluginVersion],
+            ['PLUGIN_FINGERPRINT_MISMATCH', expectedPluginFingerprint, target.mcpRuntime.pluginFingerprint],
+            ['MCP_SOURCE_FINGERPRINT_MISMATCH', expectedMcpSourceFingerprint, target.mcpRuntime.sourceFingerprint],
+            ['MCP_CONTRACT_SCHEMA_MISMATCH', expectedSchemaFingerprint, target.mcpRuntime.contractSchemaFingerprint],
+        ];
+        for (const [code, expected, actual] of mcpChecks) {
+            if (actual !== expected) {
+                diagnostics.push({ component: code.startsWith('PLUGIN') ? 'plugin' : 'mcp', status: 'mismatch', code,
+                    expected, actual: actual || null });
+                blockers.push(code);
+            }
+        }
+    }
+    return { status: blockers.length ? 'mismatch' : 'matched', blockers, diagnostics };
+}
+
+function runtimeStateMatches(command, sceneReady) {
+    const mustMatchScene = ['scene.snapshot', 'scene.node.inspect', 'scene.node.create', 'scene.node.patch'];
+    if (mustMatchScene.includes(command.id)) {
+        return sceneReady
+            ? command.status === 'available' && command.reason === null
+            : command.status === 'unavailable' && command.reason === 'NO_OPEN_SCENE';
+    }
+    if (command.id === 'scene.pngSprite') {
+        if (!sceneReady) return command.status === 'unavailable' && command.reason === 'NO_OPEN_SCENE';
+        return command.status === 'available' && command.reason === null
+            || command.status === 'unavailable' && command.reason === 'CANVAS_NOT_FOUND';
+    }
+    if (command.id === 'prefab.source.patch') {
+        return command.status === 'available' && command.reason === null
+            || command.status === 'unavailable' && command.reason === (sceneReady ? 'PREFAB_EDIT_MODE_API_UNAVAILABLE' : 'NO_OPEN_SCENE');
+    }
+    if (command.id === 'prefab.source.inspect') {
+        return command.status === 'available' && command.reason === null
+            || command.status === 'unavailable' && command.reason === 'ASSETDB_UNAVAILABLE';
+    }
+    if (command.id === 'asset.searchPng') {
+        return command.status === 'available' && command.reason === null
+            || command.status === 'unavailable' && command.reason === 'ASSETDB_UNAVAILABLE';
+    }
+    if (command.id === 'asset.refreshFolder') {
+        return command.status === 'available' && command.reason === null
+            || command.status === 'unavailable' && command.reason === 'ASSETDB_REFRESH_UNAVAILABLE';
+    }
+    return command.status === 'available' && command.reason === null;
+}
+
 function validCatalog(target, result) {
-    const expectedCommandCount = target.creatorVersion === '2.4.15' ? 14 : 5;
-    if (!Array.isArray(result.commands) || result.commands.length !== expectedCommandCount
+    if (!Array.isArray(result.commands) || result.commands.length > 64
         || !(result.activeScene === null || typeof result.activeScene === 'string')
         || !/^[0-9a-f]{64}$/.test(result.catalogRevision || '')) return false;
     const expected = {
         'scene.snapshot': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/snapshotInput', input: catalogSchema.$defs.snapshotInput, preconditions: ['activeScene'] },
         'scene.node.inspect': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/nodeInspectInput', input: catalogSchema.$defs.nodeInspectInput, preconditions: ['activeScene'] },
-        ...(target.creatorVersion === '2.4.15' ? { 'asset.searchPng': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/pngAssetSearchInput',
-            input: catalogSchema.$defs.pngAssetSearchInput, preconditions: ['assetDbReady'] } } : {}),
+        ...(target.creatorVersion === '2.4.15' ? { 'asset.searchPng': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/pngAssetSearchInput', input: catalogSchema.$defs.pngAssetSearchInput, preconditions: ['assetDbReady'] } } : {}),
         'asset.importPng': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/importPngInput', input: catalogSchema.$defs.importPngInput, preconditions: ['stagedPng', 'destinationFree'] },
-        ...(target.creatorVersion === '2.4.15' ? { 'asset.removeImportedPng': { access: 'write',
-            inputSchema: 'catalog.schema.json#/$defs/removeImportedPngInput', input: catalogSchema.$defs.removeImportedPngInput,
-            preconditions: ['assetIdentityMatches', 'noSerializedReferences'] } } : {}),
-        ...(target.creatorVersion === '2.4.15' ? { 'asset.validatePng': { access: 'read',
-            inputSchema: 'catalog.schema.json#/$defs/pipelinePngInput', input: catalogSchema.$defs.pipelinePngInput,
-            preconditions: ['pipelineOwnedAsset', 'importedMetadata'] },
+        ...(target.creatorVersion === '2.4.15' ? { 'asset.removeImportedPng': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/removeImportedPngInput',
+            input: catalogSchema.$defs.removeImportedPngInput, preconditions: ['assetIdentityMatches', 'noSerializedReferences'] } } : {}),
+        ...(target.creatorVersion === '2.4.15' ? { 'asset.validatePng': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/pipelinePngInput',
+            input: catalogSchema.$defs.pipelinePngInput, preconditions: ['pipelineOwnedAsset', 'importedMetadata'] },
         'asset.refreshPng': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/pipelinePngInput',
             input: catalogSchema.$defs.pipelinePngInput, preconditions: ['pipelineOwnedAsset', 'assetDbMappingStale', 'stableUuid'] },
         'asset.refreshFolder': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/assetFolderRefreshInput',
             input: catalogSchema.$defs.assetFolderRefreshInput, preconditions: ['folderUnderAssets', 'assetDbRefreshAvailable'] } } : {}),
-        'scene.pngSprite': { access: 'write', inputSchema: target.creatorVersion === '2.4.15'
-            ? 'catalog.schema.json#/$defs/pngSpriteInput2x' : 'catalog.schema.json#/$defs/pngSpriteInput',
+        'scene.pngSprite': { access: 'write', inputSchema: target.creatorVersion === '2.4.15' ? 'catalog.schema.json#/$defs/pngSpriteInput2x' : 'catalog.schema.json#/$defs/pngSpriteInput',
             input: target.creatorVersion === '2.4.15' ? catalogSchema.$defs.pngSpriteInput2x : catalogSchema.$defs.pngSpriteInput,
             preconditions: target.creatorVersion === '2.4.15' ? ['activeScene', 'canvasExisting', 'spriteFrameImported'] : ['activeScene', 'spriteFrameImported'] },
-        'scene.node.create': { access: 'write', inputSchema: target.creatorVersion === '2.4.15'
-            ? 'catalog.schema.json#/$defs/nodeCreateInput2x' : 'catalog.schema.json#/$defs/nodeCreateInput',
+        'scene.node.create': { access: 'write', inputSchema: target.creatorVersion === '2.4.15' ? 'catalog.schema.json#/$defs/nodeCreateInput2x' : 'catalog.schema.json#/$defs/nodeCreateInput',
             input: target.creatorVersion === '2.4.15' ? catalogSchema.$defs.nodeCreateInput2x : catalogSchema.$defs.nodeCreateInput,
-            preconditions: target.creatorVersion === '2.4.15'
-                ? ['activeScene', 'parentIdentity', 'componentTypesWhitelisted', 'componentSetCompatible', 'resourceReferencesResolvable', 'prefabAssetResolvableIfRequested']
-                : ['activeScene', 'parentIdentity'] },
+            preconditions: target.creatorVersion === '2.4.15' ? ['activeScene', 'parentIdentity', 'componentTypesWhitelisted', 'componentSetCompatible', 'resourceReferencesResolvable', 'prefabAssetResolvableIfRequested'] : ['activeScene', 'parentIdentity'] },
         ...(target.creatorVersion === '2.4.15' ? { 'scene.node.patch': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/nodePatchInput2x',
             input: catalogSchema.$defs.nodePatchInput2x, preconditions: ['activeScene', 'nodePathAndUuidMatch', 'expectedBeforeValues', 'propertyWhitelist', 'resourceReferencesResolvable'] } } : {}),
         ...(target.creatorVersion === '2.4.15' ? { 'prefab.source.patch': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/prefabSourcePatchInput2x',
@@ -174,45 +312,80 @@ function validCatalog(target, result) {
         'prefab.source.inspect': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/prefabSourceInspectInput2x',
             input: catalogSchema.$defs.prefabSourceInspectInput2x, preconditions: ['prefabUuidResolvable', 'serializedPrefabReadable'] },
         'content.stress.run': { contractVersion: '0.2', access: 'read', inputSchema: 'catalog.schema.json#/$defs/contentStressRunInput2x',
-            input: catalogSchema.$defs.contentStressRunInput2x,
-            preconditions: ['completedWebMobileBuild', 'complexPackagedPngResources', 'coldCacheProfile', 'explicitDeviceScreeningBudget'] } } : {}),
+            input: catalogSchema.$defs.contentStressRunInput2x, preconditions: ['completedWebMobileBuild', 'complexPackagedPngResources', 'coldCacheProfile', 'explicitDeviceScreeningBudget'] } } : {}),
     };
-    const seen = new Set();
+    const actualRevision = sha256(JSON.stringify({ scene: result.activeScene, commands: result.commands }));
+    if (actualRevision !== result.catalogRevision) return false;
+    const actualFingerprint = commandContractFingerprint(result.commands);
+    const compatibility = runtimeCompatibility(target, result, actualFingerprint);
+    const byId = new Map();
+    const duplicateIds = new Set();
     for (const command of result.commands) {
-        const rule = command && expected[command.id];
-        if (!rule || seen.has(command.id) || command.contractVersion !== (rule.contractVersion || '0.1') || command.access !== rule.access
-            || command.inputSchema !== rule.inputSchema || !isDeepStrictEqual(command.input, rule.input)
-            || !isDeepStrictEqual(command.preconditions, rule.preconditions)
-            || !['available', 'unavailable'].includes(command.status)
-            || (command.status === 'available' ? command.reason !== null : typeof command.reason !== 'string')) return false;
-        if (command.id === 'asset.searchPng' && (command.status === 'unavailable' ? command.reason !== 'ASSETDB_UNAVAILABLE' : command.reason !== null)) return false;
-        if (command.id === 'asset.refreshFolder' && (command.status === 'unavailable' ? command.reason !== 'ASSETDB_REFRESH_UNAVAILABLE' : command.reason !== null)) return false;
-        seen.add(command.id);
+        if (!command || typeof command.id !== 'string') continue;
+        if (byId.has(command.id)) duplicateIds.add(command.id);
+        else byId.set(command.id, command);
     }
-    const commands = Object.fromEntries(result.commands.map((command) => [command.id, command]));
+    const diagnostics = [...compatibility.diagnostics];
+    const normalized = [];
     const sceneReady = typeof result.activeScene === 'string' && result.activeScene.length > 0;
-    if (commands['asset.importPng'].status !== 'available') return false;
-    if (commands['scene.snapshot'].status !== (sceneReady ? 'available' : 'unavailable')
-        || commands['scene.snapshot'].reason !== (sceneReady ? null : 'NO_OPEN_SCENE')) return false;
-    if (commands['scene.node.inspect'].status !== (sceneReady ? 'available' : 'unavailable')
-        || commands['scene.node.inspect'].reason !== (sceneReady ? null : 'NO_OPEN_SCENE')) return false;
-    if (commands['scene.node.create'].status !== (sceneReady ? 'available' : 'unavailable')
-        || commands['scene.node.create'].reason !== (sceneReady ? null : 'NO_OPEN_SCENE')) return false;
-    if (target.creatorVersion === '2.4.15' && (commands['scene.node.patch'].status !== (sceneReady ? 'available' : 'unavailable')
-        || commands['scene.node.patch'].reason !== (sceneReady ? null : 'NO_OPEN_SCENE'))) return false;
-    if (target.creatorVersion === '2.4.15') {
-        if (commands['prefab.source.patch'].status === 'available' && commands['prefab.source.patch'].reason !== null) return false;
-        if (commands['prefab.source.patch'].status === 'unavailable'
-            && commands['prefab.source.patch'].reason !== (sceneReady ? 'PREFAB_EDIT_MODE_API_UNAVAILABLE' : 'NO_OPEN_SCENE')) return false;
-        if (commands['prefab.source.inspect'].status !== 'available'
-            && commands['prefab.source.inspect'].reason !== 'ASSETDB_UNAVAILABLE') return false;
-        if (commands['prefab.source.inspect'].status === 'available' && commands['prefab.source.inspect'].reason !== null) return false;
-        if (commands['content.stress.run'].status !== 'available' || commands['content.stress.run'].reason !== null) return false;
+    for (const [id, rule] of Object.entries(expected)) {
+        const actual = byId.get(id);
+        const version = rule.contractVersion || '0.1';
+        const expectedContract = { id, contractVersion: version, access: rule.access, inputSchema: rule.inputSchema,
+            input: rule.input, preconditions: rule.preconditions };
+        if (!actual) {
+            normalized.push({ ...expectedContract, status: 'unavailable', reason: 'COMMAND_CONTRACT_MISSING',
+                contractStatus: 'missing', editorStatus: 'unavailable' });
+            diagnostics.push({ component: 'command', id, status: 'missing', code: 'COMMAND_CONTRACT_MISSING' });
+            continue;
+        }
+        const mismatchFields = [];
+        if (duplicateIds.has(id)) mismatchFields.push('duplicateId');
+        for (const field of ['contractVersion', 'access', 'inputSchema', 'input', 'preconditions']) {
+            const expectedValue = field === 'contractVersion' ? version : rule[field];
+            if (!isDeepStrictEqual(actual[field], expectedValue)) mismatchFields.push(field);
+        }
+        const runtimeStatusValid = ['available', 'unavailable'].includes(actual.status)
+            && (actual.status === 'available' ? actual.reason === null : typeof actual.reason === 'string');
+        if (!runtimeStatusValid) mismatchFields.push('runtimeStatus');
+        if (target.creatorVersion === '2.4.15' && runtimeStatusValid && !runtimeStateMatches(actual, sceneReady))
+            mismatchFields.push('runtimeAvailability');
+        const editorStatus = runtimeStatusValid ? actual.status : 'unavailable';
+        const editorReason = runtimeStatusValid ? actual.reason : 'INVALID_RUNTIME_STATUS';
+        let status = editorStatus;
+        let reason = editorReason;
+        if (mismatchFields.length) {
+            status = 'unavailable';
+            reason = 'COMMAND_CONTRACT_MISMATCH';
+            diagnostics.push({ component: 'command', id, status: 'mismatch', code: reason, fields: mismatchFields });
+        } else if (compatibility.blockers.length) {
+            status = 'unavailable';
+            reason = compatibility.blockers[0];
+        }
+        normalized.push({ ...actual, status, reason,
+            editorStatus, editorReason,
+            contractStatus: mismatchFields.length ? 'mismatch' : 'matched' });
     }
-    if (!sceneReady && (commands['scene.pngSprite'].status !== 'unavailable' || commands['scene.pngSprite'].reason !== 'NO_OPEN_SCENE')) return false;
-    if (sceneReady && target.creatorVersion === '3.8.7' && commands['scene.pngSprite'].status !== 'available') return false;
-    if (sceneReady && target.creatorVersion === '2.4.15' && commands['scene.pngSprite'].status === 'unavailable'
-        && commands['scene.pngSprite'].reason !== 'CANVAS_NOT_FOUND') return false;
+    for (const actual of result.commands) {
+        if (!actual || typeof actual.id !== 'string') {
+            diagnostics.push({ component: 'command', status: 'invalid', code: 'COMMAND_DESCRIPTOR_INVALID' });
+            continue;
+        }
+        if (expected[actual.id]) continue;
+        normalized.push({ ...actual, editorStatus: actual.status, editorReason: actual.reason,
+            status: 'unavailable', reason: 'COMMAND_NOT_SUPPORTED_BY_HOST', contractStatus: 'unsupported' });
+        diagnostics.push({ component: 'command', id: actual.id, status: 'unsupported', code: 'COMMAND_NOT_SUPPORTED_BY_HOST' });
+    }
+    target.commands = normalized;
+    target.activeScene = result.activeScene;
+    target.catalogRevision = result.catalogRevision;
+    target.extensionVersion = result.extensionVersion || null;
+    target.extensionSourceFingerprint = result.extensionSourceFingerprint || null;
+    target.commandContractFingerprint = actualFingerprint;
+    target.contractCompatibility = { status: compatibility.status, blockers: compatibility.blockers,
+        editorContractStatus: result.commandContractFingerprint === actualFingerprint ? 'matched' : 'mismatch',
+        hostContractStatus: diagnostics.some((entry) => entry.component === 'command' && entry.status !== 'matched') ? 'partial' : 'matched' };
+    target.contractDiagnostics = diagnostics;
     return true;
 }
 
@@ -255,10 +428,6 @@ wss.on('connection', (socket, request) => {
                 unavailable(target, 'CAPABILITY_CATALOG_INVALID');
                 return;
             }
-            target.commands = result.commands;
-            target.activeScene = result.activeScene;
-            target.catalogRevision = result.catalogRevision;
-            target.extensionVersion = result.extensionVersion;
             target.state = 'catalogued';
             sendRequest(target, 'scene.snapshot');
             return;

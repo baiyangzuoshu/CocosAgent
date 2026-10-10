@@ -7,11 +7,36 @@ const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const WebSocket = require('./vendor/ws');
+const { fingerprintFiles, listFiles } = require('./runtime-fingerprint');
 const inputs = require('./catalog.schema.json').$defs;
+const schemaPath = path.join(__dirname, 'catalog.schema.json');
+const pluginPath = path.resolve(__dirname, '../../plugins/cocos-agent-2x/.codex-plugin/plugin.json');
+const pluginRoot = path.dirname(path.dirname(pluginPath));
+const mcpSourcePath = path.join(__dirname, 'mcp', 'mcp-server.mjs');
+const mcpRuntime = {
+    version: require('./mcp/package.json').version,
+    pluginVersion: JSON.parse(fs.readFileSync(pluginPath, 'utf8')).version,
+    pluginFingerprint: fingerprintFiles(pluginRoot, [
+        '.codex-plugin/plugin.json', '.mcp.json', 'README.md', 'skill-package.json',
+        ...listFiles(pluginRoot, 'scripts'), ...listFiles(pluginRoot, 'skills'), ...listFiles(pluginRoot, 'references'),
+    ]),
+    sourceFingerprint: fingerprintFiles(path.dirname(mcpSourcePath), ['mcp-server.mjs', 'package.json', 'package-lock.json']),
+    contractSchemaFingerprint: crypto.createHash('sha256').update(fs.readFileSync(schemaPath)).digest('hex'),
+};
 
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-agent-catalog-'));
 const projects = ['cocos2', 'cocos3'].map((name) => path.join(temporary, name));
-projects.forEach((project) => fs.mkdirSync(project));
+projects.forEach((project, index) => {
+    fs.mkdirSync(project);
+    if (index === 0) {
+        const extensionRoot = path.join(project, 'packages', 'cocos-agent-bridge');
+        fs.mkdirSync(extensionRoot, { recursive: true });
+        fs.writeFileSync(path.join(extensionRoot, 'main.js'), 'mock creator extension main');
+        fs.writeFileSync(path.join(extensionRoot, 'scene.js'), 'mock creator extension scene');
+        fs.writeFileSync(path.join(extensionRoot, 'package.json'), JSON.stringify({ name: 'cocos-agent-bridge', version: '0.2.0' }));
+        fs.writeFileSync(path.join(extensionRoot, 'package-lock.json'), JSON.stringify({ name: 'cocos-agent-bridge', version: '0.2.0' }));
+    }
+});
 const versions = ['2.4.15', '3.8.7'];
 const scenes = [path.join(projects[0], 'assets', 'Scene', 'helloworld.fire'), path.join(projects[1], 'assets', 'scene', 'main.scene')];
 scenes.forEach((scene, index) => {
@@ -44,10 +69,7 @@ async function mockEditor(index, options = {}) {
         const message = JSON.parse(raw.toString());
         if (message.type !== 'request') return;
         if (message.method === 'capabilities.list') {
-            socket.send(JSON.stringify({ type: 'response', id: message.id, ok: true, result: {
-                nonce: message.params.nonce, instanceId, creatorVersion: options.wrongCatalogVersion && index === 0 ? versions[1] : versions[index], projectRoot: project,
-                extensionVersion: '0.1.0', activeScene: index === 0 ? options.sceneName || 'helloworld' : null,
-                catalogRevision: crypto.createHash('sha256').update(`${index}:${options.sceneName || 'helloworld'}`).digest('hex'), commands: [
+            const commands = [
                     { id: 'scene.snapshot', contractVersion: '0.1', access: 'read', inputSchema: 'catalog.schema.json#/$defs/snapshotInput', input: inputs.snapshotInput, preconditions: ['activeScene'], status: index === 0 && !options.wrongStatus ? 'available' : 'unavailable', reason: index === 0 && !options.wrongStatus ? null : 'NO_OPEN_SCENE' },
                     { id: 'scene.node.inspect', contractVersion: '0.1', access: 'read', inputSchema: 'catalog.schema.json#/$defs/nodeInspectInput', input: inputs.nodeInspectInput, preconditions: ['activeScene'], status: index === 0 ? 'available' : 'unavailable', reason: index === 0 ? null : 'NO_OPEN_SCENE' },
                     ...(index === 0 ? [{ id: 'asset.searchPng', contractVersion: '0.1', access: 'read',
@@ -88,12 +110,26 @@ async function mockEditor(index, options = {}) {
                     { id: 'prefab.source.inspect', contractVersion: '0.1', access: 'read',
                         inputSchema: 'catalog.schema.json#/$defs/prefabSourceInspectInput2x', input: inputs.prefabSourceInspectInput2x,
                         preconditions: ['prefabUuidResolvable', 'serializedPrefabReadable'], status: 'available', reason: null },
-                    { id: 'content.stress.run', contractVersion: '0.2', access: 'read',
+                    ...(options.missingStress ? [] : [{ id: 'content.stress.run', contractVersion: '0.2', access: 'read',
                         inputSchema: 'catalog.schema.json#/$defs/contentStressRunInput2x', input: inputs.contentStressRunInput2x,
                         preconditions: ['completedWebMobileBuild', 'complexPackagedPngResources', 'coldCacheProfile', 'explicitDeviceScreeningBudget'],
-                        status: 'available', reason: null }] : []),
-                ],
-            } }));
+                        status: 'available', reason: null }]) ] : []),
+                ];
+            const actualContractFingerprint = crypto.createHash('sha256').update(JSON.stringify(commands.map((command) => ({
+                id: command.id, contractVersion: command.contractVersion, access: command.access,
+                inputSchema: command.inputSchema, input: command.input, preconditions: command.preconditions,
+            })))).digest('hex');
+            const sceneName = index === 0 ? options.sceneName || 'helloworld' : null;
+            const result = {
+                nonce: message.params.nonce, instanceId, creatorVersion: options.wrongCatalogVersion && index === 0 ? versions[1] : versions[index], projectRoot: project,
+                extensionVersion: index === 0 ? options.extensionVersion || '0.2.0' : '0.1.0',
+                extensionSourceFingerprint: index === 0 ? options.extensionSourceFingerprint || extensionFingerprint(project) : null,
+                commandContractFingerprint: actualContractFingerprint,
+                activeScene: sceneName,
+                catalogRevision: crypto.createHash('sha256').update(JSON.stringify({ scene: sceneName, commands })).digest('hex'),
+                commands,
+            };
+            socket.send(JSON.stringify({ type: 'response', id: message.id, ok: true, result }));
         } else if (message.method === 'scene.snapshot') {
             socket.send(JSON.stringify(index === 0
                 ? { type: 'response', id: message.id, ok: true, result: {
@@ -108,8 +144,14 @@ async function mockEditor(index, options = {}) {
     return socket;
 }
 
+function extensionFingerprint(project) {
+    const root = path.join(project, 'packages', 'cocos-agent-bridge');
+    return fingerprintFiles(root, ['main.js', 'package-lock.json', 'package.json', 'scene.js']);
+}
+
 async function run(query, project, options = {}) {
     const args = ['catalog-host.js', '--target', `2.4.15=${projects[0]}`, '--target', `3.8.7=${projects[1]}`, '--query', query];
+    if (!options.omitMcpRuntime) args.push('--mcp-runtime', JSON.stringify(options.mcpRuntime || mcpRuntime));
     if (project) args.push('--project', project);
     if (options.selectedVersion) args.push('--creator-version', options.selectedVersion);
     const child = spawn(process.execPath, args, { cwd: __dirname });
@@ -157,9 +199,27 @@ async function run(query, project, options = {}) {
     const catalogMismatch = await run('instances.get', projects[0], { wrongCatalogVersion: true });
     assert.strictEqual(catalogMismatch.data.error.code, 'CREATOR_VERSION_MISMATCH');
     const wrongInput = await run('capabilities.list', projects[0], { wrongInput: true });
-    assert.strictEqual(wrongInput.data.error.code, 'CAPABILITY_CATALOG_INVALID');
+    assert.strictEqual(wrongInput.exit, 0);
+    assert.strictEqual(wrongInput.data.data.instance.state, 'ready');
+    assert.strictEqual(wrongInput.data.data.commands.find((item) => item.id === 'scene.pngSprite').status, 'unavailable');
+    assert.strictEqual(wrongInput.data.data.commands.find((item) => item.id === 'scene.pngSprite').reason, 'COMMAND_CONTRACT_MISMATCH');
     const wrongStatus = await run('capabilities.list', projects[0], { wrongStatus: true });
-    assert.strictEqual(wrongStatus.data.error.code, 'CAPABILITY_CATALOG_INVALID');
+    assert.strictEqual(wrongStatus.exit, 0);
+    assert.strictEqual(wrongStatus.data.data.commands.find((item) => item.id === 'scene.snapshot').reason, 'COMMAND_CONTRACT_MISMATCH');
+    const missingStress = await run('capabilities.list', projects[0], { missingStress: true });
+    assert.strictEqual(missingStress.exit, 0);
+    assert.strictEqual(missingStress.data.data.instance.state, 'ready');
+    assert.strictEqual(missingStress.data.data.commands.find((item) => item.id === 'content.stress.run').reason, 'COMMAND_CONTRACT_MISSING');
+    const staleMcp = await run('capabilities.list', projects[0], { mcpRuntime: { ...mcpRuntime, sourceFingerprint: '0'.repeat(64) } });
+    assert.strictEqual(staleMcp.exit, 0);
+    assert.strictEqual(staleMcp.data.data.instance.contractCompatibility.status, 'mismatch');
+    assert.strictEqual(staleMcp.data.data.commands.find((item) => item.id === 'scene.node.create').reason, 'MCP_SOURCE_FINGERPRINT_MISMATCH');
+    const unattestedMcp = await run('capabilities.list', projects[0], { omitMcpRuntime: true });
+    assert.strictEqual(unattestedMcp.exit, 0);
+    assert.strictEqual(unattestedMcp.data.data.commands.find((item) => item.id === 'scene.node.create').reason, 'MCP_RUNTIME_UNREPORTED');
+    const staleExtension = await run('capabilities.list', projects[0], { extensionVersion: '0.1.0' });
+    assert.strictEqual(staleExtension.exit, 0);
+    assert.strictEqual(staleExtension.data.data.commands.find((item) => item.id === 'scene.node.create').reason, 'EXTENSION_VERSION_MISMATCH');
     const earlyArgs = ['catalog-host.js', '--target', `2.4.15=${projects[0]}`, '--target', `3.8.7=${projects[1]}`, '--query', 'instances.get', '--project', projects[0]];
     const wrongSelection = spawnSync(process.execPath, earlyArgs.concat('--creator-version', '3.8.7'), { cwd: __dirname, encoding: 'utf8' });
     assert.strictEqual(wrongSelection.status, 1);

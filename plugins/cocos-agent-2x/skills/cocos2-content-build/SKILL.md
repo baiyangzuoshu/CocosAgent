@@ -1,0 +1,16 @@
+---
+name: cocos2-content-build
+description: Plan, run, and inspect a Creator 2.4.15 Web-Mobile build for an already selected CocosAgent content release.
+---
+
+# Creator 2.4 Web-Mobile content build
+
+Use only for Cocos Creator **2.4.15** and `web-mobile`. Read the [build contract](../../references/agent-foundation/content-build-web-0.1.md) and the official [2.4 command-line build manual](https://docs.cocos.com/creator/2.4/manual/zh/publish/publish-in-command-line.html) first. This skill does not cover Creator 3.8, native packages, Asset Bundles, remote publishing, or hot update.
+
+Require the desired content release to be selected. Call `content.build.plan` with its exact `releaseId`, previously read `expectedFingerprint`, and a fresh `buildId`; inspect the derived release fingerprint, target, Creator path and isolated output path. Continue with `content.build.execute` only when the plan is ready. Read `content.build.get` after execution. If a Host restart left `state: running` or `needs-review`, use `content.build.reconcile` to inspect existing output without starting another build. Require `state: completed` plus `outcome: verified`; a Creator process exit code by itself does not establish that the textures reached the package.
+
+To run the verified package, keep the same long-lived `agent-jsonl.js` process open and call `content.preview.start` with the project, version and buildId. It rechecks the build output and requires the selected release fingerprint to match the build. Open the returned local `previewUrl` in a browser, then call `content.preview.get` to inspect connection and runtime receipt state. Require `status: runtime-observed` and an accepted `applied` or `already-active` receipt before treating runtime content as effective. Call `content.preview.stop` when finished; the local session URL contains a temporary token and should stay private. If the JSONL process exits, its preview servers close and a new process cannot retrieve that session.
+
+The command never overwrites an existing output folder. If a build fails or stops in `needs-review`, retain the operation and partial output for inspection; retry with a new buildId after diagnosing the cause. Creator's command-line build requires a GUI environment. Do not claim live packaging, deployment, or runtime behavior from unit-test fixtures.
+
+**Validation status:** contract tests pass, including packed import JSON and both observed 2.4 compressed UUID forms. `content.build.execute` has built a real Creator 2.4.15 Web-Mobile package through macOS Launch Services; Host verified both texture UUIDs, packed import JSON and PNG native files, and a separate JSONL Host process read `state: completed` ([Host CLI trace](../../references/agent-foundation/traces/cocos-agent-content-build-2.4-host-cli.jsonl)). The follow-on `content.preview.start/get/stop` flow has also served that package, opened it in a browser, received an accepted blue resource receipt, and shut both loopback services down ([preview trace](../../references/agent-foundation/traces/cocos-agent-content-preview-2.4.jsonl)). This evidence requires a GUI-capable Host environment; it does not establish headless builds, remote deployment or mobile-device behavior.

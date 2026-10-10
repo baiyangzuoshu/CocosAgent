@@ -35,4 +35,4 @@ Use this skill only with the registered Creator **2.4.15** MCP tools. It does no
 
 ## Report evidence precisely
 
-Distinguish editor structure preview, serialized-scene readback, actual pixel visibility, reopen readback, compensation, and replay. Report only phases observed in the tool receipts or the opened matching preview. The composition contract and known limits are documented in `docs/agent-foundation/scene-composition-0.1.md`.
+Distinguish editor structure preview, serialized-scene readback, actual pixel visibility, reopen readback, compensation, and replay. Report only phases observed in the tool receipts or the opened matching preview. The composition contract and known limits are documented in [`scene-composition-0.1.md`](../../references/agent-foundation/scene-composition-0.1.md).

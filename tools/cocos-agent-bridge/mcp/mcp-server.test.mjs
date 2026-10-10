@@ -3,8 +3,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { createServer, parseArgs, runAgentWorker } from './mcp-server.mjs';
+
+const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const SKILL_PACKAGE = JSON.parse(fs.readFileSync(path.join(REPOSITORY_ROOT, 'plugins/cocos-agent-2x/skill-package.json'), 'utf8'));
 
 function fixture() {
     const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-agent-mcp-'));
@@ -15,6 +20,37 @@ function fixture() {
     });
     return { parent, projects };
 }
+
+test('real MCP stdio discovers and reads the versioned skill package and its references', async () => {
+    const value = fixture();
+    const serverPath = path.join(REPOSITORY_ROOT, 'tools/cocos-agent-bridge/mcp/mcp-server.mjs');
+    const transport = new StdioClientTransport({
+        command: process.execPath,
+        args: [serverPath, '--project', value.projects[0]],
+    });
+    const client = new Client({ name: 'cocos-agent-skill-package-test', version: '1.0.0' });
+    try {
+        await client.connect(transport);
+        const { resources } = await client.listResources();
+        assert.ok(resources.some((resource) => resource.uri === 'cocos://2x/skills/index'));
+        assert.ok(resources.some((resource) => resource.uri === 'cocos://2x/skills/resource-scene-pipeline'));
+        assert.ok(resources.some((resource) => resource.uri === 'cocos://2x/references/agent-foundation/cocos-agent-resource-scene-pipeline-0.1.md'));
+        const index = JSON.parse((await client.readResource({ uri: 'cocos://2x/skills/index' })).contents[0].text);
+        assert.equal(index.plugin.version, '0.3.0');
+        assert.equal(index.mcp.version, '0.3.0');
+        assert.equal(index.skills.length, 11);
+        const resourceSkill = await client.readResource({ uri: 'cocos://2x/skills/resource-scene-pipeline' });
+        assert.match(resourceSkill.contents[0].text, /skill cocos2-resource-scene-pipeline sha256 [a-f0-9]{64}/);
+        assert.match(resourceSkill.contents[0].text, /cocos-agent-resource-scene-pipeline-0\.1\.md/);
+        const contract = await client.readResource({
+            uri: 'cocos://2x/references/agent-foundation/cocos-agent-resource-scene-pipeline-0.1.md',
+        });
+        assert.match(contract.contents[0].text, /AssetDB/);
+    } finally {
+        await client.close().catch(() => {});
+        fs.rmSync(value.parent, { recursive: true, force: true });
+    }
+});
 
 test('CLI requires existing absolute, unique, bounded registered project roots', () => {
     const value = fixture();
@@ -99,13 +135,33 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         assert.equal(stressTool.annotations.readOnlyHint, false, 'stress diagnostic writes evidence artifacts');
         assert.equal(stressTool.annotations.destructiveHint, false, 'stress diagnostic does not alter project content');
         assert.equal(stressTool.annotations.idempotentHint, false, 'each stress run creates new evidence artifacts');
+        assert.deepEqual(stressTool.inputSchema.properties.input.required,
+            ['buildId', 'resourcePaths', 'parseFixturePaths', 'failureResourcePath', 'cycles', 'nodeCount', 'packable',
+                'profileId', 'loadMode', 'budgetProfileId', 'budgets']);
+        assert.equal(stressTool.inputSchema.properties.input.properties.budgets.properties.maxColdResourceLoadP95Ms.type, 'number');
+        assert.equal(stressTool.inputSchema.properties.input.properties.budgets.properties.maxWarmResourceLoadP95Ms.type, 'number');
+        assert.equal(stressTool.inputSchema.properties.input.properties.budgets.properties.maxEstimatedRgbaWorkingSetBytes.type, 'integer');
+        assert.equal(stressTool.inputSchema.properties.input.properties.budgets.properties.maxResourceLoadP95Ms, undefined,
+            'the obsolete single resource-load budget must not be advertised');
+        assert.deepEqual(stressTool.inputSchema.properties.input,
+            stressBranch.properties.input, 'dedicated and generic command tools must expose the same canonical stress input schema');
 
         const { resources } = await client.listResources();
         assert.deepEqual(resources.map((resource) => resource.uri), [
-            'cocos://2x/agent/mcp-tools', 'cocos://2x/skills/scene-composition', 'cocos://2x/skills/prefab-source-edit',
-            'cocos://2x/skills/runtime-performance',
+            'cocos://2x/skills/index',
+            ...SKILL_PACKAGE.skills.map((skill) => skill.uri),
+            ...SKILL_PACKAGE.references.map((reference) => `cocos://2x/references/${reference.id}`),
         ]);
+        const skillIndexResource = await client.readResource({ uri: 'cocos://2x/skills/index' });
+        const skillIndex = JSON.parse(skillIndexResource.contents[0].text);
+        assert.equal(skillIndex.plugin.name, 'cocos-agent-2x');
+        assert.equal(skillIndex.plugin.version, '0.3.0');
+        assert.equal(skillIndex.mcp.version, '0.3.0');
+        assert.equal(skillIndex.skills.length, 11);
+        assert.ok(skillIndex.skills.some((skill) => skill.name === 'cocos2-asset-bundle-content'
+            && skill.references.some((reference) => reference.uri === 'cocos://2x/references/agent-foundation/asset-bundle-cross-dependency-0.2-design.md')));
         const skill = await client.readResource({ uri: 'cocos://2x/agent/mcp-tools' });
+        assert.match(skill.contents[0].text, /CocosAgent package cocos-agent-2x@0\.3\.0/);
         assert.match(skill.contents[0].text, /Creator \*\*2\.4\.15\*\*/);
         assert.match(skill.contents[0].text, /Do not repeat a possibly completed write/);
         const compositionSkill = await client.readResource({ uri: 'cocos://2x/skills/scene-composition' });
@@ -117,6 +173,18 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         const performanceSkill = await client.readResource({ uri: 'cocos://2x/skills/runtime-performance' });
         assert.match(performanceSkill.contents[0].text, /cocos_2x_content_stress_run/);
         assert.match(performanceSkill.contents[0].text, /SwiftShader/);
+        const bundleSkill = await client.readResource({ uri: 'cocos://2x/skills/asset-bundle-content' });
+        assert.match(bundleSkill.contents[0].text, /owner-first/);
+        assert.match(bundleSkill.contents[0].text, /cocos2-asset-bundle-content/);
+        const bundleReference = await client.readResource({
+            uri: 'cocos://2x/references/agent-foundation/asset-bundle-cross-dependency-0.2-design.md',
+        });
+        assert.match(bundleReference.contents[0].text, /owner/);
+        const screenshotResource = await client.readResource({
+            uri: 'cocos://2x/references/agent-foundation/traces/visual/cocos-agent-shared-boundary-auto-release-false.png',
+        });
+        assert.equal(screenshotResource.contents[0].mimeType, 'image/png');
+        assert.ok(screenshotResource.contents[0].blob.length > 1000);
 
         const { prompts } = await client.listPrompts();
         assert.deepEqual(prompts.map((prompt) => prompt.name), ['cocos_2x_resource_to_scene_workflow']);
@@ -140,6 +208,9 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         assert.deepEqual(calls.at(-1).params.targets, value.projects.map((projectRoot) => ({
             creatorVersion: '2.4.15', projectRoot,
         })));
+        assert.equal(calls.at(-1).params.mcpRuntime.version, '0.3.0');
+        assert.match(calls.at(-1).params.mcpRuntime.sourceFingerprint, /^[a-f0-9]{64}$/);
+        assert.match(calls.at(-1).params.mcpRuntime.pluginFingerprint, /^[a-f0-9]{64}$/);
 
         const selected = await client.callTool({ name: 'cocos_2x_capabilities_list', arguments: { projectRoot: value.projects[1] } });
         assert.equal(selected.structuredContent.data.instance.projectRoot, value.projects[1]);

@@ -1,0 +1,474 @@
+{
+  "observedAt": "2026-10-10T01:38:15.651Z",
+  "creatorVersion": "2.4.15",
+  "buildOutput": "2.4.15NewProject/build/cocos-agent/shared-dependency-20261010-01/web-mobile",
+  "sourceMeta": {
+    "textureUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+    "spriteFrameUuid": "0683b14a-8790-4ecd-9ee5-4b83163e34ff",
+    "rawTextureUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f"
+  },
+  "sourceScenes": [
+    {
+      "scene": "BundleSharedA",
+      "file": "2.4.15NewProject/assets/CocosAgentBundleSmoke/BundleSharedA.fire",
+      "referencesSharedFrameUuid": true,
+      "sceneMetaAutoReleaseAssets": false,
+      "serializedSceneAutoReleaseAssets": true
+    },
+    {
+      "scene": "BundleSharedB",
+      "file": "2.4.15NewProject/assets/CocosAgentBundleSidecar/BundleSharedB.fire",
+      "referencesSharedFrameUuid": true,
+      "sceneMetaAutoReleaseAssets": false,
+      "serializedSceneAutoReleaseAssets": true
+    }
+  ],
+  "bundleInventory": [
+    {
+      "bundleName": "cocos-agent-sidecar",
+      "file": "assets/cocos-agent-sidecar/config.5bffb.json",
+      "sha256": "dd2f4c25b6f4e70bf25b45b21d44c1c87391d1ca072f265e1c0edb438f34eeaf",
+      "frame": {
+        "uuid": "0683b14a-8790-4ecd-9ee5-4b83163e34ff",
+        "compressedUuid": "06g7FKh5BOzZ7lS4MWPjT/",
+        "uuidIndex": 3,
+        "pathRecord": null,
+        "redirectBundle": "resources"
+      },
+      "texture": {
+        "uuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+        "compressedUuid": "bfhgLKVWFOtYxjllPUwypP",
+        "uuidIndex": -1,
+        "pathRecord": null,
+        "redirectBundle": null
+      }
+    },
+    {
+      "bundleName": "cocos-agent-smoke",
+      "file": "assets/cocos-agent-smoke/config.97348.json",
+      "sha256": "2e3b0a886ec3df7833eaa6ec35e2556bed5aeee22f5b49fc16b3bda0eb6fe6b5",
+      "frame": {
+        "uuid": "0683b14a-8790-4ecd-9ee5-4b83163e34ff",
+        "compressedUuid": "06g7FKh5BOzZ7lS4MWPjT/",
+        "uuidIndex": 5,
+        "pathRecord": null,
+        "redirectBundle": "resources"
+      },
+      "texture": {
+        "uuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+        "compressedUuid": "bfhgLKVWFOtYxjllPUwypP",
+        "uuidIndex": -1,
+        "pathRecord": null,
+        "redirectBundle": null
+      }
+    },
+    {
+      "bundleName": "internal",
+      "file": "assets/internal/config.d17e2.json",
+      "sha256": "98e81ad5018509211a513b52e941cff4b221051332bdd0bb2de5d2dfaace752e",
+      "frame": {
+        "uuid": "0683b14a-8790-4ecd-9ee5-4b83163e34ff",
+        "compressedUuid": "06g7FKh5BOzZ7lS4MWPjT/",
+        "uuidIndex": -1,
+        "pathRecord": null,
+        "redirectBundle": null
+      },
+      "texture": {
+        "uuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+        "compressedUuid": "bfhgLKVWFOtYxjllPUwypP",
+        "uuidIndex": -1,
+        "pathRecord": null,
+        "redirectBundle": null
+      }
+    },
+    {
+      "bundleName": "main",
+      "file": "assets/main/config.36ade.json",
+      "sha256": "10ada48030de48efdaf58f6976decc7262029f3645dcc651d987346676b7ee71",
+      "frame": {
+        "uuid": "0683b14a-8790-4ecd-9ee5-4b83163e34ff",
+        "compressedUuid": "06g7FKh5BOzZ7lS4MWPjT/",
+        "uuidIndex": 5,
+        "pathRecord": null,
+        "redirectBundle": "resources"
+      },
+      "texture": {
+        "uuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+        "compressedUuid": "bfhgLKVWFOtYxjllPUwypP",
+        "uuidIndex": -1,
+        "pathRecord": null,
+        "redirectBundle": null
+      }
+    },
+    {
+      "bundleName": "resources",
+      "file": "assets/resources/config.ec065.json",
+      "sha256": "b4c1165f96095f43e82d8e6b4295aeab2bee3ae9db6d2b551ba0709498579610",
+      "frame": {
+        "uuid": "0683b14a-8790-4ecd-9ee5-4b83163e34ff",
+        "compressedUuid": "06g7FKh5BOzZ7lS4MWPjT/",
+        "uuidIndex": 7,
+        "pathRecord": [
+          "RedReleaseOct09",
+          1,
+          1
+        ],
+        "redirectBundle": null
+      },
+      "texture": {
+        "uuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+        "compressedUuid": "bfhgLKVWFOtYxjllPUwypP",
+        "uuidIndex": 6,
+        "pathRecord": [
+          "RedReleaseOct09",
+          0
+        ],
+        "redirectBundle": null
+      }
+    }
+  ],
+  "configEvidence": {
+    "resources": {
+      "file": "assets/resources/config.ec065.json",
+      "sha256": "b4c1165f96095f43e82d8e6b4295aeab2bee3ae9db6d2b551ba0709498579610",
+      "name": "resources",
+      "deps": [],
+      "sceneKeys": [],
+      "sharedFrame": {
+        "uuid": "0683b14a-8790-4ecd-9ee5-4b83163e34ff",
+        "compressedUuid": "06g7FKh5BOzZ7lS4MWPjT/",
+        "uuidIndex": 7,
+        "pathRecord": [
+          "RedReleaseOct09",
+          1,
+          1
+        ],
+        "redirectBundle": null
+      },
+      "sourceTexture": {
+        "uuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+        "compressedUuid": "bfhgLKVWFOtYxjllPUwypP",
+        "uuidIndex": 6,
+        "pathRecord": [
+          "RedReleaseOct09",
+          0
+        ],
+        "redirectBundle": null
+      }
+    },
+    "cocos-agent-smoke": {
+      "file": "assets/cocos-agent-smoke/config.97348.json",
+      "sha256": "2e3b0a886ec3df7833eaa6ec35e2556bed5aeee22f5b49fc16b3bda0eb6fe6b5",
+      "name": "cocos-agent-smoke",
+      "deps": [
+        "resources",
+        "internal"
+      ],
+      "sceneKeys": [
+        "db://assets/CocosAgentBundleSmoke/BundleSharedA.fire"
+      ],
+      "sharedFrame": {
+        "uuid": "0683b14a-8790-4ecd-9ee5-4b83163e34ff",
+        "compressedUuid": "06g7FKh5BOzZ7lS4MWPjT/",
+        "uuidIndex": 5,
+        "pathRecord": null,
+        "redirectBundle": "resources"
+      },
+      "sourceTexture": {
+        "uuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+        "compressedUuid": "bfhgLKVWFOtYxjllPUwypP",
+        "uuidIndex": -1,
+        "pathRecord": null,
+        "redirectBundle": null
+      }
+    },
+    "cocos-agent-sidecar": {
+      "file": "assets/cocos-agent-sidecar/config.5bffb.json",
+      "sha256": "dd2f4c25b6f4e70bf25b45b21d44c1c87391d1ca072f265e1c0edb438f34eeaf",
+      "name": "cocos-agent-sidecar",
+      "deps": [
+        "resources",
+        "internal"
+      ],
+      "sceneKeys": [
+        "db://assets/CocosAgentBundleSidecar/BundleSharedB.fire"
+      ],
+      "sharedFrame": {
+        "uuid": "0683b14a-8790-4ecd-9ee5-4b83163e34ff",
+        "compressedUuid": "06g7FKh5BOzZ7lS4MWPjT/",
+        "uuidIndex": 3,
+        "pathRecord": null,
+        "redirectBundle": "resources"
+      },
+      "sourceTexture": {
+        "uuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+        "compressedUuid": "bfhgLKVWFOtYxjllPUwypP",
+        "uuidIndex": -1,
+        "pathRecord": null,
+        "redirectBundle": null
+      }
+    }
+  },
+  "visualEvidence": {
+    "checkpoint": {
+      "scene": "BundleSharedB",
+      "sceneUuid": "53751717-051c-4b3d-abe7-19bfc2b3990a",
+      "frameUuid": "0683b14a-8790-4ecd-9ee5-4b83163e34ff",
+      "sourceTextureUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+      "spriteEnabled": true,
+      "frameValid": true,
+      "textureValid": true,
+      "frameCached": true,
+      "textureCached": true
+    },
+    "file": "docs/agent-foundation/traces/visual/cocos-agent-shared-boundary-auto-release-false.png",
+    "sha256": "2335256ea43d57c0b87bc0505f6923f18558af9ce660d33c2fceb8713cbea6c0"
+  },
+  "result": {
+    "creatorVersion": "2.4.15",
+    "baseline": {
+      "label": "startup",
+      "sampledAt": "2026-10-10T01:38:15.197Z",
+      "bundleNames": [
+        "internal",
+        "main",
+        "resources"
+      ],
+      "assetCacheCount": 29,
+      "bundleCacheCount": 3,
+      "frame": {
+        "uuid": "0683b14a-8790-4ecd-9ee5-4b83163e34ff",
+        "refCount": 1,
+        "valid": true
+      },
+      "texture": {
+        "uuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+        "refCount": 1,
+        "valid": true
+      }
+    },
+    "sharedFrameUuid": "0683b14a-8790-4ecd-9ee5-4b83163e34ff",
+    "sharedTextureUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+    "screenState": {
+      "ownerMissing": {
+        "before": {
+          "label": "owner-removed-before-consumer",
+          "sampledAt": "2026-10-10T01:38:15.274Z",
+          "bundleNames": [
+            "internal",
+            "main"
+          ],
+          "assetCacheCount": 27,
+          "bundleCacheCount": 2,
+          "frame": null,
+          "texture": null
+        },
+        "consumerBundleLoaded": true,
+        "consumerRedirect": "resources",
+        "redirectedAssetLoadRejected": true,
+        "error": "Please load bundle resources first"
+      },
+      "ownerFirstRecovery": {
+        "loadedOwnerBeforeRetry": true,
+        "sharedFrameUuid": "0683b14a-8790-4ecd-9ee5-4b83163e34ff",
+        "redirectedAssetLoadSucceeded": true,
+        "sceneUuid": "d86b9b2f-5d52-43b3-b2c7-5e345f9960e4",
+        "sceneLoadSucceeded": true,
+        "snapshot": {
+          "label": "after-owner-first-recovery",
+          "sampledAt": "2026-10-10T01:38:15.284Z",
+          "bundleNames": [
+            "cocos-agent-smoke",
+            "internal",
+            "main",
+            "resources"
+          ],
+          "assetCacheCount": 29,
+          "bundleCacheCount": 4,
+          "frame": {
+            "uuid": "0683b14a-8790-4ecd-9ee5-4b83163e34ff",
+            "refCount": 1,
+            "valid": true
+          },
+          "texture": {
+            "uuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+            "refCount": 1,
+            "valid": true
+          }
+        }
+      },
+      "loadedSceneSettings": [
+        {
+          "bundle": "cocos-agent-smoke",
+          "scene": "BundleSharedA",
+          "runtimeAutoReleaseAssets": false,
+          "initiallyLoadedValue": false
+        },
+        {
+          "bundle": "cocos-agent-sidecar",
+          "scene": "BundleSharedB",
+          "runtimeAutoReleaseAssets": false,
+          "initiallyLoadedValue": false
+        }
+      ],
+      "beforeSceneRun": {
+        "label": "both-scene-assets-loaded-runtime-auto-release-false",
+        "sampledAt": "2026-10-10T01:38:15.286Z",
+        "bundleNames": [
+          "cocos-agent-sidecar",
+          "cocos-agent-smoke",
+          "internal",
+          "main",
+          "resources"
+        ],
+        "assetCacheCount": 29,
+        "bundleCacheCount": 5,
+        "frame": {
+          "uuid": "0683b14a-8790-4ecd-9ee5-4b83163e34ff",
+          "refCount": 2,
+          "valid": true
+        },
+        "texture": {
+          "uuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+          "refCount": 1,
+          "valid": true
+        }
+      },
+      "afterSwitchWithFalse": {
+        "label": "after-switch-to-second-scene-auto-release-false",
+        "sampledAt": "2026-10-10T01:38:15.316Z",
+        "bundleNames": [
+          "cocos-agent-sidecar",
+          "cocos-agent-smoke",
+          "internal",
+          "main",
+          "resources"
+        ],
+        "assetCacheCount": 29,
+        "bundleCacheCount": 5,
+        "frame": {
+          "uuid": "0683b14a-8790-4ecd-9ee5-4b83163e34ff",
+          "refCount": 1,
+          "valid": true
+        },
+        "texture": {
+          "uuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+          "refCount": 1,
+          "valid": true
+        }
+      },
+      "consumerUnload": [
+        {
+          "removedConsumer": "cocos-agent-smoke",
+          "bundleCached": false,
+          "frameRefCount": 1,
+          "textureRefCount": 1,
+          "frameCached": true,
+          "textureCached": true,
+          "frameValid": true,
+          "textureValid": true,
+          "activeScene": "BundleSharedB",
+          "activeSpriteEnabled": true
+        },
+        {
+          "removedConsumer": "cocos-agent-sidecar",
+          "bundleCached": false,
+          "frameRefCount": 1,
+          "textureRefCount": 1,
+          "frameCached": true,
+          "textureCached": true,
+          "frameValid": true,
+          "textureValid": true,
+          "activeScene": "BundleSharedB",
+          "activeSpriteEnabled": true
+        }
+      ],
+      "ownerUnusedReleaseWhileActive": {
+        "label": "owner-release-unused-while-consumer-active",
+        "sampledAt": "2026-10-10T01:38:15.430Z",
+        "bundleNames": [
+          "internal",
+          "main",
+          "resources"
+        ],
+        "assetCacheCount": 27,
+        "bundleCacheCount": 3,
+        "frame": {
+          "uuid": "0683b14a-8790-4ecd-9ee5-4b83163e34ff",
+          "refCount": 1,
+          "valid": true
+        },
+        "texture": {
+          "uuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+          "refCount": 1,
+          "valid": true
+        }
+      },
+      "activeSceneAfterOwnerBundleRemoval": {
+        "label": "owner-bundle-object-removed-but-active-consumer-still-uses-asset",
+        "sampledAt": "2026-10-10T01:38:15.438Z",
+        "bundleNames": [
+          "internal",
+          "main"
+        ],
+        "assetCacheCount": 27,
+        "bundleCacheCount": 2,
+        "frame": {
+          "uuid": "0683b14a-8790-4ecd-9ee5-4b83163e34ff",
+          "refCount": 1,
+          "valid": true
+        },
+        "texture": {
+          "uuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+          "refCount": 1,
+          "valid": true
+        }
+      },
+      "visualCheckpoint": {
+        "scene": "BundleSharedB",
+        "sceneUuid": "53751717-051c-4b3d-abe7-19bfc2b3990a",
+        "frameUuid": "0683b14a-8790-4ecd-9ee5-4b83163e34ff",
+        "sourceTextureUuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+        "spriteEnabled": true,
+        "frameValid": true,
+        "textureValid": true,
+        "frameCached": true,
+        "textureCached": true
+      },
+      "afterExitAutoReleaseFalse": {
+        "label": "after-exit-all-test-scenes-auto-release-false",
+        "sampledAt": "2026-10-10T01:38:15.615Z",
+        "bundleNames": [
+          "internal",
+          "main"
+        ],
+        "assetCacheCount": 27,
+        "bundleCacheCount": 2,
+        "frame": {
+          "uuid": "0683b14a-8790-4ecd-9ee5-4b83163e34ff",
+          "refCount": 0,
+          "valid": true
+        },
+        "texture": {
+          "uuid": "bf8602ca-5561-4eb5-8c63-9653d4c32a4f",
+          "refCount": 1,
+          "valid": true
+        }
+      },
+      "ownerCleanupAfterNoActiveScene": {
+        "label": "owner-release-unused-after-all-scenes-exited",
+        "sampledAt": "2026-10-10T01:38:15.650Z",
+        "bundleNames": [
+          "internal",
+          "main",
+          "resources"
+        ],
+        "assetCacheCount": 25,
+        "bundleCacheCount": 3,
+        "frame": null,
+        "texture": null
+      }
+    },
+    "interpretation": "The owner-not-loaded case removes the resources Bundle and releases the owner SpriteFrame before loading a fresh consumer asset by UUID. The consumer Bundle config can load, but resolving its redirected asset fails until resources is loaded first. For autoReleaseAssets=false, the probe uses the loaded Scene runtime value without changing it; scene switches and consumer Bundle release leave the shared Frame and Texture valid. Owner releaseUnusedAssets preserves both while the consumer scene is active. Removing the resources Bundle object also leaves that scene intact, but must not be confused with releasing owner assets. After all test scenes exit, the probe retries non-forced owner cleanup and records its result. The preview process is isolated and discarded after the trace."
+  }
+}
