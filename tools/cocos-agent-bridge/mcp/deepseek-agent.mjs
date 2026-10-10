@@ -41,11 +41,13 @@ const MODE_RULES = {
     ].join('\n'),
     Plan: [
         'The user selected Plan mode. Inspect the project with read-only tools and produce a structured reviewable plan. Do not execute any proposed change.',
-        'After the required instance and capability receipts, return ONLY a JSON object (no prose or markdown fences): {"version":1,"title":"...","summary":"...","steps":[{"title":"...","description":"...","preconditions":["..."],"validation":"...","recovery":"..."}]}.',
-        'Use 1 to 8 ordered, concrete, independently reviewable steps. Ground project facts in receipts. State unknown facts as preconditions to verify. Never invent UUIDs, paths, assets, or claim execution. Each step must say what will change, how to validate it, and how to recover.',
+        'After the required instance and capability receipts, return ONLY a JSON object (no prose or markdown fences): {"version":1,"title":"...","summary":"...","steps":[{"title":"...","description":"...","preconditions":["..."],"requiredTools":["cocos_2x_..."],"validation":"...","recovery":"..."}]}.',
+        'Follow this exact bounded schema: title <= 120 characters; summary <= 1200; 1-8 steps; each step has exactly title, description, preconditions, requiredTools, validation, recovery; title <= 120, description <= 1600, validation <= 600, recovery <= 600; preconditions is an array of 0-4 non-empty strings, each <= 300 characters; requiredTools is an array of 1-6 unique exact MCP tool names from the discovered tool list.',
+        'For every step, list all exact MCP tools that must run to perform and validate that step, including required readback tools. Do not list instance/capability setup tools. Never invent tool names. Ground project facts in receipts. State unknown facts as preconditions to verify. Never invent UUIDs, paths, assets, or claim execution. Each step must say what will change, how to validate it, and how to recover.',
     ].join('\n'),
     Agent: [
         'The user selected Agent mode. Carry out the requested task using only the supplied tools and selected Creator project.',
+        'Instance-list and capability-list calls are setup only and never count as task completion. After those receipts succeed, use the task tool that performs or validates the requested work.',
         'Every non-read-only tool call must be approved by the user through the local approval prompt before execution.',
         'Stop when a write result is uncertain and use only supplied recovery tools until it is resolved.',
     ].join('\n'),
@@ -64,7 +66,7 @@ function redact(value, secret) {
     return value;
 }
 
-function writeEvent(tracePath, event, secret) {
+export function writeEvent(tracePath, event, secret) {
     const row = redact({ at: new Date().toISOString(), ...event }, secret);
     fs.appendFileSync(tracePath, `${JSON.stringify(row)}\n`, { encoding: 'utf8', mode: 0o600 });
     fs.chmodSync(tracePath, 0o600);
@@ -96,7 +98,7 @@ function completionEndpoint(baseUrl) {
     return url;
 }
 
-async function requestDeepSeek({ apiKey, baseUrl = DEFAULT_BASE_URL, model = DEFAULT_MODEL, messages, tools, fetchImpl = fetch, timeoutMs = 60_000 }) {
+async function requestDeepSeek({ apiKey, baseUrl = DEFAULT_BASE_URL, model = DEFAULT_MODEL, mode = 'Agent', messages, tools, fetchImpl = fetch, timeoutMs = 60_000 }) {
     if (typeof apiKey !== 'string' || apiKey.trim().length < 8) throw new Error('DEEPSEEK_API_KEY is missing or invalid.');
     const endpoint = completionEndpoint(baseUrl);
     let response;
@@ -110,7 +112,7 @@ async function requestDeepSeek({ apiKey, baseUrl = DEFAULT_BASE_URL, model = DEF
                 tools,
                 tool_choice: 'auto',
                 stream: false,
-                max_tokens: 2048,
+                max_tokens: mode === 'Plan' ? 4096 : 2048,
                 thinking: { type: 'disabled' },
             }),
             signal: AbortSignal.timeout(timeoutMs),
@@ -257,7 +259,7 @@ export async function runDeepSeekAgent({ client, task, projectRoot, projectRoots
             writeEvent(tracePath, { event: 'model.request', runId, round, model, messageCount: context.messages.length,
                 toolCount: offeredTools.length }, secret);
             emit({ type: 'model.thinking', runId, round });
-            response = await callModel({ apiKey, baseUrl, model, messages: context.messages, tools: offeredTools });
+            response = await callModel({ apiKey, baseUrl, model, mode, messages: context.messages, tools: offeredTools });
         } catch (error) {
             stopReason = 'model_request_failed';
             writeEvent(tracePath, { event: 'model.error', runId, round, error: String(error.message || error) }, secret);
@@ -300,9 +302,20 @@ export async function runDeepSeekAgent({ client, task, projectRoot, projectRoots
         }
         context.messages.push(transcriptMessage(message));
         if (!toolCalls.length) {
+            const hasCurrentPlanSetup = mode !== 'Plan'
+                || (callResults.some((receipt) => receipt.name === 'cocos_2x_instances_list'
+                    && receipt.result.structuredContent?.success === true)
+                    && callResults.some((receipt) => receipt.name === 'cocos_2x_capabilities_list'
+                        && receipt.result.structuredContent?.success === true));
+            if (!hasCurrentPlanSetup && choice.finish_reason !== 'length' && correctedFinals < 2) {
+                correctedFinals += 1;
+                context.messages.push({ role: 'system', content: `This Plan response cannot be accepted because this run has not received fresh successful instance-list and capability-list tool receipts. Make exactly ONE call from the tools offered now (${offeredTools.map((tool) => tool.function.name).join(', ')}). Do not reuse history or produce the plan until both receipts exist.` });
+                emit({ type: 'model.retrying', runId, reason: 'plan_setup_receipts_required' });
+                continue;
+            }
             if (mode === 'Agent' && !successfulTaskReceipt && choice.finish_reason !== 'length' && correctedFinals < 2) {
                 correctedFinals += 1;
-                context.messages.push({ role: 'system', content: 'Your answer has no successful task-tool receipt from THIS run and cannot be accepted as completed. Do not fabricate operation IDs or claim execution based on conversation history. Perform the requested task using the currently offered tools, ONE call per response. If only recovering a failed operation, state its actual terminal failure and do not claim the original write succeeded.' });
+                context.messages.push({ role: 'system', content: 'Your answer has no successful task-tool receipt from THIS run and cannot be accepted as completed. Instance-list and capability-list receipts are setup only and do not count. If they already succeeded, do not call them again; use the currently offered task tool for the requested step, ONE call per response. Do not fabricate operation IDs or claim execution based on conversation history. If only recovering a failed operation, state its actual terminal failure and do not claim the original write succeeded.' });
                 emit({ type: 'model.retrying', runId, reason: 'model_final_without_success_receipt' });
                 continue;
             }
@@ -396,7 +409,8 @@ export async function runDeepSeekAgent({ client, task, projectRoot, projectRoots
                 normalized.structuredContent = { ...value, success: false, outcome: 'needs-review',
                     error: { ...(value.error || {}), sideEffect: 'unknown' } };
             }
-            callResults.push({ name: toolName, callId: call.id, result: normalized });
+            const access = isReadOnly ? 'read' : (isRecovery ? 'recovery' : 'write-approved');
+            callResults.push({ name: toolName, callId: call.id, access, result: normalized });
             writeEvent(tracePath, { event: 'tool.result', runId, round, callId: call.id, name: toolName, result: normalized }, secret);
             emit({ type: 'tool.finished', runId, callId: call.id, toolName, isError: normalized.isError === true,
                 result: normalized });
@@ -439,14 +453,14 @@ export async function runDeepSeekAgent({ client, task, projectRoot, projectRoots
         : unresolved || stopReason === 'recovery_receipt_required_before_continuing' ? 'needs-review'
             : stopReason === 'write_requires_explicit_confirmation' || stopReason === 'write_not_approved' ? 'awaiting-approval' : 'stopped';
     writeEvent(tracePath, { event: 'run.stop', runId, status, reason: unresolved ? 'unresolved_operation_receipt' : stopReason,
-        toolCallCount, finalText, receipts: callResults.map(({ name, callId, result }) => ({ name, callId,
+        toolCallCount, finalText, receipts: callResults.map(({ name, callId, access, result }) => ({ name, callId, access,
             isError: result.isError, success: result.structuredContent?.success, outcome: result.structuredContent?.outcome,
             operationId: result.structuredContent?.operationId, errorCode: result.structuredContent?.error?.code,
             phases: result.structuredContent?.phases })) }, secret);
     emit({ type: 'run.finished', runId, status, reason: unresolved ? 'unresolved_operation_receipt' : stopReason, finalText,
         receipts: callResults.map(({ name, callId, result }) => ({ name, callId, ...result })) });
     return { runId, status, reason: unresolved ? 'unresolved_operation_receipt' : stopReason, finalText, tracePath, toolCalls: toolCallCount,
-        receipts: callResults.map(({ name, callId, result }) => ({ name, callId, ...result })) };
+        receipts: callResults.map(({ name, callId, access, result }) => ({ name, callId, access, ...result })) };
 }
 
 function loadRootEnvFile() {

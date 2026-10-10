@@ -61,6 +61,12 @@ for (const mode of ['Ask', 'Plan']) {
                         assert.ok(request.tools.length > 0);
                         assert.ok(request.tools.every((tool) => readonly.has(tool.function.name)));
                         assert.ok(request.messages.some((message) => message.content === 'Previous answer'));
+                        assert.equal(request.mode, mode);
+                if (mode === 'Plan') {
+                    assert.match(request.messages[0].content, /preconditions is an array of 0-4 non-empty strings/);
+                    assert.match(request.messages[0].content, /summary <= 1200/);
+                    assert.match(request.messages[0].content, /requiredTools is an array of 1-6 unique exact MCP tool names/);
+                }
                         return { choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: 'Answer' } }] };
                     } });
                 assert.equal(result.status, 'completed');
@@ -73,6 +79,48 @@ for (const mode of ['Ask', 'Plan']) {
         } finally { fs.rmSync(value.parent, { recursive: true, force: true }); }
     });
 }
+
+test('Plan mode corrects a final answer until this run has fresh setup receipts', async () => {
+    const value = fixture();
+    const hostMethods = [];
+    let rounds = 0;
+    const invokeAgent = async (request) => {
+        hostMethods.push(request.method);
+        if (request.method === 'instances.list') return { id: request.id, result: { success: true, data: [
+            { projectRoot: value.projects[0], creatorVersion: '2.4.15', state: 'ready', activeScene: 'helloworld' },
+        ] } };
+        if (request.method === 'capabilities.list') return { id: request.id, result: { success: true, data: {
+            instance: { projectRoot: value.projects[0], creatorVersion: '2.4.15', state: 'ready', activeScene: 'helloworld' },
+            commands: [],
+        } } };
+        throw new Error(`Unexpected host method ${request.method}`);
+    };
+    try {
+        const result = await withMcp([value.projects[0]], invokeAgent, (client) => runDeepSeekAgent({
+            client, mode: 'Plan', task: 'Create a reviewable plan.', projectRoots: [value.projects[0]],
+            skillFiles: [DEFAULT_SKILL], tracePath: value.tracePath, apiKey: 'test-secret-value',
+            callModel: async ({ messages, tools }) => {
+                rounds += 1;
+                if (rounds === 1) {
+                    assert.deepEqual(tools.map((tool) => tool.function.name), ['cocos_2x_instances_list']);
+                    return { choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: '{"version":1}' } }] };
+                }
+                if (rounds === 2) {
+                    assert.ok(messages.some((message) => message.role === 'system' && message.content.includes('fresh successful instance-list')));
+                    return modelToolResponse(toolCall('list', 'cocos_2x_instances_list', {}));
+                }
+                if (rounds === 3) return modelToolResponse(toolCall('caps', 'cocos_2x_capabilities_list', { projectRoot: value.projects[0] }));
+                return { choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: '{"version":1,"title":"Plan","summary":"Reviewable.","steps":[{"title":"Step","description":"Review.","preconditions":[],"requiredTools":["cocos_2x_scene_snapshot"],"validation":"Check.","recovery":"Stop if unclear."}]}' } }] };
+            },
+        }));
+        assert.equal(result.status, 'completed', JSON.stringify(result));
+        assert.equal(result.reason, 'model_final');
+        assert.equal(result.toolCalls, 2);
+        assert.deepEqual(hostMethods, ['instances.list', 'capabilities.list']);
+        assert.equal(rounds, 4);
+        assert.deepEqual(result.receipts.map((receipt) => receipt.name), ['cocos_2x_instances_list', 'cocos_2x_capabilities_list']);
+    } finally { fs.rmSync(value.parent, { recursive: true, force: true }); }
+});
 
 test('Assistant preserves flattened and wrapped operation receipts', () => {
     const payload = { isError: false, structuredContent: { success: true, outcome: 'completed', operationId: 'op-123' } };
@@ -337,7 +385,15 @@ test('DeepSeek request uses the OpenAI-compatible HTTPS tool-call endpoint witho
         } });
     assert.equal(response.choices[0].message.content, 'done');
     assert.equal(requestBodies[0].tool_choice, 'auto');
+    assert.equal(requestBodies[0].max_tokens, 2048);
     assert.deepEqual(requestBodies[0].thinking, { type: 'disabled' });
+
+    await requestDeepSeek({ apiKey: secret, mode: 'Plan', messages: [{ role: 'user', content: 'Generate a short plan.' }], tools: [],
+        fetchImpl: async (_url, init) => {
+            requestBodies.push(JSON.parse(init.body));
+            return { ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: '{}' } }] }) };
+        } });
+    assert.equal(requestBodies[1].max_tokens, 4096);
 
     await assert.rejects(requestDeepSeek({ apiKey: secret, messages: [], tools: [], fetchImpl: async () => ({
         ok: false, status: 401, json: async () => ({ error: { code: 'invalid_key', message: `rejected ${secret}` } }),

@@ -13,10 +13,10 @@
     "main": "panel/index.js",
     "type": "dockable",
     "title": "CocosAgent",
-    "width": 440,
-    "height": 640,
+    "width": 1280,
+    "height": 720,
     "min-width": 360,
-    "min-height": 420
+    "min-height": 300
   },
   "dependencies": {
     "ws": "file:../../../tools/cocos-agent-bridge/vendor/ws"

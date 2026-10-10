@@ -116,6 +116,7 @@ Editor.Panel.extend({
         this._requestId = null;
         this._pendingApproval = null;
         this._planCards = new Map();
+        this._plans = new Map();
         this._conversationId = localStorage.getItem('cocos-agent-assistant-conversation') || makeId();
         localStorage.setItem('cocos-agent-assistant-conversation', this._conversationId);
         this._modeButtons = [this.$modeAsk, this.$modePlan, this.$modeAgent];
@@ -303,10 +304,12 @@ Editor.Panel.extend({
         this.$send.disabled = false;
         this._pendingApproval = null;
         this.$approval.classList.remove('visible');
+        for (const plan of this._plans.values()) this.renderPlan(plan);
     },
 
     startPlanStep(plan) {
         if (this._busy || !plan || !this._socket || this._socket.readyState !== WebSocket.OPEN) return;
+        this.selectMode('Agent');
         this._busy = true;
         this._modeButtons.forEach((button) => { button.disabled = true; });
         this.$send.disabled = true;
@@ -320,6 +323,7 @@ Editor.Panel.extend({
 
     renderPlan(plan) {
         if (!plan || !Array.isArray(plan.steps)) return;
+        this._plans.set(plan.id, plan);
         const card = document.createElement('section');
         card.className = 'plan-card';
         const title = document.createElement('h3');
@@ -336,7 +340,7 @@ Editor.Panel.extend({
             item.textContent = step.title;
             const detail = document.createElement('div');
             detail.className = 'plan-detail';
-            detail.textContent = `${step.description}\n前置条件：${step.preconditions.join('；') || '无'}\n验证：${step.validation}\n恢复：${step.recovery}`;
+            detail.textContent = `${step.description}\n前置条件：${step.preconditions.join('；') || '无'}\n必需工具：${step.requiredTools.join('、')}\n验证：${step.validation}\n恢复：${step.recovery}`;
             item.appendChild(detail);
             list.appendChild(item);
         });

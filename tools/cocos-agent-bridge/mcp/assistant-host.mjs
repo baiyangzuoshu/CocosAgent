@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
-import { runDeepSeekAgent, DEFAULT_BASE_URL, DEFAULT_MODEL } from './deepseek-agent.mjs';
+import { runDeepSeekAgent, DEFAULT_BASE_URL, DEFAULT_MODEL, writeEvent } from './deepseek-agent.mjs';
 import { parseStructuredPlan } from './structured-plan.mjs';
 import { beginPlanStep, createPlan, finishPlanStep, hasPlanSetupReceipts, planView } from './assistant-plan-service.mjs';
 
@@ -68,6 +68,7 @@ function compactReceipt(receipt) {
     return {
         name: receipt?.name,
         callId: receipt?.callId,
+        access: receipt?.access,
         isError: result?.isError === true,
         ...compactResult(result),
     };
