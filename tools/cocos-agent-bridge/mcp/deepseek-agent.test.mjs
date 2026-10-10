@@ -3,10 +3,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { createServer } from './mcp-server.mjs';
 import { DEFAULT_BASE_URL, completionEndpoint, parseArgs, requestDeepSeek, runDeepSeekAgent } from './deepseek-agent.mjs';
+import { compactReceipt, assistantAnswer } from './assistant-host.mjs';
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const DEFAULT_SKILL = path.join(REPOSITORY_ROOT, 'plugins/cocos-agent-2x/skills/cocos-agent/SKILL.md');
@@ -43,6 +45,146 @@ async function withMcp(projects, invokeAgent, run) {
 
 function readTrace(filename) {
     return fs.readFileSync(filename, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+}
+
+for (const mode of ['Ask', 'Plan']) {
+    test(`${mode} exposes only read tools and supports a conversational answer with history`, async () => {
+        const value = fixture();
+        try {
+            await withMcp(value.projects, async () => { throw new Error('Unexpected host call'); }, async (client) => {
+                const catalog = (await client.listTools()).tools;
+                const readonly = new Set(catalog.filter((tool) => tool.annotations?.readOnlyHint === true).map((tool) => tool.name));
+                const result = await runDeepSeekAgent({ client, mode, task: 'Explain the modes.',
+                    projectRoots: value.projects, skillFiles: [DEFAULT_SKILL], tracePath: value.tracePath, apiKey: 'test-secret',
+                    history: [{ role: 'user', content: 'Previous question' }, { role: 'assistant', content: 'Previous answer' }],
+                    callModel: async (request) => {
+                        assert.ok(request.tools.length > 0);
+                        assert.ok(request.tools.every((tool) => readonly.has(tool.function.name)));
+                        assert.ok(request.messages.some((message) => message.content === 'Previous answer'));
+                        return { choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: 'Answer' } }] };
+                    } });
+                assert.equal(result.status, 'completed');
+                const blocked = await runDeepSeekAgent({ client, mode, task: 'Write anyway.',
+                    projectRoots: value.projects, skillFiles: [DEFAULT_SKILL], tracePath: value.tracePath, apiKey: 'test-secret',
+                    allowWrite: true, approveWrite: async () => { throw new Error('Must not request approval'); },
+                    callModel: async () => modelToolResponse(toolCall('write', 'cocos_2x_content_select', { projectRoot: value.projects[0], releaseId: 'demo' })) });
+                assert.equal(blocked.reason, 'model_requested_unknown_tool');
+            });
+        } finally { fs.rmSync(value.parent, { recursive: true, force: true }); }
+    });
+}
+
+test('Assistant preserves flattened and wrapped operation receipts', () => {
+    const payload = { isError: false, structuredContent: { success: true, outcome: 'completed', operationId: 'op-123' } };
+    for (const receipt of [{ name: 'write', callId: 'call', ...payload }, { name: 'write', callId: 'call', result: payload }]) {
+        assert.equal(compactReceipt(receipt).operationId, 'op-123');
+        assert.equal(compactReceipt(receipt).success, true);
+    }
+});
+
+test('Assistant never displays an Agent completion claim without a task receipt', () => {
+    const text = assistantAnswer({ status: 'stopped', reason: 'model_final_without_success_receipt', finalText: 'Created fake-node with fake-operation-id.' }, 'Agent');
+    assert.doesNotMatch(text, /fake-node|fake-operation-id/);
+    assert.match(text, /未确认完成/);
+});
+
+test('A batched model response is corrected before any tool executes', async () => {
+    const value = fixture();
+    let rounds = 0;
+    let hostCalls = 0;
+    try {
+        await withMcp(value.projects, async () => { hostCalls += 1; return { result: { success: true, data: [] } }; }, async (client) => {
+            const result = await runDeepSeekAgent({ client, mode: 'Ask', task: 'Explain.', projectRoots: value.projects,
+                skillFiles: [DEFAULT_SKILL], tracePath: value.tracePath, apiKey: 'test-secret',
+                callModel: async ({ messages }) => {
+                    rounds += 1;
+                    if (rounds === 1) return modelToolResponse(toolCall('a', 'cocos_2x_instances_list', {}), toolCall('b', 'cocos_2x_instances_list', {}));
+                    assert.equal(messages.filter((message) => message.role === 'tool' && message.content.includes('SINGLE_TOOL_CALL_REQUIRED')).length, 2);
+                    return { choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: 'Explanation only.' } }] };
+                } });
+            assert.equal(result.status, 'completed');
+            assert.equal(hostCalls, 0);
+            assert.equal(result.toolCalls, 0);
+            assert.equal(rounds, 2);
+        });
+    } finally { fs.rmSync(value.parent, { recursive: true, force: true }); }
+});
+
+test('Creator panel uses messages IPC and resets approval UI after a disconnect', () => {
+    let panel;
+    const sent = [];
+    const sockets = [];
+    class FakeSocket {
+        static OPEN = 1;
+        constructor() { this.readyState = 1; this.listeners = {}; sockets.push(this); }
+        addEventListener(name, listener) { this.listeners[name] = listener; }
+        send() {}
+        close() { this.readyState = 3; this.listeners.close?.(); }
+    }
+    vm.runInNewContext(fs.readFileSync(path.join(REPOSITORY_ROOT, '2.4.15NewProject/packages/cocos-agent-bridge/panel/index.js'), 'utf8'), {
+        Editor: { Panel: { extend(value) { panel = value; } }, Ipc: { sendToMain(...args) { sent.push(args); } } },
+        window: { crypto: { randomUUID: () => 'conversation-id' } },
+        localStorage: { getItem: () => null, setItem() {} }, WebSocket: FakeSocket,
+    });
+    for (const name of Object.keys(panel.$)) panel[`$${name}`] = {
+        value: '', dataset: {}, classList: { add() {}, remove() {}, toggle() {} }, addEventListener() {},
+    };
+    panel.addActivity = () => {};
+    panel.ready();
+    assert.equal(sent[0][0], 'cocos-agent-bridge:assistantState');
+    panel.messages['assistant-runtime-error'].call(panel, {}, { message: 'Failed' });
+    assert.equal(panel.$connect.disabled, false);
+    panel.$apiKey.value = 'session-secret';
+    panel.messages['assistant-runtime-ready'].call(panel, {}, { port: 1234, token: 'test-token', model: 'deepseek-flash' });
+    assert.equal(panel.$apiKey.value, '');
+    panel._busy = true;
+    panel._pendingApproval = 'approval';
+    panel.$send.disabled = true;
+    sockets[0].close();
+    assert.equal(panel._busy, false);
+    assert.equal(panel._pendingApproval, null);
+    assert.equal(panel.$send.disabled, false);
+    assert.ok(panel._modeButtons.every((button) => button.disabled === false));
+});
+
+for (const approved of [false, true]) {
+    test(`Agent ${approved ? 'accepts' : 'rejects'} explicit write approval and stops uncertain writes`, async () => {
+        const value = fixture();
+        let approvalCount = 0;
+        let writeCount = 0;
+        let round = 0;
+        const events = [];
+        try {
+            await withMcp([value.projects[0]], async (request) => {
+                if (request.method === 'instances.list') return { id: request.id, result: { success: true, data: [
+                    { projectRoot: value.projects[0], creatorVersion: '2.4.15', state: 'ready', activeScene: 'helloworld' }] } };
+                if (request.method === 'capabilities.list') return { id: request.id, result: { success: true, data: {
+                    instance: { projectRoot: value.projects[0], creatorVersion: '2.4.15', state: 'ready' },
+                    commands: [{ id: 'content.select', access: 'write', status: 'available' }] } } };
+                writeCount += 1;
+                throw new Error('Transport disconnected');
+            }, async (client) => {
+                const result = await runDeepSeekAgent({ client, mode: 'Agent', task: 'Select a release.',
+                    projectRoots: [value.projects[0]], skillFiles: [DEFAULT_SKILL], tracePath: value.tracePath,
+                    apiKey: 'test-secret', allowWrite: true, onEvent: (event) => events.push(event),
+                    approveWrite: async () => { approvalCount += 1; return approved; },
+                    callModel: async () => {
+                        round += 1;
+                        if (round === 1) return modelToolResponse(toolCall('instances', 'cocos_2x_instances_list', {}));
+                        if (round === 2) return modelToolResponse(toolCall('caps', 'cocos_2x_capabilities_list', { projectRoot: value.projects[0] }));
+                        return modelToolResponse(toolCall(`write-${round}`, 'cocos_2x_content_select', { projectRoot: value.projects[0], releaseId: 'demo', expectedCurrent: null }));
+                    } });
+                assert.equal(approvalCount, 1);
+                assert.equal(writeCount, approved ? 1 : 0);
+                assert.equal(result.status, approved ? 'needs-review' : 'awaiting-approval');
+                if (approved) {
+                    const receipt = events.find((event) => event.type === 'tool.finished' && event.toolName === 'cocos_2x_content_select');
+                    assert.equal(receipt.result.structuredContent.success, false);
+                    assert.equal(receipt.result.structuredContent.error.sideEffect, 'unknown');
+                }
+            });
+        } finally { fs.rmSync(value.parent, { recursive: true, force: true }); }
+    });
 }
 
 test('DeepSeek agent discovers instances, selects a ready project, queries live capabilities, then inspects read-only', async () => {
@@ -99,7 +241,9 @@ test('DeepSeek agent discovers instances, selects a ready project, queries live 
         assert.equal(events.at(-1).event, 'run.stop');
         assert.equal(events.at(-1).reason, 'model_final');
         assert.equal(events.at(-1).receipts.at(-1).outcome, 'completed');
-        assert.equal(fs.statSync(value.tracePath).mode & 0o777, 0o600);
+        // Windows chmod only controls the writable attribute, not POSIX owner/group permissions.
+        if (process.platform !== 'win32') assert.equal(fs.statSync(value.tracePath).mode & 0o777, 0o600);
+        else assert.ok(fs.statSync(value.tracePath).mode & 0o200);
         assert.doesNotMatch(fs.readFileSync(value.tracePath, 'utf8'), /test-secret-value/);
     } finally { fs.rmSync(value.parent, { recursive: true, force: true }); }
 });

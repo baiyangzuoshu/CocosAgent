@@ -1,0 +1,63 @@
+CocosAgent Assistant acceptance — Windows / Creator 2.4.15 / 2026-10-10
+
+Command: npm test
+Exit: 0
+
+> cocos-agent-mcp-bridge@0.1.0 test
+> node --test mcp-server.test.mjs deepseek-agent.test.mjs
+
+✔ Ask exposes only read tools and supports a conversational answer with history (54.9678ms)
+✔ Plan exposes only read tools and supports a conversational answer with history (23.2379ms)
+✔ Assistant preserves flattened and wrapped operation receipts (0.2261ms)
+✔ Assistant never displays an Agent completion claim without a task receipt (0.208ms)
+✔ A batched model response is corrected before any tool executes (12.5463ms)
+✔ Creator panel uses messages IPC and resets approval UI after a disconnect (1.2187ms)
+✔ Agent rejects explicit write approval and stops uncertain writes (19.593ms)
+✔ Agent accepts explicit write approval and stops uncertain writes (20.7674ms)
+✔ DeepSeek agent discovers instances, selects a ready project, queries live capabilities, then inspects read-only (25.3693ms)
+✔ DeepSeek agent blocks writes without local approval and records why it stopped (27.7131ms)
+✔ DeepSeek agent rejects batched tool calls so every choice follows its preceding receipt (18.8305ms)
+✔ DeepSeek agent cannot mark the task complete without a successful task-tool receipt (10.7595ms)
+✔ DeepSeek request uses the OpenAI-compatible HTTPS tool-call endpoint without exposing the key in errors (0.9977ms)
+✔ CLI accepts only explicit absolute, unique project roots and keeps credentials out of arguments (4.1165ms)
+✔ CLI requires existing absolute, unique, bounded registered project roots (5.3373ms)
+✔ MCP advertises fixed 2.4 tools and routes calls through the shared JSONL dispatcher contract (59.8314ms)
+✔ MCP forwards opted-in progress and prevents a duplicate scene pipeline while it is running (7.9402ms)
+✔ scene pipeline worker returns through its message channel without touching an editor (42.4471ms)
+✔ MCP cancellation sets the active pipeline shared flag and leaves compensation to the Worker (6.3432ms)
+✔ MCP converts dispatcher failures to structured tool errors without losing the Cocos error code (4.3994ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 20
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 404.1167
+
+
+Command: node --test tools/cocos-agent-bridge/operation-reconcile.test.js tools/cocos-agent-bridge/agent-dispatch.test.js tools/cocos-agent-bridge/scene-node-create-contract.test.js
+Exit: 0
+agent dispatch selection, guards, and receipt decisions passed
+✔ tools\cocos-agent-bridge\agent-dispatch.test.js (86.1757ms)
+✔ records no-effect only after same-scene parent identity and disk absence agree (27.666ms)
+✔ 2.4 initial-record failure requires live and disk absence before recovery (51.9576ms)
+✔ initial-record recovery rejects partial phases and 3.x records (36.3945ms)
+✔ rejects mismatched live scene, parent UUID, and disk node presence without changing history (26.8444ms)
+✔ does not reconcile a Prefab creation as no-effect when its generated asset remains (19.8395ms)
+✔ dispatcher selects the recorded scene and reports a reconciled failure as no-effect (20.1606ms)
+node create expected diffs cover prefab create, instantiate, and compensation identities
+✔ tools\cocos-agent-bridge\scene-node-create-contract.test.js (36.8887ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 250.3922
+
+
+Command: node tools/cocos-agent-bridge/operation-store.test.js
+Exit: 0
+operation store recovery and idempotent get passed

@@ -34,7 +34,8 @@ function write(projectRoot, record, create = false) {
     }
 }
 function sync(filename) {
-    const descriptor = fs.openSync(filename, 'r');
+    // Windows FlushFileBuffers requires a handle opened for writing.
+    const descriptor = fs.openSync(filename, process.platform === 'win32' ? 'r+' : 'r');
     try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
 }
 function syncDirectory(dirname) {

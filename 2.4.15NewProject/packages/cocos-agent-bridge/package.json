@@ -4,6 +4,20 @@
   "description": "Local CocosAgent bridge prototype for Creator 2.4.15",
   "main": "main.js",
   "scene-script": "scene.js",
+  "main-menu": {
+    "i18n:MAIN_MENU.package.title/CocosAgent/Assistant": {
+      "message": "cocos-agent-bridge:openAssistant"
+    }
+  },
+  "panel": {
+    "main": "panel/index.js",
+    "type": "dockable",
+    "title": "CocosAgent",
+    "width": 440,
+    "height": 640,
+    "min-width": 360,
+    "min-height": 420
+  },
   "dependencies": {
     "ws": "file:../../../tools/cocos-agent-bridge/vendor/ws"
   }

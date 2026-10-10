@@ -54,6 +54,37 @@ test('records no-effect only after same-scene parent identity and disk absence a
     } finally { f.cleanup(); }
 });
 
+test('2.4 initial-record failure requires live and disk absence before recovery', () => {
+    for (const withTarget of [false, true]) {
+        const f = fixture(withTarget);
+        try {
+            f.record.intent = 'created';
+            f.record.sceneName = null;
+            f.record.receipts = [];
+            for (const phase of Object.keys(f.record.phases)) f.record.phases[phase] = 'pending';
+            store.write(f.projectRoot, f.record);
+            const result = reconcileNoEffect({ ...f, creatorVersion: '2.4.15', operationId });
+            assert.equal(result.success, !withTarget);
+            if (!withTarget) assert.equal(result.data.reconciliation.disposition, 'no-effect');
+            else assert.equal(store.read(f.projectRoot, operationId).sceneName, null);
+        } finally { f.cleanup(); }
+    }
+});
+
+test('initial-record recovery rejects partial phases and 3.x records', () => {
+    for (const creatorVersion of ['2.4.15', '3.8.7']) {
+        const f = fixture();
+        try {
+            f.record.intent = 'created'; f.record.sceneName = null; f.record.receipts = [];
+            f.record.creatorVersion = creatorVersion;
+            for (const phase of Object.keys(f.record.phases)) f.record.phases[phase] = 'pending';
+            if (creatorVersion === '2.4.15') f.record.phases.editor = 'passed';
+            store.write(f.projectRoot, f.record);
+            assert.equal(reconcileNoEffect({ ...f, creatorVersion, operationId }).error.code, 'OPERATION_NOT_RECONCILABLE');
+        } finally { f.cleanup(); }
+    }
+});
+
 test('rejects mismatched live scene, parent UUID, and disk node presence without changing history', () => {
     for (const mutation of [
         (live) => { live.sceneName = 'other-scene'; },
