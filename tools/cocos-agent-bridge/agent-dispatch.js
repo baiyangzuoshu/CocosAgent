@@ -404,11 +404,11 @@ function reconcileOperation(request, invoke = runProcess) {
         && catalog.data.commands.find((command) => command.id === 'scene.snapshot');
     if (!catalog || catalog.success !== true || !selected || !snapshot || snapshot.status !== 'available'
         || selected.instanceId !== instance.instanceId || selected.catalogRevision !== instance.catalogRevision
-        || selected.activeScene !== instance.activeScene || selected.activeScene !== record.sceneName) {
+        || selected.activeScene !== instance.activeScene || selected.activeScene !== operationReconcile.recordSceneName(record)) {
         return problem('RECONCILE_TARGET_CHANGED', 'The selected Creator instance must be stable and have the recorded scene active.', null, 'recovery');
     }
     const execution = invoke('node-create-host.js', ['--project', project, '--creator-version', creatorVersion,
-        '--expected-instance-id', selected.instanceId, '--expected-scene', record.sceneName,
+        '--expected-instance-id', selected.instanceId, '--expected-scene', operationReconcile.recordSceneName(record),
         '--operation-reconcile', operationReconcileId]);
     if (execution.status !== 0) return problem('RECONCILE_NOT_CONFIRMED', 'Live and disk state did not satisfy the no-effect reconciliation checks.',
         { operationId: operationReconcileId, stderr: execution.stderr.trim() }, 'recovery', 'possible');

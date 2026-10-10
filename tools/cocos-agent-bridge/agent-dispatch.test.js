@@ -7,7 +7,7 @@ const path = require('path');
 const { dispatch } = require('./agent-dispatch');
 const operationStore = require('./operation-store');
 
-const projectRoot = '/tmp/cocos-agent-dispatch-project';
+const projectRoot = path.resolve(os.tmpdir(), 'cocos-agent-dispatch-project');
 const instanceId = 'dfc80898-3a3b-4ac1-8d28-bc6df6515c88';
 const operationId = '5858dc80-32d0-4610-8291-f057fa13151e';
 const instance = { instanceId, projectRoot, creatorVersion: '3.8.7', state: 'ready', activeScene: 'main', catalogRevision: 'a'.repeat(64) };
@@ -87,7 +87,7 @@ assert.strictEqual(result.result.action, 'apply');
 assert.strictEqual(result.error, null);
 assert.strictEqual(fixture.calls.length, 1);
 
-for (const [command, input] of [['scene.snapshot', {}], ['scene.node.inspect', { nodePath: 'main/Canvas' }], ['asset.importPng', { sourcePath: '/tmp/probe.png' }]]) {
+for (const [command, input] of [['scene.snapshot', {}], ['scene.node.inspect', { nodePath: 'main/Canvas' }], ['asset.importPng', { sourcePath: path.resolve(os.tmpdir(), 'probe.png') }]]) {
     fixture = mock();
     result = dispatch({ ...request, command, input }, fixture.invoke);
     assert.strictEqual(result.outcome, 'completed');
@@ -96,7 +96,7 @@ for (const [command, input] of [['scene.snapshot', {}], ['scene.node.inspect', {
     assert.strictEqual(result.error, null);
 }
 
-const searchProject = '/tmp/cocos-agent-dispatch-project-2x-search';
+const searchProject = path.resolve(os.tmpdir(), 'cocos-agent-dispatch-project-2x-search');
 const searchInstance = { ...instance, creatorVersion: '2.4.15', projectRoot: searchProject, activeScene: null };
 const searchFixture = mock({ includeAssetSearch: true, instance: searchInstance });
 const searchRequest = { targets: [{ creatorVersion: '2.4.15', projectRoot: searchProject }], projectRoot: searchProject,
@@ -130,7 +130,7 @@ const nodeOperationId = '4f89c7a5-40af-44f9-b526-2eb171e2e334';
 const spriteFrameUuid = 'd5cce470-1e42-4917-a416-332e905525c0';
 const nodeComponents = [{ classId: 'cc.Sprite', spriteFrameUuid }];
 const nodeTransform = { position: { x: 12, y: -4 }, scale: { x: 2, y: 3 } };
-const nodeInstance = { ...instance, creatorVersion: '2.4.15', projectRoot: '/tmp/cocos-agent-dispatch-project-2x' };
+const nodeInstance = { ...instance, creatorVersion: '2.4.15', projectRoot: path.resolve(os.tmpdir(), 'cocos-agent-dispatch-project-2x') };
 const nodeRecord = { capabilityId: 'scene.node.create', operationId: nodeOperationId, projectRoot: nodeInstance.projectRoot,
     creatorVersion: '2.4.15', createdNodeUuid: '51d83934-8f4a-47b6-99ee-df64a2f36712', intent: 'disk-verified',
     sceneName: 'helloworld', manifest: { action: 'apply', parentPath: 'helloworld/Canvas', parentUuid: 'parent-uuid',
@@ -241,7 +241,7 @@ assert.strictEqual(result.outcome, 'completed');
 assert(patchCalls.some((call) => call.script === 'scene-node-patch-host.js' && call.args.includes('--operation-get')));
 fs.rmSync(patchProject, { recursive: true, force: true });
 
-const removalProject = '/tmp/cocos-agent-removal-project';
+const removalProject = path.resolve(os.tmpdir(), 'cocos-agent-removal-project');
 const removalInstance = { instanceId, projectRoot: removalProject, creatorVersion: '2.4.15', state: 'ready',
     activeScene: 'helloworld', catalogRevision: 'b'.repeat(64) };
 const removalInput = { assetName: 'agent-created.png', textureUuid: 'f0b2e43c-7e8d-4e20-a5d3-a13458cf1c75',
@@ -265,7 +265,7 @@ assert.strictEqual(dispatch({ targets: [{ creatorVersion: '3.8.7', projectRoot }
     command: 'asset.removeImportedPng', input: removalInput }, removalInvoke).error.code, 'INVALID_ARGUMENT');
 assert.strictEqual(removalCalls.length, 3, '3.8 rejects this 2.4-only capability before editor discovery');
 
-const validationProject = '/tmp/cocos-agent-validation-project';
+const validationProject = path.resolve(os.tmpdir(), 'cocos-agent-validation-project');
 const validationInstance = { ...removalInstance, projectRoot: validationProject };
 const validationPipelineId = '77777777-7777-4777-8777-777777777777';
 const validationInput = { assetName: 'probe.png', pipelineId: validationPipelineId };
@@ -327,7 +327,8 @@ try {
     assert.equal(folderCalls.length, beforeInvalidFolder, 'path traversal is rejected before target discovery');
     assert.equal(dispatch({ ...folderRequest, input: { folderPath: 'MissingFolder' } }, folderInvoke).error.code, 'ASSET_FOLDER_UNAVAILABLE');
     assert.equal(folderCalls.length, beforeInvalidFolder, 'missing target folder is rejected before editor discovery');
-    fs.symlinkSync(path.join(folderProject, 'assets', folderPath), path.join(folderProject, 'assets', 'LinkedFolder'));
+    fs.symlinkSync(path.join(folderProject, 'assets', folderPath), path.join(folderProject, 'assets', 'LinkedFolder'),
+        process.platform === 'win32' ? 'junction' : 'dir');
     assert.equal(dispatch({ ...folderRequest, input: { folderPath: 'LinkedFolder' } }, folderInvoke).error.code, 'ASSET_FOLDER_UNAVAILABLE');
     assert.equal(folderCalls.length, beforeInvalidFolder, 'symlink target is rejected before editor discovery');
     assert.equal(dispatch({ ...folderRequest, creatorVersion: '3.8.7',

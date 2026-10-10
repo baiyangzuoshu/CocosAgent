@@ -68,6 +68,8 @@ function createdPrefabAbsent(projectRoot, record) {
 }
 
 function allowedRecord(record, projectRoot, creatorVersion, operationId) {
+    if (record.projectRoot === projectRoot && record.creatorVersion === creatorVersion && record.operationId === operationId
+        && initialRecord(record)) return true;
     if (record.projectRoot !== projectRoot || record.creatorVersion !== creatorVersion || record.operationId !== operationId
         || record.capabilityId !== 'scene.node.create' || !record.sceneName || !record.manifest
         || !['apply', 'replay'].includes(record.manifest.action) || record.intent !== 'editor-write-sent'
@@ -76,6 +78,26 @@ function allowedRecord(record, projectRoot, creatorVersion, operationId) {
         || record.reconciliation) return false;
     const editorFailure = [...(record.receipts || [])].reverse().find((item) => item.phase === 'editor' && item.status === 'failed');
     return !!(editorFailure && editorFailure.error && editorFailure.error.sideEffect === 'possible');
+}
+
+function initialRecord(record) {
+    const phases = ['capability', 'preflight', 'editor', 'disk', 'preview', 'recovery'];
+    return record.creatorVersion === '2.4.15' && record.capabilityId === 'scene.node.create'
+        && record.intent === 'created' && record.sceneName === null && !record.createdNodeUuid && !record.reconciliation
+        && Array.isArray(record.receipts) && record.receipts.length === 0 && record.phases
+        && Object.keys(record.phases).length === phases.length && phases.every((phase) => record.phases[phase] === 'pending')
+        && record.manifest?.action === 'apply' && !record.manifest.sourceOperationId && !record.manifest.targetNodeUuid
+        && !record.manifest.prefabMode && !record.manifest.prefabUuid && !record.manifest.prefabUrl
+        && Array.isArray(record.manifest.components) && record.manifest.components.length === 0
+        && record.manifest.transform && Object.keys(record.manifest.transform).length === 0
+        && typeof record.manifest.parentPath === 'string' && record.manifest.parentPath.length <= 240
+        && /^[A-Za-z0-9_-]{1,64}\/.+/.test(record.manifest.parentPath)
+        && typeof record.manifest.parentUuid === 'string' && record.manifest.parentUuid.length > 0
+        && /^[A-Za-z0-9_ -]{1,64}$/.test(record.manifest.nodeName || '');
+}
+
+function recordSceneName(record) {
+    return initialRecord(record) ? record.manifest.parentPath.split('/')[0] : record.sceneName;
 }
 
 function reconcileNoEffect({ projectRoot, creatorVersion, operationId, liveObservation }) {
@@ -88,11 +110,12 @@ function reconcileNoEffect({ projectRoot, creatorVersion, operationId, liveObser
     try { record = store.read(project, operationId); }
     catch (error) { return failure(error.code === 'ENOENT' ? 'OPERATION_NOT_FOUND' : 'OPERATION_READ_FAILED', 'Cannot read operation record.'); }
     if (record.reconciliation && record.reconciliation.disposition === 'no-effect') return { success: true, data: record, alreadyReconciled: true };
-    if (!allowedRecord(record, project, creatorVersion, operationId)) return failure('OPERATION_NOT_RECONCILABLE', 'Only an uncertain failed apply/replay with no recorded node can be reconciled.');
+    if (!allowedRecord(record, project, creatorVersion, operationId)) return failure('OPERATION_NOT_RECONCILABLE', 'Requires an uncertain failed apply/replay or an untouched 2.4 empty-node initial record.');
     const parentPath = record.manifest.parentPath;
+    const expectedScene = recordSceneName(record);
     const nodePath = `${parentPath}/${record.manifest.nodeName}`;
     const observedAt = liveObservation && liveObservation.observedAt;
-    if (!liveObservation || liveObservation.sceneName !== record.sceneName
+    if (!liveObservation || liveObservation.sceneName !== expectedScene
         || !liveObservation.parent || liveObservation.parent.status !== 'found'
         || liveObservation.parent.path !== parentPath || liveObservation.parent.uuid !== record.manifest.parentUuid
         || !liveObservation.target || liveObservation.target.status !== 'not-found' || liveObservation.target.path !== nodePath
@@ -102,11 +125,12 @@ function reconcileNoEffect({ projectRoot, creatorVersion, operationId, liveObser
     if (Date.parse(observedAt) < Date.parse(record.createdAt) || nodePath.length > 240) {
         return failure('LIVE_STATE_NOT_CONFIRMED', 'Observation time or target path is outside the operation contract.');
     }
-    const disk = diskAbsence(project, creatorVersion, record);
+    const disk = diskAbsence(project, creatorVersion, { ...record, sceneName: expectedScene });
     if (!disk) return failure('DISK_STATE_NOT_CONFIRMED', 'The saved scene must contain the recorded parent and no matching direct child.');
     if (!createdPrefabAbsent(project, record)) return failure('DISK_STATE_NOT_CONFIRMED', 'A Prefab creation may have left an asset; inspect or compensate that exact asset before reconciling no effect.');
     const relativeScene = path.relative(project, disk.filename).split(path.sep).join('/');
     if (relativeScene.length > 512) return failure('DISK_STATE_NOT_CONFIRMED', 'Saved scene path exceeds the persisted evidence limit.');
+    record.sceneName = expectedScene;
     const recoveryEvidence = { kind: 'recovery-readback', source: 'Same Creator session scene snapshots and serialized scene readback',
         sceneName: record.sceneName, nodeName: record.manifest.nodeName, sha256: disk.sha256,
         observedAt: new Date(observedAt).toISOString(), note: 'Recorded parent identity matched; target path was absent from both active scene and serialized scene.' };
@@ -121,4 +145,4 @@ function reconcileNoEffect({ projectRoot, creatorVersion, operationId, liveObser
     return { success: true, data: record, alreadyReconciled: false };
 }
 
-module.exports = { reconcileNoEffect, diskAbsence, allowedRecord, createdPrefabAbsent };
+module.exports = { reconcileNoEffect, diskAbsence, allowedRecord, createdPrefabAbsent, recordSceneName };

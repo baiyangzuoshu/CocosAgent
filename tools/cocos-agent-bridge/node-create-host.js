@@ -197,7 +197,7 @@ if (operationReconcileId) {
     }
     try { reconciliationRecord = store.read(projectRoot, operationReconcileId); } catch (_) { fail('OPERATION_NOT_FOUND'); }
     if (!reconcile.allowedRecord(reconciliationRecord, projectRoot, creatorVersion, operationReconcileId)) fail('OPERATION_NOT_RECONCILABLE');
-    if (expectedScene && expectedScene !== reconciliationRecord.sceneName) fail('EXPECTED_SCENE_MISMATCH');
+    if (expectedScene && expectedScene !== reconcile.recordSceneName(reconciliationRecord)) fail('EXPECTED_SCENE_MISMATCH');
 }
 if (!operationReconcileId && (!uuidPattern.test(operationId) || !['apply', 'compensate', 'replay'].includes(action)
     || typeof parentPath !== 'string' || parentPath.length > 240 || parentPath.includes('//') || parentPath.includes('\\')

@@ -1,6 +1,6 @@
 # CocosAgent 设计：以 AI-Native 引擎岗位要求为目标
 
-> 状态：设计基线；两版已验证本地通信、实例与能力目录、单 PNG 场景闭环和节点只读定位。依据是用户提供的四张招聘截图；截图描述的是岗位方向，不等于本仓库已经具备全部能力。版本范围为 Creator 2.4.15 和 3.8.7，不以版本迁移为目标。
+> 状态：设计基线；两版已验证本地通信、实例与能力目录、单 PNG 场景闭环和节点只读定位。2026-10-10 新增产品决策：实现 Creator 内置对话面板，含 Ask、Plan、Agent 三种模式，首期接 DeepSeek 并只推进 2.4.15。依据是用户提供的四张招聘截图；截图描述的是岗位方向，不等于本仓库已经具备全部能力。版本范围为 Creator 2.4.15 和 3.8.7，不以版本迁移为目标。
 
 **当前实施约束：** 先只开发并验收 Creator 2.4.15 的 CocosAgent 完整工作流，再根据实际形成的能力合同补充 3.8.7。现有 3.8 代码、研究和轨迹保留为历史基线；新增 3.x 功能、示例场景挂接与实机验收暂缓。下文涉及“两版”的表格描述长期目标或既有证据，不代表当前每项工作都要双版本同步推进。共享 Host 合同由 2.x 验证驱动，新增能力不得默认声明 3.x 可用。
 
@@ -55,7 +55,11 @@ flowchart LR
 
 ### 运行边界与通信职责
 
-模型属于外部 Agent 或其客户端配置；CocosAgent Host 负责把模型给出的意图变成受约束的工具调用；Creator 扩展只负责本版本编辑器 API 的执行与读回。**模型供应商的 API key 不进入 Creator 扩展、项目文件或桥接会话。**本机 WebSocket 的随机会话令牌只认证 Host 与扩展，不是模型凭证，也不提供模型调用能力。
+既有外部 Agent 接入仍由调用方持有模型；CocosAgent Host 负责将模型意图变成受约束的工具调用，Creator 扩展负责本版本编辑器 API 的执行与读回。新增的内置 Assistant 使用独立本地 Agent 服务直接调用 DeepSeek，并作为 MCP 客户端调用既有 MCP 工具服务；不另开绕过 Host 的 Creator 写入通道。
+
+**内置 Assistant 三模式合同：** Ask 只暴露标记为只读的工具；Plan 可读取项目并产出步骤，但不执行写入；Agent 可使用当前版本工具，每个非只读调用在执行前都要在面板显示工具名与参数并等待用户批准。Host / Agent 服务实施权限过滤，不能只由 UI 隐藏按钮。Creator 2.4 面板经 IPC 将会话输入交给本地 Agent 服务；可选地将 DeepSeek API Key 与模型写入 Git 忽略的项目根目录 `.env.local`，不写入场景、扩展配置或轨迹，也不放入命令行参数。Creator 扩展的主进程会短暂接收该输入并通过子进程环境交给 Agent 服务，MCP 工具服务不继承 `DEEPSEEK_*` 环境变量。
+
+本地 Assistant Agent 服务与外部 MCP 客户端复用同一 MCP Server、能力目录、操作账本和恢复合同。2026-10-10 已在 Windows Creator 2.4.15 的独立面板窗口实测 DeepSeek Flash 的 Ask、Plan、逐项批准/拒绝、空节点创建、补偿与失败对账；面板声明为 `dockable`，停靠交互尚未实测。首版提供 Flash/V4 Pro 选项，真实验收只覆盖 Flash。Key 可保存在 Git 忽略的项目根目录 `.env.local` 并在扩展启动时恢复；多用户组织管理尚未实现，完整边界见[Assistant 首版验收](agent-foundation/cocos-agent-assistant-0.1.md)。
 
 通信协议、传输方式和编辑器操作语义应分层：工具语义定义 `scene.snapshot`、`asset.import` 等操作；当前原型用 loopback WebSocket 承载 Host 与扩展之间的请求；未来可增加 MCP stdio 入口供外部 Agent 调用，但不因此让 Creator 扩展直接连接模型或把 MCP 传输细节写入 2.x/3.x 适配器。Unity 官方从内置 Assistant MCP 转向 Unity CLI 的经验可作参考：把 Agent 接入面与编辑器侧桥接解耦；Unity 旧版 MCP 文档仍可帮助理解工具注册和编辑器连接模型，但不应视为我们需要照搬的当前传输实现。
 
@@ -143,6 +147,7 @@ Creator 并不保证多资源或场景批次具备数据库式原子事务。因
 | 阶段 | 交付物 | 完成条件 | 当前状态 |
 | --- | --- | --- |
 | P0：项目理解与桥接 | 两版只读索引、场景/资源快照、能力清单、证据引用和 Host-扩展会话 | 两个示例都能返回可核对快照；能力未知时明确拒绝调用 | 基础接入已验证：双实例目录、四项版本能力、场景快照和节点定位；目录有修订号，Host 中断后可查询持久操作。完整资源索引、常驻目录与自动断线重连仍未实现 |
+| P0-A：内置 Ask / Plan / Agent | 2.4.15 对话面板、DeepSeek 本地 Agent 服务、模式权限、写入审批和对话上下文 | 面板可直接对话；Ask/Plan 无写入工具；Agent 的写操作逐项审批；工具结果与恢复状态在面板可见 | 首条切片已验收：Windows Creator 2.4.15 + DeepSeek Flash 真实对话、只读计划、拒绝/批准创建空节点、来源补偿及失败对账。当前代码已有结构化计划卡、逐步进入 Agent、Key 本地持久化和逐项写入审批；自动测试 30/30 通过。修复计划回执检查后的 Creator/DeepSeek 面板复跑尚未完成；停靠交互、持久聊天、流式响应及更广任务覆盖仍待实现/验收，见[记录](agent-foundation/cocos-agent-assistant-0.1.md) |
 | P1：编辑器变更闭环 | 两版独立场景适配器；差异计划、节点/组件/资源引用操作、读回验证与补偿 | 同一任务分别在两版可重放；编辑器重开后引用正确，预览通过，重复执行无副作用 | 按当前约束先完成 2.4：节点、Sprite/Label 组件、资源引用写入，磁盘读回、场景重开、预览验收、补偿和重放均有局部合同与证据；任意组件/预制体/脚本、复杂布局仍未覆盖。3.8 适配暂停，保留历史研究与既有证据 |
 | P2：资源批处理 | 清单、元数据校验、批量导入、依赖检查、错误定位与隔离 | 同一批资源在两版分别完成导入和场景引用；失败项不污染成功项 | 进行中：两版各两张 PNG 的导入与读回已实测；2.4.15 双 Sprite 显式坐标写入、`.fire` 坐标与 UUID 磁盘读回、同屏视觉验收、逆序补偿及新 ID 重放后再次补偿均有记录。PNG 具体依赖链和错误边界已验证，Host 单项调用中断后的同批恢复有模拟测试；任意资源类型的通用依赖发现尚未实现，3.8 批次实现按约束暂缓。见[批量导入合同](agent-foundation/asset-batch-0.1.md)和[场景 Sprite 批次合同](agent-foundation/scene-sprite-batch-0.1.md) |
 | P3：动态内容 | 版本专属资源替换与生命周期操作、运行时探针、恢复策略 | Web 与至少一个原生目标记录多轮加载/替换/释放；达到项目定义的帧时间和内存预算 | 2.4 Web 已验证红蓝替换、加载失败时保留旧内容、版本回滚、重连和 `effective`。2.4 Mac 开发包已完成红蓝应用、未打包资源失败时保留旧内容、回滚和 `already-active`；2.4 Web-Mobile 已完成从场景 release、隔离构建、包内 UUID 校验、运行时应用到旧 release 回滚。2.4 内置 `resources` 的 Web-Mobile 预览已实测 JSONL Host 重启恢复；Bundle/内置资源切换两轮后旧 Texture 从 Asset Cache 移除；两个独立 PNG Bundle 同时驻留、逐个释放并按相反顺序重复后，缓存回到会话基线。共享依赖、多 Bundle 更新合同、逐帧耗时/峰值内存预算、Asset Bundle 重启恢复、远端下载和发布版原生增量更新仍未验收；证据见[运行时缓存轨迹](agent-foundation/traces/cocos-agent-content-runtime-diagnostics-2.4-web.jsonl)、[双 Bundle 轨迹](agent-foundation/traces/cocos-agent-multi-bundle-residency-2.4-web.json)、[重启恢复轨迹](agent-foundation/traces/cocos-agent-content-preview-restart-2.4-web.jsonl)与[Asset Bundle 切片记录](agent-foundation/cocos2-asset-bundle-slice-plan.md) |

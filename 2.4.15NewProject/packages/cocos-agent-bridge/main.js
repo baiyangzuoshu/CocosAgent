@@ -3,8 +3,10 @@
 const fs = require('fs');
 const crypto = require('crypto');
 const path = require('path');
+const childProcess = require('child_process');
 const WebSocket = require('ws');
 const { searchPngAssets } = require('./asset-search');
+const { CredentialStore } = require('./credential-store.cjs');
 
 const CREATOR_VERSION = '2.4.15';
 const PROTOCOL_VERSION = '0.1';
@@ -17,6 +19,16 @@ let connecting = false;
 let lastSessionId = null;
 let activeSession = null;
 let pendingSceneSave = null;
+let assistantProcess = null;
+let assistantRuntimeInfo = null;
+let assistantKeyFingerprint = null;
+let assistantStartupTimer = null;
+let assistantCredentialRemembered = false;
+let assistantStartPending = false;
+let assistantStartSequence = 0;
+let assistantForgetSequence = 0;
+let assistantCredentialError = null;
+const assistantCredentialStore = new CredentialStore();
 const instanceBytes = crypto.randomBytes(16);
 instanceBytes[6] = (instanceBytes[6] & 0x0f) | 0x40;
 instanceBytes[8] = (instanceBytes[8] & 0x3f) | 0x80;
@@ -917,8 +929,184 @@ function connectFromSession() {
     socket.on('error', () => { connecting = false; });
 }
 
+function sendAssistantPanel(message, payload) {
+    try { Editor.Ipc.sendToPanel('cocos-agent-bridge', message, payload); } catch (_) {}
+}
+
+function stopAssistantRuntime() {
+    if (assistantStartupTimer) clearTimeout(assistantStartupTimer);
+    assistantStartupTimer = null;
+    assistantRuntimeInfo = null;
+    assistantKeyFingerprint = null;
+    if (assistantProcess) {
+        const child = assistantProcess;
+        assistantProcess = null;
+        try { child.kill(); } catch (_) {}
+    }
+}
+
+async function startAssistantRuntime(payload) {
+    const request = payload || {};
+    const sequence = ++assistantStartSequence;
+    assistantStartPending = true;
+    let apiKey = typeof request.apiKey === 'string' ? request.apiKey.trim() : '';
+    let model = request.model;
+    let remembered = false;
+
+    try {
+        if (!apiKey && request.remember !== false) {
+            const saved = await assistantCredentialStore.load();
+            if (sequence !== assistantStartSequence) return;
+            if (saved) {
+                apiKey = saved.apiKey;
+                model = ['deepseek-flash', 'deepseek-v4-pro'].includes(request.model) ? request.model : saved.model;
+                remembered = true;
+            } else if (request.automatic) {
+                assistantCredentialError = null;
+                assistantStartPending = false;
+                return;
+            }
+        }
+        if (apiKey && request.remember === true) {
+            await assistantCredentialStore.save(apiKey, model);
+            remembered = true;
+        } else if (apiKey && request.remember === false) {
+            await assistantCredentialStore.clear();
+        }
+        if (sequence !== assistantStartSequence) return;
+    } catch (_) {
+        if (sequence !== assistantStartSequence) return;
+        assistantStartPending = false;
+        assistantCredentialError = '无法读取或保存项目根目录的 .env.local；请检查文件权限后重试。';
+        sendAssistantPanel('assistant-runtime-error', { message: assistantCredentialError });
+        return;
+    }
+
+    if (apiKey.length < 8 || /[\r\n\u0000]/.test(apiKey)) {
+        assistantStartPending = false;
+        assistantCredentialError = apiKey ? 'DeepSeek API Key 无效。' : '请先输入 DeepSeek API Key，或在项目根目录 .env.local 中设置 DEEPSEEK_API_KEY。';
+        sendAssistantPanel('assistant-runtime-error', { message: assistantCredentialError });
+        return;
+    }
+    if (!['deepseek-flash', 'deepseek-v4-pro'].includes(model)) {
+        assistantStartPending = false;
+        assistantCredentialError = '所选 DeepSeek 模型暂不支持。';
+        sendAssistantPanel('assistant-runtime-error', { message: assistantCredentialError });
+        return;
+    }
+    assistantCredentialError = null;
+
+    const keyFingerprint = crypto.createHash('sha256').update(apiKey).digest('hex');
+    if (assistantRuntimeInfo && assistantProcess && assistantKeyFingerprint === keyFingerprint
+        && assistantRuntimeInfo.model === model) {
+        assistantCredentialRemembered = remembered;
+        assistantRuntimeInfo.credentialRemembered = remembered;
+        assistantStartPending = false;
+        sendAssistantPanel('assistant-runtime-ready', assistantRuntimeInfo);
+        return;
+    }
+    stopAssistantRuntime();
+
+    const hostScript = path.resolve(__dirname, '../../../tools/cocos-agent-bridge/mcp/assistant-host.mjs');
+    if (!fs.existsSync(hostScript)) {
+        assistantStartPending = false;
+        sendAssistantPanel('assistant-runtime-error', { message: '找不到 CocosAgent Assistant 服务入口。' });
+        return;
+    }
+    const nodeCommand = process.env.COCOS_AGENT_NODE || 'node';
+    const env = Object.assign({}, process.env, { DEEPSEEK_API_KEY: apiKey });
+    const child = childProcess.spawn(nodeCommand, [hostScript, '--project', PROJECT_ROOT, '--model', model], {
+        cwd: path.dirname(hostScript), env, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    assistantProcess = child;
+    assistantKeyFingerprint = keyFingerprint;
+    assistantCredentialRemembered = remembered;
+    let output = '';
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => {
+        output += chunk;
+        let newline = output.indexOf('\n');
+        while (newline >= 0) {
+            const line = output.slice(0, newline).trim();
+            output = output.slice(newline + 1);
+            newline = output.indexOf('\n');
+            if (!line.startsWith('READY ')) continue;
+            try {
+                const ready = JSON.parse(line.slice(6));
+                if (assistantProcess !== child || !Number.isInteger(ready.port) || typeof ready.token !== 'string') return;
+                assistantRuntimeInfo = { ready: true, port: ready.port, token: ready.token, model: ready.model,
+                    creatorVersion: ready.creatorVersion, credentialRemembered: assistantCredentialRemembered };
+                if (assistantStartupTimer) clearTimeout(assistantStartupTimer);
+                assistantStartupTimer = null;
+                assistantStartPending = false;
+                sendAssistantPanel('assistant-runtime-ready', assistantRuntimeInfo);
+            } catch (_) {}
+        }
+    });
+    child.on('error', () => {
+        if (assistantProcess !== child) return;
+        stopAssistantRuntime();
+        sendAssistantPanel('assistant-runtime-error', { message: '无法启动 Node.js Assistant 服务；请确认 Node.js 20+ 可用。' });
+    });
+    child.on('close', () => {
+        if (assistantProcess !== child) return;
+        const wasReady = !!assistantRuntimeInfo;
+        assistantProcess = null;
+        assistantRuntimeInfo = null;
+        assistantKeyFingerprint = null;
+        assistantCredentialRemembered = false;
+        assistantStartPending = false;
+        if (assistantStartupTimer) clearTimeout(assistantStartupTimer);
+        assistantStartupTimer = null;
+        sendAssistantPanel(wasReady ? 'assistant-runtime-stopped' : 'assistant-runtime-error', {
+            message: wasReady ? 'Agent 服务已停止。' : 'Agent 服务未能启动；请确认 Node.js 20+ 可用并已安装 MCP 依赖。',
+        });
+    });
+    assistantStartupTimer = setTimeout(() => {
+        if (assistantProcess !== child || assistantRuntimeInfo) return;
+        stopAssistantRuntime();
+        assistantStartPending = false;
+        sendAssistantPanel('assistant-runtime-error', { message: 'Assistant 服务启动超时。' });
+    }, 20000);
+}
+
+async function forgetAssistantCredential() {
+    const sequence = ++assistantForgetSequence;
+    ++assistantStartSequence;
+    assistantStartPending = false;
+    try {
+        await assistantCredentialStore.clear();
+    } catch (_) {
+        stopAssistantRuntime();
+        assistantCredentialRemembered = false;
+        assistantCredentialError = '未能清除项目根目录 .env.local 中的 DeepSeek 配置；请检查文件权限。';
+        sendAssistantPanel('assistant-runtime-error', { message: assistantCredentialError });
+        return;
+    }
+    if (sequence !== assistantForgetSequence) return;
+    stopAssistantRuntime();
+    assistantCredentialRemembered = false;
+    assistantCredentialError = null;
+    sendAssistantPanel('assistant-credential-forgotten', { forgotten: true });
+}
+
 module.exports = {
     messages: {
+        openAssistant() {
+            Editor.Panel.open('cocos-agent-bridge');
+        },
+        assistantState() {
+            sendAssistantPanel('assistant-runtime-state', assistantRuntimeInfo
+                ? Object.assign({ ready: true }, assistantRuntimeInfo)
+                : { ready: false, connecting: assistantStartPending, credentialRemembered: assistantCredentialRemembered,
+                    error: assistantCredentialError });
+        },
+        assistantStart(_event, payload) {
+            void startAssistantRuntime(payload);
+        },
+        assistantCredentialForget() {
+            void forgetAssistantCredential();
+        },
         'scene:saved'() {
             if (pendingSceneSave) pendingSceneSave(null);
         },
@@ -926,6 +1114,7 @@ module.exports = {
     load() {
         connectFromSession();
         timer = setInterval(connectFromSession, 1000);
+        void startAssistantRuntime({ automatic: true });
     },
     unload() {
         if (timer) clearInterval(timer);
@@ -933,5 +1122,6 @@ module.exports = {
         if (socket) socket.close();
         socket = null;
         activeSession = null;
+        stopAssistantRuntime();
     },
 };
