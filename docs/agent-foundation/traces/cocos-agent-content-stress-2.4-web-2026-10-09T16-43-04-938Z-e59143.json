@@ -1,0 +1,3727 @@
+{
+  "schemaVersion": "0.1",
+  "runId": "2026-10-09T16-43-04-938Z-e59143",
+  "creatorVersion": "2.4.15",
+  "platform": "web-mobile",
+  "buildId": "p1-web-20261009",
+  "releaseId": "cocosagent-p1-20261009",
+  "buildFingerprint": "39a00781269dcce421a1f1bbf802b7524879cc93c97a0d525bc758404e52fc96",
+  "buildOutputRoot": "/Users/youjunmao/WORK/Cocos_Engine/2.4.15NewProject/build/cocos-agent/p1-web-20261009",
+  "environment": {
+    "host": "darwin",
+    "architecture": "arm64",
+    "browser": "Google Chrome headless + SwiftShader",
+    "baseUrl": "http://127.0.0.1:57384/",
+    "testedAt": "2026-10-09T16:43:16.418Z"
+  },
+  "workload": {
+    "cycles": 48,
+    "nodeCount": 128,
+    "packable": true,
+    "assets": [
+      {
+        "name": "cocos-agent-batch-red",
+        "uuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624"
+      },
+      {
+        "name": "cocos-agent-batch-blue",
+        "uuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5"
+      }
+    ],
+    "targetFps": null,
+    "budgetVerdict": "not-set"
+  },
+  "screenshots": {
+    "after-cycles": "docs/agent-foundation/traces/visual/cocos-agent-content-stress-2.4-2026-10-09T16-43-04-938Z-e59143-after-cycles.png",
+    "failure-retained": "docs/agent-foundation/traces/visual/cocos-agent-content-stress-2.4-2026-10-09T16-43-04-938Z-e59143-failure-retained.png"
+  },
+  "result": {
+    "creatorVersion": "2.4.15",
+    "platform": "web-mobile",
+    "workload": {
+      "cycles": 48,
+      "nodeCount": 128,
+      "resourcePaths": [
+        "cocos-agent-batch-red",
+        "cocos-agent-batch-blue"
+      ],
+      "texturePackable": true,
+      "operations": [
+        "Texture2D load",
+        "SpriteFrame creation and assignment",
+        "Node position/scale updates",
+        "EVENT_AFTER_DRAW visibility wait",
+        "decRef plus releaseUnusedAssets"
+      ]
+    },
+    "timings": {
+      "preloadDownloadOnlyMs": {
+        "count": 2,
+        "minMs": 1.1,
+        "p50Ms": 1.1,
+        "p95Ms": 2.2,
+        "maxMs": 2.2,
+        "meanMs": 1.65
+      },
+      "resourceLoadTotalMs": {
+        "count": 49,
+        "minMs": 0.3,
+        "p50Ms": 2.4,
+        "p95Ms": 3.4,
+        "maxMs": 5.5,
+        "meanMs": 2.241
+      },
+      "spriteFrameCreateMs": {
+        "count": 49,
+        "minMs": 0,
+        "p50Ms": 0,
+        "p95Ms": 0.1,
+        "maxMs": 0.2,
+        "meanMs": 0.018
+      },
+      "spriteFrameInstallMs": {
+        "count": 49,
+        "minMs": 0,
+        "p50Ms": 0.1,
+        "p95Ms": 0.2,
+        "maxMs": 0.2,
+        "meanMs": 0.065
+      },
+      "nodeMutationMs": {
+        "count": 49,
+        "minMs": 0,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "maxMs": 0.1,
+        "meanMs": 0.004
+      },
+      "visibleDrawWaitMs": {
+        "count": 49,
+        "minMs": 5.9,
+        "p50Ms": 14.3,
+        "p95Ms": 17.1,
+        "maxMs": 75.3,
+        "meanMs": 15.902
+      },
+      "releaseCallMs": {
+        "count": 48,
+        "minMs": 0,
+        "p50Ms": 0,
+        "p95Ms": 0.1,
+        "maxMs": 0.1,
+        "meanMs": 0.012
+      },
+      "releaseObservedMs": {
+        "count": 48,
+        "minMs": 10.4,
+        "p50Ms": 16.4,
+        "p95Ms": 21.5,
+        "maxMs": 65.1,
+        "meanMs": 17.579
+      }
+    },
+    "frame": {
+      "sampleCount": 97,
+      "intervalMs": {
+        "count": 97,
+        "minMs": 10.4,
+        "p50Ms": 16.7,
+        "p95Ms": 21.5,
+        "maxMs": 77.9,
+        "meanMs": 18.03
+      },
+      "over16_667MsCount": 50,
+      "over16_667MsRatio": 0.515,
+      "over33_333MsCount": 4,
+      "over33_333MsRatio": 0.041,
+      "targetFps": null,
+      "budgetVerdict": "not-set"
+    },
+    "resourceCache": {
+      "beforePreload": [
+        {
+          "path": "cocos-agent-batch-red",
+          "expectedUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "cachedBeforeOrAfterPreload": false,
+          "refCount": null,
+          "valid": false
+        },
+        {
+          "path": "cocos-agent-batch-blue",
+          "expectedUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "cachedBeforeOrAfterPreload": false,
+          "refCount": null,
+          "valid": false
+        }
+      ],
+      "afterPreload": [
+        {
+          "path": "cocos-agent-batch-red",
+          "expectedUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "cachedBeforeOrAfterPreload": false,
+          "refCount": null,
+          "valid": false
+        },
+        {
+          "path": "cocos-agent-batch-blue",
+          "expectedUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "cachedBeforeOrAfterPreload": false,
+          "refCount": null,
+          "valid": false
+        }
+      ],
+      "cacheCountBefore": 29
+    },
+    "parse": {
+      "tapAvailable": true,
+      "preloadProducedParserCalls": 0,
+      "samplesByType": {
+        "import": {
+          "count": 50,
+          "totalMs": 0.8,
+          "maxMs": 0.1,
+          "ids": [
+            "07fe9a99-7f87-4bd8-ace2-39ac085c3624@import",
+            "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@import"
+          ],
+          "duration": {
+            "count": 50,
+            "minMs": 0,
+            "p50Ms": 0,
+            "p95Ms": 0.1,
+            "maxMs": 0.1,
+            "meanMs": 0.016
+          }
+        },
+        ".png": {
+          "count": 49,
+          "totalMs": 10.4,
+          "maxMs": 0.9,
+          "ids": [
+            "07fe9a99-7f87-4bd8-ace2-39ac085c3624@native",
+            "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@native"
+          ],
+          "duration": {
+            "count": 49,
+            "minMs": 0.1,
+            "p50Ms": 0.2,
+            "p95Ms": 0.3,
+            "maxMs": 0.9,
+            "meanMs": 0.212
+          }
+        }
+      },
+      "samples": [
+        {
+          "parserType": "import",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@native",
+          "durationMs": 0.9,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@native",
+          "durationMs": 0.3,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@import",
+          "durationMs": 0.1,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@native",
+          "durationMs": 0.2,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@native",
+          "durationMs": 0.3,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@native",
+          "durationMs": 0.3,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@native",
+          "durationMs": 0.1,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@native",
+          "durationMs": 0.2,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@import",
+          "durationMs": 0.1,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@native",
+          "durationMs": 0.2,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@native",
+          "durationMs": 0.4,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@native",
+          "durationMs": 0.2,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@native",
+          "durationMs": 0.3,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@native",
+          "durationMs": 0.1,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@native",
+          "durationMs": 0.2,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@import",
+          "durationMs": 0.1,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@native",
+          "durationMs": 0.2,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@native",
+          "durationMs": 0.2,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@native",
+          "durationMs": 0.1,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@native",
+          "durationMs": 0.1,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@native",
+          "durationMs": 0.2,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@native",
+          "durationMs": 0.2,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@import",
+          "durationMs": 0.1,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@native",
+          "durationMs": 0.2,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@native",
+          "durationMs": 0.2,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@native",
+          "durationMs": 0.1,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@native",
+          "durationMs": 0.2,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@native",
+          "durationMs": 0.1,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@native",
+          "durationMs": 0.2,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@import",
+          "durationMs": 0.1,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@native",
+          "durationMs": 0.3,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@import",
+          "durationMs": 0.1,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@native",
+          "durationMs": 0.1,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@native",
+          "durationMs": 0.2,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@native",
+          "durationMs": 0.2,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@import",
+          "durationMs": 0.1,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@native",
+          "durationMs": 0.2,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "07fe9a99-7f87-4bd8-ace2-39ac085c3624@native",
+          "durationMs": 0.2,
+          "success": true
+        },
+        {
+          "parserType": "import",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@import",
+          "durationMs": 0,
+          "success": true
+        },
+        {
+          "parserType": ".png",
+          "id": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5@native",
+          "durationMs": 0.2,
+          "success": true
+        }
+      ],
+      "truncated": true,
+      "interpretation": "The import parser callback includes Creator 2.4 deserialize(); .png parser time includes image parse/decode. A zero sample count means the selected resource was already parsed/cached or the parser hook was not reached; do not infer zero deserialization cost."
+    },
+    "failureRetention": {
+      "outcome": "retained",
+      "code": "download failed: assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png, status: 503(no response)",
+      "elapsedMs": 6010.2,
+      "sameFrameOnAllSprites": true,
+      "attemptedPath": "cocos-agent-batch-blue",
+      "attemptedUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+      "attemptedAssetBefore": {
+        "path": "cocos-agent-batch-blue",
+        "expectedUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "cachedBeforeOrAfterPreload": false,
+        "refCount": null,
+        "valid": false
+      },
+      "retainedUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+      "before": {
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "refCount": 1,
+        "packable": true,
+        "valid": true,
+        "cached": true,
+        "assetCacheCount": 30,
+        "bundleCacheCount": 3,
+        "dynamicAtlasEnabled": true,
+        "jsHeapUsedBytes": 13874815
+      },
+      "failureBefore": {
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "refCount": 1,
+        "packable": true,
+        "valid": true,
+        "cached": true,
+        "assetCacheCount": 30,
+        "bundleCacheCount": 3,
+        "dynamicAtlasEnabled": true,
+        "jsHeapUsedBytes": 13874815
+      },
+      "after": {
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "refCount": 1,
+        "packable": true,
+        "valid": true,
+        "cached": true,
+        "assetCacheCount": 30,
+        "bundleCacheCount": 3,
+        "dynamicAtlasEnabled": true,
+        "jsHeapUsedBytes": 16683051
+      }
+    },
+    "cleanup": {
+      "beforeCacheCount": 29,
+      "activeBeforeCleanup": {
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "refCount": 1,
+        "packable": true,
+        "valid": true,
+        "cached": true,
+        "assetCacheCount": 30,
+        "bundleCacheCount": 3,
+        "dynamicAtlasEnabled": true,
+        "jsHeapUsedBytes": 16729755
+      },
+      "nodeCount": 128,
+      "nodeDestroyObservedMs": 1.3,
+      "rootValidAfterDraw": false,
+      "releaseCallMs": 17.4,
+      "elapsedMs": 17.4,
+      "rootValid": false,
+      "finalTexture": {
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "refCount": 0,
+        "packable": true,
+        "valid": false,
+        "cached": false,
+        "assetCacheCount": 29,
+        "bundleCacheCount": 3,
+        "dynamicAtlasEnabled": true,
+        "jsHeapUsedBytes": 16729755
+      },
+      "ownerReferenceDelta": 1,
+      "resourceResidencyAfterOwnerRelease": "released",
+      "finalAssetCacheCount": 29,
+      "cacheDelta": 0
+    },
+    "ownerReferenceReleases": [
+      {
+        "cycle": 1,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 2,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 3,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 4,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 5,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 6,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 7,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 8,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 9,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 10,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 11,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 12,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 13,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 14,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 15,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 16,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 17,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 18,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 19,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 20,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 21,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 22,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 23,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 24,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 25,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 26,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 27,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 28,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 29,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 30,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 31,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 32,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 33,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 34,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 35,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 36,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 37,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 38,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 39,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 40,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 41,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 42,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 43,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 44,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 45,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 46,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 47,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      },
+      {
+        "cycle": 48,
+        "beforeRefCount": 1,
+        "afterRefCount": 0,
+        "ownerReferenceDelta": 1
+      }
+    ],
+    "perCycle": [
+      {
+        "cycle": 1,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 0.3,
+        "createFrameMs": 0.1,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 46.5,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 12.5,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14629711
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14629711
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14629711
+        }
+      },
+      {
+        "cycle": 2,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 3.4,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 9.4,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 16.1,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14629711
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14629711
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14629711
+        }
+      },
+      {
+        "cycle": 3,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.7,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 10.6,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 15.9,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16545243
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16545243
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16545243
+        }
+      },
+      {
+        "cycle": 4,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.4,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 75.3,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 10.4,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15042015
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15042015
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15042015
+        }
+      },
+      {
+        "cycle": 5,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 1.6,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.2,
+        "spriteFrameInstallMs": 0.2,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 8.9,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 17.6,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15042015
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15042015
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15042015
+        }
+      },
+      {
+        "cycle": 6,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.5,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 14.3,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 16.3,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13604291
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13604291
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13604291
+        }
+      },
+      {
+        "cycle": 7,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.4,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 14.5,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 16.5,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13604291
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13604291
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13604291
+        }
+      },
+      {
+        "cycle": 8,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.6,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 14.1,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 15.2,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14097835
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14097835
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14097835
+        }
+      },
+      {
+        "cycle": 9,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 1.7,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 16.4,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 15.4,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14097835
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14097835
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14097835
+        }
+      },
+      {
+        "cycle": 10,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.5,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 15.2,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 14.7,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14580399
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14580399
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14580399
+        }
+      },
+      {
+        "cycle": 11,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 1.9,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 16.6,
+        "releaseCallMs": 0.1,
+        "releaseObservedMs": 15.8,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14580399
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14580399
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14580399
+        }
+      },
+      {
+        "cycle": 12,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 3.2,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 13.9,
+        "releaseCallMs": 0.1,
+        "releaseObservedMs": 65.1,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15095171
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15061807
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15095171
+        }
+      },
+      {
+        "cycle": 13,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 1.7,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 16.2,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 16.7,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15095171
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15095171
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15095171
+        }
+      },
+      {
+        "cycle": 14,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.7,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 14.1,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 16.4,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15539171
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15539171
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15539171
+        }
+      },
+      {
+        "cycle": 15,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 1.5,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.2,
+        "spriteFrameInstallMs": 0.2,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 15.1,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 21.5,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15804939
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15539171
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15804939
+        }
+      },
+      {
+        "cycle": 16,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.4,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 9.5,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 14.6,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15804939
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15804939
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15804939
+        }
+      },
+      {
+        "cycle": 17,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 1.6,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 17.1,
+        "releaseCallMs": 0.1,
+        "releaseObservedMs": 16.4,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16286839
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15804939
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16286839
+        }
+      },
+      {
+        "cycle": 18,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.3,
+        "createFrameMs": 0.1,
+        "frameInstallAndNodeMutationMs": 0,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 14.5,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 15.4,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16286839
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16286839
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16286839
+        }
+      },
+      {
+        "cycle": 19,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.6,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0.1,
+        "visibleDrawWaitMs": 15.2,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 15.2,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13425151
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13425151
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13425151
+        }
+      },
+      {
+        "cycle": 20,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.4,
+        "createFrameMs": 0.1,
+        "frameInstallAndNodeMutationMs": 0,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 15.2,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 16.7,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13425151
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13425151
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13425151
+        }
+      },
+      {
+        "cycle": 21,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 1.5,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 15.4,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 16.3,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13901239
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13901239
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13901239
+        }
+      },
+      {
+        "cycle": 22,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.4,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 14.3,
+        "releaseCallMs": 0.1,
+        "releaseObservedMs": 16.4,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13901239
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13901239
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13901239
+        }
+      },
+      {
+        "cycle": 23,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 5.5,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 9.9,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 17.9,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14380091
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14380091
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14380091
+        }
+      },
+      {
+        "cycle": 24,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.3,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 14.5,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 16.4,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14650859
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14380091
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14650859
+        }
+      },
+      {
+        "cycle": 25,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 1.6,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 15.2,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 14.8,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14650859
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14650859
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14650859
+        }
+      },
+      {
+        "cycle": 26,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.9,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 13.9,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 34.8,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15125315
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14650859
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15125315
+        }
+      },
+      {
+        "cycle": 27,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.1,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 13.9,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 15.3,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15125315
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15125315
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15125315
+        }
+      },
+      {
+        "cycle": 28,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 3.9,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 13.7,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 17.2,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15621095
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15125315
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15621095
+        }
+      },
+      {
+        "cycle": 29,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 1.7,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 15.2,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 16.6,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15621095
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15621095
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15621095
+        }
+      },
+      {
+        "cycle": 30,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.6,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 14.1,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 16.4,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16069855
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16069855
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16069855
+        }
+      },
+      {
+        "cycle": 31,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 1.6,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 14.8,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 14.9,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16069855
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16069855
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16069855
+        }
+      },
+      {
+        "cycle": 32,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.5,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 16.3,
+        "releaseCallMs": 0.1,
+        "releaseObservedMs": 16,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16545319
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16545319
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16545319
+        }
+      },
+      {
+        "cycle": 33,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 1.5,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 15.7,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 16.4,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16545319
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16545319
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16545319
+        }
+      },
+      {
+        "cycle": 34,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.5,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 14.2,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 16.3,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13764623
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13764623
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13764623
+        }
+      },
+      {
+        "cycle": 35,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 1.6,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 15.3,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 16.5,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13764623
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13764623
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13764623
+        }
+      },
+      {
+        "cycle": 36,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.4,
+        "createFrameMs": 0.1,
+        "frameInstallAndNodeMutationMs": 0,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 12.7,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 18,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14233847
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14233847
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14233847
+        }
+      },
+      {
+        "cycle": 37,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 1.6,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 15,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 16.6,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14514619
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14233847
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14514619
+        }
+      },
+      {
+        "cycle": 38,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.4,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 14.3,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 16.5,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14514619
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14514619
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14514619
+        }
+      },
+      {
+        "cycle": 39,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 1.6,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 13.6,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 17.9,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14985195
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14514619
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14985195
+        }
+      },
+      {
+        "cycle": 40,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.4,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 14.3,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 16.4,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14985195
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14985195
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 14985195
+        }
+      },
+      {
+        "cycle": 41,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 1.7,
+        "createFrameMs": 0.1,
+        "frameInstallAndNodeMutationMs": 0,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 15.2,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 16.3,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15427495
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15427495
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15427495
+        }
+      },
+      {
+        "cycle": 42,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 3.1,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 12.8,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 17.3,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15427495
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15427495
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15427495
+        }
+      },
+      {
+        "cycle": 43,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 1.8,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 13.5,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 18.2,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15879687
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15879687
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15879687
+        }
+      },
+      {
+        "cycle": 44,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 3.2,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 13.6,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 14.8,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15879687
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15879687
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 15879687
+        }
+      },
+      {
+        "cycle": 45,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 1.5,
+        "createFrameMs": 0.1,
+        "frameInstallAndNodeMutationMs": 0,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 15.4,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 17.7,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16310463
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16310463
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16310463
+        }
+      },
+      {
+        "cycle": 46,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.5,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0.1,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 14.3,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 16.1,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16541667
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16310463
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16541667
+        }
+      },
+      {
+        "cycle": 47,
+        "path": "cocos-agent-batch-blue",
+        "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 1.4,
+        "createFrameMs": 0,
+        "frameInstallAndNodeMutationMs": 0.1,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0.1,
+        "visibleDrawWaitMs": 15.6,
+        "releaseCallMs": 0.1,
+        "releaseObservedMs": 16.3,
+        "current": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16541667
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16541667
+        },
+        "previous": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 16541667
+        }
+      },
+      {
+        "cycle": 48,
+        "path": "cocos-agent-batch-red",
+        "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+        "resourceRefCountBeforeOwner": 0,
+        "resourceRefCountAfterOwner": 1,
+        "loadMs": 2.6,
+        "createFrameMs": 0.1,
+        "frameInstallAndNodeMutationMs": 0,
+        "spriteFrameInstallMs": 0,
+        "nodeMutationMs": 0,
+        "visibleDrawWaitMs": 14,
+        "releaseCallMs": 0,
+        "releaseObservedMs": 15.1,
+        "current": {
+          "resourceUuid": "07fe9a99-7f87-4bd8-ace2-39ac085c3624",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13780783
+        },
+        "previousBeforeRelease": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 1,
+          "packable": true,
+          "valid": true,
+          "cached": true,
+          "assetCacheCount": 31,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13780783
+        },
+        "previous": {
+          "resourceUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+          "refCount": 0,
+          "packable": true,
+          "valid": false,
+          "cached": false,
+          "assetCacheCount": 30,
+          "bundleCacheCount": 3,
+          "dynamicAtlasEnabled": true,
+          "jsHeapUsedBytes": 13780783
+        }
+      }
+    ],
+    "errors": [],
+    "acceptance": {
+      "success": true,
+      "outcome": "completed-without-budget-gate",
+      "ownerReferencesBalanced": true
+    }
+  },
+  "httpRequestCount": 103,
+  "network": {
+    "responseCount": 103,
+    "statusCounts": {
+      "200": 99,
+      "503": 4
+    },
+    "assetRequests": [
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 1,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 1,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 1,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 1,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 1,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 1,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 1,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 1,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 1,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 1,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 1,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 1,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 1,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 1,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 1,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 1,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 1,
+        "responseBytes": 73
+      },
+      {
+        "path": "/assets/resources/native/07/07fe9a99-7f87-4bd8-ace2-39ac085c3624.28f81.png",
+        "method": "GET",
+        "status": 200,
+        "durationMs": 0,
+        "responseBytes": 74
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 503,
+        "durationMs": 0,
+        "responseBytes": 37
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 503,
+        "durationMs": 0,
+        "responseBytes": 37
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 503,
+        "durationMs": 0,
+        "responseBytes": 37
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 503,
+        "durationMs": 0,
+        "responseBytes": 37
+      }
+    ],
+    "injectedFailureRequests": [
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 503,
+        "durationMs": 0,
+        "responseBytes": 37
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 503,
+        "durationMs": 0,
+        "responseBytes": 37
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 503,
+        "durationMs": 0,
+        "responseBytes": 37
+      },
+      {
+        "path": "/assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png",
+        "method": "GET",
+        "status": 503,
+        "durationMs": 0,
+        "responseBytes": 37
+      }
+    ],
+    "missingResourceResponses": [],
+    "failureTargetUuid": "a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5",
+    "failureTransportConfirmed": true
+  },
+  "browserEvents": [
+    {
+      "type": "console",
+      "level": "log",
+      "text": "Cocos Creator v2.4.15"
+    },
+    {
+      "type": "console",
+      "level": "log",
+      "text": "Success to load scene: db://assets/Scene/helloworld.fire"
+    },
+    {
+      "type": "console",
+      "level": "error",
+      "text": "download failed: assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png, status: 503(no response) Error: download failed: assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png, status: 503(no response)\n    at a.onload (http://127.0.0.1:57384/cocos2d-js-min.7038f.js:1:358115)"
+    },
+    {
+      "type": "console",
+      "level": "error",
+      "text": "download failed: assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png, status: 503(no response) Error: download failed: assets/resources/native/a4/a4ad45d8-6be7-45b6-b2c6-20d56baf4cf5.9d27d.png, status: 503(no response)\n    at a.onload (http://127.0.0.1:57384/cocos2d-js-min.7038f.js:1:358115)"
+    }
+  ],
+  "error": null
+}

@@ -1,0 +1,3 @@
+interface:
+  display_name: "Cocos 2.x Dynamic Content Performance"
+  short_description: "Measure 2.4 runtime content swaps and budgets"

@@ -25,7 +25,12 @@
           "runtimePath": { "type": "string" },
           "resourceUuid": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$" },
           "spriteFrameUuid": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$" },
-          "dependsOn": { "type": "array", "uniqueItems": true, "items": { "type": "string" } }
+          "dependsOn": {
+            "type": "array",
+            "description": "IDs of other assets in this same immutable release. This field does not declare dependencies owned by another delivery or Asset Bundle.",
+            "uniqueItems": true,
+            "items": { "type": "string" }
+          }
         }
       }
     }

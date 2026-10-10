@@ -4,7 +4,7 @@
 
 ## 流程
 
-1. `content.bundle.plan` 只读检查已由 Creator 导入的 PNG、Bundle 文件夹 `.meta`、本地 Bundle 名、源字节摘要、Texture UUID、唯一 SpriteFrame UUID 及资源依赖。
+1. `content.bundle.plan` 只读检查已由 Creator 导入的 PNG、Bundle 文件夹 `.meta`、本地 Bundle 名、源字节摘要、Texture UUID、唯一 SpriteFrame UUID 及 release 内的资源依赖图。`dependsOn` 只引用本 release 中的 asset ID。
 2. `content.bundle.stage` 将校验通过的清单写成不可变 release，不改变 `selected`、不启动构建。
 3. `content.select` 显式选择 release；当前实现按 Creator 2.4.15 项目记录拒绝重复的 Bundle 名，避免 `loadBundle` 命中同名旧缓存。
 4. `content.build.plan/execute/get` 使用新的 `buildId` 与隔离 Web-Mobile 输出。包校验要求目标 Bundle config、Texture 和 SpriteFrame 压缩 UUID、SpriteFrame 到 Texture 的 import 依赖，以及 native PNG 都匹配 release。
@@ -36,4 +36,8 @@ release `bundle-host-web-20261009` 包含红蓝资源。隔离构建的 Bundle c
 
 ## 未覆盖
 
-尚未验证进程重启后的运行时重建、多 Bundle 并存的缓存计数与峰值内存、外置/远端 Bundle、下载缓存与版本 URL、小游戏、JSB、原生增量更新、任意资源类型或 Creator 3.8。`removeBundle` 与 `release/releaseAll` 的缓存区别有独立 Web 手册烟雾轨迹；Host 实机切换未直接读取内部 AssetManager 缓存计数。
+两个 2.4.15 Bundle 共享同一 `resources` SpriteFrame 的正式构建和 Web-Mobile 运行时轨迹已补齐。config `deps/redirect` 将共享 UUID 归到 `resources`；两个场景读回同一个 SpriteFrame 对象和同一个源 Texture 对象。Smoke→Sidecar、Sidecar→Smoke 两种卸载顺序中，每次移除 Bundle 后共享 Frame/Texture 均有效并在 Asset Cache；四个首场景/卸载后场景截图均能看见红色 Sprite。Asset Cache 在该探针中从基线 29 保持到 29，释放探针持有后降至 27；Bundle Cache 为 3→5→3。详见 [共享依赖轨迹](traces/cocos-agent-shared-bundle-dependency-2.4-web.json) 与 [Asset Bundle 切片计划](cocos2-asset-bundle-slice-plan.md)。2.4.15 没有公开的 `SpriteFrame.texture` 属性：源纹理从 `frame._original._texture` 读取，当前渲染纹理 `frame._texture` 可以是动态合图对象，其 UUID 为空；本次另外核对了渲染纹理已加载、后端纹理对象存在和截图。探针把导入 `autoReleaseAssets=false` 临时改为 `true`，所以不代表源设置 `false` 下的场景自动释放。
+
+0.1 清单中的 `dependsOn` 是 release 内部 asset ID 的依赖图，不表达跨 delivery 所有权。本次场景 Bundle 的 Frame 实际由 `resources` 持有，构建 config 通过 `deps` 与 `redirect` 表达这条外部边；当前 manifest 没有字段描述它，也没有要求运行时调度器先加载依赖 owner。未来合同应分别记录 consumer 场景 UUID、owner delivery/Bundle、SpriteFrame/Texture UUID 链、构建 redirect/依赖回读和加载顺序；运行时再回执外部资源引用与卸载状态。0.2 字段暂不加入现有 0.1 schema，待验证 consumer 未预加载 `resources` 的失败边界和 `autoReleaseAssets=false` 的场景切换路径后再定稿。
+
+尚未验证进程重启后的 Asset Bundle 运行时重建、多 Bundle 峰值内存、consumer 未先加载 `resources` 的失败分支、源 `autoReleaseAssets=false` 时的场景切换释放、外置/远端 Bundle、下载缓存与版本 URL、小游戏、JSB、原生增量更新、任意资源类型或 Creator 3.8。`removeBundle` 与 `release/releaseAll` 的缓存区别另有 Web 手册烟雾轨迹；Host 实机切换未直接读取内部 AssetManager 缓存计数。

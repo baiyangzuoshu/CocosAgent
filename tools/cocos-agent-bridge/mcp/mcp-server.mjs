@@ -455,7 +455,9 @@ function createServer(projectRoots, options = {}) {
     const contentAssets = z.array(z.object({
         assetName: contentAssetName,
         id: contentAssetId,
-        dependsOn: z.array(contentAssetId).max(64).refine((ids) => new Set(ids).size === ids.length, 'Dependency IDs must be unique.').optional(),
+        dependsOn: z.array(contentAssetId).max(64)
+            .refine((ids) => new Set(ids).size === ids.length, 'Dependency IDs must be unique.')
+            .describe('References other asset IDs in this same release; external Bundle/resource ownership is not represented here.').optional(),
     }).strict()).min(1).max(16).refine((items) => new Set(items.map((item) => item.assetName.toLowerCase())).size === items.length
         && new Set(items.map((item) => item.id)).size === items.length, 'Asset names and IDs must be unique.');
     const contentFromSceneInput = z.object({

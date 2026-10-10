@@ -16,4 +16,4 @@
 
 两版 Creator 重新构建 Mac 包后，包内 `resources` 配置均包含红蓝纹理。临时探针 `probes/cocos-dynamic-native-mac.py` 只注入生成包入口脚本，运行后逐字节恢复。结构化轨迹分别见 [2.4](traces/cocos-agent-dynamic-native-mac-2.4.jsonl) 与 [3.8](traces/cocos-agent-dynamic-native-mac-3.8.jsonl)：两版均在场景启动后完成红、蓝、红、蓝四轮加载；当前纹理 `refCount=1` 且在对象缓存中，上一张降至 0 后无效且从缓存移除；故意加载缺失资源时错误回调触发，已持有蓝色纹理仍有效且在缓存中；最终释放后最后一张也无效且不在缓存中。
 
-2.4 Mac 包的 `Texture2D.uuid` 在此次探针中未给出值，必须用 `_uuid` 才能按本包的实际缓存键查询；3.8 用 `uuid`。若只以 2.4 的 `uuid` 查缓存，会错误地报告“持有资源不在缓存中”。此项是当前生成包的诊断事实，不能代替资源 ID 的版本化合同。Mac 探针没有挂接可见 Sprite 或截取原生画面；画面替换仅由上述 Web 截图证明，原生轨迹证明的是加载与引用释放。
+2.4 Mac 包的 `Texture2D.uuid` 在此次探针中未给出值，必须用 `_uuid` 才能按本包的实际缓存键查询；3.8 用 `uuid`。若只以 2.4 的 `uuid` 查缓存，会错误地报告“持有资源不在缓存中”。此项是当前生成包的诊断事实，不能代替资源 ID 的版本化合同。Mac 探针没有挂接可见 Sprite 或截取原生画面；画面替换仅由上述 Web 截图证明，原生轨迹证明的是加载与引用释放。Creator 2.4.15 Web-Mobile 的多轮压力采样和可配置 P95 门槛见[动态内容性能基线](dynamic-content-pressure-2.4.md)；尚未选定产品目标设备和帧预算。
