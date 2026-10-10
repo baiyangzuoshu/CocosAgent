@@ -383,6 +383,11 @@ function compensate(params, run = dispatch) {
             const reverted = sceneBatch.compensate({ projectRoot, creatorVersion: '2.4.15', batchId: record.sceneBatchId }, run);
             if (!sceneRefsSafe(record, reverted)) { record.state = 'needs-review'; record.rollbackStatus = 'blocked';
                 record.error = { code: 'SCENE_COMPENSATION_UNVERIFIED', detail: reverted.error || null }; save(record); return publicRecord(record); }
+            if (reverted.instanceId) record.instanceId = reverted.instanceId;
+            for (const child of reverted.items || []) {
+                const item = record.items.find((candidate) => candidate.assetName === child.assetName);
+                if (item) item.sceneStatus = child.status;
+            }
         } else if (scene.items && !sceneRefsSafe(record, scene)) {
             return fail('SCENE_STATE_UNCERTAIN', 'Scene batch has unresolved writes; inspect before asset removal.');
         }

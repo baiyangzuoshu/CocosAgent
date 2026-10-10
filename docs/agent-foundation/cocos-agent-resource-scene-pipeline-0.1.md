@@ -72,8 +72,26 @@ assets.scene.repair 仅接受本流水线管理、仍被场景引用且处于 ne
 
 这次运行没有诱发陈旧 URL→UUID 映射，因此真实 `Editor.assetdb.refresh` 修复分支尚未在 Creator 中验证；该分支目前只有模拟测试覆盖。Creator 保存场景时会规范化 `.fire` 中与本次操作无关的序列化字段。本次补偿后将测试场景文件按测试前 Git 基线字节恢复，并确认测试 PNG 与 `.meta` 已删除；这说明场景文件字节恢复是单独的测试清理动作，不应误记为场景批次补偿自身恢复了原始文件字节。
 
+### Agent 编排资源导入、场景写入、预览与补偿（2026-10-09）
+
+使用 `cocos-agent-2x` MCP 工具的 Codex Agent 先查询实例和能力目录，选中 Creator 2.4.15 的 `helloworld` 项目及现有 Canvas，再对用户明确给定的两张 64×64 临时 RGBA PNG 执行计划。计划输出源 SHA-256、PNG IHDR 尺寸、目标资源名、Canvas 坐标和冲突检查；随后一次性执行 `assets.scene.execute`，没有在结果不确定时重试写入。
+
+两张 PNG 分别导入为 Texture UUID `d370f2d9-1550-4f1d-9be5-99b5b4a4bb59` / `d2821d7b-f26d-4b67-b0f5-44f2460e234c`，并生成 SpriteFrame UUID `d55b8e0e-d2a7-4b0e-8517-ef854bf09e55` / `91ed058f-0b21-4287-ba04-60920985ff1a`。Agent 核对两份 `.meta` 的 `rawTextureUuid` 均回指各自 Texture，AssetDB URL 映射、源摘要和尺寸有效；随后将 SpriteFrame 分别挂到 Canvas 的 `(-160,0)`、`(160,0)`，并通过活动场景和 `helloworld.fire` 磁盘读回。`assets.scene.validate` 在预览前后均为 `valid`，覆盖 PNG 字节、Texture/SpriteFrame UUID 链、AssetDB、活动与序列化场景引用及批次记录。
+
+Creator Web 预览 `http://127.0.0.1:7456/` 中红、青两张临时图片都在目标位置可见；两项 `preview.accept` 成功，流水线进入 `completed`。随后显式补偿的首个调用因青色资源删除回执不确定而进入 `needs-review`，没有继续盲目删除。读回确认两个 PNG 与 `.meta` 均缺失、场景引用和序列化 UUID 扫描无残留后，再调用补偿进行 `asset-absence-and-reference-scan` 对账，最终 `compensated`、`rollbackStatus=passed`。随后只读 `asset.searchPng` 对两个精确文件名均返回 `total=0`，场景快照没有对应临时节点；刷新预览后恢复基线画面。`helloworld.fire` SHA-256 与测试前一致，为 `0cdc7dd5424e2c4414f6b58caff1cd74142f77a7caaa075df08df280d7a4df94`；临时源 PNG 也已删除。流水线、资源批次和场景批次 ID、具体回执见[本次 Agent 端到端轨迹](traces/cocos-agent-resource-scene-agent-2.4-web.jsonl)。
+
+本次闭环验证的是 Creator 2.4.15 Web 下 PNG → Texture → SpriteFrame → Canvas Sprite 的正式导入、元数据关系、静态场景依赖与 Agent 编排；不代表其他图片/音频/模型格式、Asset Bundle 动态共享依赖、运行时拼接依赖或原生构建。自动修复能力仍只允许对身份保持不变且唯一问题为 `ASSETDB_MAPPING_STALE` 的资源调用 AssetDB refresh。真实修复分支仍未验证：10 月 10 日故障注入生成了同时存在运行时引用缺失的状态，触发了正确拒绝；`already-valid` 只验证无副作用分支。
+
 ### 取消与导入失败的 2.4.15 实机验收（2026-10-09）
 
 真实 MCP stdio 客户端在 `helloworld` 场景计划两张 1×1 RGBA PNG。收到 `asset.importPng` 开始通知后请求取消；第一张已完成并通过 UUID/meta 读回，第二张在下一写入边界被拒绝且 `sideEffect=none`。流水线随后调用 `asset.removeImportedPng` 清除第一张资源，终态为 `failed/EXECUTION_CANCELLED`、`rollbackStatus=passed`。两个目标场景节点均为 `not-found`，两张 PNG 和 `.meta` 均不存在。单张 PNG 的 AssetDB 导入和删除也分别独立通过。
 
 一次较早的灰度/透明 PNG 夹具导入失败并留下宽高为零、无 SpriteFrame 子资源的不完整 `.meta`。父流水线按设计进入 `needs-review`，未将不确定导入误报为无副作用，也未自动删除；随后仅在确认测试文件摘要、UUID 与工程内无序列化引用后清除该临时文件及 `.meta`。此例说明失败补偿的安全边界，不证明 Creator 普遍不支持灰度 PNG。逐条回执见 [`cocos-agent-mcp-cancel-2.4.jsonl`](traces/cocos-agent-mcp-cancel-2.4.jsonl)。
+
+### 2026-10-10：尝试在 Creator 中诱发陈旧 AssetDB 映射
+
+临时流水线 `0083bc3f-d607-402b-804d-e6506df64fe9` 使用 `RepairRedA20261010.png` 和 `AssetBlueB20261010.png`。为制造故障，将红图和 `.meta` 移出 `assets/resources`，再让 Creator 刷新该目录。AssetDB 删除红图 UUID 映射后，活动 SpriteFrame 引用也变成空值。恢复原字节后，校验同时报告 `ASSETDB_MAPPING_STALE` 与 `SCENE_RUNTIME_REFERENCE_MISMATCH`，因此 `assets.scene.repair` 按合同拒绝刷新；这不是可修复的“只有 URL 映射陈旧”状态。
+
+随后刷新 `resources` 目录，AssetDB 以相同 Texture UUID `01069f45-7316-4b69-9ee8-06424c99db4b` 和 SpriteFrame UUID `e80b2ec0-d2c0-4940-8231-997739ac5f31` 重建映射，未发生 UUID 漂移；但活动场景引用仍为空。通过受限 `scene.node.patch` 恢复原 SpriteFrame UUID 后，PNG 字节、`.meta`、AssetDB、活动场景与 `.fire` 引用均读回匹配。此时资源校验唯一失败项为 `SCENE_BATCH_REFERENCE_MISMATCH`：子场景批次仍把红项记在 `compensating`，因为先前一次补偿预检在资源暂缺期间以 `SCENE_NODE_CONFLICT/sideEffect=none` 拒绝。
+
+流水线现为 `needs-review`、`rollbackStatus=blocked`。另一个新 operation ID 的直接补偿请求被自动审批拒绝，理由是这会绕过 needs-review 批次账本；没有通过其他通道执行该删除。Creator 重启后，Host 已登记新实例 `4ca661b3-4391-4639-811e-89363788d60f`，而流水线记录仍绑定旧实例 `fa689b2c-2faf-405a-a6ff-f0a90d749adf`。只读核对确认红节点在新活动场景和 `.fire` 中仍存在，Blue 节点已补偿；两张 PNG 与 `.meta` 均在。场景 SHA-256 为 `5773772cb2423c5a98acfe14e8ee6659b05c731952c4252c8e3f5617d528719c`，测试前为 `0cdc7dd5424e2c4414f6b58caff1cd74142f77a7caaa075df08df280d7a4df94`。为通过原批次入口安全恢复，恢复实现现在还要求核对重启后相同的项目、版本、活动场景和 Canvas UUID，以及红节点 UUID、唯一 Sprite 组件、SpriteFrame UUID、变换、PNG 摘要和序列化内容；全部吻合后才记入新旧实例 ID 并继续原流水线补偿。14 项场景批次模拟测试及 8 项父流水线测试通过，包括 Canvas、实时 SpriteFrame、磁盘变换漂移时拒绝补偿。**此恢复分支尚未在 Creator 重启后的真实 MCP Host 上运行；临时节点和两份导入资源目前仍在项目中。** 需要 MCP Host 加载这版实现后，再调用原 `assets.scene.compensate` 并读回批次、资源目录和场景文件，不能把模拟测试当作真实清理成功。逐步读回见 [`修复分支尝试轨迹`](traces/cocos-agent-resource-repair-attempt-2.4-web.jsonl)。

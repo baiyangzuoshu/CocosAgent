@@ -21,6 +21,8 @@ Agent 应先调用 `plan`；它只读验证唯一匹配的目标、活动场景�
 
 确定失败时，批次会尝试撤销此前成功项。若编辑器结果不明，不会猜测是否已写入。若 `operationId` 没有单项操作记录，恢复只可在资产 SHA/UUID 与预期一致、同一 Creator 实例和 Canvas 仍活动、精确目标节点在实时场景中缺席、并且 `.fire` 读回匹配相同 Canvas UUID 且无该子节点时，把 apply 记录为 `WRITE_RECONCILED_NO_EFFECT` 和 `rejected`。该项不会自动重试；之后显式补偿可以逆序撤销其他已应用项。任何一项读回不匹配或无法执行时，仍保留 `needs-review` 并停止补偿。`scene.sprites.compensate` 为确实已应用的项创建新的补偿操作记录；原操作回执保持历史事实。`scene.sprites.replay` 只接受已完全补偿的来源批次，创建新批次与新操作 ID，并重新运行预检。
 
+若已有补偿操作只在预检阶段以 `sideEffect=none` 失败，跨 Creator 重启恢复仍只能从原批次 `compensate` 入口进行。恢复会先验证原 apply 操作磁盘阶段通过、PNG 字节哈希和 SpriteFrame UUID 未变、当前项目/版本/活动场景/Canvas UUID 与批次一致，并核对实时节点 UUID、唯一 Sprite 组件、启用状态、SpriteFrame UUID、坐标/缩放及 `.fire` 中相同父子关系和变换。只有全部匹配时，才把旧、新实例 ID 与身份摘要追加到批次对账记录，更新当前实例上下文，并为实际删除创建新的补偿操作。任一读回不一致均停止在 `needs-review`；此恢复不会重试原写入，也不允许绕开批次账本。
+
 ## 版本语义与限制
 
 2.4 手册说明图像资源可按 Sprite 类型导入并生成 SpriteFrame 子资源，Sprite 组件引用 SpriteFrame；Canvas 是 UI 场景根节点。本合同要求现有 Canvas，引用 Creator `.meta` 中的 SpriteFrame UUID，并委托既有扩展加载该类型，不自行构造 UUID 或伪造导入结果。[图像资源与 SpriteFrame](https://docs.cocos.com/creator/2.4/manual/zh/asset-workflow/sprite.html)、[Canvas](https://docs.cocos.com/creator/2.4/manual/zh/components/canvas.html)。
@@ -29,4 +31,4 @@ Agent 应先调用 `plan`；它只读验证唯一匹配的目标、活动场景�
 
 ## 验收边界
 
-模拟测试覆盖预检、顺序写入、逐项预览门、坐标校验、相似名称冲突、第二项确定失败后的逆序补偿、不确定写入停止、双侧读回后的 no-effect 对账、阻止自动重试、补偿后重放，以及 Host 单项调用中断后的同批恢复。原中断用例在操作记录和磁盘阶段已持久化但回执未返回时注入异常；再次执行同一 `batchId` 会先通过 `operation.get` 对账，保留原 `operationId` 且不重复写入。新增用例在单项记录不存在时同时核对同一实时实例/Canvas、资源身份与 `.fire` 父子关系，只有目标确实缺席才允许继续显式补偿。上述均是适配器故障注入测试，不代表杀进程或 Creator 重启测试。2026-10-08 在 Creator 2.4.15 `helloworld` 中，以 `(-64,0)` 与 `(64,0)` 放入白色 smoke 和红色 Sprite；`.fire` 读回确认坐标及各自 SpriteFrame UUID，Web 预览同一帧中两张图同时可见，两条预览回执均通过。批次逆序补偿后 Agent 节点数为零，场景文件恢复至测试前 SHA-256 `0963cd0a52e25cdfa3edda47a6e998053885d2b93753da7a5c0da2562728d1a8`。后续经真实 MCP 资源场景请求观测到第二项超时且缺少操作记录；这次没有视觉验收，而是经同一分支证明目标在实时/序列化场景中缺席，逆序补偿第一项后由外层流水线清理两个 PNG 与 `.meta`。完整记录见 [MCP 实机轨迹](traces/cocos-agent-mcp-2.4.jsonl)；原始批次轨迹见[批量场景验收记录](traces/cocos-agent-scene-sprite-batch-2.4-web.jsonl)。
+模拟测试覆盖预检、顺序写入、逐项预览门、坐标校验、相似名称冲突、第二项确定失败后的逆序补偿、不确定写入停止、双侧读回后的 no-effect 对账、阻止自动重试、补偿后重放，以及 Host 单项调用中断后的同批恢复。原中断用例在操作记录和磁盘阶段已持久化但回执未返回时注入异常；再次执行同一 `batchId` 会先通过 `operation.get` 对账，保留原 `operationId` 且不重复写入。新增用例在单项记录不存在时同时核对同一实时实例/Canvas、资源身份与 `.fire` 父子关系，只有目标确实缺席才允许继续显式补偿。另有 Creator 重启后的模拟恢复测试：仅对补偿预检 `sideEffect=none` 且项目、版本、场景、Canvas、节点、资源和序列化变换均相同的记录重绑当前实例；Canvas、实时 SpriteFrame 或磁盘变换任何一项漂移时均保持 `needs-review`。这些是适配器故障注入测试，不代表真实 Creator 重启验收。2026-10-08 在 Creator 2.4.15 `helloworld` 中，以 `(-64,0)` 与 `(64,0)` 放入白色 smoke 和红色 Sprite；`.fire` 读回确认坐标及各自 SpriteFrame UUID，Web 预览同一帧中两张图同时可见，两条预览回执均通过。批次逆序补偿后 Agent 节点数为零，场景文件恢复至测试前 SHA-256 `0963cd0a52e25cdfa3edda47a6e998053885d2b93753da7a5c0da2562728d1a8`。后续经真实 MCP 资源场景请求观测到第二项超时且缺少操作记录；这次没有视觉验收，而是经同一分支证明目标在实时/序列化场景中缺席，逆序补偿第一项后由外层流水线清理两个 PNG 与 `.meta`。完整记录见 [MCP 实机轨迹](traces/cocos-agent-mcp-2.4.jsonl)；原始批次轨迹见[批量场景验收记录](traces/cocos-agent-scene-sprite-batch-2.4-web.jsonl)。

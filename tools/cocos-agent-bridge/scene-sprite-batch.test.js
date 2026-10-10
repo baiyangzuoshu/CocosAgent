@@ -25,10 +25,12 @@ function fixture() {
     }
     const params = { targets: [{ projectRoot, creatorVersion: '2.4.15' }], projectRoot, creatorVersion: '2.4.15', assets: ['One.png', 'Two.png'],
         positions: [{ x: -64, y: 0 }, { x: 64, y: 0 }] };
-    const instance = { instanceId: '11111111-1111-4111-8111-111111111111', projectRoot,
+    let instance = { instanceId: '11111111-1111-4111-8111-111111111111', projectRoot,
         creatorVersion: '2.4.15', activeScene: 'helloworld' };
     const nodes = new Map();
     const sceneFile = path.join(projectRoot, 'assets', 'Scene', 'helloworld.fire');
+    const spriteUuid = (assetName) => JSON.parse(fs.readFileSync(path.join(resources, `${assetName}.meta`), 'utf8'))
+        .subMetas[path.basename(assetName, '.png')].uuid;
     function writeScene() {
         const objects = [
             { __type__: 'cc.Scene', _name: 'helloworld', _children: [{ __id__: 1 }] },
@@ -37,7 +39,13 @@ function fixture() {
         for (const [name, uuid] of nodes) {
             const index = objects.length;
             objects[1]._children.push({ __id__: index });
-            objects.push({ __type__: 'cc.Node', _name: name, _id: uuid, _parent: { __id__: 1 }, _children: [] });
+            const assetName = ['One.png', 'Two.png'].find((candidate) => nodeName(candidate) === name);
+            const spriteIndex = index + 1;
+            objects.push({ __type__: 'cc.Node', _name: name, _id: uuid, _parent: { __id__: 1 }, _children: [],
+                _active: true, _trs: { array: [fPositions[assetName].x, fPositions[assetName].y, 0, 0, 0, 0, 1, 1, 1, 1] },
+                _components: [{ __id__: spriteIndex }] });
+            objects.push({ __type__: 'cc.Sprite', node: { __id__: index }, _enabled: true,
+                _spriteFrame: { __uuid__: spriteUuid(assetName) } });
         }
         fs.writeFileSync(sceneFile, JSON.stringify(objects));
     }
@@ -52,7 +60,11 @@ function fixture() {
                 result: { sceneName: 'helloworld', node: { status: 'found', path: 'helloworld/Canvas', uuid: 'a286bbGknJLZpRpxROV6M94' } } };
             const name = request.input.nodePath.split('/').at(-1);
             return { success: true, outcome: 'completed', instance, result: { sceneName: 'helloworld',
-                node: nodes.has(name) ? { status: 'found', path: request.input.nodePath, uuid: nodes.get(name) }
+                node: nodes.has(name) ? { status: 'found', path: request.input.nodePath, uuid: nodes.get(name), name,
+                    childCount: 0, components: ['cc.Sprite'],
+                    componentDetails: [{ classId: 'cc.Sprite', enabled: true,
+                        spriteFrameUuid: spriteUuid(['One.png', 'Two.png'].find((candidate) => nodeName(candidate) === name)) }],
+                    transform: { position: fPositions[['One.png', 'Two.png'].find((candidate) => nodeName(candidate) === name)], scale: { x: 1, y: 1 } } }
                     : { status: 'not-found', path: request.input.nodePath } } };
         }
         if (request.operationGetId) {
@@ -90,7 +102,23 @@ function fixture() {
                 createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }, true);
             throw new Error('INJECTED_HOST_INTERRUPTION_AFTER_OPERATION_CREATED');
         }
-        if (action === 'apply') nodes.set(targetNodeName, crypto.randomUUID());
+        if (assetName === 'One.png' && action === 'compensate' && failureMode === 'compensation-preflight-once') {
+            failureMode = null;
+            const operation = { contractVersion: '0.1', operationId: request.input.operationId, projectRoot,
+                creatorVersion: '2.4.15', manifest: { assetName, nodeName: targetNodeName,
+                    assetUuid: spriteFrameUuid, sceneAction: 'compensate' }, sceneName: 'helloworld',
+                intent: 'created', receipts: [
+                    { phase: 'capability', status: 'passed' },
+                    { phase: 'preflight', status: 'failed', error: { code: 'SCENE_NODE_CONFLICT', sideEffect: 'none' } },
+                ], phases: { capability: 'passed', preflight: 'failed', editor: 'pending', disk: 'pending',
+                    preview: 'pending', recovery: 'pending' }, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+            operationStore.write(projectRoot, operation, true);
+            return { success: false, outcome: 'failed', instance, operationId: request.input.operationId,
+                phases: operation.phases, error: { code: 'EXECUTION_FAILED', message: 'simulated exact-node preflight rejection',
+                    phase: 'execution', retryable: false, sideEffect: 'none' } };
+        }
+        if (action === 'apply') nodes.set(targetNodeName,
+            targetNodeName === nodeName('One.png') ? 'beZMSkwZhAUL6+jX4TfLiP' : crypto.randomUUID());
         else nodes.delete(targetNodeName);
         writeScene();
         const operation = { contractVersion: '0.1', operationId: request.input.operationId, projectRoot, creatorVersion: '2.4.15',
@@ -111,6 +139,7 @@ function fixture() {
     let failureMode = null;
     const setFailure = (mode) => { failureMode = mode; };
     return { root, params, projectRoot, nodes, sceneCalls, run, setFailure,
+        restart: () => { instance = { ...instance, instanceId: crypto.randomUUID() }; return instance; },
         cleanup: () => fs.rmSync(root, { recursive: true, force: true }) };
 }
 
@@ -226,6 +255,102 @@ test('compensation reconciles a persisted pre-write operation only after live an
         assert.equal(recovered.error.code, 'WRITE_RECONCILED_NO_EFFECT');
     } finally { f.cleanup(); }
 });
+
+test('compensation retries a persisted side-effect-free preflight failure only after exact live and disk identity readback', () => {
+    const f = fixture();
+    try {
+        const applied = execute(f.params, f.run);
+        assert.equal(applied.outcome, 'needs-preview');
+        f.setFailure('compensation-preflight-once');
+        const interrupted = compensate({ projectRoot: f.projectRoot, creatorVersion: '2.4.15', batchId: applied.batchId }, f.run);
+        assert.equal(interrupted.outcome, 'needs-review');
+        assert.deepEqual(interrupted.items.map((item) => item.status), ['compensating', 'compensated']);
+        const failedOperationId = interrupted.items[0].compensationOperationId;
+
+        const retried = compensate({ projectRoot: f.projectRoot, creatorVersion: '2.4.15', batchId: applied.batchId }, f.run);
+        assert.equal(retried.outcome, 'failed');
+        assert.deepEqual(retried.items.map((item) => item.status), ['compensated', 'compensated']);
+        assert.equal(f.nodes.size, 0);
+        const record = JSON.parse(fs.readFileSync(path.join(f.projectRoot, '.cocos-agent', 'scene-batches', `${applied.batchId}.json`), 'utf8'));
+        assert.equal(record.items[0].reconciliations[0].disposition, 'no-effect');
+        assert.equal(record.items[0].reconciliations[0].action, 'compensate');
+        assert.notEqual(record.items[0].compensationOperationId, failedOperationId);
+        assert.equal(operationStore.read(f.projectRoot, record.items[0].compensationOperationId).phases.disk, 'passed');
+    } finally { f.cleanup(); }
+});
+
+test('compensation recovers across Creator restart only after stable context and full live/disk identity readback', () => {
+    const f = fixture();
+    try {
+        const applied = execute(f.params, f.run);
+        assert.equal(applied.outcome, 'needs-preview');
+        f.setFailure('compensation-preflight-once');
+        const interrupted = compensate({ projectRoot: f.projectRoot, creatorVersion: '2.4.15', batchId: applied.batchId }, f.run);
+        assert.equal(interrupted.outcome, 'needs-review');
+        assert.deepEqual(interrupted.items.map((item) => item.status), ['compensating', 'compensated']);
+        const previousInstanceId = interrupted.instanceId;
+        const currentInstance = f.restart();
+        assert.notEqual(currentInstance.instanceId, previousInstanceId);
+
+        const recovered = compensate({ projectRoot: f.projectRoot, creatorVersion: '2.4.15', batchId: applied.batchId }, f.run);
+        assert.equal(recovered.outcome, 'failed', 'the receipt preserves the earlier failed preflight after successful compensation');
+        assert.deepEqual(recovered.items.map((item) => item.status), ['compensated', 'compensated']);
+        assert.equal(recovered.instanceId, currentInstance.instanceId);
+        assert.equal(f.nodes.size, 0);
+        const record = JSON.parse(fs.readFileSync(path.join(f.projectRoot, '.cocos-agent', 'scene-batches', `${applied.batchId}.json`), 'utf8'));
+        const reconciliation = record.items[0].reconciliations[0];
+        assert.equal(reconciliation.disposition, 'verified-restart-context');
+        assert.equal(reconciliation.priorInstanceId, previousInstanceId);
+        assert.equal(reconciliation.currentInstanceId, currentInstance.instanceId);
+        assert.equal(reconciliation.canvasUuid, 'a286bbGknJLZpRpxROV6M94');
+        assert.equal(reconciliation.spriteFrameUuid, JSON.parse(fs.readFileSync(
+            path.join(f.projectRoot, 'assets/resources/One.png.meta'), 'utf8')).subMetas.One.uuid);
+        assert.equal(operationStore.read(f.projectRoot, record.items[0].compensationOperationId).phases.disk, 'passed');
+    } finally { f.cleanup(); }
+});
+
+for (const mismatch of ['Canvas UUID drift', 'live SpriteFrame drift', 'serialized transform drift']) {
+    test(`compensation after restart remains blocked on ${mismatch}`, () => {
+        const f = fixture();
+        try {
+            const applied = execute(f.params, f.run);
+            f.setFailure('compensation-preflight-once');
+            const interrupted = compensate({ projectRoot: f.projectRoot, creatorVersion: '2.4.15', batchId: applied.batchId }, f.run);
+            assert.equal(interrupted.outcome, 'needs-review');
+            const previousInstanceId = interrupted.instanceId;
+            f.restart();
+            const scenePath = 'helloworld/Canvas/CocosAgentAsset_One';
+            if (mismatch === 'serialized transform drift') {
+                const objects = JSON.parse(fs.readFileSync(path.join(f.projectRoot, 'assets/Scene/helloworld.fire'), 'utf8'));
+                const node = objects.find((entry) => entry._name === nodeName('One.png'));
+                node._trs.array[0] = -63;
+                fs.writeFileSync(path.join(f.projectRoot, 'assets/Scene/helloworld.fire'), JSON.stringify(objects));
+            }
+            const guardedRun = (request) => {
+                const result = f.run(request);
+                if (mismatch === 'Canvas UUID drift' && request.command === 'scene.node.inspect'
+                    && request.input.nodePath === 'helloworld/Canvas') {
+                    return { ...result, result: { ...result.result,
+                        node: { ...result.result.node, uuid: 'a286bbGknJLZpRpxROV6M95' } } };
+                }
+                if (mismatch === 'live SpriteFrame drift' && request.command === 'scene.node.inspect'
+                    && request.input.nodePath === scenePath) {
+                    const node = result.result.node;
+                    return { ...result, result: { ...result.result, node: { ...node,
+                        componentDetails: node.componentDetails.map((component) => ({ ...component, spriteFrameUuid: '00000000-0000-4000-8000-000000000099' })) } } };
+                }
+                return result;
+            };
+            const callsBefore = f.sceneCalls.length;
+            const blocked = compensate({ projectRoot: f.projectRoot, creatorVersion: '2.4.15', batchId: applied.batchId }, guardedRun);
+            assert.equal(blocked.outcome, 'needs-review');
+            assert.equal(blocked.instanceId, previousInstanceId);
+            assert.equal(blocked.items[0].status, 'compensating');
+            assert.equal(f.nodes.size, 1);
+            assert.equal(f.sceneCalls.length, callsBefore, 'no editor write follows mismatched recovery evidence');
+        } finally { f.cleanup(); }
+    });
+}
 
 test('same batch resumes after host interruption between persisted operation and reply', () => {
     const f = fixture();

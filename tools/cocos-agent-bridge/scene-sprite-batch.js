@@ -9,7 +9,7 @@ const operationReconcile = require('./operation-reconcile');
 
 const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const uuidPattern = idPattern;
-const nodeIdPattern = /^[A-Za-z0-9_-]{16,64}$/;
+const nodeIdPattern = /^[A-Za-z0-9+/_-]{16,64}$/;
 const assetPattern = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/;
 const fail = (code, message) => ({ success: false, outcome: 'failed', error: { code, message } });
 function validPosition(position) {
@@ -150,6 +150,104 @@ function reconcileNoEffect(record, item, action, operationId, run) {
     save(record);
     return true;
 }
+function serializedSpriteReferenceMatches(record, item, expectedNodeUuid) {
+    const root = path.join(record.projectRoot, 'assets');
+    const candidates = [];
+    let seen = 0;
+    let unsafe = false;
+    function visit(directory, depth) {
+        if (unsafe || depth > 12) { unsafe = true; return; }
+        let entries;
+        try { entries = fs.readdirSync(directory, { withFileTypes: true }); } catch (_) { unsafe = true; return; }
+        for (const entry of entries) {
+            const filename = path.join(directory, entry.name);
+            if (entry.isSymbolicLink()) { unsafe = true; return; }
+            if (entry.isDirectory()) visit(filename, depth + 1);
+            else if (entry.isFile()) {
+                if (++seen > 20000) { unsafe = true; return; }
+                if (entry.name === `${record.sceneName}.fire`) candidates.push(filename);
+            }
+            if (unsafe) return;
+        }
+    }
+    visit(root, 0);
+    if (unsafe || candidates.length !== 1) return false;
+    let objects;
+    try {
+        if (fs.statSync(candidates[0]).size > 20 * 1024 * 1024) return false;
+        objects = JSON.parse(fs.readFileSync(candidates[0], 'utf8'));
+    } catch (_) { return false; }
+    if (!Array.isArray(objects)) return false;
+    const canvases = objects.flatMap((node, index) => node && node.__type__ === 'cc.Node' && node._name === 'Canvas'
+        && node._id === record.canvasUuid ? [index] : []);
+    if (canvases.length !== 1) return false;
+    const canvasIndex = canvases[0];
+    const nodes = objects.flatMap((node, index) => node && node.__type__ === 'cc.Node' && node._name === item.nodeName
+        && node._parent?.__id__ === canvasIndex ? [{ node, index }] : []);
+    if (nodes.length !== 1) return false;
+    const { node, index } = nodes[0];
+    if (node._id !== expectedNodeUuid || node._active !== true || node._children?.length !== 0
+        || !Array.isArray(node._components) || node._components.length !== 1
+        || !Array.isArray(objects[canvasIndex]._children)
+        || !objects[canvasIndex]._children.some((reference) => reference && reference.__id__ === index)) return false;
+    const spriteComponents = node._components.flatMap((reference) => {
+        const component = reference && Number.isInteger(reference.__id__) ? objects[reference.__id__] : null;
+        return component && component.__type__ === 'cc.Sprite' && component.node?.__id__ === index
+            ? [component] : [];
+    });
+    const transform = node._trs?.array;
+    const position = item.position || { x: 0, y: 0 };
+    return spriteComponents.length === 1 && spriteComponents[0]._enabled === true
+        && spriteComponents[0]._spriteFrame?.__uuid__ === item.assetUuid
+        && Array.isArray(transform) && transform.length === 10
+        && Math.abs(transform[0] - position.x) <= 1e-6 && Math.abs(transform[1] - position.y) <= 1e-6
+        && Math.abs(transform[2]) <= 1e-6 && Math.abs(transform[3]) <= 1e-6
+        && Math.abs(transform[4]) <= 1e-6 && Math.abs(transform[5]) <= 1e-6
+        && Math.abs(transform[6] - 1) <= 1e-6 && Math.abs(transform[7] - 1) <= 1e-6
+        && Math.abs(transform[8] - 1) <= 1e-6 && Math.abs(transform[9] - 1) <= 1e-6;
+}
+function failedCompensationPreflightMatches(record, item, operationId, operation, run) {
+    const phases = operation && operation.phases;
+    const manifest = operation && operation.manifest;
+    const preflightFailure = operation && [...(operation.receipts || [])].reverse()
+        .find((receipt) => receipt.phase === 'preflight' && receipt.status === 'failed');
+    if (!operation || operation.operationId !== operationId || operation.projectRoot !== record.projectRoot
+        || operation.creatorVersion !== record.creatorVersion || operation.sceneName !== record.sceneName
+        || operation.intent !== 'created' || manifest?.sceneAction !== 'compensate'
+        || manifest.assetName !== item.assetName || manifest.nodeName !== item.nodeName || manifest.assetUuid !== item.assetUuid
+        || !phases || phases.capability !== 'passed' || phases.preflight !== 'failed' || phases.editor !== 'pending'
+        || phases.disk !== 'pending' || phases.preview !== 'pending' || phases.recovery !== 'pending'
+        || preflightFailure?.error?.sideEffect !== 'none') return false;
+    const original = operationState(record.projectRoot, item.operationId);
+    if (!original || original.projectRoot !== record.projectRoot || original.creatorVersion !== record.creatorVersion
+        || original.manifest?.sceneAction !== 'apply' || original.manifest.assetName !== item.assetName
+        || original.manifest.nodeName !== item.nodeName || original.manifest.assetUuid !== item.assetUuid
+        || original.phases?.disk !== 'passed') return false;
+    const asset = readAsset(record.projectRoot, item.assetName);
+    const context = inspectContext({ targets: record.targets, projectRoot: record.projectRoot,
+        creatorVersion: record.creatorVersion }, run);
+    if (!asset.success || asset.assetUuid !== item.assetUuid || asset.sha256 !== item.sha256
+        || !context.success || context.sceneName !== record.sceneName || context.canvasPath !== record.canvasPath
+        || context.canvasUuid !== record.canvasUuid || context.instance.projectRoot !== record.projectRoot
+        || context.instance.creatorVersion !== record.creatorVersion || context.instance.activeScene !== record.sceneName) return false;
+    const nodePath = `${record.canvasPath}/${item.nodeName}`;
+    const inspected = inspect({ targets: record.targets, projectRoot: record.projectRoot, creatorVersion: record.creatorVersion }, nodePath, run);
+    const node = inspected?.result?.node;
+    const sprite = node?.componentDetails?.find((component) => component.classId === 'cc.Sprite');
+    const position = item.position || { x: 0, y: 0 };
+    if (!inspected.success || !sameInstance(inspected.instance, context.instance)
+        || inspected.result?.sceneName !== record.sceneName || node?.status !== 'found' || node.path !== nodePath
+        || node.name !== item.nodeName || node.childCount !== 0 || node.components?.length !== 1
+        || !sprite || sprite.enabled !== true || sprite.spriteFrameUuid !== item.assetUuid
+        || Math.abs((node.transform?.position?.x ?? Infinity) - position.x) > 1e-6
+        || Math.abs((node.transform?.position?.y ?? Infinity) - position.y) > 1e-6
+        || Math.abs((node.transform?.scale?.x ?? Infinity) - 1) > 1e-6
+        || Math.abs((node.transform?.scale?.y ?? Infinity) - 1) > 1e-6
+        || !node.uuid || !nodeIdPattern.test(node.uuid)) return false;
+    if (!serializedSpriteReferenceMatches(record, item, node.uuid)) return false;
+    return { instance: context.instance, nodeUuid: node.uuid, spriteFrameUuid: sprite.spriteFrameUuid,
+        assetSha256: asset.sha256 };
+}
 function preWriteOperationMatches(record, item, operationId, operation) {
     const manifest = operation && operation.manifest;
     const phases = operation && operation.phases;
@@ -197,6 +295,26 @@ function reconcile(record, run) {
             save(record); return false;
         }
         const pendingOperation = operationState(record.projectRoot, operationId);
+        const restartRecovery = expectedAction === 'compensate'
+            ? failedCompensationPreflightMatches(record, item, operationId, pendingOperation, run) : false;
+        if (restartRecovery) {
+            item.reconciliations ||= [];
+            const priorInstanceId = record.instanceId;
+            const instanceChanged = priorInstanceId !== restartRecovery.instance.instanceId;
+            item.reconciliations.push({ disposition: instanceChanged ? 'verified-restart-context' : 'no-effect',
+                action: 'compensate', operationId, observedAt: new Date().toISOString(),
+                ...(instanceChanged ? { priorInstanceId, currentInstanceId: restartRecovery.instance.instanceId,
+                    sceneName: record.sceneName, canvasUuid: record.canvasUuid,
+                    nodeUuid: restartRecovery.nodeUuid, spriteFrameUuid: restartRecovery.spriteFrameUuid,
+                    assetSha256: restartRecovery.assetSha256,
+                    evidence: 'failed preflight sideEffect=none; stable project/version/scene/Canvas plus live and serialized node/resource identity matched after Creator restart' }
+                    : { evidence: 'failed preflight sideEffect=none; original apply, live SpriteFrame, and serialized scene identity matched' }) });
+            if (instanceChanged) record.instanceId = restartRecovery.instance.instanceId;
+            item.status = 'applied';
+            item.compensationOperationId = null;
+            save(record);
+            continue;
+        }
         if (expectedAction === 'apply' && preWriteOperationMatches(record, item, operationId, pendingOperation)) {
             if (reconcileNoEffect(record, item, expectedAction, operationId, run)) continue;
             record.state = 'needs-review'; record.error = { code: 'ITEM_OUTCOME_UNCERTAIN', assetName: item.assetName, operationId };
