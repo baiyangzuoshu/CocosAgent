@@ -4,7 +4,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const path = require('path');
 const childProcess = require('child_process');
-const WebSocket = require('ws');
+const WebSocket = require('./vendor/ws');
 const { searchPngAssets } = require('./asset-search');
 const { CredentialStore } = require('./credential-store.cjs');
 const extensionPackage = require('./package.json');
@@ -37,7 +37,15 @@ instanceBytes[6] = (instanceBytes[6] & 0x0f) | 0x40;
 instanceBytes[8] = (instanceBytes[8] & 0x3f) | 0x80;
 const instanceHex = instanceBytes.toString('hex');
 const INSTANCE_ID = `${instanceHex.slice(0, 8)}-${instanceHex.slice(8, 12)}-${instanceHex.slice(12, 16)}-${instanceHex.slice(16, 20)}-${instanceHex.slice(20)}`;
-const EXTENSION_SOURCE_FILES = ['main.js', 'package-lock.json', 'package.json', 'scene.js'];
+function listRelativeFiles(root, relative = '') {
+    return fs.readdirSync(path.join(root, relative), { withFileTypes: true }).flatMap((entry) => {
+        const child = path.join(relative, entry.name);
+        if (entry.isDirectory()) return listRelativeFiles(root, child);
+        return entry.isFile() ? [child.replace(/\\/g, '/')] : [];
+    }).sort();
+}
+const EXTENSION_SOURCE_FILES = ['asset-search.js', 'credential-store.cjs', 'main.js', 'package-lock.json', 'package.json', 'scene.js',
+    ...listRelativeFiles(__dirname, 'vendor/ws')].sort();
 const EXTENSION_SOURCE_FINGERPRINT = (() => {
     const hash = crypto.createHash('sha256');
     for (const relativePath of EXTENSION_SOURCE_FILES) {
@@ -1320,14 +1328,14 @@ async function startAssistantRuntime(payload) {
     } catch (_) {
         if (sequence !== assistantStartSequence) return;
         assistantStartPending = false;
-        assistantCredentialError = '无法读取或保存项目根目录的 .env.local；请检查文件权限后重试。';
+        assistantCredentialError = '无法读取或保存本机 CocosAgent 凭据；请检查用户配置目录权限后重试。';
         sendAssistantPanel('assistant-runtime-error', { message: assistantCredentialError });
         return;
     }
 
     if (apiKey.length < 8 || /[\r\n\u0000]/.test(apiKey)) {
         assistantStartPending = false;
-        assistantCredentialError = apiKey ? 'DeepSeek API Key 无效。' : '请先输入 DeepSeek API Key，或在项目根目录 .env.local 中设置 DEEPSEEK_API_KEY。';
+        assistantCredentialError = apiKey ? 'DeepSeek API Key 无效。' : '请先输入 DeepSeek API Key，或先在本机 CocosAgent 配置中保存 Key。';
         sendAssistantPanel('assistant-runtime-error', { message: assistantCredentialError });
         return;
     }
@@ -1350,14 +1358,15 @@ async function startAssistantRuntime(payload) {
     }
     stopAssistantRuntime();
 
-    const hostScript = path.resolve(__dirname, '../../../tools/cocos-agent-bridge/mcp/assistant-host.mjs');
+    const runtimeRoot = path.join(__dirname, 'assistant-runtime');
+    const hostScript = path.join(runtimeRoot, 'tools/cocos-agent-bridge/mcp/assistant-host.mjs');
     if (!fs.existsSync(hostScript)) {
         assistantStartPending = false;
-        sendAssistantPanel('assistant-runtime-error', { message: '找不到 CocosAgent Assistant 服务入口。' });
+        sendAssistantPanel('assistant-runtime-error', { message: 'CocosAgent 本地运行时未安装；请安装 Creator Agent 扩展包后重载扩展。' });
         return;
     }
     const nodeCommand = process.env.COCOS_AGENT_NODE || 'node';
-    const env = Object.assign({}, process.env, { DEEPSEEK_API_KEY: apiKey });
+    const env = Object.assign({}, process.env, { COCOS_AGENT_RUNTIME_ROOT: runtimeRoot, DEEPSEEK_API_KEY: apiKey });
     const child = childProcess.spawn(nodeCommand, [hostScript, '--project', PROJECT_ROOT, '--model', model], {
         cwd: path.dirname(hostScript), env, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'],
     });
@@ -1422,7 +1431,7 @@ async function forgetAssistantCredential() {
     } catch (_) {
         stopAssistantRuntime();
         assistantCredentialRemembered = false;
-        assistantCredentialError = '未能清除项目根目录 .env.local 中的 DeepSeek 配置；请检查文件权限。';
+        assistantCredentialError = '未能清除本机 CocosAgent 凭据；请检查用户配置目录权限。';
         sendAssistantPanel('assistant-runtime-error', { message: assistantCredentialError });
         return;
     }

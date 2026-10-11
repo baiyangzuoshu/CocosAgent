@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const MAX_KEY_LENGTH = 4096;
@@ -59,7 +60,7 @@ function isValidModel(model) {
 
 class CredentialStore {
     constructor(options = {}) {
-        this.filePath = options.filePath || path.resolve(__dirname, '../../../.env.local');
+        this.filePath = options.filePath || path.join(os.homedir(), '.cocos-agent', 'credentials.env');
         this.fs = options.fs || fs.promises;
     }
 

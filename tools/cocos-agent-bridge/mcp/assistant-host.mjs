@@ -12,7 +12,9 @@ import { parseStructuredPlan } from './structured-plan.mjs';
 import { beginPlanStep, createPlan, finishPlanStep, hasPlanSetupReceipts, planView } from './assistant-plan-service.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const REPOSITORY_ROOT = path.resolve(SCRIPT_DIR, '../../..');
+const REPOSITORY_ROOT = process.env.COCOS_AGENT_RUNTIME_ROOT
+    ? path.resolve(process.env.COCOS_AGENT_RUNTIME_ROOT)
+    : path.resolve(SCRIPT_DIR, '../../..');
 const MCP_SERVER = path.join(SCRIPT_DIR, 'mcp-server.mjs');
 const AGENT_SKILL = path.join(REPOSITORY_ROOT, 'plugins/cocos-agent-2x/skills/cocos-agent/SKILL.md');
 const MODE_NAMES = new Set(['Ask', 'Plan', 'Agent']);
@@ -275,7 +277,11 @@ async function start(options) {
     process.once('SIGTERM', shutdown);
 }
 
-const isEntrypoint = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isEntrypoint = (() => {
+    if (!process.argv[1]) return false;
+    try { return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url)); }
+    catch (_) { return false; }
+})();
 if (isEntrypoint) {
     try {
         await start(parseArgs(process.argv.slice(2)));

@@ -28,19 +28,19 @@ const RESOURCE_NAME = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/)
 const ASSET_FOLDER_PATH = z.string().min(1).max(240).regex(/^[A-Za-z0-9][A-Za-z0-9_.-]*(?:\/[A-Za-z0-9][A-Za-z0-9_.-]*){0,7}$/);
 const SERVER_VERSION = mcpPackage.version;
 const MCP_ROOT = path.dirname(fileURLToPath(import.meta.url));
-const PLUGIN_ROOT = path.join(REPOSITORY_ROOT, 'plugins/cocos-agent-2x');
-const SKILL_PACKAGE = require(path.join(PLUGIN_ROOT, 'skill-package.json'));
+const AGENT_PACKAGE_ROOT = path.join(REPOSITORY_ROOT, 'plugins/cocos-agent-2x');
+const SKILL_PACKAGE = require(path.join(AGENT_PACKAGE_ROOT, 'skill-package.json'));
+const AGENT_PACKAGE = require(path.join(AGENT_PACKAGE_ROOT, 'agent-package.json'));
 const MCP_SOURCE_FINGERPRINT = fingerprintFiles(MCP_ROOT, ['mcp-server.mjs', 'package.json', 'package-lock.json']);
 const MCP_CONTRACT_SCHEMA_FINGERPRINT = hashBytes(fs.readFileSync(path.join(REPOSITORY_ROOT, 'tools/cocos-agent-bridge/catalog.schema.json')));
-const PLUGIN_MANIFEST = require(path.join(PLUGIN_ROOT, '.codex-plugin/plugin.json'));
-const PLUGIN_SOURCE_FINGERPRINT = fingerprintFiles(PLUGIN_ROOT, [
-    '.codex-plugin/plugin.json', '.mcp.json', 'README.md', 'skill-package.json',
-    ...listFiles(PLUGIN_ROOT, 'scripts'), ...listFiles(PLUGIN_ROOT, 'skills'), ...listFiles(PLUGIN_ROOT, 'references'),
+const AGENT_PACKAGE_FINGERPRINT = fingerprintFiles(AGENT_PACKAGE_ROOT, [
+    'agent-package.json', 'skill-package.json',
+    ...listFiles(AGENT_PACKAGE_ROOT, 'skills'), ...listFiles(AGENT_PACKAGE_ROOT, 'references'),
 ]);
 const MCP_RUNTIME = Object.freeze({
     version: SERVER_VERSION,
-    pluginVersion: PLUGIN_MANIFEST.version,
-    pluginFingerprint: PLUGIN_SOURCE_FINGERPRINT,
+    agentPackageVersion: AGENT_PACKAGE.version,
+    agentPackageFingerprint: AGENT_PACKAGE_FINGERPRINT,
     sourceFingerprint: MCP_SOURCE_FINGERPRINT,
     contractSchemaFingerprint: MCP_CONTRACT_SCHEMA_FINGERPRINT,
 });
@@ -50,8 +50,8 @@ function hashBytes(value) {
 }
 
 function packageFile(relativePath) {
-    const target = path.resolve(PLUGIN_ROOT, relativePath);
-    if (!target.startsWith(`${PLUGIN_ROOT}${path.sep}`)) throw new Error(`Package path escapes the plugin: ${relativePath}`);
+    const target = path.resolve(AGENT_PACKAGE_ROOT, relativePath);
+    if (!target.startsWith(`${AGENT_PACKAGE_ROOT}${path.sep}`)) throw new Error(`Package path escapes the Agent package: ${relativePath}`);
     const bytes = fs.readFileSync(target);
     return { target, bytes, sha256: hashBytes(bytes) };
 }
@@ -60,10 +60,10 @@ function packageSkillIndex() {
     const references = new Map(SKILL_PACKAGE.references.map((reference) => [reference.id, reference]));
     return {
         schemaVersion: SKILL_PACKAGE.schemaVersion,
-        plugin: {
-            name: PLUGIN_MANIFEST.name,
-            version: PLUGIN_MANIFEST.version,
-            sourceFingerprint: PLUGIN_SOURCE_FINGERPRINT,
+        agentPackage: {
+            name: AGENT_PACKAGE.name,
+            version: AGENT_PACKAGE.version,
+            sourceFingerprint: AGENT_PACKAGE_FINGERPRINT,
         },
         mcp: { version: SERVER_VERSION, sourceFingerprint: MCP_SOURCE_FINGERPRINT },
         skills: SKILL_PACKAGE.skills.map((skill) => {
@@ -93,8 +93,8 @@ function packageSkillText(skill) {
         return `- cocos://2x/references/${id} (sha256 ${reference.sha256})`;
     });
     const provenance = [
-        `<!-- CocosAgent package ${PLUGIN_MANIFEST.name}@${PLUGIN_MANIFEST.version}`,
-        `plugin-sha256 ${PLUGIN_SOURCE_FINGERPRINT}`,
+        `<!-- CocosAgent package ${AGENT_PACKAGE.name}@${AGENT_PACKAGE.version}`,
+        `agent-package-sha256 ${AGENT_PACKAGE_FINGERPRINT}`,
         `skill ${skill.name} sha256 ${sha256}`,
         'references:',
         ...(referenceRows.length ? referenceRows : ['- none']),
@@ -109,14 +109,14 @@ function registerSkillPackageResources(server) {
     const indexUri = 'cocos://2x/skills/index';
     server.registerResource('cocos2-skills-index', indexUri, {
         title: 'CocosAgent 2.x skill and reference index',
-        description: 'Lists packaged Creator 2.4.15 task skills, their read URIs, plugin/MCP versions, source fingerprint and content hashes.',
+        description: 'Lists packaged Creator 2.4.15 task skills, their read URIs, Agent package/MCP versions, source fingerprint and content hashes.',
         mimeType: 'application/json',
     }, async (uri) => ({ contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(packageSkillIndex(), null, 2) }] }));
 
     for (const skill of SKILL_PACKAGE.skills) {
         server.registerResource(`cocos2-skill-${skill.name}`, skill.uri, {
             title: `CocosAgent skill: ${skill.name}`,
-            description: `Creator 2.4.15 task instructions. Read the skill index to verify plugin version, content hash, and supporting references.`,
+            description: `Creator 2.4.15 task instructions. Read the skill index to verify Agent package version, content hash, and supporting references.`,
             mimeType: 'text/markdown',
         }, async (uri) => ({ contents: [{ uri: uri.href, mimeType: 'text/markdown', text: packageSkillText(skill) }] }));
     }
@@ -741,7 +741,11 @@ function usage() {
     return 'Usage: node mcp-server.mjs --project <absolute Creator 2.4.15 project path> [--project <another registered project path>]';
 }
 
-const isEntrypoint = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isEntrypoint = (() => {
+    if (!process.argv[1]) return false;
+    try { return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url)); }
+    catch (_) { return false; }
+})();
 if (isEntrypoint) {
     try {
         const parsed = parseArgs(process.argv.slice(2));
@@ -749,7 +753,9 @@ if (isEntrypoint) {
             process.stderr.write(`${usage()}\n`);
             process.exitCode = 0;
         } else {
-            serveStdio(() => createServer(parsed.projects));
+            serveStdio(() => createServer(parsed.projects), {
+                onerror: (error) => process.stderr.write(`MCP_STDIO_ERROR ${String(error?.stack || error).slice(0, 1000)}\n`),
+            });
         }
     } catch (error) {
         process.stderr.write(`${error.message}\n${usage()}\n`);

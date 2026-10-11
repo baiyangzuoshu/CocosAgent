@@ -16,32 +16,34 @@ function readMcpRuntime(value) {
         const parsed = JSON.parse(value);
         if (!parsed || typeof parsed !== 'object' || typeof parsed.version !== 'string'
             || !/^[0-9a-f]{64}$/.test(parsed.sourceFingerprint || '')
-            || !/^[0-9a-f]{64}$/.test(parsed.pluginFingerprint || '')
+            || !/^[0-9a-f]{64}$/.test(parsed.agentPackageFingerprint || '')
             || !/^[0-9a-f]{64}$/.test(parsed.contractSchemaFingerprint || '')
-            || typeof parsed.pluginVersion !== 'string') return null;
+            || typeof parsed.agentPackageVersion !== 'string') return null;
         return parsed;
     } catch (_) { return null; }
 }
 const MCP_PACKAGE_PATH = path.join(__dirname, 'mcp', 'package.json');
 const MCP_SOURCE_PATH = path.join(__dirname, 'mcp', 'mcp-server.mjs');
-const PLUGIN_ROOT_PATH = path.resolve(__dirname, '../../plugins/cocos-agent-2x');
-const PLUGIN_MANIFEST_PATH = path.join(PLUGIN_ROOT_PATH, '.codex-plugin/plugin.json');
+const AGENT_PACKAGE_ROOT = path.resolve(__dirname, '../../plugins/cocos-agent-2x');
+const AGENT_PACKAGE_PATH = path.join(AGENT_PACKAGE_ROOT, 'agent-package.json');
 const mcpPackage = JSON.parse(fs.readFileSync(MCP_PACKAGE_PATH, 'utf8'));
-const pluginManifest = JSON.parse(fs.readFileSync(PLUGIN_MANIFEST_PATH, 'utf8'));
+const agentPackage = JSON.parse(fs.readFileSync(AGENT_PACKAGE_PATH, 'utf8'));
 const expectedMcpSourceFingerprint = fingerprintFiles(path.dirname(MCP_SOURCE_PATH), ['mcp-server.mjs', 'package.json', 'package-lock.json']);
 const expectedSchemaFingerprint = sha256(fs.readFileSync(path.join(__dirname, 'catalog.schema.json')));
 const expectedHostFingerprint = fingerprintFiles(__dirname, [
     'catalog-host.js', 'agent-jsonl.js', 'agent-dispatch.js', 'catalog.schema.json', 'runtime-fingerprint.js',
 ]);
 const hostRuntime = { version: HOST_VERSION, sourceFingerprint: expectedHostFingerprint, contractSchemaFingerprint: expectedSchemaFingerprint };
-const expectedPluginVersion = pluginManifest.version;
-const expectedPluginFingerprint = fingerprintFiles(PLUGIN_ROOT_PATH, [
-    '.codex-plugin/plugin.json', '.mcp.json', 'README.md', 'skill-package.json',
-    ...listFiles(PLUGIN_ROOT_PATH, 'scripts'), ...listFiles(PLUGIN_ROOT_PATH, 'skills'), ...listFiles(PLUGIN_ROOT_PATH, 'references'),
+const expectedAgentPackageVersion = agentPackage.version;
+const expectedAgentPackageFingerprint = fingerprintFiles(AGENT_PACKAGE_ROOT, [
+    'agent-package.json', 'skill-package.json',
+    ...listFiles(AGENT_PACKAGE_ROOT, 'skills'), ...listFiles(AGENT_PACKAGE_ROOT, 'references'),
 ]);
 function expectedExtensionFingerprint(projectRoot) {
     const extensionRoot = path.join(projectRoot, 'packages', 'cocos-agent-bridge');
-    const relativeFiles = ['main.js', 'scene.js', 'package.json', 'package-lock.json'];
+    if (!fs.existsSync(path.join(extensionRoot, 'vendor/ws'))) return null;
+    const relativeFiles = ['asset-search.js', 'credential-store.cjs', 'main.js', 'scene.js', 'package.json', 'package-lock.json',
+        ...listFiles(extensionRoot, 'vendor/ws')];
     const files = relativeFiles.map((name) => path.join(extensionRoot, name));
     if (!files.every((file) => fs.existsSync(file))) return null;
     return fingerprintFiles(extensionRoot, relativeFiles);
@@ -141,7 +143,7 @@ function publicInstance(target) {
         commandContractFingerprint: target.commandContractFingerprint || null,
         activeScene: target.activeScene, catalogRevision: target.catalogRevision,
         hostRuntime: target.hostRuntime,
-        expectedRuntime: { plugin: { version: expectedPluginVersion, fingerprint: expectedPluginFingerprint },
+        expectedRuntime: { agentPackage: { version: expectedAgentPackageVersion, fingerprint: expectedAgentPackageFingerprint },
             mcp: { version: mcpPackage.version, sourceFingerprint: expectedMcpSourceFingerprint,
                 contractSchemaFingerprint: expectedSchemaFingerprint },
             creatorExtension: { version: extensionVersion, sourceFingerprint: expectedExtensionFingerprint(target.projectRoot) } },
@@ -227,22 +229,22 @@ function runtimeCompatibility(target, result, actualContractFingerprint) {
     }
     if (!target.mcpRuntime) {
         diagnostics.push({ component: 'mcp', status: 'unattested', code: 'MCP_RUNTIME_UNREPORTED', expected: {
-            version: mcpPackage.version, pluginVersion: expectedPluginVersion,
-            pluginFingerprint: expectedPluginFingerprint, sourceFingerprint: expectedMcpSourceFingerprint,
+            version: mcpPackage.version, agentPackageVersion: expectedAgentPackageVersion,
+            agentPackageFingerprint: expectedAgentPackageFingerprint, sourceFingerprint: expectedMcpSourceFingerprint,
             contractSchemaFingerprint: expectedSchemaFingerprint,
         }, actual: null });
         blockers.push('MCP_RUNTIME_UNREPORTED');
     } else {
         const mcpChecks = [
             ['MCP_VERSION_MISMATCH', mcpPackage.version, target.mcpRuntime.version],
-            ['PLUGIN_VERSION_MISMATCH', expectedPluginVersion, target.mcpRuntime.pluginVersion],
-            ['PLUGIN_FINGERPRINT_MISMATCH', expectedPluginFingerprint, target.mcpRuntime.pluginFingerprint],
+            ['AGENT_PACKAGE_VERSION_MISMATCH', expectedAgentPackageVersion, target.mcpRuntime.agentPackageVersion],
+            ['AGENT_PACKAGE_FINGERPRINT_MISMATCH', expectedAgentPackageFingerprint, target.mcpRuntime.agentPackageFingerprint],
             ['MCP_SOURCE_FINGERPRINT_MISMATCH', expectedMcpSourceFingerprint, target.mcpRuntime.sourceFingerprint],
             ['MCP_CONTRACT_SCHEMA_MISMATCH', expectedSchemaFingerprint, target.mcpRuntime.contractSchemaFingerprint],
         ];
         for (const [code, expected, actual] of mcpChecks) {
             if (actual !== expected) {
-                diagnostics.push({ component: code.startsWith('PLUGIN') ? 'plugin' : 'mcp', status: 'mismatch', code,
+                diagnostics.push({ component: code.startsWith('AGENT_PACKAGE') ? 'agentPackage' : 'mcp', status: 'mismatch', code,
                     expected, actual: actual || null });
                 blockers.push(code);
             }

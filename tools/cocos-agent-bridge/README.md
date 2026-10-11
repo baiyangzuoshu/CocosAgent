@@ -22,13 +22,13 @@ Agent key 不参与此流程，也不会写入项目。WebSocket 会话令牌只
 
 通用 MCP 宿主可通过 [`mcp/mcp-server.mjs`](mcp/mcp-server.mjs) 使用已实现的实例查询、能力目录、语义命令、2.4 Web-Mobile 构建和构建包预览。适配器只注册启动参数中列出的绝对项目路径，并固定 Creator 2.4.15；MCP 宿主提供模型，CocosAgent 不配置或调用 LLM Key。安装依赖、宿主配置、工具状态和验收边界见[适配层合同](../../docs/agent-foundation/cocos-agent-mcp-0.1.md)。
 
-## Creator 内置 Assistant（2.4.15 首版）
+## Creator 原生 Agent（2.4.15）
 
-Creator 菜单 `扩展 → CocosAgent → Assistant` 打开对话面板。面板声明为 Creator 的 `dockable` 类型，目前实测为独立编辑器窗口。可选 `deepseek-flash` 与 `deepseek-v4-pro`，本轮真实模型验收使用 Flash。Key 可保存在项目根目录 `.env.local`（该文件由 `.gitignore` 忽略），扩展下次启动时自动恢复连接；面板也可选择只在本次连接使用。连接后密码框会清空。扩展主进程将密钥经子进程环境传给本地 `assistant-host.mjs`，MCP 子进程不会继承 `DEEPSEEK_*` 环境变量，Key 不放入命令行或操作轨迹。关闭 Creator 或重载扩展会停止本地 Assistant 服务。
+Creator 菜单 `扩展 → CocosAgent → Assistant` 打开对话面板。Creator 扩展管理 Assistant sidecar 的启动、停止、当前项目注册和写入审批；sidecar 自己启动 MCP stdio 子进程，但不依赖 Codex、Codex 插件缓存或 Codex MCP Host。现有 Ask/Plan/Agent、语义命令、操作回执和恢复账本继续复用。可选 `deepseek-flash` 与 `deepseek-v4-pro`，真实模型验收使用 Flash。Key 保存在当前 OS 用户的 `~/.cocos-agent/credentials.env`（Windows `%USERPROFILE%` 下），文件为明文；POSIX 下限制为用户可读写。连接后密码框会清空。扩展主进程将密钥经子进程环境传给本地 `assistant-host.mjs`，MCP 子进程不会继承 `DEEPSEEK_*` 环境变量，Key 不放入命令行或操作轨迹。关闭 Creator 或重载扩展会停止本地 Assistant 服务。
 
 Ask 和 Plan 仅向模型暴露 MCP 标记为只读的工具；Plan 用只读工程信息生成步骤，不执行写入。Agent 可使用当前 2.4.15 MCP 工具，但每个非只读工具调用都会先在面板显示工具名和参数，等待用户批准。编辑器操作仍由现有 MCP Server、Host 合同和版本扩展执行；模型服务没有任意文件写入或任意 JavaScript 工具。
 
-本机需安装 Node.js 20+，并在 `tools/cocos-agent-bridge/mcp/` 执行 `npm ci`。如果扩展进程找不到 `node`，可在启动 Creator 前设置 `COCOS_AGENT_NODE` 指向 Node 20+ 可执行文件。首版对话历史保存在 Assistant 服务内存；任务与模型最终回答会进入用户状态目录下的 `CocosAgent/agent-runs/` 操作轨迹。2026-10-10 已在 Windows Creator 2.4.15 面板实测 DeepSeek Flash 的 Ask、Plan、写入拒绝、批准创建空节点、按来源记录补偿和失败对账；临时节点已清除，场景恢复到测试前 SHA-256。详见[首版合同与验收记录](../../docs/agent-foundation/cocos-agent-assistant-0.1.md)。当前不是完整 Unity Assistant 功能集。
+本机需安装 Node.js 20+。从仓库构建独立扩展包：`node tools/cocos-agent-bridge/package-creator-extension.mjs bundle --output /absolute/path/CocosAgentCreatorPackage`；把生成目录放入 Creator 项目的 `packages/cocos-agent-bridge` 并重载扩展。开发时可用 `install-runtime --extension <绝对扩展目录>` 只安装运行时。包内携带 MCP 依赖、11 个技能、29 份引用资料和所需性能探针，不包含 Codex 插件元数据或本机 MCP 配置。如果扩展进程找不到 `node`，可在启动 Creator 前设置 `COCOS_AGENT_NODE` 指向 Node 20+ 可执行文件。首版对话历史保存在 Assistant 服务内存；任务与模型最终回答会进入用户状态目录下的 `CocosAgent/agent-runs/` 操作轨迹。2026-10-10 已在 Windows Creator 2.4.15 面板实测 DeepSeek Flash 的 Ask、Plan、写入拒绝、批准创建空节点、按来源记录补偿和失败对账；临时节点已清除，场景恢复到测试前 SHA-256。2026-10-11 将运行时装入 `2.4.15NewProject` 扩展后，Creator 2.4.15 界面重载并重开 CocosAgent 面板显示“已连接 · deepseek-flash · Key 已保存在本机”；本轮尚未实际发送 Ask 或调用 Agent 工具。独立扩展包在仓库外通过 MCP stdio、11 个技能与 29 份引用资料哈希核对；沙箱内的 Host CLI 冒烟绑定 `127.0.0.1` 返回 `EPERM`，Creator 实机面板连接成功。
 
 ## 启动
 

@@ -113,7 +113,6 @@ function resultFromTrace(tracePath, trace) {
 function run(projectRoot, input, runner = spawnSync) {
     if (!validInput(input)) throw Error('STRESS_INPUT_INVALID');
     const project = fs.realpathSync(projectRoot);
-    if (path.basename(project) !== '2.4.15NewProject') throw Error('PROJECT_VERSION_MISMATCH');
     const recordPath = path.join(project, '.cocos-agent', 'content-builds', `${input.buildId}.json`);
     const record = JSON.parse(fs.readFileSync(recordPath, 'utf8'));
     const outputRoot = path.join(project, 'build', 'cocos-agent', input.buildId);
@@ -122,7 +121,7 @@ function run(projectRoot, input, runner = spawnSync) {
         || !fs.existsSync(path.join(outputRoot, 'web-mobile', 'index.html'))) throw Error('BUILD_NOT_VERIFIED_2_4_WEB_MOBILE');
 
     const runnerPath = path.join(REPOSITORY_ROOT, 'docs/agent-foundation/probes/cocos-content-stress-2.4-live.mjs');
-    const args = [runnerPath, '--build', input.buildId, '--cycles', String(input.cycles), '--node-count', String(input.nodeCount),
+    const args = [runnerPath, '--project', project, '--build', input.buildId, '--cycles', String(input.cycles), '--node-count', String(input.nodeCount),
         '--packable', String(input.packable), '--resource-paths', JSON.stringify(input.resourcePaths),
         '--parse-fixture-paths', JSON.stringify(input.parseFixturePaths), '--failure-resource-path', input.failureResourcePath,
         '--test-profile', input.profileId, '--load-mode', input.loadMode, '--budget-profile', input.budgetProfileId,

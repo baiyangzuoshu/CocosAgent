@@ -9,7 +9,7 @@ const { dispatch } = require('./agent-dispatch');
 
 const projectRoot = '/tmp/cocos-agent-jsonl-test';
 const operationId = '5858dc80-32d0-4610-8291-f057fa13151e';
-const mcpRuntime = { version: '0.2.0', pluginVersion: '0.2.0', pluginFingerprint: 'c'.repeat(64),
+const mcpRuntime = { version: '0.2.0', agentPackageVersion: '0.3.0', agentPackageFingerprint: 'c'.repeat(64),
     sourceFingerprint: 'a'.repeat(64), contractSchemaFingerprint: 'b'.repeat(64) };
 const request = { id: 7, method: 'operation.get', params: { projectRoot, creatorVersion: '3.8.7', operationId } };
 const invoked = [];

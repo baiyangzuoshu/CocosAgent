@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node mcp-server.mjs",
-    "test": "node --test mcp-server.test.mjs deepseek-agent.test.mjs structured-plan.test.mjs assistant-plan-service.test.mjs assistant-plan-panel.test.mjs credential-store.test.mjs"
+    "test": "node --test mcp-server.test.mjs deepseek-agent.test.mjs structured-plan.test.mjs assistant-plan-service.test.mjs assistant-plan-panel.test.mjs credential-store.test.mjs creator-package.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "2.3.1",

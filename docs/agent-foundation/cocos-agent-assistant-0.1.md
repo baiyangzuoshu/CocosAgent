@@ -1,15 +1,15 @@
-# Creator 内置 Assistant 0.1
+# Creator 原生 Agent 0.1
 
 状态：2026-10-10，Windows + Creator **2.4.15** + DeepSeek **Flash** 完成首条实机切片。面板内直接对话并切换 Ask、Plan、Agent；此次写入范围为独立临时空节点。不是完整 Unity Assistant 功能集，不表示 3.8 或全部 MCP 工具已经通过真实模型验收。
 
 ## 使用
 
 1. 打开 `2.4.15NewProject`，启用 `cocos-agent-bridge` 扩展。
-2. 本机安装 Node.js 20+，在 `tools/cocos-agent-bridge/mcp/` 执行 `npm ci`。可用 `COCOS_AGENT_NODE` 指定 Node 路径。
-3. 菜单 **扩展 → CocosAgent → Assistant**。可在项目根目录 `.env.local` 中配置 `DEEPSEEK_API_KEY`，扩展会启动时自动连接；也可在面板输入 Key 后连接并保存。
+2. 本机安装 Node.js 20+，按[扩展包说明](../../2.4.15NewProject/packages/cocos-agent-bridge/README.md)构建可安装目录；可用 `COCOS_AGENT_NODE` 指定 Node 路径。
+3. 菜单 **扩展 → CocosAgent → Assistant**。在面板输入 DeepSeek Key 后连接；勾选“记住 Key”会保存到 OS 用户配置目录，重启 Creator 后自动恢复。
 4. 选择模式，在面板直接输入。Enter 发送，Shift+Enter 换行。Agent 每项非只读操作均显示工具及完整参数，批准后执行；拒绝或等待超过 120 秒不会执行该项。
 
-项目根目录 `.env.local` 已被 Git 忽略。面板默认勾选“保存到项目根目录 .env.local”，连接时会保存 `DEEPSEEK_API_KEY` 与模型；Creator 扩展下次启动时自动恢复连接，密码框不会回填 Key。取消勾选后连接会移除文件内已有的 DeepSeek Key 与模型；“忘记 Key”会停止当前服务并清除这两项，同时保留文件中的其他本地变量。`.env.local` 按普通文本保存，请勿提交或分享该文件。Flash 已真实验收，V4 Pro 仅有配置选项，未在本轮调用。
+原型最初把 Key 保存到 `.env.local`。当前 Creator 原生改造将“记住 Key”移到当前 OS 用户目录 `~/.cocos-agent/credentials.env`（Windows 为 `%USERPROFILE%\\.cocos-agent\\credentials.env`），避免把凭据写进游戏项目；该文件仍为明文，需限制访问并避免分享。改造后需在面板重新输入一次之前保存的 Key。Flash 已真实验收，V4 Pro 仅有配置选项，未在本轮调用。
 
 ## 三种模式
 
@@ -29,7 +29,7 @@ Plan 会输出带版本号的结构化步骤卡，字段包含说明、前置条
 
 - 面板使用官方 `Editor.Panel.extend` 和 `messages(event, ...args)` 接收 IPC，参见 [2.4 面板参考](https://docs.cocos.com/creator/2.4/manual/zh/extension/reference/panel-reference.html) 与 [IPC 工作流](https://docs.cocos.com/creator/2.4/manual/zh/extension/ipc-workflow.html)。扩展声明 `dockable`；本轮实际为独立编辑器窗口，拖入主窗口的停靠交互尚未验收。
 - 本地对话服务只监听 `127.0.0.1` 随机端口，使用随机令牌路径。主进程通过子进程环境传 Key，不放入命令行；MCP 子进程过滤 `DEEPSEEK_*` 环境变量。
-- Key 由 `.env.local` 提供或在面板输入；勾选保存时写入项目根目录的本地 `.env.local`，由 `.gitignore` 排除，连接后密码框清空；扩展启动时自动恢复。取消勾选或点“忘记 Key”可移除配置。主进程通过子进程环境传 Key，不放入命令行；轨迹按实际 Key 和 `sk-` 格式脱敏。
+- Key 在面板输入；勾选保存时写入当前 OS 用户目录的 CocosAgent 凭据文件，连接后密码框清空；扩展启动时自动恢复。取消勾选或点“忘记 Key”可移除配置。主进程通过子进程环境传 Key，不放入命令行；轨迹按实际 Key 和 `sk-` 格式脱敏。
 - 使用 DeepSeek Chat Completions，当前为非流式调用；工具方式依据 [DeepSeek 官方 Tool Calls](https://api-docs.deepseek.com/guides/tool_calls/)。回答按最新用户消息语言生成。
 - 会话上下文在服务内存中，最多 24 条用户/助手消息，每条 8000 字符；重启服务会丢失。操作轨迹包含任务、工具回执及模型最终回答，保存在 `%LOCALAPPDATA%/CocosAgent/agent-runs/`；项目写入账本仍在 `.cocos-agent/operations/`。
 - 模型最终文字不是编辑器回执。Agent 完全没有有效任务工具回执时，进行有限纠正，仍无回执则面板显示“任务未确认完成”并隐藏模型完成声明。这只防止本轮发现的无回执声明，不能视为对每句模型回答的语义真实性证明。

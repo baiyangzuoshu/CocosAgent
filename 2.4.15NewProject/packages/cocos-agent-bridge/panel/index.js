@@ -76,7 +76,7 @@ Editor.Panel.extend({
                     <button id="connect" class="connect">连接</button>
                 </div>
                 <div class="credential-row">
-                    <label class="remember-option"><input id="remember-key" type="checkbox" checked />保存到项目根目录 .env.local（Git 已忽略）</label>
+                    <label class="remember-option"><input id="remember-key" type="checkbox" checked />保存到本机用户配置</label>
                     <button id="forget-key" class="forget">忘记 Key</button>
                 </div>
                 <div class="modebar" role="tablist" aria-label="Agent 模式">
@@ -205,7 +205,7 @@ Editor.Panel.extend({
         const socket = new WebSocket(`ws://127.0.0.1:${payload.port}/assistant/${payload.token}`);
         this._socket = socket;
         socket.addEventListener('open', () => {
-            this.setConnection(`已连接 · ${payload.model || 'DeepSeek'}${payload.credentialRemembered ? ' · Key 已保存在 .env.local' : ''}`, 'ready');
+            this.setConnection(`已连接 · ${payload.model || 'DeepSeek'}${payload.credentialRemembered ? ' · Key 已保存在本机' : ''}`, 'ready');
             socket.send(JSON.stringify({ type: 'resume', conversationId: this._conversationId }));
         });
         socket.addEventListener('message', (event) => this.receiveMessage(event.data));

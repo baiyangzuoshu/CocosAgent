@@ -36,7 +36,7 @@ test('real MCP stdio discovers and reads the versioned skill package and its ref
         assert.ok(resources.some((resource) => resource.uri === 'cocos://2x/skills/resource-scene-pipeline'));
         assert.ok(resources.some((resource) => resource.uri === 'cocos://2x/references/agent-foundation/cocos-agent-resource-scene-pipeline-0.1.md'));
         const index = JSON.parse((await client.readResource({ uri: 'cocos://2x/skills/index' })).contents[0].text);
-        assert.equal(index.plugin.version, '0.3.0');
+        assert.equal(index.agentPackage.version, '0.3.0');
         assert.equal(index.mcp.version, '0.3.0');
         assert.equal(index.skills.length, 11);
         const resourceSkill = await client.readResource({ uri: 'cocos://2x/skills/resource-scene-pipeline' });
@@ -154,8 +154,8 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         ]);
         const skillIndexResource = await client.readResource({ uri: 'cocos://2x/skills/index' });
         const skillIndex = JSON.parse(skillIndexResource.contents[0].text);
-        assert.equal(skillIndex.plugin.name, 'cocos-agent-2x');
-        assert.equal(skillIndex.plugin.version, '0.3.0');
+        assert.equal(skillIndex.agentPackage.name, 'cocos-agent-2x');
+        assert.equal(skillIndex.agentPackage.version, '0.3.0');
         assert.equal(skillIndex.mcp.version, '0.3.0');
         assert.equal(skillIndex.skills.length, 11);
         assert.ok(skillIndex.skills.some((skill) => skill.name === 'cocos2-asset-bundle-content'
@@ -210,7 +210,7 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         })));
         assert.equal(calls.at(-1).params.mcpRuntime.version, '0.3.0');
         assert.match(calls.at(-1).params.mcpRuntime.sourceFingerprint, /^[a-f0-9]{64}$/);
-        assert.match(calls.at(-1).params.mcpRuntime.pluginFingerprint, /^[a-f0-9]{64}$/);
+        assert.match(calls.at(-1).params.mcpRuntime.agentPackageFingerprint, /^[a-f0-9]{64}$/);
 
         const selected = await client.callTool({ name: 'cocos_2x_capabilities_list', arguments: { projectRoot: value.projects[1] } });
         assert.equal(selected.structuredContent.data.instance.projectRoot, value.projects[1]);

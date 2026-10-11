@@ -5,9 +5,13 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(import.meta.dirname, '../../..');
-const projectRoot = path.join(root, '2.4.15NewProject');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const projectIndex = process.argv.indexOf('--project');
+if (projectIndex < 0 || !process.argv[projectIndex + 1] || !path.isAbsolute(process.argv[projectIndex + 1]))
+    throw Error('PROJECT_REQUIRED');
+const projectRoot = fs.realpathSync(process.argv[projectIndex + 1]);
 const buildId = value('--build');
 const cycles = numberFlag('--cycles', Number.NaN, 8, 256);
 const nodeCount = numberFlag('--node-count', Number.NaN, 32, 1024);

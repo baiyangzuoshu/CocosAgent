@@ -10,15 +10,15 @@ const WebSocket = require('./vendor/ws');
 const { fingerprintFiles, listFiles } = require('./runtime-fingerprint');
 const inputs = require('./catalog.schema.json').$defs;
 const schemaPath = path.join(__dirname, 'catalog.schema.json');
-const pluginPath = path.resolve(__dirname, '../../plugins/cocos-agent-2x/.codex-plugin/plugin.json');
-const pluginRoot = path.dirname(path.dirname(pluginPath));
+const agentPackagePath = path.resolve(__dirname, '../../plugins/cocos-agent-2x/agent-package.json');
+const agentPackageRoot = path.dirname(agentPackagePath);
 const mcpSourcePath = path.join(__dirname, 'mcp', 'mcp-server.mjs');
 const mcpRuntime = {
     version: require('./mcp/package.json').version,
-    pluginVersion: JSON.parse(fs.readFileSync(pluginPath, 'utf8')).version,
-    pluginFingerprint: fingerprintFiles(pluginRoot, [
-        '.codex-plugin/plugin.json', '.mcp.json', 'README.md', 'skill-package.json',
-        ...listFiles(pluginRoot, 'scripts'), ...listFiles(pluginRoot, 'skills'), ...listFiles(pluginRoot, 'references'),
+    agentPackageVersion: JSON.parse(fs.readFileSync(agentPackagePath, 'utf8')).version,
+    agentPackageFingerprint: fingerprintFiles(agentPackageRoot, [
+        'agent-package.json', 'skill-package.json',
+        ...listFiles(agentPackageRoot, 'skills'), ...listFiles(agentPackageRoot, 'references'),
     ]),
     sourceFingerprint: fingerprintFiles(path.dirname(mcpSourcePath), ['mcp-server.mjs', 'package.json', 'package-lock.json']),
     contractSchemaFingerprint: crypto.createHash('sha256').update(fs.readFileSync(schemaPath)).digest('hex'),
@@ -33,8 +33,16 @@ projects.forEach((project, index) => {
         fs.mkdirSync(extensionRoot, { recursive: true });
         fs.writeFileSync(path.join(extensionRoot, 'main.js'), 'mock creator extension main');
         fs.writeFileSync(path.join(extensionRoot, 'scene.js'), 'mock creator extension scene');
-        fs.writeFileSync(path.join(extensionRoot, 'package.json'), JSON.stringify({ name: 'cocos-agent-bridge', version: '0.2.0' }));
-        fs.writeFileSync(path.join(extensionRoot, 'package-lock.json'), JSON.stringify({ name: 'cocos-agent-bridge', version: '0.2.0' }));
+        fs.writeFileSync(path.join(extensionRoot, 'asset-search.js'), 'mock asset search');
+        fs.writeFileSync(path.join(extensionRoot, 'credential-store.cjs'), 'mock credential store');
+        const wsRoot = path.join(extensionRoot, 'vendor', 'ws');
+        fs.mkdirSync(wsRoot, { recursive: true });
+        fs.mkdirSync(path.join(wsRoot, 'lib'), { recursive: true });
+        fs.writeFileSync(path.join(wsRoot, 'package.json'), JSON.stringify({ name: 'ws', version: '7.5.10' }));
+        fs.writeFileSync(path.join(wsRoot, 'index.js'), 'module.exports = {};');
+        fs.writeFileSync(path.join(wsRoot, 'lib', 'websocket.js'), 'module.exports = {};');
+        fs.writeFileSync(path.join(extensionRoot, 'package.json'), JSON.stringify({ name: 'cocos-agent-bridge', version: '0.3.0' }));
+        fs.writeFileSync(path.join(extensionRoot, 'package-lock.json'), JSON.stringify({ name: 'cocos-agent-bridge', version: '0.3.0' }));
     }
 });
 const versions = ['2.4.15', '3.8.7'];
@@ -122,7 +130,7 @@ async function mockEditor(index, options = {}) {
             const sceneName = index === 0 ? options.sceneName || 'helloworld' : null;
             const result = {
                 nonce: message.params.nonce, instanceId, creatorVersion: options.wrongCatalogVersion && index === 0 ? versions[1] : versions[index], projectRoot: project,
-                extensionVersion: index === 0 ? options.extensionVersion || '0.2.0' : '0.1.0',
+                extensionVersion: index === 0 ? options.extensionVersion || '0.3.0' : '0.1.0',
                 extensionSourceFingerprint: index === 0 ? options.extensionSourceFingerprint || extensionFingerprint(project) : null,
                 commandContractFingerprint: actualContractFingerprint,
                 activeScene: sceneName,
@@ -146,7 +154,8 @@ async function mockEditor(index, options = {}) {
 
 function extensionFingerprint(project) {
     const root = path.join(project, 'packages', 'cocos-agent-bridge');
-    return fingerprintFiles(root, ['main.js', 'package-lock.json', 'package.json', 'scene.js']);
+    return fingerprintFiles(root, ['asset-search.js', 'credential-store.cjs', 'main.js', 'scene.js', 'package.json', 'package-lock.json',
+        ...listFiles(root, 'vendor/ws')]);
 }
 
 async function run(query, project, options = {}) {

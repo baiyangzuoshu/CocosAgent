@@ -6,6 +6,7 @@ bin-release/
 dist/
 coverage/
 node_modules/
+**/assistant-runtime/
 .cocos-agent/
 graphify-out/
 .env

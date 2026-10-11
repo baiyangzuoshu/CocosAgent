@@ -20,7 +20,7 @@ test('local .env parser handles comments, quoted values and duplicate managed ke
     assert.match(updated, /DEEPSEEK_API_KEY=replacement/);
 });
 
-test('credential store saves, restores and forgets only DeepSeek entries in ignored local env file', async () => {
+test('credential store saves, restores and forgets only DeepSeek entries in its configured user-store file', async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), 'cocos-agent-env-'));
     const envPath = path.join(directory, '.env.local');
     const secret = 'sk-test-not-a-real-key-0123456789';
@@ -42,6 +42,11 @@ test('credential store saves, restores and forgets only DeepSeek entries in igno
     } finally {
         await rm(directory, { recursive: true, force: true });
     }
+});
+
+test('credential store defaults to the current OS user configuration directory', () => {
+    const store = new CredentialStore();
+    assert.equal(store.filePath, path.join(os.homedir(), '.cocos-agent', 'credentials.env'));
 });
 
 test('credential store rejects invalid keys and models without writing them', async () => {

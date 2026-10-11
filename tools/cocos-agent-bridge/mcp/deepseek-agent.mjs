@@ -538,7 +538,11 @@ async function main(argv = process.argv.slice(2)) {
     }
 }
 
-const isEntrypoint = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isEntrypoint = (() => {
+    if (!process.argv[1]) return false;
+    try { return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url)); }
+    catch (_) { return false; }
+})();
 if (isEntrypoint) await main();
 
 export { DEFAULT_BASE_URL, DEFAULT_MODEL, SYSTEM_RULES, completionEndpoint, parseArgs, requestDeepSeek };
