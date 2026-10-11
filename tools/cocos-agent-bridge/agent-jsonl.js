@@ -62,22 +62,25 @@ function handle(request, adapters = {}) {
             result: { success: false, error: error('INVALID_ARGUMENT', 'Provide integer id, supported method, and object params.') } };
     }
     const { method, params } = request;
+    // Compound workflows construct child requests; retain the caller's process attestation.
+    const dispatchChild = (child) => (adapters.dispatch || dispatch)(params.mcpRuntime === undefined
+        ? child : { ...child, mcpRuntime: params.mcpRuntime });
     if (catalogMethods.has(method)) return { id: request.id, result: (adapters.catalog || catalog)(request) };
     if (workflowMethods.has(method)) return { id: request.id,
-        result: (adapters.workflow || composition.handle)(method, params, adapters.dispatch || dispatch) };
+        result: (adapters.workflow || composition.handle)(method, params, dispatchChild) };
     if (batchMethods.has(method)) return { id: request.id,
-        result: (adapters.assetBatch || assetBatch.handle)(method, params, adapters.dispatch || dispatch) };
+        result: (adapters.assetBatch || assetBatch.handle)(method, params, dispatchChild) };
     if (sceneSpriteBatchMethods.has(method)) return { id: request.id,
-        result: (adapters.sceneSpriteBatch || sceneSpriteBatch.handle)(method, params, adapters.dispatch || dispatch) };
+        result: (adapters.sceneSpriteBatch || sceneSpriteBatch.handle)(method, params, dispatchChild) };
     if (assetScenePipelineMethods.has(method)) return { id: request.id,
-        result: (adapters.assetScenePipeline || assetScenePipeline.handle)(method, params, adapters.dispatch || dispatch, adapters.onProgress) };
+        result: (adapters.assetScenePipeline || assetScenePipeline.handle)(method, params, dispatchChild, adapters.onProgress) };
     if (assetSceneValidationMethods.has(method)) return { id: request.id,
         result: method === 'assets.scene.validate'
-            ? (adapters.assetSceneValidate || assetSceneValidation.validate)(params, adapters.dispatch || dispatch)
-            : (adapters.assetSceneRepair || assetSceneValidation.repair)(params, adapters.dispatch || dispatch) };
+            ? (adapters.assetSceneValidate || assetSceneValidation.validate)(params, dispatchChild)
+            : (adapters.assetSceneRepair || assetSceneValidation.repair)(params, dispatchChild) };
     if (contentSceneReleaseMethods.has(method)) return { id: request.id,
         result: (adapters.contentSceneRelease || contentSceneRelease.handle)(method, params, {
-            validatePipeline: adapters.assetSceneValidate || ((input) => assetSceneValidation.validate(input, adapters.dispatch || dispatch)),
+            validatePipeline: adapters.assetSceneValidate || ((input) => assetSceneValidation.validate(input, dispatchChild)),
             stageRelease: adapters.contentStage || contentRelease.stage,
         }) };
     if (contentBundleReleaseMethods.has(method)) return { id: request.id,
@@ -109,7 +112,7 @@ function handle(request, adapters = {}) {
         projectRoot: params.projectRoot, creatorVersion: params.creatorVersion,
         previewAcceptId: params.operationId, evidence: params.evidence,
     };
-    return { id: request.id, result: (adapters.dispatch || dispatch)(dispatchRequest) };
+    return { id: request.id, result: dispatchChild(dispatchRequest) };
 }
 
 async function handleAsync(request, adapters = {}) {

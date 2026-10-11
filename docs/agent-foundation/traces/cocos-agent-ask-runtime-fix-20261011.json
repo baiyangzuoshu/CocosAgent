@@ -1,0 +1,75 @@
+{
+  "date": "2026-10-11",
+  "environment": "macOS / Creator 2.4.15 / installed Creator-local MCP stdio",
+  "verification": "real Creator-native DeepSeek Ask + MCP stdio; read-only",
+  "sceneSha256Before": "fc6ea793eaa6727aaf48fb485640d2c904c022b6ee11e65c823fd3055f149d68",
+  "sceneSha256After": "fc6ea793eaa6727aaf48fb485640d2c904c022b6ee11e65c823fd3055f149d68",
+  "results": [
+    {
+      "tool": "cocos_2x_instances_list",
+      "success": true,
+      "outcome": null,
+      "error": null,
+      "instanceId": "233d1a8f-2f5a-42bd-ad3e-ca321eae5d37",
+      "creatorVersion": "2.4.15",
+      "extensionVersion": "0.3.0",
+      "state": "ready",
+      "activeScene": "helloworld",
+      "contractCompatibility": {
+        "status": "matched",
+        "blockers": [],
+        "editorContractStatus": "matched",
+        "hostContractStatus": "matched"
+      }
+    },
+    {
+      "tool": "cocos_2x_capabilities_list",
+      "success": true,
+      "outcome": null,
+      "error": null,
+      "instanceId": "233d1a8f-2f5a-42bd-ad3e-ca321eae5d37",
+      "commandCount": 14,
+      "availableCount": 13,
+      "unavailable": [
+        {
+          "id": "prefab.source.patch",
+          "reason": "PREFAB_EDIT_MODE_API_UNAVAILABLE"
+        }
+      ]
+    },
+    {
+      "tool": "cocos_2x_scene_snapshot",
+      "success": true,
+      "outcome": "completed",
+      "error": null,
+      "sceneName": "helloworld",
+      "nodeCount": 15
+    }
+  ],
+  "assistantRun": {
+    "runId": "993a30c0-5798-41c3-87c3-67f741a51649",
+    "mode": "Ask",
+    "status": "completed",
+    "reason": "model_final",
+    "allowWrite": false,
+    "toolCalls": [
+      {
+        "name": "cocos_2x_instances_list",
+        "access": "read"
+      },
+      {
+        "name": "cocos_2x_capabilities_list",
+        "access": "read"
+      },
+      {
+        "name": "cocos_2x_scene_snapshot",
+        "access": "read"
+      }
+    ],
+    "scene": {
+      "name": "helloworld",
+      "nodeCount": 15,
+      "outcome": "completed"
+    }
+  }
+}

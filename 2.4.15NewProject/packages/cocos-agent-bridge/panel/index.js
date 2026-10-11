@@ -114,6 +114,7 @@ Editor.Panel.extend({
         this._socket = null;
         this._busy = false;
         this._requestId = null;
+        this._runActivity = null;
         this._pendingApproval = null;
         this._planCards = new Map();
         this._plans = new Map();
@@ -235,7 +236,7 @@ Editor.Panel.extend({
         this.$send.disabled = true;
         this.$prompt.value = '';
         this.addMessage('user', text);
-        this.addActivity(`${this._mode} · 正在处理…`);
+        this._runActivity = this.addActivity(`${this._mode} · 正在处理…`);
         this._socket.send(JSON.stringify({ type: 'run', requestId: this._requestId,
             conversationId: this._conversationId, mode: this._mode, text }));
     },
@@ -268,7 +269,7 @@ Editor.Panel.extend({
         if (message.type === 'run.failed') {
             this.addMessage('assistant', message.message || '请求失败');
             if (message.planProgress) this.renderPlan(message.planProgress);
-            this.finishRun();
+            this.finishRun(message.message, 'failed');
             return;
         }
         if (message.type === 'run.result') {
@@ -276,7 +277,7 @@ Editor.Panel.extend({
             if (message.result?.plan) this.renderPlan(message.result.plan);
             if (message.result?.planProgress) this.renderPlan(message.result.planProgress);
             if (message.result?.tracePath) this.addActivity(`记录：${message.result.tracePath}`);
-            this.finishRun();
+            this.finishRun(message.result?.reason, message.result?.status || 'stopped');
         }
     },
 
@@ -296,8 +297,13 @@ Editor.Panel.extend({
         this.addActivity(approved ? '已批准。' : '已拒绝。');
     },
 
-    finishRun(reason) {
-        if (reason) this.addActivity(`已停止：${reason}`);
+    finishRun(reason, status = 'stopped') {
+        const labels = { completed: '已结束', 'needs-review': '待核对',
+            'awaiting-approval': '等待批准', stopped: '已停止', failed: '失败' };
+        const label = labels[status] || '已停止';
+        if (this._runActivity) this._runActivity.textContent = `${this._mode} · ${label}`;
+        if (reason && status !== 'completed') this.addActivity(`${label}：${reason}`);
+        this._runActivity = null;
         this._busy = false;
         this._modeButtons.forEach((button) => { button.disabled = false; });
         this._requestId = null;
@@ -314,7 +320,7 @@ Editor.Panel.extend({
         this._modeButtons.forEach((button) => { button.disabled = true; });
         this.$send.disabled = true;
         this._requestId = makeId();
-        this.addActivity(`Agent · 执行计划第 ${plan.nextStepIndex + 1} 步：${plan.steps[plan.nextStepIndex].title}`);
+        this._runActivity = this.addActivity(`Agent · 执行计划第 ${plan.nextStepIndex + 1} 步：${plan.steps[plan.nextStepIndex].title}`);
         this.renderPlan({ ...plan, status: 'running' });
         this._socket.send(JSON.stringify({ type: 'run', requestId: this._requestId,
             conversationId: this._conversationId, mode: 'Agent',
@@ -393,5 +399,6 @@ Editor.Panel.extend({
         item.textContent = text;
         this.$messages.appendChild(item);
         this.$messages.scrollTop = this.$messages.scrollHeight;
+        return item;
     },
 });

@@ -67,6 +67,16 @@ Plan 会输出带版本号的结构化步骤卡，字段包含说明、前置条
 
 ## 修复与自动测试
 
+### 2026-10-11：Ask 查询与执行一致性、面板终态
+
+- 用户在 macOS Creator 面板完成 Ask 后，轨迹显示能力目录可用，`scene.snapshot` 却被 `MCP_RUNTIME_UNREPORTED` 拒绝；服务已返回最终结果，面板仍保留“正在处理”。
+- 根因分别为 MCP 执行请求未携带进程指纹、JSONL 子请求及 dispatcher 的 Catalog 调用未继续转发该指纹，以及面板结束请求时只解锁按钮、未更新本轮活动行。
+- MCP 统一附加实际进程指纹，JSONL 保留到单命令与组合工作流子请求，dispatcher 将其传入执行前的两次 Catalog 查询。身份、合同及指纹不匹配的拒绝规则保持原实现。
+- 面板按回执更新“已结束 / 待核对 / 等待批准 / 已停止 / 失败”，忽略其他 requestId 的结果；已结束不等于写入或预览已验收。
+- MCP/Assistant 自动测试 **46/46**、JSONL/dispatcher **5/5** 通过，新增覆盖完整 JSONL → dispatcher → Catalog 转发、组合子请求与五类面板终态。Catalog 回环集成测试通过，包含缺失指纹与陈旧指纹的拒绝检查。
+- 使用扩展内安装的本地运行时，真实 MCP stdio 查询实例、能力并读取 `helloworld` 场景成功（15 个节点）。场景 SHA-256 前后一致，见[只读回执](traces/cocos-agent-ask-runtime-fix-20261011.json)。这项独立桥接检查没有调用模型；随后另做 Creator 面板模型验收。
+- 用户重启 Creator 后完成最终实机验收：Creator 原生面板使用 DeepSeek Flash Ask，顺序调用实例列表、能力目录、场景快照；三次回执均成功，最终 `run.stop=completed/model_final`，`allowWrite=false`。场景为 `helloworld`，15 个节点，哈希未变。面板正文与活动区显示只读任务完成，发送按钮和模式已恢复可用；完整轨迹在用户目录 `~/.local/state/CocosAgent/agent-runs/2026-10-11T01-23-52-882Z-c00d3f8d.jsonl`，摘要见上述只读回执。
+
 - 面板 IPC 改用 `messages`；主进程处理器接收 `(event, payload)`，统一消息名。连接失败恢复按钮、断线结束 busy/审批状态。
 - Windows 操作账本以可写句柄执行 `fsync`，保留落盘检查。
 - 对账仅新增严格的 **2.4 空节点初始记录**：零回执、六阶段全 pending、无组件/变换/Prefab/来源记录。必须证明同一父节点 UUID、活动场景目标缺席、磁盘目标缺席；不自动执行或删除其他账本。

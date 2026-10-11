@@ -369,7 +369,8 @@ function createServer(projectRoots, options = {}) {
             } catch (_) { /* A detached MCP client must not interrupt an editor operation. */ }
         };
         try {
-            const request = { id: ++requestId, method, params };
+            // Discovery and execution must attest the same MCP process to the Host.
+            const request = { id: ++requestId, method, params: { ...params, mcpRuntime: MCP_RUNTIME } };
             let response;
             if (method === 'assets.scene.execute') {
                 if (!selectedProject) return { success: false, outcome: 'failed', error: { code: 'INVALID_ARGUMENT', message: 'A registered project is required.' } };

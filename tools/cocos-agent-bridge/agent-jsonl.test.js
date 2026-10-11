@@ -39,6 +39,37 @@ test('catalog forwards the MCP process fingerprint to the Host for runtime align
     assert.deepStrictEqual(JSON.parse(args[index + 1]), mcpRuntime);
 });
 
+test('command execution carries MCP attestation through JSONL and both catalog checks', () => {
+    const calls = [];
+    const instance = { instanceId: operationId, projectRoot, creatorVersion: '2.4.15',
+        state: 'ready', activeScene: 'helloworld', catalogRevision: 'a'.repeat(64) };
+    const response = handle({ id: 21, method: 'command.execute', params: {
+        targets: [{ creatorVersion: '2.4.15', projectRoot }], projectRoot,
+        creatorVersion: '2.4.15', command: 'scene.snapshot', input: {}, mcpRuntime,
+    } }, { dispatch: (child) => dispatch(child, (script, args) => {
+        calls.push({ script, args });
+        if (script === 'catalog-host.js') {
+            const index = args.indexOf('--mcp-runtime');
+            assert.notEqual(index, -1, 'execution must attest the same process as discovery');
+            assert.deepStrictEqual(JSON.parse(args[index + 1]), mcpRuntime);
+            return { status: 0, stdout: JSON.stringify({ success: true, data: args.includes('instances.list')
+                ? [instance] : { instance, commands: [{ id: 'scene.snapshot', contractVersion: '0.1', status: 'available' }] } }) };
+        }
+        assert(!args.includes('--mcp-runtime'), 'attestation is only a catalog argument');
+        return { status: 0, stdout: 'command.result {"command":"scene.snapshot","result":{"verified":true}}\n' };
+    }) });
+    assert.equal(response.result.success, true);
+    assert.equal(calls.filter((call) => call.script === 'catalog-host.js').length, 2);
+});
+
+test('compound workflow child requests retain parent MCP attestation', () => {
+    const response = handle({ id: 22, method: 'workflow.plan', params: { mcpRuntime } }, {
+        workflow: (_method, _params, dispatchChild) => dispatchChild({ command: 'scene.snapshot', input: {} }),
+        dispatch: (child) => child,
+    });
+    assert.deepStrictEqual(response.result.mcpRuntime, mcpRuntime);
+});
+
 const invalid = handle({ id: 8, method: 'command.execute', params: { command: 'unknown' } },
     { dispatch: (value) => dispatch(value, invoke) });
 assert.strictEqual(invalid.result.error.code, 'INVALID_ARGUMENT');

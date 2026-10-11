@@ -493,6 +493,9 @@ function reconcileOperation(request, invoke = runProcess) {
 }
 
 function dispatch(request, invoke = runProcess) {
+    const processInvoke = invoke;
+    if (request.mcpRuntime !== undefined) invoke = (script, args) => processInvoke(script,
+        script === 'catalog-host.js' ? [...args, '--mcp-runtime', JSON.stringify(request.mcpRuntime)] : args);
     const raw = request.operationReconcileId ? reconcileOperation(request, invoke) : request.operationGetId || request.previewAcceptId
         ? operationStatus(request, invoke) : dispatchCommand(request, invoke);
     return { success: raw.success, outcome: raw.outcome, command: raw.command || request.command || (request.operationGetId || request.previewAcceptId ? 'scene.pngSprite' : null),

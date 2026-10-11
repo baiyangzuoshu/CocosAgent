@@ -69,6 +69,10 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
     const value = fixture();
     const calls = [];
     const invokeAgent = async (request) => {
+        assert.equal(request.params.mcpRuntime?.version, '0.3.0', `${request.method} must attest the MCP runtime`);
+        assert.match(request.params.mcpRuntime.sourceFingerprint, /^[a-f0-9]{64}$/);
+        assert.match(request.params.mcpRuntime.contractSchemaFingerprint, /^[a-f0-9]{64}$/);
+        if (calls.length) assert.deepEqual(request.params.mcpRuntime, calls[0].params.mcpRuntime);
         calls.push(request);
         if (request.method === 'instances.list') return { id: request.id, result: { success: true,
             data: request.params.targets.map((target) => ({ ...target, state: 'ready' })) } };
