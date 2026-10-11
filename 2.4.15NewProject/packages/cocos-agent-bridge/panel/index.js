@@ -347,6 +347,19 @@ Editor.Panel.extend({
         }
         if (message.type === 'run.recovery.result') { this.renderRecoveryResult(message); return; }
         if (message.type === 'model.thinking') { this.addActivity('正在联系 DeepSeek…'); return; }
+        if (message.type === 'context.compacted') {
+            const report = message.report || {};
+            const identities = Array.isArray(report.operationIdentities) ? report.operationIdentities.length : 0;
+            const pending = Array.isArray(report.outstandingAcceptance) ? report.outstandingAcceptance.length : 0;
+            const compactedResults = report.compactedToolResults || 0;
+            this.addActivity(`上下文已压缩：${report.summarizedToolCalls || 0} 次旧工具调用已建立回执索引，另缩短 ${compactedResults} 条只读回执；保留 ${identities} 个操作身份和 ${pending} 项待验收/恢复状态。`);
+            return;
+        }
+        if (message.type === 'context.budget-exceeded') {
+            const report = message.report || {};
+            this.addActivity(`上下文仍超出预算（估算 ${report.estimatedTokens || '?'} / ${report.maxEstimatedTokens || '?'} tokens）；Agent 已停止后续模型调用。`);
+            return;
+        }
         if (message.type === 'model.failed') { this.addActivity(`DeepSeek 请求失败：${message.message || '未知错误'}`); return; }
         if (message.type === 'tool.approval-required') { this.addActivity(`等待批准：${message.toolName}`); return; }
         if (message.type === 'tool.started') { this.addActivity(`${message.access === 'read' ? '读取' : '执行'}：${message.toolName}`); return; }

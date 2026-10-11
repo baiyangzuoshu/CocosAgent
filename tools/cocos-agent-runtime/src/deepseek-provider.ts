@@ -1,0 +1,155 @@
+import type {
+    AgentMessage,
+    AgentTool,
+    JsonObject,
+    ModelProvider,
+    ModelResponse,
+} from './contracts.js';
+
+export interface DeepSeekProviderOptions {
+    apiKey: string;
+    model: 'deepseek-flash' | 'deepseek-v4-pro';
+    baseUrl?: string;
+    fetcher?: typeof fetch;
+}
+
+interface OpenAiToolCall {
+    id?: unknown;
+    function?: { name?: unknown; arguments?: unknown };
+}
+
+interface OpenAiResponse {
+    choices?: Array<{
+        finish_reason?: unknown;
+        message?: { content?: unknown; tool_calls?: unknown };
+    }>;
+    error?: { message?: unknown };
+}
+
+const DEFAULT_BASE_URL = 'https://api.deepseek.com';
+const REQUEST_TIMEOUT_MS = 60_000;
+
+function isRecord(value: unknown): value is JsonObject {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function endpoint(baseUrl: string): string {
+    let parsed: URL;
+    try { parsed = new URL(baseUrl); }
+    catch { throw new TypeError('DeepSeek base URL must be a valid HTTPS URL.'); }
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.search || parsed.hash) {
+        throw new TypeError('DeepSeek base URL must use HTTPS and omit credentials, query, and fragment.');
+    }
+    return `${parsed.origin}${parsed.pathname.replace(/\/$/, '')}/chat/completions`;
+}
+
+function providerMessages(messages: AgentMessage[]): JsonObject[] {
+    return messages.map((message) => {
+        if (message.role === 'assistant') {
+            return {
+                role: 'assistant',
+                content: message.content,
+                ...(message.toolCalls?.length ? {
+                    tool_calls: message.toolCalls.map((call) => ({
+                        id: call.id,
+                        type: 'function',
+                        function: { name: call.name, arguments: JSON.stringify(call.arguments) },
+                    })),
+                } : {}),
+            };
+        }
+        if (message.role === 'tool') return { role: 'tool', tool_call_id: message.toolCallId, content: message.content };
+        return { role: message.role, content: message.content };
+    });
+}
+
+function providerTools(tools: AgentTool[]): JsonObject[] {
+    return tools.map((tool) => ({
+        type: 'function',
+        function: { name: tool.name, description: tool.description, parameters: tool.inputSchema },
+    }));
+}
+
+function parseToolCalls(raw: unknown): ModelResponse['message']['toolCalls'] {
+    if (!Array.isArray(raw)) return undefined;
+    const calls = raw.map((item: OpenAiToolCall) => {
+        if (typeof item?.id !== 'string' || !item.id || typeof item.function?.name !== 'string') {
+            throw new Error('DeepSeek returned an invalid tool call.');
+        }
+        let args: unknown;
+        try { args = typeof item.function.arguments === 'string' ? JSON.parse(item.function.arguments) : item.function.arguments; }
+        catch { throw new Error('DeepSeek returned malformed tool arguments.'); }
+        if (!isRecord(args)) throw new Error('DeepSeek tool arguments must be a JSON object.');
+        return { id: item.id, name: item.function.name, arguments: args };
+    });
+    return calls;
+}
+
+export class DeepSeekProvider implements ModelProvider {
+    private readonly endpoint: string;
+    private readonly fetcher: typeof fetch;
+    readonly supportsImages: boolean;
+
+    constructor(private readonly options: DeepSeekProviderOptions) {
+        if (options.apiKey.trim().length < 8) throw new TypeError('A configured DeepSeek API key is required.');
+        this.endpoint = endpoint(options.baseUrl || DEFAULT_BASE_URL);
+        this.fetcher = options.fetcher || fetch;
+        this.supportsImages = options.model === 'deepseek-flash';
+    }
+
+    async complete(input: {
+        messages: AgentMessage[];
+        tools: AgentTool[];
+        mode: 'Ask' | 'Plan' | 'Agent';
+        signal?: AbortSignal;
+    }): Promise<ModelResponse> {
+        const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+        const signal = input.signal ? AbortSignal.any([input.signal, timeoutSignal]) : timeoutSignal;
+        let response: Response;
+        try {
+            response = await this.fetcher(this.endpoint, {
+                method: 'POST',
+                headers: {
+                    authorization: `Bearer ${this.options.apiKey}`,
+                    'content-type': 'application/json',
+                },
+                body: JSON.stringify({
+                    model: this.options.model,
+                    messages: providerMessages(input.messages),
+                    tools: providerTools(input.tools),
+                    tool_choice: 'auto',
+                    stream: false,
+                    max_tokens: input.mode === 'Plan' ? 4096 : 2048,
+                    thinking: { type: 'disabled' },
+                }),
+                signal,
+            });
+        } catch {
+            if (input.signal?.aborted) throw new Error('USER_CANCELLED');
+            throw new Error('DEEPSEEK_NETWORK_ERROR');
+        }
+
+        if (!response.ok) {
+            throw new Error(`DeepSeek request failed with HTTP ${response.status}.`);
+        }
+        const body: unknown = await response.json();
+        if (!isRecord(body)) throw new Error('DeepSeek returned a malformed response.');
+        const choice = (body as OpenAiResponse).choices?.[0];
+        const message = choice?.message;
+        if (!message || typeof message !== 'object') throw new Error('DeepSeek response is missing its assistant message.');
+        const content = typeof message.content === 'string' ? message.content : null;
+        const toolCalls = parseToolCalls(message.tool_calls);
+        return {
+            message: {
+                role: 'assistant',
+                content,
+                ...(toolCalls ? { toolCalls } : {}),
+            },
+            finishReason: typeof choice.finish_reason === 'string' ? choice.finish_reason : null,
+        };
+    }
+}
+
+export function toJsonObject(value: unknown): JsonObject | null {
+    return isRecord(value) ? value : null;
+}

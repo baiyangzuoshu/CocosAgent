@@ -78,7 +78,9 @@ const MODE_RULES = {
     Plan: [
         'The user selected Plan mode. Inspect the project with read-only tools and produce a structured reviewable plan. Do not execute any proposed change.',
         'After the required instance and capability receipts, return ONLY a JSON object (no prose or markdown fences): {"version":1,"title":"...","summary":"...","steps":[{"title":"...","description":"...","preconditions":["..."],"requiredTools":["cocos_2x_..."],"validation":"...","recovery":"..."}]}.',
+        'Do not put literal double quote characters inside any JSON text value; paraphrase the text instead.',
         'Follow this exact bounded schema: title <= 120 characters; summary <= 1200; 1-8 steps; each step has exactly title, description, preconditions, requiredTools, validation, recovery; title <= 120, description <= 1600, validation <= 600, recovery <= 600; preconditions is an array of 0-4 non-empty strings, each <= 300 characters; requiredTools is an array of 1-6 unique exact MCP tool names from the discovered tool list.',
+        'Tool names in requiredTools must be exact MCP names, not semantic command IDs. For a step that performs a semantic Creator write such as scene.pngSprite, include cocos_2x_command_execute and cocos_2x_operation_get plus every required readback tool. A step that claims a write cannot list read-only tools alone.',
         'For every step, list all exact MCP tools that must run to perform and validate that step, including required readback tools. Do not list instance/capability setup tools. Never invent tool names. Ground project facts in receipts. State unknown facts as preconditions to verify. Never invent UUIDs, paths, assets, or claim execution. Each step must say what will change, how to validate it, and how to recover.',
     ].join('\n'),
     Agent: [
@@ -839,4 +841,4 @@ const isEntrypoint = (() => {
 if (isEntrypoint) await main();
 
 export { DEFAULT_BASE_URL, DEFAULT_MODEL, SYSTEM_RULES, appendToolImages, completionEndpoint, normalizeToolResult,
-    parseArgs, requestDeepSeek, toolResultForModel, toolResultForTrace };
+    invokeSkillTool, loadContext, parseArgs, REQUIRED_COMMAND, requestDeepSeek, toolResultForModel, toolResultForTrace };

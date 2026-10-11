@@ -1,6 +1,8 @@
 # CocosAgent Creator 原生 Agent 开发计划
 
-制定日期：2026-10-11。状态：**产品方向已确认；Creator 2.4.15 原生只读 Ask 已在研究工程实机验收；LinkUpClient 曾由 0.3.1 扩展启动并完成真实 DeepSeek + 项目 MCP 脱敏只读任务，现磁盘包已升级到 extension 0.3.4 / MCP 0.3.3，并保留 0.3.1 与 0.3.3 回滚副本；Creator 尚未重载新包，面板直发 Ask、选择与项目约定消费仍待验收。** 当前适用版本：Cocos Creator 2.4.15。
+制定日期：2026-10-11；进度更新：2026-10-12。状态：**产品方向已确认；Creator 2.4.15 的 TS Ask、Plan 和 Agent 均已接入 TS 内核。原生面板实测通过 Ask/Plan 只读任务，以及 Agent 按需读取 skill/合同后查询完整场景快照。TS Agent 现已完成一次精确、可逆的场景补偿写入及读回，确认审批、操作账本与最终场景状态一致；这是受限字段补偿闭环，不是通用脚本编辑或重放验收。指定 PNG 的旧 JS 原生写入任务已完成保存读回、重开、预览、补偿和新 ID 重放，最终 replay 节点保留；它与 TS Agent 实机验收分开记录。上下文预算与压缩已接入 TS 内核并通过自动测试，Creator 面板超预算实机验收仍待完成。工程隔离长期记忆的 TS/Host 实现、来源验证、纠正、删除和精确操作恢复已有自动测试，Creator 面板实机验收尚未完成。LinkUpClient 项目选择与约定消费仍待面板实机验证。** 当前适用版本：Cocos Creator 2.4.15。
+
+**技术栈补充决定（2026-10-11；实现与验收更新于 2026-10-12）：Agent 内核以 `learn-claude-code` 为机制移植基线，产品实现使用 TypeScript + Node.js，不运行上游 Python。** `tools/cocos-agent-runtime/` 承载 TS loop、DeepSeek Provider、MCP 适配、实例/能力预检、Agent 工具门槛与恢复限制；Assistant Host 的 Ask、Plan、Agent 均已路由至 TS 内核。skill 目录、正文与引用仍由 `deepseek-agent.mjs` 的只读 MCP Resource 适配器提供，Agent loop 根据工具回执强制先读任务 skill 和声明引用。TS runtime 现有 42 项测试通过，MCP/扩展本轮 79 项测试通过。真实 Creator 面板运行的 TS Agent 只读任务读取 13 项技能目录、`cocos2-scene-node-operations` 正文及合同引用，再成功取得 `helloworld` 完整快照（19 个节点）；runId `84f18514-a8d4-442d-9ef4-dc3e1d4c06ab`。随后 TS Agent 在 Creator 面板中完成一项精确补偿：先读同一 skill/reference、源账本和实时节点，再经面板批准执行 `scene.node.patch`，将原 operation `a7d3f106-5c92-4b7e-8e41-2b93de7c0f58` 的差异 `x:220→221` 补偿为 `x:221→220`。新补偿 operation `3f8c1d47-6a25-4b90-9e13-72d5ac8b04e6` 的 `editor/disk/recovery` 通过；源及补偿账本读回成功，最终实时节点为 `(220,100)`，无 replay、needs-review 或额外写入。runId `86eea250-80f1-4472-8592-88c026c6c4cf`，本机轨迹 `~/.local/state/CocosAgent/agent-runs/2026-10-11T16-21-48-721Z-b052586f.jsonl`。实测还暴露空模型回复及多工具批调用导致提前停止；TS loop 已加入有界重试，自动测试覆盖继续与耗尽停止，尚未声称 Creator 面板实机触发过新批调用重试分支。旧 JS 指定 PNG 原生写入记录见下文和 AGENTS.md。
 
 ## 1. 目标
 
@@ -29,6 +31,42 @@ Creator 扩展是用户入口、生命周期所有者和产品状态的权威来
 
 模型调用采用可替换的 Provider 接口。现有原型支持 DeepSeek Flash/V4 Pro 配置，真实调用只验收过 Flash；Key 改为明文保存在 OS 用户配置目录 `~/.cocos-agent/credentials.env`（Windows `%USERPROFILE%` 下），POSIX 设置 `0600`。这避免将 Key 写进游戏项目，但还不是系统密钥链加密存储；不得把 Key 写入场景、操作轨迹或版本库。
 
+### TypeScript 内核移植与融合
+
+用户已确认使用 TypeScript，替代此前讨论的 Python sidecar 方案。Creator 扩展继续拥有 Agent 生命周期；新内核运行于 Creator 管理的 Node.js 服务，使用现有面板通信与真实 Cocos MCP。新增内核和产品适配源码采用 TS，构建产物为 JavaScript；Creator 2.4 扩展入口的模块格式和编译目标按实际宿主兼容要求配置。产品启动与正常使用不需要 Python/pip；既有 Python 研究与测量脚本按原用途保留。
+
+上游来源：[learn-claude-code](https://github.com/shareAI-lab/learn-claude-code) 固定在 [`0dcafa2ae053a1ddd6a72f265431104b08a5aa13`](https://github.com/shareAI-lab/learn-claude-code/commit/0dcafa2ae053a1ddd6a72f265431104b08a5aa13)。逐章对应、移植/适配/暂缓/排除状态和维护规则以 [UPSTREAM.md](../../tools/cocos-agent-runtime/UPSTREAM.md) 为准；该表的所有上游源码链接均指向固定 SHA。当前没有直接复制或翻译上游源码：CocosAgent 仅将选定机制独立用 TypeScript 重写，并按 Creator 命令、实例、权限、账本和面板语义适配。仓库保留 MIT 许可作为研究来源记录；将来若复制上游源码，再按 MIT 要求在分发物中保留相应版权与许可声明。不能把文件后缀改成 `.ts` 当作完成移植。
+
+课程 README 还推荐作者的独立产品 [KODE Agent SDK](https://github.com/shareAI-lab/kode-agent-sdk)，不是 `learn-claude-code` 教程仓库本身。SDK 提供 TypeScript Agent、审批事件、MCP、Provider 与 Skills，作为候选集成方案已完成文档级初审；其运行依赖、状态存储与 Creator 命令的项目/实例/账本门槛尚未审计，因此当前 TS 包仍按用户已选的教程机制逐步移植，不引入该 SDK。
+
+源码核对边界：上游集成示例默认使用 Anthropic 客户端、终端审批与工程目录中的状态文件；其 MCP 是进程内模拟服务。TS 移植需接入现有 DeepSeek Provider、面板审批、按工程隔离的用户状态目录以及真实 MCP stdio 客户端，完整保留结构化回执、错误、图片与技能 Resource 读取。模型调用统一经过 Provider 接口；若后续实现上下文摘要与记忆，也沿用该接口。凭据不进入 MCP 子进程、项目资产或轨迹。
+
+| 模块 | 当前对应与边界 |
+| --- | --- |
+| s01 Agent Loop / s15 单 Agent 核心 | 按课程机制独立用 TS 重写；Ask/Plan/Agent 接入 TS 内核。Creator 面板已验收只读 Agent 任务和一次受控场景补偿，不代表通用写入任务都已通过 |
+| s02 工具调用 / s14 MCP | 适配实时 Cocos MCP 工具目录与回执；逐项核对 2.4.15 版本、合同、访问级别、目标实例和能力。不是通用 shell 或任意 MCP 插件执行器 |
+| s03 权限 / s04 Hooks | 适配为 Creator 面板写入批准、项目约定哈希、技能证据门槛、恢复限制与面板事件；不提供通用命令审批或用户脚本 hooks |
+| s07 Skill Loading | TS loop 强制同轮技能/引用回执；正文和引用当前由 JS MCP Resource 适配器读取。技能权威来源为 `plugins/cocos-agent-2x/skills/`，不读取 Codex 插件缓存 |
+| s05 TodoWrite / s10 Task System | 暂缓。持久 Plan、任务状态和 Cocos 操作账本不等于上游 TodoWrite 或通用依赖任务图 |
+| s08 Context Compact | TS 内核已实现确定性预算估算与压缩；保留 call/result 对应、操作身份和未完成验收/恢复项。runtime 全套自动测试通过；Creator 面板实机仍待验收，见[上下文压缩合同](cocos-agent-context-compaction-0.1.md) |
+| s09 Memory | 已实现项目隔离的本机长期记忆、任务召回、精确用户/工具来源、版本纠正、内容删除与精确操作恢复；runtime 与 Host 自动测试通过。Creator 面板审批、重载后的跨任务读回、纠正及删除仍待实机验收，见[工程隔离记忆合同](cocos-agent-project-memory-0.1.md) |
+| s16 Workflow Runtime / s17 Goal Loop | 暂缓。现有 Cocos 资源/场景流水线是领域操作合同；回执成功门槛不等于脚本化通用 workflow 或独立目标评估器 |
+| s06 Subagent / s11 Background Tasks / s12 Cron / s13 Agent Teams | 按产品约定排除：Creator Agent 不加入子 Agent、通用后台任务、定时任务或团队协作 |
+| Creator 内容操作 | 复用既有 Creator 命令与账本；保留预期差异、陈旧拒绝、读回、预览、对账、补偿与重放。能力状态按 2.4.15 实测记录 |
+
+Creator Agent 不加入通用 shell 工具、团队/子 Agent 协作或定时任务。文件读写只通过面向 Creator 内容的窄接口完成，并受场景、Prefab、资源元数据、脚本合同和操作账本约束；上游示例中的通用机制不自动纳入产品范围。
+
+近期执行顺序：
+
+1. **锁定上游与移植边界（已完成）。** 基线固定为 `0dcafa2ae053a1ddd6a72f265431104b08a5aa13`；逐章映射、当前实现、明确排除项与许可说明见 [UPSTREAM.md](../../tools/cocos-agent-runtime/UPSTREAM.md)。
+2. **建立 TS Agent Core。** 在 `tools/cocos-agent-runtime/` 建立独立 TS 包，定义消息、工具回执、Provider、权限、事件与取消接口；接入现有 DeepSeek 配置。Ask/Plan 现已使用该内核。
+3. **接入真实只读通路。** TS Ask/Plan 已在 Creator 面板真实通过。Plan 由 Host 查询唯一就绪实例与能力，模型按需读取任务 skill 和声明引用，再产生经过严格结构和当前工具目录校验的 6 步计划；写入、运行观察、预览验收及补偿步骤均列出相应工具。新 runtime 已打包并由 Creator 重载后的面板实测；计划停在待确认状态，未执行任何步骤，场景 SHA 未变。
+4. **验收 TS Agent 写入路径。** Agent 工具分类、按命令审批、项目约定前置检查、skill/reference 门槛和不确定写入恢复限制已进入 TS；在 Creator 面板选择一个独立、可补偿的真实任务，验证授权、执行回执、磁盘/编辑器读回、预览与恢复。既有 PNG 任务已由旧 JS 路径收口，不重复 apply/replay；按钮任务仍按其单独缺口继续验收。
+5. **实现并验收长期记忆。** s09 的工程隔离存储、任务召回、来源核验、版本纠正、内容删除和不确定写入恢复已进入 TS/Host；本轮自动测试通过。下一步在 Creator 面板验收批准写入、跨 Host 重启召回、纠正来源留痕和删除后不再召回。记忆不代替当前编辑器状态或 Creator 操作账本。
+6. **在 LinkUpClient 持续验收。** 构建扩展包并验证独立安装、更新、取消、恢复和实际项目任务；缺口由真实使用推动。
+
+第 1–3 步的 TS 内核和只读实机路径已完成；runtime 42 项测试通过，MCP/扩展本轮 79 项测试通过。真实 Agent 运行已证明它会因缺少技能证据拒绝过早工具调用，再按要求读取 skill/reference 并成功完成只读场景任务。s08 压缩已覆盖 call/result 配对、operation ID、未完成验收状态、完整运行消息不变和预算不足停止；尚未在 Creator 面板触发真实超预算路径。s09 工程隔离记忆已有自动化证据，Creator 面板审批和跨重启实测仍待做。下一步产品验收仍是第 4 步：由 TS Agent 在 Creator 面板执行一项独立、可补偿的真实写入，验收授权、回执、读回、预览和恢复。PNG operation `b1d4c0e2-7f3a-4a91-9c58-2e6d10ab4f01` 已补偿，并从源记录 replay 为 `9c4f7a28-3b51-4e9d-a27c-6f80d13b5e44`；后者保存并通过预览验收后保留节点 `NativePanelBlue1011`，不再重复 apply/replay。按钮脚本的 TS Agent 写入和 LinkUpClient 面板验收仍是独立事项。Creator 2.x 外部 Codex MCP 连接器的旧指纹状态与 Creator 面板内的 TS Agent 路径分开处理，不据此外推原生 Agent 能力。
+
 ## 3. Unity 对照原则
 
 Unity 官方同时提供 Editor 内的项目感知助手，以及供外部 IDE Agent 使用的 Gateway、MCP/CLI 和插件。我们选择 **Editor 内原生助手**作为主产品参照：面板与当前项目深度集成，具备 Ask/Plan/Agent 类工作流、清晰权限、执行状态和可撤销修改；MCP/CLI 只作为之后可选的外部互操作入口。
@@ -41,7 +79,7 @@ Unity 官方同时提供 Editor 内的项目感知助手，以及供外部 IDE A
 
 已修正扩展的服务入口为扩展包内 `assistant-runtime/.../assistant-host.mjs`，扩展 WebSocket 依赖随包携带；凭据写入用户目录；MCP 运行时指纹由 Codex 插件字段改为通用 Agent 技能包字段。`package-creator-extension.mjs` 可构建扩展包或向开发扩展安装 runtime，包内不需要 `.codex-plugin`、`.mcp.json` 或 Codex 进程。自动测试已在仓库外临时目录完成 MCP 工具、11 个技能和 29 份引用资源的发现、读取及哈希核对。Creator 2.4.15 `2.4.15NewProject` 扩展运行时安装后，编辑器界面重载并再次打开 Assistant 面板；面板显示 `已连接 · deepseek-flash · Key 已保存在本机`。随后已由 Creator 原生面板真实调用 DeepSeek Flash，完成只读实例、能力、场景查询；三项回执成功且场景 SHA 未变，详见[Ask 实机轨迹摘要](traces/cocos-agent-ask-runtime-fix-20261011.json)与 Assistant 说明。新增的按需 skill 工具已随 0.3.1 扩展安装到独立 LinkUpClient 工程并由其 MCP 资源提供；该工程的 Creator 已加载扩展，但本次模型 Ask 由受控 harness 发起，尚未从面板发起。
 
-**完成标准：** 补齐现有原型的进程图、依赖清单和独立工程安装验证；确认 Creator 扩展/Creator 管理的 sidecar 与可选外部 MCP 的边界。此步只做检查与设计，不重写已能工作的模型调度。
+**完成标准：** 补齐现有原型的进程图、依赖清单和独立工程安装验证；确认 Creator 扩展/Creator 管理的 sidecar 与可选外部 MCP 的边界。此步是现有原型的历史盘点门槛；后续内核迁移按上文 TypeScript 移植顺序推进。
 
 ### 1：Creator 内的只读 Agent 最小闭环（已完成）
 
@@ -55,13 +93,13 @@ Unity 官方同时提供 Editor 内的项目感知助手，以及供外部 IDE A
 
 **完成标准：** Agent 能针对一个只读真实项目任务展示计划、由模型按任务选择并读取相关 skill/引用、调用工具并解释停止原因；运行轨迹记录读取到的技能名、版本、URI、哈希和引用 ID，且不包含技能正文或凭据。
 
-**当前进度（2026-10-11）：** `tools/cocos-agent-bridge/mcp/deepseek-agent.mjs` 提供 `cocos_2x_skills_list`、`cocos_2x_skill_read`、`cocos_2x_skill_reference_read` 三个只读模型工具。Creator 包内 MCP Resource 是权威内容源；入口索引携带 11 个 2.4.15 skill、29 份引用及 SHA-256。只允许读取索引声明的 skill 和该 skill 声明的 reference ID；核对 package `0.3.1`、源指纹与内容哈希。轨迹只写读取元数据，不写正文/Base64。确定性循环已覆盖“实例 → 能力 → skill 目录 → skill 正文 → 合同引用 → 场景快照”；MCP/Assistant **48/48** 测试通过，skill 包 **11/29** 检查通过。
+**当前进度（2026-10-11）：** `tools/cocos-agent-bridge/mcp/deepseek-agent.mjs` 提供 `cocos_2x_skills_list`、`cocos_2x_skill_read`、`cocos_2x_skill_reference_read` 三个只读模型工具。Creator 包内 MCP Resource 是权威内容源；初始 0.3.1 索引包含 11 个 2.4.15 skill、29 份引用及 SHA-256，只允许读取索引声明的 skill 和该 skill 声明的 reference ID。当前 Creator 研究扩展加载 0.3.2 技能目录，本轮实测目录有 13 个 skill；运行时记录 package 指纹、索引哈希、读取 URI 与正文哈希，不记录正文/Base64。TS Plan 必须在同一轮取得技能目录、非基础任务 skill 与其声明引用的成功回执；Creator 面板真实运行已满足此门槛。后续 Agent 写入模式仍需把同样的技能/合同读取和项目约定检查接入 TS 执行路径。
 
 **独立真实工程验收（2026-10-11）：** 在独立的 LinkUpClient Creator 2.4.15 工程安装 0.3.1 扩展并启动 Creator；扩展日志显示加载，面板上下文识别工程 `LinkUpClient`、活动场景 `LinkUp`、无选中对象，并检测到 `AGENTS.md`（SHA-256 `ae984519…`）。真实 DeepSeek Flash 通过该安装包的 MCP stdio 连接运行中的 Creator，完成只读 Ask。模型按顺序调用实例列表、skill 列表、`cocos2-mcp-tools` skill 读取、能力列表和场景快照，5 次调用均为 read，最终确认 2.4.15、`LinkUp`、选择为空、快照 9 个节点且未截断。为实现获准的路径脱敏，调度器现在在比较能力回执时规范化注册工程路径；独立回归用 symlink 别名验证没有放宽注册根校验。模型只收到保留工程名的临时根路径别名和脱敏实例/能力/场景数据；实际工程绝对路径、`AGENTS.md` 正文没有发送。API Key 没有进入提示词、工具参数或轨迹，但按 DeepSeek API 要求作为 HTTPS Authorization 凭据发给 DeepSeek 服务端。项目约定读取工具在本机成功返回文件存在、哈希和长度，正文只在本地验收进程中处理。skill 内容对应 `cocos-agent-2x@0.3.1`，URI `cocos://2x/agent/mcp-tools`，SHA-256 `8807a5d5…`；本次模型未读取引用资料。脱敏运行摘要见[LinkUpClient Ask 验收记录](traces/cocos-agent-linkup-ask-2.4-20261011.json)。
 
 **仍未完成：** 这次真实模型循环是测试 harness 调用 Agent 调度器、经独立工程扩展内 MCP stdio 操作真实 Creator，不是 Creator 面板内直接点击 Ask 的端到端记录；工程名由显示上下文/脱敏别名提供，当前 MCP 实例合同没有独立的 displayName 字段；模型没有读取项目约定正文，因此不宣称它已按 LinkUpClient 的 AGENTS 规范回答；安装为 0.3.1 的新工程接入，未验证从旧版扩展升级。Creator 窗口中的非空对象选择同步也尚未验证。面板直发 Ask、旧版升级、选择对象同步和约定内容在本地筛选后如何提供给模型，是该里程碑剩余验收项。本次独立工程验收时研究工程仍是 0.3.0；后续研究工程 runtime 已更新至 0.3.1。该安装状态变化不补足 LinkUpClient 面板直发的验收缺口。
 
-**实现补充（2026-10-11）：** Creator 面板每轮将经过白名单筛选的工程名、版本、场景、最多 8 个选中节点及约定文件状态传给本地 Assistant；Host 校验工程路径精确对应当前 sidecar，提示上下文不持久化且不含工程绝对路径、AGENTS 正文或哈希。模型在依据选择写入前必须重新调用 `scene.snapshot`。Agent 模式写入需先通过项目只读工具读取 `AGENTS.md`，并验证读取哈希与本回合面板采样一致；未读取或约定文件已变化时停止调度。扩展包源版本为 0.3.4，MCP runtime 为 0.3.3；同目录原子升级/回滚命令已有自动测试，LinkUpClient 磁盘包已从 0.3.1 升至 0.3.4，保留 0.3.1 和中间版 0.3.3。Creator 当前尚未重载，面板、非空选择、约定消费和升级后的运行态仍待实机验收。
+**实现补充（2026-10-11）：** Creator 面板每轮将经过白名单筛选的工程名、版本、场景、最多 8 个选中节点及约定文件状态传给本地 Assistant；Host 校验工程路径精确对应当前 sidecar，提示上下文不持久化且不含工程绝对路径、AGENTS 正文或哈希。模型在依据选择写入前必须重新调用 `scene.snapshot`。Agent 模式写入需先通过项目只读工具读取 `AGENTS.md`，并验证读取哈希与本回合面板采样一致；未读取或约定文件已变化时停止调度。扩展包源版本为 0.3.4，MCP runtime 为 0.3.3；同目录原子升级/回滚命令已有自动测试，LinkUpClient 磁盘包已从 0.3.1 升至 0.3.4，保留 0.3.1 和中间版 0.3.3。Creator 已执行“开发者 → 重新加载界面”；其后两次只读 Agent 复测均未发出任务工具调用，均以 missing-successful-task-receipt 停止，扩展指纹刷新与场景快照能力仍待确认。
 
 ### 3：一个受控写入任务的完整闭环
 
@@ -122,22 +160,24 @@ Unity 官方同时提供 Editor 内的项目感知助手，以及供外部 IDE A
 | 步骤 | 状态 | 下一步 |
 | --- | --- | --- |
 | 0：边界盘点 | 扩展包与 sidecar 接线已改；Creator 面板连接与 Ask 实机均有证据 | 后续在真实独立工程持续核对启动/停止与安装可移植性 |
-| 1：原生只读闭环 | **已完成** Creator 原生 Ask 实机：实例、能力、场景回执成功；只读且场景未变 | 暂无门槛缺口；后续任务扩展按 2.4.15 实测推进 |
-| 2：计划与知识读取 | 独立工程 0.3.1 曾启动；真实模型通过项目 MCP 读取 `cocos2-mcp-tools` 并完成只读场景 Ask；新包已升级到磁盘 0.3.4，Creator 面板直发及项目约定消费未验收 | 重载 LinkUpClient 的 0.3.4 包，从面板发起 Ask，核对按需 skill 与项目约定读取轨迹 |
-| 3：受控写入闭环 | 指定 PNG 已经原生面板批准写入并保存读回；原操作有独立浏览器运行态核对。研究工程内部旧 MCP 已更新并重载，原生 Ask 实测版本/合同匹配并读取原账本与实时节点；锁屏中断后续 UI 验收 | 沿原操作 `b1d4c0e2-7f3a-4a91-9c58-2e6d10ab4f01` 完成场景重开、视觉验收、补偿、新 ID 重放及最终补偿，禁止重复 apply；见[本轮验收记录](traces/cocos-agent-native-png-write-2.4-20261011.json) |
-| 4：脚本开发闭环 | 原生面板模型读取/差异批准/写入、原 ID 编译对账、补偿通过；CUA 实际点击计数 1/2，恢复后点击不再计数；脚本/meta/场景基线恢复 | 补原生新 ID 重放、真实错误修复及独立游戏工程脚本任务；Plan 结构输出和多次提示调度缺口仍在 |
+| 1：原生只读闭环 | Ask/Plan/Agent 均由 TS 内核调度；三种模式的只读面板路径已有实机证据；TS runtime 42/42、MCP/扩展 79/79 | 只读路径已通过；继续收 LinkUpClient 项目约定、选择对象与多轮上下文的面板验收 |
+| 2：计划与知识读取 | TS Agent 实际读取 13 项技能目录、任务 skill 与合同引用；缺少读取证据时先收到 `TASK_SKILL_READ_REQUIRED`，读完后完成场景快照任务 | Creator 原生 Resource 读取现由 MCP JS 适配器提供；LinkUpClient 的项目约定/选择上下文仍需面板实测 |
+| 3：受控写入闭环 | 旧 JS 指定 PNG 原生任务已完成 apply/重开/预览/补偿/replay；TS Agent 又真实完成 operation `a7d3f106-5c92-4b7e-8e41-2b93de7c0f58` 的唯一反向补偿 `3f8c1d47-6a25-4b90-9e13-72d5ac8b04e6`，面板批准、editor/disk/recovery 回执、源与新账本读回及实时 `(220,100)` 读回通过 | 基础 TS 写入/补偿路径已验；下一步用真实任务验收 TS 脚本读取、差异审阅、编译、运行与失败恢复，不重复该节点写入 |
+| 4：脚本开发闭环 | 原生面板完成既有 JS 的读取、精确差异、审批、写入和 Creator 编译；本次实际点击显示 `Clicked: 1/2`，原操作补偿后刷新预览再点不变。脚本源 SHA、UUID/meta 与按钮位置已读回恢复；记录见 AGENTS.md 的 2026-10-12 复验 | 补原生新 ID 重放、真实错误修复及独立游戏工程脚本任务；Plan 结构输出和多次提示调度缺口仍在 |
 | 5：运行结果观察 | **实现与模拟编排测试完成；原生初始观察已有实机证据，错误修复闭环待做。** 新增 2.4.15 Web 预览日志、帧/暂停状态、可选节点状态和画布截图观察；Agent 可按同一场景 UUID 读回，再走现有脚本读取、差异计划、批准补丁和二次观察。研究工程当前扩展 0.3.4 / MCP 0.3.3 合同匹配；原生已批准启动预览并观察同场景 UUID、帧、Label、日志和截图。每次观察为独立新页面，不能读取已点击页面状态 | 在隔离的 2.4.15 工程安装新运行时，注入已知可逆脚本错误，验证面板观察、窄补丁、Creator 编译和同场景二次观察；再恢复基线。另需解决共享预览端口 7456 的实例归属认证 |
 | 6：连续任务体验 | **实现与自动测试完成，Creator 实机验收待做**；会话/计划、最近任务、副作用、停止、差异与只读账本核对入口已接入 | 在真实 2.4.15 面板跨 sidecar 重启验证恢复；在真实写入期间取消并确认当前命令回执、后续调度停止且无自动回滚 |
 | 7：外部 Agent 适配 | 可选 | 原生路径稳定后再决定维护范围 |
 | 8：持续验证与 3.x | 2.4 持续推进；3.x 暂停新增 | 以真实工程可重复验收作为后续 3.x 规划门槛 |
-| 9：LinkUpClient 持续使用 | 上下文筛选、实时选择约束、项目约定读取前置检查、整包升级/恢复命令已实现并通过自动测试；磁盘包已升级到 0.3.4，保留 0.3.1 与 0.3.3 回滚副本，Creator 尚未重载 | 重载 LinkUpClient 扩展；在 Creator 面板验收项目约定按需读取、非空选择、多轮任务和 sidecar 重启恢复 |
+| 9：LinkUpClient 持续使用 | 上下文筛选、实时选择约束、项目约定读取前置检查、整包升级/恢复命令已实现并通过自动测试；磁盘包已升级到 0.3.4，保留 0.3.1 与 0.3.3 回滚副本，Creator 的“重新加载界面”已执行；重载后的两次只读 Agent 复测未发出任务工具调用，当前能力状态仍待确认 | 验证扩展指纹和场景快照，再验收项目约定按需读取、非空选择、多轮任务和 sidecar 重启恢复 |
+| 10：工程隔离长期记忆 | TS/Host 本地持久化、来源核验、纠正/删除、准确恢复与任务召回已实现；TS runtime 42/42、MCP/扩展 79/79 | Creator 面板验收创建批准、来源查看、纠正后保留旧版本来源、删除后检索为空及 Host 重启后仍按当前工程隔离 |
 
-## 7. 2026-10-11 进度校正与近期顺序
+## 7. 2026-10-12 进度校正与近期顺序
 
-1. 先收完第 3 步指定现有 PNG 的原生面板写入闭环；既有 Host/MCP 写入和历史空节点实测不能替代本任务的计划、重开、预览、补偿和重放。
-2. 然后收完第 4 步脚本按钮任务；原生写入、编译对账、实际点击及补偿已验；新 ID 重放、真实错误修复与独立工程任务仍待做，详见 [脚本合同](cocos-agent-script-development-0.1.md)。
-3. 接着执行第 5 步运行观察、第 6 步连续任务体验。
-4. 然后在 LinkUpClient 持续使用：重载已升级至 0.3.4 的扩展，实测项目约定、非空选择和多轮上下文；不以测试 harness 或磁盘安装替代 Creator 面板验收。
-5. 只推进 2.4.15。新增命令/skill 由真实项目阻塞触发；外部适配、3.x 和无测量问题的引擎改造保持后续范围。
+**当前 TS 验收状态：** Ask/Plan/Agent 均已路由至 TS loop。Creator 面板真实运行通过技能门槛与场景只读任务，并真实执行了一次精确的 `scene.node.patch` compensate。写前核对源账本的 `preview=passed` 与节点当前 `x=221`，面板批准唯一写入后，补偿账本的 editor/disk/recovery 阶段通过；源及补偿账本、最终实时节点 `(220,100)` 均读回确认。runId `86eea250-80f1-4472-8592-88c026c6c4cf`，本机轨迹 `~/.local/state/CocosAgent/agent-runs/2026-10-11T16-21-48-721Z-b052586f.jsonl`。此验收覆盖受限字段的 TS 调度、审批、回执和恢复，不代表脚本开发或新 ID 重放。TS runtime 42/42、MCP/扩展 79/79。TS loop 已新增对空模型回复和多工具批调用的有界重试；相关分支由自动测试覆盖，实机任务此次是逐个工具成功完成，没有宣称实机触发重试分支。项目隔离长期记忆实现了本机按工程哈希持久化、确定性任务召回、逐条来源验证、审批写入、版本纠正、内容删除和精确写入恢复；这些是自动测试证据，Creator 面板的完整创建/纠正/删除与 Host 重启验收仍待完成。旧 JS 指定 PNG 任务已从 operation `b1d4c0e2-7f3a-4a91-9c58-2e6d10ab4f01` replay 得到 `9c4f7a28-3b51-4e9d-a27c-6f80d13b5e44`；最终节点保留，不能重复 apply/replay。
+
+1. 在独立的真实 2.4.15 游戏工程继续验收 TS Agent：长期记忆创建批准、跨 Host 重启召回、来源纠正、删除后不再召回，以及项目 `AGENTS.md` 哈希门槛、非空选择上下文、多轮任务续接；不以研究工程或模拟 harness 替代。
+2. 收按钮脚本任务剩余缺口：让 TS Agent 读取现有 JS、提出精确差异、按面板审批写入、Creator 编译、实际点击验证并恢复；原生新 ID 重放、错误注入修复和独立项目任务仍分别验收，详见 [脚本合同](cocos-agent-script-development-0.1.md)。
+3. 完成运行观察错误修复闭环和连续任务体验的 Creator 面板实机验收：独立预览归属、Console/截图读取、取消与 sidecar 重启后的会话恢复。
+4. Creator Agent 继续严格限定 Creator 专用命令与技能；不加入通用 shell、团队/子 Agent 协作或定时任务。性能和引擎源码改造由真实任务与可复现测量触发；3.x 按仓库约束暂停新增。
 
 当前源目录包含 13 个产品 skill 与 31 份引用；这是分发实现状态，不代表各技能均经过原生面板模型执行验收。运行观察 skill 和合同见 [运行观察合同](cocos-agent-runtime-observation-0.1.md)。最新 Unity 对照与缺口见 [产品状态复核](cocos-agent-unity-native-status-20261011.md)。

@@ -1,11 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_SOURCE_ROOT = path.resolve(SCRIPT_DIR, '../..');
 const EXTENSION_RELATIVE = '2.4.15NewProject/packages/cocos-agent-bridge';
 const RUNTIME_TOOLS_RELATIVE = 'tools/cocos-agent-bridge';
+const AGENT_RUNTIME_RELATIVE = 'tools/cocos-agent-runtime';
 const RUNTIME_SKILLS_RELATIVE = 'plugins/cocos-agent-2x';
 const STRESS_PROBES = ['cocos-content-stress-2.4-live.mjs', 'cocos-content-stress-2.4.js'];
 
@@ -54,6 +56,18 @@ function copyRuntime(sourceRoot, runtimeDestination) {
     const mcpNodeModulesDestination = path.join(toolsDestination, 'mcp', 'node_modules');
     copyTree(mcpNodeModulesSource, mcpNodeModulesDestination);
 
+    const agentRuntimeSource = path.join(sourceRoot, AGENT_RUNTIME_RELATIVE);
+    const agentRuntimeDestination = path.join(runtimeDestination, AGENT_RUNTIME_RELATIVE);
+    const agentRuntimeBuild = path.join(agentRuntimeSource, 'dist');
+    if (!fs.statSync(path.join(agentRuntimeBuild, 'index.js'), { throwIfNoEntry: false })?.isFile()) {
+        throw new Error('AGENT_RUNTIME_NOT_BUILT: run npm ci and build the TypeScript Agent runtime first');
+    }
+    fs.mkdirSync(agentRuntimeDestination, { recursive: true });
+    fs.copyFileSync(path.join(agentRuntimeSource, 'package.json'), path.join(agentRuntimeDestination, 'package.json'));
+    fs.copyFileSync(path.join(agentRuntimeSource, 'LICENSE.learn-claude-code'), path.join(agentRuntimeDestination, 'LICENSE.learn-claude-code'));
+    copyTree(agentRuntimeBuild, path.join(agentRuntimeDestination, 'dist'), (source) =>
+        source === agentRuntimeBuild || path.extname(source) === '.js');
+
     const skillsSource = path.join(sourceRoot, RUNTIME_SKILLS_RELATIVE);
     const skillsDestination = path.join(runtimeDestination, RUNTIME_SKILLS_RELATIVE);
     copyTree(skillsSource, skillsDestination, (source) => skillPackageFilter(skillsSource, source));
@@ -67,6 +81,19 @@ function copyRuntime(sourceRoot, runtimeDestination) {
         fs.copyFileSync(source, path.join(probeDestination, filename));
     }
     fs.mkdirSync(path.join(runtimeDestination, 'docs/agent-foundation/traces/visual'), { recursive: true });
+}
+
+function buildAgentRuntime(sourceRoot) {
+    const runtimeRoot = path.join(sourceRoot, AGENT_RUNTIME_RELATIVE);
+    const compiler = path.join(runtimeRoot, 'node_modules/typescript/bin/tsc');
+    const config = path.join(runtimeRoot, 'tsconfig.json');
+    if (!fs.existsSync(compiler)) throw new Error('AGENT_RUNTIME_COMPILER_MISSING: run npm ci in tools/cocos-agent-runtime');
+    try {
+        execFileSync(process.execPath, [compiler, '-p', config], { cwd: runtimeRoot, stdio: 'pipe', encoding: 'utf8' });
+    } catch (error) {
+        const output = [error.stdout, error.stderr].filter(Boolean).join('\n').trim();
+        throw new Error(`AGENT_RUNTIME_BUILD_FAILED${output ? `\n${output}` : ''}`);
+    }
 }
 
 function copyExtensionSources(sourceRoot, extensionDestination) {
@@ -88,6 +115,8 @@ export function buildCreatorExtensionBundle({ sourceRoot = DEFAULT_SOURCE_ROOT, 
     const output = ensureAbsolute(outputDirectory, 'output');
     if (inside(source, output) || inside(output, source)) throw new Error('OUTPUT_MUST_BE_OUTSIDE_SOURCE_ROOT');
     if (fs.existsSync(output)) throw new Error('OUTPUT_ALREADY_EXISTS');
+    if (!fs.existsSync(path.join(source, EXTENSION_RELATIVE, 'package.json'))) throw new Error('CREATOR_EXTENSION_SOURCE_MISSING');
+    buildAgentRuntime(source);
     const parent = path.dirname(output);
     fs.mkdirSync(parent, { recursive: true });
     const staging = path.join(parent, `.${path.basename(output)}.tmp-${process.pid}-${Date.now()}`);
@@ -111,6 +140,7 @@ export function installCreatorRuntime({ sourceRoot = DEFAULT_SOURCE_ROOT, extens
     if (extensionPackage.name !== 'cocos-agent-bridge') throw new Error('CREATOR_EXTENSION_TARGET_MISMATCH');
     const runtime = path.join(extension, 'assistant-runtime');
     if (fs.existsSync(runtime)) throw new Error('CREATOR_RUNTIME_ALREADY_INSTALLED');
+    buildAgentRuntime(source);
     const staging = path.join(extension, `.assistant-runtime.tmp-${process.pid}-${Date.now()}`);
     try {
         copyRuntime(source, staging);
@@ -141,7 +171,10 @@ function validateCreatorExtensionBundle(directory) {
         'scene.js',
         'panel/index.js',
         'assistant-runtime/tools/cocos-agent-bridge/mcp/assistant-host.mjs',
+        'assistant-runtime/tools/cocos-agent-bridge/mcp/assistant-memory-store.mjs',
         'assistant-runtime/tools/cocos-agent-bridge/mcp/mcp-server.mjs',
+        'assistant-runtime/tools/cocos-agent-runtime/dist/index.js',
+        'assistant-runtime/tools/cocos-agent-runtime/LICENSE.learn-claude-code',
         'assistant-runtime/plugins/cocos-agent-2x/agent-package.json',
     ];
     for (const relative of requiredFiles) {

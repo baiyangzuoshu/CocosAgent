@@ -239,6 +239,7 @@ test('Creator extension upgrade swaps a complete verified package and retains a 
         assert.equal(result.installedVersion, JSON.parse(fs.readFileSync(path.join(extension, 'package.json'), 'utf8')).version);
         assert.equal(result.creatorReloadRequired, true);
         assert.equal(fs.existsSync(path.join(extension, 'assistant-runtime/tools/cocos-agent-bridge/mcp/assistant-host.mjs')), true);
+        assert.equal(fs.existsSync(path.join(extension, 'assistant-runtime/tools/cocos-agent-bridge/mcp/assistant-memory-store.mjs')), true);
         assert.equal(fs.existsSync(path.join(result.rollbackDirectory, 'assistant-runtime/old-runtime-marker')), true);
         assert.equal(fs.existsSync(path.join(result.rollbackDirectory, 'main.js')), true);
         const restored = restoreCreatorExtension({ extensionDirectory: extension, rollbackDirectory: result.rollbackDirectory });

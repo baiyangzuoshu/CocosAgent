@@ -183,3 +183,32 @@ test('panel exposes safe cancellation, expected diff details, and exact-operatio
     recover.listeners.click();
     assert.deepEqual(sent.at(-1), { type: 'run.recover', conversationId: 'conversation-id', runId: 'run-id', operationId });
 });
+
+test('panel explains context compaction and stops when required state exceeds the configured budget', () => {
+    let panel;
+    const activities = [];
+    vm.runInNewContext(fs.readFileSync(path.join(root, '2.4.15NewProject/packages/cocos-agent-bridge/panel/index.js'), 'utf8'), {
+        Editor: { Panel: { extend(value) { panel = value; } }, Ipc: { sendToMain() {} } },
+        document: { createElement: () => new Element() },
+        window: { crypto: { randomUUID: () => 'request-id' } },
+        localStorage: { getItem: () => null, setItem() {} }, WebSocket: { OPEN: 1 },
+    });
+    for (const name of Object.keys(panel.$)) panel[`$${name}`] = new Element();
+    panel._requestId = 'active-request';
+    panel.addActivity = (text) => activities.push(text);
+
+    panel.receiveMessage(JSON.stringify({ type: 'context.compacted', requestId: 'active-request', report: {
+        summarizedToolCalls: 6, operationIdentities: ['operationId=op-1'],
+        compactedToolResults: 2,
+        outstandingAcceptance: [{ key: 'operationId=op-1', kind: 'preview', status: 'needs-preview' }],
+    } }));
+    panel.receiveMessage(JSON.stringify({ type: 'context.budget-exceeded', requestId: 'active-request', report: {
+        estimatedTokens: 4_200, maxEstimatedTokens: 4_000,
+    } }));
+
+    assert.match(activities[0], /6 次旧工具调用/);
+    assert.match(activities[0], /另缩短 2 条只读回执/);
+    assert.match(activities[0], /保留 1 个操作身份和 1 项待验收\/恢复状态/);
+    assert.match(activities[1], /4200 \/ 4000 tokens/);
+    assert.match(activities[1], /停止后续模型调用/);
+});

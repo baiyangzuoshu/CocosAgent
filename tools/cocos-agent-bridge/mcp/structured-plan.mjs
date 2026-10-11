@@ -1,6 +1,17 @@
 const MAX_PLAN_CHARS = 12_000;
 const MAX_STEPS = 8;
 const PLAN_SETUP_TOOLS = new Set(['cocos_2x_instances_list', 'cocos_2x_instances_get', 'cocos_2x_capabilities_list']);
+const TOOL_REFERENCE_COVERAGE = [
+    [/\basset\.searchPng\b/, 'cocos_2x_asset_search_png'],
+    [/\basset\.validatePng\b/, 'cocos_2x_asset_validate_png'],
+    [/\bscene\.snapshot\b/, 'cocos_2x_scene_snapshot'],
+    [/\bscene\.node\.inspect\b/, 'cocos_2x_scene_node_inspect'],
+    [/\boperation\.get\b|操作(?:账本|回执)/, 'cocos_2x_operation_get'],
+    [/\bruntime\.preview\.start\b/, 'cocos_2x_command_execute'],
+    [/\bruntime(?:\.|\s)observe\b/, 'cocos_2x_runtime_observe'],
+    [/\boperation\.preview\.accept\b/, 'cocos_2x_operation_preview_accept'],
+];
+const SCENE_WRITE_REFERENCE = /\b(?:scene\.(?:node\.(?:create|patch)|pngSprite)|prefab\.source\.patch)\b/;
 
 function boundedText(value, max, field) {
     if (typeof value !== 'string' || !value.trim() || value.length > max) {
@@ -20,15 +31,61 @@ function parseJson(text) {
     const input = typeof text === 'string' ? text.trim() : '';
     if (!input || input.length > MAX_PLAN_CHARS) throw new TypeError('INVALID_PLAN_SIZE');
     const fenced = input.match(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i);
-    return JSON.parse(fenced ? fenced[1] : input);
+    const json = fenced ? fenced[1] : input;
+    try {
+        return JSON.parse(json);
+    } catch (originalError) {
+        // Models sometimes place literal quotation marks inside a JSON string
+        // without escaping them. Repair only quotes that cannot legally close
+        // a JSON string, then let JSON.parse and the strict plan schema decide
+        // whether the result is acceptable.
+        let repaired = '';
+        let inString = false;
+        let escaped = false;
+        let changed = false;
+        for (let index = 0; index < json.length; index += 1) {
+            const character = json[index];
+            if (!inString) {
+                repaired += character;
+                if (character === '"') inString = true;
+                continue;
+            }
+            if (escaped) {
+                repaired += character;
+                escaped = false;
+                continue;
+            }
+            if (character === '\\') {
+                repaired += character;
+                escaped = true;
+                continue;
+            }
+            if (character === '"') {
+                let next = index + 1;
+                while (next < json.length && /\s/.test(json[next])) next += 1;
+                if (next < json.length && ![',', '}', ']', ':'].includes(json[next])) {
+                    repaired += '\\"';
+                    changed = true;
+                } else {
+                    repaired += character;
+                    inString = false;
+                }
+                continue;
+            }
+            repaired += character;
+        }
+        if (!changed) throw originalError;
+        return JSON.parse(repaired);
+    }
 }
 
-export function parseStructuredPlan(text) {
+export function parseStructuredPlan(text, { availableToolNames } = {}) {
     const value = parseJson(text);
     exactKeys(value, ['version', 'title', 'summary', 'steps'], 'root');
     if (value.version !== 1 || !Array.isArray(value.steps) || value.steps.length < 1 || value.steps.length > MAX_STEPS) {
         throw new TypeError('INVALID_PLAN_VERSION_OR_STEPS');
     }
+    const allowedTools = Array.isArray(availableToolNames) ? new Set(availableToolNames) : null;
     return {
         version: 1,
         title: boundedText(value.title, 120, 'title'),
@@ -42,6 +99,16 @@ export function parseStructuredPlan(text) {
                 || new Set(step.requiredTools).size !== step.requiredTools.length) {
                 throw new TypeError('INVALID_PLAN_REQUIRED_TOOLS');
             }
+            if (allowedTools && step.requiredTools.some((name) => !allowedTools.has(name))) {
+                throw new TypeError('INVALID_PLAN_UNKNOWN_TOOL');
+            }
+            const stepText = [step.title, step.description, ...step.preconditions, step.validation, step.recovery].join('\n');
+            const requiredByText = TOOL_REFERENCE_COVERAGE
+                .filter(([pattern]) => pattern.test(stepText))
+                .map(([, toolName]) => toolName);
+            if (SCENE_WRITE_REFERENCE.test(stepText)) requiredByText.push('cocos_2x_command_execute', 'cocos_2x_operation_get');
+            const missingCoverage = [...new Set(requiredByText)].filter((toolName) => !step.requiredTools.includes(toolName));
+            if (missingCoverage.length) throw new TypeError(`INVALID_PLAN_TOOL_COVERAGE:${missingCoverage.join(',')}`);
             return {
                 title: boundedText(step.title, 120, 'step_title'),
                 description: boundedText(step.description, 1600, 'description'),

@@ -3,15 +3,16 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
-import { runDeepSeekAgent, DEFAULT_BASE_URL, DEFAULT_MODEL, writeEvent } from './deepseek-agent.mjs';
+import { DEFAULT_BASE_URL, DEFAULT_MODEL, writeEvent } from './deepseek-agent.mjs';
 import { parseStructuredPlan } from './structured-plan.mjs';
 import { beginPlanStep, createPlan, finishPlanStep, hasPlanSetupReceipts, planView } from './assistant-plan-service.mjs';
 import { AssistantStateStore } from './assistant-state-store.mjs';
-import { normalizeCreatorProjectContext } from './assistant-project-context.mjs';
+import { AssistantMemoryFileStore } from './assistant-memory-store.mjs';
+import { formatCreatorProjectContext, normalizeCreatorProjectContext } from './assistant-project-context.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPOSITORY_ROOT = process.env.COCOS_AGENT_RUNTIME_ROOT
@@ -25,6 +26,36 @@ const MAX_HISTORY = 24;
 const APPROVAL_TIMEOUT_MS = 120_000;
 const require = createRequire(import.meta.url);
 const { Server: WebSocketServer } = require('../vendor/ws');
+
+async function runTypeScriptReadOnly({ client, task, projectRoot, skillFiles, tracePath, apiKey, model, mode, history,
+    projectContext, signal, onEvent, memoryStore }) {
+    const runtimeUrl = pathToFileURL(path.join(REPOSITORY_ROOT, 'tools/cocos-agent-runtime/dist/index.js')).href;
+    const runtime = await import(runtimeUrl);
+    const legacyAdapter = await import('./deepseek-agent.mjs');
+    return runtime.runCreatorReadOnly({
+        client, task, projectRoot, skillFiles, tracePath, apiKey, model, mode, history,
+        projectContext, signal, onEvent,
+        skillAdapter: legacyAdapter,
+        formatProjectContext: formatCreatorProjectContext,
+        writeEvent,
+        projectMemory: { projectKey: memoryStore.projectKey, persistence: memoryStore },
+    });
+}
+
+async function runTypeScriptAgent({ client, task, projectRoot, skillFiles, tracePath, apiKey, model, history,
+    projectContext, signal, onEvent, approveWrite, memoryStore }) {
+    const runtimeUrl = pathToFileURL(path.join(REPOSITORY_ROOT, 'tools/cocos-agent-runtime/dist/index.js')).href;
+    const runtime = await import(runtimeUrl);
+    const legacyAdapter = await import('./deepseek-agent.mjs');
+    return runtime.runCreatorAgent({
+        client, task, projectRoot, skillFiles, tracePath, apiKey, model, mode: 'Agent', history,
+        projectContext, signal, onEvent, approveWrite,
+        skillAdapter: legacyAdapter,
+        formatProjectContext: formatCreatorProjectContext,
+        writeEvent,
+        projectMemory: { projectKey: memoryStore.projectKey, persistence: memoryStore },
+    });
+}
 
 function parseArgs(argv) {
     const options = { project: null, model: DEFAULT_MODEL };
@@ -71,8 +102,21 @@ function compactResult(result) {
             reconciliation: structured.reconciliation ? { disposition: structured.reconciliation.disposition } : undefined,
         };
         for (const key of ['packageName', 'packageVersion', 'packageFingerprint', 'skillsIndexSha256',
-            'skillName', 'referenceId', 'uri', 'sha256', 'mimeType', 'byteLength']) {
+            'skillName', 'referenceId', 'uri', 'sha256', 'mimeType', 'byteLength', 'memoryId', 'revision', 'deletedRevision']) {
             if (structured[key] !== undefined) compact[key] = structured[key];
+        }
+        const compactMemory = (memory) => memory && typeof memory === 'object' ? {
+            id: memory.id, revision: memory.revision, title: memory.title, body: memory.body,
+            category: memory.category, sources: Array.isArray(memory.sources) ? memory.sources.slice(0, 8) : [],
+            createdAt: memory.createdAt, updatedAt: memory.updatedAt,
+            history: Array.isArray(memory.history) ? memory.history.slice(-10) : [],
+        } : undefined;
+        if (structured.memory) compact.memory = compactMemory(structured.memory);
+        if (structured.operation) compact.operation = structured.operation;
+        if (structured.tombstone) compact.tombstone = structured.tombstone;
+        if (structured.data?.memory) compact.data = { memory: compactMemory(structured.data.memory) };
+        if (Array.isArray(structured.data?.memories)) {
+            compact.data = { memories: structured.data.memories.slice(0, 8).map(compactMemory) };
         }
         if (structured.scene) compact.scene = structured.scene;
         if (structured.runtime) compact.runtime = structured.runtime;
@@ -117,15 +161,31 @@ function compactReceipt(receipt) {
     };
 }
 
-async function readRecoveryReceipt(client, projectRoot, toolName, operationId) {
-    if (!path.isAbsolute(projectRoot) || !/^[0-9a-f-]{36}$/i.test(operationId)
+async function readRecoveryReceipt(client, projectRoot, toolName, operationId, memoryStore = null) {
+    if (!path.isAbsolute(projectRoot) || typeof operationId !== 'string' || !operationId || operationId.length > 200) {
+        throw new Error('RECOVERY_REQUEST_INVALID');
+    }
+    if (toolName === 'cocos_2x_memory_operation_get') {
+        if (!memoryStore || memoryStore.projectKey !== crypto.createHash('sha256').update(fs.realpathSync(projectRoot)).digest('hex')) {
+            throw new Error('MEMORY_RECOVERY_PROJECT_MISMATCH');
+        }
+        const snapshot = await memoryStore.load();
+        const operation = snapshot?.operations?.find((item) => item.operationId === operationId);
+        if (!operation) return { success: true, operationId, outcome: 'no-effect', status: 'no-effect',
+            reconciliation: { disposition: 'not-recorded' } };
+        const memory = snapshot.memories.find((item) => item.id === operation.memoryId);
+        const tombstone = snapshot.tombstones.find((item) => item.operationId === operationId);
+        return { success: true, operationId, outcome: operation.outcome, status: operation.outcome,
+            operation, ...(memory ? { memory } : {}), ...(tombstone ? { tombstone } : {}) };
+    }
+    if (!/^[0-9a-f-]{36}$/i.test(operationId)
         || !['cocos_2x_operation_get', 'cocos_2x_script_operation_get'].includes(toolName)) {
         throw new Error('RECOVERY_REQUEST_INVALID');
     }
-    const requiredCommand = toolName === 'cocos_2x_script_operation_get' ? 'script.operation.get' : 'operation.get';
     const listed = await client.callTool({ name: 'cocos_2x_instances_list', arguments: {} });
     const instances = listed?.structuredContent?.data;
-    const selected = Array.isArray(instances) && instances.find((instance) => instance.projectRoot === projectRoot);
+    const matches = Array.isArray(instances) ? instances.filter((instance) => instance.projectRoot === projectRoot) : [];
+    const selected = matches.length === 1 ? matches[0] : null;
     if (listed?.structuredContent?.success !== true || !selected
         || selected.creatorVersion !== '2.4.15' || selected.state !== 'ready') {
         throw new Error('RECOVERY_INSTANCE_NOT_READY');
@@ -133,10 +193,16 @@ async function readRecoveryReceipt(client, projectRoot, toolName, operationId) {
     const catalog = await client.callTool({ name: 'cocos_2x_capabilities_list', arguments: { projectRoot } });
     const catalogData = catalog?.structuredContent?.data;
     const exactInstance = catalogData?.instance;
-    const capability = catalogData?.commands?.find((item) => item.id === requiredCommand);
+    // Scene operation.get is a Host-side ledger reader, not a Creator command.
+    // Script operation.get is implemented by the Creator extension and must
+    // still be advertised as available by the selected live instance.
+    const requiredCommand = toolName === 'cocos_2x_script_operation_get' ? 'script.operation.get' : null;
+    const capability = requiredCommand
+        ? catalogData?.commands?.find((item) => item.id === requiredCommand)
+        : null;
     if (catalog?.structuredContent?.success !== true || exactInstance?.projectRoot !== projectRoot
         || exactInstance.creatorVersion !== '2.4.15' || exactInstance.state !== 'ready'
-        || !capability || capability.status !== 'available') {
+        || (requiredCommand && (!capability || capability.status !== 'available'))) {
         throw new Error('RECOVERY_CAPABILITY_NOT_AVAILABLE');
     }
     const args = toolName === 'cocos_2x_script_operation_get'
@@ -181,6 +247,7 @@ async function start(options) {
     const token = crypto.randomBytes(32).toString('hex');
     const wss = new WebSocketServer({ host: '127.0.0.1', port: 0, maxPayload: 16 * 1024 });
     const stateStore = new AssistantStateStore(options.project);
+    const memoryStore = new AssistantMemoryFileStore(options.project);
     const restoredState = stateStore.load();
     const conversations = new Map(restoredState.conversations.map((entry) => [entry.id, entry.messages]));
     const plans = new Map(restoredState.plans.map((plan) => [plan.id, plan]));
@@ -253,17 +320,21 @@ async function start(options) {
                     && item.conversationId === message.conversationId
                     && ((item.receipts || []).some((receipt) => receipt.operationId === message.operationId)
                         || item.activeTool?.operationId === message.operationId));
-                if (!run || !/^[0-9a-f-]{36}$/i.test(message.operationId)) {
+                const writeReceipt = run?.receipts?.find((receipt) => receipt.operationId === message.operationId)
+                    || run?.activeTool;
+                const memoryOperation = writeReceipt?.toolName?.startsWith('cocos_2x_memory_')
+                    && writeReceipt?.access !== 'read';
+                if (!run || (!memoryOperation && !/^[0-9a-f-]{36}$/i.test(message.operationId))
+                    || (memoryOperation && message.operationId.length > 200)) {
                     send(socket, { type: 'run.recovery.result', runId: message.runId, operationId: message.operationId,
                         error: '没有找到与当前会话匹配的已记录操作 ID。' });
                     return;
                 }
-                const writeReceipt = run.receipts.find((receipt) => receipt.operationId === message.operationId)
-                    || run.activeTool;
-                const toolName = writeReceipt?.toolName === 'cocos_2x_script_patch'
+                const toolName = memoryOperation ? 'cocos_2x_memory_operation_get'
+                    : writeReceipt?.toolName === 'cocos_2x_script_patch'
                     || writeReceipt?.command?.startsWith('script.') ? 'cocos_2x_script_operation_get' : 'cocos_2x_operation_get';
                 void (async () => {
-                    const receipt = await readRecoveryReceipt(client, options.project, toolName, message.operationId);
+                    const receipt = await readRecoveryReceipt(client, options.project, toolName, message.operationId, memoryStore);
                     run.recovery = { operationId: message.operationId, checkedAt: new Date().toISOString(), receipt };
                     run.updatedAt = run.recovery.checkedAt;
                     appendRun(run);
@@ -340,32 +411,18 @@ async function start(options) {
                     toolName: tool.name, arguments: args, timeoutMs: APPROVAL_TIMEOUT_MS });
             });
 
-            void runDeepSeekAgent({
-                client,
-                task: taskText,
-                projectRoots: [options.project],
-                skillFiles: [AGENT_SKILL],
-                tracePath: traceFile(options.project),
-                apiKey,
-                model: options.model,
-                mode: message.mode,
-                // Skill/reference discovery and verification need room before the final answer.
-                maxTurns: message.mode === 'Ask' ? 16 : 20,
-                maxToolCalls: message.mode === 'Ask' ? 14 : 18,
-                history: history.slice(-MAX_HISTORY),
-                projectContext: normalizeCreatorProjectContext(message.projectContext),
-                allowWrite: message.mode === 'Agent',
-                approveWrite,
-                signal: active.controller.signal,
-                onEvent: (event) => {
+            const runTracePath = traceFile(options.project);
+            const onAgentEvent = (event) => {
                     if (event.type.startsWith('run.')) return;
                     if (event.type === 'tool.finished') event.result = compactResult(event.result);
                     if (event.type === 'run.finished' && Array.isArray(event.receipts)) {
                         event.receipts = event.receipts.map(compactReceipt);
                     }
                     if (event.type === 'tool.started') {
+                        const memoryWrite = event.access === 'write' && String(event.toolName || '').startsWith('cocos_2x_memory_');
                         active.activeTool = { toolName: event.toolName, command: event.command,
-                            operationId: event.operationId, access: event.access || 'unknown', callId: event.callId };
+                            operationId: event.operationId || (memoryWrite ? event.callId : undefined),
+                            access: event.access || 'unknown', callId: event.callId };
                         runRecord.activeTool = active.activeTool;
                     } else if (event.type === 'tool.finished') {
                         const result = event.result || {};
@@ -387,15 +444,46 @@ async function start(options) {
                         send(socket, { type: 'run.persistence-error', requestId: message.requestId });
                     }
                     send(socket, { ...event, requestId: message.requestId });
-                },
-            }).then((result) => {
+                };
+            const agentRun = message.mode === 'Agent'
+                ? runTypeScriptAgent({
+                    client,
+                    task: taskText,
+                    projectRoot: options.project,
+                    skillFiles: [AGENT_SKILL],
+                    tracePath: runTracePath,
+                    apiKey,
+                    model: options.model,
+                    history: history.slice(-MAX_HISTORY),
+                    projectContext: normalizeCreatorProjectContext(message.projectContext),
+                    signal: active.controller.signal,
+                    onEvent: onAgentEvent,
+                    approveWrite,
+                    memoryStore,
+                })
+                : runTypeScriptReadOnly({
+                    client,
+                    task: taskText,
+                    projectRoot: options.project,
+                    skillFiles: [AGENT_SKILL],
+                    tracePath: runTracePath,
+                    apiKey,
+                    model: options.model,
+                    mode: message.mode,
+                    history: history.slice(-MAX_HISTORY),
+                    projectContext: normalizeCreatorProjectContext(message.projectContext),
+                    signal: active.controller.signal,
+                    onEvent: onAgentEvent,
+                    memoryStore,
+                });
+            void agentRun.then((result) => {
                 let structuredPlan = null;
                 let assistantText;
                 if (message.mode === 'Plan') {
                     if (result.status === 'completed' && hasPlanSetupReceipts(result.receipts)) {
                         try {
                             structuredPlan = createPlan({ conversationId: message.conversationId, userTask: message.text.trim(),
-                                data: parseStructuredPlan(result.finalText) });
+                                data: parseStructuredPlan(result.finalText, { availableToolNames: result.availableToolNames }) });
                             plans.set(structuredPlan.id, structuredPlan);
                             writeEvent(result.tracePath, { event: 'plan.created', plan: planView(structuredPlan) }, apiKey);
                             assistantText = `已生成 ${structuredPlan.steps.length} 步计划「${structuredPlan.title}」。请先检查每一步，再选择开始。计划内容本身不会修改项目。`;
@@ -436,6 +524,7 @@ async function start(options) {
                     result: { status: result.status, reason: result.reason, finalText: assistantText,
                         toolCalls: result.toolCalls, tracePath: result.tracePath,
                         receipts: (result.receipts || []).map(compactReceipt),
+                        contextCompactions: result.contextCompactions || [],
                         plan: structuredPlan ? planView(structuredPlan) : undefined,
                         planProgress: activePlan ? planView(activePlan) : undefined,
                         recentRuns: recentRuns.filter((run) => run.conversationId === message.conversationId).slice(-12) } });

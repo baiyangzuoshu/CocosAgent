@@ -523,7 +523,61 @@ test('recovery reads the live instance and capability contract before the exact 
     assert.deepEqual(calls[2].arguments, { operationId }, 'script operation schema receives only the exact operation ID');
 });
 
-test('recovery stops before reading an operation when the live capability is unavailable', async () => {
+test('scene ledger recovery does not require Host operation.get to appear in the Creator command catalog', async () => {
+    const projectRoot = '/tmp/cocos-recovery-project';
+    const operationId = '33333333-3333-4333-8333-333333333333';
+    const calls = [];
+    const client = { async callTool(request) {
+        calls.push(request);
+        if (request.name === 'cocos_2x_instances_list') return { structuredContent: { success: true, data: [
+            { projectRoot, creatorVersion: '2.4.15', state: 'ready' },
+        ] } };
+        if (request.name === 'cocos_2x_capabilities_list') return { structuredContent: { success: true, data: {
+            instance: { projectRoot, creatorVersion: '2.4.15', state: 'ready' },
+            commands: [{ id: 'script.operation.get', status: 'available' }],
+        } } };
+        return { structuredContent: { success: true, outcome: 'completed', operationId } };
+    } };
+    const receipt = await readRecoveryReceipt(client, projectRoot, 'cocos_2x_operation_get', operationId);
+    assert.equal(receipt.outcome, 'completed');
+    assert.deepEqual(calls.map((call) => call.name), [
+        'cocos_2x_instances_list', 'cocos_2x_capabilities_list', 'cocos_2x_operation_get',
+    ]);
+    assert.deepEqual(calls[2].arguments, { projectRoot, operationId });
+});
+
+test('memory recovery reads only the canonical project memory ledger and accepts exact provider call IDs', async () => {
+    const value = fixture();
+    const operationId = 'call-memory-write-73';
+    const projectKey = crypto.createHash('sha256').update(fs.realpathSync(value.projects[0])).digest('hex');
+    const memoryStore = {
+        projectKey,
+        async load() {
+            return {
+                version: 1, projectKey, revision: 1,
+                memories: [{ id: 'memory-1', revision: 1, title: 'Canvas design', body: '640 by 960 portrait.',
+                    category: 'project-fact', sources: [{ kind: 'user', runId: 'run-1', messageIndex: 0,
+                        quote: '640 by 960 portrait', recordedAt: '2026-10-12T12:00:00.000Z' }] }],
+                operations: [{ operationId, action: 'remember', memoryId: 'memory-1', outcome: 'remembered', revision: 1,
+                    timestamp: '2026-10-12T12:00:00.000Z' }],
+                tombstones: [],
+            };
+        },
+    };
+    try {
+        const receipt = await readRecoveryReceipt({ callTool: async () => { throw new Error('Creator must not be queried for local memory recovery'); } },
+            value.projects[0], 'cocos_2x_memory_operation_get', operationId, memoryStore);
+        assert.equal(receipt.operationId, operationId);
+        assert.equal(receipt.outcome, 'remembered');
+        assert.equal(receipt.memory.sources[0].runId, 'run-1');
+        await assert.rejects(readRecoveryReceipt({}, value.projects[1], 'cocos_2x_memory_operation_get', operationId, memoryStore),
+            /MEMORY_RECOVERY_PROJECT_MISMATCH/);
+        const noEffect = await readRecoveryReceipt({}, value.projects[0], 'cocos_2x_memory_operation_get', 'call-not-written', memoryStore);
+        assert.equal(noEffect.outcome, 'no-effect');
+    } finally { fs.rmSync(value.parent, { recursive: true, force: true }); }
+});
+
+test('script ledger recovery still requires the Creator script.operation.get capability', async () => {
     const projectRoot = '/tmp/cocos-recovery-project';
     const operationId = '33333333-3333-4333-8333-333333333333';
     const calls = [];
@@ -534,10 +588,10 @@ test('recovery stops before reading an operation when the live capability is una
         ] } };
         return { structuredContent: { success: true, data: {
             instance: { projectRoot, creatorVersion: '2.4.15', state: 'ready' },
-            commands: [{ id: 'operation.get', status: 'unavailable' }],
+            commands: [{ id: 'script.operation.get', status: 'unavailable' }],
         } } };
     } };
-    await assert.rejects(readRecoveryReceipt(client, projectRoot, 'cocos_2x_operation_get', operationId), /RECOVERY_CAPABILITY_NOT_AVAILABLE/);
+    await assert.rejects(readRecoveryReceipt(client, projectRoot, 'cocos_2x_script_operation_get', operationId), /RECOVERY_CAPABILITY_NOT_AVAILABLE/);
     assert.deepEqual(calls, ['cocos_2x_instances_list', 'cocos_2x_capabilities_list']);
 });
 
