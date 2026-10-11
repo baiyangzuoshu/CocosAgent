@@ -48,3 +48,7 @@ Mock tests currently cover error collection, redaction, frame progress, screensh
 Live acceptance still needs a controlled Creator 2.4.15 Web case: introduce a known, reversible runtime error in an existing test script; confirm the native panel reports the error and screenshot; prepare and approve one narrow repair; verify Creator import/compile; then observe the same scene UUID again and confirm the error is gone. Compensate the test edit and confirm baseline restoration. Keep the test confined to a disposable test project and retain the existing unrelated dirty scene fixture.
 
 Do not claim this live acceptance based on headless mocks or the earlier button script read-only check. Ordinary Web runtime observation should not be considered complete while preview port ownership remains ambiguous across concurrent Creator projects.
+
+## 2026-10-11 初始观察实机证据与页面边界
+
+按钮脚本任务已在 Creator 原生 Agent 中批准 `runtime.preview.start` 并调用观察：同一 helloworld UUID、帧推进 38、running/非暂停、Label `Hello, World!`、无错误、画布截图均由真实回执确认。本轮不是运行错误注入/自动修复验收。观察器每次新开临时浏览器并在结束时关闭，不连接已有可见预览；因此无法读取另一页面实际点击后的计数，不能把两份页面证据合并为同一运行会话。实际点击与恢复后点击由外部 CUA 可见预览单独验证，见[按钮记录](traces/cocos-agent-native-button-script-2.4-20261011.json)。

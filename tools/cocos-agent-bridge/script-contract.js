@@ -120,17 +120,35 @@ function createScriptService(root, editor, options = {}) {
     }
     function compileEvidence(record, expectedSource, started) {
         const prefix = `temp/quick-scripts/src/assets/${record.scriptPath}`;
-        const sourceMap = safePath(root, `${prefix}.map`);
         const compiledFile = safePath(root, prefix);
         const destination = safePath(root, `temp/quick-scripts/dst/assets/${record.scriptPath}`);
-        if ([sourceMap, compiledFile, destination].some((f) => fs.statSync(f).size > 2 * 1024 * 1024)) return null;
+        if ([compiledFile, destination].some((f) => fs.statSync(f).size > 2 * 1024 * 1024)) return null;
+        const compiled = fs.readFileSync(compiledFile, 'utf8');
+        const output = fs.readFileSync(destination, 'utf8');
+        // Creator's incremental importer writes the destination's inline map while
+        // the separate map/stats can remain from a previous preview compilation.
+        const inlineMaps = [...output.matchAll(/\/\/# sourceMappingURL=data:application\/json[^,\r\n]*;base64,([A-Za-z0-9+/=]+)[ \t]*(?:\r?\n|$)/g)];
+        if (inlineMaps.length) {
+            if (inlineMaps.length !== 1 || fs.statSync(compiledFile).mtimeMs < started
+                || fs.statSync(destination).mtimeMs < started) return null;
+            const inline = JSON.parse(Buffer.from(inlineMaps[0][1], 'base64').toString('utf8'));
+            const index = Array.isArray(inline.sources) ? inline.sources.indexOf(`assets/${record.scriptPath}`) : -1;
+            if (inline.version !== 3 || index < 0 || !inline.sourcesContent
+                || inline.sourcesContent[index] !== expectedSource) return null;
+            new vm.Script(compiled); new vm.Script(output);
+            return { status: 'compiled', sourceSha256: sha(expectedSource), evidenceKind: 'destination-inline-source-map',
+                sourceMap: `temp/quick-scripts/dst/assets/${record.scriptPath}#inline`,
+                compiledSha256: sha(compiled), destinationSha256: sha(output), checkedAt: new Date().toISOString() };
+        }
+        const sourceMap = safePath(root, `${prefix}.map`);
+        if (fs.statSync(sourceMap).size > 2 * 1024 * 1024) return null;
         const map = JSON.parse(fs.readFileSync(sourceMap));
         const index = map.sources.indexOf(`assets/${record.scriptPath}`);
         if (index < 0 || !map.sourcesContent || map.sourcesContent[index] !== expectedSource || fs.statSync(sourceMap).mtimeMs < started) return null;
         const statsFile = safePath(root, 'temp/quick-scripts/dst/__file_stats__.json');
         const stats = JSON.parse(fs.readFileSync(statsFile));
         if (stats.stats[compiledFile] !== fs.statSync(compiledFile).mtime.toISOString()) return null;
-        new vm.Script(fs.readFileSync(compiledFile, 'utf8')); new vm.Script(fs.readFileSync(destination, 'utf8'));
+        new vm.Script(compiled); new vm.Script(output);
         return { status: 'compiled', sourceSha256: sha(expectedSource), sourceMap: `${prefix}.map`,
             compiledSha256: sha(fs.readFileSync(compiledFile)), destinationSha256: sha(fs.readFileSync(destination)),
             compilerStatsVersion: stats.version, checkedAt: new Date().toISOString() };

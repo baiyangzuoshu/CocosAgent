@@ -19,7 +19,7 @@
     }
   },
   "beforeSceneSha256": "fc6ea793eaa6727aaf48fb485640d2c904c022b6ee11e65c823fd3055f149d68",
-  "currentSceneSha256": "fc6ea793eaa6727aaf48fb485640d2c904c022b6ee11e65c823fd3055f149d68",
+  "currentSceneSha256": "414c5563d24778a815632f1c480bc8d243ceb978a311a56f26db49e28d96993a",
   "pngSha256": "f585e076137ea41bae73074065b30325d80feead2a82712d770c6f5ac4a7bb22",
   "attempts": [
     {
@@ -214,20 +214,21 @@
     "verified-task-skill-read",
     "verified-reference-read",
     "asset-search",
-    "canvas-inspect"
+    "canvas-inspect",
+    "native-approved-apply",
+    "save-disk-readback",
+    "independent-runtime-readback",
+    "native-resume-ledger-and-live-node-read"
   ],
   "pendingPhases": [
-    "accepted-plan-card",
-    "apply",
-    "save-disk-readback",
     "scene-reopen",
-    "runtime-preview",
+    "native-runtime-observation",
     "visual-acceptance",
     "compensate",
     "replay",
     "final-compensate"
   ],
-  "projectWritesPerformed": false,
+  "projectWritesPerformed": true,
   "localFix": {
     "file": "tools/cocos-agent-bridge/mcp/assistant-host.mjs",
     "cause": "Real read-only discovery exhausted the default 10 model rounds before producing the plan.",
@@ -246,16 +247,253 @@
       }
     },
     "runtimeFileUpdated": true,
-    "extensionReloadPending": true,
+    "extensionReloadPending": false,
     "tests": {
       "passed": 48,
-      "failed": 0
+      "failed": 0,
+      "evidenceScope": "Historical budget-fix tests; not rerun for this runtime installation"
     }
   },
   "limitations": [
-    "Scene write acceptance is not complete.",
-    "No harness or external Codex MCP call substitutes for native panel acceptance.",
-    "Creator UI became locked before the next native interaction.",
-    "Scene reopening is a separate real Creator action; ordinary node creation save/disk readback does not prove reopening."
-  ]
+    "Entire native PNG task is not complete.",
+    "Original apply and resumed read-only verification used the real native panel; external MCP query is supplemental only.",
+    "Existing runtime-preview receipt is independent browser structural evidence, not native-model visual acceptance.",
+    "Scene reopening remains pending and must be tested separately.",
+    "Mac lock interrupted UI acceptance; compensation/replay were not attempted.",
+    "Current scene includes later button fixtures; preserve those rather than restoring the early scene hash."
+  ],
+  "continuation": {
+    "scope": "Creator native panel; original operation is resumed, never reapplied",
+    "operationId": "b1d4c0e2-7f3a-4a91-9c58-2e6d10ab4f01",
+    "nodeUuid": "a608G6aX9MMb8CqUwqBqY4",
+    "projectWritesDuringContinuation": false,
+    "attempts": [
+      {
+        "traceFile": "2026-10-11T05-18-40-878Z-42f3a026.jsonl",
+        "runId": "ef7fc4e5-95e3-4fb8-bd14-4f1a5fb08bb9",
+        "stop": [
+          {
+            "status": "completed",
+            "reason": "model_final"
+          }
+        ],
+        "toolResults": [
+          {
+            "name": "cocos_2x_instances_list",
+            "success": true,
+            "instances": [
+              {
+                "instanceId": "d782dcd0-1a34-41a6-8b35-8664573db0f0",
+                "creatorVersion": "2.4.15",
+                "extensionVersion": "0.3.1",
+                "state": "ready",
+                "activeScene": "helloworld",
+                "mcpVersion": "0.3.0",
+                "skillPackageVersion": "0.3.1",
+                "contractCompatibility": {
+                  "status": "matched",
+                  "blockers": [],
+                  "editorContractStatus": "matched",
+                  "hostContractStatus": "matched"
+                },
+                "error": null
+              }
+            ]
+          },
+          {
+            "name": "cocos_2x_capabilities_list",
+            "success": true
+          },
+          {
+            "name": "cocos_2x_command_execute",
+            "success": true,
+            "outcome": "completed",
+            "operationId": "b1d4c0e2-7f3a-4a91-9c58-2e6d10ab4f01",
+            "command": "scene.node.create",
+            "phases": {
+              "capability": "passed",
+              "preflight": "passed",
+              "editor": "passed",
+              "disk": "passed",
+              "preview": "passed",
+              "recovery": "pending"
+            },
+            "error": null
+          },
+          {
+            "name": "cocos_2x_operation_get",
+            "success": true,
+            "outcome": "completed",
+            "operationId": "b1d4c0e2-7f3a-4a91-9c58-2e6d10ab4f01",
+            "command": "scene.node.create",
+            "phases": {
+              "capability": "passed",
+              "preflight": "passed",
+              "editor": "passed",
+              "disk": "passed",
+              "preview": "passed",
+              "recovery": "pending"
+            },
+            "error": null
+          }
+        ]
+      },
+      {
+        "traceFile": "2026-10-11T09-54-08-654Z-679aef1b.jsonl",
+        "runId": "161937c2-3b9f-462a-83aa-4b42177e2ce8",
+        "stop": [
+          {
+            "status": "completed",
+            "reason": "model_final"
+          }
+        ],
+        "toolResults": [
+          {
+            "name": "cocos_2x_instances_list",
+            "success": true,
+            "instances": [
+              {
+                "instanceId": "90c688bd-795b-4fad-9e97-6c14f2cf452e",
+                "creatorVersion": "2.4.15",
+                "extensionVersion": null,
+                "state": "unavailable",
+                "activeScene": null,
+                "mcpVersion": "0.3.0",
+                "skillPackageVersion": "0.3.1",
+                "contractCompatibility": null,
+                "error": "CAPABILITY_CATALOG_INVALID"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "traceFile": "2026-10-11T09-57-06-569Z-78e3360d.jsonl",
+        "runId": "20ffe8f4-0ea8-43e2-8d5f-1cdafbbca43f",
+        "stop": [
+          {
+            "status": "completed",
+            "reason": "model_final"
+          }
+        ],
+        "toolResults": [
+          {
+            "name": "cocos_2x_instances_list",
+            "success": true,
+            "instances": [
+              {
+                "instanceId": "1e94d997-81d0-4775-a51f-5637ebff95ad",
+                "creatorVersion": "2.4.15",
+                "extensionVersion": "0.3.4",
+                "state": "ready",
+                "activeScene": "helloworld",
+                "activeSceneUuid": "2d2f792f-a40c-49bb-a189-ed176a246e49",
+                "mcpVersion": "0.3.3",
+                "skillPackageVersion": "0.3.2",
+                "contractCompatibility": {
+                  "status": "matched",
+                  "blockers": [],
+                  "editorContractStatus": "matched",
+                  "hostContractStatus": "matched"
+                },
+                "error": null
+              }
+            ]
+          },
+          {
+            "name": "cocos_2x_capabilities_list",
+            "success": true
+          },
+          {
+            "name": "cocos_2x_operation_get",
+            "success": true,
+            "outcome": "completed",
+            "operationId": "b1d4c0e2-7f3a-4a91-9c58-2e6d10ab4f01",
+            "command": "scene.node.create",
+            "phases": {
+              "capability": "passed",
+              "preflight": "passed",
+              "editor": "passed",
+              "disk": "passed",
+              "preview": "passed",
+              "recovery": "pending"
+            },
+            "error": null
+          },
+          {
+            "name": "cocos_2x_scene_snapshot",
+            "success": false,
+            "outcome": "failed",
+            "operationId": null,
+            "command": "scene.snapshot",
+            "phases": null,
+            "error": {
+              "code": "INVALID_ARGUMENT",
+              "message": "Provide valid input for the selected command and Creator version.",
+              "phase": "selection",
+              "retryable": false,
+              "sideEffect": "none"
+            }
+          },
+          {
+            "name": "cocos_2x_scene_snapshot",
+            "success": true,
+            "outcome": "completed",
+            "operationId": null,
+            "command": "scene.snapshot",
+            "phases": null,
+            "error": null
+          },
+          {
+            "name": "cocos_2x_scene_node_inspect",
+            "success": true,
+            "outcome": "completed",
+            "operationId": null,
+            "command": "scene.node.inspect",
+            "phases": null,
+            "error": null,
+            "node": {
+              "status": "found",
+              "path": "helloworld/Canvas/NativePanelBlue1011",
+              "uuid": "a608G6aX9MMb8CqUwqBqY4",
+              "name": "NativePanelBlue1011",
+              "active": true,
+              "childCount": 0,
+              "components": [
+                "cc.Sprite"
+              ],
+              "componentDetails": [
+                {
+                  "classId": "cc.Sprite",
+                  "enabled": true,
+                  "spriteFrameUuid": "83db07f9-8830-49c2-a1b6-140db2079183"
+                }
+              ],
+              "transform": {
+                "position": {
+                  "x": 220,
+                  "y": 100
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1
+                }
+              },
+              "prefabUuid": null
+            }
+          }
+        ]
+      }
+    ],
+    "runtimeUpdate": {
+      "previousMcpVersion": "0.3.0",
+      "previousSkillPackageVersion": "0.3.1",
+      "installedMcpVersion": "0.3.3",
+      "installedSkillPackageVersion": "0.3.2",
+      "extensionVersion": "0.3.4",
+      "backupLocation": "/tmp/cocos-native-png-runtime-before-20261011-0958",
+      "reload": "Creator Package Manager cocos-agent-bridge Reload; native Ask confirms matched"
+    },
+    "blocker": "CUA explicitly reported Mac locked after the original record/live-node verification; scene reopening and recovery UI steps have not been executed"
+  }
 }

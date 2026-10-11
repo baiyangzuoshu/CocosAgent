@@ -115,4 +115,12 @@ Plan 会输出带版本号的结构化步骤卡，字段包含说明、前置条
 
 唯一实例中的真实模型已读取 `cocos2-mcp-tools@0.3.1` 和声明的 MCP 合同引用，并通过 PNG 搜索、场景快照和精确 Canvas 读回。模型将同名 PNG 搜索缩小至 `resources/BlueReleaseOct09` 后取得唯一有效结果；Canvas 使用快照返回的 `helloworld/Canvas` 路径。该轮默认 10 次模型调用在最终计划输出前耗尽，未生成可执行计划卡，也未写入场景。原生服务现明确使用 Ask 16 轮/14 工具调用、Plan 与 Agent 20 轮/18 工具调用的有界预算，保留每项写入审批。更新文件已同步到开发扩展内部 runtime，但锁屏导致扩展重载与下一轮实机验收仍待完成；自动测试 48/48 通过。
 
-**此任务尚未完成：** apply、保存磁盘读回、场景重开、运行态与视觉预览、补偿、重放和最终清理均没有本轮运行证据。普通节点创建的保存读回不能当作场景重开证据。本轮场景 SHA-256 仍为验收前 `fc6ea793eaa6727aaf48fb485640d2c904c022b6ee11e65c823fd3055f149d68`，现有演示节点保留。限量轨迹摘要见 [原生 PNG 任务验收记录](traces/cocos-agent-native-png-write-2.4-20261011.json)。
+**后续证据校正：** 原生面板后来完成计划步骤执行和批准写入，操作 `b1d4c0e2-7f3a-4a91-9c58-2e6d10ab4f01` 的编辑器与磁盘读回通过，创建节点 UUID 为 `a608G6aX9MMb8CqUwqBqY4`。原生运行轨迹 `2026-10-11T05-18-40-878Z-42f3a026.jsonl` 包含实例、能力、批准后的 `scene.node.create` 与 `operation.get`。账本另有 05:20 UTC 的独立浏览器运行态读回：节点、SpriteFrame UUID、位置与缩放一致；这不是原生模型观察截图或视觉批准证据，也不证明场景重开。
+
+09:54 UTC 再从原生面板续验时，发现扩展主程序为 0.3.4，但其内部运行包仍为 MCP 0.3.0 / skills 0.3.1，能力查询返回 `CAPABILITY_CATALOG_INVALID`，模型安全停止。保留旧 runtime 至 `/tmp/cocos-native-png-runtime-before-20261011-0958` 后，用当前打包器生成并替换研究工程的内部 runtime，再通过 Creator Package Manager 重载本扩展。09:57 UTC 原生 Ask 确认 extension 0.3.4 / MCP 0.3.3 / skills 0.3.2、合同 `matched`，并实际读取原操作、场景快照和精确节点；模型首次给快照传入不支持的 `targetNodeName` 被只读参数校验拒绝，随后用空输入成功读回，没有执行任何写入。
+
+**整条任务仍未完成：** 场景重开、视觉验收、原生补偿、新 ID 重放及最终补偿尚缺证据。续验前场景 SHA-256 为 `414c5563d24778a815632f1c480bc8d243ceb978a311a56f26db49e28d96993a`，其中还包含已有按钮夹具；不得为恢复早期 SHA 而覆盖后来内容。桌面接口随后明确报告 Mac 锁屏，故尚未继续这些 UI 步骤。下一次必须沿原操作账本续验，禁止重复 apply。限量轨迹摘要见 [原生 PNG 任务验收记录](traces/cocos-agent-native-png-write-2.4-20261011.json)。
+
+## 2026-10-11 原生按钮脚本续验
+
+原生面板已完成真实 DeepSeek Flash skill 读取、精确差异批准、脚本 apply、原账本 reconcile 和 compensate；Creator 增量编译使用目的产物内联 source map，独立 map/stats 留旧缓存导致初次超时，严格校验修复重载后同 ID 对账通过。临时按钮位置独立记录并补偿，脚本/meta/场景均恢复本轮基线，原 PNG 节点保留。实际鼠标点击与画面/Console 的计数 1、2，以及脚本恢复后不再计数由 CUA 可见本地预览验证。原生 runtime_observe 只证明初始运行，其独立临时页面未观察点击后状态。新 ID 原生重放和真实错误修复待做；前述旧版本只读/分发状态为历史记录。见[脚本合同与验收](cocos-agent-script-development-0.1.md)。

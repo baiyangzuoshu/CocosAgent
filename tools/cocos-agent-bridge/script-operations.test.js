@@ -11,11 +11,23 @@ function setup(t, behavior = 'compile') {
     fs.writeFileSync(path.join(root, 'assets/Script/Test.js.meta'), JSON.stringify({ importer: 'javascript', uuid }));
     const editor = { assetdb: { urlToUuid: () => uuid, refresh(url, callback) {
         if (behavior === 'error') { callback(new Error('Injected import error')); return; }
-        if (behavior !== 'compile') { callback(null); return; }
+        if (behavior !== 'compile' && !behavior.startsWith('inline')) { callback(null); return; }
         setTimeout(() => {
             const src = path.join(root, 'temp/quick-scripts/src/assets/Script/Test.js'); const dst = path.join(root, 'temp/quick-scripts/dst/assets/Script/Test.js');
             fs.mkdirSync(path.dirname(src), { recursive: true }); fs.mkdirSync(path.dirname(dst), { recursive: true });
             const source = fs.readFileSync(path.join(root, 'assets/Script/Test.js'), 'utf8');
+            if (behavior.startsWith('inline')) {
+                fs.writeFileSync(src, source);
+                const map = { version: 3, sources: [behavior === 'inline-wrong-path' ? 'assets/Other.js' : 'assets/Script/Test.js'],
+                    sourcesContent: [behavior === 'inline-wrong-source' ? 'var count = 0;\n' : source] };
+                const output = `${behavior === 'inline-invalid-code' ? 'var count = ;' : source}\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,${Buffer.from(JSON.stringify(map)).toString('base64')}\n`;
+                fs.writeFileSync(dst, output);
+                // Stale side files reproduce the real incremental import path.
+                fs.writeFileSync(`${src}.map`, JSON.stringify({ sources: ['assets/Script/Test.js'], sourcesContent: ['var count = 0;\n'] }));
+                fs.writeFileSync(path.join(root, 'temp/quick-scripts/dst/__file_stats__.json'), JSON.stringify({ version: 'old', stats: {} }));
+                if (behavior === 'inline-stale') fs.utimesSync(dst, new Date(0), new Date(0));
+                callback(null); return;
+            }
             fs.writeFileSync(src, source); fs.writeFileSync(`${src}.map`, JSON.stringify({ sources: ['assets/Script/Test.js'], sourcesContent: [source] }));
             fs.writeFileSync(dst, source);
             fs.writeFileSync(path.join(root, 'temp/quick-scripts/dst/__file_stats__.json'), JSON.stringify({ version: 'fixture', stats: { [src]: fs.statSync(src).mtime.toISOString() } }));
@@ -71,3 +83,21 @@ test('known import error reports confirmed source side effect and a recoverable 
     assert.equal(result.record.state, 'compile-failed'); assert.equal(result.error.code, 'SCRIPT_IMPORT_FAILED');
     assert.equal(result.error.sideEffect, 'confirmed'); assert.equal(result.current.matchesAfter, true);
 });
+
+test('incremental destination inline map verifies exact source despite stale side map/stats, including restore', async (t) => {
+    const { service, identity } = setup(t, 'inline'); const operationId = crypto.randomUUID();
+    const result = await service.execute('script.patch', { ...identity, action: 'apply', operationId });
+    assert.equal(result.outcome, 'needs-runtime');
+    assert.equal(result.record.compilation.evidenceKind, 'destination-inline-source-map');
+    const restored = await service.execute('script.patch', { action: 'compensate', operationId });
+    assert.equal(restored.record.state, 'compensated'); assert.equal(restored.current.matchesBefore, true);
+});
+
+for (const behavior of ['inline-wrong-source', 'inline-wrong-path', 'inline-stale', 'inline-invalid-code']) {
+    test(`${behavior} cannot satisfy compilation or fall back to stale side files`, async (t) => {
+        const { service, identity } = setup(t, behavior);
+        const result = await service.execute('script.patch', { ...identity, action: 'apply', operationId: crypto.randomUUID() });
+        assert.equal(result.outcome, 'needs-review'); assert.equal(result.error.code, 'SCRIPT_COMPILE_TIMEOUT');
+        assert.equal(result.current.matchesAfter, true);
+    });
+}
