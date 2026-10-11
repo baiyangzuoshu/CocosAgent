@@ -53,7 +53,8 @@ for (const mode of ['Ask', 'Plan']) {
         try {
             await withMcp(value.projects, async () => { throw new Error('Unexpected host call'); }, async (client) => {
                 const catalog = (await client.listTools()).tools;
-                const readonly = new Set(catalog.filter((tool) => tool.annotations?.readOnlyHint === true).map((tool) => tool.name));
+                const readonly = new Set([...catalog.filter((tool) => tool.annotations?.readOnlyHint === true).map((tool) => tool.name),
+                    'cocos_2x_skills_list', 'cocos_2x_skill_read', 'cocos_2x_skill_reference_read']);
                 const result = await runDeepSeekAgent({ client, mode, task: 'Explain the modes.',
                     projectRoots: value.projects, skillFiles: [DEFAULT_SKILL], tracePath: value.tracePath, apiKey: 'test-secret',
                     history: [{ role: 'user', content: 'Previous question' }, { role: 'assistant', content: 'Previous answer' }],
@@ -79,6 +80,91 @@ for (const mode of ['Ask', 'Plan']) {
         } finally { fs.rmSync(value.parent, { recursive: true, force: true }); }
     });
 }
+
+test('Creator Agent reads the selected skill and its declared reference on demand and traces verified hashes', async () => {
+    const value = fixture();
+    const hostMethods = [];
+    const agentEvents = [];
+    let round = 0;
+    const skillName = 'cocos2-scene-composition';
+    const referenceId = 'agent-foundation/scene-composition-0.1.md';
+    try {
+        await withMcp([value.projects[0]], async (request) => {
+            hostMethods.push(request.method);
+            if (request.method === 'instances.list') return { id: request.id, result: { success: true, data: [
+                { projectRoot: value.projects[0], creatorVersion: '2.4.15', state: 'ready', activeScene: 'helloworld' },
+            ] } };
+            if (request.method === 'capabilities.list') return { id: request.id, result: { success: true, data: {
+                instance: { projectRoot: value.projects[0], creatorVersion: '2.4.15', state: 'ready', activeScene: 'helloworld' },
+                commands: [{ id: 'scene.snapshot', access: 'read', status: 'available' }],
+            } } };
+            if (request.method === 'command.execute') {
+                assert.equal(request.params.command, 'scene.snapshot');
+                return { id: request.id, result: { success: true, outcome: 'completed', command: 'scene.snapshot',
+                    data: { sceneName: 'helloworld', nodeCount: 3 } } };
+            }
+            throw new Error(`Unexpected host method ${request.method}`);
+        }, async (client) => {
+            const result = await runDeepSeekAgent({ client, mode: 'Ask', task: 'Inspect the scene composition workflow and current scene.',
+                projectRoots: [value.projects[0]], skillFiles: [DEFAULT_SKILL], tracePath: value.tracePath, apiKey: 'test-secret',
+                onEvent: (event) => agentEvents.push(event),
+                callModel: async ({ messages, tools }) => {
+                    round += 1;
+                    if (round === 1) {
+                        assert.deepEqual(tools.map((tool) => tool.function.name), ['cocos_2x_instances_list']);
+                        return modelToolResponse(toolCall('instances', 'cocos_2x_instances_list', {}));
+                    }
+                    if (round === 2) return modelToolResponse(toolCall('capabilities', 'cocos_2x_capabilities_list', { projectRoot: value.projects[0] }));
+                    if (round === 3) {
+                        const names = tools.map((tool) => tool.function.name);
+                        assert.ok(names.includes('cocos_2x_skills_list'));
+                        assert.ok(names.includes('cocos_2x_skill_read'));
+                        assert.ok(names.includes('cocos_2x_skill_reference_read'));
+                        assert.match(messages[0].content, /cocos2-scene-composition/);
+                        return modelToolResponse(toolCall('skills', 'cocos_2x_skills_list', {}));
+                    }
+                    if (round === 4) {
+                        const listed = JSON.parse(messages.at(-1).content).structuredContent;
+                        const entry = listed.data.skills.find((skill) => skill.name === skillName);
+                        assert.match(entry.sha256, /^[a-f0-9]{64}$/);
+                        assert.ok(entry.references.some((reference) => reference.id === referenceId));
+                        return modelToolResponse(toolCall('skill', 'cocos_2x_skill_read', { name: skillName }));
+                    }
+                    if (round === 5) {
+                        const read = JSON.parse(messages.at(-1).content).structuredContent;
+                        assert.equal(read.skillName, skillName);
+                        assert.match(read.sha256, /^[a-f0-9]{64}$/);
+                        assert.match(read.content, /cocos_2x_workflow_plan/);
+                        return modelToolResponse(toolCall('reference', 'cocos_2x_skill_reference_read', { skillName, referenceId }));
+                    }
+                    if (round === 6) {
+                        const read = JSON.parse(messages.at(-1).content).structuredContent;
+                        assert.equal(read.referenceId, referenceId);
+                        assert.match(read.sha256, /^[a-f0-9]{64}$/);
+                        assert.match(read.content, /Creator 2\.4\.15/);
+                        return modelToolResponse(toolCall('snapshot', 'cocos_2x_scene_snapshot', { projectRoot: value.projects[0], input: {} }));
+                    }
+                    assert.match(messages.at(-1).content, /nodeCount/);
+                    return { choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: 'The scene snapshot was read after loading the matching workflow skill and reference.' } }] };
+                },
+            });
+            assert.equal(result.status, 'completed', JSON.stringify({ result, round, hostMethods,
+                modelFailures: agentEvents.filter((event) => event.type === 'model.failed') }));
+            assert.equal(result.toolCalls, 6);
+            assert.deepEqual(hostMethods, ['instances.list', 'capabilities.list', 'command.execute']);
+        });
+        const traceText = fs.readFileSync(value.tracePath, 'utf8');
+        const events = readTrace(value.tracePath);
+        assert.ok(events.some((event) => event.event === 'skills.catalog.loaded' && event.packageVersion === '0.3.1'
+            && /^[a-f0-9]{64}$/.test(event.skillsIndexSha256)));
+        assert.ok(events.some((event) => event.event === 'skill.read' && event.source === 'model-requested'
+            && event.skillName === skillName && /^[a-f0-9]{64}$/.test(event.sha256)));
+        assert.ok(events.some((event) => event.event === 'skill.reference.read' && event.referenceId === referenceId
+            && /^[a-f0-9]{64}$/.test(event.sha256)));
+        assert.equal(traceText.includes('The Creator 2.4.15 multi-step scene composition'), false,
+            'skill bodies remain in the model context and are not duplicated into the local run trace');
+    } finally { fs.rmSync(value.parent, { recursive: true, force: true }); }
+});
 
 test('Plan mode corrects a final answer until this run has fresh setup receipts', async () => {
     const value = fixture();
@@ -293,6 +379,60 @@ test('DeepSeek agent discovers instances, selects a ready project, queries live 
         if (process.platform !== 'win32') assert.equal(fs.statSync(value.tracePath).mode & 0o777, 0o600);
         else assert.ok(fs.statSync(value.tracePath).mode & 0o200);
         assert.doesNotMatch(fs.readFileSync(value.tracePath, 'utf8'), /test-secret-value/);
+    } finally { fs.rmSync(value.parent, { recursive: true, force: true }); }
+});
+
+test('DeepSeek agent accepts a sanitized project alias while validating canonical instance identity', async () => {
+    const value = fixture();
+    const projectRoot = value.projects[0];
+    const projectAlias = path.join(value.parent, 'registered-project');
+    fs.symlinkSync(projectRoot, projectAlias, 'dir');
+    const toolCalls = [];
+    const modelRequests = [];
+    const invokeAgent = async (request) => {
+        toolCalls.push(request);
+        if (request.method === 'instances.list') return { id: request.id, result: { success: true, data: [
+            { projectRoot, creatorVersion: '2.4.15', state: 'ready', activeScene: 'LinkUp' },
+        ] } };
+        if (request.method === 'capabilities.list') return { id: request.id, result: { success: true, data: {
+            instance: { projectRoot, creatorVersion: '2.4.15', state: 'ready', activeScene: 'LinkUp' },
+            commands: [{ id: 'scene.snapshot', contractVersion: '0.1', access: 'read', status: 'available' }],
+        } } };
+        if (request.method === 'command.execute') return { id: request.id, result: { success: true, outcome: 'completed',
+            command: 'scene.snapshot', data: { sceneName: 'LinkUp', selectedNodes: [] } } };
+        throw new Error(`Unexpected host method ${request.method}`);
+    };
+    const replaceProjectRoot = (valueToReplace) => {
+        if (typeof valueToReplace === 'string') return valueToReplace.split(projectRoot).join(projectAlias);
+        if (Array.isArray(valueToReplace)) return valueToReplace.map(replaceProjectRoot);
+        if (!valueToReplace || typeof valueToReplace !== 'object') return valueToReplace;
+        return Object.fromEntries(Object.entries(valueToReplace).map(([key, item]) => [key, replaceProjectRoot(item)]));
+    };
+    try {
+        const result = await withMcp([projectRoot], invokeAgent, async (client) => runDeepSeekAgent({
+            client: {
+                listTools: async () => replaceProjectRoot(await client.listTools()),
+                readResource: async (request) => replaceProjectRoot(await client.readResource(request)),
+                callTool: async (request) => replaceProjectRoot(await client.callTool(request)),
+            },
+            task: 'Read the active scene from the registered project alias.', projectRoots: [projectRoot],
+            skillFiles: [DEFAULT_SKILL], tracePath: value.tracePath, apiKey: 'test-secret',
+            callModel: async (request) => {
+                modelRequests.push(request);
+                const serialized = JSON.stringify(request);
+                assert.equal(serialized.includes(projectRoot), false);
+                if (modelRequests.length === 1) return modelToolResponse(toolCall('instances', 'cocos_2x_instances_list', {}));
+                if (modelRequests.length === 2) return modelToolResponse(toolCall('capabilities', 'cocos_2x_capabilities_list', { projectRoot: projectAlias }));
+                if (modelRequests.length === 3) return modelToolResponse(toolCall('snapshot', 'cocos_2x_scene_snapshot', { projectRoot: projectAlias, input: {} }));
+                assert.match(modelRequests.at(-1).messages.at(-1).content, /LinkUp/);
+                return { choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: 'Active scene: LinkUp. No object is selected.' } }] };
+            },
+        }));
+        assert.equal(result.status, 'completed', JSON.stringify(result));
+        assert.deepEqual(toolCalls.map((call) => call.method), ['instances.list', 'capabilities.list', 'command.execute']);
+        assert.equal(toolCalls[1].params.projectRoot, projectRoot);
+        assert.equal(toolCalls[2].params.projectRoot, projectRoot);
+        assert.equal(result.finalText, 'Active scene: LinkUp. No object is selected.');
     } finally { fs.rmSync(value.parent, { recursive: true, force: true }); }
 });
 

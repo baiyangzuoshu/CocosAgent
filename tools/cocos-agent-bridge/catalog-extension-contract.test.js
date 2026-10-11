@@ -12,7 +12,7 @@ function loadCatalog(relativePath) {
     const localRequire = (name) => name === 'ws' ? {} : name.startsWith('./')
         ? require(path.resolve(path.dirname(filename), name)) : require(name);
     const source = `${fs.readFileSync(filename, 'utf8')}\nmodule.exports.testCatalog = commandCatalog;`;
-    new Function('require', 'module', 'exports', '__dirname', source)(localRequire, module, module.exports, path.dirname(filename));
+    new Function('require', 'module', 'exports', '__dirname', 'Editor', source)(localRequire, module, module.exports, path.dirname(filename), {});
     return module.exports.testCatalog;
 }
 
@@ -21,13 +21,19 @@ const catalog3 = loadCatalog('3.8,7NewProject/extensions/cocos-agent-bridge/dist
 for (const [version, catalog] of [['2.4.15', catalog2], ['3.8.7', catalog3]]) {
     const commands = catalog({ sceneName: 'example', hasCanvas: true, assetDbReady: true, prefabSourcePatchApiReady: true });
     const expectedIds = ['scene.snapshot', 'scene.node.inspect', ...(version === '2.4.15' ? ['asset.searchPng'] : []), 'asset.importPng', ...(version === '2.4.15' ? ['asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder'] : []), 'scene.pngSprite', 'scene.node.create', ...(version === '2.4.15' ? ['scene.node.patch', 'prefab.source.patch', 'prefab.source.inspect', 'content.stress.run'] : [])];
-    assert.deepStrictEqual(commands.map((item) => item.id), expectedIds);
+    assert.deepStrictEqual(commands.map((item) => item.id), [...(version === '2.4.15' ? ['script.read', 'script.patch.plan', 'script.patch', 'script.operation.get'] : []), ...expectedIds]);
     assert.ok(commands.every((item) => item.contractVersion === (item.id === 'content.stress.run' ? '0.2' : '0.1')));
-    assert.deepStrictEqual(commands.map((item) => item.access), ['read', 'read', ...(version === '2.4.15' ? ['read'] : []), 'write', ...(version === '2.4.15' ? ['write', 'read', 'write', 'write'] : []), 'write', 'write', ...(version === '2.4.15' ? ['write', 'write', 'read', 'read'] : [])]);
-    assert.ok(isDeepStrictEqual(commands[0].input, inputs.snapshotInput));
-    assert.ok(isDeepStrictEqual(commands[1].input, inputs.nodeInspectInput));
+    assert.deepStrictEqual(commands.map((item) => item.access), [...(version === '2.4.15' ? ['read', 'read', 'write', 'read'] : []), 'read', 'read', ...(version === '2.4.15' ? ['read'] : []), 'write', ...(version === '2.4.15' ? ['write', 'read', 'write', 'write'] : []), 'write', 'write', ...(version === '2.4.15' ? ['write', 'write', 'read', 'read'] : [])]);
+    assert.ok(isDeepStrictEqual(commands.find((item) => item.id === 'scene.snapshot').input, inputs.snapshotInput));
+    assert.ok(isDeepStrictEqual(commands.find((item) => item.id === 'scene.node.inspect').input, inputs.nodeInspectInput));
     assert.ok(isDeepStrictEqual(commands.find((item) => item.id === 'asset.importPng').input, inputs.importPngInput));
     if (version === '2.4.15') {
+        for (const [id, definition] of [['script.read', 'scriptReadInput2x'], ['script.patch.plan', 'scriptPatchPlanInput2x'], ['script.patch', 'scriptPatchInput2x'], ['script.operation.get', 'scriptOperationGetInput2x']]) {
+            const item = commands.find((candidate) => candidate.id === id);
+            assert.ok(isDeepStrictEqual(item.input, inputs[definition]), id);
+            assert.equal(item.status, 'available');
+            assert.equal(catalog({ assetDbReady: false }).find((candidate) => candidate.id === id).reason, 'ASSETDB_UNAVAILABLE');
+        }
         const search = commands.find((item) => item.id === 'asset.searchPng');
         assert.ok(isDeepStrictEqual(search.input, inputs.pngAssetSearchInput));
         assert.deepStrictEqual(search.preconditions, ['assetDbReady']);

@@ -8,7 +8,8 @@ const operationStore = require('./operation-store');
 const operationReconcile = require('./operation-reconcile');
 const scenePatchContract = require('./scene-patch-contract');
 
-const commands = new Set(['scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.pngSprite', 'scene.node.create', 'scene.node.patch', 'prefab.source.patch', 'prefab.source.inspect', 'content.stress.run']);
+const scriptContract = require('./script-contract');
+const commands = new Set([...Object.keys(scriptContract.inputs), 'scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.pngSprite', 'scene.node.create', 'scene.node.patch', 'prefab.source.patch', 'prefab.source.inspect', 'content.stress.run']);
 const versions = new Set(['2.4.15', '3.8.7']);
 
 function dispatchError(code, message, phase = 'selection', sideEffect = 'none', retryable = false) {
@@ -95,6 +96,7 @@ function existingAssetFolder(projectRoot, folderPath) {
 function validInput(command, input, creatorVersion) {
     if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
     const keys = Object.keys(input);
+    if (command.startsWith('script.')) return creatorVersion === '2.4.15' && scriptContract.validInput(command, input);
     if (command === 'scene.snapshot') return keys.length === 0;
     if (command === 'scene.node.inspect') return keys.length === 1 && typeof input.nodePath === 'string'
         && input.nodePath.length > 0 && input.nodePath.length <= 240 && !input.nodePath.includes('\\') && !input.nodePath.includes('//');
@@ -227,6 +229,7 @@ function dispatchCommand(request, invoke) {
     const executionArgs = ['--project', project, '--creator-version', creatorVersion, '--expected-instance-id', selected.instanceId];
     if (selected.activeScene && !['asset.searchPng', 'asset.refreshFolder'].includes(command)) executionArgs.push('--expected-scene', selected.activeScene);
     let operationId = null;
+    if (command.startsWith('script.')) executionArgs.push('--command', command, '--input', JSON.stringify(input));
     if (command === 'asset.importPng') executionArgs.push('--png', path.resolve(input.sourcePath));
     if (command === 'asset.removeImportedPng') executionArgs.push('--asset-remove', input.assetName,
         '--texture-uuid', input.textureUuid, '--sprite-frame-uuid', input.spriteFrameUuid, '--source-sha256', input.sha256);
@@ -270,7 +273,7 @@ function dispatchCommand(request, invoke) {
     if (command === 'content.stress.run') executionArgs.push('--input', JSON.stringify(input));
     const patchOperation = command === 'scene.node.patch';
     const prefabSourcePatch = command === 'prefab.source.patch';
-    const hostScript = command === 'scene.node.create' ? 'node-create-host.js'
+    const hostScript = command.startsWith('script.') ? 'script-host.js' : command === 'scene.node.create' ? 'node-create-host.js'
         : patchOperation ? 'scene-node-patch-host.js' : prefabSourcePatch ? 'prefab-source-patch-host.js'
             : command === 'prefab.source.inspect' ? 'prefab-source-inspect-host.js'
                 : command === 'content.stress.run' ? 'content-stress-host.js' : 'bridge-host.js';
@@ -279,6 +282,8 @@ function dispatchCommand(request, invoke) {
     if (!operationId) {
         if (execution.status !== 0) return problem('EXECUTION_FAILED', 'Command execution failed.', { ...base, stderr: execution.stderr.trim() }, 'execution', capability.access === 'read' ? 'none' : 'possible');
         const result = parseCommandResult(execution.stdout, command);
+        if (result && command.startsWith('script.')) return { success: result.success !== false, outcome: result.outcome || 'completed', ...base,
+            ...(result.operationId ? { operationId: result.operationId } : {}), ...(result.error ? { error: result.error } : {}), result };
         return result ? { success: true, outcome: 'completed', ...base, result }
             : problem('RESULT_MISSING', 'Command finished without a structured result.', base, 'execution', capability.access === 'read' ? 'none' : 'possible');
     }

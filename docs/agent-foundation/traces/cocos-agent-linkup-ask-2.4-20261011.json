@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "evidenceType": "sanitized-run-summary",
+  "recordedAt": "2026-10-11",
+  "runner": {
+    "mode": "Ask",
+    "provider": "DeepSeek",
+    "model": "deepseek-flash",
+    "status": "completed",
+    "reason": "model_final",
+    "entryPoint": "read-only acceptance harness using the independent Creator extension MCP stdio runtime",
+    "creatorPanelInitiated": false
+  },
+  "project": {
+    "displayName": "LinkUpClient",
+    "creatorVersion": "2.4.15",
+    "extensionVersion": "0.3.1",
+    "rootSentToModel": "sanitized temporary alias preserving the project name",
+    "actualProjectRootSentToModel": false,
+    "sanitizedAliasSentToModel": true,
+    "activeScene": "LinkUp",
+    "selectionStatus": "read",
+    "selectedNodeCount": 0,
+    "sceneNodeCount": 9,
+    "sceneSnapshotTruncated": false
+  },
+  "toolCalls": [
+    { "name": "cocos_2x_instances_list", "access": "read", "isError": false },
+    { "name": "cocos_2x_skills_list", "access": "read", "isError": false },
+    { "name": "cocos_2x_skill_read", "access": "read", "isError": false },
+    { "name": "cocos_2x_capabilities_list", "access": "read", "isError": false },
+    { "name": "cocos_2x_scene_snapshot", "access": "read", "isError": false }
+  ],
+  "skillRead": {
+    "skillName": "cocos2-mcp-tools",
+    "packageName": "cocos-agent-2x",
+    "packageVersion": "0.3.1",
+    "packageSourceFingerprint": "a0145f1a4911a9102caafcf27277d68a94e4ad5c1ed3e247ead882a61090c11b",
+    "uri": "cocos://2x/agent/mcp-tools",
+    "sha256": "8807a5d5e525e110a72909c0acfab1963521315be2f4a000c741f86ef9aa78ff",
+    "referenceIdsRead": []
+  },
+  "projectInstructions": {
+    "file": "AGENTS.md",
+    "found": true,
+    "sha256": "ae984519b3f1a808dad20546311c11701a031b1ce749f741f2a117a6aefa6f14",
+    "byteLength": 8140,
+    "bodySharedWithModel": false
+  },
+  "sideEffects": {
+    "writeToolsCalled": 0,
+    "sceneOrProjectWrites": 0,
+    "apiKeyInPromptToolArgsOrTrace": false,
+    "apiKeyUsedInProviderAuthorization": true
+  },
+  "limitations": [
+    "The Agent dispatcher was called by a harness; this is not a Creator-panel-initiated Ask trace.",
+    "The project instructions body was read locally for digest verification but was not supplied to the model.",
+    "The installed project had no verified previous extension version, so an in-place upgrade path remains untested.",
+    "The live selection was empty; synchronization of a non-empty Creator selection remains untested."
+  ]
+}

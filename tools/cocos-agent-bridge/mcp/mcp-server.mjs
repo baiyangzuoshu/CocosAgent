@@ -18,6 +18,7 @@ const COMMANDS_2X = [
     'scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng',
     'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.pngSprite', 'scene.node.create', 'scene.node.patch',
     'prefab.source.patch', 'prefab.source.inspect', 'content.stress.run',
+    'script.read', 'script.patch.plan', 'script.patch', 'script.operation.get',
 ];
 const CONTENT_BUILD_ID = z.string().regex(/^[a-z0-9][a-z0-9-]{2,31}$/);
 const RELEASE_ID = z.string().regex(/^(?!(selected|effective)$)[a-z0-9][a-z0-9._-]{0,63}$/);
@@ -56,6 +57,33 @@ function packageFile(relativePath) {
     return { target, bytes, sha256: hashBytes(bytes) };
 }
 
+function readProjectInstructions(projectRoot) {
+    const root = fs.realpathSync(projectRoot);
+    const filename = path.join(root, 'AGENTS.md');
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) {
+        if (error?.code === 'ENOENT') return { success: true, found: false, projectRoot: root, file: 'AGENTS.md' };
+        return { success: false, projectRoot: root, error: { code: 'PROJECT_INSTRUCTIONS_STAT_FAILED' } };
+    }
+    if (!stat.isFile() || stat.isSymbolicLink()) {
+        return { success: false, projectRoot: root, error: { code: 'PROJECT_INSTRUCTIONS_NOT_REGULAR_FILE' } };
+    }
+    if (stat.size > 32768) {
+        return { success: false, projectRoot: root, error: { code: 'PROJECT_INSTRUCTIONS_TOO_LARGE', maxBytes: 32768 } };
+    }
+    try {
+        const actualPath = fs.realpathSync(filename);
+        if (actualPath !== filename) return { success: false, projectRoot: root,
+            error: { code: 'PROJECT_INSTRUCTIONS_PATH_MISMATCH' } };
+        const bytes = fs.readFileSync(actualPath);
+        return { success: true, found: true, projectRoot: root, file: 'AGENTS.md',
+            sha256: hashBytes(bytes), byteLength: bytes.length, content: bytes.toString('utf8') };
+    } catch (_) {
+        return { success: false, projectRoot: root, error: { code: 'PROJECT_INSTRUCTIONS_READ_FAILED' } };
+    }
+}
+
 function packageSkillIndex() {
     const references = new Map(SKILL_PACKAGE.references.map((reference) => [reference.id, reference]));
     return {
@@ -68,8 +96,12 @@ function packageSkillIndex() {
         mcp: { version: SERVER_VERSION, sourceFingerprint: MCP_SOURCE_FINGERPRINT },
         skills: SKILL_PACKAGE.skills.map((skill) => {
             const { bytes } = packageFile(path.join('skills', skill.name, 'SKILL.md'));
+            const frontmatter = bytes.toString('utf8').match(/^---\s*\n([\s\S]*?)\n---(?:\s*\n|$)/);
+            const description = frontmatter?.[1].match(/^description:\s*(.+?)\s*$/m)?.[1];
+            if (!description) throw new Error(`Skill description is missing: ${skill.name}`);
             return {
                 name: skill.name,
+                description,
                 uri: skill.uri,
                 sha256: hashBytes(bytes),
                 references: skill.references.map((id) => {
@@ -165,6 +197,10 @@ function positionSchema() {
 
 function commandInputSchema(projectRoot) {
     const definitions = {
+        'script.read': z.fromJSONSchema(catalogSchema.$defs.scriptReadInput2x),
+        'script.patch.plan': z.fromJSONSchema(catalogSchema.$defs.scriptPatchPlanInput2x),
+        'script.patch': z.fromJSONSchema(catalogSchema.$defs.scriptPatchInput2x),
+        'script.operation.get': z.fromJSONSchema(catalogSchema.$defs.scriptOperationGetInput2x),
         'scene.snapshot': z.object({ targetNodeName: z.string().min(1).max(64).optional() }).strict(),
         'scene.node.inspect': z.object({ nodePath: z.string().min(1).max(240) }).strict(),
         'asset.searchPng': z.object({ query: z.string().min(1).max(80).regex(/^[^\u0000-\u001f\u007f]+$/), limit: z.number().int().min(1).max(50).optional(),
@@ -427,6 +463,12 @@ function createServer(projectRoots, options = {}) {
             targets: targetList, projectRoot: selected, creatorVersion: CREATOR_VERSION, mcpRuntime: MCP_RUNTIME,
         }), { title: 'Get a Creator 2.4.15 instance', readOnlyHint: true, destructiveHint: false, openWorldHint: false });
 
+    server.registerTool('cocos_2x_project_instructions_read', {
+        description: 'Read the registered Creator 2.4.15 project root AGENTS.md conventions file. Read-only, limited to 32 KiB, and unavailable paths are never searched outside the selected project.',
+        inputSchema: z.object({ projectRoot }).strict(),
+        annotations: { title: 'Read project conventions', readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    }, async ({ projectRoot: selected }) => toolReply(readProjectInstructions(selected)));
+
     register('cocos_2x_capabilities_list',
         'List the live command contracts and availability for one registered Creator 2.4.15 project. Query this before command execution.',
         z.object({ projectRoot }).strict(), 'capabilities.list', ({ projectRoot: selected }) => ({
@@ -434,6 +476,10 @@ function createServer(projectRoots, options = {}) {
         }), { title: 'List Creator 2.4.15 capabilities', readOnlyHint: true, destructiveHint: false, openWorldHint: false });
 
     const dedicatedCommandTools = [
+        { name: 'cocos_2x_script_read', command: 'script.read', description: 'Read one existing assets JavaScript file, UUID, metadata and source hash (max 64 KiB). Never reads files outside assets.', input: z.fromJSONSchema(catalogSchema.$defs.scriptReadInput2x) },
+        { name: 'cocos_2x_script_patch_plan', command: 'script.patch.plan', description: 'Propose unique text replacements against an exact JavaScript UUID/source hash, return expected differences and syntax diagnostics without changing source. Does not run or compile code.', input: z.fromJSONSchema(catalogSchema.$defs.scriptPatchPlanInput2x) },
+        { name: 'cocos_2x_script_operation_get', command: 'script.operation.get', description: 'Read the original script edit ledger and current disk identity. Reading this receipt never retries an uncertain write.', input: z.fromJSONSchema(catalogSchema.$defs.scriptOperationGetInput2x) },
+
         {
             name: 'cocos_2x_scene_snapshot',
             command: 'scene.snapshot',
@@ -474,6 +520,12 @@ function createServer(projectRoots, options = {}) {
             }), { title: tool.name, readOnlyHint: tool.command !== 'content.stress.run', destructiveHint: false,
                 idempotentHint: tool.command !== 'content.stress.run', openWorldHint: false });
     }
+
+    register('cocos_2x_script_patch',
+        'Apply an approved exact existing-JS patch, compensate the original operation, reconcile uncertain compiler results without rewriting, or replay a compensated record under a new ID. A successful compile yields needs-runtime, never functional success. Compilation failures retain exact backup/source hashes. All actions require local approval.',
+        z.object({ projectRoot, input: z.fromJSONSchema(catalogSchema.$defs.scriptPatchInput2x) }).strict(), 'command.execute',
+        ({ projectRoot: selected, input }) => ({ targets: targetList, projectRoot: selected, creatorVersion: CREATOR_VERSION, command: 'script.patch', input }),
+        { title: 'Edit existing JavaScript with recovery', readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
 
     register('cocos_2x_command_execute',
         'Execute one semantic command from the selected Creator 2.4.15 project catalog. Query capabilities first and use only a command currently marked available. The input schema varies by command and matches the 2.4 catalog. This tool may change the project; its result carries CocosAgent status, phases and error codes.',

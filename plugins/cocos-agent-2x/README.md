@@ -1,6 +1,6 @@
-# CocosAgent 2.x plugin (local Codex)
+# CocosAgent 2.x skills and optional Codex MCP adapter
 
-This plugin packages the Creator 2.4.15 workflow skill and connects Codex to the existing local MCP stdio Host. The Host supplies no model and asks for no LLM key. The plugin is local-only because its MCP process communicates with the user’s local Creator editor and project files.
+The package contains the versioned Creator 2.4.15 workflow skills and their references. The primary product path loads them in the Creator-native Assistant, where Creator owns the panel, model provider, and local service lifecycle. The optional Codex plugin adapter uses the same MCP command interface; an external Agent owns its own model and credentials. This repository package source is local because its MCP process communicates with the user’s Creator editor and project files.
 
 The plugin package is the single maintained source for its 2.4 task skills. It currently contains 11 task skills and ships their linked contracts, probes and acceptance records under `references/`. Docs entries for packaged skills point back to the plugin source. Before installing or updating, validate the package and its reference hashes:
 

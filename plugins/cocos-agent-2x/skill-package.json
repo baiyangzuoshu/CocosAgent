@@ -61,7 +61,8 @@
       "agent-foundation/probes/build-cocos-agent-memory-bridge-2.4.py",
       "agent-foundation/probes/cocos-native-content-stress-2.4.py",
       "agent-foundation/native/cocos-agent-memory-bridge-2.4.h"
-    ] }
+    ] },
+    {"name": "cocos2-script-development", "uri": "cocos://2x/skills/script-development", "references": []}
   ],
   "references": [
     { "id": "agent-foundation/cocos-agent-mcp-0.1.md", "source": "docs/agent-foundation/cocos-agent-mcp-0.1.md" },

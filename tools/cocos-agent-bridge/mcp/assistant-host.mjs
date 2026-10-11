@@ -51,7 +51,7 @@ function send(socket, message) {
 function compactResult(result) {
     const structured = result?.structuredContent;
     if (structured && typeof structured === 'object') {
-        return {
+        const compact = {
             success: structured.success,
             outcome: structured.outcome,
             status: structured.status,
@@ -60,6 +60,25 @@ function compactResult(result) {
             phases: structured.phases,
             reconciliation: structured.reconciliation ? { disposition: structured.reconciliation.disposition } : undefined,
         };
+        for (const key of ['packageName', 'packageVersion', 'packageFingerprint', 'skillsIndexSha256',
+            'skillName', 'referenceId', 'uri', 'sha256', 'mimeType', 'byteLength']) {
+            if (structured[key] !== undefined) compact[key] = structured[key];
+        }
+        if (Array.isArray(structured.data?.skills)) {
+            compact.skills = structured.data.skills.map((skill) => ({ name: skill.name, sha256: skill.sha256,
+                referenceIds: (skill.references || []).map((reference) => reference.id) }));
+            compact.skillsIndexSha256 = structured.data.skillsIndexSha256;
+            compact.packageVersion = structured.data.packageVersion;
+            compact.packageFingerprint = structured.data.packageFingerprint;
+        }
+        const script = structured.result;
+        if (structured.command?.startsWith('script.') && script) {
+            compact.script = { scriptPath: script.scriptPath || script.record?.scriptPath,
+                scriptUuid: script.scriptUuid || script.record?.scriptUuid, sourceSha256: script.sourceSha256,
+                expectedDiff: script.expectedDiff, afterSha256: script.afterSha256,
+                state: script.record?.state, compilation: script.record?.compilation, runtime: script.record?.runtime, current: script.current };
+        }
+        return compact;
     }
     const text = (result?.content || []).filter((item) => item.type === 'text').map((item) => item.text).join('\n');
     return { text: text.slice(0, 4000) };
@@ -80,6 +99,8 @@ function assistantAnswer(result, mode) {
     if (mode === 'Agent' && result.reason === 'model_final_without_success_receipt') {
         return '任务未确认完成：本轮没有取得有效的任务操作回执。模型的完成声明未通过校验；请查询操作记录或继续执行。';
     }
+    const pendingScript = (result.receipts || []).some((receipt) => receipt.result?.structuredContent?.outcome === 'needs-runtime');
+    if (mode === 'Agent' && pendingScript) return `${result.finalText || '脚本修改已取得编译回执。'}\n\n验收边界：本轮工具只证明源码读回和 Creator 编译，按钮点击等功能仍须实际预览验证。`;
     return result.finalText || (result.status === 'awaiting-approval'
         ? '操作未获批准，项目没有执行这一步修改。'
         : `任务已停止：${result.reason || result.status}`);
@@ -191,6 +212,9 @@ async function start(options) {
                 apiKey,
                 model: options.model,
                 mode: message.mode,
+                // Skill/reference discovery and verification need room before the final answer.
+                maxTurns: message.mode === 'Ask' ? 16 : 20,
+                maxToolCalls: message.mode === 'Ask' ? 14 : 18,
                 history: history.slice(-MAX_HISTORY),
                 allowWrite: message.mode === 'Agent',
                 approveWrite,

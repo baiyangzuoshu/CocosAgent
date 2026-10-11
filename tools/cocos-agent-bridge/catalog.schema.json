@@ -233,6 +233,10 @@
         "status": { "enum": ["available", "unavailable"] },
         "reason": { "type": ["string", "null"] }
       }
-    }
+    },
+    "scriptReadInput2x": {"type": "object", "additionalProperties": false, "required": ["scriptPath"], "properties": {"scriptPath": {"type": "string", "minLength": 4, "maxLength": 240, "pattern": "^[A-Za-z0-9_ -]+(?:/[A-Za-z0-9_. -]+)*\\.js$"}}},
+    "scriptPatchPlanInput2x": {"type": "object", "additionalProperties": false, "required": ["scriptPath", "scriptUuid", "expectedSha256", "edits"], "properties": {"scriptPath": {"type": "string", "minLength": 4, "maxLength": 240, "pattern": "^[A-Za-z0-9_ -]+(?:/[A-Za-z0-9_. -]+)*\\.js$"}, "scriptUuid": {"type": "string", "format": "uuid"}, "expectedSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "edits": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"type": "object", "additionalProperties": false, "required": ["before", "after"], "properties": {"before": {"type": "string", "minLength": 1, "maxLength": 16384}, "after": {"type": "string", "maxLength": 16384}}}}}},
+    "scriptPatchInput2x": {"type": "object", "additionalProperties": false, "required": ["action", "operationId"], "properties": {"scriptPath": {"type": "string", "minLength": 4, "maxLength": 240, "pattern": "^[A-Za-z0-9_ -]+(?:/[A-Za-z0-9_. -]+)*\\.js$"}, "scriptUuid": {"type": "string", "format": "uuid"}, "expectedSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "edits": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"type": "object", "additionalProperties": false, "required": ["before", "after"], "properties": {"before": {"type": "string", "minLength": 1, "maxLength": 16384}, "after": {"type": "string", "maxLength": 16384}}}}, "action": {"type": "string", "enum": ["apply", "compensate", "reconcile", "replay"]}, "operationId": {"type": "string", "format": "uuid"}, "sourceOperationId": {"type": "string", "format": "uuid"}}},
+    "scriptOperationGetInput2x": {"type": "object", "additionalProperties": false, "required": ["operationId"], "properties": {"operationId": {"type": "string", "format": "uuid"}}}
   }
 }

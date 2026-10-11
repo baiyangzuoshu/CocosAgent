@@ -102,7 +102,12 @@ for (const [status, label] of [['completed', '已结束'], ['needs-review', '待
         let requestCount = 0;
         const sent = [];
         vm.runInNewContext(fs.readFileSync(path.join(root, '2.4.15NewProject/packages/cocos-agent-bridge/panel/index.js'), 'utf8'), {
-            Editor: { Panel: { extend(value) { panel = value; } }, Ipc: { sendToMain() {} } },
+            Editor: { Panel: { extend(value) { panel = value; } }, Ipc: { sendToMain(event, callback) {
+                if (event === 'cocos-agent-bridge:projectContextGet') callback(null, {
+                    projectName: 'TestProject', creatorVersion: '2.4.15', activeScene: 'scene.fire',
+                    selectedNodes: [], selectionStatus: 'read', projectConventions: { status: 'missing' },
+                });
+            } } },
             document: { createElement: () => new Element() },
             window: { crypto: { randomUUID: () => `request-${++requestCount}` } },
             localStorage: { getItem: () => null, setItem() {} }, WebSocket: { OPEN: 1 },

@@ -15,6 +15,12 @@ Editor.Panel.extend({
         .brand strong { font-size: 14px; letter-spacing: .2px; }
         .connection { color: #a9afb8; font-size: 11px; }
         .connection[data-state="ready"] { color: #76d39b; }
+        .project-context { margin: 8px 0 10px; padding: 7px 8px; border: 1px solid #3d4249; border-radius: 5px; background: #202225; color: #c6cbd2; font-size: 10px; line-height: 1.45; }
+        .project-context-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 3px; }
+        .project-context-head strong { color: #e7e9ec; font-size: 11px; }
+        .context-refresh { padding: 2px 6px; font-size: 10px; }
+        .context-line { overflow-wrap: anywhere; }
+        .context-muted { color: #9299a3; }
         .model-row { display: flex; gap: 6px; }
         input, select, textarea { color: #e7e9ec; background: #191a1c; border: 1px solid #464a50; border-radius: 4px; outline: none; }
         input:focus, select:focus, textarea:focus { border-color: #6ca8ff; }
@@ -67,6 +73,13 @@ Editor.Panel.extend({
         <div class="root">
             <header class="top">
                 <div class="brand"><strong>CocosAgent</strong><span class="connection" id="connection">未连接</span></div>
+                <div class="project-context" id="project-context">
+                    <div class="project-context-head"><strong>当前工程上下文</strong><button class="context-refresh" id="context-refresh">刷新</button></div>
+                    <div class="context-line" id="context-project">正在读取工程…</div>
+                    <div class="context-line" id="context-scene">活动场景：读取中…</div>
+                    <div class="context-line" id="context-selection">选中对象：读取中…</div>
+                    <div class="context-line context-muted" id="context-conventions">项目约定：读取中…</div>
+                </div>
                 <div class="model-row">
                     <input id="api-key" class="key" type="password" autocomplete="off" placeholder="DeepSeek API Key（连接后清空）" />
                     <select id="model" aria-label="DeepSeek 模型">
@@ -104,6 +117,8 @@ Editor.Panel.extend({
 
     $: {
         connection: '#connection', apiKey: '#api-key', model: '#model', connect: '#connect', rememberKey: '#remember-key', forgetKey: '#forget-key',
+        projectContext: '#project-context', contextRefresh: '#context-refresh', contextProject: '#context-project', contextScene: '#context-scene',
+        contextSelection: '#context-selection', contextConventions: '#context-conventions',
         modeAsk: '#mode-ask', modePlan: '#mode-plan', modeAgent: '#mode-agent', modeNote: '#mode-note', messages: '#messages', empty: '#empty',
         prompt: '#prompt', send: '#send', approval: '#approval', approvalTool: '#approval-tool',
         approvalArgs: '#approval-args', approve: '#approve', reject: '#reject',
@@ -118,6 +133,7 @@ Editor.Panel.extend({
         this._pendingApproval = null;
         this._planCards = new Map();
         this._plans = new Map();
+        this._projectContext = null;
         this._conversationId = localStorage.getItem('cocos-agent-assistant-conversation') || makeId();
         localStorage.setItem('cocos-agent-assistant-conversation', this._conversationId);
         this._modeButtons = [this.$modeAsk, this.$modePlan, this.$modeAgent];
@@ -128,12 +144,14 @@ Editor.Panel.extend({
             Editor.Ipc.sendToMain('cocos-agent-bridge:assistantCredentialForget');
         });
         this.$send.addEventListener('click', () => this.sendPrompt());
+        this.$contextRefresh.addEventListener('click', () => this.refreshProjectContext());
         this.$prompt.addEventListener('keydown', (event) => {
             if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); this.sendPrompt(); }
         });
         this.$approve.addEventListener('click', () => this.answerApproval(true));
         this.$reject.addEventListener('click', () => this.answerApproval(false));
         Editor.Ipc.sendToMain('cocos-agent-bridge:assistantState');
+        this.refreshProjectContext();
     },
 
     messages: {
@@ -236,9 +254,52 @@ Editor.Panel.extend({
         this.$send.disabled = true;
         this.$prompt.value = '';
         this.addMessage('user', text);
-        this._runActivity = this.addActivity(`${this._mode} · 正在处理…`);
-        this._socket.send(JSON.stringify({ type: 'run', requestId: this._requestId,
-            conversationId: this._conversationId, mode: this._mode, text }));
+        this._runActivity = this.addActivity(`${this._mode} · 正在刷新工程上下文…`);
+        this.refreshProjectContext((error) => {
+            if (error) { this.finishRun(`工程上下文读取失败：${error.message || error}`, 'failed'); return; }
+            if (!this._socket || this._socket.readyState !== WebSocket.OPEN) {
+                this.finishRun('本地 Agent 连接已断开；请先重新连接。', 'failed'); return;
+            }
+            if (this._runActivity) this._runActivity.textContent = `${this._mode} · 正在处理…`;
+            this._socket.send(JSON.stringify({ type: 'run', requestId: this._requestId,
+                conversationId: this._conversationId, mode: this._mode, text }));
+        });
+    },
+
+    refreshProjectContext(done) {
+        if (this.$contextRefresh) this.$contextRefresh.disabled = true;
+        if (!this._projectContext) {
+            this.$contextProject.textContent = '正在读取工程…';
+            this.$contextScene.textContent = '活动场景：读取中…';
+            this.$contextSelection.textContent = '选中对象：读取中…';
+            this.$contextConventions.textContent = '项目约定：读取中…';
+        }
+        Editor.Ipc.sendToMain('cocos-agent-bridge:projectContextGet', (error, context) => {
+            if (this.$contextRefresh) this.$contextRefresh.disabled = false;
+            if (error || !context) {
+                const failure = error || new Error('没有收到工程上下文回执。');
+                this.$contextProject.textContent = '工程上下文不可用';
+                this.$contextScene.textContent = '活动场景：未知';
+                this.$contextSelection.textContent = '选中对象：未知';
+                this.$contextConventions.textContent = '项目约定：未读取';
+                if (typeof done === 'function') done(failure);
+                return;
+            }
+            this._projectContext = context;
+            const projectName = context.projectName || '未命名工程';
+            this.$contextProject.textContent = `${projectName} · Creator ${context.creatorVersion || '未知版本'}`;
+            this.$contextProject.title = context.projectRoot || '';
+            this.$contextScene.textContent = `活动场景：${context.activeScene || '无活动场景'}`;
+            const selected = Array.isArray(context.selectedNodes) ? context.selectedNodes : [];
+            const found = selected.filter((item) => item.status === 'found');
+            this.$contextSelection.textContent = found.length
+                ? `选中对象：${found.map((item) => `${item.path} [${(item.components || []).join(', ') || '无组件'}]`).join('；')}`
+                : `选中对象：${context.selectionStatus === 'read' ? '无' : '不可用'}`;
+            this.$contextConventions.textContent = context.projectConventions?.status === 'available'
+                ? `项目约定：AGENTS.md 已就绪 · SHA-256 ${String(context.projectConventions.sha256 || '').slice(0, 12)}`
+                : `项目约定：${context.projectConventions?.status === 'missing' ? '未找到 AGENTS.md' : '不可用'}`;
+            if (typeof done === 'function') done(null, context);
+        });
     },
 
     receiveMessage(raw) {

@@ -2,6 +2,8 @@
 
 状态：2026-10-10，Windows + Creator **2.4.15** + DeepSeek **Flash** 完成首条实机切片。面板内直接对话并切换 Ask、Plan、Agent；此次写入范围为独立临时空节点。不是完整 Unity Assistant 功能集，不表示 3.8 或全部 MCP 工具已经通过真实模型验收。
 
+2026-10-11，Creator 原生 Ask 已在 macOS 2.4.15 实机验收；按需 skill 目录、正文与引用读取已接入模型工具循环，并由自动化模型循环测试验证。Creator 已安装运行时尚未更新到包含此能力的包，因此“Creator 面板中的真实模型按任务读取 skill”仍待重载新包后实测。
+
 ## 使用
 
 1. 打开 `2.4.15NewProject`，启用 `cocos-agent-bridge` 扩展。
@@ -33,6 +35,14 @@ Plan 会输出带版本号的结构化步骤卡，字段包含说明、前置条
 - 使用 DeepSeek Chat Completions，当前为非流式调用；工具方式依据 [DeepSeek 官方 Tool Calls](https://api-docs.deepseek.com/guides/tool_calls/)。回答按最新用户消息语言生成。
 - 会话上下文在服务内存中，最多 24 条用户/助手消息，每条 8000 字符；重启服务会丢失。操作轨迹包含任务、工具回执及模型最终回答，保存在 `%LOCALAPPDATA%/CocosAgent/agent-runs/`；项目写入账本仍在 `.cocos-agent/operations/`。
 - 模型最终文字不是编辑器回执。Agent 完全没有有效任务工具回执时，进行有限纠正，仍无回执则面板显示“任务未确认完成”并隐藏模型完成声明。这只防止本轮发现的无回执声明，不能视为对每句模型回答的语义真实性证明。
+
+## 原生 skill 按需读取
+
+- Creator 原生 Agent 启动时只载入基础 `cocos-agent` skill，并读取 `cocos://2x/skills/index` 元数据目录；任务技能正文不会一次性注入上下文。目录列出 2.4.15 技能名、用途、资源 URI、SHA-256 和已声明引用。
+- 模型可按需调用只读 `cocos_2x_skills_list`、`cocos_2x_skill_read`、`cocos_2x_skill_reference_read`。正文和引用均从 Creator 扩展包内 MCP Resource 读取；Host 校验 package 名称/版本/指纹、资源 URI 与目录 SHA-256。引用只能按选中 skill 声明的 reference ID 读取。
+- 轨迹记录目录哈希、包版本/指纹、skill 名称、引用 ID、URI、正文哈希、字节数与来源（启动基础 skill 或模型按需读取）；不复制 skill 正文、图片 Base64 或凭据到 JSONL。读取失败记录错误码且不产生项目副作用。
+- 自动化集成测试使用确定性模拟模型走通“实例 → 能力 → 目录 → 场景组合 skill → 合同引用 → 场景快照 → 最终回答”，并断言轨迹能证明读取对象且没有技能正文。它验证了真实工具调度代码和 MCP Resource 合同，但不等同于真实 DeepSeek 的任务选择或 Creator 面板验收。
+- Creator 安装运行时仍为 `cocos-agent-2x@0.3.0`，源码包已升级为 `0.3.1`；需更新运行时并重载 Creator 后，才能在面板中完成真实模型按需读取验收。
 
 ## 真实验收
 
@@ -77,6 +87,14 @@ Plan 会输出带版本号的结构化步骤卡，字段包含说明、前置条
 - 使用扩展内安装的本地运行时，真实 MCP stdio 查询实例、能力并读取 `helloworld` 场景成功（15 个节点）。场景 SHA-256 前后一致，见[只读回执](traces/cocos-agent-ask-runtime-fix-20261011.json)。这项独立桥接检查没有调用模型；随后另做 Creator 面板模型验收。
 - 用户重启 Creator 后完成最终实机验收：Creator 原生面板使用 DeepSeek Flash Ask，顺序调用实例列表、能力目录、场景快照；三次回执均成功，最终 `run.stop=completed/model_final`，`allowWrite=false`。场景为 `helloworld`，15 个节点，哈希未变。面板正文与活动区显示只读任务完成，发送按钮和模式已恢复可用；完整轨迹在用户目录 `~/.local/state/CocosAgent/agent-runs/2026-10-11T01-23-52-882Z-c00d3f8d.jsonl`，摘要见上述只读回执。
 
+### 2026-10-11：任务级 skill/引用读取
+
+- MCP 技能目录补充用途描述；Creator 原生模型工具循环发现目录元数据，但只在模型按任务选择后读取技能正文和声明引用。
+- 每次读取前核对扩展包版本、package fingerprint、skill/reference URI 和 SHA-256；读取轨迹记元数据，不记录正文或图片 Base64。启动注入的基础 skill 同样记录来源与 SHA-256。
+- 产品技能说明改为 Creator 原生 Agent 的主路径，明确 sidecar/MCP 是 Creator 管理的内部实现；Codex MCP adapter 仅为可选外部入口。同步权威 skill 来源与包版本到 `0.3.1`。
+- MCP/Assistant 全量自动测试 **47/47** 通过；确定性 Agent 循环和独立 Creator 扩展打包测试均证明按需读取 `cocos2-scene-composition` 及其合同引用，然后调用只读场景快照，并验证 JSONL 没有复制 skill 正文。技能包检查通过：**11 个技能、29 份引用**；`git diff --check` 通过。
+- 仍缺 Creator 面板端到端证据：`2.4.15NewProject/packages/cocos-agent-bridge/assistant-runtime` 当前为 `cocos-agent-2x@0.3.0`，不含新 skill 工具，不能把自动化循环测试表述成已在面板中实测。需安装 `0.3.1` Creator 扩展包并重载后，用真实模型完成一个对应任务，再从 Creator 本机轨迹核对其实际选择与读取记录。
+
 - 面板 IPC 改用 `messages`；主进程处理器接收 `(event, payload)`，统一消息名。连接失败恢复按钮、断线结束 busy/审批状态。
 - Windows 操作账本以可写句柄执行 `fsync`，保留落盘检查。
 - 对账仅新增严格的 **2.4 空节点初始记录**：零回执、六阶段全 pending、无组件/变换/Prefab/来源记录。必须证明同一父节点 UUID、活动场景目标缺席、磁盘目标缺席；不自动执行或删除其他账本。
@@ -90,3 +108,11 @@ Plan 会输出带版本号的结构化步骤卡，字段包含说明、前置条
 ## 后续范围
 
 尚未完成：流式回答、Markdown 渲染、聊天持久化/多会话、计划编辑、任务取消、上下文附件/选择对象引用、差异预览、全面 Unity 交互对齐。计划逐步执行尚待 Creator 实机与 DeepSeek 真模型端到端回归。Agent 当前的实机编辑操作只验收空节点和其恢复；资源、Prefab、构建和运行时虽有已有 Host 能力，需另按具体模型任务逐项验收。3.8 按当前项目范围暂停。
+
+### 2026-10-11：现有 PNG 原生面板写入验收进行中
+
+固定使用研究工程 `db://assets/resources/BlueReleaseOct09.png`，目标为 `helloworld/Canvas` 下临时 Sprite `NativePanelBlue1011`，位置 `(220,100)`、缩放 `(1,1)`。已真实在 Creator 面板输入并发送 Plan；没有用 harness 或外部 Codex MCP 替代面板入口。首次暴露研究工程内部 MCP 仍加载旧 `0.3.0` 的版本/指纹不匹配，更新运行包并通过 Package Manager 仅重载本工程扩展后，合同检查匹配。随后同一工程两个 Creator 实例交替连接导致 `CATALOG_CHANGED`；关闭已确认没有未保存标记的重复工程窗口后，只读查询恢复。
+
+唯一实例中的真实模型已读取 `cocos2-mcp-tools@0.3.1` 和声明的 MCP 合同引用，并通过 PNG 搜索、场景快照和精确 Canvas 读回。模型将同名 PNG 搜索缩小至 `resources/BlueReleaseOct09` 后取得唯一有效结果；Canvas 使用快照返回的 `helloworld/Canvas` 路径。该轮默认 10 次模型调用在最终计划输出前耗尽，未生成可执行计划卡，也未写入场景。原生服务现明确使用 Ask 16 轮/14 工具调用、Plan 与 Agent 20 轮/18 工具调用的有界预算，保留每项写入审批。更新文件已同步到开发扩展内部 runtime，但锁屏导致扩展重载与下一轮实机验收仍待完成；自动测试 48/48 通过。
+
+**此任务尚未完成：** apply、保存磁盘读回、场景重开、运行态与视觉预览、补偿、重放和最终清理均没有本轮运行证据。普通节点创建的保存读回不能当作场景重开证据。本轮场景 SHA-256 仍为验收前 `fc6ea793eaa6727aaf48fb485640d2c904c022b6ee11e65c823fd3055f149d68`，现有演示节点保留。限量轨迹摘要见 [原生 PNG 任务验收记录](traces/cocos-agent-native-png-write-2.4-20261011.json)。

@@ -42,7 +42,7 @@ const expectedAgentPackageFingerprint = fingerprintFiles(AGENT_PACKAGE_ROOT, [
 function expectedExtensionFingerprint(projectRoot) {
     const extensionRoot = path.join(projectRoot, 'packages', 'cocos-agent-bridge');
     if (!fs.existsSync(path.join(extensionRoot, 'vendor/ws'))) return null;
-    const relativeFiles = ['asset-search.js', 'credential-store.cjs', 'main.js', 'scene.js', 'package.json', 'package-lock.json',
+    const relativeFiles = ['asset-search.js', 'credential-store.cjs', 'main.js', 'script-operations.js', 'scene.js', 'package.json', 'package-lock.json',
         ...listFiles(extensionRoot, 'vendor/ws')];
     const files = relativeFiles.map((name) => path.join(extensionRoot, name));
     if (!files.every((file) => fs.existsSync(file))) return null;
@@ -273,7 +273,7 @@ function runtimeStateMatches(command, sceneReady) {
         return command.status === 'available' && command.reason === null
             || command.status === 'unavailable' && command.reason === 'ASSETDB_UNAVAILABLE';
     }
-    if (command.id === 'asset.searchPng') {
+    if (command.id.startsWith('script.') || command.id === 'asset.searchPng') {
         return command.status === 'available' && command.reason === null
             || command.status === 'unavailable' && command.reason === 'ASSETDB_UNAVAILABLE';
     }
@@ -289,6 +289,10 @@ function validCatalog(target, result) {
         || !(result.activeScene === null || typeof result.activeScene === 'string')
         || !/^[0-9a-f]{64}$/.test(result.catalogRevision || '')) return false;
     const expected = {
+        ...(target.creatorVersion === '2.4.15' ? { 'script.read': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/scriptReadInput2x', input: catalogSchema.$defs.scriptReadInput2x, preconditions: ['existingProjectJavaScript', 'assetDbReady'] } } : {}),
+        ...(target.creatorVersion === '2.4.15' ? { 'script.patch.plan': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/scriptPatchPlanInput2x', input: catalogSchema.$defs.scriptPatchPlanInput2x, preconditions: ['existingProjectJavaScript', 'assetDbReady'] } } : {}),
+        ...(target.creatorVersion === '2.4.15' ? { 'script.patch': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/scriptPatchInput2x', input: catalogSchema.$defs.scriptPatchInput2x, preconditions: ['existingProjectJavaScript', 'assetDbReady'] } } : {}),
+        ...(target.creatorVersion === '2.4.15' ? { 'script.operation.get': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/scriptOperationGetInput2x', input: catalogSchema.$defs.scriptOperationGetInput2x, preconditions: ['existingProjectJavaScript', 'assetDbReady'] } } : {}),
         'scene.snapshot': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/snapshotInput', input: catalogSchema.$defs.snapshotInput, preconditions: ['activeScene'] },
         'scene.node.inspect': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/nodeInspectInput', input: catalogSchema.$defs.nodeInspectInput, preconditions: ['activeScene'] },
         ...(target.creatorVersion === '2.4.15' ? { 'asset.searchPng': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/pngAssetSearchInput', input: catalogSchema.$defs.pngAssetSearchInput, preconditions: ['assetDbReady'] } } : {}),

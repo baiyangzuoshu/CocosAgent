@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
@@ -53,6 +53,8 @@ function waitForStart(child, timeoutMs = 10_000) {
 test('Creator bundle runs its MCP server outside the research repository without Codex metadata', async () => {
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-agent-package-'));
     const output = path.join(temporary, 'creator-extension-package');
+    const conventionText = '# Fixture conventions\nprivate-convention-marker: keep UI prefab paths stable.\n';
+    fs.writeFileSync(path.join(temporary, 'AGENTS.md'), conventionText);
     let client;
     try {
         const built = buildCreatorExtensionBundle({ sourceRoot: SOURCE_ROOT, outputDirectory: output });
@@ -81,11 +83,21 @@ test('Creator bundle runs its MCP server outside the research repository without
         await client.connect(transport);
         const { tools } = await client.listTools();
         assert.ok(tools.some((tool) => tool.name === 'cocos_2x_scene_snapshot'));
+        const instructionsTool = tools.find((tool) => tool.name === 'cocos_2x_project_instructions_read');
+        assert.equal(instructionsTool.annotations.readOnlyHint, true);
+        const registeredProjectRoot = fs.realpathSync(temporary);
+        const readInstructions = await client.callTool({ name: instructionsTool.name, arguments: { projectRoot: registeredProjectRoot } });
+        const instructions = readInstructions.structuredContent || (() => {
+            assert.equal(readInstructions.isError, false, readInstructions.content?.[0]?.text || 'Project instructions read failed.');
+            return JSON.parse(readInstructions.content[0].text);
+        })();
+        assert.equal(instructions.content, conventionText);
+        assert.equal(instructions.projectRoot, registeredProjectRoot);
         const { resources } = await client.listResources();
         assert.ok(resources.some((resource) => resource.uri === 'cocos://2x/skills/index'));
         const index = JSON.parse((await client.readResource({ uri: 'cocos://2x/skills/index' })).contents[0].text);
         assert.equal(index.agentPackage.name, 'cocos-agent-2x');
-        assert.equal(index.skills.length, 11);
+        assert.equal(index.skills.length, 12);
         const indexedReferences = new Map();
         for (const skill of index.skills) {
             const skillText = (await client.readResource({ uri: skill.uri })).contents[0].text;
@@ -98,6 +110,76 @@ test('Creator bundle runs its MCP server outside the research repository without
             const bytes = content.blob ? Buffer.from(content.blob, 'base64') : Buffer.from(content.text || '', 'utf8');
             assert.equal(createHash('sha256').update(bytes).digest('hex'), reference.sha256, `reference hash mismatch: ${reference.uri}`);
         }
+
+        const { runDeepSeekAgent: runPackagedAgent } = await import(pathToFileURL(
+            path.join(runtimeRoot, 'tools/cocos-agent-bridge/mcp/deepseek-agent.mjs')).href);
+        const sceneSkill = index.skills.find((skill) => skill.name === 'cocos2-scene-composition');
+        assert.ok(sceneSkill);
+        const sceneReference = sceneSkill.references.find((reference) => reference.id.endsWith('scene-composition-0.1.md'));
+        assert.ok(sceneReference);
+        const registeredRoot = registeredProjectRoot;
+        const instance = { projectRoot: registeredRoot, creatorVersion: '2.4.15', state: 'ready' };
+        const modelSteps = [
+            ['cocos_2x_instances_list', {}],
+            ['cocos_2x_capabilities_list', { projectRoot: registeredRoot }],
+            ['cocos_2x_project_instructions_read', { projectRoot: registeredRoot }],
+            ['cocos_2x_skills_list', {}],
+            ['cocos_2x_skill_read', { name: sceneSkill.name }],
+            ['cocos_2x_skill_reference_read', { skillName: sceneSkill.name, referenceId: sceneReference.id }],
+            ['cocos_2x_scene_snapshot', { projectRoot: registeredRoot, input: {} }],
+        ];
+        let modelStepIndex = 0;
+        const tracePath = path.join(temporary, 'packaged-skill-read.jsonl');
+        const packagedResult = await runPackagedAgent({
+            client: {
+                listTools: () => client.listTools(),
+                readResource: (request) => client.readResource(request),
+                callTool: async ({ name, arguments: args }) => {
+                    if (name === 'cocos_2x_instances_list') return { isError: false,
+                        structuredContent: { success: true, data: [instance] } };
+                    if (name === 'cocos_2x_capabilities_list') return { isError: false,
+                        structuredContent: { success: true, data: { instance, commands: [{ id: 'scene.snapshot', status: 'available' }] } } };
+                    if (name === 'cocos_2x_project_instructions_read') return client.callTool({ name, arguments: args });
+                    if (name === 'cocos_2x_scene_snapshot' && args.projectRoot === registeredRoot) return { isError: false,
+                        structuredContent: { success: true, outcome: 'completed', data: { scene: 'fixture-scene', nodeCount: 1 } } };
+                    throw new Error(`Unexpected packaged tool call: ${name}`);
+                },
+            },
+            task: '只读规划如何在场景中组织多个 Sprite 和 Label，并说明读回、预览与补偿要求。',
+            projectRoot: registeredRoot,
+            skillFiles: [path.join(pluginRoot, 'skills/cocos-agent/SKILL.md')],
+            tracePath,
+            apiKey: 'sk-packaged-agent-test-placeholder',
+            mode: 'Ask',
+            maxTurns: 8,
+            callModel: async ({ tools: offeredTools, messages }) => {
+                if (modelStepIndex === modelSteps.length) return { choices: [{ finish_reason: 'stop', message: { role: 'assistant',
+                    content: '只读场景检查完成；已读取组合技能及其合同引用。' } }] };
+                const [expectedName, expectedArguments] = modelSteps[modelStepIndex++];
+                assert.ok(offeredTools.some((tool) => tool.function.name === expectedName), `packaged Agent did not offer ${expectedName}`);
+                if (expectedName === 'cocos_2x_skill_reference_read') {
+                    assert.ok(messages.some((message) => message.role === 'tool' && message.content.includes('# Creator 2.4.15 scene composition')));
+                }
+                if (expectedName === 'cocos_2x_skills_list') {
+                    assert.ok(messages.some((message) => message.role === 'tool' && message.content.includes('private-convention-marker')));
+                }
+                if (expectedName === 'cocos_2x_scene_snapshot') {
+                    assert.ok(messages.some((message) => message.role === 'tool' && message.content.includes('scene-composition-0.1.md')));
+                }
+                return { choices: [{ finish_reason: 'tool_calls', message: {
+                    role: 'assistant', tool_calls: [{ id: `packaged-call-${modelStepIndex}`, type: 'function',
+                        function: { name: expectedName, arguments: JSON.stringify(expectedArguments) } }],
+                } }] };
+            },
+        });
+        assert.equal(packagedResult.status, 'completed', `${packagedResult.status}:${packagedResult.reason}:${JSON.stringify(packagedResult.receipts.map((receipt) => ({ name: receipt.name, success: receipt.structuredContent?.success, code: receipt.structuredContent?.error?.code })))}`);
+        assert.equal(modelStepIndex, modelSteps.length);
+        const packagedTrace = fs.readFileSync(tracePath, 'utf8');
+        assert.match(packagedTrace, /"event":"skill.read"[^\n]*"skillName":"cocos2-scene-composition"/);
+        assert.match(packagedTrace, /"event":"skill.reference.read"[^\n]*"referenceId":"[^"]*scene-composition-0\.1\.md"/);
+        assert.equal(packagedTrace.includes('Use this skill only with the registered'), false);
+        assert.equal(packagedTrace.includes('private-convention-marker'), false, 'trace must keep project convention text private');
+        assert.match(packagedTrace, /"file":"AGENTS\.md"[^\n]*"sha256":"[a-f0-9]{64}"/);
 
         const assistantHost = path.join(runtimeRoot, 'tools/cocos-agent-bridge/mcp/assistant-host.mjs');
         const child = spawn(process.execPath, [assistantHost, '--project', temporary, '--model', 'deepseek-flash'], {

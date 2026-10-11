@@ -302,6 +302,17 @@ module.exports = {
             return;
         }
 
+        const requestedSelection = Array.isArray(params && params.selectedNodeUuids)
+            ? params.selectedNodeUuids.filter((uuid) => typeof uuid === 'string' && uuid.length <= 64) : [];
+        const selectedNodeUuids = requestedSelection.slice(0, 8);
+        const selectedNodes = selectedNodeUuids.map((uuid) => {
+            const node = findNodeByUuid(scene, uuid);
+            return node ? { status: 'found', uuid: node.uuid, path: getNodePath(node).slice(0, MAX_PATH_LENGTH),
+                name: String(node.name || '').slice(0, MAX_NAME_LENGTH), active: node.active !== false,
+                components: componentDetails(node).map((item) => item.classId).filter(Boolean).slice(0, 16) }
+                : { status: 'not-in-active-scene', uuid };
+        });
+
         const nodes = [];
         let truncated = false;
         function visit(node, parentPath, depth) {
@@ -367,6 +378,10 @@ module.exports = {
         }
         event.reply(null, {
             sceneName: scene.name || '',
+            selectedNodes,
+            selectionCount: selectedNodes.length,
+            selectionTruncated: requestedSelection.length > selectedNodeUuids.length,
+            selectionStatus: params && params.selectionAvailable === false ? 'unavailable' : 'read',
             nodeCount: nodes.length,
             truncated,
             nodes,

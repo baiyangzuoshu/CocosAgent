@@ -73,7 +73,7 @@ function copyExtensionSources(sourceRoot, extensionDestination) {
     const extensionSource = path.join(sourceRoot, EXTENSION_RELATIVE);
     if (!fs.existsSync(path.join(extensionSource, 'package.json'))) throw new Error('CREATOR_EXTENSION_SOURCE_MISSING');
     fs.mkdirSync(extensionDestination, { recursive: true });
-    for (const name of ['asset-search.js', 'credential-store.cjs', 'main.js', 'package-lock.json', 'package.json', 'scene.js']) {
+    for (const name of ['asset-search.js', 'credential-store.cjs', 'main.js', 'script-operations.js', 'package-lock.json', 'package.json', 'scene.js']) {
         const source = path.join(extensionSource, name);
         if (!fs.existsSync(source)) throw new Error(`CREATOR_EXTENSION_FILE_MISSING:${name}`);
         fs.copyFileSync(source, path.join(extensionDestination, name));

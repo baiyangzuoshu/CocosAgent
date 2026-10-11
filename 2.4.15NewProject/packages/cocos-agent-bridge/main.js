@@ -8,11 +8,13 @@ const WebSocket = require('./vendor/ws');
 const { searchPngAssets } = require('./asset-search');
 const { CredentialStore } = require('./credential-store.cjs');
 const extensionPackage = require('./package.json');
+const scriptOperations = require('./script-operations');
 
 const CREATOR_VERSION = '2.4.15';
 const EXTENSION_VERSION = extensionPackage.version;
 const PROTOCOL_VERSION = '0.1';
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
+const scriptService = scriptOperations.createScriptService(PROJECT_ROOT, Editor);
 const SESSION_PATH = path.join(PROJECT_ROOT, 'temp', 'cocos-agent-bridge', 'session.json');
 const INBOX_PATH = path.join(PROJECT_ROOT, 'temp', 'cocos-agent-bridge', 'inbox');
 let timer = null;
@@ -44,7 +46,7 @@ function listRelativeFiles(root, relative = '') {
         return entry.isFile() ? [child.replace(/\\/g, '/')] : [];
     }).sort();
 }
-const EXTENSION_SOURCE_FILES = ['asset-search.js', 'credential-store.cjs', 'main.js', 'package-lock.json', 'package.json', 'scene.js',
+const EXTENSION_SOURCE_FILES = ['asset-search.js', 'credential-store.cjs', 'main.js', 'script-operations.js', 'package-lock.json', 'package.json', 'scene.js',
     ...listRelativeFiles(__dirname, 'vendor/ws')].sort();
 const EXTENSION_SOURCE_FINGERPRINT = (() => {
     const hash = crypto.createHash('sha256');
@@ -181,6 +183,22 @@ function commandCatalog(context) {
     const spriteReady = sceneReady && context.hasCanvas === true;
     const assetDbReady = context.assetDbReady === true;
     return [
+        { id: 'script.read', contractVersion: '0.1', access: 'read',
+            inputSchema: 'catalog.schema.json#/$defs/scriptReadInput2x', input: scriptOperations.inputs['script.read'],
+            preconditions: ['existingProjectJavaScript', 'assetDbReady'],
+            status: assetDbReady ? 'available' : 'unavailable', reason: assetDbReady ? null : 'ASSETDB_UNAVAILABLE' },
+        { id: 'script.patch.plan', contractVersion: '0.1', access: 'read',
+            inputSchema: 'catalog.schema.json#/$defs/scriptPatchPlanInput2x', input: scriptOperations.inputs['script.patch.plan'],
+            preconditions: ['existingProjectJavaScript', 'assetDbReady'],
+            status: assetDbReady ? 'available' : 'unavailable', reason: assetDbReady ? null : 'ASSETDB_UNAVAILABLE' },
+        { id: 'script.patch', contractVersion: '0.1', access: 'write',
+            inputSchema: 'catalog.schema.json#/$defs/scriptPatchInput2x', input: scriptOperations.inputs['script.patch'],
+            preconditions: ['existingProjectJavaScript', 'assetDbReady'],
+            status: assetDbReady ? 'available' : 'unavailable', reason: assetDbReady ? null : 'ASSETDB_UNAVAILABLE' },
+        { id: 'script.operation.get', contractVersion: '0.1', access: 'read',
+            inputSchema: 'catalog.schema.json#/$defs/scriptOperationGetInput2x', input: scriptOperations.inputs['script.operation.get'],
+            preconditions: ['existingProjectJavaScript', 'assetDbReady'],
+            status: assetDbReady ? 'available' : 'unavailable', reason: assetDbReady ? null : 'ASSETDB_UNAVAILABLE' },
         { id: 'scene.snapshot', contractVersion: '0.1', access: 'read',
             inputSchema: 'catalog.schema.json#/$defs/snapshotInput', input: COMMAND_INPUTS.snapshot, preconditions: ['activeScene'],
             status: sceneReady ? 'available' : 'unavailable', reason: sceneReady ? null : 'NO_OPEN_SCENE' },
@@ -245,6 +263,44 @@ function commandContractFingerprint(commands) {
     })))).digest('hex');
 }
 
+function selectedNodeUuids() {
+    try {
+        if (!Editor.Selection || typeof Editor.Selection.curSelection !== 'function') return null;
+        const selected = Editor.Selection.curSelection('node');
+        return Array.isArray(selected) ? selected.filter((uuid) => typeof uuid === 'string' && uuid.length <= 64).slice(0, 8) : [];
+    } catch (_) { return null; }
+}
+
+function getProjectContext(event) {
+    const context = { creatorVersion: CREATOR_VERSION, projectRoot: PROJECT_ROOT,
+        projectName: path.basename(PROJECT_ROOT), activeScene: null, selectedNodes: [], selectionStatus: 'unavailable',
+        projectConventions: { file: 'AGENTS.md', status: 'missing', sha256: null } };
+    try {
+        const project = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, 'project.json'), 'utf8'));
+        if (typeof project.name === 'string' && project.name) context.projectName = project.name;
+        if (project.version !== CREATOR_VERSION) context.projectVersion = String(project.version || 'unknown');
+    } catch (_) { context.projectMetadataStatus = 'unavailable'; }
+    try {
+        const instructionsPath = path.join(PROJECT_ROOT, 'AGENTS.md');
+        const stat = fs.lstatSync(instructionsPath);
+        if (stat.isFile() && !stat.isSymbolicLink() && stat.size <= 32768) {
+            context.projectConventions = { file: 'AGENTS.md', status: 'available',
+                sha256: crypto.createHash('sha256').update(fs.readFileSync(instructionsPath)).digest('hex') };
+        } else context.projectConventions.status = 'unsupported-file';
+    } catch (_) {}
+    const selection = selectedNodeUuids();
+    Editor.Scene.callSceneScript('cocos-agent-bridge', 'snapshot', { selectedNodeUuids: selection || [],
+        selectionAvailable: selection !== null }, (error, snapshot) => {
+        if (!error && snapshot) {
+            context.activeScene = snapshot.sceneName || null;
+            context.selectedNodes = snapshot.selectedNodes || [];
+            context.selectionStatus = snapshot.selectionStatus || 'read';
+        } else context.selectionStatus = 'unavailable';
+        if (event && typeof event.reply === 'function') event.reply(null, context);
+        else sendAssistantPanel('project-context', context);
+    });
+}
+
 function send(value) {
     if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(value));
 }
@@ -279,6 +335,19 @@ function onMessage(raw) {
                 commands,
             } });
         });
+        return;
+    }
+    if (Object.prototype.hasOwnProperty.call(scriptOperations.inputs, message.method)) {
+        const params = message.params || {};
+        if (!activeSession || params.sessionId !== activeSession.sessionId || params.instanceId !== INSTANCE_ID
+            || params.nonce !== activeSession.scriptRequestNonce || message.method !== activeSession.scriptCommand
+            || JSON.stringify(params.input) !== JSON.stringify(activeSession.scriptInput)) {
+            send({ type: 'response', id: message.id, ok: false, error: { code: 'INVALID_SCRIPT_SESSION' } }); return;
+        }
+        scriptService.execute(message.method, params.input).then((result) => send({ type: 'response', id: message.id, ok: true,
+            result: { nonce: params.nonce, instanceId: INSTANCE_ID, creatorVersion: CREATOR_VERSION, projectRoot: PROJECT_ROOT, ...result } }))
+            .catch((error) => send({ type: 'response', id: message.id, ok: false,
+                error: { code: error.code || 'SCRIPT_COMMAND_FAILED', message: String(error.message).slice(0, 800), sideEffect: 'none' } }));
         return;
     }
     if (message.method === 'scene.preflightPngSprite') {
@@ -352,7 +421,9 @@ function onMessage(raw) {
     if (message.method === 'scene.snapshot') {
         const params = message.params || {};
         const nonce = params.nonce;
-        Editor.Scene.callSceneScript('cocos-agent-bridge', 'snapshot', params, (error, snapshot) => {
+        const selection = selectedNodeUuids();
+        const snapshotParams = Object.assign({}, params, { selectedNodeUuids: selection || [], selectionAvailable: selection !== null });
+        Editor.Scene.callSceneScript('cocos-agent-bridge', 'snapshot', snapshotParams, (error, snapshot) => {
             if (error) {
                 send({ type: 'response', id: message.id, ok: false, error: { code: 'SCENE_SNAPSHOT_FAILED', message: String(error.message || error) } });
                 return;
@@ -1444,6 +1515,7 @@ async function forgetAssistantCredential() {
 
 module.exports = {
     messages: {
+        'asset-db:script-import-failed'(event, ...args) { scriptService.importFailed(args); },
         openAssistant() {
             Editor.Panel.open('cocos-agent-bridge');
         },
@@ -1458,6 +1530,9 @@ module.exports = {
         },
         assistantCredentialForget() {
             void forgetAssistantCredential();
+        },
+        projectContextGet(event) {
+            getProjectContext(event);
         },
         'scene:saved'() {
             if (pendingSceneSave) pendingSceneSave(null);
