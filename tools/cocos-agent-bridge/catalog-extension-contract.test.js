@@ -20,14 +20,18 @@ const catalog2 = loadCatalog('2.4.15NewProject/packages/cocos-agent-bridge/main.
 const catalog3 = loadCatalog('3.8,7NewProject/extensions/cocos-agent-bridge/dist/main.js');
 for (const [version, catalog] of [['2.4.15', catalog2], ['3.8.7', catalog3]]) {
     const commands = catalog({ sceneName: 'example', hasCanvas: true, assetDbReady: true, prefabSourcePatchApiReady: true });
-    const expectedIds = ['scene.snapshot', 'scene.node.inspect', ...(version === '2.4.15' ? ['asset.searchPng'] : []), 'asset.importPng', ...(version === '2.4.15' ? ['asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder'] : []), 'scene.pngSprite', 'scene.node.create', ...(version === '2.4.15' ? ['scene.node.patch', 'prefab.source.patch', 'prefab.source.inspect', 'content.stress.run'] : [])];
+    const expectedIds = ['scene.snapshot', ...(version === '2.4.15' ? ['runtime.preview.start'] : []), 'scene.node.inspect', ...(version === '2.4.15' ? ['asset.searchPng'] : []), 'asset.importPng', ...(version === '2.4.15' ? ['asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder'] : []), 'scene.pngSprite', 'scene.node.create', ...(version === '2.4.15' ? ['scene.node.patch', 'prefab.source.patch', 'prefab.source.inspect', 'content.stress.run'] : [])];
     assert.deepStrictEqual(commands.map((item) => item.id), [...(version === '2.4.15' ? ['script.read', 'script.patch.plan', 'script.patch', 'script.operation.get'] : []), ...expectedIds]);
     assert.ok(commands.every((item) => item.contractVersion === (item.id === 'content.stress.run' ? '0.2' : '0.1')));
-    assert.deepStrictEqual(commands.map((item) => item.access), [...(version === '2.4.15' ? ['read', 'read', 'write', 'read'] : []), 'read', 'read', ...(version === '2.4.15' ? ['read'] : []), 'write', ...(version === '2.4.15' ? ['write', 'read', 'write', 'write'] : []), 'write', 'write', ...(version === '2.4.15' ? ['write', 'write', 'read', 'read'] : [])]);
+    assert.deepStrictEqual(commands.map((item) => item.access), [...(version === '2.4.15' ? ['read', 'read', 'write', 'read'] : []), 'read', ...(version === '2.4.15' ? ['write'] : []), 'read', ...(version === '2.4.15' ? ['read'] : []), 'write', ...(version === '2.4.15' ? ['write', 'read', 'write', 'write'] : []), 'write', 'write', ...(version === '2.4.15' ? ['write', 'write', 'read', 'read'] : [])]);
     assert.ok(isDeepStrictEqual(commands.find((item) => item.id === 'scene.snapshot').input, inputs.snapshotInput));
     assert.ok(isDeepStrictEqual(commands.find((item) => item.id === 'scene.node.inspect').input, inputs.nodeInspectInput));
     assert.ok(isDeepStrictEqual(commands.find((item) => item.id === 'asset.importPng').input, inputs.importPngInput));
     if (version === '2.4.15') {
+        const preview = commands.find((item) => item.id === 'runtime.preview.start');
+        assert.ok(isDeepStrictEqual(preview.input, inputs.runtimePreviewStartInput2x));
+        assert.deepStrictEqual(preview.preconditions, ['activeScene']);
+        assert.strictEqual(preview.status, 'available');
         for (const [id, definition] of [['script.read', 'scriptReadInput2x'], ['script.patch.plan', 'scriptPatchPlanInput2x'], ['script.patch', 'scriptPatchInput2x'], ['script.operation.get', 'scriptOperationGetInput2x']]) {
             const item = commands.find((candidate) => candidate.id === id);
             assert.ok(isDeepStrictEqual(item.input, inputs[definition]), id);
@@ -74,6 +78,7 @@ for (const [version, catalog] of [['2.4.15', catalog2], ['3.8.7', catalog3]]) {
         assert.strictEqual(commands.find((item) => item.id === 'prefab.source.patch'), undefined, '3.8 must not advertise 2.4 Prefab editing');
         assert.strictEqual(commands.find((item) => item.id === 'prefab.source.inspect'), undefined, '3.8 must not advertise 2.4 Prefab inspection');
         assert.strictEqual(commands.find((item) => item.id === 'content.stress.run'), undefined, '3.8 must not advertise the 2.4 runtime diagnostic');
+        assert.strictEqual(commands.find((item) => item.id === 'runtime.preview.start'), undefined, '3.8 must not advertise the 2.4 preview command');
     }
     assert.strictEqual(nodeCommand.status, 'available', version);
     assert.strictEqual(catalog({ sceneName: null, hasCanvas: false }).find((item) => item.id === 'scene.node.create').reason, 'NO_OPEN_SCENE');

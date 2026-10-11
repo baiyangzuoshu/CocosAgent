@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,8 +8,9 @@ import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { createServer } from './mcp-server.mjs';
-import { DEFAULT_BASE_URL, completionEndpoint, parseArgs, requestDeepSeek, runDeepSeekAgent } from './deepseek-agent.mjs';
-import { compactReceipt, assistantAnswer } from './assistant-host.mjs';
+import { DEFAULT_BASE_URL, appendToolImages, completionEndpoint, normalizeToolResult, parseArgs, requestDeepSeek,
+    runDeepSeekAgent, toolResultForModel, toolResultForTrace } from './deepseek-agent.mjs';
+import { compactReceipt, compactResult, assistantAnswer, projectContextMatchesProject, readRecoveryReceipt } from './assistant-host.mjs';
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const DEFAULT_SKILL = path.join(REPOSITORY_ROOT, 'plugins/cocos-agent-2x/skills/cocos-agent/SKILL.md');
@@ -33,8 +35,8 @@ function modelToolResponse(...toolCalls) {
     } }] };
 }
 
-async function withMcp(projects, invokeAgent, run) {
-    const server = createServer(projects, { invokeAgent });
+async function withMcp(projects, invokeAgent, run, options = {}) {
+    const server = createServer(projects, { invokeAgent, ...options });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: 'deepseek-agent-test', version: '0.1.0' });
     await server.connect(serverTransport);
@@ -47,6 +49,155 @@ function readTrace(filename) {
     return fs.readFileSync(filename, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
 }
 
+test('runtime screenshots are sent only as DeepSeek Flash user images and are omitted from tool JSON and traces', () => {
+    const data = Buffer.from('jpeg-payload').toString('base64');
+    const result = normalizeToolResult({ structuredContent: { success: true, runtime: { status: 'runtime-error' } },
+        content: [{ type: 'image', mimeType: 'image/jpeg', data }] });
+    const modelMessages = [{ role: 'tool', content: JSON.stringify(toolResultForModel(result)) }];
+    assert.equal(appendToolImages(modelMessages, result, 'deepseek-flash', 'cocos_2x_runtime_observe'), true);
+    assert.equal(modelMessages[1].role, 'user', 'DeepSeek Chat Completions accepts images in user messages');
+    assert.equal(modelMessages[1].content[1].type, 'image_url');
+    assert.equal(modelMessages[1].content[1].image_url.url, `data:image/jpeg;base64,${data}`);
+    assert.equal(JSON.stringify(toolResultForModel(result)).includes(data), false);
+    const traced = toolResultForTrace(result);
+    assert.equal(JSON.stringify(traced).includes(data), false);
+    assert.equal(traced.content[0].byteLength, Buffer.from(data, 'base64').byteLength);
+    const otherModelMessages = [];
+    assert.equal(appendToolImages(otherModelMessages, result, 'deepseek-v4-pro', 'cocos_2x_runtime_observe'), false);
+    assert.deepEqual(otherModelMessages, []);
+});
+
+test('Creator panel context is bounded to the exact registered project', () => {
+    const value = fixture();
+    const context = { creatorVersion: '2.4.15', projectRoot: value.projects[0], projectName: 'LinkUpClient',
+        activeScene: 'LinkUp', selectionStatus: 'read', selectedNodes: [], projectConventions: { status: 'available' } };
+    try {
+        assert.equal(projectContextMatchesProject(context, value.projects[0]), true);
+        assert.equal(projectContextMatchesProject({ ...context, projectRoot: value.projects[1] }, value.projects[0]), false);
+        assert.equal(projectContextMatchesProject({ ...context, creatorVersion: '3.8.7' }, value.projects[0]), false);
+        assert.equal(projectContextMatchesProject({ ...context, projectRoot: null }, value.projects[0]), false);
+        assert.equal(projectContextMatchesProject(undefined, value.projects[0]), true, 'older panel clients may omit this optional context');
+    } finally { fs.rmSync(value.parent, { recursive: true, force: true }); }
+});
+
+test('Assistant runtime observation event keeps the diagnostic summary and a bounded panel-only screenshot URL', () => {
+    const data = Buffer.from('jpeg-payload').toString('base64');
+    const compact = compactResult({ structuredContent: { success: true, outcome: 'observed',
+        scene: { name: 'helloworld' }, runtime: { status: 'runtime-error' },
+        diagnostics: { errors: [{ message: 'TypeError' }], warnings: [], logs: [] },
+        screenshot: { available: true, mimeType: 'image/jpeg' } },
+    content: [{ type: 'image', mimeType: 'image/jpeg', data }] });
+    assert.equal(compact.runtime.status, 'runtime-error');
+    assert.equal(compact.diagnostics.errors[0].message, 'TypeError');
+    assert.equal(compact.imageDataUrl, `data:image/jpeg;base64,${data}`);
+});
+
+test('Creator Agent observes a runtime error, gets approval for one script patch, then observes the same scene again', async () => {
+    const value = fixture();
+    const projectRoot = value.projects[0];
+    const sceneUuid = '11111111-1111-4111-8111-111111111111';
+    const scriptUuid = '22222222-2222-4222-8222-222222222222';
+    const sourceSha256 = 'a'.repeat(64);
+    const runtimeStatuses = ['runtime-error', 'running'];
+    const commands = ['runtime.preview.start', 'script.read', 'script.patch.plan', 'script.patch', 'script.operation.get']
+        .map((id) => ({ id, contractVersion: '0.1', access: id === 'script.patch' ? 'write' : 'read', status: 'available' }));
+    const hostCalls = [];
+    const approvals = [];
+    const modelRequests = [];
+    const observerInputs = [];
+    const image = Buffer.from('bounded-fake-jpeg').toString('base64');
+    const observeRuntime = async (input) => {
+        observerInputs.push(input);
+        const status = runtimeStatuses.shift();
+        return { success: true, outcome: 'observed', creatorVersion: '2.4.15',
+            scene: { name: 'helloworld', uuid: sceneUuid, matchesExpected: true },
+            runtime: { status, frameCount: status === 'running' ? 148 : 83, frameDelta: 12, paused: false,
+                capturedErrorCount: status === 'runtime-error' ? 1 : 0 },
+            diagnostics: { errors: status === 'runtime-error' ? [{ source: 'console', level: 'error',
+                message: 'TypeError: this.target is null', location: { resource: 'HelloWorld.js', line: 42 } }] : [],
+                warnings: [], logs: [] }, screenshot: { available: true, mimeType: 'image/jpeg', width: 640, height: 360 },
+            screenshotBase64: image };
+    };
+    const invokeAgent = async (request) => {
+        hostCalls.push(request);
+        if (request.method === 'instances.list') return { id: request.id, result: { success: true, data: [
+            { projectRoot, creatorVersion: '2.4.15', state: 'ready', activeScene: 'helloworld', activeSceneUuid: sceneUuid },
+        ] } };
+        if (request.method === 'capabilities.list') return { id: request.id, result: { success: true, data: {
+            instance: { projectRoot, creatorVersion: '2.4.15', state: 'ready', activeScene: 'helloworld', activeSceneUuid: sceneUuid },
+            commands,
+        } } };
+        if (request.method === 'command.execute') {
+            const command = request.params.command;
+            if (command === 'script.read') return { id: request.id, result: { success: true, outcome: 'completed', command,
+                result: { scriptPath: 'Script/HelloWorld.js', scriptUuid, sourceSha256, source: 'onLoad() { this.target.run(); }' } } };
+            if (command === 'script.patch.plan') return { id: request.id, result: { success: true, outcome: 'ready', command,
+                result: { expectedDiff: [{ before: 'this.target.run();', after: 'if (!this.target) return; this.target.run();' }], sourceSha256 } } };
+            if (command === 'script.patch') return { id: request.id, result: { success: true, outcome: 'needs-runtime', command,
+                result: { scriptPath: 'Script/HelloWorld.js', scriptUuid, afterSha256: 'b'.repeat(64),
+                    compilation: { status: 'compiled' } } } };
+        }
+        throw new Error(`Unexpected host method ${request.method}`);
+    };
+    const calls = [
+        toolCall('observe-list', 'cocos_2x_instances_list', {}),
+        toolCall('observe-skills', 'cocos_2x_skills_list', {}),
+        toolCall('observe-skill', 'cocos_2x_skill_read', { name: 'cocos2-runtime-observation' }),
+        toolCall('observe-capabilities', 'cocos_2x_capabilities_list', { projectRoot }),
+        toolCall('observe-contract', 'cocos_2x_skill_reference_read', {
+            skillName: 'cocos2-runtime-observation', referenceId: 'agent-foundation/cocos-agent-runtime-observation-0.1.md',
+        }),
+        toolCall('observe-before', 'cocos_2x_runtime_observe', { projectRoot, expectedScene: 'helloworld' }),
+        toolCall('read-script', 'cocos_2x_script_read', { projectRoot, input: { scriptPath: 'Script/HelloWorld.js' } }),
+        toolCall('plan-patch', 'cocos_2x_script_patch_plan', { projectRoot, input: {
+            scriptPath: 'Script/HelloWorld.js', scriptUuid, expectedSha256: sourceSha256,
+            edits: [{ before: 'this.target.run();', after: 'if (!this.target) return; this.target.run();' }],
+        } }),
+        toolCall('apply-patch', 'cocos_2x_script_patch', { projectRoot, input: {
+            action: 'apply', operationId: '33333333-3333-4333-8333-333333333333', scriptPath: 'Script/HelloWorld.js',
+            scriptUuid, expectedSha256: sourceSha256,
+            edits: [{ before: 'this.target.run();', after: 'if (!this.target) return; this.target.run();' }],
+        } }),
+        toolCall('observe-after', 'cocos_2x_runtime_observe', { projectRoot, expectedScene: 'helloworld' }),
+    ];
+    let modelRound = 0;
+    try {
+        const result = await withMcp([projectRoot], invokeAgent, (client) => runDeepSeekAgent({
+            client, mode: 'Agent', task: '运行时报错，请依据证据做最小脚本修复并复查。',
+            projectRoots: [projectRoot], skillFiles: [DEFAULT_SKILL], tracePath: value.tracePath, apiKey: 'test-secret-value',
+            allowWrite: true,
+            maxTurns: 12,
+            approveWrite: async (tool, args) => { approvals.push({ tool: tool.name, args }); return true; },
+            callModel: async (request) => {
+                modelRequests.push(request);
+                const call = calls[modelRound++];
+                if (call) return modelToolResponse(call);
+                return { id: 'runtime-repair-final', choices: [{ finish_reason: 'stop', message: { role: 'assistant',
+                    content: '发现空引用错误；已批准并应用窄范围修复，Creator 编译成功。同一场景复查后无错误且帧继续推进。' } }] };
+            },
+        }), { observeRuntime });
+
+        assert.equal(result.status, 'completed', JSON.stringify(result));
+        assert.equal(result.reason, 'model_final');
+        assert.equal(result.toolCalls, 10);
+        assert.deepEqual(observerInputs.map((input) => [input.expectedScene, input.expectedSceneUuid]), [
+            ['helloworld', sceneUuid], ['helloworld', sceneUuid],
+        ]);
+        assert.deepEqual(hostCalls.filter((call) => call.method === 'command.execute').map((call) => call.params.command), [
+            'script.read', 'script.patch.plan', 'script.patch',
+        ]);
+        assert.equal(approvals.length, 1);
+        assert.equal(approvals[0].tool, 'cocos_2x_script_patch');
+        assert.equal(modelRequests.some((request) => request.messages.some((message) => message.role === 'user'
+            && Array.isArray(message.content) && message.content.some((part) => part.type === 'image_url'))), true,
+        'the vision model receives the runtime screenshot as an image input');
+        const events = readTrace(value.tracePath);
+        assert.deepEqual(events.filter((event) => event.event === 'tool.call').map((event) => event.name), calls.map((call) => call.function.name));
+        assert.equal(events.filter((event) => event.event === 'tool.image-forwarded').length, 2);
+        assert.doesNotMatch(fs.readFileSync(value.tracePath, 'utf8'), /bounded-fake-jpeg/);
+    } finally { fs.rmSync(value.parent, { recursive: true, force: true }); }
+});
+
 for (const mode of ['Ask', 'Plan']) {
     test(`${mode} exposes only read tools and supports a conversational answer with history`, async () => {
         const value = fixture();
@@ -58,10 +209,21 @@ for (const mode of ['Ask', 'Plan']) {
                 const result = await runDeepSeekAgent({ client, mode, task: 'Explain the modes.',
                     projectRoots: value.projects, skillFiles: [DEFAULT_SKILL], tracePath: value.tracePath, apiKey: 'test-secret',
                     history: [{ role: 'user', content: 'Previous question' }, { role: 'assistant', content: 'Previous answer' }],
+                    projectContext: { creatorVersion: '2.4.15', projectName: 'LinkUpClient', activeScene: 'LinkUp',
+                        selectionStatus: 'read', selectedNodes: [{ status: 'found', uuid: 'node-123', path: 'LinkUp/Canvas/Start',
+                            name: 'Start', active: true, components: ['cc.Button'] }],
+                        projectRoot: '/private/user/LinkUpClient', projectConventions: { status: 'available', sha256: 'a'.repeat(64) },
+                        instructionsContent: 'do-not-send-this-project-file' },
                     callModel: async (request) => {
                         assert.ok(request.tools.length > 0);
                         assert.ok(request.tools.every((tool) => readonly.has(tool.function.name)));
                         assert.ok(request.messages.some((message) => message.content === 'Previous answer'));
+                        const panelContext = request.messages.find((message) => message.role === 'user'
+                            && typeof message.content === 'string' && message.content.includes('Current Creator panel context'));
+                        assert.ok(panelContext, 'each turn receives the refreshed bounded panel context');
+                        assert.match(panelContext.content, /"activeScene":"LinkUp"/);
+                        assert.match(panelContext.content, /"path":"LinkUp\/Canvas\/Start"/);
+                        assert.doesNotMatch(panelContext.content, /private\/user|do-not-send-this-project-file|"sha256"/);
                         assert.equal(request.mode, mode);
                 if (mode === 'Plan') {
                     assert.match(request.messages[0].content, /preconditions is an array of 0-4 non-empty strings/);
@@ -80,6 +242,121 @@ for (const mode of ['Ask', 'Plan']) {
         } finally { fs.rmSync(value.parent, { recursive: true, force: true }); }
     });
 }
+
+test('each follow-up uses the refreshed selection context without persisting the previous selection hint', async () => {
+    const value = fixture();
+    const seen = [];
+    const contextFor = (uuid, name) => ({ creatorVersion: '2.4.15', projectRoot: value.projects[0], projectName: 'LinkUpClient',
+        activeScene: 'LinkUp', selectionStatus: 'read', selectedNodes: [{ status: 'found', uuid, path: `LinkUp/Canvas/${name}`,
+            name, active: true, components: ['cc.Button'] }], projectConventions: { status: 'available' } });
+    try {
+        await withMcp([value.projects[0]], async () => { throw new Error('A conversational Ask should not need a tool call.'); }, async (client) => {
+            const ask = (task, projectContext, history = []) => runDeepSeekAgent({ client, mode: 'Ask', task,
+                projectRoots: [value.projects[0]], skillFiles: [DEFAULT_SKILL], tracePath: value.tracePath, apiKey: 'test-secret',
+                projectContext, history, callModel: async (request) => {
+                    seen.push(request.messages);
+                    return { choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: '只读回答。' } }] };
+                } });
+            const first = await ask('说明当前选择。', contextFor('old-selection-uuid', 'OldButton'));
+            assert.equal(first.status, 'completed');
+            const second = await ask('沿用刚才的上下文继续说明。', contextFor('new-selection-uuid', 'NewButton'), [
+                { role: 'user', content: '说明当前选择。' }, { role: 'assistant', content: '上一轮只读回答。' },
+            ]);
+            assert.equal(second.status, 'completed');
+        });
+        const lastContext = seen[1].find((message) => message.role === 'user'
+            && typeof message.content === 'string' && message.content.includes('Current Creator panel context'));
+        assert.ok(lastContext);
+        assert.match(lastContext.content, /new-selection-uuid/);
+        assert.doesNotMatch(lastContext.content, /old-selection-uuid|OldButton/);
+        assert.deepEqual(seen[1].filter((message) => typeof message.content === 'string'
+            && message.content.includes('Current Creator panel context')).length, 1);
+    } finally { fs.rmSync(value.parent, { recursive: true, force: true }); }
+});
+
+test('Agent must read the current project conventions before an approved project write', async () => {
+    const value = fixture();
+    const hostMethods = [];
+    const approvals = [];
+    const conventionText = '# Project convention fixture\nAll LinkUpClient changes use existing naming and avoid unrelated scene edits.\n';
+    fs.writeFileSync(path.join(value.projects[0], 'AGENTS.md'), conventionText);
+    const conventionSha = crypto.createHash('sha256').update(conventionText).digest('hex');
+    let round = 0;
+    const calls = [];
+    try {
+        const invokeAgent = async (request) => {
+            hostMethods.push(request.method);
+            if (request.method === 'instances.list') return { id: request.id, result: { success: true, data: [
+                { projectRoot: value.projects[0], creatorVersion: '2.4.15', state: 'ready', activeScene: 'LinkUp' },
+            ] } };
+            if (request.method === 'capabilities.list') return { id: request.id, result: { success: true, data: {
+                instance: { projectRoot: value.projects[0], creatorVersion: '2.4.15', state: 'ready' },
+                commands: [{ id: 'content.select', access: 'write', status: 'available' }],
+            } } };
+            if (request.method === 'content.select') return { id: request.id, result: { success: true, outcome: 'completed',
+                command: 'content.select', data: { releaseId: 'demo-release' } } };
+            throw new Error(`Unexpected Host method: ${request.method}`);
+        };
+        const result = await withMcp([value.projects[0]], invokeAgent, (client) => runDeepSeekAgent({
+            client, mode: 'Agent', task: 'Select the requested release after reviewing this project.',
+            projectRoots: [value.projects[0]], skillFiles: [DEFAULT_SKILL], tracePath: value.tracePath, apiKey: 'test-secret',
+            projectContext: { creatorVersion: '2.4.15', projectRoot: value.projects[0], projectName: 'LinkUpClient',
+                activeScene: 'LinkUp', selectionStatus: 'read', selectedNodes: [],
+                projectConventions: { status: 'available', sha256: conventionSha } },
+            allowWrite: true,
+            approveWrite: async (tool) => { approvals.push(tool.name); return true; },
+            callModel: async ({ messages, tools }) => {
+                round += 1;
+                if (round === 1) return modelToolResponse(toolCall('list', 'cocos_2x_instances_list', {}));
+                if (round === 2) return modelToolResponse(toolCall('capabilities', 'cocos_2x_capabilities_list', { projectRoot: value.projects[0] }));
+                if (round === 3) return modelToolResponse(toolCall('premature-write', 'cocos_2x_content_select', {
+                    projectRoot: value.projects[0], releaseId: 'demo-release', expectedCurrent: null,
+                }));
+                if (round === 4) {
+                    assert.ok(messages.some((message) => typeof message.content === 'string'
+                        && message.content.includes('PROJECT_INSTRUCTIONS_REQUIRED')));
+                    assert.equal(approvals.length, 0, 'the blocked write must not request user approval');
+                    return modelToolResponse(toolCall('read-conventions', 'cocos_2x_project_instructions_read', { projectRoot: value.projects[0] }));
+                }
+                if (round === 5) {
+                    assert.match(messages.at(-1).content, /All LinkUpClient changes use existing naming/);
+                    return modelToolResponse(toolCall('approved-write', 'cocos_2x_content_select', {
+                        projectRoot: value.projects[0], releaseId: 'demo-release', expectedCurrent: null,
+                    }));
+                }
+                assert.match(messages.at(-1).content, /demo-release/);
+                return { choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: '已根据工程约定完成选择并读回回执。' } }] };
+            },
+        }));
+        assert.equal(result.status, 'completed', JSON.stringify(result));
+        assert.deepEqual(approvals, ['cocos_2x_content_select']);
+        assert.deepEqual(hostMethods, ['instances.list', 'capabilities.list', 'content.select']);
+        const trace = fs.readFileSync(value.tracePath, 'utf8');
+        assert.match(trace, /project_instructions_not_read/);
+        assert.match(trace, /"event":"tool\.call"[^\n]*"name":"cocos_2x_project_instructions_read"/);
+        assert.doesNotMatch(trace, /All LinkUpClient changes use existing naming/);
+
+        let staleRound = 0;
+        const stale = await withMcp([value.projects[0]], invokeAgent, (client) => runDeepSeekAgent({
+            client, mode: 'Agent', task: 'Plan a project write.', projectRoots: [value.projects[0]],
+            skillFiles: [DEFAULT_SKILL], tracePath: path.join(value.parent, 'stale-run.jsonl'), apiKey: 'test-secret',
+            projectContext: { creatorVersion: '2.4.15', projectRoot: value.projects[0], projectName: 'LinkUpClient',
+                activeScene: 'LinkUp', selectionStatus: 'read', selectedNodes: [],
+                projectConventions: { status: 'available', sha256: '0'.repeat(64) } },
+            allowWrite: true,
+            callModel: async () => {
+                staleRound += 1;
+                if (staleRound === 1) return modelToolResponse(toolCall('stale-list', 'cocos_2x_instances_list', {}));
+                if (staleRound === 2) return modelToolResponse(toolCall('stale-capabilities', 'cocos_2x_capabilities_list', { projectRoot: value.projects[0] }));
+                return modelToolResponse(toolCall('stale-instructions', 'cocos_2x_project_instructions_read', { projectRoot: value.projects[0] }));
+            },
+        }));
+        assert.equal(stale.reason, 'project_context_stale');
+        assert.deepEqual(approvals, ['cocos_2x_content_select'], 'a changed project convention file must stop before another write approval');
+        assert.deepEqual(hostMethods, ['instances.list', 'capabilities.list', 'content.select', 'instances.list', 'capabilities.list'],
+            'stale context must not reach a second write command');
+    } finally { fs.rmSync(value.parent, { recursive: true, force: true }); }
+});
 
 test('Creator Agent reads the selected skill and its declared reference on demand and traces verified hashes', async () => {
     const value = fixture();
@@ -155,7 +432,7 @@ test('Creator Agent reads the selected skill and its declared reference on deman
         });
         const traceText = fs.readFileSync(value.tracePath, 'utf8');
         const events = readTrace(value.tracePath);
-        assert.ok(events.some((event) => event.event === 'skills.catalog.loaded' && event.packageVersion === '0.3.1'
+        assert.ok(events.some((event) => event.event === 'skills.catalog.loaded' && event.packageVersion === '0.3.2'
             && /^[a-f0-9]{64}$/.test(event.skillsIndexSha256)));
         assert.ok(events.some((event) => event.event === 'skill.read' && event.source === 'model-requested'
             && event.skillName === skillName && /^[a-f0-9]{64}$/.test(event.sha256)));
@@ -220,6 +497,48 @@ test('Assistant never displays an Agent completion claim without a task receipt'
     const text = assistantAnswer({ status: 'stopped', reason: 'model_final_without_success_receipt', finalText: 'Created fake-node with fake-operation-id.' }, 'Agent');
     assert.doesNotMatch(text, /fake-node|fake-operation-id/);
     assert.match(text, /未确认完成/);
+});
+
+test('recovery reads the live instance and capability contract before the exact operation receipt', async () => {
+    const projectRoot = '/tmp/cocos-recovery-project';
+    const operationId = '33333333-3333-4333-8333-333333333333';
+    const calls = [];
+    const client = { async callTool(request) {
+        calls.push(request);
+        if (request.name === 'cocos_2x_instances_list') return { structuredContent: { success: true, data: [
+            { projectRoot, creatorVersion: '2.4.15', state: 'ready' },
+        ] } };
+        if (request.name === 'cocos_2x_capabilities_list') return { structuredContent: { success: true, data: {
+            instance: { projectRoot, creatorVersion: '2.4.15', state: 'ready' },
+            commands: [{ id: 'script.operation.get', status: 'available' }],
+        } } };
+        return { structuredContent: { success: true, outcome: 'completed', operationId } };
+    } };
+    const receipt = await readRecoveryReceipt(client, projectRoot, 'cocos_2x_script_operation_get', operationId);
+    assert.equal(receipt.outcome, 'completed');
+    assert.deepEqual(calls.map((call) => call.name), [
+        'cocos_2x_instances_list', 'cocos_2x_capabilities_list', 'cocos_2x_script_operation_get',
+    ]);
+    assert.deepEqual(calls[1].arguments, { projectRoot });
+    assert.deepEqual(calls[2].arguments, { operationId }, 'script operation schema receives only the exact operation ID');
+});
+
+test('recovery stops before reading an operation when the live capability is unavailable', async () => {
+    const projectRoot = '/tmp/cocos-recovery-project';
+    const operationId = '33333333-3333-4333-8333-333333333333';
+    const calls = [];
+    const client = { async callTool(request) {
+        calls.push(request.name);
+        if (request.name === 'cocos_2x_instances_list') return { structuredContent: { success: true, data: [
+            { projectRoot, creatorVersion: '2.4.15', state: 'ready' },
+        ] } };
+        return { structuredContent: { success: true, data: {
+            instance: { projectRoot, creatorVersion: '2.4.15', state: 'ready' },
+            commands: [{ id: 'operation.get', status: 'unavailable' }],
+        } } };
+    } };
+    await assert.rejects(readRecoveryReceipt(client, projectRoot, 'cocos_2x_operation_get', operationId), /RECOVERY_CAPABILITY_NOT_AVAILABLE/);
+    assert.deepEqual(calls, ['cocos_2x_instances_list', 'cocos_2x_capabilities_list']);
 });
 
 test('A batched model response is corrected before any tool executes', async () => {
@@ -510,6 +829,58 @@ test('DeepSeek agent cannot mark the task complete without a successful task-too
         assert.match(result.finalText, /Inspection succeeded/);
         assert.equal(result.toolCalls, 0);
     } finally { fs.rmSync(value.parent, { recursive: true, force: true }); }
+});
+
+test('cancel during an in-flight approved write waits for its receipt and prevents subsequent model calls', async () => {
+    const value = fixture();
+    const projectRoot = value.projects[0];
+    const controller = new AbortController();
+    let writeStarted;
+    const started = new Promise((resolve) => { writeStarted = resolve; });
+    let releaseWrite;
+    const writeGate = new Promise((resolve) => { releaseWrite = resolve; });
+    let modelCalls = 0;
+    const operationId = '33333333-3333-4333-8333-333333333333';
+    const invokeAgent = async (request) => {
+        if (request.method === 'instances.list') return { id: request.id, result: { success: true, data: [
+            { projectRoot, creatorVersion: '2.4.15', state: 'ready' },
+        ] } };
+        if (request.method === 'capabilities.list') return { id: request.id, result: { success: true, data: {
+            instance: { projectRoot, creatorVersion: '2.4.15', state: 'ready' },
+            commands: [{ id: 'script.patch', access: 'write', status: 'available' }],
+        } } };
+        if (request.method === 'command.execute') {
+            writeStarted();
+            await writeGate;
+            return { id: request.id, result: { success: true, outcome: 'completed', command: 'script.patch', operationId } };
+        }
+        throw new Error(`Unexpected method ${request.method}`);
+    };
+    const runPromise = withMcp([projectRoot], invokeAgent, (client) => runDeepSeekAgent({
+        client, mode: 'Agent', task: 'Apply this approved script patch.', projectRoots: [projectRoot],
+        skillFiles: [DEFAULT_SKILL], tracePath: value.tracePath, apiKey: 'test-secret-value', allowWrite: true,
+        signal: controller.signal, approveWrite: async () => true,
+        callModel: async () => {
+            modelCalls += 1;
+            if (modelCalls === 1) return modelToolResponse(toolCall('instances', 'cocos_2x_instances_list', {}));
+            if (modelCalls === 2) return modelToolResponse(toolCall('capabilities', 'cocos_2x_capabilities_list', { projectRoot }));
+            if (modelCalls === 3) return modelToolResponse(toolCall('write', 'cocos_2x_command_execute', { projectRoot,
+                command: 'script.patch', input: { action: 'apply', operationId, scriptPath: 'Script/HelloWorld.js',
+                    scriptUuid: '22222222-2222-4222-8222-222222222222', expectedSha256: 'a'.repeat(64),
+                    edits: [{ before: 'old();', after: 'new();' }] } }));
+            throw new Error('a follow-up model turn must not occur after cancel');
+        },
+    }));
+    try {
+        await started;
+        controller.abort();
+        releaseWrite();
+        const result = await runPromise;
+        assert.equal(result.status, 'cancelled');
+        assert.equal(result.reason, 'user_cancelled');
+        assert.equal(modelCalls, 3);
+        assert.equal(result.receipts.at(-1).structuredContent.operationId, operationId);
+    } finally { releaseWrite(); fs.rmSync(value.parent, { recursive: true, force: true }); }
 });
 
 test('DeepSeek request uses the OpenAI-compatible HTTPS tool-call endpoint without exposing the key in errors', async () => {

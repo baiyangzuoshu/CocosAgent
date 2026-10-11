@@ -35,14 +35,15 @@ projects.forEach((project, index) => {
         fs.writeFileSync(path.join(extensionRoot, 'scene.js'), 'mock creator extension scene');
         fs.writeFileSync(path.join(extensionRoot, 'asset-search.js'), 'mock asset search');
         fs.writeFileSync(path.join(extensionRoot, 'credential-store.cjs'), 'mock credential store');
+        fs.writeFileSync(path.join(extensionRoot, 'script-operations.js'), 'mock script operations');
         const wsRoot = path.join(extensionRoot, 'vendor', 'ws');
         fs.mkdirSync(wsRoot, { recursive: true });
         fs.mkdirSync(path.join(wsRoot, 'lib'), { recursive: true });
         fs.writeFileSync(path.join(wsRoot, 'package.json'), JSON.stringify({ name: 'ws', version: '7.5.10' }));
         fs.writeFileSync(path.join(wsRoot, 'index.js'), 'module.exports = {};');
         fs.writeFileSync(path.join(wsRoot, 'lib', 'websocket.js'), 'module.exports = {};');
-        fs.writeFileSync(path.join(extensionRoot, 'package.json'), JSON.stringify({ name: 'cocos-agent-bridge', version: '0.3.0' }));
-        fs.writeFileSync(path.join(extensionRoot, 'package-lock.json'), JSON.stringify({ name: 'cocos-agent-bridge', version: '0.3.0' }));
+        fs.writeFileSync(path.join(extensionRoot, 'package.json'), JSON.stringify({ name: 'cocos-agent-bridge', version: '0.3.2' }));
+        fs.writeFileSync(path.join(extensionRoot, 'package-lock.json'), JSON.stringify({ name: 'cocos-agent-bridge', version: '0.3.2' }));
     }
 });
 const versions = ['2.4.15', '3.8.7'];
@@ -79,6 +80,10 @@ async function mockEditor(index, options = {}) {
         if (message.method === 'capabilities.list') {
             const commands = [
                     { id: 'scene.snapshot', contractVersion: '0.1', access: 'read', inputSchema: 'catalog.schema.json#/$defs/snapshotInput', input: inputs.snapshotInput, preconditions: ['activeScene'], status: index === 0 && !options.wrongStatus ? 'available' : 'unavailable', reason: index === 0 && !options.wrongStatus ? null : 'NO_OPEN_SCENE' },
+                    ...(index === 0 ? [{ id: 'runtime.preview.start', contractVersion: '0.1', access: 'write',
+                        inputSchema: 'catalog.schema.json#/$defs/runtimePreviewStartInput2x', input: inputs.runtimePreviewStartInput2x,
+                        preconditions: ['activeScene'], status: options.sceneName === null ? 'unavailable' : 'available',
+                        reason: options.sceneName === null ? 'NO_OPEN_SCENE' : null }] : []),
                     { id: 'scene.node.inspect', contractVersion: '0.1', access: 'read', inputSchema: 'catalog.schema.json#/$defs/nodeInspectInput', input: inputs.nodeInspectInput, preconditions: ['activeScene'], status: index === 0 ? 'available' : 'unavailable', reason: index === 0 ? null : 'NO_OPEN_SCENE' },
                     ...(index === 0 ? [{ id: 'asset.searchPng', contractVersion: '0.1', access: 'read',
                         inputSchema: 'catalog.schema.json#/$defs/pngAssetSearchInput', input: inputs.pngAssetSearchInput,
@@ -128,21 +133,26 @@ async function mockEditor(index, options = {}) {
                 inputSchema: command.inputSchema, input: command.input, preconditions: command.preconditions,
             })))).digest('hex');
             const sceneName = index === 0 ? options.sceneName || 'helloworld' : null;
+            const sceneUuid = sceneName ? '280c3aec-6492-4a9d-9f51-a9b00b570b4a' : null;
             const result = {
                 nonce: message.params.nonce, instanceId, creatorVersion: options.wrongCatalogVersion && index === 0 ? versions[1] : versions[index], projectRoot: project,
-                extensionVersion: index === 0 ? options.extensionVersion || '0.3.0' : '0.1.0',
+                extensionVersion: index === 0 ? options.extensionVersion || '0.3.2' : '0.1.0',
                 extensionSourceFingerprint: index === 0 ? options.extensionSourceFingerprint || extensionFingerprint(project) : null,
                 commandContractFingerprint: actualContractFingerprint,
                 activeScene: sceneName,
-                catalogRevision: crypto.createHash('sha256').update(JSON.stringify({ scene: sceneName, commands })).digest('hex'),
+                activeSceneUuid: sceneUuid,
+                catalogRevision: crypto.createHash('sha256').update(JSON.stringify({ scene: sceneName,
+                    ...(sceneUuid ? { sceneUuid } : {}), commands })).digest('hex'),
                 commands,
             };
             socket.send(JSON.stringify({ type: 'response', id: message.id, ok: true, result }));
         } else if (message.method === 'scene.snapshot') {
+            const snapshotSceneName = options.snapshotSceneName || options.sceneName || 'helloworld';
             socket.send(JSON.stringify(index === 0
                 ? { type: 'response', id: message.id, ok: true, result: {
                     nonce: message.params.nonce, creatorVersion: versions[index], projectRoot: project,
-                    sceneName: options.snapshotSceneName || options.sceneName || 'helloworld', nodes: [{ name: 'Canvas' }],
+                    sceneName: snapshotSceneName, sceneUuid: snapshotSceneName ? '280c3aec-6492-4a9d-9f51-a9b00b570b4a' : null,
+                    nodes: [{ name: 'Canvas' }],
                 } }
                 : { type: 'response', id: message.id, ok: false, error: { code: 'NO_OPEN_SCENE' } }));
         } else {
@@ -154,7 +164,7 @@ async function mockEditor(index, options = {}) {
 
 function extensionFingerprint(project) {
     const root = path.join(project, 'packages', 'cocos-agent-bridge');
-    return fingerprintFiles(root, ['asset-search.js', 'credential-store.cjs', 'main.js', 'scene.js', 'package.json', 'package-lock.json',
+    return fingerprintFiles(root, ['asset-search.js', 'credential-store.cjs', 'main.js', 'script-operations.js', 'scene.js', 'package.json', 'package-lock.json',
         ...listFiles(root, 'vendor/ws')]);
 }
 
@@ -180,6 +190,9 @@ async function run(query, project, options = {}) {
     assert.strictEqual(list.exit, 0);
     assert.strictEqual(list.data.data.length, 2);
     assert.deepStrictEqual(list.data.data.map((item) => item.activeScene), ['helloworld', null]);
+    assert.deepStrictEqual(list.data.data.map((item) => item.activeSceneUuid), [
+        '280c3aec-6492-4a9d-9f51-a9b00b570b4a', null,
+    ]);
     const catalog = await run('capabilities.list', projects[1]);
     assert.strictEqual(catalog.exit, 0);
     assert.strictEqual(catalog.data.data.instance.projectRoot, projects[1]);

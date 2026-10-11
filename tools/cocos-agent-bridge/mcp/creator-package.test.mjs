@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
-import { buildCreatorExtensionBundle } from '../package-creator-extension.mjs';
+import { buildCreatorExtensionBundle, restoreCreatorExtension, upgradeCreatorExtension } from '../package-creator-extension.mjs';
 
 const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE_ROOT = path.resolve(TEST_DIR, '../../..');
@@ -61,8 +61,12 @@ test('Creator bundle runs its MCP server outside the research repository without
         const runtimeRoot = path.join(output, 'assistant-runtime');
         const pluginRoot = path.join(runtimeRoot, 'plugins/cocos-agent-2x');
         const serverPath = path.join(runtimeRoot, 'tools/cocos-agent-bridge/mcp/mcp-server.mjs');
+        const assistantStateStorePath = path.join(runtimeRoot, 'tools/cocos-agent-bridge/mcp/assistant-state-store.mjs');
+        const runtimeObserverPath = path.join(runtimeRoot, 'tools/cocos-agent-bridge/runtime-observation.js');
         assert.equal(built.runtimeDirectory, runtimeRoot);
         assert.ok(fs.existsSync(serverPath));
+        assert.ok(fs.existsSync(runtimeObserverPath));
+        assert.ok(fs.existsSync(assistantStateStorePath), 'Creator package contains durable Assistant state support');
         assert.ok(fs.existsSync(path.join(runtimeRoot, 'tools/cocos-agent-bridge/mcp/node_modules/zod/package.json')));
         assert.ok(fs.existsSync(path.join(output, 'vendor/ws/index.js')));
         const bundledWebSocket = createRequire(import.meta.url)(path.join(output, 'vendor/ws'));
@@ -83,6 +87,7 @@ test('Creator bundle runs its MCP server outside the research repository without
         await client.connect(transport);
         const { tools } = await client.listTools();
         assert.ok(tools.some((tool) => tool.name === 'cocos_2x_scene_snapshot'));
+        assert.ok(tools.some((tool) => tool.name === 'cocos_2x_runtime_observe'));
         const instructionsTool = tools.find((tool) => tool.name === 'cocos_2x_project_instructions_read');
         assert.equal(instructionsTool.annotations.readOnlyHint, true);
         const registeredProjectRoot = fs.realpathSync(temporary);
@@ -97,14 +102,14 @@ test('Creator bundle runs its MCP server outside the research repository without
         assert.ok(resources.some((resource) => resource.uri === 'cocos://2x/skills/index'));
         const index = JSON.parse((await client.readResource({ uri: 'cocos://2x/skills/index' })).contents[0].text);
         assert.equal(index.agentPackage.name, 'cocos-agent-2x');
-        assert.equal(index.skills.length, 12);
+        assert.equal(index.skills.length, 13);
         const indexedReferences = new Map();
         for (const skill of index.skills) {
             const skillText = (await client.readResource({ uri: skill.uri })).contents[0].text;
             assert.ok(skillText.includes(`skill ${skill.name} sha256 ${skill.sha256}`), `skill hash missing: ${skill.name}`);
             for (const reference of skill.references) indexedReferences.set(reference.uri, reference);
         }
-        assert.equal(indexedReferences.size, 29);
+        assert.equal(indexedReferences.size, 31);
         for (const reference of indexedReferences.values()) {
             const content = (await client.readResource({ uri: reference.uri })).contents[0];
             const bytes = content.blob ? Buffer.from(content.blob, 'base64') : Buffer.from(content.text || '', 'utf8');
@@ -218,4 +223,43 @@ test('Creator runtime installer rejects an existing runtime instead of replacing
     } finally {
         fs.rmSync(temporary, { recursive: true, force: true });
     }
+});
+
+test('Creator extension upgrade swaps a complete verified package and retains a rollback copy', () => {
+    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-agent-extension-upgrade-'));
+    const extension = path.join(temporary, 'LinkUpClient/packages/cocos-agent-bridge');
+    fs.mkdirSync(path.join(extension, 'assistant-runtime'), { recursive: true });
+    fs.writeFileSync(path.join(extension, 'package.json'), JSON.stringify({ name: 'cocos-agent-bridge', version: '0.3.0',
+        'cocos-agent': { creatorVersion: '2.4.15' } }));
+    fs.writeFileSync(path.join(extension, 'main.js'), 'old-extension-marker');
+    fs.writeFileSync(path.join(extension, 'assistant-runtime', 'old-runtime-marker'), 'old-runtime-marker');
+    try {
+        const result = upgradeCreatorExtension({ sourceRoot: SOURCE_ROOT, extensionDirectory: extension });
+        assert.equal(result.previousVersion, '0.3.0');
+        assert.equal(result.installedVersion, JSON.parse(fs.readFileSync(path.join(extension, 'package.json'), 'utf8')).version);
+        assert.equal(result.creatorReloadRequired, true);
+        assert.equal(fs.existsSync(path.join(extension, 'assistant-runtime/tools/cocos-agent-bridge/mcp/assistant-host.mjs')), true);
+        assert.equal(fs.existsSync(path.join(result.rollbackDirectory, 'assistant-runtime/old-runtime-marker')), true);
+        assert.equal(fs.existsSync(path.join(result.rollbackDirectory, 'main.js')), true);
+        const restored = restoreCreatorExtension({ extensionDirectory: extension, rollbackDirectory: result.rollbackDirectory });
+        assert.equal(restored.restoredVersion, '0.3.0');
+        assert.equal(restored.replacedVersion, result.installedVersion);
+        assert.equal(fs.readFileSync(path.join(extension, 'main.js'), 'utf8'), 'old-extension-marker');
+    } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
+});
+
+test('Creator extension upgrade leaves the installed extension intact when package staging fails', () => {
+    const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-agent-extension-upgrade-fail-'));
+    const extension = path.join(temporary, 'LinkUpClient/packages/cocos-agent-bridge');
+    const badSource = path.join(temporary, 'incomplete-source');
+    fs.mkdirSync(extension, { recursive: true });
+    fs.mkdirSync(badSource);
+    fs.writeFileSync(path.join(extension, 'package.json'), JSON.stringify({ name: 'cocos-agent-bridge', version: '0.3.0',
+        'cocos-agent': { creatorVersion: '2.4.15' } }));
+    fs.writeFileSync(path.join(extension, 'marker.txt'), 'preserve-me');
+    try {
+        assert.throws(() => upgradeCreatorExtension({ sourceRoot: badSource, extensionDirectory: extension }), /CREATOR_EXTENSION_SOURCE_MISSING/);
+        assert.equal(fs.readFileSync(path.join(extension, 'marker.txt'), 'utf8'), 'preserve-me');
+        assert.equal(fs.readdirSync(path.dirname(extension)).some((name) => name.includes('rollback-') || name.includes('upgrade-')), false);
+    } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
 });

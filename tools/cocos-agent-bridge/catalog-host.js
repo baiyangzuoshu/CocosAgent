@@ -97,7 +97,7 @@ for (const arg of targetArgs) {
         return;
     }
     seen.add(projectRoot);
-    targets.push({ creatorVersion, projectRoot, instanceId: null, state: 'disconnected', activeScene: null, catalogRevision: null,
+    targets.push({ creatorVersion, projectRoot, instanceId: null, state: 'disconnected', activeScene: null, activeSceneUuid: null, catalogRevision: null,
         extensionVersion: null, extensionSourceFingerprint: null, commandContractFingerprint: null,
         contractCompatibility: null, contractDiagnostics: [], commands: [], error: null,
         mcpRuntime, hostRuntime,
@@ -141,7 +141,7 @@ function publicInstance(target) {
         extensionVersion: target.extensionVersion || null, state: target.state,
         extensionSourceFingerprint: target.extensionSourceFingerprint || null,
         commandContractFingerprint: target.commandContractFingerprint || null,
-        activeScene: target.activeScene, catalogRevision: target.catalogRevision,
+        activeScene: target.activeScene, activeSceneUuid: target.activeSceneUuid || null, catalogRevision: target.catalogRevision,
         hostRuntime: target.hostRuntime,
         expectedRuntime: { agentPackage: { version: expectedAgentPackageVersion, fingerprint: expectedAgentPackageFingerprint },
             mcp: { version: mcpPackage.version, sourceFingerprint: expectedMcpSourceFingerprint,
@@ -265,6 +265,11 @@ function runtimeStateMatches(command, sceneReady) {
         return command.status === 'available' && command.reason === null
             || command.status === 'unavailable' && command.reason === 'CANVAS_NOT_FOUND';
     }
+    if (command.id === 'runtime.preview.start') {
+        return sceneReady
+            ? command.status === 'available' && command.reason === null
+            : command.status === 'unavailable' && command.reason === 'NO_OPEN_SCENE';
+    }
     if (command.id === 'prefab.source.patch') {
         return command.status === 'available' && command.reason === null
             || command.status === 'unavailable' && command.reason === (sceneReady ? 'PREFAB_EDIT_MODE_API_UNAVAILABLE' : 'NO_OPEN_SCENE');
@@ -287,6 +292,8 @@ function runtimeStateMatches(command, sceneReady) {
 function validCatalog(target, result) {
     if (!Array.isArray(result.commands) || result.commands.length > 64
         || !(result.activeScene === null || typeof result.activeScene === 'string')
+        || !(result.activeSceneUuid === undefined || result.activeSceneUuid === null
+            || typeof result.activeSceneUuid === 'string' && /^[0-9a-fA-F-]{36}$/.test(result.activeSceneUuid))
         || !/^[0-9a-f]{64}$/.test(result.catalogRevision || '')) return false;
     const expected = {
         ...(target.creatorVersion === '2.4.15' ? { 'script.read': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/scriptReadInput2x', input: catalogSchema.$defs.scriptReadInput2x, preconditions: ['existingProjectJavaScript', 'assetDbReady'] } } : {}),
@@ -294,6 +301,8 @@ function validCatalog(target, result) {
         ...(target.creatorVersion === '2.4.15' ? { 'script.patch': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/scriptPatchInput2x', input: catalogSchema.$defs.scriptPatchInput2x, preconditions: ['existingProjectJavaScript', 'assetDbReady'] } } : {}),
         ...(target.creatorVersion === '2.4.15' ? { 'script.operation.get': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/scriptOperationGetInput2x', input: catalogSchema.$defs.scriptOperationGetInput2x, preconditions: ['existingProjectJavaScript', 'assetDbReady'] } } : {}),
         'scene.snapshot': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/snapshotInput', input: catalogSchema.$defs.snapshotInput, preconditions: ['activeScene'] },
+        ...(target.creatorVersion === '2.4.15' ? { 'runtime.preview.start': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/runtimePreviewStartInput2x',
+            input: catalogSchema.$defs.runtimePreviewStartInput2x, preconditions: ['activeScene'] } } : {}),
         'scene.node.inspect': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/nodeInspectInput', input: catalogSchema.$defs.nodeInspectInput, preconditions: ['activeScene'] },
         ...(target.creatorVersion === '2.4.15' ? { 'asset.searchPng': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/pngAssetSearchInput', input: catalogSchema.$defs.pngAssetSearchInput, preconditions: ['assetDbReady'] } } : {}),
         'asset.importPng': { access: 'write', inputSchema: 'catalog.schema.json#/$defs/importPngInput', input: catalogSchema.$defs.importPngInput, preconditions: ['stagedPng', 'destinationFree'] },
@@ -320,7 +329,8 @@ function validCatalog(target, result) {
         'content.stress.run': { contractVersion: '0.2', access: 'read', inputSchema: 'catalog.schema.json#/$defs/contentStressRunInput2x',
             input: catalogSchema.$defs.contentStressRunInput2x, preconditions: ['completedWebMobileBuild', 'complexPackagedPngResources', 'coldCacheProfile', 'explicitDeviceScreeningBudget'] } } : {}),
     };
-    const actualRevision = sha256(JSON.stringify({ scene: result.activeScene, commands: result.commands }));
+    const actualRevision = sha256(JSON.stringify({ scene: result.activeScene,
+        ...(result.activeSceneUuid ? { sceneUuid: result.activeSceneUuid } : {}), commands: result.commands }));
     if (actualRevision !== result.catalogRevision) return false;
     const actualFingerprint = commandContractFingerprint(result.commands);
     const compatibility = runtimeCompatibility(target, result, actualFingerprint);
@@ -384,6 +394,7 @@ function validCatalog(target, result) {
     }
     target.commands = normalized;
     target.activeScene = result.activeScene;
+    target.activeSceneUuid = result.activeSceneUuid || null;
     target.catalogRevision = result.catalogRevision;
     target.extensionVersion = result.extensionVersion || null;
     target.extensionSourceFingerprint = result.extensionSourceFingerprint || null;

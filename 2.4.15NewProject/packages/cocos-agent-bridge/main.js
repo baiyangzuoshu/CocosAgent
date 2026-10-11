@@ -61,6 +61,7 @@ const EXTENSION_SOURCE_FINGERPRINT = (() => {
 const COMMAND_INPUTS = {
     snapshot: { type: 'object', additionalProperties: false,
         properties: { targetNodeName: { type: 'string', minLength: 1, maxLength: 64 } } },
+    runtimePreviewStart: { type: 'object', additionalProperties: false, properties: {} },
     nodeInspect: { type: 'object', additionalProperties: false, required: ['nodePath'],
         properties: { nodePath: { type: 'string', minLength: 1, maxLength: 240 } } },
     searchPng: { type: 'object', additionalProperties: false, required: ['query'],
@@ -202,6 +203,9 @@ function commandCatalog(context) {
         { id: 'scene.snapshot', contractVersion: '0.1', access: 'read',
             inputSchema: 'catalog.schema.json#/$defs/snapshotInput', input: COMMAND_INPUTS.snapshot, preconditions: ['activeScene'],
             status: sceneReady ? 'available' : 'unavailable', reason: sceneReady ? null : 'NO_OPEN_SCENE' },
+        { id: 'runtime.preview.start', contractVersion: '0.1', access: 'write',
+            inputSchema: 'catalog.schema.json#/$defs/runtimePreviewStartInput2x', input: COMMAND_INPUTS.runtimePreviewStart, preconditions: ['activeScene'],
+            status: sceneReady ? 'available' : 'unavailable', reason: sceneReady ? null : 'NO_OPEN_SCENE' },
         { id: 'scene.node.inspect', contractVersion: '0.1', access: 'read',
             inputSchema: 'catalog.schema.json#/$defs/nodeInspectInput', input: COMMAND_INPUTS.nodeInspect, preconditions: ['activeScene'],
             status: sceneReady ? 'available' : 'unavailable', reason: sceneReady ? null : 'NO_OPEN_SCENE' },
@@ -331,7 +335,9 @@ function onMessage(raw) {
                 extensionSourceFingerprint: EXTENSION_SOURCE_FINGERPRINT,
                 commandContractFingerprint: commandContractFingerprint(commands),
                 activeScene: sceneContext.sceneName,
-                catalogRevision: crypto.createHash('sha256').update(JSON.stringify({ scene: sceneContext.sceneName, commands })).digest('hex'),
+                activeSceneUuid: sceneContext.sceneUuid || null,
+                catalogRevision: crypto.createHash('sha256').update(JSON.stringify({ scene: sceneContext.sceneName,
+                    ...(sceneContext.sceneUuid ? { sceneUuid: sceneContext.sceneUuid } : {}), commands })).digest('hex'),
                 commands,
             } });
         });
@@ -386,12 +392,24 @@ function onMessage(raw) {
     }
     if (message.method === 'scene.preview.start') {
         const params = message.params || {};
-        if (!activeSession || params.sessionId !== activeSession.sessionId || typeof params.nonce !== 'string') {
+        if (!activeSession || params.sessionId !== activeSession.sessionId || typeof params.nonce !== 'string'
+            || !/^[0-9a-fA-F-]{36}$/.test(params.expectedSceneUuid || '')
+            || !/^[A-Za-z0-9_-]{1,64}$/.test(params.expectedScene || '')) {
             send({ type: 'response', id: message.id, ok: false, error: { code: 'INVALID_PREVIEW_SESSION' } }); return;
         }
-        Editor.Ipc.sendToPanel('scene', 'scene:play-on-device');
-        send({ type: 'response', id: message.id, ok: true, result: { nonce: params.nonce, started: true,
-            creatorVersion: CREATOR_VERSION, projectRoot: PROJECT_ROOT } });
+        Editor.Scene.callSceneScript('cocos-agent-bridge', 'catalog-context', {}, (error, context) => {
+            const sceneName = context && context.sceneName;
+            const sceneUuid = context && context.sceneUuid;
+            if (error || sceneName !== params.expectedScene || sceneUuid !== params.expectedSceneUuid) {
+                send({ type: 'response', id: message.id, ok: false,
+                    error: { code: error ? 'PREVIEW_SCENE_UNAVAILABLE' : sceneName !== params.expectedScene
+                        ? 'PREVIEW_SCENE_MISMATCH' : 'PREVIEW_SCENE_IDENTITY_MISMATCH' } }); return;
+            }
+            Editor.Ipc.sendToPanel('scene', 'scene:play-on-device');
+            send({ type: 'response', id: message.id, ok: true, result: { nonce: params.nonce,
+                sessionId: activeSession.sessionId, instanceId: INSTANCE_ID, started: true, sceneName, sceneUuid,
+                creatorVersion: CREATOR_VERSION, projectRoot: PROJECT_ROOT } });
+        });
         return;
     }
     if (message.method === 'asset.importPng') {
@@ -1333,7 +1351,7 @@ function connectFromSession() {
             projectRoot: PROJECT_ROOT,
             extension: 'cocos-agent-bridge',
             instanceId: INSTANCE_ID,
-            capabilities: ['bridge.ping', 'scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.preflightPngSprite', 'scene.placePngSprite', 'scene.removePngSprite', 'scene.node.create.preflight', 'scene.node.create', 'scene.node.patch.preflight', 'scene.node.patch', 'scene.node.patch.snapshot', 'prefab.source.patch.preflight', 'prefab.source.patch.execute'],
+            capabilities: ['bridge.ping', 'scene.snapshot', 'runtime.preview.start', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.preflightPngSprite', 'scene.placePngSprite', 'scene.removePngSprite', 'scene.node.create.preflight', 'scene.node.create', 'scene.node.patch.preflight', 'scene.node.patch', 'scene.node.patch.snapshot', 'prefab.source.patch.preflight', 'prefab.source.patch.execute'],
             operationContract: { id: 'scene.pngSprite', contractVersion: '0.1', creatorVersion: CREATOR_VERSION, access: 'scene-write', actions: ['apply', 'compensate', 'replay'], previewVerification: 'manual-web', compensation: 'identity-checked-node-removal', positionSpace: 'canvas-local-design-pixels' },
             assetRemovalContract: { id: 'asset.removeImportedPng', contractVersion: '0.1', creatorVersion: CREATOR_VERSION,
                 access: 'write', implementation: 'Editor.assetdb.delete', verify: 'matching-texture-uuid-and-deleted-result' },

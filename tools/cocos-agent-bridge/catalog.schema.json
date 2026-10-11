@@ -10,6 +10,11 @@
         "targetNodeName": { "type": "string", "minLength": 1, "maxLength": 64 }
       }
     },
+    "runtimePreviewStartInput2x": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
     "nodeInspectInput": {
       "type": "object",
       "additionalProperties": false,

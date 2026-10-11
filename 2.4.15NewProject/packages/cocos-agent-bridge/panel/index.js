@@ -46,6 +46,7 @@ Editor.Panel.extend({
         .message.assistant { background: #2d3034; margin-right: 12px; }
         .message .role { color: #aeb5bf; display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
         .activity { color: #aab1bb; font-size: 11px; margin: 4px 2px 8px; white-space: pre-wrap; }
+        .runtime-screenshot { display: block; max-width: 100%; max-height: 420px; object-fit: contain; margin: 4px 2px 12px; border: 1px solid #4a5058; border-radius: 4px; background: #17181a; }
         .plan-card { margin: 0 0 12px; padding: 10px; border: 1px solid #4a5058; border-radius: 6px; background: #282c31; }
         .plan-card h3 { margin: 0 0 6px; font-size: 13px; }
         .plan-summary, .plan-status { color: #b9c0ca; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -54,6 +55,14 @@ Editor.Panel.extend({
         .plan-detail { color: #aeb5bf; font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 4px; }
         .plan-status { margin: 8px 0; color: #d4d8de; font-size: 11px; }
         .plan-action { background: #2867bc; border-color: #3979cf; }
+        .run-card { margin: 0 0 10px; padding: 9px; border: 1px solid #57504a; border-radius: 6px; background: #302d29; }
+        .run-card h4 { margin: 0 0 5px; font-size: 12px; }
+        .run-meta, .run-effects { color: #c2c0ba; font-size: 10px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .run-recover { margin: 5px 5px 0 0; padding: 3px 6px; font-size: 10px; }
+        .run-receipt { max-height: 180px; overflow: auto; color: #c2c0ba; font: 10px Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .diff-details { margin-top: 5px; font-size: 10px; }
+        .diff-details summary { color: #9fc5ff; cursor: pointer; }
+        .diff-details pre { max-height: 180px; overflow: auto; color: #cdd2da; white-space: pre-wrap; overflow-wrap: anywhere; }
         .approval { display: none; padding: 10px 12px; border-top: 1px solid #615438; background: #312c22; }
         .approval.visible { display: block; }
         .approval-title { color: #f2d084; font-weight: 600; margin-bottom: 5px; }
@@ -110,7 +119,7 @@ Editor.Panel.extend({
             </section>
             <footer class="composer">
                 <textarea id="prompt" maxlength="8000" placeholder="向 CocosAgent 提问…"></textarea>
-                <div class="composer-foot"><span class="hint">Enter 发送 · Shift+Enter 换行</span><button class="send" id="send">发送</button></div>
+                <div class="composer-foot"><span class="hint">Enter 发送 · Shift+Enter 换行</span><div><button id="cancel-run" hidden>停止任务</button> <button class="send" id="send">发送</button></div></div>
             </footer>
         </div>
     `,
@@ -120,7 +129,7 @@ Editor.Panel.extend({
         projectContext: '#project-context', contextRefresh: '#context-refresh', contextProject: '#context-project', contextScene: '#context-scene',
         contextSelection: '#context-selection', contextConventions: '#context-conventions',
         modeAsk: '#mode-ask', modePlan: '#mode-plan', modeAgent: '#mode-agent', modeNote: '#mode-note', messages: '#messages', empty: '#empty',
-        prompt: '#prompt', send: '#send', approval: '#approval', approvalTool: '#approval-tool',
+        prompt: '#prompt', send: '#send', cancelRun: '#cancel-run', approval: '#approval', approvalTool: '#approval-tool',
         approvalArgs: '#approval-args', approve: '#approve', reject: '#reject',
     },
 
@@ -129,10 +138,13 @@ Editor.Panel.extend({
         this._socket = null;
         this._busy = false;
         this._requestId = null;
+        this._requestSent = false;
+        this._cancelRequested = false;
         this._runActivity = null;
         this._pendingApproval = null;
         this._planCards = new Map();
         this._plans = new Map();
+        this._runCards = new Map();
         this._projectContext = null;
         this._conversationId = localStorage.getItem('cocos-agent-assistant-conversation') || makeId();
         localStorage.setItem('cocos-agent-assistant-conversation', this._conversationId);
@@ -144,6 +156,7 @@ Editor.Panel.extend({
             Editor.Ipc.sendToMain('cocos-agent-bridge:assistantCredentialForget');
         });
         this.$send.addEventListener('click', () => this.sendPrompt());
+        this.$cancelRun.addEventListener('click', () => this.cancelRun());
         this.$contextRefresh.addEventListener('click', () => this.refreshProjectContext());
         this.$prompt.addEventListener('keydown', (event) => {
             if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); this.sendPrompt(); }
@@ -251,18 +264,28 @@ Editor.Panel.extend({
         this._busy = true;
         this._modeButtons.forEach((button) => { button.disabled = true; });
         this._requestId = makeId();
+        const requestId = this._requestId;
+        this._requestSent = false;
+        this._cancelRequested = false;
         this.$send.disabled = true;
+        this.$cancelRun.hidden = false;
+        this.$cancelRun.disabled = false;
+        this.$cancelRun.textContent = '停止任务';
         this.$prompt.value = '';
         this.addMessage('user', text);
         this._runActivity = this.addActivity(`${this._mode} · 正在刷新工程上下文…`);
         this.refreshProjectContext((error) => {
+            if (this._requestId !== requestId) return;
             if (error) { this.finishRun(`工程上下文读取失败：${error.message || error}`, 'failed'); return; }
+            if (this._cancelRequested) { this.finishRun('已在发送任务前取消；Agent 未收到请求。', 'cancelled'); return; }
             if (!this._socket || this._socket.readyState !== WebSocket.OPEN) {
                 this.finishRun('本地 Agent 连接已断开；请先重新连接。', 'failed'); return;
             }
             if (this._runActivity) this._runActivity.textContent = `${this._mode} · 正在处理…`;
-            this._socket.send(JSON.stringify({ type: 'run', requestId: this._requestId,
-                conversationId: this._conversationId, mode: this._mode, text }));
+            this._requestSent = true;
+            this._socket.send(JSON.stringify({ type: 'run', requestId,
+                conversationId: this._conversationId, mode: this._mode, text,
+                projectContext: this._projectContext }));
         });
     },
 
@@ -310,11 +333,19 @@ Editor.Panel.extend({
                 message.messages.forEach((item) => this.addMessage(item.role, item.content));
             }
             if (Array.isArray(message.plans)) message.plans.forEach((plan) => this.renderPlan(plan));
+            if (Array.isArray(message.recentRuns)) message.recentRuns.forEach((run) => this.renderRecentRun(run));
             return;
         }
         if (message.type === 'connected') return;
         if (message.requestId && message.requestId !== this._requestId) return;
         if (message.type === 'run.started') { this.addActivity(`${message.mode} · 已开始`); return; }
+        if (message.type === 'run.cancelling') { this.addActivity(message.message || '正在安全停止…'); return; }
+        if (message.type === 'run.cancel.rejected') { this.addActivity(`无法停止：${message.reason || '任务已结束'}`); return; }
+        if (message.type === 'run.persistence-error') {
+            this.addActivity('本地会话状态写入失败，Agent 已停止后续调度；请核对上方已有回执和 Creator 操作记录。');
+            return;
+        }
+        if (message.type === 'run.recovery.result') { this.renderRecoveryResult(message); return; }
         if (message.type === 'model.thinking') { this.addActivity('正在联系 DeepSeek…'); return; }
         if (message.type === 'model.failed') { this.addActivity(`DeepSeek 请求失败：${message.message || '未知错误'}`); return; }
         if (message.type === 'tool.approval-required') { this.addActivity(`等待批准：${message.toolName}`); return; }
@@ -322,7 +353,35 @@ Editor.Panel.extend({
         if (message.type === 'tool.finished') {
             const label = message.result?.reconciliation?.disposition === 'no-effect' ? '已对账（无副作用）'
                 : message.isError || message.result?.success === false ? '失败' : '完成';
-            this.addActivity(`${label}：${message.toolName}\n${JSON.stringify(message.result || {}).slice(0, 900)}`);
+            const result = message.result || {};
+            const imageDataUrl = result.imageDataUrl;
+            const details = { ...result };
+            delete details.imageDataUrl;
+            let summary;
+            if (result.runtime && result.diagnostics) {
+                const diagnostics = result.diagnostics;
+                const lines = [
+                    `${result.scene?.name || '场景'} · ${result.runtime.status} · 帧 ${result.runtime.frameCount}（采样推进 ${result.runtime.frameDelta}）`,
+                    `错误：${(diagnostics.errors || []).slice(0, 8).map((item) => item.message).join('；') || '无'}`,
+                    `警告：${(diagnostics.warnings || []).slice(0, 8).map((item) => item.message).join('；') || '无'}`,
+                    `日志：${(diagnostics.logs || []).slice(0, 8).map((item) => item.message).join('；') || '无'}`,
+                ];
+                if (result.targetNode) lines.push(`目标节点：${result.targetNode.path} · ${result.targetNode.active ? '启用' : '未启用'}`);
+                if (result.screenshot) lines.push(`画面：${result.screenshot.available ? '已截取' : '不可用'}`);
+                summary = `${label}：${message.toolName}\n${lines.join('\n')}`;
+            } else summary = `${label}：${message.toolName}\n${JSON.stringify(details).slice(0, 900)}`;
+            const activity = this.addActivity(summary);
+            const diff = result.expectedDiff || result.script?.expectedDiff;
+            if (diff !== undefined) this.appendDiffDetails(activity, diff);
+            if (typeof imageDataUrl === 'string' && imageDataUrl.startsWith('data:image/jpeg;base64,')
+                && imageDataUrl.length <= 2 * 1024 * 1024 * 4 / 3 + 64) {
+                const image = document.createElement('img');
+                image.className = 'runtime-screenshot';
+                image.alt = 'Creator 运行画布截图';
+                image.src = imageDataUrl;
+                this.$messages.appendChild(image);
+                this.$messages.scrollTop = this.$messages.scrollHeight;
+            }
             return;
         }
         if (message.type === 'approval.required') { this.showApproval(message); return; }
@@ -337,6 +396,7 @@ Editor.Panel.extend({
             this.addMessage('assistant', message.result?.finalText || '任务已结束。');
             if (message.result?.plan) this.renderPlan(message.result.plan);
             if (message.result?.planProgress) this.renderPlan(message.result.planProgress);
+            if (Array.isArray(message.result?.recentRuns)) message.result.recentRuns.forEach((run) => this.renderRecentRun(run));
             if (message.result?.tracePath) this.addActivity(`记录：${message.result.tracePath}`);
             this.finishRun(message.result?.reason, message.result?.status || 'stopped');
         }
@@ -359,19 +419,36 @@ Editor.Panel.extend({
     },
 
     finishRun(reason, status = 'stopped') {
-        const labels = { completed: '已结束', 'needs-review': '待核对',
+        const labels = { completed: '已结束', cancelled: '已取消', 'needs-review': '待核对',
             'awaiting-approval': '等待批准', stopped: '已停止', failed: '失败' };
         const label = labels[status] || '已停止';
         if (this._runActivity) this._runActivity.textContent = `${this._mode} · ${label}`;
         if (reason && status !== 'completed') this.addActivity(`${label}：${reason}`);
         this._runActivity = null;
         this._busy = false;
+        this.$cancelRun.hidden = true;
+        this.$cancelRun.disabled = false;
+        this.$cancelRun.textContent = '停止任务';
         this._modeButtons.forEach((button) => { button.disabled = false; });
         this._requestId = null;
+        this._requestSent = false;
+        this._cancelRequested = false;
         this.$send.disabled = false;
         this._pendingApproval = null;
         this.$approval.classList.remove('visible');
         for (const plan of this._plans.values()) this.renderPlan(plan);
+    },
+
+    cancelRun() {
+        if (!this._busy || !this._requestId || !this._socket || this._socket.readyState !== WebSocket.OPEN) return;
+        if (!this._requestSent) {
+            this._cancelRequested = true;
+            this.finishRun('已在发送任务前取消；Agent 未收到请求。', 'cancelled');
+            return;
+        }
+        this.$cancelRun.disabled = true;
+        this.$cancelRun.textContent = '正在停止…';
+        this._socket.send(JSON.stringify({ type: 'run.cancel', requestId: this._requestId }));
     },
 
     startPlanStep(plan) {
@@ -380,8 +457,13 @@ Editor.Panel.extend({
         this._busy = true;
         this._modeButtons.forEach((button) => { button.disabled = true; });
         this.$send.disabled = true;
+        this.$cancelRun.hidden = false;
+        this.$cancelRun.disabled = false;
+        this.$cancelRun.textContent = '停止任务';
         this._requestId = makeId();
         this._runActivity = this.addActivity(`Agent · 执行计划第 ${plan.nextStepIndex + 1} 步：${plan.steps[plan.nextStepIndex].title}`);
+        this._requestSent = true;
+        this._cancelRequested = false;
         this.renderPlan({ ...plan, status: 'running' });
         this._socket.send(JSON.stringify({ type: 'run', requestId: this._requestId,
             conversationId: this._conversationId, mode: 'Agent',
@@ -408,6 +490,8 @@ Editor.Panel.extend({
             const detail = document.createElement('div');
             detail.className = 'plan-detail';
             detail.textContent = `${step.description}\n前置条件：${step.preconditions.join('；') || '无'}\n必需工具：${step.requiredTools.join('、')}\n验证：${step.validation}\n恢复：${step.recovery}`;
+            const evidence = (plan.stepEvidence || []).find((item) => item.stepIndex === plan.steps.indexOf(step));
+            if (evidence) detail.textContent += `\n已发生的副作用与回执：\n${JSON.stringify(evidence.receipts || [], null, 2).slice(0, 4000)}`;
             item.appendChild(detail);
             list.appendChild(item);
         });
@@ -461,5 +545,93 @@ Editor.Panel.extend({
         this.$messages.appendChild(item);
         this.$messages.scrollTop = this.$messages.scrollHeight;
         return item;
+    },
+
+    appendDiffDetails(container, diff) {
+        if (!container || diff === undefined) return;
+        const details = document.createElement('details');
+        details.className = 'diff-details';
+        const summary = document.createElement('summary');
+        summary.textContent = '查看预期差异';
+        const pre = document.createElement('pre');
+        let serialized;
+        try { serialized = JSON.stringify(diff, null, 2); } catch (_) { serialized = String(diff); }
+        pre.textContent = (serialized || '').slice(0, 12000);
+        details.appendChild(summary);
+        details.appendChild(pre);
+        container.appendChild(details);
+    },
+
+    renderRecentRun(run) {
+        if (!run || typeof run.id !== 'string') return;
+        const card = document.createElement('section');
+        card.className = 'run-card';
+        const title = document.createElement('h4');
+        const statusLabels = { completed: '已完成', 'needs-review': '需要核对', interrupted: '服务重启中断', cancelled: '已取消' };
+        title.textContent = `${statusLabels[run.status] || run.status || '任务'} · ${(run.task || '').slice(0, 180)}`;
+        card.appendChild(title);
+        const meta = document.createElement('div');
+        meta.className = 'run-meta';
+        meta.textContent = `${run.mode || 'Agent'} · ${run.updatedAt || run.startedAt || ''}${run.reason ? ` · ${run.reason}` : ''}`;
+        card.appendChild(meta);
+        const receipts = Array.isArray(run.receipts) ? run.receipts : [];
+        receipts.forEach((receipt) => {
+            if (receipt.expectedDiff !== undefined) this.appendDiffDetails(card, receipt.expectedDiff);
+        });
+        const effects = receipts.filter((receipt) => receipt.access !== 'read'
+            && (receipt.success === true || receipt.sideEffect === 'possible' || receipt.sideEffect === 'unknown'
+                || receipt.outcome === 'needs-review'));
+        const effectLine = document.createElement('div');
+        effectLine.className = 'run-effects';
+        const activeWrite = run.activeTool && run.activeTool.access !== 'read' ? run.activeTool : null;
+        effectLine.textContent = effects.length || activeWrite ? `已发生或可能发生的写入：\n${[
+            ...effects.map((receipt) =>
+            `${receipt.toolName || '未知工具'} · ${receipt.outcome || (receipt.success ? '成功回执' : '结果未知')}`
+            + `${receipt.operationId ? ` · 操作 ${receipt.operationId}` : ''}`
+            + `${receipt.sideEffect ? ` · 副作用 ${receipt.sideEffect}` : ''}`),
+            ...(activeWrite ? [`中断时正在执行 ${activeWrite.toolName || '未知工具'}；结果尚未读回${activeWrite.operationId ? ` · 操作 ${activeWrite.operationId}` : ''}`] : []),
+        ].join('\n')}` : '已记录：没有得到写入回执。';
+        card.appendChild(effectLine);
+        const recoveryTargets = [...receipts, ...(run.activeTool?.operationId ? [run.activeTool] : [])];
+        const seenOperations = new Set();
+        for (const receipt of recoveryTargets) {
+            if (!receipt.operationId || seenOperations.has(receipt.operationId)) continue;
+            seenOperations.add(receipt.operationId);
+            const button = document.createElement('button');
+            button.className = 'run-recover';
+            button.textContent = `只读核对 ${receipt.operationId.slice(0, 8)}`;
+            button.addEventListener('click', () => {
+                if (this._socket && this._socket.readyState === WebSocket.OPEN) this._socket.send(JSON.stringify({
+                    type: 'run.recover', conversationId: run.conversationId, runId: run.id, operationId: receipt.operationId,
+                }));
+            });
+            card.appendChild(button);
+        }
+        if (run.recovery) {
+            const pre = document.createElement('pre');
+            pre.className = 'run-receipt';
+            pre.textContent = `最近读回：${JSON.stringify(run.recovery.receipt || run.recovery, null, 2).slice(0, 5000)}`;
+            card.appendChild(pre);
+        }
+        const previous = this._runCards.get(run.id);
+        if (previous?.parentNode) previous.parentNode.replaceChild(card, previous);
+        else this.$messages.appendChild(card);
+        this._runCards.set(run.id, card);
+    },
+
+    renderRecoveryResult(message) {
+        const run = { id: message.runId, status: message.error ? '核对失败' : '操作记录已读回',
+            task: `操作 ${message.operationId}`, updatedAt: new Date().toISOString(),
+            receipts: [{ toolName: 'read-only recovery', operationId: message.operationId,
+                access: 'read', success: !message.error }],
+            recovery: { operationId: message.operationId, checkedAt: new Date().toISOString(),
+                receipt: message.receipt || { error: message.error } } };
+        const previous = this._runCards.get(run.id);
+        if (previous?.parentNode) {
+            const pre = document.createElement('pre');
+            pre.className = 'run-receipt';
+            pre.textContent = `只读核对结果：${JSON.stringify(message.receipt || { error: message.error }, null, 2).slice(0, 5000)}`;
+            previous.appendChild(pre);
+        } else this.renderRecentRun(run);
     },
 });

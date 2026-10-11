@@ -418,4 +418,36 @@ try {
     assert.equal(folderCalls.length, beforeInvalidFolder, 'folder refresh remains 2.4-only');
 } finally { fs.rmSync(folderProject, { recursive: true, force: true }); }
 
+const previewProject = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-agent-preview-start-'));
+const previewSceneUuid = '280c3aec-6492-4a9d-9f51-a9b00b570b4a';
+let previewInstance = { ...removalInstance, projectRoot: previewProject, activeScene: 'helloworld', activeSceneUuid: previewSceneUuid };
+const previewCalls = [];
+const previewInvoke = (script, args) => {
+    previewCalls.push({ script, args });
+    if (script === 'catalog-host.js' && args.includes('instances.list'))
+        return { status: 0, stdout: JSON.stringify({ success: true, data: [previewInstance] }) };
+    if (script === 'catalog-host.js') return { status: 0, stdout: JSON.stringify({ success: true, data: {
+        instance: previewInstance, commands: [{ id: 'runtime.preview.start', contractVersion: '0.1', access: 'write', status: 'available', reason: null }],
+    } }) };
+    return { status: 0, stdout: `command.result ${JSON.stringify({ command: 'runtime.preview.start', result: {
+        started: true, sceneName: 'helloworld', sceneUuid: previewSceneUuid, creatorVersion: '2.4.15',
+        projectRoot: previewProject, instanceId,
+    } })}\n`, stderr: '' };
+};
+const previewRequest = { targets: [{ creatorVersion: '2.4.15', projectRoot: previewProject }], projectRoot: previewProject,
+    creatorVersion: '2.4.15', command: 'runtime.preview.start', input: {} };
+const previewResult = dispatch(previewRequest, previewInvoke);
+assert.equal(previewResult.outcome, 'completed', JSON.stringify(previewResult));
+const previewExecution = previewCalls.find((call) => call.script === 'bridge-host.js');
+assert(previewExecution.args.includes('--runtime-preview-start'));
+assert(previewExecution.args.includes('--expected-scene-uuid'));
+assert(previewExecution.args.includes(previewSceneUuid));
+previewCalls.length = 0;
+previewInstance = { ...previewInstance, activeSceneUuid: null };
+const unboundPreview = dispatch(previewRequest, previewInvoke);
+assert.equal(unboundPreview.error.code, 'SCENE_IDENTITY_UNAVAILABLE');
+assert.equal(previewCalls.some((call) => call.script === 'bridge-host.js'), false,
+    'preview start must stop before editor action when the scene identity is unavailable');
+fs.rmSync(previewProject, { recursive: true, force: true });
+
 process.stdout.write('agent dispatch selection, guards, and receipt decisions passed\n');

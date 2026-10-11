@@ -42,9 +42,11 @@ const requestedOperationId = argument('--operation-id');
 const scenePositionArg = argument('--scene-position');
 const operationGetId = argument('--operation-get');
 const nodePath = argument('--node-path');
+const runtimePreviewStart = process.argv.includes('--runtime-preview-start');
 const interruptAfterEditor = process.argv.includes('--interrupt-after-editor');
 const expectedInstanceId = argument('--expected-instance-id');
 const expectedScene = argument('--expected-scene');
+const expectedSceneUuid = argument('--expected-scene-uuid');
 let assetSearch = null;
 if (assetSearchQuery !== undefined) {
     const limit = assetSearchLimitArg === undefined ? 20 : Number(assetSearchLimitArg);
@@ -68,8 +70,13 @@ if (nodePath && (sceneAssetName || sceneAction || pngSourceArg || assetSearch ||
 if (requestedOperationId && !sceneAssetName) fail('--operation-id requires a scene operation.');
 if (interruptAfterEditor && !sceneAssetName) fail('--interrupt-after-editor requires a scene operation.');
 if (assetSearch && (pngSourceArg || removeAssetName || assetValidateName || assetRefreshName || sceneAssetName || sceneAction
-    || assetFolderRefreshPath || scenePositionArg || requestedOperationId || interruptAfterEditor || operationGetId || nodePath))
+    || assetFolderRefreshPath || scenePositionArg || requestedOperationId || interruptAfterEditor || operationGetId || nodePath || runtimePreviewStart))
     fail('--asset-search-png is a read-only action and cannot be combined with another command.');
+if (runtimePreviewStart && (creatorVersion !== '2.4.15' || !expectedScene || !expectedInstanceId
+    || !/^[0-9a-fA-F-]{36}$/.test(expectedSceneUuid || '') || pngSourceArg || assetSearch || removeAssetName
+    || assetValidateName || assetRefreshName || assetFolderRefreshPath || sceneAssetName || sceneAction || operationGetId || nodePath)) {
+    fail('--runtime-preview-start requires a Creator 2.4.15 active scene and cannot be combined with another action.');
+}
 if (removeAssetName && (pngSourceArg || assetSearch || assetFolderRefreshPath || sceneAssetName || sceneAction || scenePositionArg || requestedOperationId || interruptAfterEditor
     || creatorVersion !== '2.4.15' || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\.png$/i.test(removeAssetName)
     || !/^[0-9a-f-]{36}$/i.test(removeTextureUuid || '') || !/^[0-9a-f-]{36}$/i.test(removeSpriteFrameUuid || '')
@@ -323,6 +330,8 @@ const preflightRequestId = crypto.randomUUID();
 const preflightNonce = crypto.randomBytes(12).toString('hex');
 const verifySnapshotRequestId = crypto.randomUUID();
 const verifySnapshotNonce = crypto.randomBytes(12).toString('hex');
+const runtimePreviewRequestId = crypto.randomUUID();
+const runtimePreviewNonce = crypto.randomBytes(12).toString('hex');
 let stagedPngPath = null;
 let stagedPng = null;
 if (pngSourceArg) {
@@ -476,6 +485,7 @@ webSocketServer.on('connection', (socket) => {
             const instanceMatches = !expectedInstanceId || message.instanceId === expectedInstanceId;
             const capabilityMatches = Array.isArray(message.capabilities)
                 && message.capabilities.includes('scene.snapshot')
+                && (!runtimePreviewStart || message.capabilities.includes('runtime.preview.start'))
                 && (!stagedPng || message.capabilities.includes('asset.importPng'))
                 && (!assetSearch || message.capabilities.includes('asset.searchPng'))
                 && (!assetRemoval || message.capabilities.includes('asset.removeImportedPng'))
@@ -584,6 +594,7 @@ webSocketServer.on('connection', (socket) => {
                 && result.creatorVersion === creatorVersion
                 && path.resolve(result.projectRoot || '') === projectRoot
                 && typeof result.sceneName === 'string'
+                && (!runtimePreviewStart || result.sceneUuid === expectedSceneUuid)
                 && Array.isArray(result.nodes)
                 && result.nodeCount === result.nodes.length
                 && typeof result.truncated === 'boolean'
@@ -610,10 +621,24 @@ webSocketServer.on('connection', (socket) => {
                 cleanUp(1);
                 return;
             }
+            if (runtimePreviewStart && result.sceneUuid !== expectedSceneUuid) {
+                process.stderr.write(`SCENE_IDENTITY_CHANGED: expected ${expectedSceneUuid}, got ${String(result.sceneUuid || 'none')}\n`);
+                cleanUp(1);
+                return;
+            }
             if (operationRecord) {
                 operationRecord.sceneName = activeSceneName;
                 operationRecord.updatedAt = new Date().toISOString();
                 operationStore.write(projectRoot, operationRecord);
+            }
+            if (runtimePreviewStart) {
+                send(socket, { type: 'request', id: runtimePreviewRequestId, method: 'scene.preview.start',
+                    params: { nonce: runtimePreviewNonce, sessionId, expectedScene, expectedSceneUuid } });
+                requestTimer = setTimeout(() => {
+                    process.stderr.write('runtime.preview.start timed out.\n');
+                    cleanUp(1);
+                }, 15000);
+                return;
             }
             if (assetRemoval && !assetRemovalStillSafe(assetRemoval)) {
                 process.stderr.write('ASSET_REMOVAL_PRECONDITION_CHANGED: the resource identity or serialized reference scan changed before delete.\n');
@@ -668,6 +693,27 @@ webSocketServer.on('connection', (socket) => {
                 process.stdout.write(`command.result ${JSON.stringify({ command: 'scene.snapshot', result })}\n`);
                 cleanUp(0);
             }
+            return;
+        }
+
+        if (message.type === 'response' && message.id === runtimePreviewRequestId) {
+            clearTimeout(requestTimer);
+            const result = message.result || {};
+            const valid = message.ok === true && result.nonce === runtimePreviewNonce
+                && result.sessionId === sessionId && result.instanceId === expectedInstanceId
+                && result.creatorVersion === '2.4.15' && path.resolve(result.projectRoot || '') === projectRoot
+                && result.sceneName === expectedScene && result.sceneUuid === expectedSceneUuid && result.started === true;
+            if (!valid) {
+                const code = message.error && message.error.code || 'RUNTIME_PREVIEW_START_UNVERIFIED';
+                process.stderr.write(`runtime.preview.start failed validation (${String(code).slice(0, 80)}).\n`);
+                cleanUp(1);
+                return;
+            }
+            process.stdout.write(`command.result ${JSON.stringify({ command: 'runtime.preview.start', result: {
+                started: true, sceneName: result.sceneName, creatorVersion: result.creatorVersion,
+                sceneUuid: result.sceneUuid, projectRoot, instanceId: result.instanceId,
+            } })}\n`);
+            cleanUp(0);
             return;
         }
 

@@ -139,3 +139,47 @@ for (const [status, label] of [['completed', '已结束'], ['needs-review', '待
         assert.equal(heading.textContent, `Ask · ${label}`);
     });
 }
+
+test('panel exposes safe cancellation, expected diff details, and exact-operation readback on recent runs', () => {
+    let panel;
+    const sent = [];
+    class WebSocketMock { static OPEN = 1; }
+    vm.runInNewContext(fs.readFileSync(path.join(root, '2.4.15NewProject/packages/cocos-agent-bridge/panel/index.js'), 'utf8'), {
+        Editor: { Panel: { extend(value) { panel = value; } }, Ipc: { sendToMain() {} } },
+        document: { createElement: () => new Element() },
+        window: { crypto: { randomUUID: () => 'request-id' } },
+        localStorage: { getItem: () => null, setItem() {} }, WebSocket: WebSocketMock,
+    });
+    for (const name of Object.keys(panel.$)) panel[`$${name}`] = new Element();
+    panel.$messages.children = [];
+    panel._runCards = new Map();
+    panel._busy = true;
+    panel._requestId = 'run-id';
+    panel._requestSent = true;
+    panel._conversationId = 'conversation-id';
+    panel._socket = { readyState: 1, send: (raw) => sent.push(JSON.parse(raw)) };
+
+    panel.cancelRun();
+    assert.equal(sent[0].type, 'run.cancel');
+    assert.equal(panel.$cancelRun.disabled, true);
+
+    panel.receiveMessage(JSON.stringify({ type: 'tool.finished', requestId: 'run-id', toolName: 'cocos_2x_script_patch_plan',
+        result: { success: true, expectedDiff: [{ before: 'old();', after: 'new();' }] } }));
+    const activity = panel.$messages.children[0];
+    assert.equal(activity.children[0].children[0].textContent, '查看预期差异');
+    assert.match(activity.children[0].children[1].textContent, /old\(\);/);
+
+    const operationId = '11111111-1111-4111-8111-111111111111';
+    panel.renderRecentRun({ id: 'run-id', conversationId: 'conversation-id', task: 'Edit button logic', mode: 'Agent',
+        status: 'needs-review', activeTool: { toolName: 'cocos_2x_script_patch', access: 'write-approved', operationId },
+        receipts: [{ toolName: 'cocos_2x_script_patch_plan', access: 'read', operationId,
+            expectedDiff: [{ before: 'old();', after: 'new();' }] }] });
+    const card = panel._runCards.get('run-id');
+    assert.ok(card.children.some((child) => child.className === 'diff-details'));
+    const effects = card.children.find((child) => child.className === 'run-effects');
+    assert.match(effects.textContent, /中断时正在执行/);
+    assert.match(effects.textContent, /结果尚未读回/);
+    const recover = card.children.find((child) => child.className === 'run-recover');
+    recover.listeners.click();
+    assert.deepEqual(sent.at(-1), { type: 'run.recover', conversationId: 'conversation-id', runId: 'run-id', operationId });
+});

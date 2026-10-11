@@ -122,6 +122,101 @@ export function installCreatorRuntime({ sourceRoot = DEFAULT_SOURCE_ROOT, extens
     return { extensionDirectory: extension, runtimeDirectory: runtime };
 }
 
+function readCreatorExtension(extensionDirectory) {
+    const info = fs.lstatSync(extensionDirectory);
+    if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('CREATOR_EXTENSION_TARGET_NOT_DIRECTORY');
+    const packagePath = path.join(extensionDirectory, 'package.json');
+    if (!fs.existsSync(packagePath)) throw new Error('CREATOR_EXTENSION_TARGET_MISSING');
+    const extensionPackage = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+    if (extensionPackage.name !== 'cocos-agent-bridge') throw new Error('CREATOR_EXTENSION_TARGET_MISMATCH');
+    const creatorVersion = extensionPackage['cocos-agent']?.creatorVersion;
+    if (creatorVersion !== '2.4.15') throw new Error('CREATOR_EXTENSION_VERSION_UNSUPPORTED');
+    return extensionPackage;
+}
+
+function validateCreatorExtensionBundle(directory) {
+    const extensionPackage = readCreatorExtension(directory);
+    const requiredFiles = [
+        'main.js',
+        'scene.js',
+        'panel/index.js',
+        'assistant-runtime/tools/cocos-agent-bridge/mcp/assistant-host.mjs',
+        'assistant-runtime/tools/cocos-agent-bridge/mcp/mcp-server.mjs',
+        'assistant-runtime/plugins/cocos-agent-2x/agent-package.json',
+    ];
+    for (const relative of requiredFiles) {
+        if (!fs.statSync(path.join(directory, relative), { throwIfNoEntry: false })?.isFile())
+            throw new Error(`CREATOR_EXTENSION_BUNDLE_INCOMPLETE:${relative}`);
+    }
+    return extensionPackage;
+}
+
+export function upgradeCreatorExtension({ sourceRoot = DEFAULT_SOURCE_ROOT, extensionDirectory }) {
+    const source = path.resolve(sourceRoot);
+    const extension = ensureAbsolute(extensionDirectory, 'extension');
+    if (inside(source, extension) || inside(extension, source)) throw new Error('UPGRADE_TARGET_MUST_BE_OUTSIDE_SOURCE_ROOT');
+    const previousPackage = readCreatorExtension(extension);
+    const parent = path.dirname(extension);
+    const suffix = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+    const staging = path.join(parent, `.cocos-agent-bridge.upgrade-${suffix}`);
+    const backup = path.join(parent, `.cocos-agent-bridge.rollback-${suffix}`);
+    try {
+        buildCreatorExtensionBundle({ sourceRoot: source, outputDirectory: staging });
+        const nextPackage = validateCreatorExtensionBundle(staging);
+        fs.renameSync(extension, backup);
+        try {
+            fs.renameSync(staging, extension);
+            validateCreatorExtensionBundle(extension);
+        } catch (error) {
+            const failedBundle = `${staging}.failed`;
+            if (fs.existsSync(extension)) fs.renameSync(extension, failedBundle);
+            try { fs.renameSync(backup, extension); }
+            catch (restoreError) {
+                throw new Error(`CREATOR_UPGRADE_ROLLBACK_FAILED:${restoreError.message || restoreError};backup=${backup}`);
+            }
+            fs.rmSync(failedBundle, { recursive: true, force: true });
+            throw error;
+        }
+        return {
+            extensionDirectory: extension,
+            previousVersion: previousPackage.version || 'unknown',
+            installedVersion: nextPackage.version || 'unknown',
+            rollbackDirectory: backup,
+            creatorReloadRequired: true,
+        };
+    } catch (error) {
+        if (fs.existsSync(staging)) fs.rmSync(staging, { recursive: true, force: true });
+        throw error;
+    }
+}
+
+export function restoreCreatorExtension({ extensionDirectory, rollbackDirectory }) {
+    const extension = ensureAbsolute(extensionDirectory, 'extension');
+    const backup = ensureAbsolute(rollbackDirectory, 'rollback');
+    if (path.dirname(extension) !== path.dirname(backup)
+        || !path.basename(backup).startsWith('.cocos-agent-bridge.rollback-')) {
+        throw new Error('CREATOR_EXTENSION_ROLLBACK_PATH_MISMATCH');
+    }
+    const currentPackage = readCreatorExtension(extension);
+    const rollbackPackage = readCreatorExtension(backup);
+    const suffix = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+    const replaced = path.join(path.dirname(extension), `.cocos-agent-bridge.replaced-${suffix}`);
+    fs.renameSync(extension, replaced);
+    try {
+        fs.renameSync(backup, extension);
+        readCreatorExtension(extension);
+    } catch (error) {
+        if (fs.existsSync(extension)) fs.renameSync(extension, backup);
+        try { fs.renameSync(replaced, extension); }
+        catch (restoreError) {
+            throw new Error(`CREATOR_EXTENSION_RESTORE_FAILED:${restoreError.message || restoreError};current=${replaced};rollback=${backup}`);
+        }
+        throw error;
+    }
+    return { extensionDirectory: extension, restoredVersion: rollbackPackage.version || 'unknown',
+        replacedVersion: currentPackage.version || 'unknown', replacedDirectory: replaced, creatorReloadRequired: true };
+}
+
 function parseArgs(argv) {
     const [command, ...args] = argv;
     const values = new Map();
@@ -132,7 +227,9 @@ function parseArgs(argv) {
     }
     if (command === 'bundle') return { command, outputDirectory: values.get('output') };
     if (command === 'install-runtime') return { command, extensionDirectory: values.get('extension') };
-    throw new Error('USAGE: node package-creator-extension.mjs bundle --output <absolute-empty-path> | install-runtime --extension <absolute-creator-extension-path>');
+    if (command === 'upgrade-extension') return { command, extensionDirectory: values.get('extension') };
+    if (command === 'restore-extension') return { command, extensionDirectory: values.get('extension'), rollbackDirectory: values.get('rollback') };
+    throw new Error('USAGE: node package-creator-extension.mjs bundle --output <absolute-empty-path> | install-runtime --extension <absolute-creator-extension-path> | upgrade-extension --extension <absolute-creator-extension-path> | restore-extension --extension <absolute-creator-extension-path> --rollback <absolute-backup-path>');
 }
 
 function main(argv = process.argv.slice(2)) {
@@ -140,7 +237,8 @@ function main(argv = process.argv.slice(2)) {
     const options = parseArgs(argv);
     const result = options.command === 'bundle'
         ? buildCreatorExtensionBundle(options)
-        : installCreatorRuntime(options);
+        : options.command === 'upgrade-extension' ? upgradeCreatorExtension(options)
+            : options.command === 'restore-extension' ? restoreCreatorExtension(options) : installCreatorRuntime(options);
     process.stdout.write(`${JSON.stringify({ success: true, ...result }, null, 2)}\n`);
 }
 

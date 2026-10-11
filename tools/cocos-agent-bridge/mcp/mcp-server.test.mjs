@@ -36,9 +36,9 @@ test('real MCP stdio discovers and reads the versioned skill package and its ref
         assert.ok(resources.some((resource) => resource.uri === 'cocos://2x/skills/resource-scene-pipeline'));
         assert.ok(resources.some((resource) => resource.uri === 'cocos://2x/references/agent-foundation/cocos-agent-resource-scene-pipeline-0.1.md'));
         const index = JSON.parse((await client.readResource({ uri: 'cocos://2x/skills/index' })).contents[0].text);
-        assert.equal(index.agentPackage.version, '0.3.1');
-        assert.equal(index.mcp.version, '0.3.0');
-        assert.equal(index.skills.length, 12);
+        assert.equal(index.agentPackage.version, '0.3.2');
+        assert.equal(index.mcp.version, '0.3.3');
+        assert.equal(index.skills.length, 13);
         const resourceSkill = await client.readResource({ uri: 'cocos://2x/skills/resource-scene-pipeline' });
         assert.match(resourceSkill.contents[0].text, /skill cocos2-resource-scene-pipeline sha256 [a-f0-9]{64}/);
         assert.match(resourceSkill.contents[0].text, /cocos-agent-resource-scene-pipeline-0\.1\.md/);
@@ -65,11 +65,61 @@ test('CLI requires existing absolute, unique, bounded registered project roots',
     } finally { fs.rmSync(value.parent, { recursive: true, force: true }); }
 });
 
+test('runtime observation verifies the active 2.4 scene and returns a separate image block without embedding it in the receipt', async () => {
+    const value = fixture();
+    const seen = [];
+    let sceneUuidAvailable = true;
+    const server = createServer([value.projects[0]], {
+        invokeAgent: async (request) => {
+            seen.push(request.method);
+            return { id: request.id, result: { success: true, data: { instance: {
+                creatorVersion: '2.4.15', projectRoot: value.projects[0], activeScene: 'helloworld',
+                activeSceneUuid: sceneUuidAvailable ? '280c3aec-6492-4a9d-9f51-a9b00b570b4a' : null, state: 'ready',
+            }, commands: [{ id: 'runtime.preview.start', status: 'available', reason: null }] } } };
+        },
+        observeRuntime: async (input) => {
+            assert.deepEqual(input, { expectedScene: 'helloworld', expectedSceneUuid: '280c3aec-6492-4a9d-9f51-a9b00b570b4a',
+                nodePath: 'Canvas/Button', timeoutMs: 12000 });
+            return { success: true, outcome: 'observed', scene: { name: 'helloworld', matchesExpected: true },
+                runtime: { status: 'runtime-error', frameCount: 80, frameDelta: 12, paused: false, capturedErrorCount: 1 },
+                diagnostics: { errors: [{ message: 'TypeError in Button.js' }], warnings: [], logs: [], truncated: { errors: false, warnings: false, logs: false } },
+                screenshot: { available: true, mimeType: 'image/jpeg', width: 64, height: 64 },
+                screenshotBase64: Buffer.from('jpeg-test').toString('base64') };
+        },
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'cocos-agent-runtime-observe-test', version: '1.0.0' });
+    try {
+        await server.connect(serverTransport);
+        await client.connect(clientTransport);
+        const result = await client.callTool({ name: 'cocos_2x_runtime_observe', arguments: {
+            projectRoot: value.projects[0], expectedScene: 'helloworld', nodePath: 'Canvas/Button', timeoutMs: 12000,
+        } });
+        assert.deepEqual(seen, ['capabilities.list']);
+        assert.equal(result.structuredContent.runtime.status, 'runtime-error');
+        assert.equal('screenshotBase64' in result.structuredContent, false);
+        assert.equal(result.content.filter((item) => item.type === 'image').length, 1);
+        assert.equal(result.content.find((item) => item.type === 'image').mimeType, 'image/jpeg');
+        const mismatch = await client.callTool({ name: 'cocos_2x_runtime_observe', arguments: {
+            projectRoot: value.projects[0], expectedScene: 'other-scene',
+        } });
+        assert.equal(mismatch.structuredContent.error.code, 'PREVIEW_SCENE_MISMATCH');
+        sceneUuidAvailable = false;
+        const unbound = await client.callTool({ name: 'cocos_2x_runtime_observe', arguments: {
+            projectRoot: value.projects[0], expectedScene: 'helloworld',
+        } });
+        assert.equal(unbound.structuredContent.error.code, 'PREVIEW_SCENE_IDENTITY_UNAVAILABLE');
+    } finally {
+        await client.close().catch(() => {});
+        fs.rmSync(value.parent, { recursive: true, force: true });
+    }
+});
+
 test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL dispatcher contract', async () => {
     const value = fixture();
     const calls = [];
     const invokeAgent = async (request) => {
-        assert.equal(request.params.mcpRuntime?.version, '0.3.0', `${request.method} must attest the MCP runtime`);
+        assert.equal(request.params.mcpRuntime?.version, '0.3.3', `${request.method} must attest the MCP runtime`);
         assert.match(request.params.mcpRuntime.sourceFingerprint, /^[a-f0-9]{64}$/);
         assert.match(request.params.mcpRuntime.contractSchemaFingerprint, /^[a-f0-9]{64}$/);
         if (calls.length) assert.deepEqual(request.params.mcpRuntime, calls[0].params.mcpRuntime);
@@ -104,15 +154,15 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
             'cocos_2x_content_rollback', 'cocos_2x_content_select', 'cocos_2x_content_stress_run',
             'cocos_2x_instances_get', 'cocos_2x_instances_list', 'cocos_2x_operation_get',
             'cocos_2x_operation_preview_accept', 'cocos_2x_operation_reconcile', 'cocos_2x_project_instructions_read',
-            'cocos_2x_scene_node_inspect', 'cocos_2x_scene_snapshot', 'cocos_2x_script_operation_get', 'cocos_2x_script_patch', 'cocos_2x_script_patch_plan', 'cocos_2x_script_read', 'cocos_2x_workflow_compensate',
+            'cocos_2x_runtime_observe', 'cocos_2x_scene_node_inspect', 'cocos_2x_scene_snapshot', 'cocos_2x_script_operation_get', 'cocos_2x_script_patch', 'cocos_2x_script_patch_plan', 'cocos_2x_script_read', 'cocos_2x_workflow_compensate',
             'cocos_2x_workflow_execute', 'cocos_2x_workflow_get', 'cocos_2x_workflow_plan', 'cocos_2x_workflow_replay',
         ]);
-        assert.equal(tools.length, 47);
+        assert.equal(tools.length, 48);
         const commandTool = tools.find((tool) => tool.name === 'cocos_2x_command_execute');
         assert.equal(commandTool.annotations.readOnlyHint, false);
         assert.equal(commandTool.annotations.destructiveHint, true);
         const commandBranches = commandTool.inputSchema.oneOf || commandTool.inputSchema.anyOf;
-        assert.equal(commandBranches.length, 18);
+        assert.equal(commandBranches.length, 19);
         const inspectBranch = commandBranches.find((branch) => branch.properties?.command?.const === 'scene.node.inspect');
         assert.deepEqual(inspectBranch.properties.input.required, ['nodePath']);
         const searchBranch = commandBranches.find((branch) => branch.properties?.command?.const === 'asset.searchPng');
@@ -150,6 +200,9 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
             'the obsolete single resource-load budget must not be advertised');
         assert.deepEqual(stressTool.inputSchema.properties.input,
             stressBranch.properties.input, 'dedicated and generic command tools must expose the same canonical stress input schema');
+        const runtimeObserve = tools.find((tool) => tool.name === 'cocos_2x_runtime_observe');
+        assert.equal(runtimeObserve.annotations.readOnlyHint, true);
+        assert.deepEqual(runtimeObserve.inputSchema.required, ['projectRoot', 'expectedScene']);
 
         const { resources } = await client.listResources();
         assert.deepEqual(resources.map((resource) => resource.uri), [
@@ -160,14 +213,14 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         const skillIndexResource = await client.readResource({ uri: 'cocos://2x/skills/index' });
         const skillIndex = JSON.parse(skillIndexResource.contents[0].text);
         assert.equal(skillIndex.agentPackage.name, 'cocos-agent-2x');
-        assert.equal(skillIndex.agentPackage.version, '0.3.1');
-        assert.equal(skillIndex.mcp.version, '0.3.0');
-        assert.equal(skillIndex.skills.length, 12);
+        assert.equal(skillIndex.agentPackage.version, '0.3.2');
+        assert.equal(skillIndex.mcp.version, '0.3.3');
+        assert.equal(skillIndex.skills.length, 13);
         assert.ok(skillIndex.skills.every((item) => typeof item.description === 'string' && item.description.length > 0));
         assert.ok(skillIndex.skills.some((skill) => skill.name === 'cocos2-asset-bundle-content'
             && skill.references.some((reference) => reference.uri === 'cocos://2x/references/agent-foundation/asset-bundle-cross-dependency-0.2-design.md')));
         const skill = await client.readResource({ uri: 'cocos://2x/agent/mcp-tools' });
-        assert.match(skill.contents[0].text, /CocosAgent package cocos-agent-2x@0\.3\.1/);
+        assert.match(skill.contents[0].text, /CocosAgent package cocos-agent-2x@0\.3\.2/);
         assert.match(skill.contents[0].text, /Creator \*\*2\.4\.15\*\*/);
         assert.match(skill.contents[0].text, /Do not repeat a possibly completed write/);
         const compositionSkill = await client.readResource({ uri: 'cocos://2x/skills/scene-composition' });
@@ -214,7 +267,7 @@ test('MCP advertises fixed 2.4 tools and routes calls through the shared JSONL d
         assert.deepEqual(calls.at(-1).params.targets, value.projects.map((projectRoot) => ({
             creatorVersion: '2.4.15', projectRoot,
         })));
-        assert.equal(calls.at(-1).params.mcpRuntime.version, '0.3.0');
+        assert.equal(calls.at(-1).params.mcpRuntime.version, '0.3.3');
         assert.match(calls.at(-1).params.mcpRuntime.sourceFingerprint, /^[a-f0-9]{64}$/);
         assert.match(calls.at(-1).params.mcpRuntime.agentPackageFingerprint, /^[a-f0-9]{64}$/);
 

@@ -9,7 +9,7 @@ const operationReconcile = require('./operation-reconcile');
 const scenePatchContract = require('./scene-patch-contract');
 
 const scriptContract = require('./script-contract');
-const commands = new Set([...Object.keys(scriptContract.inputs), 'scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.pngSprite', 'scene.node.create', 'scene.node.patch', 'prefab.source.patch', 'prefab.source.inspect', 'content.stress.run']);
+const commands = new Set([...Object.keys(scriptContract.inputs), 'scene.snapshot', 'runtime.preview.start', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.pngSprite', 'scene.node.create', 'scene.node.patch', 'prefab.source.patch', 'prefab.source.inspect', 'content.stress.run']);
 const versions = new Set(['2.4.15', '3.8.7']);
 
 function dispatchError(code, message, phase = 'selection', sideEffect = 'none', retryable = false) {
@@ -98,6 +98,7 @@ function validInput(command, input, creatorVersion) {
     const keys = Object.keys(input);
     if (command.startsWith('script.')) return creatorVersion === '2.4.15' && scriptContract.validInput(command, input);
     if (command === 'scene.snapshot') return keys.length === 0;
+    if (command === 'runtime.preview.start') return creatorVersion === '2.4.15' && keys.length === 0;
     if (command === 'scene.node.inspect') return keys.length === 1 && typeof input.nodePath === 'string'
         && input.nodePath.length > 0 && input.nodePath.length <= 240 && !input.nodePath.includes('\\') && !input.nodePath.includes('//');
     if (command === 'asset.searchPng') return creatorVersion === '2.4.15'
@@ -195,6 +196,8 @@ function dispatchCommand(request, invoke) {
         return problem('COMMAND_UNAVAILABLE', 'Prefab source inspection is currently supported only by Creator 2.4.15.');
     if (command === 'content.stress.run' && creatorVersion !== '2.4.15')
         return problem('COMMAND_UNAVAILABLE', 'Runtime content stress diagnostics are currently supported only by Creator 2.4.15.');
+    if (command === 'runtime.preview.start' && creatorVersion !== '2.4.15')
+        return problem('COMMAND_UNAVAILABLE', 'Editor runtime preview is currently supported only by Creator 2.4.15.');
     if (!validInput(command, input, creatorVersion)) return problem('INVALID_ARGUMENT', 'Provide valid input for the selected command and Creator version.');
     const project = path.resolve(projectRoot);
     if (['asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng'].includes(command) && creatorVersion !== '2.4.15')
@@ -228,6 +231,11 @@ function dispatchCommand(request, invoke) {
     }
     const executionArgs = ['--project', project, '--creator-version', creatorVersion, '--expected-instance-id', selected.instanceId];
     if (selected.activeScene && !['asset.searchPng', 'asset.refreshFolder'].includes(command)) executionArgs.push('--expected-scene', selected.activeScene);
+    if (command === 'runtime.preview.start') {
+        if (typeof selected.activeSceneUuid !== 'string' || !/^[0-9a-fA-F-]{36}$/.test(selected.activeSceneUuid))
+            return problem('SCENE_IDENTITY_UNAVAILABLE', 'The selected Creator instance did not provide a verifiable active scene UUID.');
+        executionArgs.push('--expected-scene-uuid', selected.activeSceneUuid);
+    }
     let operationId = null;
     if (command.startsWith('script.')) executionArgs.push('--command', command, '--input', JSON.stringify(input));
     if (command === 'asset.importPng') executionArgs.push('--png', path.resolve(input.sourcePath));
@@ -271,6 +279,7 @@ function dispatchCommand(request, invoke) {
     }
     if (command === 'prefab.source.inspect') executionArgs.push('--prefab-uuid', input.prefabUuid);
     if (command === 'content.stress.run') executionArgs.push('--input', JSON.stringify(input));
+    if (command === 'runtime.preview.start') executionArgs.push('--runtime-preview-start');
     const patchOperation = command === 'scene.node.patch';
     const prefabSourcePatch = command === 'prefab.source.patch';
     const hostScript = command.startsWith('script.') ? 'script-host.js' : command === 'scene.node.create' ? 'node-create-host.js'

@@ -255,6 +255,7 @@ module.exports = {
         const scene = cc.director.getScene();
         event.reply(null, {
             sceneName: scene ? scene.name || '' : null,
+            sceneUuid: scene && (typeof scene._id === 'string' ? scene._id : typeof scene.uuid === 'string' ? scene.uuid : null),
             hasCanvas: !!(scene && scene.getChildByName('Canvas')),
         });
     },
@@ -378,6 +379,7 @@ module.exports = {
         }
         event.reply(null, {
             sceneName: scene.name || '',
+            sceneUuid: typeof scene._id === 'string' ? scene._id : typeof scene.uuid === 'string' ? scene.uuid : null,
             selectedNodes,
             selectionCount: selectedNodes.length,
             selectionTruncated: requestedSelection.length > selectedNodeUuids.length,

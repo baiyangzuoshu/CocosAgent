@@ -101,6 +101,7 @@ export function finishPlanStep(plan, result) {
 }
 
 export function planView(plan) {
-    const { id, conversationId, title, summary, steps, nextStepIndex, completedSteps, status } = plan;
-    return { id, conversationId, title, summary, steps, nextStepIndex, completedSteps, status };
+    const { id, conversationId, title, summary, steps, nextStepIndex, completedSteps, status, stepEvidence } = plan;
+    return { id, conversationId, title, summary, steps, nextStepIndex, completedSteps, status,
+        ...(Array.isArray(stepEvidence) ? { stepEvidence: stepEvidence.slice(-8) } : {}) };
 }

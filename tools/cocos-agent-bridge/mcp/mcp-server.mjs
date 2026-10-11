@@ -9,6 +9,7 @@ import * as z from 'zod/v4';
 
 const require = createRequire(import.meta.url);
 const { handleAsync } = require('../agent-jsonl.js');
+const { observeRuntime } = require('../runtime-observation.js');
 const { fingerprintFiles, listFiles } = require('../runtime-fingerprint.js');
 const catalogSchema = require('../catalog.schema.json');
 const mcpPackage = require('./package.json');
@@ -18,7 +19,7 @@ const COMMANDS_2X = [
     'scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng',
     'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.pngSprite', 'scene.node.create', 'scene.node.patch',
     'prefab.source.patch', 'prefab.source.inspect', 'content.stress.run',
-    'script.read', 'script.patch.plan', 'script.patch', 'script.operation.get',
+    'script.read', 'script.patch.plan', 'script.patch', 'script.operation.get', 'runtime.preview.start',
 ];
 const CONTENT_BUILD_ID = z.string().regex(/^[a-z0-9][a-z0-9-]{2,31}$/);
 const RELEASE_ID = z.string().regex(/^(?!(selected|effective)$)[a-z0-9][a-z0-9._-]{0,63}$/);
@@ -202,6 +203,7 @@ function commandInputSchema(projectRoot) {
         'script.patch': z.fromJSONSchema(catalogSchema.$defs.scriptPatchInput2x),
         'script.operation.get': z.fromJSONSchema(catalogSchema.$defs.scriptOperationGetInput2x),
         'scene.snapshot': z.object({ targetNodeName: z.string().min(1).max(64).optional() }).strict(),
+        'runtime.preview.start': z.object({}).strict(),
         'scene.node.inspect': z.object({ nodePath: z.string().min(1).max(240) }).strict(),
         'asset.searchPng': z.object({ query: z.string().min(1).max(80).regex(/^[^\u0000-\u001f\u007f]+$/), limit: z.number().int().min(1).max(50).optional(),
             offset: z.number().int().min(0).max(100000).optional() }).strict(),
@@ -341,6 +343,7 @@ function createServer(projectRoots, options = {}) {
     const targetList = roots.map((projectRoot) => ({ creatorVersion: CREATOR_VERSION, projectRoot }));
     const projectRoot = z.enum(roots);
     const invokeAgent = options.invokeAgent || handleAsync;
+    const runtimeObserver = options.observeRuntime || observeRuntime;
     const runScenePipelineWorker = options.runScenePipelineWorker || runAgentWorker;
     const activeScenePipelines = new Map();
     let requestId = 0;
@@ -520,6 +523,47 @@ function createServer(projectRoots, options = {}) {
             }), { title: tool.name, readOnlyHint: tool.command !== 'content.stress.run', destructiveHint: false,
                 idempotentHint: tool.command !== 'content.stress.run', openWorldHint: false });
     }
+
+    server.registerTool('cocos_2x_runtime_observe', {
+        description: 'Read the running Creator 2.4.15 Web preview for the registered project and exact active scene identity (scene name and UUID). Collects bounded console errors/warnings/logs, uncaught exceptions, frame progress, pause state, an optional whitelisted node snapshot, and a cropped game-canvas screenshot. Requires the current scene preview server on 127.0.0.1:7456; it does not start or modify the project. The captured screenshot and diagnostic text are supplied to the configured DeepSeek model for this request.',
+        inputSchema: z.object({ projectRoot, expectedScene: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+            nodePath: z.string().min(1).max(240).regex(/^[A-Za-z0-9_ -]+(?:\/[A-Za-z0-9_ -]+)*$/).optional(),
+            timeoutMs: z.number().int().min(3000).max(30000).optional() }).strict(),
+        annotations: { title: 'Observe Creator runtime', readOnlyHint: true, destructiveHint: false,
+            idempotentHint: true, openWorldHint: false },
+    }, async ({ projectRoot: selected, expectedScene, nodePath, timeoutMs }) => {
+        const project = path.resolve(selected);
+        if (!targetList.some((target) => target.projectRoot === project)) {
+            const unavailable = { success: false, outcome: 'failed', error: { code: 'PROJECT_NOT_REGISTERED' } };
+            return toolReply(unavailable);
+        }
+        const catalog = await invoke('capabilities.list', { targets: targetList, projectRoot: project,
+            creatorVersion: CREATOR_VERSION }, {});
+        if (catalog?.success !== true || catalog.data?.instance?.activeScene !== expectedScene) {
+            const failure = { success: false, outcome: 'failed', error: { code: catalog?.success === true
+                ? 'PREVIEW_SCENE_MISMATCH' : catalog?.error?.code || 'CREATOR_INSTANCE_UNAVAILABLE' } };
+            return toolReply(failure);
+        }
+        const expectedSceneUuid = catalog.data.instance.activeSceneUuid;
+        if (typeof expectedSceneUuid !== 'string' || !/^[0-9a-fA-F-]{36}$/.test(expectedSceneUuid)) {
+            return toolReply({ success: false, outcome: 'failed', error: { code: 'PREVIEW_SCENE_IDENTITY_UNAVAILABLE' } });
+        }
+        const previewCapability = catalog.data.commands?.find((command) => command.id === 'runtime.preview.start');
+        if (!previewCapability || previewCapability.status !== 'available') {
+            return toolReply({ success: false, outcome: 'failed', error: { code: previewCapability?.reason || 'PREVIEW_CAPABILITY_UNAVAILABLE' } });
+        }
+        const observation = await runtimeObserver({ expectedScene, expectedSceneUuid, ...(nodePath ? { nodePath } : {}),
+            timeoutMs: timeoutMs === undefined ? 20000 : timeoutMs });
+        const { screenshotBase64, ...structured } = observation;
+        const content = [{ type: 'text', text: JSON.stringify(structured) }];
+        if (typeof screenshotBase64 === 'string' && Buffer.byteLength(screenshotBase64, 'base64') <= 2 * 1024 * 1024) {
+            content.push({ type: 'image', mimeType: 'image/jpeg', data: screenshotBase64 });
+        } else if (screenshotBase64) {
+            structured.screenshot = { ...structured.screenshot, available: false, error: 'SCREENSHOT_TOO_LARGE' };
+            content[0] = { type: 'text', text: JSON.stringify(structured) };
+        }
+        return { content, structuredContent: structured, isError: observation.success === false };
+    });
 
     register('cocos_2x_script_patch',
         'Apply an approved exact existing-JS patch, compensate the original operation, reconcile uncertain compiler results without rewriting, or replay a compensated record under a new ID. A successful compile yields needs-runtime, never functional success. Compilation failures retain exact backup/source hashes. All actions require local approval.',

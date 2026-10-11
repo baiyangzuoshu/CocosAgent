@@ -33,6 +33,8 @@ test('plan steps require explicit click, correct conversation, and strict order'
     } }] });
     assert.equal(plan.status, 'waiting-next');
     assert.equal(plan.completedSteps, 1);
+    assert.equal(planView(plan).stepEvidence[0].stepIndex, 0);
+    assert.equal(planView(plan).stepEvidence[0].receipts[0].operationId, 'verified-source-operation');
     const nextTask = beginPlanStep(plan, { conversationId: 'conversation-a', planId: plan.id, stepIndex: 1 });
     assert.match(nextTask, /verified-source-operation/);
     assert.throws(() => beginPlanStep(plan, { conversationId: 'conversation-a', planId: plan.id, stepIndex: 0 }), /PLAN_STEP_OUT_OF_ORDER/);

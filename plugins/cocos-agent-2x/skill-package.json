@@ -7,6 +7,7 @@
     "cocos2-content-build",
     "cocos2-asset-bundle-content",
     "cocos2-runtime-performance",
+    "cocos2-runtime-observation",
     "cocos2-mcp-tools"
   ],
   "skills": [
@@ -62,10 +63,19 @@
       "agent-foundation/probes/cocos-native-content-stress-2.4.py",
       "agent-foundation/native/cocos-agent-memory-bridge-2.4.h"
     ] },
-    {"name": "cocos2-script-development", "uri": "cocos://2x/skills/script-development", "references": []}
+    {"name": "cocos2-script-development", "uri": "cocos://2x/skills/script-development", "references": [
+      "agent-foundation/cocos-agent-script-development-0.1.md",
+      "agent-foundation/cocos-agent-runtime-observation-0.1.md"
+    ]},
+    {"name": "cocos2-runtime-observation", "uri": "cocos://2x/skills/runtime-observation", "references": [
+      "agent-foundation/cocos-agent-runtime-observation-0.1.md",
+      "agent-foundation/cocos-agent-script-development-0.1.md"
+    ]}
   ],
   "references": [
     { "id": "agent-foundation/cocos-agent-mcp-0.1.md", "source": "docs/agent-foundation/cocos-agent-mcp-0.1.md" },
+    { "id": "agent-foundation/cocos-agent-script-development-0.1.md", "source": "docs/agent-foundation/cocos-agent-script-development-0.1.md" },
+    { "id": "agent-foundation/cocos-agent-runtime-observation-0.1.md", "source": "docs/agent-foundation/cocos-agent-runtime-observation-0.1.md" },
     { "id": "agent-foundation/cocos-agent-asset-search-0.1.md", "source": "docs/agent-foundation/cocos-agent-asset-search-0.1.md" },
     { "id": "agent-foundation/traces/cocos-agent-mcp-2.4.jsonl", "source": "docs/agent-foundation/traces/cocos-agent-mcp-2.4.jsonl" },
     { "id": "agent-foundation/traces/cocos-agent-mcp-cancel-2.4.jsonl", "source": "docs/agent-foundation/traces/cocos-agent-mcp-cancel-2.4.jsonl" },
