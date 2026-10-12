@@ -13,7 +13,20 @@ const scriptOperations = require('./script-operations');
 const CREATOR_VERSION = '2.4.15';
 const EXTENSION_VERSION = extensionPackage.version;
 const PROTOCOL_VERSION = '0.1';
-const PROJECT_ROOT = path.resolve(__dirname, '../..');
+function resolveCreatorProjectRoot() {
+    const candidates = [];
+    const activeProjectPath = Editor && Editor.Project && Editor.Project.path;
+    if (typeof activeProjectPath === 'string' && path.isAbsolute(activeProjectPath)) candidates.push(activeProjectPath);
+    candidates.push(path.resolve(__dirname, '../..'));
+    for (let index = 0; index < candidates.length; index += 1) {
+        try {
+            const canonical = fs.realpathSync(candidates[index]);
+            if (fs.statSync(path.join(canonical, 'project.json')).isFile()) return canonical;
+        } catch (_) {}
+    }
+    throw new Error('CocosAgent requires an active Creator project with project.json.');
+}
+const PROJECT_ROOT = resolveCreatorProjectRoot();
 const scriptService = scriptOperations.createScriptService(PROJECT_ROOT, Editor);
 const SESSION_PATH = path.join(PROJECT_ROOT, 'temp', 'cocos-agent-bridge', 'session.json');
 const INBOX_PATH = path.join(PROJECT_ROOT, 'temp', 'cocos-agent-bridge', 'inbox');
@@ -711,11 +724,10 @@ function callPrefabSceneScript(method, params, callback) {
 }
 
 function prefabEditModeModule() {
-    try {
-        const editMode = Editor.require('scene://edit-mode');
-        return editMode && typeof editMode.curMode === 'function'
-            && typeof editMode.save === 'function' && typeof editMode.pop === 'function' ? editMode : null;
-    } catch (_) { return null; }
+    // Creator 2.4.15 may not register scene://edit-mode in the main process.
+    // Calling Editor.require for an unregistered URL logs a protocol error even
+    // when caught, so report this optional capability as unavailable without probing it.
+    return null;
 }
 
 function prefabEditModeApiReady() { return !!prefabEditModeModule(); }
@@ -1542,6 +1554,55 @@ module.exports = {
                 ? Object.assign({ ready: true }, assistantRuntimeInfo)
                 : { ready: false, connecting: assistantStartPending, credentialRemembered: assistantCredentialRemembered,
                     error: assistantCredentialError });
+        },
+        assistantVersion() {
+            sendAssistantPanel('assistant-extension-version', { version: EXTENSION_VERSION });
+        },
+        assistantClipboardWrite(_event, payload) {
+            const requestId = typeof payload?.requestId === 'string' ? payload.requestId : '';
+            const text = typeof payload?.text === 'string' ? payload.text : '';
+            const imageDataUrl = typeof payload?.imageDataUrl === 'string' ? payload.imageDataUrl : '';
+            const isImage = imageDataUrl.startsWith('data:image/jpeg;base64,') && imageDataUrl.length <= 2800000;
+            if (!requestId || ((!text || text.length > 256000) && !isImage)) {
+                sendAssistantPanel('assistant-copy-result', { requestId, success: false });
+                return;
+            }
+            try {
+                const { clipboard, nativeImage } = require('electron');
+                if (isImage) {
+                    const image = nativeImage.createFromDataURL(imageDataUrl);
+                    if (image.isEmpty()) throw new Error('Invalid image');
+                    clipboard.writeImage(image);
+                } else clipboard.writeText(text);
+                sendAssistantPanel('assistant-copy-result', { requestId, success: true });
+            } catch (_) {
+                sendAssistantPanel('assistant-copy-result', { requestId, success: false });
+            }
+        },
+        assistantLogExport(_event, payload) {
+            const requestId = typeof payload?.requestId === 'string' ? payload.requestId : '';
+            const contents = typeof payload?.contents === 'string' ? payload.contents : '';
+            if (!requestId || !contents || contents.length > 4000000) {
+                sendAssistantPanel('assistant-log-export-result', { requestId, success: false, error: '日志内容为空或超过 4 MB。' });
+                return;
+            }
+            void (async () => {
+                const { dialog } = require('electron');
+                const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+                const result = await dialog.showSaveDialog({
+                    title: '导出 CocosAgent 支持日志',
+                    defaultPath: `CocosAgent-support-${stamp}.json`,
+                    filters: [{ name: 'JSON 支持日志', extensions: ['json'] }],
+                });
+                if (result.canceled || !result.filePath) {
+                    sendAssistantPanel('assistant-log-export-result', { requestId, canceled: true });
+                    return;
+                }
+                fs.writeFileSync(result.filePath, contents, { encoding: 'utf8', mode: 0o600 });
+                sendAssistantPanel('assistant-log-export-result', { requestId, success: true, filePath: result.filePath });
+            })().catch((error) => sendAssistantPanel('assistant-log-export-result', {
+                requestId, success: false, error: String(error?.message || error).slice(0, 300),
+            }));
         },
         assistantStart(_event, payload) {
             void startAssistantRuntime(payload);

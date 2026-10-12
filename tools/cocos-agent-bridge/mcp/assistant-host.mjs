@@ -83,11 +83,51 @@ export function projectContextMatchesProject(context, projectRoot) {
     catch (_) { return false; }
 }
 
-function traceFile(projectRoot) {
+function traceDirectory() {
     const userStateRoot = process.env.LOCALAPPDATA || process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state');
     const directory = path.join(userStateRoot, 'CocosAgent', 'agent-runs');
     fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-    return path.join(directory, `${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomUUID().slice(0, 8)}.jsonl`);
+    return directory;
+}
+
+function traceFile(projectRoot) {
+    return path.join(traceDirectory(), `${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomUUID().slice(0, 8)}.jsonl`);
+}
+
+function supportSafeValue(value, depth = 0) {
+    if (depth > 10) return null;
+    if (value === null || typeof value === 'boolean' || typeof value === 'number') return value;
+    if (typeof value === 'string') return value
+        .replace(/\bsk-[A-Za-z0-9_-]{12,}\b/g, '[REDACTED]')
+        .replace(/\bBearer\s+[A-Za-z0-9._-]{12,}\b/gi, 'Bearer [REDACTED]')
+        .replace(/((?:api[\s_-]?key|authorization|access[\s_-]?token|password|secret)\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTED]')
+        .slice(0, 100000);
+    if (Array.isArray(value)) return value.slice(0, 200).map((item) => supportSafeValue(item, depth + 1));
+    if (typeof value !== 'object') return null;
+    const output = {};
+    for (const [key, item] of Object.entries(value).slice(0, 256)) {
+        if (/(?:api.?key|authorization|secret|password|credential|token|imageDataUrl|dataBase64|screenshot)/i.test(key)) continue;
+        output[key.slice(0, 120)] = supportSafeValue(item, depth + 1);
+    }
+    return output;
+}
+
+function readTraceForSupport(tracePath, remainingBytes) {
+    try {
+        const allowedRoot = fs.realpathSync(traceDirectory());
+        const canonicalPath = fs.realpathSync(tracePath);
+        const relative = path.relative(allowedRoot, canonicalPath);
+        if (!relative || relative.startsWith('..') || path.isAbsolute(relative) || path.extname(canonicalPath) !== '.jsonl') return null;
+        const stat = fs.statSync(canonicalPath);
+        if (!stat.isFile() || stat.size > 512000 || stat.size > remainingBytes) return { file: path.basename(canonicalPath), omitted: 'trace_size_limit' };
+        const events = [];
+        for (const line of fs.readFileSync(canonicalPath, 'utf8').split(/\r?\n/)) {
+            if (!line.trim()) continue;
+            try { events.push(supportSafeValue(JSON.parse(line))); }
+            catch (_) { events.push({ event: 'unparseable_trace_line', text: line.slice(0, 1000) }); }
+        }
+        return { file: path.basename(canonicalPath), events };
+    } catch (_) { return null; }
 }
 
 function send(socket, message) {
@@ -295,6 +335,52 @@ async function start(options) {
                     recentRuns: recentRuns.filter((run) => run.conversationId === message.conversationId).slice(-12) });
                 return;
             }
+            if (message?.type === 'conversation.export' && typeof message.conversationId === 'string'
+                && message.conversationId.length > 0 && message.conversationId.length <= 80
+                && typeof message.requestId === 'string' && message.requestId.length <= 80) {
+                const runs = recentRuns.filter((run) => run.conversationId === message.conversationId).slice(-12);
+                let remainingBytes = 512000;
+                const traces = [];
+                for (const run of runs) {
+                    if (typeof run.tracePath !== 'string') continue;
+                    const trace = readTraceForSupport(run.tracePath, remainingBytes);
+                    if (!trace) continue;
+                    traces.push({ runId: run.id, ...trace });
+                    remainingBytes -= Buffer.byteLength(JSON.stringify(trace), 'utf8');
+                    if (remainingBytes <= 0) break;
+                }
+                const exportRuns = runs.map((run) => {
+                    const copy = { ...run };
+                    delete copy.tracePath;
+                    return supportSafeValue(copy);
+                });
+                send(socket, { type: 'conversation.exported', requestId: message.requestId,
+                    conversationId: message.conversationId,
+                    messages: supportSafeValue(conversations.get(message.conversationId) || []),
+                    plans: [...plans.values()].filter((plan) => plan.conversationId === message.conversationId)
+                        .slice(-12).map((plan) => supportSafeValue(planView(plan))),
+                    runs: exportRuns, traces });
+                return;
+            }
+            if (message?.type === 'conversation.clear' && typeof message.conversationId === 'string'
+                && message.conversationId.length > 0 && message.conversationId.length <= 80) {
+                if (activeRunState) {
+                    send(socket, { type: 'conversation.cleared', conversationId: message.conversationId,
+                        error: '当前有任务正在执行，请结束任务后再清空。' });
+                    return;
+                }
+                const previousMessages = conversations.get(message.conversationId);
+                conversations.delete(message.conversationId);
+                try {
+                    persistState();
+                    send(socket, { type: 'conversation.cleared', conversationId: message.conversationId });
+                } catch (_) {
+                    if (previousMessages) conversations.set(message.conversationId, previousMessages);
+                    send(socket, { type: 'conversation.cleared', conversationId: message.conversationId,
+                        error: '本机聊天记录未能保存变更，请稍后重试。' });
+                }
+                return;
+            }
             if (message?.type === 'run.cancel' && typeof message.requestId === 'string') {
                 const active = activeRunState;
                 if (!active || active.requestId !== message.requestId || active.socket !== socket) {
@@ -419,6 +505,8 @@ async function start(options) {
             });
 
             const runTracePath = traceFile(options.project);
+            runRecord.tracePath = runTracePath;
+            try { appendRun(runRecord); } catch (_) { delete runRecord.tracePath; }
             const onAgentEvent = (event) => {
                     if (event.type === 'run.finished') {
                         runRecord.executionChecklist = Array.isArray(event.executionChecklist) ? event.executionChecklist : [];

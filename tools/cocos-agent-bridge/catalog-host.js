@@ -40,13 +40,34 @@ const expectedAgentPackageFingerprint = fingerprintFiles(AGENT_PACKAGE_ROOT, [
     ...listFiles(AGENT_PACKAGE_ROOT, 'skills'), ...listFiles(AGENT_PACKAGE_ROOT, 'references'),
 ]);
 function expectedExtensionFingerprint(projectRoot) {
-    const extensionRoot = path.join(projectRoot, 'packages', 'cocos-agent-bridge');
+    const projectExtensionRoot = path.join(projectRoot, 'packages', 'cocos-agent-bridge');
+    // The Creator extension and its sidecar are installed globally by default.
+    // In that layout there is intentionally no copy under the game's packages/.
+    // Compare the receipt with the extension package that launched this Host.
+    const bundledExtensionRoot = path.resolve(__dirname, '../../..');
+    const bundledPackagePath = path.join(bundledExtensionRoot, 'package.json');
+    const bundledRuntimeRoot = path.resolve(__dirname, '..', '..');
+    const extensionRoot = fs.existsSync(path.join(bundledRuntimeRoot, 'tools/cocos-agent-runtime/package.json'))
+        && fs.existsSync(bundledPackagePath)
+        ? bundledExtensionRoot
+        : projectExtensionRoot;
     if (!fs.existsSync(path.join(extensionRoot, 'vendor/ws'))) return null;
     const relativeFiles = ['asset-search.js', 'credential-store.cjs', 'main.js', 'script-operations.js', 'scene.js', 'package.json', 'package-lock.json',
         ...listFiles(extensionRoot, 'vendor/ws')];
     const files = relativeFiles.map((name) => path.join(extensionRoot, name));
     if (!files.every((file) => fs.existsSync(file))) return null;
     return fingerprintFiles(extensionRoot, relativeFiles);
+}
+
+function expectedExtensionVersion(projectRoot) {
+    const bundledExtensionRoot = path.resolve(__dirname, '../../..');
+    const bundledRuntimeRoot = path.resolve(__dirname, '..', '..');
+    const bundledPackagePath = path.join(bundledExtensionRoot, 'package.json');
+    const projectPackagePath = path.join(projectRoot, 'packages', 'cocos-agent-bridge', 'package.json');
+    const packagePath = fs.existsSync(path.join(bundledRuntimeRoot, 'tools/cocos-agent-runtime/package.json'))
+        && fs.existsSync(bundledPackagePath) ? bundledPackagePath : projectPackagePath;
+    try { return JSON.parse(fs.readFileSync(packagePath, 'utf8')).version || null; }
+    catch (_) { return null; }
 }
 
 const args = process.argv.slice(2);
@@ -203,10 +224,7 @@ function runtimeCompatibility(target, result, actualContractFingerprint) {
     if (target.creatorVersion !== '2.4.15') return { status: 'legacy-unverified', blockers: [], diagnostics: [] };
     const diagnostics = [];
     const blockers = [];
-    const extensionRoot = path.join(target.projectRoot, 'packages', 'cocos-agent-bridge');
-    let expectedExtensionVersion = null;
-    try { expectedExtensionVersion = JSON.parse(fs.readFileSync(path.join(extensionRoot, 'package.json'), 'utf8')).version; }
-    catch (_) { /* Report the missing local build metadata. */ }
+    const expectedVersion = expectedExtensionVersion(target.projectRoot);
     const expectedExtFingerprint = expectedExtensionFingerprint(target.projectRoot);
     if (!result.extensionSourceFingerprint) {
         diagnostics.push({ component: 'creatorExtension', status: 'unattested', code: 'EXTENSION_FINGERPRINT_UNREPORTED',
@@ -217,9 +235,9 @@ function runtimeCompatibility(target, result, actualContractFingerprint) {
             expected: expectedExtFingerprint, actual: result.extensionSourceFingerprint });
         blockers.push('CREATOR_EXTENSION_STALE');
     }
-    if (!result.extensionVersion || result.extensionVersion !== expectedExtensionVersion) {
+    if (!result.extensionVersion || result.extensionVersion !== expectedVersion) {
         diagnostics.push({ component: 'creatorExtension', status: 'mismatch', code: 'EXTENSION_VERSION_MISMATCH',
-            expected: expectedExtensionVersion, actual: result.extensionVersion || null });
+            expected: expectedVersion, actual: result.extensionVersion || null });
         blockers.push('EXTENSION_VERSION_MISMATCH');
     }
     if (!result.commandContractFingerprint || result.commandContractFingerprint !== actualContractFingerprint) {

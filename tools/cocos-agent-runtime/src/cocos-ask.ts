@@ -14,6 +14,11 @@ const RECOVERY_TOOLS = new Set([
 const MAX_TOOL_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_TOOL_IMAGE_BASE64_CHARS = Math.ceil(MAX_TOOL_IMAGE_BYTES * 4 / 3) + 8;
 
+function isAbsoluteCreatorProjectRoot(projectRoot: string): boolean {
+    return projectRoot.startsWith('/') || /^[A-Za-z]:[\\/]/.test(projectRoot)
+        || /^\\\\[^\\/]+[\\/][^\\/]+/.test(projectRoot);
+}
+
 export interface CocosReadOnlyToolDefinition {
     name: string;
     description?: string;
@@ -64,7 +69,9 @@ export class CocosReadOnlyToolRegistry implements ToolRegistry {
         private readonly projectInstructions: CocosProjectInstructionsRequirement = { required: false },
     ) {
         this.instructionsVerified = !projectInstructions.required;
-        if (!projectRoot || !projectRoot.startsWith('/')) throw new TypeError('A canonical absolute Creator project root is required.');
+        if (!projectRoot || !isAbsoluteCreatorProjectRoot(projectRoot)) {
+            throw new TypeError('A canonical absolute Creator project root is required.');
+        }
         const seen = new Set<string>();
         this.tools = definitions.map((definition) => {
             if (!definition || typeof definition.name !== 'string' || !definition.name

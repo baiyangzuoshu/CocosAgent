@@ -5,6 +5,166 @@ function makeId() {
     return `cocos-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function clearChildren(element) {
+    while (element && element.firstChild) element.removeChild(element.firstChild);
+}
+
+function safeSupportText(value) {
+    return String(value || '')
+        .replace(/\bsk-[A-Za-z0-9_-]{12,}\b/g, '[REDACTED]')
+        .replace(/\bBearer\s+[A-Za-z0-9._-]{12,}\b/gi, 'Bearer [REDACTED]')
+        .replace(/((?:api[\s_-]?key|authorization|access[\s_-]?token|password|secret)\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTED]');
+}
+
+function visibleText(element) {
+    if (!element) return '';
+    const copy = element.cloneNode(true);
+    const controls = copy.querySelectorAll('button, .copy-button');
+    Array.prototype.slice.call(controls).forEach((control) => {
+        if (control.parentNode) control.parentNode.removeChild(control);
+    });
+    return safeSupportText(String(copy.innerText || copy.textContent || '').trim());
+}
+
+function appendInlineMarkdown(parent, text) {
+    const token = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|`([^`]+)`|\*\*([^*\n]+)\*\*|__([^_\n]+)__|~~([^~\n]+)~~|\*([^*\n]+)\*|_([^_\n]+)_/g;
+    let offset = 0;
+    let match;
+    while ((match = token.exec(text))) {
+        if (match.index > offset) parent.appendChild(document.createTextNode(text.slice(offset, match.index)));
+        let node;
+        if (match[1] !== undefined) {
+            node = document.createElement('a');
+            node.textContent = match[1];
+            node.href = match[2];
+            node.target = '_blank';
+            node.rel = 'noopener noreferrer';
+        } else if (match[3] !== undefined) {
+            node = document.createElement('code');
+            node.textContent = match[3];
+        } else if (match[4] !== undefined || match[5] !== undefined) {
+            node = document.createElement('strong');
+            node.textContent = match[4] || match[5];
+        } else if (match[6] !== undefined) {
+            node = document.createElement('del');
+            node.textContent = match[6];
+        } else {
+            node = document.createElement('em');
+            node.textContent = match[7] || match[8];
+        }
+        parent.appendChild(node);
+        offset = token.lastIndex;
+    }
+    if (offset < text.length) parent.appendChild(document.createTextNode(text.slice(offset)));
+}
+
+function markdownTableCells(line) {
+    return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim());
+}
+
+function renderAssistantMarkdown(container, markdown) {
+    const lines = markdown.replace(/\r\n?/g, '\n').split('\n');
+    const isTableRule = (line) => /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+    const isList = (line) => /^\s*(?:[-+*]|\d+[.)])\s+/.test(line);
+    const isBlockStart = (index) => {
+        const line = lines[index] || '';
+        return /^\s*```/.test(line) || /^\s{0,3}#{1,6}\s+/.test(line)
+            || /^\s{0,3}(?:---+|\*\*\*|___)\s*$/.test(line) || /^\s*>/.test(line)
+            || isList(line) || (line.includes('|') && isTableRule(lines[index + 1] || ''));
+    };
+    let index = 0;
+    while (index < lines.length) {
+        const line = lines[index];
+        if (!line.trim()) { index += 1; continue; }
+        if (/^\s*```/.test(line)) {
+            index += 1;
+            const code = [];
+            while (index < lines.length && !/^\s*```/.test(lines[index])) code.push(lines[index++]);
+            if (index < lines.length) index += 1;
+            const pre = document.createElement('pre');
+            const codeNode = document.createElement('code');
+            codeNode.textContent = code.join('\n');
+            pre.appendChild(codeNode);
+            container.appendChild(pre);
+            continue;
+        }
+        const heading = line.match(/^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/);
+        if (heading) {
+            const node = document.createElement(`h${Math.min(heading[1].length, 4)}`);
+            appendInlineMarkdown(node, heading[2]);
+            container.appendChild(node);
+            index += 1;
+            continue;
+        }
+        if (/^\s{0,3}(?:---+|\*\*\*|___)\s*$/.test(line)) {
+            container.appendChild(document.createElement('hr'));
+            index += 1;
+            continue;
+        }
+        if (line.includes('|') && isTableRule(lines[index + 1] || '')) {
+            const headers = markdownTableCells(line);
+            index += 2;
+            const table = document.createElement('table');
+            const thead = document.createElement('thead');
+            const headerRow = document.createElement('tr');
+            headers.forEach((cell) => {
+                const th = document.createElement('th');
+                appendInlineMarkdown(th, cell);
+                headerRow.appendChild(th);
+            });
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+            const tbody = document.createElement('tbody');
+            while (index < lines.length && lines[index].includes('|') && lines[index].trim()) {
+                const cells = markdownTableCells(lines[index++]);
+                const row = document.createElement('tr');
+                headers.forEach((_header, cellIndex) => {
+                    const td = document.createElement('td');
+                    appendInlineMarkdown(td, cells[cellIndex] || '');
+                    row.appendChild(td);
+                });
+                tbody.appendChild(row);
+            }
+            table.appendChild(tbody);
+            const wrap = document.createElement('div');
+            wrap.className = 'markdown-table-wrap';
+            wrap.appendChild(table);
+            container.appendChild(wrap);
+            continue;
+        }
+        if (/^\s*>/.test(line)) {
+            const quote = document.createElement('blockquote');
+            while (index < lines.length && /^\s*>/.test(lines[index])) {
+                const row = document.createElement('p');
+                appendInlineMarkdown(row, lines[index++].replace(/^\s*>\s?/, ''));
+                quote.appendChild(row);
+            }
+            container.appendChild(quote);
+            continue;
+        }
+        if (isList(line)) {
+            const ordered = /^\s*\d+[.)]\s+/.test(line);
+            const list = document.createElement(ordered ? 'ol' : 'ul');
+            while (index < lines.length && isList(lines[index]) && /^\s*\d+[.)]\s+/.test(lines[index]) === ordered) {
+                const item = document.createElement('li');
+                appendInlineMarkdown(item, lines[index++].replace(/^\s*(?:[-+*]|\d+[.)])\s+/, ''));
+                list.appendChild(item);
+            }
+            container.appendChild(list);
+            continue;
+        }
+        const paragraph = document.createElement('p');
+        const paragraphLines = [];
+        while (index < lines.length && lines[index].trim() && !isBlockStart(index)) paragraphLines.push(lines[index++]);
+        if (!paragraphLines.length) paragraphLines.push(lines[index++]);
+        paragraphLines.forEach((part, partIndex) => {
+            if (partIndex) paragraph.appendChild(document.createElement('br'));
+            appendInlineMarkdown(paragraph, part);
+        });
+        container.appendChild(paragraph);
+    }
+}
+
 Editor.Panel.extend({
     style: `
         :host { display: block; height: 100%; color: #e7e9ec; background: #242629; font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
@@ -12,13 +172,20 @@ Editor.Panel.extend({
         .root { height: 100%; min-height: 0; display: flex; flex-direction: column; }
         .top { padding: 12px; border-bottom: 1px solid #3d4045; }
         .brand { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .brand-actions { display: flex; align-items: center; gap: 8px; }
         .brand strong { font-size: 14px; letter-spacing: .2px; }
+        .extension-version { color: #969da7; font-size: 10px; font-weight: 400; letter-spacing: 0; vertical-align: middle; }
+        .export-log { padding: 3px 7px; font-size: 10px; white-space: nowrap; }
         .connection { color: #a9afb8; font-size: 11px; }
         .connection[data-state="ready"] { color: #76d39b; }
+        .clear-chat { padding: 3px 7px; font-size: 10px; white-space: nowrap; }
+        .clear-chat.confirming { color: #fff2d4; background: #74552b; border-color: #a47b3e; }
         .project-context { margin: 8px 0 10px; padding: 7px 8px; border: 1px solid #3d4249; border-radius: 5px; background: #202225; color: #c6cbd2; font-size: 10px; line-height: 1.45; }
         .project-context-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 3px; }
         .project-context-head strong { color: #e7e9ec; font-size: 11px; }
+        .context-actions { display: flex; align-items: center; gap: 4px; }
         .context-refresh { padding: 2px 6px; font-size: 10px; }
+        .context-copy { padding: 2px 6px; font-size: 10px; }
         .context-line { overflow-wrap: anywhere; }
         .context-muted { color: #9299a3; }
         .model-row { display: flex; gap: 6px; }
@@ -41,14 +208,36 @@ Editor.Panel.extend({
         .mode-note { color: #969da7; font-size: 11px; min-height: 15px; margin-top: 6px; }
         .messages { flex: 1; min-height: 0; overflow: auto; padding: 12px; }
         .empty { color: #9ca3ad; line-height: 1.55; margin: 10px 2px; }
-        .message { margin: 0 0 12px; padding: 9px 10px; border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
+        .message { position: relative; margin: 0 0 12px; padding: 9px 10px; border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
         .message.user { background: #343941; margin-left: 22px; }
         .message.assistant { background: #2d3034; margin-right: 12px; }
-        .message .role { color: #aeb5bf; display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
-        .activity { color: #aab1bb; font-size: 11px; margin: 4px 2px 8px; white-space: pre-wrap; }
+        .message .role { color: #aeb5bf; display: block; padding-right: 50px; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+        .message-body { white-space: normal; line-height: 1.6; overflow-wrap: anywhere; }
+        .message-body > :first-child { margin-top: 0; }
+        .message-body > :last-child { margin-bottom: 0; }
+        .message-body p { margin: 0 0 9px; }
+        .message-body h1, .message-body h2, .message-body h3, .message-body h4 { line-height: 1.35; margin: 12px 0 6px; }
+        .message-body h1 { font-size: 17px; } .message-body h2 { font-size: 15px; } .message-body h3, .message-body h4 { font-size: 13px; }
+        .message-body ul, .message-body ol { margin: 4px 0 10px; padding-left: 22px; }
+        .message-body li { padding: 1px 0; }
+        .message-body blockquote { margin: 6px 0 10px; padding: 3px 10px; border-left: 3px solid #65758a; color: #c0c6ce; }
+        .message-body blockquote p { margin: 2px 0; }
+        .message-body code { padding: 1px 4px; border-radius: 3px; background: #202226; color: #d7e5fa; font: 0.92em Consolas, monospace; }
+        .message-body pre { margin: 6px 0 10px; padding: 9px; max-height: 360px; overflow: auto; border: 1px solid #454a52; border-radius: 4px; background: #202226; white-space: pre; }
+        .message-body pre code { padding: 0; background: transparent; }
+        .message-body a { color: #8dbdff; }
+        .message-body hr { border: 0; border-top: 1px solid #4a4e55; margin: 10px 0; }
+        .markdown-table-wrap { max-width: 100%; overflow: auto; margin: 6px 0 10px; }
+        .message-body table { border-collapse: collapse; table-layout: fixed; width: 100%; font-size: 11px; }
+        .message-body th, .message-body td { padding: 5px 7px; border: 1px solid #4b5058; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+        .message-body th { background: #373b41; color: #eef1f5; }
+        .message-body td { color: #d0d4da; }
+        .activity { position: relative; min-height: 23px; padding: 3px 52px 3px 2px; color: #aab1bb; font-size: 11px; margin: 4px 2px 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .screenshot-card { position: relative; display: table; max-width: 100%; }
         .runtime-screenshot { display: block; max-width: 100%; max-height: 420px; object-fit: contain; margin: 4px 2px 12px; border: 1px solid #4a5058; border-radius: 4px; background: #17181a; }
+        .plan-card, .run-card { position: relative; }
         .plan-card { margin: 0 0 12px; padding: 10px; border: 1px solid #4a5058; border-radius: 6px; background: #282c31; }
-        .plan-card h3 { margin: 0 0 6px; font-size: 13px; }
+        .plan-card h3 { margin: 0 0 6px; padding-right: 50px; font-size: 13px; }
         .plan-summary, .plan-status { color: #b9c0ca; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
         .plan-steps { padding-left: 22px; }
         .plan-steps li { padding: 4px 0; }
@@ -56,16 +245,18 @@ Editor.Panel.extend({
         .plan-status { margin: 8px 0; color: #d4d8de; font-size: 11px; }
         .plan-action { background: #2867bc; border-color: #3979cf; }
         .run-card { margin: 0 0 10px; padding: 9px; border: 1px solid #57504a; border-radius: 6px; background: #302d29; }
-        .run-card h4 { margin: 0 0 5px; font-size: 12px; }
+        .run-card h4 { margin: 0 0 5px; padding-right: 50px; font-size: 12px; }
         .run-meta, .run-effects { color: #c2c0ba; font-size: 10px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
         .run-recover { margin: 5px 5px 0 0; padding: 3px 6px; font-size: 10px; }
         .run-receipt { max-height: 180px; overflow: auto; color: #c2c0ba; font: 10px Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .copy-button { position: absolute; z-index: 3; top: 6px; right: 7px; padding: 2px 6px; font-size: 10px; line-height: 1.25; opacity: .82; }
+        .copy-button:hover { opacity: 1; }
         .diff-details { margin-top: 5px; font-size: 10px; }
         .diff-details summary { color: #9fc5ff; cursor: pointer; }
         .diff-details pre { max-height: 180px; overflow: auto; color: #cdd2da; white-space: pre-wrap; overflow-wrap: anywhere; }
-        .approval { display: none; padding: 10px 12px; border-top: 1px solid #615438; background: #312c22; }
+        .approval { position: relative; display: none; padding: 10px 12px; border-top: 1px solid #615438; background: #312c22; }
         .approval.visible { display: block; }
-        .approval-title { color: #f2d084; font-weight: 600; margin-bottom: 5px; }
+        .approval-title { padding-right: 50px; color: #f2d084; font-weight: 600; margin-bottom: 5px; }
         .approval-tool { font-family: Consolas, monospace; font-size: 11px; margin: 5px 0; }
         .approval-args { max-height: 120px; overflow: auto; color: #c4c0b5; font: 10px Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
         .approval-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
@@ -81,9 +272,9 @@ Editor.Panel.extend({
     template: `
         <div class="root">
             <header class="top">
-                <div class="brand"><strong>CocosAgent</strong><span class="connection" id="connection">未连接</span></div>
+                <div class="brand"><strong>CocosAgent <span class="extension-version" id="extension-version">v…</span></strong><div class="brand-actions"><button class="export-log" id="export-log">导出日志</button><button class="clear-chat" id="clear-chat" title="清除当前会话的聊天文本">清空聊天</button><span class="connection" id="connection">未连接</span></div></div>
                 <div class="project-context" id="project-context">
-                    <div class="project-context-head"><strong>当前工程上下文</strong><button class="context-refresh" id="context-refresh">刷新</button></div>
+                    <div class="project-context-head"><strong>当前工程上下文</strong><span class="context-actions"><button class="context-copy" id="context-copy">复制上下文</button><button class="context-refresh" id="context-refresh">刷新</button></span></div>
                     <div class="context-line" id="context-project">正在读取工程…</div>
                     <div class="context-line" id="context-scene">活动场景：读取中…</div>
                     <div class="context-line" id="context-selection">选中对象：读取中…</div>
@@ -125,8 +316,8 @@ Editor.Panel.extend({
     `,
 
     $: {
-        connection: '#connection', apiKey: '#api-key', model: '#model', connect: '#connect', rememberKey: '#remember-key', forgetKey: '#forget-key',
-        projectContext: '#project-context', contextRefresh: '#context-refresh', contextProject: '#context-project', contextScene: '#context-scene',
+        connection: '#connection', extensionVersion: '#extension-version', exportLog: '#export-log', clearChat: '#clear-chat', apiKey: '#api-key', model: '#model', connect: '#connect', rememberKey: '#remember-key', forgetKey: '#forget-key',
+        projectContext: '#project-context', contextCopy: '#context-copy', contextRefresh: '#context-refresh', contextProject: '#context-project', contextScene: '#context-scene',
         contextSelection: '#context-selection', contextConventions: '#context-conventions',
         modeAsk: '#mode-ask', modePlan: '#mode-plan', modeAgent: '#mode-agent', modeNote: '#mode-note', messages: '#messages', empty: '#empty',
         prompt: '#prompt', send: '#send', cancelRun: '#cancel-run', approval: '#approval', approvalTool: '#approval-tool',
@@ -146,8 +337,15 @@ Editor.Panel.extend({
         this._plans = new Map();
         this._runCards = new Map();
         this._projectContext = null;
+        this._clearChatArmed = false;
+        this._clearChatTimer = null;
+        this._copyRequests = new Map();
+        this._exportRequestId = null;
+        this._pendingSupportLog = null;
+        this._waitingForExportData = false;
         this._conversationId = localStorage.getItem('cocos-agent-assistant-conversation') || makeId();
         localStorage.setItem('cocos-agent-assistant-conversation', this._conversationId);
+        this.$clearChat.disabled = true;
         this._modeButtons = [this.$modeAsk, this.$modePlan, this.$modeAgent];
         this._modeButtons.forEach((button) => button.addEventListener('click', () => this.selectMode(button.dataset.mode)));
         this.$connect.addEventListener('click', () => this.startRuntime());
@@ -156,7 +354,13 @@ Editor.Panel.extend({
             Editor.Ipc.sendToMain('cocos-agent-bridge:assistantCredentialForget');
         });
         this.$send.addEventListener('click', () => this.sendPrompt());
+        this.$clearChat.addEventListener('click', () => this.clearChat());
+        this.$exportLog.addEventListener('click', () => this.exportLog());
         this.$cancelRun.addEventListener('click', () => this.cancelRun());
+        this.$contextCopy.addEventListener('click', () => this.requestClipboard([
+            this.$contextProject.textContent, this.$contextScene.textContent,
+            this.$contextSelection.textContent, this.$contextConventions.textContent,
+        ].join('\n'), this.$contextCopy));
         this.$contextRefresh.addEventListener('click', () => this.refreshProjectContext());
         this.$prompt.addEventListener('keydown', (event) => {
             if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); this.sendPrompt(); }
@@ -164,10 +368,35 @@ Editor.Panel.extend({
         this.$approve.addEventListener('click', () => this.answerApproval(true));
         this.$reject.addEventListener('click', () => this.answerApproval(false));
         Editor.Ipc.sendToMain('cocos-agent-bridge:assistantState');
+        Editor.Ipc.sendToMain('cocos-agent-bridge:assistantVersion');
         this.refreshProjectContext();
     },
 
     messages: {
+        'assistant-extension-version'(_event, payload) {
+            if (typeof payload?.version === 'string') this.$extensionVersion.textContent = `v${payload.version}`;
+        },
+        'assistant-copy-result'(_event, payload) {
+            const request = this._copyRequests.get(payload?.requestId);
+            if (!request) return;
+            this._copyRequests.delete(payload.requestId);
+            request.button.disabled = false;
+            request.button.textContent = payload.success ? '已复制' : '复制失败';
+            setTimeout(() => {
+                if (request.button && request.button.parentNode) request.button.textContent = '复制';
+            }, 1400);
+        },
+        'assistant-log-export-result'(_event, payload) {
+            if (!payload || payload.requestId !== this._exportRequestId) return;
+            this._exportRequestId = null;
+            this._pendingSupportLog = null;
+            this.$exportLog.disabled = false;
+            if (payload.canceled) { this.$exportLog.textContent = '导出日志'; return; }
+            this.$exportLog.textContent = payload.success ? '导出完成' : '导出失败';
+            if (payload.success) this.addActivity(`日志已导出：${payload.filePath}`);
+            else this.addActivity(`日志导出失败：${payload.error || '未知错误'}`);
+            setTimeout(() => { this.$exportLog.textContent = '导出日志'; }, 1800);
+        },
         'assistant-runtime-ready'(_event, payload) {
             this.connectRuntime(payload);
         },
@@ -218,6 +447,140 @@ Editor.Panel.extend({
         this.$connection.dataset.state = state || '';
     },
 
+    clearChat() {
+        if (this._busy || this._pendingApproval || !this._socket || this._socket.readyState !== WebSocket.OPEN) return;
+        if (!this._clearChatArmed) {
+            this._clearChatArmed = true;
+            this.$clearChat.classList.add('confirming');
+            this.$clearChat.textContent = '确认清空';
+            this.$clearChat.title = '再次点击以清除聊天；计划和操作记录会保留';
+            this._clearChatTimer = setTimeout(() => this.resetClearChatConfirmation(), 4000);
+            return;
+        }
+        this.resetClearChatConfirmation();
+        this.$clearChat.disabled = true;
+        this._clearConversationId = this._conversationId;
+        this._socket.send(JSON.stringify({ type: 'conversation.clear', conversationId: this._conversationId }));
+    },
+
+    resetClearChatConfirmation() {
+        if (this._clearChatTimer) clearTimeout(this._clearChatTimer);
+        this._clearChatTimer = null;
+        this._clearChatArmed = false;
+        this.$clearChat.classList.remove('confirming');
+        this.$clearChat.textContent = '清空聊天';
+        this.$clearChat.title = '清除当前会话的聊天文本';
+    },
+
+    finishClearChat(error) {
+        this.$clearChat.disabled = false;
+        if (error) {
+            this.setConnection(`清空聊天失败：${error}`, 'error');
+            return;
+        }
+        this._conversationId = makeId();
+        localStorage.setItem('cocos-agent-assistant-conversation', this._conversationId);
+        this._clearConversationId = null;
+        this._planCards.clear();
+        this._plans.clear();
+        this._runCards.clear();
+        clearChildren(this.$messages);
+        this.$messages.appendChild(this.$empty);
+        this.$empty.textContent = '当前聊天已清空。计划、运行记录和操作账本仍保留。';
+        this.setConnection(this.$connection.textContent, 'ready');
+        setTimeout(() => this.$prompt.focus(), 0);
+    },
+
+    addCopyButton(element) {
+        if (!element || element.querySelector('.copy-button')) return;
+        element.classList.add('copyable');
+        const button = document.createElement('button');
+        button.className = 'copy-button';
+        button.type = 'button';
+        button.textContent = '复制';
+        button.title = '复制这条信息';
+        button.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const text = visibleText(element);
+            if (!text) return;
+            this.requestClipboard(text, button);
+        });
+        element.appendChild(button);
+    },
+
+    requestClipboard(text, button) {
+        const content = safeSupportText(text).slice(0, 256000);
+        if (!content || !button) return;
+        const requestId = makeId();
+        button.disabled = true;
+        this._copyRequests.set(requestId, { button });
+        Editor.Ipc.sendToMain('cocos-agent-bridge:assistantClipboardWrite', { requestId, text: content });
+    },
+
+    requestImageClipboard(imageDataUrl, button) {
+        if (typeof imageDataUrl !== 'string' || !imageDataUrl.startsWith('data:image/jpeg;base64,')
+            || imageDataUrl.length > 2800000 || !button) return;
+        const requestId = makeId();
+        button.disabled = true;
+        this._copyRequests.set(requestId, { button });
+        Editor.Ipc.sendToMain('cocos-agent-bridge:assistantClipboardWrite', { requestId, imageDataUrl });
+    },
+
+    exportLog() {
+        if (this._exportRequestId) return;
+        const items = [];
+        Array.prototype.slice.call(this.$messages.children).forEach((element) => {
+            if (element.classList.contains('empty')) return;
+            const type = ['message', 'activity', 'plan-card', 'run-card', 'screenshot-card'].find((name) => element.classList.contains(name))
+                || (element.tagName === 'IMG' ? 'screenshot' : 'info');
+            const screenshot = type === 'screenshot' || type === 'screenshot-card';
+            const image = screenshot ? element.querySelector('img') || element : null;
+            const text = screenshot ? `[截图] ${image.alt || 'Creator 运行画布截图'}（图像未写入日志）` : visibleText(element);
+            if (text) items.push({ type, text });
+        });
+        const data = {
+            format: 'cocos-agent-support-log', formatVersion: 1,
+            exportedAt: new Date().toISOString(), creatorVersion: '2.4.15',
+            extensionVersion: this.$extensionVersion.textContent.replace(/^v/, ''),
+            projectContext: {
+                project: safeSupportText(this.$contextProject.textContent),
+                scene: safeSupportText(this.$contextScene.textContent),
+                selection: safeSupportText(this.$contextSelection.textContent),
+                conventions: safeSupportText(this.$contextConventions.textContent),
+            },
+            mode: this._mode, conversationId: this._conversationId, timeline: items,
+        };
+        this._pendingSupportLog = data;
+        this._exportRequestId = makeId();
+        this.$exportLog.disabled = true;
+        this.$exportLog.textContent = '整理日志…';
+        if (this._socket && this._socket.readyState === WebSocket.OPEN) {
+            this._waitingForExportData = true;
+            this._socket.send(JSON.stringify({ type: 'conversation.export', conversationId: this._conversationId,
+                requestId: this._exportRequestId }));
+        } else this.saveSupportLog({ messages: [], plans: [], runs: [], traces: [] });
+    },
+
+    saveSupportLog(agentData) {
+        if (!this._pendingSupportLog || !this._exportRequestId) return;
+        this._waitingForExportData = false;
+        const data = { ...this._pendingSupportLog, agent: agentData };
+        const contents = JSON.stringify(data, null, 2);
+        if (contents.length > 4000000) {
+            this._pendingSupportLog = null;
+            this._exportRequestId = null;
+            this.$exportLog.disabled = false;
+            this.$exportLog.textContent = '导出日志';
+            this.addActivity('日志导出失败：当前日志超过 4 MB。');
+            return;
+        }
+        this.$exportLog.textContent = '选择保存位置…';
+        Editor.Ipc.sendToMain('cocos-agent-bridge:assistantLogExport', {
+            requestId: this._exportRequestId, contents,
+        });
+        this._pendingSupportLog = null;
+    },
+
     startRuntime() {
         const apiKey = this.$apiKey.value.trim();
         if (!apiKey && !this.$rememberKey.checked) { this.setConnection('请输入 DeepSeek API Key', 'error'); this.$apiKey.focus(); return; }
@@ -238,18 +601,30 @@ Editor.Panel.extend({
         this._socket = socket;
         socket.addEventListener('open', () => {
             this.setConnection(`已连接 · ${payload.model || 'DeepSeek'}${payload.credentialRemembered ? ' · Key 已保存在本机' : ''}`, 'ready');
+            this.$clearChat.disabled = this._busy;
             socket.send(JSON.stringify({ type: 'resume', conversationId: this._conversationId }));
         });
         socket.addEventListener('message', (event) => this.receiveMessage(event.data));
         socket.addEventListener('close', () => {
             if (this._socket === socket) {
                 this.setConnection('连接已关闭', '');
+                this.$clearChat.disabled = true;
+                this._clearConversationId = null;
+                if (this._waitingForExportData) {
+                    this._waitingForExportData = false;
+                    this._pendingSupportLog = null;
+                    this._exportRequestId = null;
+                    this.$exportLog.disabled = false;
+                    this.$exportLog.textContent = '导出日志';
+                }
                 if (this._busy) this.finishRun('连接中断；继续操作前请先查询操作回执');
             }
             this.$connect.disabled = false;
         });
         socket.addEventListener('error', () => {
             this.setConnection('无法连接本地 Agent 服务', 'error');
+            this.$clearChat.disabled = true;
+            this._clearConversationId = null;
             this.$connect.disabled = false;
         });
     },
@@ -263,6 +638,7 @@ Editor.Panel.extend({
         }
         this._busy = true;
         this._modeButtons.forEach((button) => { button.disabled = true; });
+        this.$clearChat.disabled = true;
         this._requestId = makeId();
         const requestId = this._requestId;
         this._requestSent = false;
@@ -281,7 +657,10 @@ Editor.Panel.extend({
             if (!this._socket || this._socket.readyState !== WebSocket.OPEN) {
                 this.finishRun('本地 Agent 连接已断开；请先重新连接。', 'failed'); return;
             }
-            if (this._runActivity) this._runActivity.textContent = `${this._mode} · 正在处理…`;
+            if (this._runActivity) {
+                this._runActivity.textContent = `${this._mode} · 正在处理…`;
+                this.addCopyButton(this._runActivity);
+            }
             this._requestSent = true;
             this._socket.send(JSON.stringify({ type: 'run', requestId,
                 conversationId: this._conversationId, mode: this._mode, text,
@@ -334,6 +713,19 @@ Editor.Panel.extend({
             }
             if (Array.isArray(message.plans)) message.plans.forEach((plan) => this.renderPlan(plan));
             if (Array.isArray(message.recentRuns)) message.recentRuns.forEach((run) => this.renderRecentRun(run));
+            return;
+        }
+        if (message.type === 'conversation.cleared') {
+            if (message.conversationId !== this._clearConversationId) return;
+            this.finishClearChat(message.error);
+            return;
+        }
+        if (message.type === 'conversation.exported') {
+            if (message.requestId !== this._exportRequestId || message.conversationId !== this._conversationId) return;
+            this._waitingForExportData = false;
+            if (!this._pendingSupportLog) return;
+            this.saveSupportLog({ messages: message.messages || [], plans: message.plans || [],
+                runs: message.runs || [], traces: message.traces || [] });
             return;
         }
         if (message.type === 'connected') return;
@@ -400,11 +792,24 @@ Editor.Panel.extend({
             if (diff !== undefined) this.appendDiffDetails(activity, diff);
             if (typeof imageDataUrl === 'string' && imageDataUrl.startsWith('data:image/jpeg;base64,')
                 && imageDataUrl.length <= 2 * 1024 * 1024 * 4 / 3 + 64) {
+                const screenshot = document.createElement('div');
+                screenshot.className = 'screenshot-card';
                 const image = document.createElement('img');
                 image.className = 'runtime-screenshot';
                 image.alt = 'Creator 运行画布截图';
                 image.src = imageDataUrl;
-                this.$messages.appendChild(image);
+                screenshot.appendChild(image);
+                const copy = document.createElement('button');
+                copy.className = 'copy-button';
+                copy.type = 'button';
+                copy.textContent = '复制图片';
+                copy.title = '复制截图到剪贴板';
+                copy.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    this.requestImageClipboard(image.src, copy);
+                });
+                screenshot.appendChild(copy);
+                this.$messages.appendChild(screenshot);
                 this.$messages.scrollTop = this.$messages.scrollHeight;
             }
             return;
@@ -438,6 +843,7 @@ Editor.Panel.extend({
         this.$approvalTool.textContent = message.toolName;
         this.$approvalArgs.textContent = JSON.stringify(message.arguments, null, 2);
         this.$approval.classList.add('visible');
+        this.addCopyButton(this.$approval);
         this.addActivity('Agent 等待你的操作批准。');
     },
 
@@ -453,7 +859,10 @@ Editor.Panel.extend({
         const labels = { completed: '已结束', cancelled: '已取消', 'needs-review': '待核对',
             'awaiting-approval': '等待批准', stopped: '已停止', failed: '失败' };
         const label = labels[status] || '已停止';
-        if (this._runActivity) this._runActivity.textContent = `${this._mode} · ${label}`;
+        if (this._runActivity) {
+            this._runActivity.textContent = `${this._mode} · ${label}`;
+            this.addCopyButton(this._runActivity);
+        }
         if (reason && status !== 'completed') this.addActivity(`${label}：${reason}`);
         this._runActivity = null;
         this._busy = false;
@@ -461,6 +870,7 @@ Editor.Panel.extend({
         this.$cancelRun.disabled = false;
         this.$cancelRun.textContent = '停止任务';
         this._modeButtons.forEach((button) => { button.disabled = false; });
+        this.$clearChat.disabled = !this._socket || this._socket.readyState !== WebSocket.OPEN;
         this._requestId = null;
         this._requestSent = false;
         this._cancelRequested = false;
@@ -556,6 +966,7 @@ Editor.Panel.extend({
             card.appendChild(button);
         }
         const previous = this._planCards.get(plan.id);
+        this.addCopyButton(card);
         if (previous && previous.parentNode) previous.parentNode.replaceChild(card, previous);
         else this.$messages.appendChild(card);
         this._planCards.set(plan.id, card);
@@ -571,10 +982,13 @@ Editor.Panel.extend({
         label.className = 'role';
         label.textContent = role === 'user' ? 'You' : 'CocosAgent';
         const body = document.createElement('div');
-        body.textContent = text;
+        body.className = 'message-body';
+        if (role === 'assistant') renderAssistantMarkdown(body, text);
+        else body.textContent = text;
         article.appendChild(label);
         article.appendChild(body);
         this.$messages.appendChild(article);
+        this.addCopyButton(article);
         this.$messages.scrollTop = this.$messages.scrollHeight;
     },
 
@@ -582,6 +996,7 @@ Editor.Panel.extend({
         const item = document.createElement('div');
         item.className = 'activity';
         item.textContent = text;
+        this.addCopyButton(item);
         this.$messages.appendChild(item);
         this.$messages.scrollTop = this.$messages.scrollHeight;
         return item;
@@ -613,7 +1028,7 @@ Editor.Panel.extend({
             card.className = 'run-card execution-checklist';
             this._checklistCards.set(key, card);
         }
-        card.replaceChildren();
+        clearChildren(card);
         const title = document.createElement('h4');
         title.textContent = live ? '执行清单 · Agent 进度' : '执行清单 · 保留进度';
         card.appendChild(title);
@@ -638,6 +1053,7 @@ Editor.Panel.extend({
         }
         card.appendChild(list);
         const target = parent || this.$messages;
+        this.addCopyButton(card);
         if (card.parentNode !== target) target.appendChild(card);
         if (live) this.$messages.scrollTop = this.$messages.scrollHeight;
     },
@@ -704,6 +1120,7 @@ Editor.Panel.extend({
             card.appendChild(pre);
         }
         const previous = this._runCards.get(run.id);
+        this.addCopyButton(card);
         if (previous?.parentNode) previous.parentNode.replaceChild(card, previous);
         else this.$messages.appendChild(card);
         this._runCards.set(run.id, card);

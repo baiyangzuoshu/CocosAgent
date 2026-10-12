@@ -74,6 +74,7 @@ const MODE_RULES = {
     Ask: [
         'The user selected Ask mode. Treat the request as read-only project exploration and explanation.',
         'Only use tools explicitly marked read-only. Do not say that a project change has been applied.',
+        'Before making claims about project contents, require successful receipts from the relevant Creator read-only tools. If a capability is unavailable, a contract is mismatched, or the task tool fails, state plainly that the requested analysis was not completed; quote the blocking code and do not infer project contents from unavailable tools or unrelated local reads.',
     ].join('\n'),
     Plan: [
         'The user selected Plan mode. Inspect the project with read-only tools and produce a structured reviewable plan. Do not execute any proposed change.',

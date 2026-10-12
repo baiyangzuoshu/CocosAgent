@@ -1,6 +1,6 @@
 {
   "name": "cocos-agent-2x",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Creator 2.4.15 Agent skills and verified workflow references.",
   "skills": "./skills/",
   "references": "./references/"

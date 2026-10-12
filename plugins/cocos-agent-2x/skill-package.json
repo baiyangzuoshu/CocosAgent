@@ -25,6 +25,10 @@
     { "name": "cocos2-scene-node-operations", "uri": "cocos://2x/skills/scene-node-operations", "references": [
       "agent-foundation/scene-node-patch-prefab-0.1.md"
     ] },
+    { "name": "cocos2-prefab-workflows", "uri": "cocos://2x/skills/prefab-workflows", "references": [
+      "agent-foundation/scene-node-patch-prefab-0.1.md",
+      "agent-foundation/prefab-source-edit-0.1.md"
+    ] },
     { "name": "cocos2-prefab-source-edit", "uri": "cocos://2x/skills/prefab-source-edit", "references": [
       "agent-foundation/prefab-source-edit-0.1.md"
     ] },
