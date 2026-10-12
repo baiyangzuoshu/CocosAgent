@@ -90,6 +90,7 @@ const MAX_TITLE_CHARS = 120;
 const MAX_BODY_CHARS = 2_000;
 const MAX_QUOTE_CHARS = 500;
 const MAX_SEARCH_RESULTS = 8;
+const MAX_MEMORY_CANDIDATES = 16;
 const CATEGORIES: ProjectMemoryCategory[] = ['user-preference', 'project-fact', 'workflow', 'decision', 'constraint'];
 const SENSITIVE_TEXT = /(?:\bsk-[A-Za-z0-9_-]{12,}\b|\bBearer\s+[A-Za-z0-9._-]{12,}\b|\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{30,}|xox[baprs]-[A-Za-z0-9-]{20,})\b|\b(?:api[_ -]?key|secret|password|token)\s*[:=]\s*[A-Za-z0-9_./+=-]{12,}\b|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----)/i;
 
@@ -286,9 +287,20 @@ const MEMORY_TOOLS: AgentTool[] = [
         access: 'read', role: 'task',
     },
     {
+        name: `${MEMORY_PREFIX}propose`,
+        description: 'Extract one durable memory candidate from cited current-run user/tool evidence. Keeps validated source provenance in this run only; it does not save, correct, or delete long-term memory. Review search matches, then use remember/correct separately (which requires panel approval).',
+        inputSchema: schema({
+            title: { type: 'string', minLength: 1, maxLength: MAX_TITLE_CHARS },
+            body: { type: 'string', minLength: 1, maxLength: MAX_BODY_CHARS },
+            category: { type: 'string', enum: CATEGORIES }, sources: sourceSchema,
+        }, ['title', 'body', 'category', 'sources']),
+        access: 'read', role: 'task',
+    },
+    {
         name: `${MEMORY_PREFIX}remember`,
         description: 'Save a durable fact, project decision, workflow, constraint, or user preference to this project’s local memory. Every source must be cited and verified; this write requires panel approval.',
         inputSchema: schema({
+            candidateId: { type: 'string', minLength: 1, maxLength: 80 },
             title: { type: 'string', minLength: 1, maxLength: MAX_TITLE_CHARS },
             body: { type: 'string', minLength: 1, maxLength: MAX_BODY_CHARS },
             category: { type: 'string', enum: CATEGORIES }, sources: sourceSchema,
@@ -299,6 +311,7 @@ const MEMORY_TOOLS: AgentTool[] = [
         name: `${MEMORY_PREFIX}correct`,
         description: 'Correct a project memory using its exact current revision. The old revision and both sets of provenance are retained; this write requires panel approval.',
         inputSchema: schema({
+            candidateId: { type: 'string', minLength: 1, maxLength: 80 },
             memoryId: { type: 'string', minLength: 1, maxLength: 80 },
             expectedRevision: { type: 'integer', minimum: 1 },
             title: { type: 'string', minLength: 1, maxLength: MAX_TITLE_CHARS },
@@ -327,6 +340,7 @@ export class CreatorProjectMemory {
     private readonly now: () => Date;
     private readonly createId: () => string;
     private readonly userSources: Array<{ index: number; text: string }>;
+    private readonly candidates = new Map<string, { title: string; body: string; category: ProjectMemoryCategory; sources: ProjectMemorySource[] }>();
 
     private constructor(private readonly options: ProjectMemoryOptions, snapshot: ProjectMemorySnapshot) {
         this.snapshot = snapshot;
@@ -379,6 +393,7 @@ export class CreatorProjectMemory {
                 const filter = parsedCategory || undefined;
                 return success({ data: { memories: (await this.search(query, filter)).map(publicMemory) } });
             }
+            if (name === `${MEMORY_PREFIX}propose`) return await this.propose(args);
             if (name === `${MEMORY_PREFIX}get`) {
                 const id = argumentString(args, 'memoryId', 1, 80);
                 if (!id) return failure('MEMORY_ID_INVALID', 'Memory ID is invalid.');
@@ -439,6 +454,8 @@ export class CreatorProjectMemory {
         if (this.snapshot.memories.length >= MAX_MEMORIES) return failure('MEMORY_LIMIT_REACHED', 'This project has reached the memory count limit.');
         const sources = this.validateSources(args.sources);
         if (sources.error) return sources.error;
+        const candidateError = this.validateCandidate(args, content.value, sources.value);
+        if (candidateError) return candidateError;
         const timestamp = nowIso(this.now);
         const id = this.createId();
         const memory: ProjectMemoryRecord = {
@@ -461,6 +478,8 @@ export class CreatorProjectMemory {
         if ('error' in content) return content.error;
         const sources = this.validateSources(args.sources);
         if (sources.error) return sources.error;
+        const candidateError = this.validateCandidate(args, content.value, sources.value);
+        if (candidateError) return candidateError;
         const timestamp = nowIso(this.now);
         const next: ProjectMemoryRecord = {
             ...current, ...content.value, revision: current.revision + 1,
@@ -472,6 +491,42 @@ export class CreatorProjectMemory {
         };
         await this.commit(operationId, 'correct', next);
         return success({ operationId, outcome: 'corrected', memoryId: id, revision: next.revision, memory: publicMemory(next) });
+    }
+
+    private async propose(args: JsonObject): Promise<AgentToolResult> {
+        if (this.candidates.size >= MAX_MEMORY_CANDIDATES) return failure('MEMORY_CANDIDATE_LIMIT_REACHED', 'This run has reached its memory-candidate limit.');
+        const content = this.readContent(args);
+        if ('error' in content) return content.error;
+        const sources = this.validateSources(args.sources);
+        if (sources.error) return sources.error;
+        const candidateId = this.createId();
+        const candidate = { ...content.value, sources: sources.value };
+        this.candidates.set(candidateId, candidate);
+        const matches = await this.search(`${candidate.title} ${candidate.body}`, undefined, 3);
+        return success({ outcome: 'candidate-only', candidateId, candidate: {
+            ...candidate, sources: candidate.sources.map(smallSource),
+        }, possibleExistingMemories: matches.map((memory) => ({ id: memory.id, revision: memory.revision,
+            title: memory.title, body: memory.body, category: memory.category })),
+        persisted: false, next: 'Review provenance and any existing match. To retain, call remember with this candidateId and request panel approval; to merge/correct, call correct with the exact memory revision and panel approval.' });
+    }
+
+    private validateCandidate(args: JsonObject,
+        content: { title: string; body: string; category: ProjectMemoryCategory },
+        sources: ProjectMemorySource[]): AgentToolResult | null {
+        if (args.candidateId === undefined) return null;
+        const candidateId = argumentString(args, 'candidateId', 1, 80);
+        const candidate = candidateId ? this.candidates.get(candidateId) : undefined;
+        const sameSources = candidate && candidate.sources.length === sources.length && candidate.sources.every((source, index) => {
+            const current = sources[index];
+            return current && source.kind === current.kind && source.runId === current.runId
+                && source.quote === current.quote && source.messageIndex === current.messageIndex
+                && source.callId === current.callId && source.operationId === current.operationId;
+        });
+        if (!candidate || candidate.title !== content.title || candidate.body !== content.body
+            || candidate.category !== content.category || !sameSources) {
+            return failure('MEMORY_CANDIDATE_MISMATCH', 'The candidate is absent or its content/provenance changed. Propose it again from verified sources.');
+        }
+        return null;
     }
 
     private async delete(args: JsonObject, operationId: string): Promise<AgentToolResult> {

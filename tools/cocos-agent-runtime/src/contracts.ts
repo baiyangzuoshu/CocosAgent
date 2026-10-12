@@ -1,6 +1,6 @@
 export type AgentMode = 'Ask' | 'Plan' | 'Agent';
 export type ToolAccess = 'read' | 'write';
-export type ToolRole = 'setup' | 'task' | 'recovery';
+export type ToolRole = 'setup' | 'task' | 'recovery' | 'todo' | 'context' | 'task-system';
 
 export type JsonObject = Record<string, unknown>;
 
@@ -91,6 +91,14 @@ export interface ToolRegistry {
     }): Promise<AgentToolResult>;
 }
 
+/** Run-scoped store for the exact model-facing text of oversized tool results. */
+export interface AgentToolResultArchive {
+    save(input: { runId: string; callId: string; toolName: string; payload: string }): Promise<void>;
+    read(input: { runId: string; callId: string; offset: number; limit: number }): Promise<{
+        payload: string; totalChars: number; nextOffset: number | null;
+    } | null>;
+}
+
 export interface ToolApprovalRequest {
     runId: string;
     tool: AgentTool;
@@ -99,6 +107,56 @@ export interface ToolApprovalRequest {
 
 export interface AgentPolicy {
     approveWrite(request: ToolApprovalRequest): Promise<boolean>;
+    createRunPolicy?(input: { runId: string; mode: AgentMode; task: string }): AgentRunPolicy;
+}
+
+export interface AgentPolicyToolContext {
+    tool: AgentTool;
+    arguments: JsonObject;
+    receipts: AgentReceipt[];
+    availableTools: AgentTool[];
+}
+
+export type AgentPolicyToolDecision =
+    | { action: 'allow' }
+    | { action: 'block'; code: string; message: string; continue: boolean; reason?: string };
+
+export type AgentPolicyStopDecision =
+    | { action: 'continue'; message: string }
+    | { action: 'finish'; reason: string; finalText?: string | null };
+
+export interface AgentGoalCriterion {
+    id: string;
+    description: string;
+    requiredTools: string[];
+}
+
+export interface AgentGoal {
+    taskId: string;
+    criteria: AgentGoalCriterion[];
+    maxContinuationAttempts?: number;
+}
+
+/** Per-run product policy. The kernel only orchestrates these generic hooks. */
+export interface AgentRunPolicy {
+    systemPrompt?: string;
+    filterTools?(tools: AgentTool[], mode: AgentMode): AgentTool[];
+    beforeTool?(context: AgentPolicyToolContext): Promise<AgentPolicyToolDecision> | AgentPolicyToolDecision;
+    normalizeResult?(tool: AgentTool, result: AgentToolResult): AgentToolResult;
+    afterTool?(receipt: AgentReceipt, toolArguments: JsonObject): Promise<void> | void;
+    onAssistantMessage?(message: AssistantMessage, receipts: AgentReceipt[]): Promise<void> | void;
+    onAssistantStop?(input: {
+        message: AssistantMessage;
+        finishReason: string | null;
+        receipts: AgentReceipt[];
+        availableTools: AgentTool[];
+    }): Promise<AgentPolicyStopDecision | undefined> | AgentPolicyStopDecision | undefined;
+    evaluateGoal?(input: { goal: AgentGoal; receipts: AgentReceipt[] }): Promise<{
+        satisfied: boolean;
+        outstanding: Array<{ id: string; description: string; missingTools: string[] }>;
+    }> | { satisfied: boolean; outstanding: Array<{ id: string; description: string; missingTools: string[] }> };
+    recoveryRequired?(): boolean;
+    getFinalStatus?(reason: string): AgentRunStatus | undefined;
 }
 
 export interface ContextBudgetOptions {
@@ -155,7 +213,12 @@ export type AgentEvent =
     | { type: 'tool.approval-required'; request: ToolApprovalRequest }
     | { type: 'tool.started'; runId: string; callId: string; tool: AgentTool }
     | { type: 'tool.finished'; runId: string; callId: string; tool: AgentTool; result: AgentToolResult }
-    | { type: 'run.finished'; runId: string; status: AgentRunStatus; reason: string };
+    | { type: 'todo.updated'; runId: string; items: AgentTodoItem[] }
+    | { type: 'goal.evaluated'; runId: string; taskId: string; satisfied: boolean; outstanding: Array<{ id: string; description: string; missingTools: string[] }>; continuationAttempt: number; maxContinuationAttempts: number }
+    | { type: 'run.finished'; runId: string; status: AgentRunStatus; reason: string; executionChecklist: AgentTodoItem[] };
+
+export type AgentTodoStatus = 'pending' | 'in_progress' | 'completed';
+export interface AgentTodoItem { id: string; content: string; status: AgentTodoStatus }
 
 export type AgentRunStatus = 'completed' | 'stopped' | 'awaiting-approval' | 'needs-review' | 'cancelled';
 
@@ -167,6 +230,20 @@ export interface AgentReceipt {
     result: AgentToolResult;
 }
 
+export type AgentLifecycleEvent = 'UserPromptSubmit' | 'PreToolUse' | 'PostToolUse' | 'Stop';
+export interface AgentLifecycleInputs {
+    UserPromptSubmit: { runId: string; mode: AgentMode; task: string; history: AgentMessage[] };
+    PreToolUse: { runId: string; tool: AgentTool; arguments: JsonObject };
+    PostToolUse: { runId: string; tool: AgentTool; arguments: JsonObject; result: AgentToolResult; receipt: AgentReceipt };
+    Stop: { runId: string; mode: AgentMode; task: string; reason: string; messages: AgentMessage[]; receipts: AgentReceipt[] };
+}
+export interface AgentLifecycleResults {
+    UserPromptSubmit: string | void;
+    PreToolUse: string | void;
+    PostToolUse: void;
+    Stop: { action: 'continue'; message: string } | { action: 'finish' } | void;
+}
+
 export interface AgentRunResult {
     runId: string;
     mode: AgentMode;
@@ -176,6 +253,8 @@ export interface AgentRunResult {
     receipts: AgentReceipt[];
     messages: AgentMessage[];
     contextCompactions: ContextCompactionReport[];
+    executionChecklist: AgentTodoItem[];
+    goalEvaluation?: { satisfied: boolean; outstanding: Array<{ id: string; description: string; missingTools: string[] }> };
 }
 
 export interface AgentHooks {
@@ -189,10 +268,19 @@ export interface AgentKernelOptions {
     tools: ToolRegistry;
     policy: AgentPolicy;
     hooks?: AgentHooks;
+    lifecycleHooks?: AgentLifecycleHookRegistry;
     maxTurns?: number;
     maxToolCalls?: number;
     contextBudget?: ContextBudgetOptions;
+    toolResultArchive?: AgentToolResultArchive;
+    toolResultArchiveThreshold?: number;
     systemPrompt: string;
+}
+
+export interface AgentLifecycleHookRegistry {
+    register<E extends AgentLifecycleEvent>(event: E,
+        handler: (input: AgentLifecycleInputs[E]) => AgentLifecycleResults[E] | Promise<AgentLifecycleResults[E]>): () => void;
+    dispatch<E extends AgentLifecycleEvent>(event: E, input: AgentLifecycleInputs[E], stopOnResult?: boolean): Promise<Array<AgentLifecycleResults[E]>>;
 }
 
 export interface RunAgentInput {
@@ -201,4 +289,5 @@ export interface RunAgentInput {
     mode: AgentMode;
     history?: AgentMessage[];
     signal?: AbortSignal;
+    goal?: AgentGoal;
 }

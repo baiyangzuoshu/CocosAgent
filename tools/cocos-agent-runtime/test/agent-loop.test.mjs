@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { AgentKernel } from '../dist/agent-loop.js';
 import { CocosReadOnlyToolRegistry } from '../dist/cocos-ask.js';
+import { createCreatorAgentPolicy } from '../dist/creator-policy.js';
 
 function tool(name, access, role = 'task') {
     return { name, description: name, inputSchema: { type: 'object', properties: {}, additionalProperties: false }, access, role };
@@ -20,6 +21,11 @@ function provider(respond) {
 
 function policy(approve = true) {
     return { approveWrite: async () => approve };
+}
+
+function creatorPolicy(approve = true, mode = 'Agent') {
+    return createCreatorAgentPolicy({ mode, baseInstructions: '', toolCatalog: '',
+        approveWrite: async () => approve });
 }
 
 function sceneSnapshotDefinition(projectRoot) {
@@ -103,6 +109,77 @@ test('a resolved read-only task receipt can complete Agent mode', async () => {
     assert.equal(result.receipts.length, 1);
 });
 
+test('Goal Loop continues after a premature final answer, then completes from required receipts', async () => {
+    let round = 0;
+    const events = [];
+    const kernel = new AgentKernel({
+        provider: provider(async ({ messages }) => {
+            round += 1;
+            if (round === 1) return { message: { role: 'assistant', content: '都完成了。' }, finishReason: 'stop' };
+            if (round === 2) return { message: call('scene.readback', 'readback-call'), finishReason: 'tool_calls' };
+            if (round === 3) {
+                assert.ok(messages.some((message) => message.role === 'system' && message.content.includes('Outstanding acceptance criteria')));
+                return { message: { role: 'assistant', content: '已读回。' }, finishReason: 'stop' };
+            }
+            throw new Error('unexpected model call');
+        }),
+        tools: { listTools: async () => [tool('scene.readback', 'read')],
+            callTool: async () => ({ structuredContent: { success: true, outcome: 'completed' } }) },
+        policy: policy(), systemPrompt: 'Goal loop test', hooks: { onEvent: (event) => events.push(event) },
+    });
+    const result = await kernel.run({ task: 'save and read back', mode: 'Agent', goal: { taskId: 'task_abcd1234',
+        criteria: [{ id: 'readback', description: 'Read the saved scene', requiredTools: ['scene.readback'] }] } });
+    assert.equal(result.status, 'completed', result.reason);
+    assert.equal(result.reason, 'completed');
+    assert.equal(round, 3);
+    assert.deepEqual(events.filter((event) => event.type === 'goal.evaluated').map((event) => event.satisfied), [false, true]);
+});
+
+test('Goal Loop stops with explicit unmet-criteria reason when continuation attempts are exhausted', async () => {
+    let round = 0;
+    const kernel = new AgentKernel({
+        provider: provider(async () => { round += 1; return { message: { role: 'assistant', content: '已经完成。' }, finishReason: 'stop' }; }),
+        tools: { listTools: async () => [], callTool: async () => ({}) }, policy: policy(), systemPrompt: 'Goal limit test',
+    });
+    const result = await kernel.run({ task: 'do task', mode: 'Agent', goal: { taskId: 'task_abcd1234', maxContinuationAttempts: 1,
+        criteria: [{ id: 'preview', description: 'Accept preview', requiredTools: ['preview.accept'] }] } });
+    assert.equal(result.status, 'stopped');
+    assert.equal(result.reason, 'goal-unmet-continuation-limit');
+    assert.equal(round, 2);
+    assert.deepEqual(result.goalEvaluation.outstanding[0].missingTools, ['preview.accept']);
+});
+
+test('Goal Loop does not retry a truncated model answer', async () => {
+    let round = 0;
+    const kernel = new AgentKernel({
+        provider: provider(async () => { round += 1; return { message: { role: 'assistant', content: 'unfinished' }, finishReason: 'length' }; }),
+        tools: { listTools: async () => [], callTool: async () => ({}) }, policy: policy(), systemPrompt: 'Goal truncated test',
+    });
+    const result = await kernel.run({ task: 'do task', mode: 'Agent', goal: { taskId: 'task_abcd1234',
+        criteria: [{ id: 'preview', description: 'Accept preview', requiredTools: ['preview.accept'] }] } });
+    assert.equal(result.reason, 'model-output-truncated');
+    assert.equal(round, 1);
+});
+
+test('Goal Loop stops instead of continuing when Creator policy has an unresolved write recovery lock', async () => {
+    let round = 0;
+    const kernel = new AgentKernel({
+        provider: provider(async () => {
+            round += 1;
+            if (round === 1) return { message: call('scene.write', 'write-call'), finishReason: 'tool_calls' };
+            return { message: { role: 'assistant', content: '完成。' }, finishReason: 'stop' };
+        }),
+        tools: { listTools: async () => [tool('scene.write', 'write'), tool('scene.operation.get', 'read', 'recovery')],
+            callTool: async () => ({ structuredContent: { success: false, outcome: 'needs-review', error: { sideEffect: 'unknown' } } }) },
+        policy: creatorPolicy(), systemPrompt: 'Goal recovery test',
+    });
+    const result = await kernel.run({ task: 'write and verify', mode: 'Agent', goal: { taskId: 'task_abcd1234',
+        criteria: [{ id: 'verified', description: 'Write is verified', requiredTools: ['scene.verify'] }] } });
+    assert.equal(result.status, 'needs-review');
+    assert.equal(result.reason, 'goal-blocked-by-recovery');
+    assert.equal(round, 2);
+});
+
 test('a recovery-classified read can be the requested task when no recovery lock is active', async () => {
     let round = 0;
     const kernel = new AgentKernel({
@@ -139,12 +216,12 @@ test('needs-preview keeps Agent task tools available for preview acceptance', as
                 ? { structuredContent: { success: true, outcome: 'needs-preview', operationId: 'op-1' } }
                 : { structuredContent: { success: true, outcome: 'completed', operationId: 'op-1', preview: 'passed' } },
         },
-        policy: policy(true),
+        policy: creatorPolicy(true),
         systemPrompt: 'CocosAgent test prompt',
     });
 
     const result = await kernel.run({ task: '修改并验收场景', mode: 'Agent' });
-    assert.deepEqual(offered[1], ['scene.write', 'cocos_2x_operation_preview_accept']);
+    assert.deepEqual(offered[1], ['scene.write', 'cocos_2x_operation_preview_accept', 'agent_todo_write']);
     assert.equal(result.status, 'completed');
     assert.equal(result.receipts.length, 2);
 });
@@ -158,7 +235,7 @@ test('Agent cannot finish while a write still needs preview acceptance', async (
             if (round === 2) return { message: call('scene.write', 'write'), finishReason: 'tool_calls' };
             if (round === 3) return { message: { role: 'assistant', content: '修改已经完成。' }, finishReason: 'stop' };
             if (round === 4) {
-                assert.match(messages.at(-1).content, /still require visual preview acceptance: \(operation ID missing\)/);
+                assert.match(messages.at(-1).content, /writes require matching visual preview acceptance: \(operation ID missing\)/);
                 return { message: { role: 'assistant', content: '我仍然认为已经完成。' }, finishReason: 'stop' };
             }
             return { message: { role: 'assistant', content: '完成。' }, finishReason: 'stop' };
@@ -169,7 +246,7 @@ test('Agent cannot finish while a write still needs preview acceptance', async (
                 ? { structuredContent: { success: true, scene: 'helloworld' } }
                 : { structuredContent: { success: true, outcome: 'needs-preview' } },
         },
-        policy: policy(true),
+        policy: creatorPolicy(true),
         systemPrompt: 'CocosAgent test prompt',
     });
 
@@ -210,7 +287,7 @@ test('Agent requires a matching installed skill before task tools when skill too
                 return result;
             },
         },
-        policy: policy(false),
+        policy: creatorPolicy(false),
         systemPrompt: 'CocosAgent test prompt',
     });
 
@@ -218,7 +295,7 @@ test('Agent requires a matching installed skill before task tools when skill too
     assert.equal(receipts.some(({ name }) => name === 'scene.read'), true);
     assert.ok(result.messages.some((message) => message.role === 'system'
         && /Before task-specific Creator tools, read cocos_2x_skills_list/.test(message.content)));
-    assert.deepEqual(offered[2], ['cocos_2x_skills_list', 'cocos_2x_skill_read', 'scene.read']);
+    assert.deepEqual(offered[2], ['cocos_2x_skills_list', 'cocos_2x_skill_read', 'scene.read', 'agent_todo_write']);
     assert.equal(result.status, 'completed');
     assert.equal(result.receipts.at(-1).toolName, 'scene.read');
 });
@@ -245,7 +322,7 @@ test('Agent accepts an explicit no-match skill assessment and continues without 
                 return { structuredContent: { success: true, scene: 'helloworld' } };
             },
         },
-        policy: policy(false),
+        policy: creatorPolicy(false),
         systemPrompt: 'CocosAgent test prompt',
     });
 
@@ -323,14 +400,14 @@ test('an uncertain write restricts the next model turn to recovery tools', async
                     ? { structuredContent: { success: true, outcome: 'reconciled', operationId: 'uncertain-op' } }
                     : { structuredContent: { success: true, scene: 'helloworld' } },
         },
-        policy: policy(true),
+        policy: creatorPolicy(true),
         systemPrompt: 'CocosAgent test prompt',
     });
 
     const result = await kernel.run({ task: '修改并验证场景', mode: 'Agent' });
-    assert.deepEqual(offered[0], ['scene.write', 'operation.get', 'scene.read']);
+    assert.deepEqual(offered[0], ['scene.write', 'operation.get', 'scene.read', 'agent_todo_write']);
     assert.deepEqual(offered[1], ['operation.get']);
-    assert.deepEqual(offered[2], ['scene.write', 'operation.get', 'scene.read']);
+    assert.deepEqual(offered[2], ['scene.write', 'operation.get', 'scene.read', 'agent_todo_write']);
     assert.equal(result.status, 'completed');
     assert.deepEqual(result.receipts.map(({ toolName }) => toolName), ['scene.write', 'operation.get', 'scene.read']);
 });
@@ -350,7 +427,7 @@ test('a write failure without an explicit no-effect receipt remains needs-review
                 ? { isError: true, content: [{ type: 'text', text: 'connection closed' }] }
                 : { structuredContent: { success: true, status: 'needs-review' } },
         },
-        policy: policy(true),
+        policy: creatorPolicy(true),
         systemPrompt: 'CocosAgent test prompt',
     });
 
@@ -377,7 +454,7 @@ test('a successful-looking recovery receipt with a pending ledger status does no
                 ? { structuredContent: { success: false, outcome: 'needs-review', operationId: 'uncertain-op', error: { sideEffect: 'unknown' } } }
                 : { structuredContent: { success: true, status: 'needs-review', operationId: 'uncertain-op' } },
         },
-        policy: policy(true),
+        policy: creatorPolicy(true),
         systemPrompt: 'CocosAgent test prompt',
     });
 
@@ -414,7 +491,7 @@ test('a recovery call and its receipt must both match the uncertain operation id
                 return { structuredContent: { success: true, outcome: 'completed', operationId: 'operation-B' } };
             },
         },
-        policy: policy(true),
+        policy: creatorPolicy(true),
         systemPrompt: 'CocosAgent test prompt',
     });
 
@@ -443,7 +520,7 @@ test('cancellation waits for an in-flight write receipt', async () => {
                 return { structuredContent: { success: false, outcome: 'needs-review', error: { sideEffect: 'unknown' } } };
             },
         },
-        policy: policy(true),
+        policy: creatorPolicy(true),
         systemPrompt: 'CocosAgent test prompt',
     });
 
@@ -747,7 +824,7 @@ test('Creator Plan runs through the TypeScript kernel after fresh read-only inst
             return { message: { role: 'assistant', content: '{"version":1,"title":"Inspect scene","summary":"Read current scene state.","steps":[]}' }, finishReason: 'stop' };
         }),
         tools: registry,
-        policy: policy(false),
+        policy: creatorPolicy(false, 'Plan'),
         systemPrompt: 'Plan system prompt',
     });
 
@@ -772,7 +849,7 @@ test('Creator Plan cannot finish without a task-specific skill and its declared 
             return { message: { role: 'assistant', content: '{"version":1,"title":"Plan","summary":"No writes.","steps":[]}' }, finishReason: 'stop' };
         }),
         tools: { listTools: async () => [], callTool: async () => { throw new Error('No tool should be called'); } },
-        policy: policy(false),
+        policy: creatorPolicy(false, 'Plan'),
         systemPrompt: 'CocosAgent test prompt',
         maxTurns: 8,
     });
@@ -801,11 +878,50 @@ test('Creator Plan accepts an explicit no-match skill assessment in its summary'
             callTool: async () => ({ structuredContent: { success: true,
                 data: { skills: [{ name: 'unrelated-skill' }] } } }),
         },
-        policy: policy(false),
+        policy: creatorPolicy(false, 'Plan'),
         systemPrompt: 'CocosAgent test prompt',
     });
 
     const result = await kernel.run({ task: '规划只读检查', mode: 'Plan' });
     assert.equal(result.status, 'completed');
     assert.equal(round, 2);
+});
+
+test('oversized tool evidence is archived before context insertion and can be retrieved by exact run/call ID', async () => {
+    const rows = new Map();
+    const archive = {
+        save: async (row) => rows.set(`${row.runId}:${row.callId}`, row),
+        read: async ({ runId, callId, offset, limit }) => {
+            const row = rows.get(`${runId}:${callId}`);
+            if (!row || offset > row.payload.length) return null;
+            const payload = row.payload.slice(offset, offset + limit);
+            return { payload, totalChars: row.payload.length,
+                nextOffset: offset + payload.length < row.payload.length ? offset + payload.length : null };
+        },
+    };
+    let round = 0;
+    const kernel = new AgentKernel({
+        provider: provider(async ({ messages, tools }) => {
+            round += 1;
+            if (round === 1) return { message: call('scene.large', 'large-1'), finishReason: 'tool_calls' };
+            if (round === 2) {
+                assert.ok(tools.some((item) => item.name === 'agent_tool_result_read'));
+                const marker = messages.find((item) => item.role === 'tool' && item.toolCallId === 'large-1')?.content;
+                assert.match(marker, /"archived":true/);
+                assert.doesNotMatch(marker, /x{12000}/);
+                return { message: call('agent_tool_result_read', 'archive-read-1', { callId: 'large-1', offset: 0, limit: 4000 }), finishReason: 'tool_calls' };
+            }
+            assert.match(messages.at(-1).content, /x{2000}/);
+            return { message: { role: 'assistant', content: 'Evidence recovered from this run.' }, finishReason: 'stop' };
+        }),
+        tools: { listTools: async () => [tool('scene.large', 'read')],
+            callTool: async () => ({ structuredContent: { success: true, data: 'x'.repeat(20_000) } }) },
+        policy: creatorPolicy(), systemPrompt: '', toolResultArchive: archive,
+    });
+    const result = await kernel.run({ task: 'Inspect full evidence.', mode: 'Agent', runId: 'archive-run' });
+    assert.equal(result.status, 'completed');
+    assert.equal(rows.size, 1);
+    assert.equal(rows.get('archive-run:large-1').payload.includes('x'.repeat(20_000)), true);
+    const crossRun = await archive.read({ runId: 'other-run', callId: 'large-1', offset: 0, limit: 100 });
+    assert.equal(crossRun, null);
 });

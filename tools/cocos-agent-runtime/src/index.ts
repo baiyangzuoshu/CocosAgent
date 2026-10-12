@@ -5,3 +5,7 @@ export * from './deepseek-provider.js';
 export * from './mcp-tool-registry.js';
 export * from './cocos-ask.js';
 export * from './creator-host-adapter.js';
+export * from './creator-policy.js';
+export * from './lifecycle-hooks.js';
+export * from './todo.js';
+export * from './task-system.js';

@@ -221,3 +221,47 @@ test('Creator Agent persists approved project memory and recalls it in a later r
         globalThis.fetch = originalFetch;
     }
 });
+
+test('Creator Agent creates a durable project task and only closes it after successful receipt evidence', async () => {
+    const definitions = [definition('cocos_2x_instances_list'), definition('cocos_2x_capabilities_list'), definition('cocos_2x_scene_snapshot')];
+    const client = {
+        listTools: async () => ({ tools: definitions }),
+        callTool: async ({ name }) => name === 'cocos_2x_instances_list'
+            ? { structuredContent: { success: true, data: [{ projectRoot, creatorVersion: '2.4.15', state: 'ready' }] } }
+            : name === 'cocos_2x_capabilities_list'
+                ? { structuredContent: { success: true, data: { instance: { projectRoot, creatorVersion: '2.4.15', state: 'ready' }, commands: [] } } }
+                : { structuredContent: { success: true, outcome: 'completed', scene: { name: 'helloworld' } } },
+    };
+    const skillAdapter = {
+        REQUIRED_COMMAND: new Map(),
+        loadContext: async () => ({ toolsByName: new Map(definitions.map((item) => [item.name, item])), skillIndex: {},
+            messages: [{ role: 'system', content: 'Task integration test' }] }),
+        invokeSkillTool: async () => { throw new Error('No skill tools expected.'); },
+    };
+    let savedTasks = [];
+    let round = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (_url, request) => {
+        round += 1;
+        const body = JSON.parse(request.body);
+        assert.ok(body.tools.some((tool) => tool.function.name === 'agent_task_list'));
+        if (round === 1) return new Response(JSON.stringify({ choices: [{ message: { tool_calls: [{ id: 'snapshot-call', type: 'function',
+            function: { name: 'cocos_2x_scene_snapshot', arguments: JSON.stringify({ projectRoot }) } }] }, finish_reason: 'tool_calls' }] }), { status: 200 });
+        return new Response(JSON.stringify({ choices: [{ message: { content: '场景已读回。' }, finish_reason: 'stop' }] }), { status: 200 });
+    };
+    try {
+        const events = [];
+        const result = await runCreatorAgent({ client, task: 'Read the scene', projectRoot, skillFiles: [],
+            tracePath: '/tmp/cocos-agent-task-system.jsonl', apiKey: 'test-key-for-adapter-only', model: 'deepseek-flash',
+            mode: 'Agent', history: [], projectContext: null, onEvent: (event) => events.push(event), skillAdapter,
+            formatProjectContext: () => null, writeEvent: () => {}, approveWrite: async () => true,
+            taskPersistence: { load: () => savedTasks, save: (tasks) => { savedTasks = structuredClone(tasks); } } });
+        assert.equal(result.status, 'completed', result.reason);
+        assert.equal(result.goalEvaluation.satisfied, true);
+        assert.equal(savedTasks.length, 1);
+        assert.match(savedTasks[0].id, /^task_[0-9a-f]{8}$/);
+        assert.equal(savedTasks[0].status, 'completed');
+        assert.equal(savedTasks[0].acceptanceCriteria[0].status, 'satisfied');
+        assert.ok(events.some((event) => event.type === 'goal.evaluated' && event.satisfied));
+    } finally { globalThis.fetch = originalFetch; }
+});

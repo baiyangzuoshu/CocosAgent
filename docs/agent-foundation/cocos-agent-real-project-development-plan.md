@@ -1,8 +1,8 @@
 # CocosAgent Creator 原生 Agent 开发计划
 
-制定日期：2026-10-11；进度更新：2026-10-12。状态：**产品方向已确认；Creator 2.4.15 的 TS Ask、Plan 和 Agent 均已接入 TS 内核。原生面板实测通过 Ask/Plan 只读任务，以及 Agent 按需读取 skill/合同后查询完整场景快照。TS Agent 现已完成一次精确、可逆的场景补偿写入及读回，确认审批、操作账本与最终场景状态一致；这是受限字段补偿闭环，不是通用脚本编辑或重放验收。指定 PNG 的旧 JS 原生写入任务已完成保存读回、重开、预览、补偿和新 ID 重放，最终 replay 节点保留；它与 TS Agent 实机验收分开记录。上下文预算与压缩已接入 TS 内核并通过自动测试，Creator 面板超预算实机验收仍待完成。工程隔离长期记忆的 TS/Host 实现、来源验证、纠正、删除和精确操作恢复已有自动测试，Creator 面板实机验收尚未完成。LinkUpClient 项目选择与约定消费仍待面板实机验证。** 当前适用版本：Cocos Creator 2.4.15。
+制定日期：2026-10-11；进度更新：2026-10-12。状态：**产品方向已确认；Creator 2.4.15 的 TS Ask、Plan 和 Agent 均已接入 TS 内核。原生面板实测通过 Ask/Plan 只读任务，以及 Agent 按需读取 skill/合同后查询完整场景快照。TS Agent 现已完成一次精确、可逆的场景补偿写入及读回，确认审批、操作账本与最终场景状态一致；这是受限字段补偿闭环，不是通用脚本编辑或重放验收。指定 PNG 的旧 JS 原生写入任务已完成保存读回、重开、预览、补偿和新 ID 重放，最终 replay 节点保留；它与 TS Agent 实机验收分开记录。上下文预算与压缩现含结果档案和按需取回；工程隔离记忆含 run-local 来源候选，自动测试通过。本轮 s04 lifecycle hooks、s05 TodoWrite、s10 工程隔离任务图与 s17 确定性 Goal Loop 已进入 TS/Host/面板路径；runtime 58 项、MCP/扩展 84 项自动测试通过。任务图跨 Host 重启、目标缺项续跑和停止原因仍待 Creator 面板端到端验收。LinkUpClient 项目选择与约定消费仍待面板实机验证。** 当前适用版本：Cocos Creator 2.4.15。
 
-**技术栈补充决定（2026-10-11；实现与验收更新于 2026-10-12）：Agent 内核以 `learn-claude-code` 为机制移植基线，产品实现使用 TypeScript + Node.js，不运行上游 Python。** `tools/cocos-agent-runtime/` 承载 TS loop、DeepSeek Provider、MCP 适配、实例/能力预检、Agent 工具门槛与恢复限制；Assistant Host 的 Ask、Plan、Agent 均已路由至 TS 内核。skill 目录、正文与引用仍由 `deepseek-agent.mjs` 的只读 MCP Resource 适配器提供，Agent loop 根据工具回执强制先读任务 skill 和声明引用。TS runtime 现有 42 项测试通过，MCP/扩展本轮 79 项测试通过。真实 Creator 面板运行的 TS Agent 只读任务读取 13 项技能目录、`cocos2-scene-node-operations` 正文及合同引用，再成功取得 `helloworld` 完整快照（19 个节点）；runId `84f18514-a8d4-442d-9ef4-dc3e1d4c06ab`。随后 TS Agent 在 Creator 面板中完成一项精确补偿：先读同一 skill/reference、源账本和实时节点，再经面板批准执行 `scene.node.patch`，将原 operation `a7d3f106-5c92-4b7e-8e41-2b93de7c0f58` 的差异 `x:220→221` 补偿为 `x:221→220`。新补偿 operation `3f8c1d47-6a25-4b90-9e13-72d5ac8b04e6` 的 `editor/disk/recovery` 通过；源及补偿账本读回成功，最终实时节点为 `(220,100)`，无 replay、needs-review 或额外写入。runId `86eea250-80f1-4472-8592-88c026c6c4cf`，本机轨迹 `~/.local/state/CocosAgent/agent-runs/2026-10-11T16-21-48-721Z-b052586f.jsonl`。实测还暴露空模型回复及多工具批调用导致提前停止；TS loop 已加入有界重试，自动测试覆盖继续与耗尽停止，尚未声称 Creator 面板实机触发过新批调用重试分支。旧 JS 指定 PNG 原生写入记录见下文和 AGENTS.md。
+**技术栈补充决定（2026-10-11；实现与验收更新于 2026-10-12）：Agent 内核以 `learn-claude-code` 为机制移植基线，产品实现使用 TypeScript + Node.js，不运行上游 Python。** `tools/cocos-agent-runtime/` 承载 TS loop、DeepSeek Provider、MCP 适配、实例/能力预检、Agent 工具门槛与恢复限制；Assistant Host 的 Ask、Plan、Agent 均已路由至 TS 内核。skill 目录、正文与引用仍由 `deepseek-agent.mjs` 的只读 MCP Resource 适配器提供，Agent loop 根据工具回执强制先读任务 skill 和声明引用。TS runtime 58 项测试、MCP/扩展 84 项测试均通过，专项回归覆盖 Hook/Todo、任务依赖环和持久化、Goal Loop 缺项续跑与上限停止、恢复锁和面板验收项展示。Creator 面板端到端验收仍待进行。真实 Creator 面板运行的 TS Agent 只读任务读取 13 项技能目录、`cocos2-scene-node-operations` 正文及合同引用，再成功取得 `helloworld` 完整快照（19 个节点）；runId `84f18514-a8d4-442d-9ef4-dc3e1d4c06ab`。随后 TS Agent 在 Creator 面板中完成一项精确补偿：先读同一 skill/reference、源账本和实时节点，再经面板批准执行 `scene.node.patch`，将原 operation `a7d3f106-5c92-4b7e-8e41-2b93de7c0f58` 的差异 `x:220→221` 补偿为 `x:221→220`。新补偿 operation `3f8c1d47-6a25-4b90-9e13-72d5ac8b04e6` 的 `editor/disk/recovery` 通过；源及补偿账本读回成功，最终实时节点为 `(220,100)`，无 replay、needs-review 或额外写入。runId `86eea250-80f1-4472-8592-88c026c6c4cf`，本机轨迹 `~/.local/state/CocosAgent/agent-runs/2026-10-11T16-21-48-721Z-b052586f.jsonl`。实测还暴露空模型回复及多工具批调用导致提前停止；TS loop 已加入有界重试，自动测试覆盖继续与耗尽停止，尚未声称 Creator 面板实机触发过新批调用重试分支。旧 JS 指定 PNG 原生写入记录见下文和 AGENTS.md。
 
 ## 1. 目标
 
@@ -35,7 +35,7 @@ Creator 扩展是用户入口、生命周期所有者和产品状态的权威来
 
 用户已确认使用 TypeScript，替代此前讨论的 Python sidecar 方案。Creator 扩展继续拥有 Agent 生命周期；新内核运行于 Creator 管理的 Node.js 服务，使用现有面板通信与真实 Cocos MCP。新增内核和产品适配源码采用 TS，构建产物为 JavaScript；Creator 2.4 扩展入口的模块格式和编译目标按实际宿主兼容要求配置。产品启动与正常使用不需要 Python/pip；既有 Python 研究与测量脚本按原用途保留。
 
-上游来源：[learn-claude-code](https://github.com/shareAI-lab/learn-claude-code) 固定在 [`0dcafa2ae053a1ddd6a72f265431104b08a5aa13`](https://github.com/shareAI-lab/learn-claude-code/commit/0dcafa2ae053a1ddd6a72f265431104b08a5aa13)。逐章对应、移植/适配/暂缓/排除状态和维护规则以 [UPSTREAM.md](../../tools/cocos-agent-runtime/UPSTREAM.md) 为准；该表的所有上游源码链接均指向固定 SHA。当前没有直接复制或翻译上游源码：CocosAgent 仅将选定机制独立用 TypeScript 重写，并按 Creator 命令、实例、权限、账本和面板语义适配。仓库保留 MIT 许可作为研究来源记录；将来若复制上游源码，再按 MIT 要求在分发物中保留相应版权与许可声明。不能把文件后缀改成 `.ts` 当作完成移植。
+上游来源：[learn-claude-code](https://github.com/shareAI-lab/learn-claude-code) 固定在 [`0dcafa2ae053a1ddd6a72f265431104b08a5aa13`](https://github.com/shareAI-lab/learn-claude-code/commit/0dcafa2ae053a1ddd6a72f265431104b08a5aa13)。逐章对应、移植/适配/暂缓/排除状态和维护规则以 [UPSTREAM.md](../../tools/cocos-agent-runtime/UPSTREAM.md) 为准；该表的所有上游源码链接均指向固定 SHA。固定 commit 的 s01–s17 原始 code.py、MIT License 与文件哈希已归档于 [vendor/learn-claude-code](../../vendor/learn-claude-code/0dcafa2ae053a1ddd6a72f265431104b08a5aa13/)。逐章源码映射、哈希和验证命令见 [PORTING-MAP.md](../../tools/cocos-agent-runtime/PORTING-MAP.md)。上游源码仅作只读移植基线，不进入产品运行时；当前 TS 实现仍是独立实现，尚无逐行或机械翻译。未来每次源码移植都需记录上游符号、保留行为与 Creator 改动，并遵守 MIT 许可。不能把文件后缀改成 `.ts` 当作完成移植。
 
 课程 README 还推荐作者的独立产品 [KODE Agent SDK](https://github.com/shareAI-lab/kode-agent-sdk)，不是 `learn-claude-code` 教程仓库本身。SDK 提供 TypeScript Agent、审批事件、MCP、Provider 与 Skills，作为候选集成方案已完成文档级初审；其运行依赖、状态存储与 Creator 命令的项目/实例/账本门槛尚未审计，因此当前 TS 包仍按用户已选的教程机制逐步移植，不引入该 SDK。
 
@@ -45,12 +45,12 @@ Creator 扩展是用户入口、生命周期所有者和产品状态的权威来
 | --- | --- |
 | s01 Agent Loop / s15 单 Agent 核心 | 按课程机制独立用 TS 重写；Ask/Plan/Agent 接入 TS 内核。Creator 面板已验收只读 Agent 任务和一次受控场景补偿，不代表通用写入任务都已通过 |
 | s02 工具调用 / s14 MCP | 适配实时 Cocos MCP 工具目录与回执；逐项核对 2.4.15 版本、合同、访问级别、目标实例和能力。不是通用 shell 或任意 MCP 插件执行器 |
-| s03 权限 / s04 Hooks | 适配为 Creator 面板写入批准、项目约定哈希、技能证据门槛、恢复限制与面板事件；不提供通用命令审批或用户脚本 hooks |
+| s03 权限 / s04 Hooks | Creator 面板批准与程序门槛之外，TS 内核已有输入、工具前后、停止四类可组合生命周期 hooks；停止钩子续轮受 maxTurns 限制。自动回归通过，Creator 面板钩子轨迹仍待实机验收；不提供用户脚本 hooks |
 | s07 Skill Loading | TS loop 强制同轮技能/引用回执；正文和引用当前由 JS MCP Resource 适配器读取。技能权威来源为 `plugins/cocos-agent-2x/skills/`，不读取 Codex 插件缓存 |
-| s05 TodoWrite / s10 Task System | 暂缓。持久 Plan、任务状态和 Cocos 操作账本不等于上游 TodoWrite 或通用依赖任务图 |
-| s08 Context Compact | TS 内核已实现确定性预算估算与压缩；保留 call/result 对应、操作身份和未完成验收/恢复项。runtime 全套自动测试通过；Creator 面板实机仍待验收，见[上下文压缩合同](cocos-agent-context-compaction-0.1.md) |
-| s09 Memory | 已实现项目隔离的本机长期记忆、任务召回、精确用户/工具来源、版本纠正、内容删除与精确操作恢复；runtime 与 Host 自动测试通过。Creator 面板审批、重载后的跨任务读回、纠正及删除仍待实机验收，见[工程隔离记忆合同](cocos-agent-project-memory-0.1.md) |
-| s16 Workflow Runtime / s17 Goal Loop | 暂缓。现有 Cocos 资源/场景流水线是领域操作合同；回执成功门槛不等于脚本化通用 workflow 或独立目标评估器 |
+| s05 TodoWrite / s10 Task System | s05 是 run-local `agent_todo_write`，Host 持久化执行进度，与用户批准 Plan 分离。s10 已增加工程隔离任务图：持久 ID、状态、依赖、claim 与回执派生完成；Creator 面板失败/取消和跨 Host 重启读取待实机验收。 |
+| s08 Context Compact | TS 内核已有预算估算与确定性压缩；大型结果新增本机每-run 私有档案、短预览和按精确 call ID 分块读取。继续保留 call/result 对应、操作身份和未完成验收/恢复项。runtime 58 项、MCP/扩展 84 项自动测试通过；Creator 面板超预算/证据取回实机仍待验收，见[上下文压缩合同](cocos-agent-context-compaction-0.1.md) |
+| s09 Memory | 已实现项目隔离的本机长期记忆、任务召回、精确用户/工具来源、run-local 候选提取、批准后创建/纠正/删除与精确操作恢复；runtime 与 Host 自动测试通过。Creator 面板候选审阅、写入审批、重载后的跨任务读回、纠正及删除仍待实机验收，见[工程隔离记忆合同](cocos-agent-project-memory-0.1.md) |
+| s16 Workflow Runtime / s17 Goal Loop | s16 通用脚本工作流仍暂缓。s17 已按 Creator 适配：显式工具回执验收、最多续跑 2 次，预算/取消/审批/恢复锁仍生效；无独立 LLM 评估器。真实面板续跑和停止原因展示待实机验收。 |
 | s06 Subagent / s11 Background Tasks / s12 Cron / s13 Agent Teams | 按产品约定排除：Creator Agent 不加入子 Agent、通用后台任务、定时任务或团队协作 |
 | Creator 内容操作 | 复用既有 Creator 命令与账本；保留预期差异、陈旧拒绝、读回、预览、对账、补偿与重放。能力状态按 2.4.15 实测记录 |
 
@@ -65,7 +65,9 @@ Creator Agent 不加入通用 shell 工具、团队/子 Agent 协作或定时任
 5. **实现并验收长期记忆。** s09 的工程隔离存储、任务召回、来源核验、版本纠正、内容删除和不确定写入恢复已进入 TS/Host；本轮自动测试通过。下一步在 Creator 面板验收批准写入、跨 Host 重启召回、纠正来源留痕和删除后不再召回。记忆不代替当前编辑器状态或 Creator 操作账本。
 6. **在 LinkUpClient 持续验收。** 构建扩展包并验证独立安装、更新、取消、恢复和实际项目任务；缺口由真实使用推动。
 
-第 1–3 步的 TS 内核和只读实机路径已完成；runtime 42 项测试通过，MCP/扩展本轮 79 项测试通过。真实 Agent 运行已证明它会因缺少技能证据拒绝过早工具调用，再按要求读取 skill/reference 并成功完成只读场景任务。s08 压缩已覆盖 call/result 配对、operation ID、未完成验收状态、完整运行消息不变和预算不足停止；尚未在 Creator 面板触发真实超预算路径。s09 工程隔离记忆已有自动化证据，Creator 面板审批和跨重启实测仍待做。下一步产品验收仍是第 4 步：由 TS Agent 在 Creator 面板执行一项独立、可补偿的真实写入，验收授权、回执、读回、预览和恢复。PNG operation `b1d4c0e2-7f3a-4a91-9c58-2e6d10ab4f01` 已补偿，并从源记录 replay 为 `9c4f7a28-3b51-4e9d-a27c-6f80d13b5e44`；后者保存并通过预览验收后保留节点 `NativePanelBlue1011`，不再重复 apply/replay。按钮脚本的 TS Agent 写入和 LinkUpClient 面板验收仍是独立事项。Creator 2.x 外部 Codex MCP 连接器的旧指纹状态与 Creator 面板内的 TS Agent 路径分开处理，不据此外推原生 Agent 能力。
+7. **移植单 Agent Task System 与 Goal Loop（实现完成，Creator 实机验收待做）。** 任务 ID、依赖、认领与状态工程隔离持久化；仅以成功工具回执满足显式验收项，最多续跑两次。面板需展示未满足条件、续跑次数及停止原因；取消、预算、单次写入审批和恢复锁继续由程序限制。
+
+截至 2026-10-12，Task System/Goal Loop 的 TS/Host 代码与自动回归已完成；runtime 58 项、MCP/扩展 84 项全部通过。真实 Creator 面板仍需验收任务图跨重启恢复、requiredTools 缺项续跑、预算/取消/审批/恢复锁停止，以及未完成验收项展示。此前只读 Agent、受限场景补偿和 PNG 原生闭环证据保持各自边界；自动测试不代替 Creator 实机验收。
 
 ## 3. Unity 对照原则
 
@@ -160,7 +162,7 @@ Unity 官方同时提供 Editor 内的项目感知助手，以及供外部 IDE A
 | 步骤 | 状态 | 下一步 |
 | --- | --- | --- |
 | 0：边界盘点 | 扩展包与 sidecar 接线已改；Creator 面板连接与 Ask 实机均有证据 | 后续在真实独立工程持续核对启动/停止与安装可移植性 |
-| 1：原生只读闭环 | Ask/Plan/Agent 均由 TS 内核调度；三种模式的只读面板路径已有实机证据；TS runtime 42/42、MCP/扩展 79/79 | 只读路径已通过；继续收 LinkUpClient 项目约定、选择对象与多轮上下文的面板验收 |
+| 1：原生只读闭环 | Ask/Plan/Agent 均由 TS 内核调度；三种模式的只读面板路径已有实机证据；TS runtime 58/58、MCP/扩展 84/84 | 只读路径已通过；继续收 LinkUpClient 项目约定、选择对象与多轮上下文的面板验收 |
 | 2：计划与知识读取 | TS Agent 实际读取 13 项技能目录、任务 skill 与合同引用；缺少读取证据时先收到 `TASK_SKILL_READ_REQUIRED`，读完后完成场景快照任务 | Creator 原生 Resource 读取现由 MCP JS 适配器提供；LinkUpClient 的项目约定/选择上下文仍需面板实测 |
 | 3：受控写入闭环 | 旧 JS 指定 PNG 原生任务已完成 apply/重开/预览/补偿/replay；TS Agent 又真实完成 operation `a7d3f106-5c92-4b7e-8e41-2b93de7c0f58` 的唯一反向补偿 `3f8c1d47-6a25-4b90-9e13-72d5ac8b04e6`，面板批准、editor/disk/recovery 回执、源与新账本读回及实时 `(220,100)` 读回通过 | 基础 TS 写入/补偿路径已验；下一步用真实任务验收 TS 脚本读取、差异审阅、编译、运行与失败恢复，不重复该节点写入 |
 | 4：脚本开发闭环 | 原生面板完成既有 JS 的读取、精确差异、审批、写入和 Creator 编译；本次实际点击显示 `Clicked: 1/2`，原操作补偿后刷新预览再点不变。脚本源 SHA、UUID/meta 与按钮位置已读回恢复；记录见 AGENTS.md 的 2026-10-12 复验 | 补原生新 ID 重放、真实错误修复及独立游戏工程脚本任务；Plan 结构输出和多次提示调度缺口仍在 |
@@ -169,11 +171,12 @@ Unity 官方同时提供 Editor 内的项目感知助手，以及供外部 IDE A
 | 7：外部 Agent 适配 | 可选 | 原生路径稳定后再决定维护范围 |
 | 8：持续验证与 3.x | 2.4 持续推进；3.x 暂停新增 | 以真实工程可重复验收作为后续 3.x 规划门槛 |
 | 9：LinkUpClient 持续使用 | 上下文筛选、实时选择约束、项目约定读取前置检查、整包升级/恢复命令已实现并通过自动测试；磁盘包已升级到 0.3.4，保留 0.3.1 与 0.3.3 回滚副本，Creator 的“重新加载界面”已执行；重载后的两次只读 Agent 复测未发出任务工具调用，当前能力状态仍待确认 | 验证扩展指纹和场景快照，再验收项目约定按需读取、非空选择、多轮任务和 sidecar 重启恢复 |
-| 10：工程隔离长期记忆 | TS/Host 本地持久化、来源核验、纠正/删除、准确恢复与任务召回已实现；TS runtime 42/42、MCP/扩展 79/79 | Creator 面板验收创建批准、来源查看、纠正后保留旧版本来源、删除后检索为空及 Host 重启后仍按当前工程隔离 |
+| 10：工程隔离长期记忆 | TS/Host 本地持久化、来源核验、候选提取、纠正/删除、准确恢复与任务召回已实现；TS runtime 58/58、MCP/扩展 84/84 | Creator 面板验收候选审阅、创建批准、来源查看、纠正后保留旧版本来源、删除后检索为空及 Host 重启后仍按当前工程隔离 |
+| 11：单 Agent Task System / Goal Loop | TS/Host 任务图、依赖/认领、工程隔离持久化、成功回执判定和最多两次有界续跑已实现；预算、取消、写入审批与恢复锁保留原程序约束 | Creator 面板验收跨 Host 恢复、缺项续跑/停止、审批拒绝、取消和停止原因展示；不引入通用 shell、团队或定时任务 |
 
 ## 7. 2026-10-12 进度校正与近期顺序
 
-**当前 TS 验收状态：** Ask/Plan/Agent 均已路由至 TS loop。Creator 面板真实运行通过技能门槛与场景只读任务，并真实执行了一次精确的 `scene.node.patch` compensate。写前核对源账本的 `preview=passed` 与节点当前 `x=221`，面板批准唯一写入后，补偿账本的 editor/disk/recovery 阶段通过；源及补偿账本、最终实时节点 `(220,100)` 均读回确认。runId `86eea250-80f1-4472-8592-88c026c6c4cf`，本机轨迹 `~/.local/state/CocosAgent/agent-runs/2026-10-11T16-21-48-721Z-b052586f.jsonl`。此验收覆盖受限字段的 TS 调度、审批、回执和恢复，不代表脚本开发或新 ID 重放。TS runtime 42/42、MCP/扩展 79/79。TS loop 已新增对空模型回复和多工具批调用的有界重试；相关分支由自动测试覆盖，实机任务此次是逐个工具成功完成，没有宣称实机触发重试分支。项目隔离长期记忆实现了本机按工程哈希持久化、确定性任务召回、逐条来源验证、审批写入、版本纠正、内容删除和精确写入恢复；这些是自动测试证据，Creator 面板的完整创建/纠正/删除与 Host 重启验收仍待完成。旧 JS 指定 PNG 任务已从 operation `b1d4c0e2-7f3a-4a91-9c58-2e6d10ab4f01` replay 得到 `9c4f7a28-3b51-4e9d-a27c-6f80d13b5e44`；最终节点保留，不能重复 apply/replay。
+**当前 TS 验收状态：** Ask/Plan/Agent 均已路由至 TS loop。Creator 面板真实运行通过技能门槛与场景只读任务，并真实执行了一次精确的 `scene.node.patch` compensate。写前核对源账本的 `preview=passed` 与节点当前 `x=221`，面板批准唯一写入后，补偿账本的 editor/disk/recovery 阶段通过；源及补偿账本、最终实时节点 `(220,100)` 均读回确认。runId `86eea250-80f1-4472-8592-88c026c6c4cf`，本机轨迹 `~/.local/state/CocosAgent/agent-runs/2026-10-11T16-21-48-721Z-b052586f.jsonl`。此验收覆盖受限字段的 TS 调度、审批、回执和恢复，不代表脚本开发或新 ID 重放。TS runtime 58/58、MCP/扩展 84/84。Task System / Goal Loop 已有模拟回归，Creator 面板跨重启恢复与验收续跑尚未实测。TS loop 已新增对空模型回复和多工具批调用的有界重试；相关分支由自动测试覆盖，实机任务此次是逐个工具成功完成，没有宣称实机触发重试分支。项目隔离记忆已有本机持久化、确定性任务召回、逐条来源验证、审批写入、候选抽取、版本纠正、内容删除和精确写入恢复；这些仍是自动测试证据，Creator 面板的候选审阅、跨 Host 重启及纠正/删除验收仍待完成。s08 结果档案自动化通过但面板取证未验收。旧 JS 指定 PNG 任务已从 operation `b1d4c0e2-7f3a-4a91-9c58-2e6d10ab4f01` replay 得到 `9c4f7a28-3b51-4e9d-a27c-6f80d13b5e44`；最终节点保留，不能重复 apply/replay。
 
 1. 在独立的真实 2.4.15 游戏工程继续验收 TS Agent：长期记忆创建批准、跨 Host 重启召回、来源纠正、删除后不再召回，以及项目 `AGENTS.md` 哈希门槛、非空选择上下文、多轮任务续接；不以研究工程或模拟 harness 替代。
 2. 收按钮脚本任务剩余缺口：让 TS Agent 读取现有 JS、提出精确差异、按面板审批写入、Creator 编译、实际点击验证并恢复；原生新 ID 重放、错误注入修复和独立项目任务仍分别验收，详见 [脚本合同](cocos-agent-script-development-0.1.md)。

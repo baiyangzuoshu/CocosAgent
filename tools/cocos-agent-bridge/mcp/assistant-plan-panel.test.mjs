@@ -17,6 +17,11 @@ class Element {
         this.scrollHeight = 0;
     }
     appendChild(child) { child.parentNode = this; this.children.push(child); return child; }
+    replaceChildren(...children) {
+        for (const child of this.children) child.parentNode = null;
+        this.children = [];
+        for (const child of children) this.appendChild(child);
+    }
     replaceChild(next, old) { const index = this.children.indexOf(old); this.children[index] = next; next.parentNode = this; old.parentNode = null; }
     removeChild(child) { this.children.splice(this.children.indexOf(child), 1); child.parentNode = null; }
     addEventListener(name, handler) { this.listeners[name] = handler; }
@@ -93,6 +98,55 @@ test('plan action is enabled after a Plan request finishes', () => {
     definition.finishRun();
     assert.equal(definition._busy, false);
     assert.equal(definition.$messages.children[0].children.at(-1).disabled, false);
+});
+
+test('execution checklist stays visually separate from the user-approved Plan and survives a failed run display', () => {
+    let panel;
+    class WebSocketMock { static OPEN = 1; }
+    vm.runInNewContext(fs.readFileSync(path.join(root, '2.4.15NewProject/packages/cocos-agent-bridge/panel/index.js'), 'utf8'), {
+        Editor: { Panel: { extend(value) { panel = value; } }, Ipc: { sendToMain() {} } },
+        document: { createElement: () => new Element() },
+        window: { crypto: { randomUUID: () => 'request-id' } },
+        localStorage: { getItem: () => null, setItem() {} }, WebSocket: WebSocketMock,
+    });
+    for (const name of Object.keys(panel.$)) panel[`$${name}`] = new Element();
+    panel.$messages.children = [];
+    panel._planCards = new Map();
+    panel._plans = new Map();
+    panel._runCards = new Map();
+    panel.renderPlan({ id: 'approved-plan', title: 'Approved change plan', summary: 'User-reviewed.', steps: [], status: 'proposed' });
+    panel.renderExecutionChecklist([
+        { id: 'todo-1', content: 'Inspect the active scene', status: 'completed' },
+        { id: 'todo-2', content: 'Apply approved change', status: 'in_progress' },
+        { id: 'todo-3', content: 'Read back and preview', status: 'pending' },
+    ], 'run-1', true);
+    const checklist = panel._checklistCards.get('run-1');
+    assert.match(checklist.children[0].textContent, /执行清单/);
+    assert.match(checklist.children[1].textContent, /不等同于用户批准的变更计划/);
+    assert.equal(checklist.children[2].children.length, 3);
+    assert.match(checklist.children[2].children[1].textContent, /进行中/);
+    assert.equal(panel._planCards.has('approved-plan'), true);
+    panel.receiveMessage(JSON.stringify({ type: 'run.failed', requestId: 'run-1', message: 'simulated failure' }));
+    assert.equal(panel._checklistCards.get('run-1').children[2].children.length, 3);
+});
+
+test('panel displays goal-loop decisions and outstanding receipt criteria', () => {
+    let panel;
+    class WebSocketMock { static OPEN = 1; }
+    vm.runInNewContext(fs.readFileSync(path.join(root, '2.4.15NewProject/packages/cocos-agent-bridge/panel/index.js'), 'utf8'), {
+        Editor: { Panel: { extend(value) { panel = value; } }, Ipc: { sendToMain() {} } },
+        document: { createElement: () => new Element() }, window: { crypto: { randomUUID: () => 'request-id' } },
+        localStorage: { getItem: () => null, setItem() {} }, WebSocket: WebSocketMock,
+    });
+    for (const name of Object.keys(panel.$)) panel[`$${name}`] = new Element();
+    panel._requestId = 'request-id';
+    const activity = [];
+    panel.addActivity = (text) => activity.push(text);
+    panel.receiveMessage(JSON.stringify({ type: 'goal.evaluated', requestId: 'request-id', taskId: 'task_1234abcd',
+        satisfied: false, continuationAttempt: 1, maxContinuationAttempts: 2,
+        outstanding: [{ id: 'preview', description: 'Preview must be accepted', missingTools: ['cocos_2x_operation_preview_accept'] }] }));
+    assert.match(activity[0], /仍有 1 项未完成（续跑 1\/2）/);
+    assert.match(activity[0], /cocos_2x_operation_preview_accept/);
 });
 
 for (const [status, label] of [['completed', '已结束'], ['needs-review', '待核对'],

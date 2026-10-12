@@ -12,6 +12,8 @@ import { parseStructuredPlan } from './structured-plan.mjs';
 import { beginPlanStep, createPlan, finishPlanStep, hasPlanSetupReceipts, planView } from './assistant-plan-service.mjs';
 import { AssistantStateStore } from './assistant-state-store.mjs';
 import { AssistantMemoryFileStore } from './assistant-memory-store.mjs';
+import { AssistantToolResultArchive } from './assistant-tool-result-archive.mjs';
+import { AssistantTaskStore } from './assistant-task-store.mjs';
 import { formatCreatorProjectContext, normalizeCreatorProjectContext } from './assistant-project-context.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -35,6 +37,7 @@ async function runTypeScriptReadOnly({ client, task, projectRoot, skillFiles, tr
     return runtime.runCreatorReadOnly({
         client, task, projectRoot, skillFiles, tracePath, apiKey, model, mode, history,
         projectContext, signal, onEvent,
+        toolResultArchive: new AssistantToolResultArchive(tracePath),
         skillAdapter: legacyAdapter,
         formatProjectContext: formatCreatorProjectContext,
         writeEvent,
@@ -43,17 +46,20 @@ async function runTypeScriptReadOnly({ client, task, projectRoot, skillFiles, tr
 }
 
 async function runTypeScriptAgent({ client, task, projectRoot, skillFiles, tracePath, apiKey, model, history,
-    projectContext, signal, onEvent, approveWrite, memoryStore }) {
+    projectContext, signal, onEvent, approveWrite, memoryStore, taskStore, goalCriteria }) {
     const runtimeUrl = pathToFileURL(path.join(REPOSITORY_ROOT, 'tools/cocos-agent-runtime/dist/index.js')).href;
     const runtime = await import(runtimeUrl);
     const legacyAdapter = await import('./deepseek-agent.mjs');
     return runtime.runCreatorAgent({
         client, task, projectRoot, skillFiles, tracePath, apiKey, model, mode: 'Agent', history,
         projectContext, signal, onEvent, approveWrite,
+        toolResultArchive: new AssistantToolResultArchive(tracePath),
         skillAdapter: legacyAdapter,
         formatProjectContext: formatCreatorProjectContext,
         writeEvent,
         projectMemory: { projectKey: memoryStore.projectKey, persistence: memoryStore },
+        taskPersistence: taskStore,
+        ...(goalCriteria ? { goalCriteria } : {}),
     });
 }
 
@@ -248,6 +254,7 @@ async function start(options) {
     const wss = new WebSocketServer({ host: '127.0.0.1', port: 0, maxPayload: 16 * 1024 });
     const stateStore = new AssistantStateStore(options.project);
     const memoryStore = new AssistantMemoryFileStore(options.project);
+    const taskStore = new AssistantTaskStore(options.project);
     const restoredState = stateStore.load();
     const conversations = new Map(restoredState.conversations.map((entry) => [entry.id, entry.messages]));
     const plans = new Map(restoredState.plans.map((plan) => [plan.id, plan]));
@@ -388,7 +395,7 @@ async function start(options) {
             const runRecord = { id: message.requestId, conversationId: message.conversationId,
                 planId: activePlan?.id, task: taskText.slice(0, MAX_MESSAGE_LENGTH), mode: message.mode,
                 status: 'running', reason: null, startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-                activeTool: null, receipts: [] };
+                activeTool: null, receipts: [], executionChecklist: [] };
             active.runRecord = runRecord;
             try { appendRun(runRecord); }
             catch (error) {
@@ -413,7 +420,31 @@ async function start(options) {
 
             const runTracePath = traceFile(options.project);
             const onAgentEvent = (event) => {
+                    if (event.type === 'run.finished') {
+                        runRecord.executionChecklist = Array.isArray(event.executionChecklist) ? event.executionChecklist : [];
+                        runRecord.updatedAt = new Date().toISOString();
+                        try { appendRun(runRecord); } catch (_) {}
+                        send(socket, { ...event, requestId: message.requestId });
+                        return;
+                    }
                     if (event.type.startsWith('run.')) return;
+                    if (event.type === 'todo.updated') {
+                        runRecord.executionChecklist = Array.isArray(event.items) ? event.items : [];
+                        runRecord.updatedAt = new Date().toISOString();
+                        try { appendRun(runRecord); }
+                        catch (_) {
+                            active.persistenceError = true;
+                            active.controller.abort();
+                            send(socket, { type: 'run.persistence-error', requestId: message.requestId });
+                        }
+                        send(socket, { ...event, requestId: message.requestId });
+                        return;
+                    }
+                    if (event.type === 'goal.evaluated') {
+                        runRecord.goalEvaluation = { taskId: event.taskId, satisfied: event.satisfied,
+                            outstanding: event.outstanding, continuationAttempt: event.continuationAttempt,
+                            maxContinuationAttempts: event.maxContinuationAttempts };
+                    }
                     if (event.type === 'tool.finished') event.result = compactResult(event.result);
                     if (event.type === 'run.finished' && Array.isArray(event.receipts)) {
                         event.receipts = event.receipts.map(compactReceipt);
@@ -460,6 +491,10 @@ async function start(options) {
                     onEvent: onAgentEvent,
                     approveWrite,
                     memoryStore,
+                    taskStore,
+                    ...(activePlan ? { goalCriteria: activePlan.steps[message.planExecution.stepIndex].requiredTools.map((name, index) => ({
+                        id: `required-tool-${index + 1}`, description: `Successful receipt from ${name}`, requiredTools: [name],
+                    })) } : {}),
                 })
                 : runTypeScriptReadOnly({
                     client,
@@ -505,6 +540,7 @@ async function start(options) {
                 conversations.set(message.conversationId, conversation.slice(-MAX_HISTORY));
                 runRecord.status = result.status;
                 runRecord.reason = result.reason;
+                runRecord.executionChecklist = Array.isArray(result.executionChecklist) ? result.executionChecklist : runRecord.executionChecklist;
                 runRecord.updatedAt = new Date().toISOString();
                 runRecord.activeTool = null;
                 // Preserve full result receipts in the compact recovery ledger, merging in case
@@ -525,6 +561,8 @@ async function start(options) {
                         toolCalls: result.toolCalls, tracePath: result.tracePath,
                         receipts: (result.receipts || []).map(compactReceipt),
                         contextCompactions: result.contextCompactions || [],
+                        executionChecklist: runRecord.executionChecklist,
+                        goalEvaluation: runRecord.goalEvaluation,
                         plan: structuredPlan ? planView(structuredPlan) : undefined,
                         planProgress: activePlan ? planView(activePlan) : undefined,
                         recentRuns: recentRuns.filter((run) => run.conversationId === message.conversationId).slice(-12) } });

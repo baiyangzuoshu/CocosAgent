@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { AgentKernel } from '../dist/agent-loop.js';
+import { createCreatorAgentPolicy } from '../dist/creator-policy.js';
 import { CreatorMemoryToolRegistry, CreatorProjectMemory } from '../dist/project-memory.js';
 
 const PROJECT_A = 'a'.repeat(64);
@@ -68,6 +69,51 @@ test('remember stores only verified source citations and injects matching projec
     assert.equal(unverified.structuredContent?.success, false);
     assert.equal(unverified.structuredContent?.error?.code, 'MEMORY_SOURCE_NOT_VERIFIED');
     assert.equal(persistence.value.memories.length, 1);
+});
+
+test('memory extraction stages a source-verified candidate, preserves its citations, and persists only after write approval', async () => {
+    const task = 'Remember that the LinkUpClient game uses a 720 by 1280 portrait design resolution.';
+    const { memory, persistence } = await setup({ task });
+    const registry = new CreatorMemoryToolRegistry({ listTools: async () => [], callTool: async () => ({}) }, memory);
+    const source = [userSource('720 by 1280 portrait design resolution')];
+    const responses = [
+        { role: 'assistant', content: null, toolCalls: [{ id: 'candidate-call', name: `${MEMORY}propose`, arguments: {
+            title: 'LinkUpClient design resolution', body: 'The game uses a 720 by 1280 portrait design resolution.',
+            category: 'project-fact', sources: source,
+        } }] },
+        { role: 'assistant', content: null, toolCalls: [{ id: 'remember-call', name: `${MEMORY}remember`, arguments: {
+            candidateId: 'memory-1', title: 'LinkUpClient design resolution',
+            body: 'The game uses a 720 by 1280 portrait design resolution.', category: 'project-fact', sources: source,
+        } }] },
+        { role: 'assistant', content: 'The cited candidate was approved and saved.' },
+    ];
+    let round = 0;
+    const kernel = new AgentKernel({
+        provider: { complete: async () => {
+            round += 1;
+            if (round === 2) assert.equal(persistence.value, null, 'candidate extraction must not persist memory');
+            return { message: responses.shift(), finishReason: 'stop' };
+        } },
+        tools: registry, policy: { approveWrite: async () => true }, systemPrompt: 'test',
+    });
+    const result = await kernel.run({ task, mode: 'Agent' });
+    assert.equal(result.status, 'completed');
+    assert.equal(result.receipts[0].toolName, `${MEMORY}propose`);
+    assert.equal(result.receipts[0].result.structuredContent.outcome, 'candidate-only');
+    assert.equal(result.receipts[1].toolName, `${MEMORY}remember`);
+    assert.equal(persistence.value.memories.length, 1);
+    assert.equal(persistence.value.memories[0].sources[0].quote, source[0].quote);
+    assert.equal(persistence.value.memories[0].sources[0].runId, 'run-memory-1');
+});
+
+test('memory extraction rejects unverifiable candidate sources and creates no durable record', async () => {
+    const { memory, persistence } = await setup({ task: 'This task does not contain the proposed fact.' });
+    const result = await memory.call(`${MEMORY}propose`, {
+        title: 'Unverified', body: 'This was not evidenced.', category: 'project-fact',
+        sources: [userSource('A missing source quote')],
+    }, 'candidate-invalid');
+    assert.equal(result.structuredContent?.error?.code, 'MEMORY_SOURCE_NOT_VERIFIED');
+    assert.equal(persistence.value, null);
 });
 
 test('tool provenance must name a successful receipt and exact quote; operation ID is captured', async () => {
@@ -197,7 +243,8 @@ test('Agent locks to the exact memory operation receipt after an uncertain persi
             requests.push(input);
             return { message: responses.shift(), finishReason: 'stop' };
         } },
-        tools: registry, policy: { approveWrite: async () => true }, systemPrompt: 'test',
+        tools: registry, policy: createCreatorAgentPolicy({ mode: 'Agent', baseInstructions: '',
+            approveWrite: async () => true }), systemPrompt: 'test',
     });
     const result = await kernel.run({ task, mode: 'Agent' });
     assert.equal(result.status, 'completed');

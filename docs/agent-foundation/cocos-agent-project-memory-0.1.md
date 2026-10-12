@@ -4,7 +4,7 @@
 
 ## 目标与上游关系
 
-本切片把 learn-claude-code 固定基线 `0dcafa2ae053a1ddd6a72f265431104b08a5aa13` 的有限跨会话记忆与任务召回机制，用 TypeScript 独立实现，并按 Creator 工程、来源、审批和恢复语义适配。实现参考 [上游 s09_memory](https://github.com/shareAI-lab/learn-claude-code/blob/0dcafa2ae053a1ddd6a72f265431104b08a5aa13/s09_memory/code.py)。没有复制上游 Python；不包含自动推断/抽取、自动归档、用户级跨项目记忆、通用文件工具或上游完整 memory manager。
+本切片把 learn-claude-code 固定基线 `0dcafa2ae053a1ddd6a72f265431104b08a5aa13` 的有限跨会话记忆与任务召回机制，用 TypeScript 独立实现，并按 Creator 工程、来源、审批和恢复语义适配。实现参考 [上游 s09_memory](https://github.com/shareAI-lab/learn-claude-code/blob/0dcafa2ae053a1ddd6a72f265431104b08a5aa13/s09_memory/code.py)。没有复制上游 Python；不包含无来源自动推断、自动归档、用户级跨项目记忆、通用文件工具或上游完整 memory manager。
 
 记忆只补充跨任务知识；当前用户要求、项目 `AGENTS.md`、实时 Creator 回执和操作账本优先。它不代表当前编辑器状态，不得用记忆替代 `scene.snapshot` 等实时核验，也不把 Creator 写入操作记录混为记忆。
 
@@ -20,6 +20,8 @@
 
 每条记忆有稳定 `memoryId`、从 1 递增的 `revision`、标题、正文、类别、创建/更新时间、来源数组和最近 10 个旧版本。类别为 `user-preference`、`project-fact`、`workflow`、`decision`、`constraint`。
 
+Agent 可以先调用 `cocos_2x_memory_propose` 提取单条候选。候选来源立即按当前任务/历史用户消息或本 run 成功回执校验，保留精确来源、call ID 和可用的 operation ID，只存在当前 Agent run 的内存中；工具回执同时返回有限的相似已有条目供模型判断重复或整合。候选提取本身不写磁盘，也不产生长期记忆。随后 `remember` 或 `correct` 可携带候选 ID，Host 会再次验证候选内容与来源未被替换；持久化操作仍按原有 Creator 面板审批、项目指令哈希门槛、修订比较和操作 ID 恢复流程执行。没有自动把模型摘要写入记忆的后台流程。
+
 支持两种来源：
 
 - **用户来源：** 精确引用当前任务（`messageIndex=0`）或本轮输入所带历史中的用户消息。Host 要求引文确实出现在对应文本中，并记录 `runId`、消息序号、原文片段和记录时间。
@@ -33,6 +35,7 @@
 | --- | --- | --- |
 | `cocos_2x_memory_search` | read | 搜索本工程；空查询列最近项。返回 ID、修订号和来源 |
 | `cocos_2x_memory_get` | read | 按精确 ID 读取内容、来源和纠正历史 |
+| `cocos_2x_memory_propose` | read | 从已验证来源提取 run-local 候选；返回相似现有条目，未持久化 |
 | `cocos_2x_memory_remember` | write | 新建有来源的持久记忆；同名项拒绝，提示读取并纠正现有条目 |
 | `cocos_2x_memory_correct` | write | 必须给出当前 `expectedRevision` 和新的可核验来源；旧版本及旧来源保留在最近 10 版历史中 |
 | `cocos_2x_memory_delete` | write | 必须给出当前 ID/修订号；移除有效内容及历史，只留不含内容的 ID/修订号/时间/操作 ID 墓碑 |
@@ -44,8 +47,8 @@
 
 ## 验收边界
 
-- TS runtime 当前全套测试：41/41；覆盖来源校验、任务召回、修订号冲突、旧版本来源、内容删除、精确恢复、审批、项目键隔离和凭据拒绝。
-- MCP/Creator 扩展当前全套测试：79/79；额外覆盖本机状态目录隔离、文件权限、并发写入、CAS、死 Host 锁回收、Host 恢复读回和扩展包包含存储适配器。
+- TS runtime 当前全套测试：50/50；覆盖来源校验、候选提取不落盘、候选来源绑定、审批后持久化、跨会话任务召回、修订号冲突、旧版本来源、内容删除、精确恢复、项目键隔离和凭据拒绝。
+- MCP/Creator 扩展当前全套测试：81/81；额外覆盖本机状态目录隔离、文件权限、并发写入、CAS、死 Host 锁回收、Host 恢复读回和扩展包包含存储适配器。
 - Creator 面板还未实际验收：批准创建 → 新请求/重开 Host 后召回 → 纠正并查看新旧来源 → 删除后搜索为空。不能把模拟 Provider、自动测试或磁盘包生成写成面板实机通过。
 - 当前只接入 Cocos Creator 2.4.15 Creator 原生 Agent；没有向 3.8 新增记忆工具或宣称 3.8 支持。
 

@@ -172,6 +172,7 @@ function validateCreatorExtensionBundle(directory) {
         'panel/index.js',
         'assistant-runtime/tools/cocos-agent-bridge/mcp/assistant-host.mjs',
         'assistant-runtime/tools/cocos-agent-bridge/mcp/assistant-memory-store.mjs',
+        'assistant-runtime/tools/cocos-agent-bridge/mcp/assistant-tool-result-archive.mjs',
         'assistant-runtime/tools/cocos-agent-bridge/mcp/mcp-server.mjs',
         'assistant-runtime/tools/cocos-agent-runtime/dist/index.js',
         'assistant-runtime/tools/cocos-agent-runtime/LICENSE.learn-claude-code',

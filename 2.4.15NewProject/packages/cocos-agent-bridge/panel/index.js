@@ -339,6 +339,18 @@ Editor.Panel.extend({
         if (message.type === 'connected') return;
         if (message.requestId && message.requestId !== this._requestId) return;
         if (message.type === 'run.started') { this.addActivity(`${message.mode} · 已开始`); return; }
+        if (message.type === 'todo.updated') {
+            this.renderExecutionChecklist(message.items, message.requestId || message.runId, true);
+            return;
+        }
+        if (message.type === 'goal.evaluated') {
+            this.renderGoalEvaluation(message);
+            return;
+        }
+        if (message.type === 'run.finished') {
+            this.renderExecutionChecklist(message.executionChecklist, message.requestId || message.runId, true);
+            return;
+        }
         if (message.type === 'run.cancelling') { this.addActivity(message.message || '正在安全停止…'); return; }
         if (message.type === 'run.cancel.rejected') { this.addActivity(`无法停止：${message.reason || '任务已结束'}`); return; }
         if (message.type === 'run.persistence-error') {
@@ -407,6 +419,12 @@ Editor.Panel.extend({
         }
         if (message.type === 'run.result') {
             this.addMessage('assistant', message.result?.finalText || '任务已结束。');
+            this.renderExecutionChecklist(message.result?.executionChecklist, message.requestId, true);
+            if (message.result?.goalEvaluation) this.renderGoalEvaluation({
+                ...message.result.goalEvaluation,
+                continuationAttempt: message.result.goalEvaluation.continuationAttempt || 0,
+                maxContinuationAttempts: message.result.goalEvaluation.maxContinuationAttempts || 0,
+            });
             if (message.result?.plan) this.renderPlan(message.result.plan);
             if (message.result?.planProgress) this.renderPlan(message.result.planProgress);
             if (Array.isArray(message.result?.recentRuns)) message.result.recentRuns.forEach((run) => this.renderRecentRun(run));
@@ -450,6 +468,15 @@ Editor.Panel.extend({
         this._pendingApproval = null;
         this.$approval.classList.remove('visible');
         for (const plan of this._plans.values()) this.renderPlan(plan);
+    },
+
+    renderGoalEvaluation(goal) {
+        const outstanding = Array.isArray(goal.outstanding) ? goal.outstanding : [];
+        const summary = goal.satisfied === true
+            ? `验收目标 ${goal.taskId || ''}：全部条件均有成功工具回执。`
+            : `验收目标 ${goal.taskId || ''}：仍有 ${outstanding.length} 项未完成（续跑 ${goal.continuationAttempt || 0}/${goal.maxContinuationAttempts || 0}）。`;
+        const details = outstanding.map((item) => `- ${item.id}: ${item.description} · 缺少回执 ${Array.isArray(item.missingTools) ? item.missingTools.join(', ') || '依赖任务' : '未知'}`);
+        this.addActivity([summary, ...details].join('\n'));
     },
 
     cancelRun() {
@@ -575,6 +602,46 @@ Editor.Panel.extend({
         container.appendChild(details);
     },
 
+    renderExecutionChecklist(items, id, live = false, parent = null) {
+        if (!Array.isArray(items)) return;
+        const key = String(id || 'unknown');
+        if (!this._checklistCards) this._checklistCards = new Map();
+        let card = this._checklistCards.get(key);
+        if (!card && !items.length) return;
+        if (!card || !card.parentNode) {
+            card = document.createElement('section');
+            card.className = 'run-card execution-checklist';
+            this._checklistCards.set(key, card);
+        }
+        card.replaceChildren();
+        const title = document.createElement('h4');
+        title.textContent = live ? '执行清单 · Agent 进度' : '执行清单 · 保留进度';
+        card.appendChild(title);
+        const note = document.createElement('div');
+        note.className = 'run-meta';
+        note.textContent = '模型维护的任务进度；不等同于用户批准的变更计划，也不会授予写入权限。';
+        card.appendChild(note);
+        const list = document.createElement('ul');
+        list.className = 'execution-checklist-items';
+        for (const item of items) {
+            if (!item || typeof item.content !== 'string') continue;
+            const row = document.createElement('li');
+            const status = item.status === 'completed' ? '已完成' : item.status === 'in_progress' ? '进行中' : '待处理';
+            row.textContent = `${status} · ${item.content}`;
+            if (item.status === 'completed') row.className = 'completed';
+            list.appendChild(row);
+        }
+        if (!items.length) {
+            const empty = document.createElement('li');
+            empty.textContent = '当前执行清单为空。';
+            list.appendChild(empty);
+        }
+        card.appendChild(list);
+        const target = parent || this.$messages;
+        if (card.parentNode !== target) target.appendChild(card);
+        if (live) this.$messages.scrollTop = this.$messages.scrollHeight;
+    },
+
     renderRecentRun(run) {
         if (!run || typeof run.id !== 'string') return;
         const card = document.createElement('section');
@@ -587,6 +654,15 @@ Editor.Panel.extend({
         meta.className = 'run-meta';
         meta.textContent = `${run.mode || 'Agent'} · ${run.updatedAt || run.startedAt || ''}${run.reason ? ` · ${run.reason}` : ''}`;
         card.appendChild(meta);
+        if (run.goalEvaluation) {
+            const goal = document.createElement('div');
+            goal.className = 'run-meta';
+            const outstanding = Array.isArray(run.goalEvaluation.outstanding) ? run.goalEvaluation.outstanding : [];
+            goal.textContent = run.goalEvaluation.satisfied
+                ? `验收目标 ${run.goalEvaluation.taskId || ''}：已完成。`
+                : `验收目标 ${run.goalEvaluation.taskId || ''}：${outstanding.map((item) => `${item.id} 缺少 ${Array.isArray(item.missingTools) ? item.missingTools.join(', ') || '依赖任务' : '回执'}`).join('；') || '未满足'}。`;
+            card.appendChild(goal);
+        }
         const receipts = Array.isArray(run.receipts) ? run.receipts : [];
         receipts.forEach((receipt) => {
             if (receipt.expectedDiff !== undefined) this.appendDiffDetails(card, receipt.expectedDiff);
@@ -605,6 +681,7 @@ Editor.Panel.extend({
             ...(activeWrite ? [`中断时正在执行 ${activeWrite.toolName || '未知工具'}；结果尚未读回${activeWrite.operationId ? ` · 操作 ${activeWrite.operationId}` : ''}`] : []),
         ].join('\n')}` : '已记录：没有得到写入回执。';
         card.appendChild(effectLine);
+        this.renderExecutionChecklist(run.executionChecklist, run.id, false, card);
         const recoveryTargets = [...receipts, ...(run.activeTool?.operationId ? [run.activeTool] : [])];
         const seenOperations = new Set();
         for (const receipt of recoveryTargets) {
