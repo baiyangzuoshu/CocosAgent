@@ -39,9 +39,41 @@ test('scene inspection and starting preview cannot complete a requested network 
 test('a genuine read-only task still completes from a content receipt, but task metadata and skills do not', () => {
     assert.equal(evaluate('Read the scene', [receipt('cocos_2x_scene_snapshot', { success: true })]).satisfied, true);
     assert.equal(evaluate('不要修改项目，只读查看场景', [inspect()]).satisfied, true);
+    for (const task of [
+        '只读检查场景。禁止任何写入、补偿、重放。',
+        'After restart, run a strictly read-only acceptance. No writes, approvals, preview, build, compensation, replay, or memory changes. Finally read the current scene.',
+        'Please inspect the current scene. Do not write, compensate, replay, preview, or build.',
+    ]) {
+        const criteria = creatorTaskCriteria(task);
+        assert.deepEqual(criteria.map((item) => item.id), ['requested-read'], task);
+        assert.equal(evaluate(task, [receipt('cocos_2x_scene_snapshot', { success: true })]).satisfied, true, task);
+    }
+    assert.ok(creatorTaskCriteria('分析场景，然后创建节点').some((item) => item.id === 'content-written'),
+        'a positive write request remains in scope when paired with a read request');
+    assert.ok(creatorTaskCriteria('补偿恢复该节点').some((item) => item.id === 'content-written'),
+        'a positive restoration request remains in scope');
     assert.equal(evaluate('分析场景', [receipt('agent_task_list', { success: true })]).satisfied, false);
     assert.equal(evaluate('检查场景', [receipt('cocos_2x_skills_list', { success: true })]).satisfied, false);
     assert.equal(evaluate('Do it', [inspect()]).satisfied, false, 'ambiguous tasks cannot silently become read-only');
+});
+
+test('an explicit multi-step read-only checklist requires a receipt for every requested verification', () => {
+    const task = 'Run a strictly read-only acceptance. Verify the registered instance root and Creator version; read the live capability catalog; read the installed skills index; read cocos2-mcp-tools and its declared contract reference; finally call the dedicated scene snapshot for helloworld. No writes, approvals, preview, build, compensation, replay, or memory changes.';
+    const criteria = creatorTaskCriteria(task);
+    assert.deepEqual(criteria.map((item) => item.id), [
+        'requested-instance', 'requested-capabilities', 'requested-skills-index', 'requested-skill-body',
+        'requested-skill-reference', 'requested-scene-snapshot',
+    ]);
+    const tools = criteria.map((item) => receipt(item.requiredTools[0], { success: true }));
+    assert.equal(evaluate(task, tools).satisfied, true);
+    const setupTools = tools.map((item) => ({ ...item, role: 'setup' }));
+    assert.equal(evaluate(task, setupTools).satisfied, true, 'explicit setup/read receipts satisfy requested read criteria');
+    const writeTool = { ...setupTools[3], access: 'write' };
+    assert.equal(evaluate(task, [...setupTools.slice(0, 3), writeTool, ...setupTools.slice(4)]).satisfied, false);
+    assert.equal(evaluate(task, tools.slice(0, -1)).satisfied, false, 'the checklist remains open when its final snapshot is missing');
+    const failedReference = structuredClone(tools[4]);
+    failedReference.result.structuredContent.success = false;
+    assert.equal(evaluate(task, [...tools.slice(0, 4), failedReference, tools[5]]).satisfied, false);
 });
 
 test('a scene edit requires its operation ledger and matching fresh UUID and expected fields', () => {

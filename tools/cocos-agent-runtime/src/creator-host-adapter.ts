@@ -177,6 +177,13 @@ async function runCreatorMode(options: CreatorAssistantModeRunOptions): Promise<
         options.onEvent({ type: 'tool.finished', runId, callId, toolName: receipt.name,
             isError: receipt.result.isError === true, result: receipt.result });
     }
+    const setupAgentReceipts: AgentReceipt[] = setupReceipts.map((receipt) => ({
+        callId: receipt.callId,
+        toolName: receipt.name,
+        access: 'read',
+        role: 'setup',
+        result: receipt.result,
+    }));
 
     const initialHistory: AgentMessage[] = options.history.slice(-24).map(({ role, content }) => ({ role, content }));
     const formattedContext = options.formatProjectContext(options.projectContext);
@@ -220,7 +227,9 @@ async function runCreatorMode(options: CreatorAssistantModeRunOptions): Promise<
     const acceptanceCriteria = options.mode === 'Agent'
         ? planAcceptance ? planAcceptance.criteria : options.goalCriteria?.length ? options.goalCriteria : creatorTaskCriteria(options.task) : [];
     const verifyReceipt = planAcceptance?.verify || verifyCreatorTaskReceipt;
-    const acceptanceReceipts = (receipts: AgentReceipt[]) => planAcceptance ? planAcceptance.receipts(receipts) : receipts;
+    const acceptanceReceipts = (receipts: AgentReceipt[]) => planAcceptance
+        ? planAcceptance.receipts([...setupAgentReceipts, ...receipts])
+        : [...setupAgentReceipts, ...receipts];
     const taskSystem = options.mode === 'Agent' && options.taskPersistence
         ? new CreatorTaskSystem(options.taskPersistence, verifyReceipt) : null;
     let activeTaskId = options.taskId;

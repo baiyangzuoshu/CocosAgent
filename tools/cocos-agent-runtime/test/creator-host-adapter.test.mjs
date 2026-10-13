@@ -251,7 +251,7 @@ test('Creator Agent creates a durable project task and only closes it after succ
     };
     try {
         const events = [];
-        const result = await runCreatorAgent({ client, task: 'Read the scene', projectRoot, skillFiles: [],
+        const result = await runCreatorAgent({ client, task: 'Read the capability catalog and scene snapshot', projectRoot, skillFiles: [],
             tracePath: '/tmp/cocos-agent-task-system.jsonl', apiKey: 'test-key-for-adapter-only', model: 'deepseek-flash',
             mode: 'Agent', history: [], projectContext: null, onEvent: (event) => events.push(event), skillAdapter,
             formatProjectContext: () => null, writeEvent: () => {}, approveWrite: async () => true,
@@ -261,7 +261,8 @@ test('Creator Agent creates a durable project task and only closes it after succ
         assert.equal(savedTasks.length, 1);
         assert.match(savedTasks[0].id, /^task_[0-9a-f]{8}$/);
         assert.equal(savedTasks[0].status, 'completed');
-        assert.equal(savedTasks[0].acceptanceCriteria[0].status, 'satisfied');
+        assert.deepEqual(savedTasks[0].acceptanceCriteria.map((criterion) => criterion.status), ['satisfied', 'satisfied'],
+            'fresh Host preflight capability receipts satisfy only the explicitly requested read criterion');
         assert.ok(events.some((event) => event.type === 'goal.evaluated' && event.satisfied));
     } finally { globalThis.fetch = originalFetch; }
 });

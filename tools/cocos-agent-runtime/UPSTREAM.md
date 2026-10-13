@@ -5,7 +5,7 @@
 ## 固定上游版本
 
 - 仓库：[`shareAI-lab/learn-claude-code`](https://github.com/shareAI-lab/learn-claude-code)
-- 研究基线：[`0dcafa2ae053a1ddd6a72f265431104b08a5aa13`](https://github.com/shareAI-lab/learn-claude-code/commit/0dcafa2ae053a1ddd6a72f265431104b08a5aa13)，对应上游 `main` 在 2026-10-12 核对到的版本。
+- 研究基线：[`0dcafa2ae053a1ddd6a72f265431104b08a5aa13`](https://github.com/shareAI-lab/learn-claude-code/commit/0dcafa2ae053a1ddd6a72f265431104b08a5aa13)，对应上游 `main` 在 2026-10-12 核对到的版本；2026-10-14 对浮动 `main` 的复核另见下文，不自动移动固定基线。
 - 该提交的课程主线是根目录 `s01`–`s17`。下表链接均指向这个 commit，不随 `main` 后续变化。
 - 根课程的 `s01`–`s17` 原始 `code.py` 与 MIT License 已按原字节归档于 [vendor/learn-claude-code](../../vendor/learn-claude-code/0dcafa2ae053a1ddd6a72f265431104b08a5aa13/)。这些 Python 文件只用于研究和移植对照，不进入 Creator 扩展、运行时或分发包。
 - CocosAgent 产品运行时采用 TypeScript + Node.js。**当前没有逐行或机械翻译自上游的 TS 代码；现有 TS 模块是独立实现。** 上游源码原文、文件哈希和可执行校验器构成移植基线；逐章节的保留行为、TS 对应模块和差异见 [PORTING-MAP.md](PORTING-MAP.md)。
@@ -46,3 +46,7 @@
 - 后续分析或移植必须针对上述固定 SHA；要升级基线时，先记录旧/新 SHA、逐章差异和本地合同影响，再更新本表。不要直接把链接改回浮动的 `main`。
 - 上游许可为 MIT，版权归 shareAI Lab。上游源码快照目录内保留原始 `LICENSE` 和 `NOTICE.md`；[SOURCE-MANIFEST.json](../../vendor/learn-claude-code/0dcafa2ae053a1ddd6a72f265431104b08a5aa13/SOURCE-MANIFEST.json) 固定每个文件的 SHA-256 与 Git blob SHA-1。若将来把上游代码复制或翻译进产品分发物，须继续保留版权和许可声明，并记录具体衍生文件。
 - 本包开发使用 `npm ci` 安装锁定依赖并构建 `src/`；Creator 扩展分发 TypeScript 编译后的 JavaScript。Python 只用于上游课程示例或既有研究脚本，不是 CocosAgent 产品运行时依赖。
+
+## 浮动 `main` 差异抽查（2026-10-14）
+
+上游 `main` 当前提交 [`ce8f9f186058939da54c9d6fead78dfb5d0fd6c3`](https://github.com/shareAI-lab/learn-claude-code/commit/ce8f9f186058939da54c9d6fead78dfb5d0fd6c3)（#586）在 `s11_background_tasks/code.py` 和 `s15_integrated_harness/code.py` 增加 Windows 上后台进程清理兼容。`s11` 通用后台任务属于 CocosAgent 明确排除范围；`s15` 是 Python 教学 harness 的跨平台实现，而本产品使用独立 TypeScript/Node.js Host、工程隔离任务状态和 Creator 专用生命周期，因此这项改动没有可直接移植的上游实现差异，也没有改变 CocosAgent 当前固定 SHA 的研究映射。**当前没有发现需要因该上游提交而改动产品范围或移植基线的偏离。** 如后续承诺 Windows Creator 支持，再单独核验 TS Host 与任务存储的 Windows 语义；本次抽查不构成 Windows 产品验收。

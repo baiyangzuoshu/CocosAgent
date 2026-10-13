@@ -2,6 +2,9 @@ import type { AgentGoalCriterion, AgentReceipt, JsonObject } from './contracts.j
 
 const READ_TOOLS = ['cocos_2x_scene_snapshot', 'cocos_2x_scene_node_inspect', 'cocos_2x_script_read',
     'cocos_2x_asset_search_png', 'cocos_2x_operation_get', 'cocos_2x_script_operation_get', 'cocos_2x_runtime_observe', 'cocos_2x_command_execute'];
+const REQUESTABLE_READ_TOOLS = [
+    'cocos_2x_instances_list', 'cocos_2x_instances_get', 'cocos_2x_capabilities_list', 'cocos_2x_skills_list',
+    'cocos_2x_skill_read', 'cocos_2x_skill_reference_read', 'cocos_2x_project_instructions_read'];
 const WRITE_TOOLS = ['cocos_2x_command_execute', 'cocos_2x_script_patch'];
 const LEDGER_TOOLS = ['cocos_2x_operation_get', 'cocos_2x_script_operation_get'];
 const READBACK_TOOLS = [...LEDGER_TOOLS, 'cocos_2x_scene_node_inspect', 'cocos_2x_script_read', 'cocos_2x_command_execute'];
@@ -24,24 +27,52 @@ function criterion(id: string, description: string, tools: string[], receiptRequ
     return { id, description, requiredTools: tools, toolMatch: 'any', receiptRequirement };
 }
 
+function removeNegatedScopes(task: string): string {
+    return task
+        // Chinese task prompts commonly enumerate forbidden actions up to a comma,
+        // then continue with the permitted read-only request.
+        .replace(/(?:禁止|严禁|不得|不允许|不可以|不要|无需|不必|无须|不需要)\s*(?:进行|执行|调用|任何|再)?[^，,。；;.!?\n]*/g, ' ')
+        // English prompts often list several prohibited actions separated by commas.
+        .replace(/\b(?:no|never|without|do\s+not|don['’]t|must\s+not|mustn['’]t|prohibit(?:ed)?)\b[^.!?;\n]*/gi, ' ')
+        .replace(/^[\s,，。；;]+|[\s,，。；;]+$/g, '')
+        .trim();
+}
+
+function requestedReadCriteria(task: string): AgentGoalCriterion[] {
+    const requested: Array<[string, RegExp, string]> = [
+        ['instance', /\b(?:registered\s+)?instance\b|\binstances?\s+(?:list|get|query)\b|实例|工程实例/i, 'cocos_2x_instances_get'],
+        ['capabilities', /\bcapabilit(?:y|ies)\s+(?:catalog|list|directory)\b|能力(?:目录|目錄|清单|清單)/i, 'cocos_2x_capabilities_list'],
+        ['skills-index', /\bskills?\s+index\b|技能(?:索引|目录|目錄)/i, 'cocos_2x_skills_list'],
+        ['skill-body', /\b(?:read|inspect|verify)\b.{0,100}\b(?:skill|cocos2-mcp-tools)\b|读取.{0,80}skill|技能正文|skill\s+[`'"“][^`'"”]+[`'"“]/i, 'cocos_2x_skill_read'],
+        ['skill-reference', /\bdeclared\b.{0,120}\breferences?\b|\bcontract\s+references?\b|合同引用|声明的引用/i, 'cocos_2x_skill_reference_read'],
+        ['scene-snapshot', /\bscene\s+snapshot\b|场景快照/i, 'cocos_2x_scene_snapshot'],
+    ];
+    return requested.filter(([, pattern]) => pattern.test(task)).map(([id, , tool]) =>
+        criterion(`requested-${id}`, `取得 ${tool} 的本轮成功只读回执`, [tool], 'creator-requested-read'));
+}
+
 /** Conservative scope recognition. Unknown requests require clarification, never a generic successful receipt. */
 export function creatorTaskCriteria(task: string): AgentGoalCriterion[] {
-    const value = task.trim().replace(/(?:不要|无需|不必)(?:修改|创建|新增|添加|删除|写入)[^，。；,;\n]*/g, '')
-        .replace(/\bdo not (?:modify|create|add|delete|write)[^,;\n.]*/gi, '').replace(/^[\s,，。；;]+/, '').trim();
-    const read = /^(?:(?:请|帮我|麻烦|先)\s*)*(?:只读|阅读|读取|查看|检查|查询|分析|解释|总结|列出|核对)|^(?:please\s+)?(?:read|inspect|check|query|analy[sz]e|explain|summari[sz]e|list|show)\b/i.test(value);
+    const value = removeNegatedScopes(task);
+    const read = /只读|只讀|read[ -]only|\b(?:read|inspect|check|query|analy[sz]e|explain|summari[sz]e|list|show|verify)\b|(?:阅读|读取|查看|检查|查询|分析|解释|总结|列出|核对)/i.test(value);
     const restore = /补偿|恢复|撤销|回滚|\bcompensate\b|\brestore\b|\bundo\b|\brollback\b/i.test(value);
     const contentScope = value.replace(/(?:删除|修改|更新|纠正|压缩|整合|合并|整理)(?:这条|该|一条|所有|项目)?记忆|\b(?:delete|remove|modify|update|correct|compact|consolidate|merge|organize)\s+(?:the\s+|this\s+|project\s+)?memory\b/gi, '');
-    const modifies = restore || /创建|新建|新增|增加|添加|制作|搭建|修改|改名|重命名|改为|改成|更新|删除|实现|修复|重构|移动|调整|替换|实例化|生成|导入|做一个|建一个|帮我做|\b(?:create|make|build|add|modify|change|rename|update|delete|remove|implement|fix|refactor|move|replace|instantiate|import)\b/i.test(contentScope);
+    const modifies = restore || /写入|保存|创建|新建|新增|增加|添加|制作|搭建|修改|改名|重命名|改为|改成|更新|删除|实现|修复|重构|移动|调整|替换|实例化|生成|导入|做一个|建一个|帮我做|\b(?:write|save|create|make|build|add|modify|change|rename|update|delete|remove|implement|fix|refactor|move|replace|instantiate|import)\b/i.test(contentScope);
     const memoryMutation = /记住|忘记|(?:删除|修改|更新|纠正|压缩|整合|合并|整理).*记忆|\bremember\b|\bforget\b|\b(?:delete|remove|modify|update|correct|compact|consolidate|merge|organize).*\bmemory\b/i.test(value);
+    const explicitReads = requestedReadCriteria(value);
     if (memoryMutation && !modifies) {
         const requirements = [criterion('memory-mutation', '取得经批准、已持久化的记忆变更回执', MEMORY_WRITES, 'creator-memory-write')];
-        if (read) requirements.unshift(criterion('requested-read', '取得本次只读检查所需的 Creator 内容回执', READ_TOOLS, 'creator-read'));
+        if (read) requirements.unshift(...(explicitReads.length ? explicitReads
+            : [criterion('requested-read', '取得本次只读检查所需的 Creator 内容回执', READ_TOOLS, 'creator-read')]));
         return requirements;
     }
     // A read prefix must not downgrade a mixed inspect-and-create request.
-    if (read && !modifies) return [criterion('requested-read', '取得本次只读检查所需的 Creator 内容回执', READ_TOOLS, 'creator-read')];
+    if (read && !modifies) return explicitReads.length ? explicitReads
+        : [criterion('requested-read', '取得本次只读检查所需的 Creator 内容回执', READ_TOOLS, 'creator-read')];
     if (!modifies) return [criterion('request-scope', '任务目标尚不明确：请明确仅检查还是修改，以及要验收的对象', READ_TOOLS, 'creator-scope-unknown')];
     const requirements = [
+        ...(read ? (explicitReads.length ? explicitReads
+            : [criterion('requested-read', '取得本次只读检查所需的 Creator 内容回执', READ_TOOLS, 'creator-read')]) : []),
         criterion('content-written', restore ? '取得经批准且保存读回通过的补偿/恢复操作' : '取得经批准且编辑器与磁盘验证通过的实际内容写入', WRITE_TOOLS,
             restore ? 'creator-restoration-write' : 'creator-content-write'),
         criterion('operation-readback', '在最后一次内容写入之后，重新核对本轮每个操作 ID 的保存账本', LEDGER_TOOLS, 'creator-ledger'),
@@ -156,6 +187,8 @@ export function verifyCreatorTaskReceipt(criterion: AgentGoalCriterion, receipt:
     if (requirement === 'creator-read') return receipt.role === 'task' && good(receipt)
         && (receipt.toolName === 'cocos_2x_command_execute' ? READ_COMMANDS.has(command(receipt))
             : receipt.access === 'read' && READ_TOOLS.includes(receipt.toolName));
+    if (requirement === 'creator-requested-read') return ['setup', 'task'].includes(receipt.role) && receipt.access === 'read'
+        && good(receipt) && criterion.requiredTools.includes(receipt.toolName);
     if (requirement === 'creator-memory-write') return receipt.access === 'write' && good(receipt) && MEMORY_WRITES.includes(receipt.toolName)
         && ['remembered', 'corrected', 'deleted', 'compacted'].includes(text(data(receipt).outcome)) && !!operationId(receipt);
     if (requirement === 'creator-scope-unknown' || requirement === 'creator-interaction') return false;
