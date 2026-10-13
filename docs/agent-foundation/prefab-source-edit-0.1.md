@@ -21,6 +21,8 @@
 
 下一轮必须重新调用 `prefab.source.inspect`，读取新的源哈希和字段值。旧哈希用于新一轮写入会被 `PREFAB_SOURCE_STALE` 拒绝。这样同一 Prefab 的每一轮修改都链接到新状态，不把前一轮的 before 值套用到后续内容。
 
+改名时 `targetNodePath` 的末段必须等于差异中 `node.name.before`。预检使用该 before 路径；保存重开和磁盘读回仅将末段派生为 `node.name.after`，仍要求同一节点 UUID、相同父级路径、唯一层级及所有字段一致。补偿和重放使用当次 manifest 的 before/after 路径规则；不会只凭 UUID 跳过路径校验。
+
 只读检查反映磁盘上已保存的 Prefab。若 Creator 正在 Prefab 编辑模式且有未保存修改，先保存或退出并检查；写入命令会拒绝从现有 Prefab 子模式开始，避免把未保存状态当作磁盘基线。
 
 `compensate` 通过已完成操作的 `sourceOperationId` 派生逆向差异；执行前要求当前 Prefab 哈希等于源操作的 after 哈希，且活动与磁盘字段仍匹配。完成补偿后，`replay` 必须基于该已完成的补偿操作和新的 operation ID。禁止直接重发旧 apply 或用旧哈希覆盖更新后的 Prefab。
@@ -39,6 +41,7 @@
 
 - 完成扩展消息、Host 持久操作记录、JSON Schema、MCP 命令目录、只读源检查和序列化层级校验。
 - 2026-10-13：0.3.14 场景进程桥接已实现，移除主进程固定返回 `null` 的入口；本轮构建与语法检查结果另行记录，未运行新的自动测试或真实 Prefab 写入。
+- 2026-10-13：0.3.16 修正场景端重开及 Host 磁盘读回沿用改名前路径的问题，并拒绝末段与改名前值不一致的输入。构建/语法检查不替代原生改名、二次改名、补偿和重放的实机验收。
 - 通过 Prefab 合同、差异逆转、目标节点路径/UUID、序列化父子关系与只读资源检查测试。Host 模拟扩展通道完成同一 Prefab 两轮修改、陈旧哈希拒绝、第二轮补偿/重放及首轮补偿，并逐轮检查哈希和父子、组件、SpriteFrame 引用关系；模拟通道只验证 Host 编排和持久记录，不验证 Creator 内部编辑模式时序。仓库内 Host 回归、双版本目录、多实例 Catalog Host 和 MCP schema/routing 测试均通过。
 - **真实 Creator 2.4.15 Prefab 多轮修改、保存/重开、SpriteFrame 引用改换、补偿与重放尚未验收。** 实机验收需在 Creator 窗口可交互时运行；内部 `scene://edit-mode.save/pop` 时序是主要待证据项。
 - 在实机验收完成前，不把此命令描述成已验证能力，也不在 `AGENTS.md` 中登记为完成项。

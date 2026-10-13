@@ -9,7 +9,7 @@ import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { DEFAULT_BASE_URL, DEFAULT_MODEL, writeEvent } from './deepseek-agent.mjs';
 import { parseStructuredPlan } from './structured-plan.mjs';
-import { beginPlanStep, createPlan, finishPlanStep, hasPlanSetupReceipts, planView } from './assistant-plan-service.mjs';
+import { beginPlanStep, createPlan, finishPlanStep, hasPlanSetupReceipts, planView, planAcceptanceContext } from './assistant-plan-service.mjs';
 import { AssistantStateStore } from './assistant-state-store.mjs';
 import { AssistantMemoryFileStore } from './assistant-memory-store.mjs';
 import { AssistantToolResultArchive } from './assistant-tool-result-archive.mjs';
@@ -46,7 +46,7 @@ async function runTypeScriptReadOnly({ client, task, projectRoot, skillFiles, tr
 }
 
 async function runTypeScriptAgent({ client, task, projectRoot, skillFiles, tracePath, apiKey, model, history,
-    projectContext, signal, onEvent, approveWrite, memoryStore, taskStore, goalCriteria }) {
+    projectContext, signal, onEvent, approveWrite, memoryStore, taskStore, planAcceptance }) {
     const runtimeUrl = pathToFileURL(path.join(REPOSITORY_ROOT, 'tools/cocos-agent-runtime/dist/index.js')).href;
     const runtime = await import(runtimeUrl);
     const legacyAdapter = await import('./deepseek-agent.mjs');
@@ -59,7 +59,7 @@ async function runTypeScriptAgent({ client, task, projectRoot, skillFiles, trace
         writeEvent,
         projectMemory: { projectKey: memoryStore.projectKey, persistence: memoryStore },
         taskPersistence: taskStore,
-        ...(goalCriteria ? { goalCriteria } : {}),
+        ...(planAcceptance ? { planAcceptance } : {}),
     });
 }
 
@@ -478,12 +478,14 @@ async function start(options) {
             }
 
             let activePlan = null;
+            let approvedPlanAcceptance = null;
             let taskText = planExecutionRequested ? '' : message.text.trim();
             if (planExecutionRequested) {
                 activePlan = plans.get(message.planExecution.planId) || null;
                 try {
                     taskText = beginPlanStep(activePlan, { conversationId: message.conversationId,
                         planId: message.planExecution.planId, stepIndex: message.planExecution.stepIndex });
+                    approvedPlanAcceptance = planAcceptanceContext(activePlan);
                 } catch (error) {
                     send(socket, { type: 'run.rejected', requestId: message.requestId, reason: error.message });
                     return;
@@ -598,9 +600,7 @@ async function start(options) {
                     approveWrite,
                     memoryStore,
                     taskStore,
-                    ...(activePlan ? { goalCriteria: activePlan.steps[message.planExecution.stepIndex].requiredTools.map((name, index) => ({
-                        id: `required-tool-${index + 1}`, description: `Successful receipt from ${name}`, requiredTools: [name],
-                    })) } : {}),
+                    ...(approvedPlanAcceptance ? { planAcceptance: approvedPlanAcceptance } : {}),
                 })
                 : runTypeScriptReadOnly({
                     client,
@@ -617,7 +617,7 @@ async function start(options) {
                     onEvent: onAgentEvent,
                     memoryStore,
                 });
-            void agentRun.then((rawResult) => {
+            void agentRun.then(async (rawResult) => {
                 let result = rawResult;
                 let structuredPlan = null;
                 let assistantText;
@@ -639,7 +639,15 @@ async function start(options) {
                     assistantText = assistantAnswer(result, message.mode);
                 }
                 if (activePlan) {
-                    finishPlanStep(activePlan, result);
+                    const runtime = await import(pathToFileURL(path.join(REPOSITORY_ROOT, 'tools/cocos-agent-runtime/dist/index.js')).href);
+                    const business = runtime.evaluateCreatorPlanAcceptance(approvedPlanAcceptance, result.receipts || []);
+                    if (result.status === 'completed' && !business.satisfied) {
+                        result = { ...result, status: 'stopped', reason: 'plan-business-acceptance-unmet',
+                            goalEvaluation: { satisfied: false, outstanding: business.outstanding },
+                            finalText: `计划尚未完成。\n未完成业务验收：\n${business.outstanding.map((item) => `- ${item.description}`).join('\n')}` };
+                    }
+                    finishPlanStep(activePlan, result, business);
+                    assistantText = assistantAnswer(result, message.mode);
                     writeEvent(result.tracePath, { event: 'plan.step.finished', plan: planView(activePlan),
                         stepIndex: message.planExecution.stepIndex, runStatus: result.status, reason: result.reason }, apiKey);
                 }

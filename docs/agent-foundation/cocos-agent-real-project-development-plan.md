@@ -4,6 +4,25 @@
 
 **技术栈补充决定（2026-10-11；实现与验收更新于 2026-10-12）：Agent 内核以 `learn-claude-code` 为机制移植基线，产品实现使用 TypeScript + Node.js，不运行上游 Python。** `tools/cocos-agent-runtime/` 承载 TS loop、DeepSeek Provider、MCP 适配、实例/能力预检、Agent 工具门槛与恢复限制；Assistant Host 的 Ask、Plan、Agent 均已路由至 TS 内核。skill 目录、正文与引用仍由 `deepseek-agent.mjs` 的只读 MCP Resource 适配器提供，Agent loop 根据工具回执强制先读任务 skill 和声明引用。TS runtime 58 项测试、MCP/扩展 84 项测试均通过，专项回归覆盖 Hook/Todo、任务依赖环和持久化、Goal Loop 缺项续跑与上限停止、恢复锁和面板验收项展示。Creator 面板端到端验收仍待进行。真实 Creator 面板运行的 TS Agent 只读任务读取 13 项技能目录、`cocos2-scene-node-operations` 正文及合同引用，再成功取得 `helloworld` 完整快照（19 个节点）；runId `84f18514-a8d4-442d-9ef4-dc3e1d4c06ab`。随后 TS Agent 在 Creator 面板中完成一项精确补偿：先读同一 skill/reference、源账本和实时节点，再经面板批准执行 `scene.node.patch`，将原 operation `a7d3f106-5c92-4b7e-8e41-2b93de7c0f58` 的差异 `x:220→221` 补偿为 `x:221→220`。新补偿 operation `3f8c1d47-6a25-4b90-9e13-72d5ac8b04e6` 的 `editor/disk/recovery` 通过；源及补偿账本读回成功，最终实时节点为 `(220,100)`，无 replay、needs-review 或额外写入。runId `86eea250-80f1-4472-8592-88c026c6c4cf`，本机轨迹 `~/.local/state/CocosAgent/agent-runs/2026-10-11T16-21-48-721Z-b052586f.jsonl`。实测还暴露空模型回复及多工具批调用导致提前停止；TS loop 已加入有界重试，自动测试覆盖继续与耗尽停止，尚未声称 Creator 面板实机触发过新批调用重试分支。旧 JS 指定 PNG 原生写入记录见下文和 AGENTS.md。
 
+## 新增能力实施门槛（2026-10-13）
+
+后续新增能力统一按 **命令合同 → 编辑器桥接 → 产品 skill → 原生实机验收** 推进。每项能力先关联一个具体、可复现的 Creator 2.4.15 用户任务；复用既有阶段时，重新核对版本、能力可用性、合同和证据范围。
+
+| 阶段 | 必须交付 | 完成状态 |
+| --- | --- | --- |
+| 命令合同 | 明确支持版本、输入 schema、读写级别、目标 UUID/hash/前值、前置条件、属性范围、成功回执、业务验收条件、失败副作用和对账/恢复流程 | 合同已定义 |
+| 编辑器桥接 | 完成所属进程的 Creator API 接线、Host/MCP 路由、实时能力探测；读写能力分别核对身份、保存读回、超时和恢复。Host 能力在此阶段完成原生上下文、运行时及面板接线 | 桥接已实现 |
+| 产品 skill | 在 `plugins/cocos-agent-2x/skills/` 增补对应工作流，引用权威合同，说明参数来源、审批、验证和失败恢复；同步技能索引、打包、原生读取与哈希校验，并明确实际实现/验收边界 | skill 已发布 |
+| 原生实机验收 | 从真实 Creator 原生面板发起任务，由模型读取产品 skill/引用并调用受控工具；核对编辑器、项目磁盘及相应运行行为。涉及写入时按合同分别验证补偿、恢复或新 ID 重放，保留版本、工程、run/operation 身份和真实证据 | 原生实机验收通过 |
+
+只读能力以读取身份和真实结果验收；功能性写入还需证明用户要求的行为。工具成功回执、模拟测试、能力目录声明、安装和构建结果分别保留其证据含义，只有真实闭环通过后才登记为已验证能力。尚缺实机证据时，明确记录当前阶段、未完成项及已有副作用/恢复状态。
+
+新增能力所需的步骤知识通过产品 skill 发布；涉及缺失编辑器操作或观察入口时，先补命令与桥接。Codex 的 `.codex/skills/` 继续用于 Codex 工作流；Creator 原生 Agent 消费自身包内的产品技能。
+
+## 0.3.16 修复进度（2026-10-13）
+
+批准 Plan 使用 version 2 的逐步业务条件，并在最终步骤按原始用户目标核对实际写入、最新账本/目标读回及适用的运行验收；前序真实回执以有界元数据保存，旧计划需要重新生成。Prefab 源改名的场景重开与磁盘读回都按当次 before/after 名称派生路径，继续校验 UUID、父级和字段。合同、桥接/Host/TS/面板及产品 skill 已更新；构建和语法检查不代表实机验收，原生计划执行、跨 Host 恢复及 Prefab 连续改名/补偿/重放仍待验证。详见 [Plan 业务验收合同](cocos-agent-plan-business-acceptance-0.1.md)和 [Prefab 源合同](prefab-source-edit-0.1.md)。
+
 ## 1. 目标
 
 让开发者在 Cocos Creator 内直接向 CocosAgent 描述游戏开发任务。Agent 能读取当前工程和编辑器状态、形成可审阅计划、调用经校验的编辑器能力，并用磁盘读回、导入/编译反馈、预览画面和运行状态验证结果。失败时明确说明已完成步骤与副作用，并使用已有记录恢复。

@@ -946,6 +946,9 @@ Editor.Panel.extend({
             const detail = document.createElement('div');
             detail.className = 'plan-detail';
             detail.textContent = `${step.description}\n前置条件：${step.preconditions.join('；') || '无'}\n必需工具：${step.requiredTools.join('、')}\n验证：${step.validation}\n恢复：${step.recovery}`;
+            const acceptanceLabels = { read: '只读检查', write: '保存、账本和目标读回', restore: '恢复与读回',
+                runtime: '目标运行状态与画面', interaction: '交互功能（当前缺少自动验收入口）', memory: '记忆持久化' };
+            detail.textContent += `\n业务验收：${acceptanceLabels[step.acceptance?.kind] || '旧计划尚未定义'}`;
             const evidence = (plan.stepEvidence || []).find((item) => item.stepIndex === plan.steps.indexOf(step));
             if (evidence) detail.textContent += `\n已发生的副作用与回执：\n${JSON.stringify(evidence.receipts || [], null, 2).slice(0, 4000)}`;
             item.appendChild(detail);
@@ -958,8 +961,10 @@ Editor.Panel.extend({
             'waiting-next': `已完成 ${plan.completedSteps}/${plan.steps.length} 步`,
             paused: '当前步骤未完成，可重试；写入仍需单独批准',
             'needs-review': '执行结果不确定，已锁定计划；请先在 Agent 模式核对操作回执',
-            completed: '计划全部步骤已完成' };
+            'needs-regeneration': '旧计划缺少业务验收条件；请先核对已有操作，再重新生成计划',
+            completed: '计划步骤与整项目标验收已通过' };
         status.textContent = labels[plan.status] || '计划状态未知';
+        if (plan.businessEvaluation?.satisfied === false) status.textContent += `\n未完成验收：${(plan.businessEvaluation.outstanding || []).map((item) => item.description).join('；')}`;
         card.appendChild(status);
         const canStart = ['proposed', 'waiting-next', 'paused'].includes(plan.status) && plan.nextStepIndex < plan.steps.length;
         if (canStart) {

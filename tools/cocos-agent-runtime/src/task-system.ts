@@ -41,7 +41,7 @@ export interface CreatorTaskPersistence {
 
 const TASK_ID = /^task_[0-9a-f]{8}$/;
 const MAX_TASKS = 100;
-const MAX_CRITERIA = 12;
+const MAX_CRITERIA = 24;
 const MAX_TASK_TEXT = 1200;
 const SENSITIVE_VALUE = /\b(?:sk-[A-Za-z0-9_-]{12,}|Bearer\s+[A-Za-z0-9._-]{12,})\b/gi;
 

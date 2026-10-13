@@ -18,7 +18,7 @@ function safeString(value, limit = MAX_STRING) {
 }
 
 function safeValue(value, depth = 0) {
-    if (depth > 8) return null;
+    if (depth > 12) return null;
     if (value === null || typeof value === 'boolean' || typeof value === 'number') return value;
     if (typeof value === 'string') return safeString(value);
     if (Array.isArray(value)) return value.slice(0, 64).map((item) => safeValue(item, depth + 1));

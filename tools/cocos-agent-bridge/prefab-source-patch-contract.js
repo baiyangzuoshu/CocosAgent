@@ -18,6 +18,7 @@ function validInput(input) {
         && (input.action !== 'apply' || SHA256.test(input.expectedPrefabSha256 || ''))
         && ['apply', 'compensate', 'replay'].includes(input.action)
         && scenePatch.validateDiff(input.expectedDiff)
+        && input.expectedDiff.every((item) => item.path !== 'node.name' || input.targetNodePath.split('/').pop() === item.before)
         && (input.action === 'apply' ? input.sourceOperationId === undefined : UUID.test(input.sourceOperationId || ''))
         && (input.operationId === undefined || UUID.test(input.operationId));
 }

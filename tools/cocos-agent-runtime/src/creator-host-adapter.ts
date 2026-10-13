@@ -6,8 +6,10 @@ import { CreatorMemoryToolRegistry, CreatorProjectMemory } from './project-memor
 import { AgentHookRegistry } from './lifecycle-hooks.js';
 import { CreatorTaskSystem, CreatorTaskToolRegistry, evaluateGoalEvidence, type CreatorTaskPersistence } from './task-system.js';
 import { creatorTaskCriteria, verifyCreatorTaskReceipt } from './creator-task-acceptance.js';
+import { createCreatorPlanAcceptance, creatorPlanToolAllowed, type CreatorPlanAcceptanceContext } from './creator-plan-acceptance.js';
 import type {
     AgentEvent,
+    AgentPolicyToolContext,
     AgentGoal,
     AgentMessage,
     AgentMode,
@@ -72,6 +74,7 @@ export interface CreatorAssistantModeRunOptions {
     projectMemory?: { projectKey: string; persistence: ProjectMemoryPersistence };
     taskPersistence?: CreatorTaskPersistence;
     goalCriteria?: Array<{ id: string; description: string; requiredTools: string[] }>;
+    planAcceptance?: CreatorPlanAcceptanceContext;
     taskId?: string;
     toolResultArchive?: AgentToolResultArchive;
     approveWrite?(tool: { name: string; access: 'read' | 'write' }, args: JsonObject): Promise<boolean>;
@@ -97,6 +100,7 @@ export interface CreatorAssistantReadOnlyRunResult extends Omit<AgentRunResult, 
         name: string;
         callId: string;
         access: string;
+        role?: AgentReceipt['role'];
         isError?: boolean;
         structuredContent?: JsonObject;
         content?: AgentToolResult['content'];
@@ -212,10 +216,13 @@ async function runCreatorMode(options: CreatorAssistantModeRunOptions): Promise<
     }) : null;
     const registry = memory ? new CreatorMemoryToolRegistry(cocosRegistry, memory, () => cocosRegistry.canWrite) : cocosRegistry;
     const memoryTools = memory?.tools() || [];
+    const planAcceptance = options.mode === 'Agent' && options.planAcceptance ? createCreatorPlanAcceptance(options.planAcceptance) : null;
     const acceptanceCriteria = options.mode === 'Agent'
-        ? options.goalCriteria?.length ? options.goalCriteria : creatorTaskCriteria(options.task) : [];
+        ? planAcceptance ? planAcceptance.criteria : options.goalCriteria?.length ? options.goalCriteria : creatorTaskCriteria(options.task) : [];
+    const verifyReceipt = planAcceptance?.verify || verifyCreatorTaskReceipt;
+    const acceptanceReceipts = (receipts: AgentReceipt[]) => planAcceptance ? planAcceptance.receipts(receipts) : receipts;
     const taskSystem = options.mode === 'Agent' && options.taskPersistence
-        ? new CreatorTaskSystem(options.taskPersistence, verifyCreatorTaskReceipt) : null;
+        ? new CreatorTaskSystem(options.taskPersistence, verifyReceipt) : null;
     let activeTaskId = options.taskId;
     if (taskSystem && !activeTaskId) {
         const task = await taskSystem.create({
@@ -287,9 +294,19 @@ async function runCreatorMode(options: CreatorAssistantModeRunOptions): Promise<
             if (!policy) throw new Error('CREATOR_AGENT_RUN_POLICY_MISSING');
             return {
                 ...policy,
+                async beforeTool(context: AgentPolicyToolContext) {
+                    const decision = await policy.beforeTool?.(context);
+                    if (decision?.action === 'block') return decision;
+                    if (options.planAcceptance && !creatorPlanToolAllowed(options.planAcceptance, context)) {
+                        return { action: 'block' as const, code: 'PLAN_TOOL_OUT_OF_SCOPE', continue: true,
+                            message: '该工具或写入不属于当前批准步骤。报告缺少的验收条件；不得重复前序写入以满足整项计划。' };
+                    }
+                    return decision || { action: 'allow' as const };
+                },
                 async evaluateGoal({ goal, receipts }: { goal: AgentGoal; receipts: AgentReceipt[] }) {
-                    const acceptance = evaluateGoalEvidence({ ...goal, criteria: acceptanceCriteria }, receipts, verifyCreatorTaskReceipt);
-                    const progress = taskSystem && activeTaskId ? await taskSystem.recordReceipts(goal.taskId, receipts, false) : null;
+                    const evidenceReceipts = acceptanceReceipts(receipts);
+                    const acceptance = evaluateGoalEvidence({ ...goal, criteria: acceptanceCriteria }, evidenceReceipts, verifyReceipt);
+                    const progress = taskSystem && activeTaskId ? await taskSystem.recordReceipts(goal.taskId, evidenceReceipts, false) : null;
                     const outstanding = [...new Map([...acceptance.outstanding, ...(progress?.outstanding || [])]
                         .map((item) => [item.id, item])).values()];
                     return { satisfied: outstanding.length === 0, outstanding };
@@ -358,8 +375,8 @@ async function runCreatorMode(options: CreatorAssistantModeRunOptions): Promise<
     });
 
     const acceptance = options.mode === 'Agent' ? evaluateGoalEvidence({ taskId: activeTaskId || runId,
-        criteria: acceptanceCriteria }, result.receipts, verifyCreatorTaskReceipt) : undefined;
-    const progress = taskSystem && activeTaskId ? await taskSystem.recordReceipts(activeTaskId, result.receipts,
+        criteria: acceptanceCriteria }, acceptanceReceipts(result.receipts), verifyReceipt) : undefined;
+    const progress = taskSystem && activeTaskId ? await taskSystem.recordReceipts(activeTaskId, acceptanceReceipts(result.receipts),
         result.status === 'completed' && acceptance?.satisfied === true && result.goalEvaluation?.satisfied === true) : undefined;
     const outstanding = acceptance ? [...new Map([...acceptance.outstanding, ...(progress?.outstanding || [])]
         .map((item) => [item.id, item])).values()] : undefined;
@@ -383,6 +400,7 @@ async function runCreatorMode(options: CreatorAssistantModeRunOptions): Promise<
                 name: receipt.toolName,
                 callId: receipt.callId,
                 access: receipt.access,
+                role: receipt.role,
                 ...receipt.result,
                 result: receipt.result,
             }))],

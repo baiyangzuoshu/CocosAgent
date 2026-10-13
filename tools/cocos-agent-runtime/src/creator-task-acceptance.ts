@@ -1,7 +1,7 @@
 import type { AgentGoalCriterion, AgentReceipt, JsonObject } from './contracts.js';
 
 const READ_TOOLS = ['cocos_2x_scene_snapshot', 'cocos_2x_scene_node_inspect', 'cocos_2x_script_read',
-    'cocos_2x_asset_search_png', 'cocos_2x_operation_get', 'cocos_2x_script_operation_get', 'cocos_2x_runtime_observe'];
+    'cocos_2x_asset_search_png', 'cocos_2x_operation_get', 'cocos_2x_script_operation_get', 'cocos_2x_runtime_observe', 'cocos_2x_command_execute'];
 const WRITE_TOOLS = ['cocos_2x_command_execute', 'cocos_2x_script_patch'];
 const LEDGER_TOOLS = ['cocos_2x_operation_get', 'cocos_2x_script_operation_get'];
 const READBACK_TOOLS = [...LEDGER_TOOLS, 'cocos_2x_scene_node_inspect', 'cocos_2x_script_read', 'cocos_2x_command_execute'];
@@ -31,7 +31,7 @@ export function creatorTaskCriteria(task: string): AgentGoalCriterion[] {
     const read = /^(?:(?:请|帮我|麻烦|先)\s*)*(?:只读|阅读|读取|查看|检查|查询|分析|解释|总结|列出|核对)|^(?:please\s+)?(?:read|inspect|check|query|analy[sz]e|explain|summari[sz]e|list|show)\b/i.test(value);
     const restore = /补偿|恢复|撤销|回滚|\bcompensate\b|\brestore\b|\bundo\b|\brollback\b/i.test(value);
     const contentScope = value.replace(/(?:删除|修改|更新|纠正)(?:这条|该|一条|所有|项目)?记忆|\b(?:delete|remove|modify|update|correct)\s+(?:the\s+|this\s+|project\s+)?memory\b/gi, '');
-    const modifies = restore || /创建|新建|新增|增加|添加|制作|搭建|修改|改为|改成|更新|删除|实现|修复|重构|移动|调整|替换|实例化|生成|导入|做一个|建一个|帮我做|\b(?:create|make|build|add|modify|change|update|delete|remove|implement|fix|refactor|move|replace|instantiate|import)\b/i.test(contentScope);
+    const modifies = restore || /创建|新建|新增|增加|添加|制作|搭建|修改|改名|重命名|改为|改成|更新|删除|实现|修复|重构|移动|调整|替换|实例化|生成|导入|做一个|建一个|帮我做|\b(?:create|make|build|add|modify|change|rename|update|delete|remove|implement|fix|refactor|move|replace|instantiate|import)\b/i.test(contentScope);
     const memoryMutation = /记住|忘记|(?:删除|修改|更新|纠正).*记忆|\bremember\b|\bforget\b|\b(?:delete|remove|modify|update|correct).*\bmemory\b/i.test(value);
     if (memoryMutation && !modifies) {
         const requirements = [criterion('memory-mutation', '取得经批准、已持久化的记忆变更回执', MEMORY_WRITES, 'creator-memory-write')];
@@ -153,7 +153,9 @@ function targetMatches(receipt: AgentReceipt, write: AgentReceipt, restoring: bo
 /** Product evidence checks consume actual receipts only. Unsupported checks fail closed. */
 export function verifyCreatorTaskReceipt(criterion: AgentGoalCriterion, receipt: AgentReceipt, receipts: AgentReceipt[]): boolean {
     const requirement = criterion.receiptRequirement;
-    if (requirement === 'creator-read') return receipt.access === 'read' && receipt.role === 'task' && READ_TOOLS.includes(receipt.toolName) && good(receipt);
+    if (requirement === 'creator-read') return receipt.role === 'task' && good(receipt)
+        && (receipt.toolName === 'cocos_2x_command_execute' ? READ_COMMANDS.has(command(receipt))
+            : receipt.access === 'read' && READ_TOOLS.includes(receipt.toolName));
     if (requirement === 'creator-memory-write') return receipt.access === 'write' && good(receipt) && MEMORY_WRITES.includes(receipt.toolName)
         && ['remembered', 'corrected', 'deleted'].includes(text(data(receipt).outcome)) && !!operationId(receipt);
     if (requirement === 'creator-scope-unknown' || requirement === 'creator-interaction') return false;

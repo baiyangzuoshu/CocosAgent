@@ -32,6 +32,14 @@ Before the first task-specific Creator command, inspect the installed skill cata
 - **Build and run:** plan the selected release, execute only a ready Web-Mobile build plan, read its persisted build receipt, then start the preview for that verified build. Inspect the runtime receipt and stop the preview when finished.
 - **Asset Bundle:** use the Bundle plan/stage workflow only for Creator 2.4.15. Keep Bundle delivery status distinct from the built-in `resources` delivery status.
 
+## Approved Plan business acceptance
+
+Read this skill's `agent-foundation/cocos-agent-plan-business-acceptance-0.1.md` reference when proposing or executing a native Plan. New plans use version 2 and an explicit acceptance kind for each step: read, write, restore, runtime, interaction or memory. Tool names must come from the discovered catalog; setup and skill reads are preparation only.
+
+Read steps require fresh content evidence. Write/restore steps require approved effects, operation and target readback, and applicable compilation. Runtime steps inspect earlier approved targets. The final step also verifies the original user goal and requires fresh ledger/target/runtime reads; include these tools in its requiredTools. A successful tool cannot replace a business condition. Native interaction assertions are still unavailable.
+
+Execute only the current approved step. On unmet acceptance, report the missing evidence and actual effects; do not repeat a previous write to manufacture success. Old plans without business conditions must be regenerated after checking existing operation records. Prior-step evidence is identity/state metadata, not source text or image bytes, and is not new execution authority.
+
 ## Write safety and recovery
 
 Scene edits, imports, deletion, release selection, and builds change project state. Explain the intended target and expected change before invoking a write tool when the user’s request is ambiguous. Respect MCP approval prompts.

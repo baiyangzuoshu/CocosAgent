@@ -47,7 +47,7 @@ module.exports = {
         }
         const node = findNodeByUuid(cc.director.getScene(), params.targetNodeUuid);
         const snapshot = node && nodePatchSnapshot(node, getNodePath(node));
-        if (!snapshot || !matchesPrefabTargetPath(snapshot.path, params.targetNodePath)) {
+        if (!snapshot || !matchesPrefabTargetPath(snapshot.path, prefabSourceTargetPath(params, 'before'))) {
             event.reply({ code: 'PREFAB_NODE_IDENTITY_MISMATCH', message: 'Prefab node path and UUID no longer identify the same node.' }); return;
         }
         if (!validPatchDiff(params.expectedDiff) || !patchMatches(snapshot, params.expectedDiff, 'before')) {
@@ -68,7 +68,7 @@ module.exports = {
         }
         const node = findNodeByUuid(cc.director.getScene(), params.targetNodeUuid);
         const snapshot = node && nodePatchSnapshot(node, getNodePath(node));
-        if (!snapshot || !matchesPrefabTargetPath(snapshot.path, params.targetNodePath)) {
+        if (!snapshot || !matchesPrefabTargetPath(snapshot.path, prefabSourceTargetPath(params, params.side))) {
             event.reply({ code: 'PREFAB_NODE_IDENTITY_MISMATCH', message: 'Prefab node path and UUID no longer identify the same node.' }); return;
         }
         if (!validPatchDiff(params.expectedDiff) || !patchMatches(snapshot, params.expectedDiff, params.side)) {
@@ -87,7 +87,7 @@ module.exports = {
         }
         const node = findNodeByUuid(cc.director.getScene(), params.targetNodeUuid);
         const before = node && nodePatchSnapshot(node, getNodePath(node));
-        if (!node || !matchesPrefabTargetPath(before.path, params.targetNodePath)
+        if (!node || !matchesPrefabTargetPath(before.path, prefabSourceTargetPath(params, 'before'))
             || !validPatchDiff(params.expectedDiff) || !patchMatches(before, params.expectedDiff, 'before')) {
             event.reply({ code: 'EXPECTED_STATE_MISMATCH', message: 'Prefab source changed after preflight; no properties were written.' }); return;
         }
@@ -100,7 +100,7 @@ module.exports = {
                 requirePrefabEditTarget(params, 'PREFAB_MODE_TARGET_MISMATCH');
                 const liveNode = findNodeByUuid(cc.director.getScene(), params.targetNodeUuid);
                 const liveBefore = liveNode && nodePatchSnapshot(liveNode, getNodePath(liveNode));
-                if (liveNode !== node || !liveBefore || !matchesPrefabTargetPath(liveBefore.path, params.targetNodePath)
+                if (liveNode !== node || !liveBefore || !matchesPrefabTargetPath(liveBefore.path, prefabSourceTargetPath(params, 'before'))
                     || !patchMatches(liveBefore, params.expectedDiff, 'before') || patchNameConflict(node, params.expectedDiff)) {
                     event.reply({ code: 'EXPECTED_STATE_MISMATCH', message: 'Prefab target changed while loading references; no properties were written.' }); return;
                 }
@@ -651,6 +651,18 @@ function matchesPrefabTargetPath(actualPath, expectedPath) {
     if (typeof actualPath !== 'string' || typeof expectedPath !== 'string') return false;
     const actual = actualPath.split('/'); const expected = expectedPath.split('/');
     return actual.length >= expected.length && expected.every((part, index) => actual[actual.length - expected.length + index] === part);
+}
+
+function prefabSourceTargetPath(params, side) {
+    if (!params || !['before', 'after'].includes(side) || typeof params.targetNodePath !== 'string'
+        || !validPatchDiff(params.expectedDiff)) return null;
+    const parts = params.targetNodePath.split('/');
+    const rename = params.expectedDiff.find((item) => item.path === 'node.name');
+    if (rename) {
+        if (parts[parts.length - 1] !== rename.before) return null;
+        parts[parts.length - 1] = rename[side];
+    }
+    return parts.join('/');
 }
 
 function getNodePath(node) {

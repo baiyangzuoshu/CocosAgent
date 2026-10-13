@@ -75,7 +75,8 @@ function findPrefabAsset(uuid) {
 function readbackState(asset, manifest, side) {
     const index = serialized.pathIndex(asset.objects);
     if (!index) return null;
-    const node = serialized.resolveNode(asset.objects, manifest.targetNodePath, manifest.targetNodeUuid);
+    const targetPath = require('./scene-patch-contract').targetPathAt(manifest.targetNodePath, manifest.expectedDiff, side);
+    const node = serialized.resolveNode(asset.objects, targetPath, manifest.targetNodeUuid);
     if (!node || !serialized.matchesDiff(asset.objects, node, manifest.expectedDiff, side)) return null;
     return { filename: asset.filename, nodePath: node.path, serializedNodeIndex: node.index,
         serializedNodeId: node.object._id, nodeObject: node.object };
