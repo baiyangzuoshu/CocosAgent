@@ -23,6 +23,10 @@
 
 批准 Plan 使用 version 2 的逐步业务条件，并在最终步骤按原始用户目标核对实际写入、最新账本/目标读回及适用的运行验收；前序真实回执以有界元数据保存，旧计划需要重新生成。Prefab 源改名的场景重开与磁盘读回都按当次 before/after 名称派生路径，继续校验 UUID、父级和字段。合同、桥接/Host/TS/面板及产品 skill 已更新；构建和语法检查不代表实机验收，原生计划执行、跨 Host 恢复及 Prefab 连续改名/补偿/重放仍待验证。详见 [Plan 业务验收合同](cocos-agent-plan-business-acceptance-0.1.md)和 [Prefab 源合同](prefab-source-edit-0.1.md)。
 
+### Codex 接入移除后的 Creator 原生验收（2026-10-13）
+
+Creator 2.4.15 原生 Assistant 面板在 Codex 插件卸载后显示已连接 DeepSeek Flash，并通过原生 Agent 完成只读实例、能力、技能索引/哈希、合同引用及 `helloworld` 场景快照读取；19 个节点、未截断，项目无写入。安装包仍为 `cocos-agent-2x@0.3.2`（13 项技能），仓库源包为 0.3.3（14 项）。首次快照经通用 `cocos_2x_command_execute`，面板要求一次只读命令审批；Agent 最终文字错误地称没有审批。专用 `cocos_2x_scene_snapshot` 复验未获得工具回执，run 以 `missing-successful-task-receipt` 停止。因此 Creator 原生入口及当前只读主链路已验收，当前源包升级、专用只读工具接线和审批/运行卡片摘要一致性仍待完成。证据见[迁移后验收记录](traces/cocos-agent-native-migration-acceptance-2.4-20261013.md)。
+
 ## 1. 目标
 
 让开发者在 Cocos Creator 内直接向 CocosAgent 描述游戏开发任务。Agent 能读取当前工程和编辑器状态、形成可审阅计划、调用经校验的编辑器能力，并用磁盘读回、导入/编译反馈、预览画面和运行状态验证结果。失败时明确说明已完成步骤与副作用，并使用已有记录恢复。
@@ -181,8 +185,8 @@ Unity 官方同时提供 Editor 内的项目感知助手，以及供外部 IDE A
 | 步骤 | 状态 | 下一步 |
 | --- | --- | --- |
 | 0：边界盘点 | 扩展包与 sidecar 接线已改；Creator 面板连接与 Ask 实机均有证据 | 后续在真实独立工程持续核对启动/停止与安装可移植性 |
-| 1：原生只读闭环 | Ask/Plan/Agent 均由 TS 内核调度；三种模式的只读面板路径已有实机证据；TS runtime 58/58、MCP/扩展 84/84 | 只读路径已通过；继续收 LinkUpClient 项目约定、选择对象与多轮上下文的面板验收 |
-| 2：计划与知识读取 | TS Agent 实际读取 13 项技能目录、任务 skill 与合同引用；缺少读取证据时先收到 `TASK_SKILL_READ_REQUIRED`，读完后完成场景快照任务 | Creator 原生 Resource 读取现由 MCP JS 适配器提供；LinkUpClient 的项目约定/选择上下文仍需面板实测 |
+| 1：原生只读闭环 | Ask/Plan/Agent 均由 TS 内核调度；迁移后 Creator 原生 Agent 完成实例、能力、技能/引用哈希及 19 节点场景只读验收；TS runtime 74/74 | 当前安装 0.3.2 与仓库源包 0.3.3 不一致；专用场景快照工具和只读审批呈现仍需修正/验收 |
+| 2：计划与知识读取 | 原生 Agent 实际读取安装索引、任务 skill 与合同引用，哈希匹配；迁移后 runId `2e1add85-d53d-4246-8782-ad9397a190cf` | 当前安装包 13 项而源包 14 项；专用 `cocos_2x_scene_snapshot` run 未取得成功回执，详见迁移验收记录 |
 | 3：受控写入闭环 | 旧 JS 指定 PNG 原生任务已完成 apply/重开/预览/补偿/replay；TS Agent 又真实完成 operation `a7d3f106-5c92-4b7e-8e41-2b93de7c0f58` 的唯一反向补偿 `3f8c1d47-6a25-4b90-9e13-72d5ac8b04e6`，面板批准、editor/disk/recovery 回执、源与新账本读回及实时 `(220,100)` 读回通过 | 基础 TS 写入/补偿路径已验；下一步用真实任务验收 TS 脚本读取、差异审阅、编译、运行与失败恢复，不重复该节点写入 |
 | 4：脚本开发闭环 | 原生面板完成既有 JS 的读取、精确差异、审批、写入和 Creator 编译；本次实际点击显示 `Clicked: 1/2`，原操作补偿后刷新预览再点不变。脚本源 SHA、UUID/meta 与按钮位置已读回恢复；记录见 AGENTS.md 的 2026-10-12 复验 | 补原生新 ID 重放、真实错误修复及独立游戏工程脚本任务；Plan 结构输出和多次提示调度缺口仍在 |
 | 5：运行结果观察 | **实现与模拟编排测试完成；原生初始观察已有实机证据，错误修复闭环待做。** 新增 2.4.15 Web 预览日志、帧/暂停状态、可选节点状态和画布截图观察；Agent 可按同一场景 UUID 读回，再走现有脚本读取、差异计划、批准补丁和二次观察。研究工程当前扩展 0.3.4 / MCP 0.3.3 合同匹配；原生已批准启动预览并观察同场景 UUID、帧、Label、日志和截图。每次观察为独立新页面，不能读取已点击页面状态 | 在隔离的 2.4.15 工程安装新运行时，注入已知可逆脚本错误，验证面板观察、窄补丁、Creator 编译和同场景二次观察；再恢复基线。另需解决共享预览端口 7456 的实例归属认证 |
@@ -202,4 +206,4 @@ Unity 官方同时提供 Editor 内的项目感知助手，以及供外部 IDE A
 3. 完成运行观察错误修复闭环和连续任务体验的 Creator 面板实机验收：独立预览归属、Console/截图读取、取消与 sidecar 重启后的会话恢复。
 4. Creator Agent 继续严格限定 Creator 专用命令与技能；不加入通用 shell、团队/子 Agent 协作或定时任务。性能和引擎源码改造由真实任务与可复现测量触发；3.x 按仓库约束暂停新增。
 
-当前源目录包含 13 个产品 skill 与 31 份引用；这是分发实现状态，不代表各技能均经过原生面板模型执行验收。运行观察 skill 和合同见 [运行观察合同](cocos-agent-runtime-observation-0.1.md)。最新 Unity 对照与缺口见 [产品状态复核](cocos-agent-unity-native-status-20261011.md)。
+当前源目录包含 14 个产品 skill 与 32 份引用；这是分发实现状态，不代表各技能均经过原生面板模型执行验收。运行观察 skill 和合同见 [运行观察合同](cocos-agent-runtime-observation-0.1.md)。最新 Unity 对照与缺口见 [产品状态复核](cocos-agent-unity-native-status-20261011.md)。
