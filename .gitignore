@@ -8,6 +8,7 @@ coverage/
 node_modules/
 **/assistant-runtime/
 /2.4.15NewProject/packages/cocos-agent-bridge/.assistant-runtime.rollback-*/
+/2.4.15NewProject/packages/.cocos-agent-bridge.rollback-*/
 .cocos-agent/
 graphify-out/
 .env
