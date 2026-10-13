@@ -1,38 +1,29 @@
-# CocosAgent 2.x skills and optional Codex MCP adapter
+# CocosAgent 2.x product skills
 
-The package contains the versioned Creator 2.4.15 workflow skills and their references. The primary product path loads them in the Creator-native Assistant, where Creator owns the panel, model provider, and local service lifecycle. The optional Codex plugin adapter uses the same MCP command interface; an external Agent owns its own model and credentials. This repository package source is local because its MCP process communicates with the user’s Creator editor and project files.
+This directory is the maintained source for Creator 2.4.15 workflow skills and their references. The Creator extension packages them with the native Assistant. Creator owns the panel, model provider, approval flow, and local service lifecycle; the local MCP stdio child process is an internal CocosAgent transport started and stopped by its Assistant Host. This product does not register a Codex MCP server or require a Codex plugin.
 
-The plugin package is the single maintained source for its 2.4 task skills. It currently contains 11 task skills and ships their linked contracts, probes and acceptance records under `references/`. Docs entries for packaged skills point back to the plugin source. Before installing or updating, validate the package and its reference hashes:
+The package is the single maintained source for its 2.4 task skills. It currently contains 14 task skills and ships their linked contracts, probes and acceptance records under `references/`. Docs entries for packaged skills point back to this source. Before installing or updating, validate the package and its reference hashes:
 
 ```sh
 node plugins/cocos-agent-2x/scripts/package-skills.mjs --check
 ```
 
-The MCP server exposes `cocos://2x/skills/index`, each task skill URI, and the listed reference URIs. The index reports plugin/MCP versions, the plugin source fingerprint, and SHA-256 for each skill and reference. Read the index before relying on an installed skill snapshot.
+The Creator-managed skill service exposes `cocos://2x/skills/index`, each task skill URI, and the listed reference URIs. The index reports the Agent package version, source fingerprint, and SHA-256 for each skill and reference. Read the index before relying on an installed skill snapshot.
 
-## Prepare this checkout
+## Prepare the Creator extension
 
-From the repository root, install the pinned MCP dependencies and generate a machine-local server configuration:
+The extension starts its own local Assistant Host and MCP stdio child process. For development, install the pinned dependencies used by that Creator-managed service:
 
 ```sh
 cd tools/cocos-agent-bridge/mcp
 npm ci
 cd ../../..
-node plugins/cocos-agent-2x/scripts/configure-local-plugin.mjs
 ```
 
-Pass additional registered Creator 2.4.15 projects with repeated `--project /absolute/path` arguments. The generated `.mcp.json` is local configuration and is ignored by Git. It uses the current Node executable and an explicit project allowlist. The local marketplace manifest is `plugins/.agents/plugins/marketplace.json`.
+Creator installs and launches the extension for its current project. Agent tasks use the project and editor context supplied by that Creator instance, and writes remain subject to the in-panel approval policy. Use the validation steps in the packaged `cocos-agent` skill and record actual receipts; unit tests or an MCP handshake do not prove that a scene write, preview, runtime update, or build passed.
 
-Register the local marketplace with `codex plugin marketplace add ./plugins`, then install or update **CocosAgent 2.x** from `cocos-agent-local`. The installed package is versioned; verify it with `codex plugin list` and check that its cache contains every skill folder from `skill-package.json`. A running Codex task can retain the skill/tool registry it loaded at startup; package installation alone does not prove that an already-running task has refreshed its view. Instance discovery and four dedicated read-only inspection tools are pre-approved in the generated local config; the mixed semantic command executor and all other state-changing tools remain subject to the host’s approval policy.
-
-## Verify the connection
-
-Start with `cocos_2x_instances_list`, then select the exact ready `2.4.15` project and query its capability catalog. Do not treat `npm test` or a successful MCP handshake as evidence that a scene write, preview, runtime update, or build passed. Use the validation steps in the packaged `cocos-agent` skill and record actual receipts.
-
-The package has no 3.x target, remote endpoint, model/API credential, arbitrary script tool, or public marketplace submission. CocosAgent’s existing version-specific contracts and evidence remain in `docs/agent-foundation/`.
+The package has no 3.x target, remote endpoint, model/API credential, arbitrary script tool, or external host registration. CocosAgent’s existing version-specific contracts and evidence remain in `docs/agent-foundation/`.
 
 ## Acceptance evidence
 
-On 2026-10-09, a natural-language Codex Agent task used the installed plugin to list and select the ready Creator `2.4.15` instance for `2.4.15NewProject/`, read its capability catalog, and fetch the active `helloworld` scene snapshot. The snapshot returned 14 nodes without truncation; the Canvas had six active children, including the red and blue release sample Sprites. No write tool ran and no scene, asset, project, or editor state changed. The snapshot reports hierarchy and active state, not component properties, transforms, resource UUIDs, or rendered appearance.
-
-The first attempt exposed that the mixed `cocos_2x_command_execute` tool correctly requires approval even for a read command. Four dedicated read-only wrappers were added and pre-approved instead; the mixed executor and other state-changing tools remain behind the host approval policy. MCP contract tests and the packaged skill validator pass.
+Historical Codex-hosted MCP adapter evidence remains in the research traces for reproducibility. Product acceptance now uses the native Creator Assistant panel, Creator-managed Host lifecycle, project disk state, and actual runtime observations.

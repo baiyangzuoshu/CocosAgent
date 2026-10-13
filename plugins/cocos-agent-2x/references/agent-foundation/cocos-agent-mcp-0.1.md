@@ -1,5 +1,7 @@
 # CocosAgent MCP stdio 适配层 0.1
 
+> 状态（2026-10-13）：本文保留 stdio 命令适配器的合同与历史验收证据。Codex-hosted 插件、本地 `.mcp.json` 注册脚本及开发 marketplace 已移除；当前产品只由 Creator 原生面板启动 CocosAgent Host，并由 Host 启动本地 stdio 子进程作为内部 transport。不要在 Codex 中注册此服务。
+
 `tools/cocos-agent-bridge/mcp/mcp-server.mjs` 是既有本地 Agent JSONL API 的 MCP stdio 适配器。MCP SDK 管理 JSON-RPC、协议版本和工具输入校验；业务请求仍交给 `agent-jsonl.js`，再由既有调度器和 2.4.15 扩展处理。MCP 进程不调用 LLM，也不需要 Agent API Key；模型由启动它的 MCP 宿主提供。
 
 ## 首版边界
@@ -77,9 +79,9 @@ Resource 只读取固定仓库 skill 文件，不接受任意文件路径。Prom
 
 流水线执行期间，同一项目的重复 execute 返回 `PIPELINE_EXECUTION_IN_PROGRESS`；其他非只读操作返回 `EDITOR_BUSY`。此时可调用 `assets_scene_get` 查看已有回执。只有用户明确要求取消时才调用 `assets_scene_cancel`。它对活动 Worker 设置共享取消标记；当前 Host 命令不被强杀，随后在下一写入边界停止，并尝试按“场景引用先、导入资源后”补偿。取消结果仍须以流水线回执为准，状态不确定时保留 `needs-review`。请求超时或客户端断开本身不会取消 Worker，也不证明写入失败：先读取流水线和操作记录，再决定补偿；不要盲目重发。其余 MCP Host 调用仍可能同步阻塞，跨进程重连恢复尚未实现。
 
-## 启动和配置
+## Creator 管理的内部传输
 
-依赖锁定在 MCP TypeScript SDK v2 `2.3.1` 与 Zod `4.6.5`。SDK 使用 Node.js 20 或更新版本；此工作区以 Node.js 22.22.2 完成验收。安装及运行测试：
+产品只通过 Creator 扩展启动 `assistant-host.mjs`；Host 根据当前 Creator 项目启动并管理此 stdio 子进程。项目身份从 Creator 侧注册状态取得，不通过 Codex 或其他 MCP Host 配置。依赖锁定在 MCP TypeScript SDK v2 `2.3.1` 与 Zod `4.6.5`；SDK 使用 Node.js 20 或更新版本。开发者可在源码目录运行内部传输回归：
 
 ```sh
 cd tools/cocos-agent-bridge/mcp
@@ -87,31 +89,7 @@ npm ci
 npm test
 ```
 
-直接启动 stdio 服务（替换为本机仓库和工程的绝对路径）：
-
-```sh
-node /absolute/path/Cocos_Engine/tools/cocos-agent-bridge/mcp/mcp-server.mjs \
-  --project /absolute/path/Cocos_Engine/2.4.15NewProject
-```
-
-若要管理多个 2.4.15 工程，重复传入 `--project`。通用 MCP 宿主的配置形式如下；`command` 应指向 Node.js 可执行文件，`args` 中使用本机绝对路径：
-
-```json
-{
-  "mcpServers": {
-    "cocos-agent-2x": {
-      "command": "/absolute/path/to/node",
-      "args": [
-        "/absolute/path/Cocos_Engine/tools/cocos-agent-bridge/mcp/mcp-server.mjs",
-        "--project",
-        "/absolute/path/Cocos_Engine/2.4.15NewProject"
-      ]
-    }
-  }
-}
-```
-
-配置后，MCP 宿主应能读取工具列表。调用 `instances.list` 与 `capabilities.list` 只做本机编辑器握手和目录查询，不写入场景。构建、导入、场景修改等操作仍由各工具自己的 access annotation、参数约束和 Host 回执表达。
+不要把 `mcp-server.mjs` 注册到 Codex 或其他外部 Agent 来启动产品任务。工具发现、实例查询和能力校验都由 Creator 管理的 Host 执行；实际编辑器操作继续经过各工具自己的访问级别、输入约束和 Host 回执。
 
 官方协议与接口依据：[MCP TypeScript SDK v2](https://ts.sdk.modelcontextprotocol.io/v2/)、[stdio transport](https://ts.sdk.modelcontextprotocol.io/v2/serving/stdio)、[构建 MCP server](https://ts.sdk.modelcontextprotocol.io/v2/get-started/first-server)。
 

@@ -27,7 +27,7 @@
 
 让开发者在 Cocos Creator 内直接向 CocosAgent 描述游戏开发任务。Agent 能读取当前工程和编辑器状态、形成可审阅计划、调用经校验的编辑器能力，并用磁盘读回、导入/编译反馈、预览画面和运行状态验证结果。失败时明确说明已完成步骤与副作用，并使用已有记录恢复。
 
-**主产品不能依赖 Codex 进程、Codex 插件缓存、Codex MCP 配置或其他外部 Agent 才能运行。** Creator 可以启动和管理本机 sidecar 处理模型请求、文件操作或持久记录；sidecar 由 Creator 产品生命周期拥有，不以 Codex 为启动器或必要宿主。外部 MCP 可以保留为可选适配器。
+**主产品不依赖 Codex 进程、Codex 插件缓存、Codex MCP 配置或其他外部 Agent。** Codex-hosted CocosAgent MCP 插件和本地注册配置已移除；Creator 扩展管理自己的 Agent 生命周期与本机 sidecar，sidecar 内部 MCP stdio 只作为 CocosAgent 的 Creator-owned transport。以后若要支持外部互操作，需作为单独适配器重新设计与验收，不属于当前产品路径。
 
 ## 2. 产品与进程边界
 
@@ -43,10 +43,10 @@ Cocos Creator 2.4.15
             └─ 回执、对账、补偿与恢复
                  └─ 当前游戏项目
 
-可选互操作：外部 Agent → MCP/CLI 适配器 → 同一命令合同与 Creator 扩展
+当前产品路径：Creator 原生面板 → CocosAgent TS 内核 → Creator 管理的本机 Host/内部 stdio transport → 版本化命令合同与 Creator 扩展
 ```
 
-Creator 扩展是用户入口、生命周期所有者和产品状态的权威来源。现有 Assistant 已由 Creator 扩展启动本地 `assistant-host.mjs`，再由它启动自己的 MCP stdio 子进程；这是 Creator 管理的内部传输，不等于依赖 Codex 管理的 MCP Host。当前新增独立打包器将扩展源码、skills、引用资料和 MCP 依赖放入 Creator 扩展包；sidecar 仍要求本机提供 Node.js 20+。Agent 调度可以位于扩展运行时或 Creator 启动的本地服务中；不预设把所有工作塞进编辑器进程。无论内部如何拆进程，关闭 Codex 后，Creator 内的 Agent 仍须独立完成其支持的任务。
+Creator 扩展是用户入口、生命周期所有者和产品状态的权威来源。现有 Assistant 由 Creator 扩展启动本地 `assistant-host.mjs`，再由它启动自己的 MCP stdio 子进程；这个内部进程随 Creator 扩展包分发，不需要 Codex 注册、插件或宿主。sidecar 要求本机提供 Node.js 20+。Agent 调度可以位于扩展运行时或 Creator 启动的本地服务中；不预设把所有工作塞进编辑器进程。Creator 内的 Agent 必须在未安装 Codex 的环境中独立完成其支持的任务。
 
 模型调用采用可替换的 Provider 接口。现有原型支持 DeepSeek Flash/V4 Pro 配置，真实调用只验收过 Flash；Key 改为明文保存在 OS 用户配置目录 `~/.cocos-agent/credentials.env`（Windows `%USERPROFILE%` 下），POSIX 设置 `0600`。这避免将 Key 写进游戏项目，但还不是系统密钥链加密存储；不得把 Key 写入场景、操作轨迹或版本库。
 

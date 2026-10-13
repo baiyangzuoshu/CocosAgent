@@ -8,6 +8,7 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PLUGIN_ROOT = path.resolve(SCRIPT_DIR, '..');
 const REPOSITORY_ROOT = path.resolve(PLUGIN_ROOT, '../..');
 const PACKAGE_FILE = path.join(PLUGIN_ROOT, 'skill-package.json');
+const AGENT_PACKAGE_FILE = path.join(PLUGIN_ROOT, 'agent-package.json');
 
 function sha256(bytes) {
     return crypto.createHash('sha256').update(bytes).digest('hex');
@@ -116,7 +117,10 @@ function validatePackage(mode = 'check') {
         }
     }
 
-    const pluginManifest = JSON.parse(fs.readFileSync(path.join(PLUGIN_ROOT, '.codex-plugin/plugin.json'), 'utf8'));
+    const agentPackage = JSON.parse(fs.readFileSync(AGENT_PACKAGE_FILE, 'utf8'));
+    if (typeof agentPackage.name !== 'string' || typeof agentPackage.version !== 'string') {
+        throw new Error('Agent package manifest needs a name and version.');
+    }
     const indexed = manifest.skills.map((skill) => {
         const skillPath = path.join(PLUGIN_ROOT, 'skills', skill.name, 'SKILL.md');
         const parsed = parseFrontmatter(skillPath);
@@ -134,7 +138,7 @@ function validatePackage(mode = 'check') {
     });
     return {
         manifest,
-        plugin: { name: pluginManifest.name, version: pluginManifest.version },
+        agentPackage: { name: agentPackage.name, version: agentPackage.version },
         skills: indexed,
         referenceCount: manifest.references.length,
     };
@@ -144,7 +148,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     try {
         const mode = process.argv.includes('--sync') ? 'sync' : 'check';
         const result = validatePackage(mode);
-        process.stdout.write(`${mode === 'sync' ? 'Synchronized' : 'Verified'} ${result.skills.length} skills and ${result.referenceCount} references for ${result.plugin.name}@${result.plugin.version}.\n`);
+        process.stdout.write(`${mode === 'sync' ? 'Synchronized' : 'Verified'} ${result.skills.length} skills and ${result.referenceCount} references for ${result.agentPackage.name}@${result.agentPackage.version}.\n`);
     } catch (error) {
         process.stderr.write(`${error.message}\n`);
         process.exitCode = 1;

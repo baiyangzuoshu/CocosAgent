@@ -102,14 +102,14 @@ test('Creator bundle runs its MCP server outside the research repository without
         assert.ok(resources.some((resource) => resource.uri === 'cocos://2x/skills/index'));
         const index = JSON.parse((await client.readResource({ uri: 'cocos://2x/skills/index' })).contents[0].text);
         assert.equal(index.agentPackage.name, 'cocos-agent-2x');
-        assert.equal(index.skills.length, 13);
+        assert.equal(index.skills.length, 14);
         const indexedReferences = new Map();
         for (const skill of index.skills) {
             const skillText = (await client.readResource({ uri: skill.uri })).contents[0].text;
             assert.ok(skillText.includes(`skill ${skill.name} sha256 ${skill.sha256}`), `skill hash missing: ${skill.name}`);
             for (const reference of skill.references) indexedReferences.set(reference.uri, reference);
         }
-        assert.equal(indexedReferences.size, 31);
+        assert.equal(indexedReferences.size, 32);
         for (const reference of indexedReferences.values()) {
             const content = (await client.readResource({ uri: reference.uri })).contents[0];
             const bytes = content.blob ? Buffer.from(content.blob, 'base64') : Buffer.from(content.text || '', 'utf8');

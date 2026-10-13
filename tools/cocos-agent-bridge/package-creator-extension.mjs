@@ -41,9 +41,7 @@ function skillPackageFilter(_sourceRoot, source) {
     const relative = path.relative(_sourceRoot, source);
     if (!relative) return true;
     const segments = relative.split(path.sep);
-    return !segments.includes('.codex-plugin')
-        && !segments.includes('scripts')
-        && path.basename(source) !== '.mcp.json'
+    return !segments.includes('scripts')
         && path.basename(source) !== 'README.md';
 }
 

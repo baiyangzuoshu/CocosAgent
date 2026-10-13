@@ -5,7 +5,7 @@ description: Use CocosAgent to inspect and operate an explicitly registered Coco
 
 # CocosAgent for Creator 2.4.15
 
-This is the base workflow for the **Creator-native CocosAgent** and its Creator 2.4.15 command tools. Creator owns the Assistant panel, provider configuration, and local service lifecycle; the MCP stdio process is an internal transport managed by the extension. A separate external MCP client may also call the same tools, but it owns its own model and credentials. The registered project roots are a local allowlist. Never invent a project path or target 3.8 from these tools.
+This is the base workflow for the **Creator-native CocosAgent** and its Creator 2.4.15 command tools. Creator owns the Assistant panel, provider configuration, and local service lifecycle; the MCP stdio process is an internal transport managed by the extension. The registered project roots are a local allowlist. Never invent a project path or target 3.8 from these tools.
 
 ## Select the editor and discover commands
 
@@ -54,4 +54,4 @@ Read each tool result’s `success`, `outcome`, phase receipts, error code, oper
 
 Do not describe 3.8 behavior as implemented. This plugin’s MCP tool set and validation status are version-specific to Creator 2.4.15.
 
-The `cocos-agent-2x` package is the canonical source for task skills. The Creator-native Agent exposes `cocos_2x_skills_list`, `cocos_2x_skill_read`, and `cocos_2x_skill_reference_read`; use them for installed metadata and on-demand content. The equivalent MCP resources remain available to external clients. Prefer the returned installed content over repo-relative links that may not exist in a packaged Creator extension.
+The `cocos-agent-2x` package is the canonical source for task skills. The Creator-native Agent exposes `cocos_2x_skills_list`, `cocos_2x_skill_read`, and `cocos_2x_skill_reference_read`; use them for installed metadata and on-demand content. Prefer the returned installed content over repo-relative links that may not exist in a packaged Creator extension.

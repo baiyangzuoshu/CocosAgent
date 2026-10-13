@@ -30,9 +30,6 @@ __pycache__/
 # Other files and folders
 .settings/
 
-# Machine-specific local Codex plugin MCP configuration
-/plugins/cocos-agent-2x/.mcp.json
-
 # Executables
 *.swf
 *.air
