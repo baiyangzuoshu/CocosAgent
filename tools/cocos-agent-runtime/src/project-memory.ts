@@ -37,9 +37,10 @@ export interface ProjectMemoryRecord {
 
 export interface ProjectMemoryOperation {
     operationId: string;
-    action: 'remember' | 'correct' | 'delete';
+    action: 'remember' | 'correct' | 'delete' | 'compact';
     memoryId: string;
-    outcome: 'remembered' | 'corrected' | 'deleted';
+    memoryIds?: string[];
+    outcome: 'remembered' | 'corrected' | 'deleted' | 'compacted';
     revision: number;
     timestamp: string;
 }
@@ -140,7 +141,8 @@ function normalizeSnapshot(value: unknown, projectKey: string): ProjectMemorySna
         || !value.tombstones.every(isMemoryTombstone)) {
         throw new Error('PROJECT_MEMORY_STORE_INVALID_RECORD');
     }
-    return structuredClone(value) as unknown as ProjectMemorySnapshot;
+    const snapshot = structuredClone(value) as unknown as ProjectMemorySnapshot;
+    return snapshot;
 }
 
 function isMemorySource(value: unknown): value is ProjectMemorySource {
@@ -193,11 +195,13 @@ function hasSensitiveMemoryContent(value: unknown): boolean {
 }
 
 function isMemoryOperation(value: unknown): value is ProjectMemoryOperation {
-    return hasOnlyKeys(value, ['operationId', 'action', 'memoryId', 'outcome', 'revision', 'timestamp'])
+    return hasOnlyKeys(value, ['operationId', 'action', 'memoryId', 'memoryIds', 'outcome', 'revision', 'timestamp'])
         && typeof value.operationId === 'string' && value.operationId.length > 0 && value.operationId.length <= 200
-        && ['remember', 'correct', 'delete'].includes(String(value.action))
+        && ['remember', 'correct', 'delete', 'compact'].includes(String(value.action))
         && typeof value.memoryId === 'string' && value.memoryId.length > 0 && value.memoryId.length <= 80
-        && ['remembered', 'corrected', 'deleted'].includes(String(value.outcome))
+        && (value.memoryIds === undefined || (Array.isArray(value.memoryIds) && value.memoryIds.length >= 2
+            && value.memoryIds.length <= 8 && value.memoryIds.every((id) => typeof id === 'string' && id.length > 0 && id.length <= 80)))
+        && ['remembered', 'corrected', 'deleted', 'compacted'].includes(String(value.outcome))
         && Number.isSafeInteger(value.revision) && (value.revision as number) > 0
         && typeof value.timestamp === 'string' && value.timestamp.length <= 40;
 }
@@ -231,6 +235,10 @@ function argumentString(args: JsonObject, name: string, min: number, max: number
 function category(value: unknown): ProjectMemoryCategory | null {
     return typeof value === 'string' && CATEGORIES.includes(value as ProjectMemoryCategory)
         ? value as ProjectMemoryCategory : null;
+}
+
+function isActiveMemory(memory: ProjectMemoryRecord): boolean {
+    return (memory as ProjectMemoryRecord & { status?: string }).status !== 'superseded';
 }
 
 function smallSource(source: ProjectMemorySource): JsonObject {
@@ -295,6 +303,19 @@ const MEMORY_TOOLS: AgentTool[] = [
             category: { type: 'string', enum: CATEGORIES }, sources: sourceSchema,
         }, ['title', 'body', 'category', 'sources']),
         access: 'read', role: 'task',
+    },
+    {
+        name: `${MEMORY_PREFIX}compact`,
+        description: 'Merge 2–8 same-category project memories after reviewing them. Provide each exact memory ID and revision plus a concise merged body. Every source citation is retained, the target gets a new revision, merged source entries are removed, and the complete change requires panel approval.',
+        inputSchema: schema({
+            targetMemoryId: { type: 'string', minLength: 1, maxLength: 80 },
+            memories: { type: 'array', minItems: 2, maxItems: 8, items: { type: 'object', properties: {
+                memoryId: { type: 'string', minLength: 1, maxLength: 80 },
+                expectedRevision: { type: 'integer', minimum: 1 },
+            }, required: ['memoryId', 'expectedRevision'], additionalProperties: false } },
+            body: { type: 'string', minLength: 1, maxLength: MAX_BODY_CHARS },
+        }, ['targetMemoryId', 'memories', 'body']),
+        access: 'write', role: 'task',
     },
     {
         name: `${MEMORY_PREFIX}remember`,
@@ -410,6 +431,7 @@ export class CreatorProjectMemory {
             }
             if (name === `${MEMORY_PREFIX}remember`) return await this.remember(args, callId);
             if (name === `${MEMORY_PREFIX}correct`) return await this.correct(args, callId);
+            if (name === `${MEMORY_PREFIX}compact`) return await this.compact(args, callId);
             return await this.delete(args, callId);
         } catch (error) {
             const sideEffect = error instanceof MemoryPersistenceError ? error.sideEffect
@@ -425,7 +447,7 @@ export class CreatorProjectMemory {
     private async search(query: string, filter?: ProjectMemoryCategory, limit = MAX_SEARCH_RESULTS): Promise<ProjectMemoryRecord[]> {
         const queryTokens = tokens(query);
         const scored = this.snapshot.memories
-            .filter((item) => !filter || item.category === filter)
+            .filter((item) => isActiveMemory(item) && (!filter || item.category === filter))
             .map((memory) => {
                 const title = normalizedText(memory.title);
                 const body = normalizedText(memory.body);
@@ -447,11 +469,11 @@ export class CreatorProjectMemory {
         const content = this.readContent(args);
         if ('error' in content) return content.error;
         const titleKey = normalizedText(content.value.title);
-        const duplicate = this.snapshot.memories.find((item) => normalizedText(item.title) === titleKey);
+        const duplicate = this.snapshot.memories.find((item) => isActiveMemory(item) && normalizedText(item.title) === titleKey);
         if (duplicate) return failure('MEMORY_TITLE_EXISTS', 'A memory with this title already exists; read it and use memory.correct with its current revision.', 'none', {
             existingMemoryId: duplicate.id, currentRevision: duplicate.revision,
         });
-        if (this.snapshot.memories.length >= MAX_MEMORIES) return failure('MEMORY_LIMIT_REACHED', 'This project has reached the memory count limit.');
+        if (this.snapshot.memories.filter(isActiveMemory).length >= MAX_MEMORIES) return failure('MEMORY_LIMIT_REACHED', 'This project has reached the memory count limit.');
         const sources = this.validateSources(args.sources);
         if (sources.error) return sources.error;
         const candidateError = this.validateCandidate(args, content.value, sources.value);
@@ -468,7 +490,7 @@ export class CreatorProjectMemory {
     private async correct(args: JsonObject, operationId: string): Promise<AgentToolResult> {
         const id = argumentString(args, 'memoryId', 1, 80);
         const expectedRevision = Number.isInteger(args.expectedRevision) ? args.expectedRevision as number : null;
-        const current = id ? this.snapshot.memories.find((item) => item.id === id) : undefined;
+        const current = id ? this.snapshot.memories.find((item) => item.id === id && isActiveMemory(item)) : undefined;
         if (!current) return failure('MEMORY_NOT_FOUND', 'No active memory has this ID.');
         if (!expectedRevision || expectedRevision !== current.revision) return failure('MEMORY_REVISION_CONFLICT',
             'The memory changed since it was read. Read it again and correct the exact current revision.', 'none', {
@@ -510,6 +532,84 @@ export class CreatorProjectMemory {
         persisted: false, next: 'Review provenance and any existing match. To retain, call remember with this candidateId and request panel approval; to merge/correct, call correct with the exact memory revision and panel approval.' });
     }
 
+    private async compact(args: JsonObject, operationId: string): Promise<AgentToolResult> {
+        const targetId = argumentString(args, 'targetMemoryId', 1, 80);
+        const body = argumentString(args, 'body', 1, MAX_BODY_CHARS);
+        if (!targetId || !body || SENSITIVE_TEXT.test(body)) {
+            return failure(SENSITIVE_TEXT.test(body || '') ? 'MEMORY_SECRET_REJECTED' : 'MEMORY_COMPACTION_INVALID',
+                'Provide a valid target memory and concise merged text without credentials.');
+        }
+        if (!Array.isArray(args.memories) || args.memories.length < 2 || args.memories.length > 8) {
+            return failure('MEMORY_COMPACTION_INVALID', 'Select 2–8 exact memory IDs and revisions to merge.');
+        }
+        const requested = new Map<string, number>();
+        for (const item of args.memories) {
+            if (!isRecord(item) || typeof item.memoryId !== 'string' || !item.memoryId
+                || !Number.isSafeInteger(item.expectedRevision) || (item.expectedRevision as number) < 1
+                || requested.has(item.memoryId)) {
+                return failure('MEMORY_COMPACTION_INVALID', 'Each selected memory needs a unique ID and positive expected revision.');
+            }
+            requested.set(item.memoryId, item.expectedRevision as number);
+        }
+        if (!requested.has(targetId)) return failure('MEMORY_COMPACTION_TARGET_REQUIRED', 'The target memory must be one of the selected records.');
+        const selected = [...requested].map(([id]) => this.snapshot.memories.find((item) => item.id === id && isActiveMemory(item)));
+        if (selected.some((item) => !item) || selected.length !== requested.size) {
+            return failure('MEMORY_NOT_FOUND', 'One or more selected memories are no longer active. Refresh the memory list.');
+        }
+        const records = selected as ProjectMemoryRecord[];
+        for (const memory of records) if (memory.revision !== requested.get(memory.id)) {
+            return failure('MEMORY_REVISION_CONFLICT', 'A selected memory changed after review. Refresh the records before compacting.', 'none', {
+                memoryId: memory.id, expectedRevision: requested.get(memory.id), currentRevision: memory.revision,
+            });
+        }
+        const target = records.find((item) => item.id === targetId)!;
+        if (records.some((item) => item.category !== target.category)) {
+            return failure('MEMORY_COMPACTION_CATEGORY_MISMATCH', 'Only memories in the same category can be merged.');
+        }
+        const sourcesByIdentity = new Map<string, ProjectMemorySource>();
+        for (const memory of records) for (const source of memory.sources) {
+            const key = JSON.stringify([source.kind, source.runId, source.messageIndex, source.callId, source.quote]);
+            sourcesByIdentity.set(key, source);
+        }
+        if (!sourcesByIdentity.size || sourcesByIdentity.size > MAX_SOURCES) {
+            return failure('MEMORY_COMPACTION_SOURCE_LIMIT', `The merge would retain ${sourcesByIdentity.size} distinct source citations; compact a smaller group (up to ${MAX_SOURCES} citations).`);
+        }
+        const timestamp = nowIso(this.now);
+        const merged: ProjectMemoryRecord = {
+            ...target,
+            revision: target.revision + 1,
+            body,
+            sources: [...sourcesByIdentity.values()],
+            updatedAt: timestamp,
+            history: [...target.history, {
+                revision: target.revision, title: target.title, body: target.body,
+                category: target.category, sources: target.sources, changedAt: timestamp,
+            }].slice(-10),
+        };
+        const mergedIds = records.map((item) => item.id);
+        const removed = records.filter((item) => item.id !== targetId);
+        const operation: ProjectMemoryOperation = {
+            operationId, action: 'compact', memoryId: targetId, memoryIds: mergedIds,
+            outcome: 'compacted', revision: merged.revision, timestamp,
+        };
+        const tombstones = removed.map((memory): ProjectMemoryTombstone => ({
+            id: memory.id, lastRevision: memory.revision, deletedAt: timestamp, operationId,
+        }));
+        const next: ProjectMemorySnapshot = {
+            ...this.snapshot,
+            revision: this.snapshot.revision + 1,
+            memories: [...this.snapshot.memories.filter((item) => !requested.has(item.id)), merged],
+            operations: [...this.snapshot.operations, operation].slice(-MAX_OPERATIONS),
+            tombstones: [...this.snapshot.tombstones.filter((item) => !requested.has(item.id)), ...tombstones].slice(-MAX_OPERATIONS),
+        };
+        try { await this.options.persistence.save(next, this.snapshot.revision); }
+        catch (error) { throw new MemoryPersistenceError(error); }
+        this.snapshot = next;
+        return success({ operationId, outcome: 'compacted', targetMemoryId: targetId, memoryIds: mergedIds,
+            revision: merged.revision, removedMemoryIds: removed.map((item) => item.id), memory: publicMemory(merged),
+            retainedSourceCount: merged.sources.length });
+    }
+
     private validateCandidate(args: JsonObject,
         content: { title: string; body: string; category: ProjectMemoryCategory },
         sources: ProjectMemorySource[]): AgentToolResult | null {
@@ -532,7 +632,7 @@ export class CreatorProjectMemory {
     private async delete(args: JsonObject, operationId: string): Promise<AgentToolResult> {
         const id = argumentString(args, 'memoryId', 1, 80);
         const expectedRevision = Number.isInteger(args.expectedRevision) ? args.expectedRevision as number : null;
-        const current = id ? this.snapshot.memories.find((item) => item.id === id) : undefined;
+        const current = id ? this.snapshot.memories.find((item) => item.id === id && isActiveMemory(item)) : undefined;
         if (!current) return failure('MEMORY_NOT_FOUND', 'No active memory has this ID.');
         if (!expectedRevision || expectedRevision !== current.revision) return failure('MEMORY_REVISION_CONFLICT',
             'The memory changed since it was read. Read it again before deleting.', 'none', {
@@ -633,7 +733,9 @@ export class CreatorProjectMemory {
         const active = this.snapshot.memories.find((item) => item.id === operation.memoryId);
         const deleted = this.snapshot.tombstones.find((item) => item.operationId === operationId);
         return success({ operationId, outcome: operation.outcome, status: operation.outcome,
-            operation, ...(active ? { memory: publicMemory(active) } : {}), ...(deleted ? { tombstone: deleted } : {}) });
+            operation, ...(active ? { memory: publicMemory(active) } : {}),
+            ...(deleted ? { tombstone: deleted } : {}),
+            ...(operation.action === 'compact' ? { tombstones: this.snapshot.tombstones.filter((item) => item.operationId === operationId) } : {}) });
     }
 
     private async refresh(): Promise<void> {

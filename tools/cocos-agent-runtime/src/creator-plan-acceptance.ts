@@ -155,7 +155,7 @@ export function creatorPlanToolAllowed(plan: CreatorPlanAcceptanceContext, conte
     if (['runtime', 'interaction'].includes(plan.kind)) return readCommand
         || context.tool.name === 'cocos_2x_operation_preview_accept'
         || context.tool.name === 'cocos_2x_command_execute' && command === 'runtime.preview.start';
-    if (plan.kind === 'memory') return /^cocos_2x_memory_(remember|correct|delete)$/.test(context.tool.name);
+    if (plan.kind === 'memory') return /^cocos_2x_memory_(remember|correct|delete|compact)$/.test(context.tool.name);
     if (context.tool.name === 'cocos_2x_operation_preview_accept') return true;
     if (context.tool.name === 'cocos_2x_script_patch') {
         const action = String(object(context.arguments.input).action || context.arguments.action || 'apply');

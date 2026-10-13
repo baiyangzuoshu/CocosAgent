@@ -8,7 +8,7 @@ const READBACK_TOOLS = [...LEDGER_TOOLS, 'cocos_2x_scene_node_inspect', 'cocos_2
 const CONTENT_COMMANDS = new Set(['scene.node.create', 'scene.node.patch', 'scene.pngSprite', 'prefab.source.patch', 'script.patch']);
 const READ_COMMANDS = new Set(['scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.validatePng',
     'prefab.source.inspect', 'script.read', 'script.patch.plan', 'script.operation.get', 'content.stress.run']);
-const MEMORY_WRITES = ['cocos_2x_memory_remember', 'cocos_2x_memory_correct', 'cocos_2x_memory_delete'];
+const MEMORY_WRITES = ['cocos_2x_memory_remember', 'cocos_2x_memory_correct', 'cocos_2x_memory_delete', 'cocos_2x_memory_compact'];
 const NON_CONTENT_WRITES = new Set(['cocos_2x_operation_preview_accept', 'cocos_2x_operation_reconcile', ...MEMORY_WRITES]);
 const record = (value: unknown): value is JsonObject => value !== null && typeof value === 'object' && !Array.isArray(value);
 const object = (value: unknown): JsonObject => record(value) ? value : {};
@@ -30,9 +30,9 @@ export function creatorTaskCriteria(task: string): AgentGoalCriterion[] {
         .replace(/\bdo not (?:modify|create|add|delete|write)[^,;\n.]*/gi, '').replace(/^[\s,，。；;]+/, '').trim();
     const read = /^(?:(?:请|帮我|麻烦|先)\s*)*(?:只读|阅读|读取|查看|检查|查询|分析|解释|总结|列出|核对)|^(?:please\s+)?(?:read|inspect|check|query|analy[sz]e|explain|summari[sz]e|list|show)\b/i.test(value);
     const restore = /补偿|恢复|撤销|回滚|\bcompensate\b|\brestore\b|\bundo\b|\brollback\b/i.test(value);
-    const contentScope = value.replace(/(?:删除|修改|更新|纠正)(?:这条|该|一条|所有|项目)?记忆|\b(?:delete|remove|modify|update|correct)\s+(?:the\s+|this\s+|project\s+)?memory\b/gi, '');
+    const contentScope = value.replace(/(?:删除|修改|更新|纠正|压缩|整合|合并|整理)(?:这条|该|一条|所有|项目)?记忆|\b(?:delete|remove|modify|update|correct|compact|consolidate|merge|organize)\s+(?:the\s+|this\s+|project\s+)?memory\b/gi, '');
     const modifies = restore || /创建|新建|新增|增加|添加|制作|搭建|修改|改名|重命名|改为|改成|更新|删除|实现|修复|重构|移动|调整|替换|实例化|生成|导入|做一个|建一个|帮我做|\b(?:create|make|build|add|modify|change|rename|update|delete|remove|implement|fix|refactor|move|replace|instantiate|import)\b/i.test(contentScope);
-    const memoryMutation = /记住|忘记|(?:删除|修改|更新|纠正).*记忆|\bremember\b|\bforget\b|\b(?:delete|remove|modify|update|correct).*\bmemory\b/i.test(value);
+    const memoryMutation = /记住|忘记|(?:删除|修改|更新|纠正|压缩|整合|合并|整理).*记忆|\bremember\b|\bforget\b|\b(?:delete|remove|modify|update|correct|compact|consolidate|merge|organize).*\bmemory\b/i.test(value);
     if (memoryMutation && !modifies) {
         const requirements = [criterion('memory-mutation', '取得经批准、已持久化的记忆变更回执', MEMORY_WRITES, 'creator-memory-write')];
         if (read) requirements.unshift(criterion('requested-read', '取得本次只读检查所需的 Creator 内容回执', READ_TOOLS, 'creator-read'));
@@ -157,7 +157,7 @@ export function verifyCreatorTaskReceipt(criterion: AgentGoalCriterion, receipt:
         && (receipt.toolName === 'cocos_2x_command_execute' ? READ_COMMANDS.has(command(receipt))
             : receipt.access === 'read' && READ_TOOLS.includes(receipt.toolName));
     if (requirement === 'creator-memory-write') return receipt.access === 'write' && good(receipt) && MEMORY_WRITES.includes(receipt.toolName)
-        && ['remembered', 'corrected', 'deleted'].includes(text(data(receipt).outcome)) && !!operationId(receipt);
+        && ['remembered', 'corrected', 'deleted', 'compacted'].includes(text(data(receipt).outcome)) && !!operationId(receipt);
     if (requirement === 'creator-scope-unknown' || requirement === 'creator-interaction') return false;
     const attempts = writes(receipts);
     if (!attempts.length) return false;

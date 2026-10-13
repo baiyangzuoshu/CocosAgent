@@ -178,13 +178,29 @@ export class AgentKernel {
                 discovered.push(TOOL_RESULT_ARCHIVE_TOOL);
             }
             const available = runPolicy?.filterTools?.(discovered, input.mode) || discovered;
-            const prepared = prepareAgentContext({
+            const contextInput = {
                 messages,
                 tools: available,
                 activeTask: input.task.trim(),
                 receipts,
                 ...(this.options.contextBudget ? { options: this.options.contextBudget } : {}),
-            });
+            };
+            let prepared = prepareAgentContext(contextInput);
+            const summarizePrepared = async (current: typeof prepared): Promise<typeof prepared> => {
+                if (!current.report.compacted || !current.dialogueToSummarize?.trim()
+                    || !this.options.provider.summarizeContext || input.signal?.aborted) return current;
+                try {
+                    const summary = await this.options.provider.summarizeContext({ task: input.task.trim(),
+                        dialogue: current.dialogueToSummarize, ...(input.signal ? { signal: input.signal } : {}) });
+                    if (!summary.trim()) return current;
+                    const candidate = prepareAgentContext({ ...contextInput, dialogueSummary: summary });
+                    return candidate.fitsBudget ? candidate : current;
+                } catch {
+                    // Deterministic receipt/dialogue compaction remains the safe fallback.
+                    return current;
+                }
+            };
+            prepared = await summarizePrepared(prepared);
             if (prepared.report.compacted) {
                 contextCompactions.push(prepared.report);
                 await this.emit({ type: 'context.compacted', runId, round, report: prepared.report });
@@ -202,18 +218,57 @@ export class AgentKernel {
                 reason = 'context-budget-exceeded';
                 break;
             }
-            await this.emit({ type: 'model.requested', runId, round });
-
             let response;
-            try {
-                response = await this.options.provider.complete({
-                    messages: prepared.messages,
-                    tools: available,
-                    mode: input.mode,
-                    ...(input.signal ? { signal: input.signal } : {}),
-                });
-            } catch (error) {
-                reason = input.signal?.aborted ? 'cancelled' : `model-error:${errorName(error)}`;
+            let providerAttempt = 0;
+            while (true) {
+                await this.emit({ type: 'model.requested', runId, round });
+                try {
+                    response = await this.options.provider.complete({
+                        messages: prepared.messages,
+                        tools: available,
+                        mode: input.mode,
+                        ...(input.signal ? { signal: input.signal } : {}),
+                    });
+                    break;
+                } catch (error) {
+                    if (input.signal?.aborted) { reason = 'cancelled'; break; }
+                    const code = isRecord(error) && typeof error.code === 'string' ? error.code : '';
+                    if (code === 'DEEPSEEK_CONTEXT_TOO_LONG' && providerAttempt === 0) {
+                        providerAttempt += 1;
+                        const reducedBudget = Math.max(512, Math.floor(prepared.report.maxEstimatedTokens * 0.65));
+                        if (reducedBudget >= prepared.report.maxEstimatedTokens) {
+                            reason = 'provider-context-limit-local-budget-exhausted';
+                            finalText = '模型报告上下文超限，但本轮已达到最小本地预算；为避免重复发送相同请求，已停止运行。';
+                            break;
+                        }
+                        const retry = prepareAgentContext({ ...contextInput,
+                            options: { ...(this.options.contextBudget || {}), maxEstimatedTokens: reducedBudget } });
+                        prepared = await summarizePrepared(retry);
+                        if (!prepared.fitsBudget) {
+                            contextCompactions.push(prepared.report);
+                            await this.emit({ type: 'context.budget-exceeded', runId, round, report: prepared.report });
+                            finalText = `模型报告上下文超限，压缩后仍无法装入重试预算（估算 ${prepared.report.estimatedTokens}，上限 ${prepared.report.maxEstimatedTokens}）；已停止本轮。`;
+                            reason = 'context-budget-exceeded';
+                            break;
+                        }
+                        if (prepared.report.compacted) {
+                            contextCompactions.push(prepared.report);
+                            await this.emit({ type: 'context.compacted', runId, round, report: prepared.report });
+                        }
+                        continue;
+                    }
+                    if (code === 'DEEPSEEK_CONTEXT_TOO_LONG') {
+                        reason = 'provider-context-limit-retry-exhausted';
+                        finalText = '模型在一次压缩重试后仍报告上下文超限；本轮已停止，未继续调用工具。';
+                        break;
+                    }
+                    reason = `model-error:${errorName(error)}`;
+                    break;
+                }
+            }
+            if (reason !== 'turn-limit') break;
+            if (!response) {
+                reason = 'provider-response-missing';
                 break;
             }
             if (input.signal?.aborted) {

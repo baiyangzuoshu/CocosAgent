@@ -30,7 +30,7 @@ function unresolvedWriteReceipt(receipt) {
     const value = receipt?.structuredContent;
     if (!writeReceipt(receipt)) return false;
     if (receipt?.access === undefined) return true;
-    return value?.success === true && !['completed', 'already-terminal', 'no-effect', 'remembered', 'corrected', 'deleted'].includes(value.outcome);
+    return value?.success === true && !['completed', 'already-terminal', 'no-effect', 'remembered', 'corrected', 'deleted', 'compacted'].includes(value.outcome);
 }
 
 function successfulWriteReceipt(receipt) {

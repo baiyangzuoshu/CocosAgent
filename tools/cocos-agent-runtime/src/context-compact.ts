@@ -34,6 +34,7 @@ export interface PreparedAgentContext {
     messages: AgentMessage[];
     fitsBudget: boolean;
     report: ContextCompactionReport;
+    dialogueToSummarize?: string;
 }
 
 interface AcceptanceSignal {
@@ -71,6 +72,7 @@ export function prepareAgentContext(input: {
     activeTask: string;
     receipts?: AgentReceipt[];
     options?: ContextBudgetOptions;
+    dialogueSummary?: string;
 }): PreparedAgentContext {
     const maxEstimatedTokens = input.options?.maxEstimatedTokens ?? DEFAULT_MAX_ESTIMATED_TOKENS;
     const keepRecentMessages = input.options?.keepRecentMessages ?? DEFAULT_KEEP_RECENT_MESSAGES;
@@ -93,6 +95,7 @@ export function prepareAgentContext(input: {
                 maxEstimatedTokens,
                 estimatedTokens: beforeTokens,
                 compacted: false,
+                dialogueSummarySource: 'none',
                 summarizedToolCalls: 0,
                 compactedToolResults: 0,
                 retainedToolCalls: interactions.length,
@@ -107,7 +110,9 @@ export function prepareAgentContext(input: {
     const selected = selectRecentAndCriticalMessages(original, interactions, outstandingAcceptance,
         keepRecentMessages, keepRecentToolInteractions);
     const summarized = interactions.filter((interaction) => !selected.has(interaction.assistantIndex));
-    const omittedText = collectDialogueNotes(original, selected);
+    const omittedText = input.dialogueSummary?.trim()
+        ? [truncate(input.dialogueSummary.trim(), 2_400)]
+        : collectDialogueNotes(original, selected);
     const compactionMessage: AgentMessage = {
         role: 'user',
         content: createCompactionSummary(input.activeTask, omittedText, summarized, outstandingAcceptance, unpairedToolResults),
@@ -144,10 +149,12 @@ export function prepareAgentContext(input: {
     return {
         messages: compacted,
         fitsBudget: estimatedTokens <= maxEstimatedTokens,
+        dialogueToSummarize: collectDialogueForSummary(original, selected),
         report: {
             maxEstimatedTokens,
             estimatedTokens,
             compacted: true,
+            dialogueSummarySource: input.dialogueSummary?.trim() ? 'provider' : 'deterministic',
             summarizedToolCalls: summarized.length,
             compactedToolResults: compactedResultCallIds.size,
             retainedToolCalls: interactions.length - summarized.length,
@@ -157,6 +164,22 @@ export function prepareAgentContext(input: {
             unpairedToolResults,
         },
     };
+}
+
+function collectDialogueForSummary(messages: AgentMessage[], selected: Set<number>): string {
+    const parts: string[] = [];
+    let remaining = 24_000;
+    for (let index = 1; index < messages.length && remaining > 0; index += 1) {
+        if (selected.has(index)) continue;
+        const message = messages[index]!;
+        if (message.role === 'tool' || message.role === 'system' || (message.role === 'assistant' && message.toolCalls?.length)) continue;
+        const text = messageContentText(message).trim();
+        if (!text) continue;
+        const part = `${message.role}: ${truncate(text, Math.min(3_000, remaining))}`;
+        parts.push(part);
+        remaining -= part.length;
+    }
+    return parts.join('\n\n').slice(-24_000);
 }
 
 function validatePositiveInteger(value: number, name: string, min: number, max: number): void {

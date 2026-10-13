@@ -26,6 +26,19 @@ function isProjectMemoryTool(name: string): boolean {
     return name.startsWith('cocos_2x_memory_');
 }
 
+function memoryCompactionReviewed(context: AgentPolicyToolContext): boolean {
+    const requested = context.arguments.memories;
+    if (!Array.isArray(requested) || requested.length < 2 || requested.length > 8) return false;
+    return requested.every((item) => {
+        if (!isRecord(item) || typeof item.memoryId !== 'string' || !Number.isSafeInteger(item.expectedRevision)) return false;
+        return context.receipts.some((receipt) => receipt.toolName === 'cocos_2x_memory_get'
+            && !receipt.result.isError && receipt.result.structuredContent?.success === true
+            && isRecord(receipt.result.structuredContent.data)
+            && receipt.result.structuredContent.data.id === item.memoryId
+            && receipt.result.structuredContent.data.revision === item.expectedRevision);
+    });
+}
+
 function isResolved(result: AgentToolResult): boolean {
     const value = result.structuredContent;
     if (result.isError || value?.success === false) return false;
@@ -176,6 +189,12 @@ export function createCreatorAgentPolicy(input: {
                     return tools;
                 },
                 beforeTool(context: AgentPolicyToolContext) {
+                    if (input.mode === 'Agent' && context.tool.name === 'cocos_2x_memory_compact'
+                        && !memoryCompactionReviewed(context)) {
+                        return { action: 'block', code: 'MEMORY_COMPACTION_REVIEW_REQUIRED',
+                            message: 'Read every selected memory with cocos_2x_memory_get in this run and use its exact current ID/revision before proposing a merge for panel approval.',
+                            continue: true };
+                    }
                     if (input.mode === 'Agent' && recoveryOnly) {
                         let permitted = context.tool.role === 'recovery';
                         if (permitted && context.tool.name === 'cocos_2x_script_patch') {
@@ -214,7 +233,7 @@ export function createCreatorAgentPolicy(input: {
                         && sameIdentity(pendingIdentity, argumentIdentity(args))
                         && sameIdentity(pendingIdentity, resultIdentity(result))) {
                         if (receipt.toolName === 'cocos_2x_memory_operation_get'
-                            && ['remembered', 'corrected', 'deleted'].includes(String(result.structuredContent?.outcome))) {
+                            && ['remembered', 'corrected', 'deleted', 'compacted'].includes(String(result.structuredContent?.outcome))) {
                             recoveredMemoryMutation = true;
                         }
                         recoveryOnly = false;

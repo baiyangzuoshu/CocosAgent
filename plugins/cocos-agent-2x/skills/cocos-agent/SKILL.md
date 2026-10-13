@@ -40,6 +40,12 @@ Read steps require fresh content evidence. Write/restore steps require approved 
 
 Execute only the current approved step. On unmet acceptance, report the missing evidence and actual effects; do not repeat a previous write to manufacture success. Old plans without business conditions must be regenerated after checking existing operation records. Prior-step evidence is identity/state metadata, not source text or image bytes, and is not new execution authority.
 
+## Context compaction and project memory
+
+Long histories may be compacted before model requests. A provider may summarize omitted dialogue without tools; the current user request, exact Creator receipt index, operation identities, and unresolved acceptance/recovery states remain separately preserved. If summarization fails, deterministic compaction continues. If the provider reports context overflow, the Agent reduces its local budget and retries once; a second overflow stops the run before another tool call.
+
+Project memory is isolated by Creator project and is historical context. Read current entries before retaining or changing them. Only propose, remember, correct, delete, or compact memory when the user’s request authorizes that action; writes still require panel approval. For explicit cleanup, inspect exact IDs and revisions with `cocos_2x_memory_search` / `get`, then use `cocos_2x_memory_compact` to merge 2–8 records of one category. Include the target and concise merged body. The approved write removes other selected records, advances the target revision, retains the union of source citations (up to 8), and leaves content-free tombstones for recovery. If the source union exceeds 8, compact a smaller group. Query `cocos_2x_memory_operation_get` after an uncertain result; never repeat compaction blindly.
+
 ## Write safety and recovery
 
 Scene edits, imports, deletion, release selection, and builds change project state. Explain the intended target and expected change before invoking a write tool when the user’s request is ambiguous. Respect MCP approval prompts.

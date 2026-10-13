@@ -22,6 +22,8 @@
 
 Agent 可以先调用 `cocos_2x_memory_propose` 提取单条候选。候选来源立即按当前任务/历史用户消息或本 run 成功回执校验，保留精确来源、call ID 和可用的 operation ID，只存在当前 Agent run 的内存中；工具回执同时返回有限的相似已有条目供模型判断重复或整合。候选提取本身不写磁盘，也不产生长期记忆。随后 `remember` 或 `correct` 可携带候选 ID，Host 会再次验证候选内容与来源未被替换；持久化操作仍按原有 Creator 面板审批、项目指令哈希门槛、修订比较和操作 ID 恢复流程执行。没有自动把模型摘要写入记忆的后台流程。
 
+显式记忆整理由 `cocos_2x_memory_compact` 完成：用户任务须授权合并/整理；Agent 先在本 run 对每条所选记忆调用精确 `get`，再提交 2–8 个同类别记录的 ID 与 revision、明确的目标 ID 和合并正文。策略在送达面板审批前检查每个 ID/revision 都有成功读回。工具再次检查无重复 ID、全部版本仍有效、来源引用总数不超过 8、正文不含凭据；面板单次批准后以一次 CAS 写入更新目标版本、聚合全部来源引用、移除其余选中正文并为这些 ID 写入无正文 tombstone。operation record 保留受影响 ID；精确操作查询会返回主记录和关联 tombstones。该机制不自动推断相似度或触发写入，建议正文由模型整理后交给用户审批。
+
 支持两种来源：
 
 - **用户来源：** 精确引用当前任务（`messageIndex=0`）或本轮输入所带历史中的用户消息。Host 要求引文确实出现在对应文本中，并记录 `runId`、消息序号、原文片段和记录时间。
@@ -36,6 +38,7 @@ Agent 可以先调用 `cocos_2x_memory_propose` 提取单条候选。候选来�
 | `cocos_2x_memory_search` | read | 搜索本工程；空查询列最近项。返回 ID、修订号和来源 |
 | `cocos_2x_memory_get` | read | 按精确 ID 读取内容、来源和纠正历史 |
 | `cocos_2x_memory_propose` | read | 从已验证来源提取 run-local 候选；返回相似现有条目，未持久化 |
+| `cocos_2x_memory_compact` | write | 经批准合并 2–8 个同类别、精确 revision 的记录，保留至多 8 条来源引用并以无正文 tombstone 记录被移除项 |
 | `cocos_2x_memory_remember` | write | 新建有来源的持久记忆；同名项拒绝，提示读取并纠正现有条目 |
 | `cocos_2x_memory_correct` | write | 必须给出当前 `expectedRevision` 和新的可核验来源；旧版本及旧来源保留在最近 10 版历史中 |
 | `cocos_2x_memory_delete` | write | 必须给出当前 ID/修订号；移除有效内容及历史，只留不含内容的 ID/修订号/时间/操作 ID 墓碑 |
@@ -43,7 +46,7 @@ Agent 可以先调用 `cocos_2x_memory_propose` 提取单条候选。候选来�
 
 所有记忆写入都经过 Creator 面板现有批准回调；如果当前工程有 `AGENTS.md`，也服从同轮内容哈希门槛。纠正和删除使用修订号比较，避免覆盖已更新的记忆。Agent 策略要求用户明确提出遗忘/删除具体记忆后才能提交删除调用，删除仍需面板批准。
 
-记忆操作 ID 使用模型返回的精确 tool-call ID。Host 中断或保存后回执丢失时，Agent 只获得原操作的恢复工具；读取原记忆存储账本后才允许继续。若原操作已提交，恢复返回具体记忆/版本；若没有记录，返回 `no-effect`，不会自动重复写入。
+记忆操作 ID 使用模型返回的精确 tool-call ID。Host 中断或保存后回执丢失时，Agent 只获得原操作的恢复工具；读取原记忆存储账本后才允许继续。若原操作已提交，恢复返回具体记忆/版本；若没有记录，返回 `no-effect`，不会自动重复写入。Compaction 恢复还列出此 operation ID 生成的全部无正文 tombstones，可核对全部受影响的源记录。
 
 ## 验收边界
 

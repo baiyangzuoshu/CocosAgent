@@ -756,7 +756,8 @@ Editor.Panel.extend({
             const identities = Array.isArray(report.operationIdentities) ? report.operationIdentities.length : 0;
             const pending = Array.isArray(report.outstandingAcceptance) ? report.outstandingAcceptance.length : 0;
             const compactedResults = report.compactedToolResults || 0;
-            this.addActivity(`上下文已压缩：${report.summarizedToolCalls || 0} 次旧工具调用已建立回执索引，另缩短 ${compactedResults} 条只读回执；保留 ${identities} 个操作身份和 ${pending} 项待验收/恢复状态。`);
+            const summary = report.dialogueSummarySource === 'provider' ? '已保留模型整理的历史约束' : '使用确定性历史摘要';
+            this.addActivity(`上下文已压缩：${summary}；${report.summarizedToolCalls || 0} 次旧工具调用已建立回执索引，另缩短 ${compactedResults} 条只读回执；保留 ${identities} 个操作身份和 ${pending} 项待验收/恢复状态。`);
             return;
         }
         if (message.type === 'context.budget-exceeded') {

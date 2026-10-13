@@ -114,7 +114,7 @@ export function parseStructuredPlan(text, { availableToolNames } = {}) {
                 throw new TypeError('INVALID_PLAN_RUNTIME_TOOLS');
             }
             if (step.acceptance.kind === 'read' && step.requiredTools.includes('cocos_2x_script_patch')) throw new TypeError('INVALID_PLAN_READ_STEP_WRITE');
-            if (step.acceptance.kind === 'memory' && !step.requiredTools.some((name) => /^cocos_2x_memory_(remember|correct|delete)$/.test(name))) {
+            if (step.acceptance.kind === 'memory' && !step.requiredTools.some((name) => /^cocos_2x_memory_(remember|correct|delete|compact)$/.test(name))) {
                 throw new TypeError('INVALID_PLAN_MEMORY_WRITE_TOOLS');
             }
             const stepText = [step.title, step.description, ...step.preconditions, step.validation, step.recovery].join('\n');

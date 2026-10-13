@@ -79,6 +79,8 @@ export interface ModelProvider {
         mode: AgentMode;
         signal?: AbortSignal;
     }): Promise<ModelResponse>;
+    /** Optional tool-free summary of historical dialogue during context compaction. */
+    summarizeContext?(input: { task: string; dialogue: string; signal?: AbortSignal }): Promise<string>;
 }
 
 export interface ToolRegistry {
@@ -197,6 +199,7 @@ export interface ContextCompactionReport {
     maxEstimatedTokens: number;
     estimatedTokens: number;
     compacted: boolean;
+    dialogueSummarySource: 'provider' | 'deterministic' | 'none';
     summarizedToolCalls: number;
     compactedToolResults: number;
     retainedToolCalls: number;
