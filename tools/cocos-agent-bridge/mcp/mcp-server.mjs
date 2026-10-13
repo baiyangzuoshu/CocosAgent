@@ -9,7 +9,7 @@ import * as z from 'zod/v4';
 
 const require = createRequire(import.meta.url);
 const { handleAsync } = require('../agent-jsonl.js');
-const { observeRuntime } = require('../runtime-observation.js');
+const { createRuntimeObserver } = require('../runtime-observation.js');
 const { fingerprintFiles, listFiles } = require('../runtime-fingerprint.js');
 const catalogSchema = require('../catalog.schema.json');
 const mcpPackage = require('./package.json');
@@ -343,7 +343,8 @@ function createServer(projectRoots, options = {}) {
     const targetList = roots.map((projectRoot) => ({ creatorVersion: CREATOR_VERSION, projectRoot }));
     const projectRoot = z.enum(roots);
     const invokeAgent = options.invokeAgent || handleAsync;
-    const runtimeObserver = options.observeRuntime || observeRuntime;
+    const runtimeSessions = options.observeRuntime ? null : createRuntimeObserver(options.runtimeObserverOptions);
+    const runtimeObserver = options.observeRuntime || ((input) => runtimeSessions.observe(input));
     const runScenePipelineWorker = options.runScenePipelineWorker || runAgentWorker;
     const activeScenePipelines = new Map();
     let requestId = 0;
@@ -408,6 +409,12 @@ function createServer(projectRoots, options = {}) {
             } catch (_) { /* A detached MCP client must not interrupt an editor operation. */ }
         };
         try {
+            const contentWrite = method === 'command.execute'
+                ? ['script.patch', 'scene.node.create', 'scene.node.patch', 'scene.pngSprite', 'prefab.source.patch',
+                    'asset.importPng', 'asset.removeImportedPng', 'asset.refreshPng', 'asset.refreshFolder'].includes(params.command)
+                : /^(?:assets|scene|workflow)\..*\.(?:execute|compensate|replay|repair)$/.test(method);
+            // Invalidate before dispatch, including uncertain writes and captures in flight.
+            if (runtimeSessions && selectedProject && contentWrite) runtimeSessions.contentChanged(selectedProject);
             // Discovery and execution must attest the same MCP process to the Host.
             const request = { id: ++requestId, method, params: { ...params, mcpRuntime: MCP_RUNTIME } };
             let response;
@@ -429,9 +436,11 @@ function createServer(projectRoots, options = {}) {
             } else {
                 response = await invokeAgent(request, { onProgress });
             }
-            return response && response.result && typeof response.result === 'object'
-                ? response.result
-                : { success: false, error: { code: 'INVALID_HOST_RESPONSE', message: 'CocosAgent Host returned an invalid result.' } };
+            const result = response && response.result && typeof response.result === 'object'
+                ? response.result : { success: false, error: { code: 'INVALID_HOST_RESPONSE', message: 'CocosAgent Host returned an invalid result.' } };
+            if (runtimeSessions && selectedProject && method === 'command.execute' && params.command === 'runtime.preview.start'
+                && result.success === true) runtimeSessions.previewStarted(selectedProject);
+            return result;
         } catch (_) {
             return { success: false, error: { code: 'INTERNAL_ERROR', message: 'CocosAgent request failed.' } };
         }
@@ -525,7 +534,7 @@ function createServer(projectRoots, options = {}) {
     }
 
     server.registerTool('cocos_2x_runtime_observe', {
-        description: 'Read the running Creator 2.4.15 Web preview for the registered project and exact active scene identity (scene name and UUID). Collects bounded console errors/warnings/logs, uncaught exceptions, frame progress, pause state, an optional whitelisted node snapshot, and a cropped game-canvas screenshot. Requires the current scene preview server on 127.0.0.1:7456; it does not start or modify the project. The captured screenshot and diagnostic text are supplied to the configured DeepSeek model for this request.',
+        description: 'Observe the registered Creator 2.4.15 Web preview with its exact active scene name, UUID and editor instance. Opens an isolated visible Agent preview window on first observation and reuses that exact page for later observations, retaining user clicks and logs between observations. Interact in this Agent window, not an unrelated ordinary browser tab. Returns session/page identity, bounded diagnostics, frame progress, optional whitelisted node state and a cropped canvas image. Requires the preview server on 127.0.0.1:7456. Content changes or a closed/changed session require an approved runtime.preview.start before a refresh; never restart preview between observations merely to read it. This tool does not inject game input. The image and diagnostics are supplied to the configured model.',
         inputSchema: z.object({ projectRoot, expectedScene: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
             nodePath: z.string().min(1).max(240).regex(/^[A-Za-z0-9_ -]+(?:\/[A-Za-z0-9_ -]+)*$/).optional(),
             timeoutMs: z.number().int().min(3000).max(30000).optional() }).strict(),
@@ -552,8 +561,16 @@ function createServer(projectRoots, options = {}) {
         if (!previewCapability || previewCapability.status !== 'available') {
             return toolReply({ success: false, outcome: 'failed', error: { code: previewCapability?.reason || 'PREVIEW_CAPABILITY_UNAVAILABLE' } });
         }
-        const observation = await runtimeObserver({ expectedScene, expectedSceneUuid, ...(nodePath ? { nodePath } : {}),
+        let observation = await runtimeObserver({ projectRoot: project, instanceId: catalog.data.instance.instanceId,
+            expectedScene, expectedSceneUuid, ...(nodePath ? { nodePath } : {}),
             timeoutMs: timeoutMs === undefined ? 20000 : timeoutMs });
+        if (observation.success === true) {
+            const after = await invoke('capabilities.list', { targets: targetList, projectRoot: project, creatorVersion: CREATOR_VERSION }, {});
+            if (after?.success !== true || after.data?.instance?.instanceId !== catalog.data.instance.instanceId
+                || after.data?.instance?.activeScene !== expectedScene || after.data?.instance?.activeSceneUuid !== expectedSceneUuid) {
+                observation = { success: false, outcome: 'failed', error: { code: 'CREATOR_CONTEXT_CHANGED_DURING_OBSERVATION' } };
+            }
+        }
         const { screenshotBase64, ...structured } = observation;
         const content = [{ type: 'text', text: JSON.stringify(structured) }];
         if (typeof screenshotBase64 === 'string' && Buffer.byteLength(screenshotBase64, 'base64') <= 2 * 1024 * 1024) {
@@ -830,7 +847,9 @@ function createServer(projectRoots, options = {}) {
             projectRoot: selected, creatorVersion: CREATOR_VERSION, ...params,
         }), { title: 'Stop a Creator 2.4.15 content preview', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
 
-    server.server.onclose = () => { void require('../content-preview.js').closeAll().catch(() => {}); };
+    server.server.onclose = () => {
+        void Promise.allSettled([require('../content-preview.js').closeAll(), runtimeSessions ? runtimeSessions.closeAll() : Promise.resolve()]);
+    };
     return server;
 }
 

@@ -83,6 +83,24 @@ export function projectContextMatchesProject(context, projectRoot) {
     catch (_) { return false; }
 }
 
+export function finalizePlanResult(result, { conversationId, userTask }) {
+    if (result.status !== 'completed') return { result, plan: null };
+    if (!hasPlanSetupReceipts(result.receipts)) {
+        return { result: { ...result, status: 'failed', reason: 'plan-preflight-missing',
+            finalText: '无法生成计划：尚未取得本轮 Creator 就绪实例和能力目录回执。项目未修改。' }, plan: null };
+    }
+    let plan;
+    try {
+        plan = createPlan({ conversationId, userTask,
+            data: parseStructuredPlan(result.finalText, { availableToolNames: result.availableToolNames }) });
+    } catch (error) {
+        return { result: { ...result, status: 'failed', reason: 'plan-validation-failed',
+            finalText: `计划没有通过结构校验（${String(error.message || error).slice(0, 300)}）。项目未修改；请重新生成计划。` }, plan: null };
+    }
+    return { result: { ...result, reason: 'plan-generated',
+        finalText: `已生成 ${plan.steps.length} 步计划「${plan.title}」。请先检查每一步，再选择开始。计划内容本身不会修改项目。` }, plan };
+}
+
 function traceDirectory() {
     const userStateRoot = process.env.LOCALAPPDATA || process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state');
     const directory = path.join(userStateRoot, 'CocosAgent', 'agent-runs');
@@ -599,23 +617,24 @@ async function start(options) {
                     onEvent: onAgentEvent,
                     memoryStore,
                 });
-            void agentRun.then((result) => {
+            void agentRun.then((rawResult) => {
+                let result = rawResult;
                 let structuredPlan = null;
                 let assistantText;
                 if (message.mode === 'Plan') {
-                    if (result.status === 'completed' && hasPlanSetupReceipts(result.receipts)) {
-                        try {
-                            structuredPlan = createPlan({ conversationId: message.conversationId, userTask: message.text.trim(),
-                                data: parseStructuredPlan(result.finalText, { availableToolNames: result.availableToolNames }) });
-                            plans.set(structuredPlan.id, structuredPlan);
-                            writeEvent(result.tracePath, { event: 'plan.created', plan: planView(structuredPlan) }, apiKey);
-                            assistantText = `已生成 ${structuredPlan.steps.length} 步计划「${structuredPlan.title}」。请先检查每一步，再选择开始。计划内容本身不会修改项目。`;
-                        } catch (error) {
-                            assistantText = `计划没有通过结构校验（${String(error.message || error)}）。项目未修改；请重新生成计划。`;
-                        }
-                    } else {
-                        assistantText = '无法生成计划：尚未取得本轮 Creator 就绪实例和能力目录回执。项目未修改。';
+                    const finalized = finalizePlanResult(rawResult, {
+                        conversationId: message.conversationId, userTask: message.text.trim(),
+                    });
+                    result = finalized.result;
+                    structuredPlan = finalized.plan;
+                    writeEvent(result.tracePath, { event: 'plan.generation.finished',
+                        kernelStatus: rawResult.status, kernelReason: rawResult.reason,
+                        status: result.status, reason: result.reason }, apiKey);
+                    if (structuredPlan) {
+                        plans.set(structuredPlan.id, structuredPlan);
+                        writeEvent(result.tracePath, { event: 'plan.created', plan: planView(structuredPlan) }, apiKey);
                     }
+                    assistantText = assistantAnswer(result, message.mode);
                 } else {
                     assistantText = assistantAnswer(result, message.mode);
                 }
@@ -628,6 +647,7 @@ async function start(options) {
                 conversations.set(message.conversationId, conversation.slice(-MAX_HISTORY));
                 runRecord.status = result.status;
                 runRecord.reason = result.reason;
+                if (result.goalEvaluation) runRecord.goalEvaluation = result.goalEvaluation;
                 runRecord.executionChecklist = Array.isArray(result.executionChecklist) ? result.executionChecklist : runRecord.executionChecklist;
                 runRecord.updatedAt = new Date().toISOString();
                 runRecord.activeTool = null;

@@ -4,19 +4,15 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { randomUUID } = require('node:crypto');
 const WebSocket = require('./vendor/ws');
+const { discoverBrowser } = require('./browser-discovery');
 
 const PREVIEW_URL = 'http://127.0.0.1:7456/';
-const CHROME_CANDIDATES = [
-    process.env.COCOS_AGENT_CHROME_PATH,
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    '/Applications/Chromium.app/Contents/MacOS/Chromium',
-].filter(Boolean);
 const MAX_EVENTS = 24;
 const MAX_EVENT_TEXT = 1200;
 
 function delay(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
-function chromePath() { return CHROME_CANDIDATES.find((filename) => fs.existsSync(filename)) || null; }
 
 function validSceneName(value) { return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value); }
 function validSceneUuid(value) { return typeof value === 'string' && /^[0-9a-fA-F-]{36}$/.test(value); }
@@ -40,6 +36,7 @@ function targetExpression(expectedScene, expectedSceneUuid, nodePath) {
     const expectedUuid = JSON.stringify(expectedSceneUuid || null);
     const parts = JSON.stringify(nodePath ? nodePath.split('/') : null);
     return `(function(){
+      if(location.origin!==${JSON.stringify(new URL(PREVIEW_URL).origin)}||location.pathname!=='/')return {pageMismatch:true};
       if(typeof cc==='undefined'||!cc.director)return null;
       var scene=cc.director.getScene();if(!scene)return null;
       var canvas=document.querySelector('#GameCanvas')||document.querySelector('canvas');
@@ -84,7 +81,49 @@ function locationFromStack(stack) {
     return { resource: sanitizeText(resource).slice(0, 100), line: Number.isInteger(frame.lineNumber) ? frame.lineNumber + 1 : null };
 }
 
-function addBounded(list, item) { if (list.length < MAX_EVENTS) list.push(item); }
+function addBounded(list, item) {
+    if (list.length === MAX_EVENTS) { list.shift(); list.dropped = (list.dropped || 0) + 1; }
+    list.push(item);
+}
+
+function previewPageUrl(value) {
+    try { const url = new URL(value); return url.origin === new URL(PREVIEW_URL).origin && url.pathname === '/'; }
+    catch (_) { return false; }
+}
+
+function localDebuggerUrl(value, port) {
+    try { const url = new URL(value); return url.protocol === 'ws:' && url.hostname === '127.0.0.1'
+        && Number(url.port) === port && /^\/devtools\/page\/[^/]+$/.test(url.pathname); }
+    catch (_) { return false; }
+}
+
+async function closeRuntimeSession(session) {
+    if (!session || session.closing) return session && session.closing;
+    session.closed = true;
+    session.closing = (async () => {
+        if (session.send && session.socket && session.socket.readyState === WebSocket.OPEN) {
+            await Promise.race([session.send('Browser.close').catch(() => {}), delay(800)]);
+        }
+        if (session.socket) { try { session.socket.close(); } catch (_) {} }
+        if (session.child && session.child.exitCode === null && !session.childExited && !session.childError) {
+            try { session.child.kill(); } catch (_) {}
+            await Promise.race([new Promise((resolve) => session.child.once('exit', resolve)), delay(1500)]);
+        }
+        if (session.pending) {
+            for (const settle of session.pending.values()) settle({ error: { message: 'PREVIEW_CLOSED' } });
+            session.pending.clear();
+        }
+        // Delete only our own generated profile, and only after the browser exits.
+        const profile = session.profile;
+        if (profile && (!session.child || session.childError || session.childExited || session.child.exitCode !== null)) {
+            try {
+                if (path.dirname(profile) === session.tempRoot && /^cocos-agent-runtime-observe-[A-Za-z0-9]+$/.test(path.basename(profile))
+                    && fs.realpathSync(profile) === profile) fs.rmSync(profile, { recursive: true, force: true });
+            } catch (_) { /* Windows may retain a lock; never delete a wider directory. */ }
+        }
+    })();
+    return session.closing;
+}
 
 async function observeRuntime(input, options = {}) {
     const expectedScene = input && input.expectedScene;
@@ -96,10 +135,15 @@ async function observeRuntime(input, options = {}) {
         || !Number.isInteger(timeoutMs) || timeoutMs < 3000 || timeoutMs > 30000) {
         return { success: false, error: { code: 'INVALID_RUNTIME_OBSERVATION_INPUT' } };
     }
-    const executable = options.chromePath || chromePath();
-    if (!executable) return { success: false, error: { code: 'CHROME_NOT_FOUND' } };
+    const stopAt = Date.now() + timeoutMs;
+    const session = options.session || { id: randomUUID(), persistent: false };
+    if (session.closed || session.childExited || session.disconnected) {
+        return { success: false, error: { code: 'PREVIEW_SESSION_CLOSED', message: 'Approve runtime.preview.start to open a new Agent preview session.' } };
+    }
+    const executable = session.executable || options.chromePath || discoverBrowser({ deadline: stopAt });
+    if (!executable) return { success: false, error: { code: Date.now() >= stopAt ? 'PREVIEW_RUNTIME_TIMEOUT' : 'CHROME_NOT_FOUND' } };
     const fetchImpl = options.fetch || fetch;
-    const previewDeadline = Date.now() + Math.min(timeoutMs, 10000);
+    const previewDeadline = Math.min(stopAt, Date.now() + 10000);
     let previewReady = false;
     let previewStatus = null;
     while (Date.now() < previewDeadline) {
@@ -113,88 +157,156 @@ async function observeRuntime(input, options = {}) {
     if (!previewReady) return { success: false, error: { code: 'PREVIEW_SERVER_UNAVAILABLE',
         ...(previewStatus ? { statusCode: previewStatus } : {}),
         message: 'Creator 2.4.15 Web preview is not reachable on 127.0.0.1:7456.' } };
+    if (session.closed || Date.now() >= stopAt) return { success: false, error: { code: session.closed ? 'PREVIEW_SESSION_CLOSED' : 'PREVIEW_RUNTIME_TIMEOUT' } };
 
-    const profile = fs.mkdtempSync(path.join(options.tempRoot || os.tmpdir(), 'cocos-agent-runtime-observe-'));
+    session.tempRoot = session.tempRoot || fs.realpathSync(options.tempRoot || os.tmpdir());
+    const profile = session.profile || (session.profile = fs.mkdtempSync(path.join(session.tempRoot, 'cocos-agent-runtime-observe-')));
     const spawnImpl = options.spawn || spawn;
     const socketApi = options.WebSocket || WebSocket;
-    const child = spawnImpl(executable, ['--headless=new', '--no-first-run', '--no-default-browser-check',
-        '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--remote-allow-origins=*',
-        '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--window-size=1280,800', 'about:blank'], { stdio: 'ignore' });
-    let socket = null;
-    let nextId = 0;
-    const pending = new Map();
-    const errors = [];
-    const warnings = [];
-    const logs = [];
+    if (!session.child) {
+        try {
+            session.executable = executable;
+            session.child = spawnImpl(executable, [...(session.persistent ? ['--new-window'] : ['--headless=new']),
+                '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1',
+                '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows',
+                `--user-data-dir=${profile}`, '--window-size=1280,800',
+                ...(!session.persistent ? ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] : []), 'about:blank'],
+            { stdio: 'ignore', windowsHide: true, shell: false });
+        } catch (_) {
+            await closeRuntimeSession(session);
+            return { success: false, error: { code: 'CHROME_START_FAILED' } };
+        }
+        session.child.once('exit', () => { session.childExited = true; session.closed = true; });
+        session.child.once('error', () => { session.childError = true; session.closed = true; });
+    }
+    let socket = session.socket || null;
+    session.nextId = session.nextId || 0;
+    const pending = session.pending || (session.pending = new Map());
+    const errors = session.errors || (session.errors = []);
+    const warnings = session.warnings || (session.warnings = []);
+    const logs = session.logs || (session.logs = []);
+    const pageErrors = session.pageErrors || (session.pageErrors = []);
     const now = Date.now;
-    const stopAt = now() + timeoutMs;
-    let childExited = false;
-    child.once('exit', () => { childExited = true; });
-    const send = (method, params = {}) => new Promise((resolve, reject) => {
+    const send = (method, params = {}, requestTimeout = 10000) => new Promise((resolve, reject) => {
         if (!socket || socket.readyState !== socketApi.OPEN) { reject(new Error('PREVIEW_CDP_DISCONNECTED')); return; }
-        const id = ++nextId;
-        const timer = setTimeout(() => { pending.delete(id); reject(new Error(`CDP_TIMEOUT_${method}`)); }, 10000);
+        const id = ++session.nextId;
+        const timer = setTimeout(() => { pending.delete(id); reject(new Error(`CDP_TIMEOUT_${method}`)); },
+            method === 'Browser.close' ? requestTimeout : Math.max(1, Math.min(requestTimeout, stopAt - now())));
         pending.set(id, (message) => { clearTimeout(timer); message.error ? reject(new Error(message.error.message)) : resolve(message.result || {}); });
-        socket.send(JSON.stringify({ id, method, params }));
+        try { socket.send(JSON.stringify({ id, method, params })); }
+        catch (error) { const settle = pending.get(id); pending.delete(id); settle({ error: { message: error.message } }); }
     });
+    session.send = (method, params) => send(method, params, 1000);
     const evaluate = async (expression) => {
         const result = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, timeout: 5000 });
         if (result.exceptionDetails) throw new Error(result.exceptionDetails.text || 'PREVIEW_EVALUATION_FAILED');
         return result.result && result.result.value;
     };
     try {
-        let port = null;
-        while (now() < stopAt && !childExited) {
-            const marker = path.join(profile, 'DevToolsActivePort');
-            if (fs.existsSync(marker)) { port = Number(fs.readFileSync(marker, 'utf8').split('\n')[0]); if (port) break; }
-            await delay(50);
-        }
-        if (!port) return { success: false, error: { code: childExited ? 'CHROME_EXITED' : 'CHROME_DEVTOOLS_NOT_READY' } };
-
-        let page = null;
-        while (now() < stopAt && !childExited) {
-            try {
-                const response = await fetchImpl(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(1000) });
-                const pages = await response.json();
-                page = pages.find((item) => item.type === 'page' && item.url === 'about:blank');
-                if (page) break;
-            } catch (_) { /* DevTools is still starting. */ }
-            await delay(50);
-        }
-        if (!page) return { success: false, error: { code: 'PREVIEW_PAGE_NOT_FOUND' } };
-        socket = new socketApi(page.webSocketDebuggerUrl);
-        await new Promise((resolve, reject) => { socket.once('open', resolve); socket.once('error', reject); });
-        socket.on('message', (raw) => {
-            let message;
-            try { message = JSON.parse(raw.toString()); } catch (_) { return; }
-            if (message.id && pending.has(message.id)) { const settle = pending.get(message.id); pending.delete(message.id); settle(message); return; }
-            if (message.method === 'Runtime.exceptionThrown') {
-                const details = message.params && message.params.exceptionDetails || {};
-                addBounded(errors, { source: 'uncaught-exception', message: sanitizeText(details.exception && details.exception.description || details.text || 'Uncaught exception'),
-                    location: locationFromStack(details.stackTrace) });
-            } else if (message.method === 'Runtime.consoleAPICalled') {
-                const params = message.params || {};
-                const level = params.type === 'warning' ? 'warning' : params.type === 'error' || params.type === 'assert' ? 'error' : 'log';
-                const item = { source: 'console', level, message: eventText(params), location: locationFromStack(params.stackTrace) };
-                if (level === 'error') addBounded(errors, item);
-                else if (level === 'warning') addBounded(warnings, item);
-                else addBounded(logs, item);
-            } else if (message.method === 'Log.entryAdded') {
-                const entry = message.params && message.params.entry || {};
-                const item = { source: 'browser', level: entry.level || 'error', message: sanitizeText(entry.text || 'Browser runtime error'),
-                    ...(entry.url ? { location: { resource: String(entry.url).split(/[/?#]/).filter(Boolean).pop() } } : {}) };
-                if (entry.level === 'warning') addBounded(warnings, item);
-                else if (entry.level === 'error') addBounded(errors, item);
+        if (!socket) {
+            let port = null;
+            while (now() < stopAt && !session.childExited && !session.childError) {
+                const marker = path.join(profile, 'DevToolsActivePort');
+                if (fs.existsSync(marker)) { port = Number(fs.readFileSync(marker, 'utf8').split('\n')[0]); if (Number.isInteger(port) && port > 0 && port <= 65535) break; port = null; }
+                await delay(50);
             }
-        });
-        await send('Runtime.enable');
-        await send('Log.enable');
-        await send('Page.enable');
-        await send('Page.navigate', { url: PREVIEW_URL });
+            if (!port) return { success: false, error: { code: session.childError ? 'CHROME_START_FAILED' : session.childExited ? 'CHROME_EXITED' : 'CHROME_DEVTOOLS_NOT_READY' } };
+
+            let page = null;
+            while (now() < stopAt && !session.childExited && !session.childError) {
+                try {
+                    const response = await fetchImpl(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(1000) });
+                    const pages = await response.json();
+                    const matching = Array.isArray(pages) ? pages.filter((item) => item.type === 'page' && item.url === 'about:blank') : [];
+                    page = matching.length === 1 ? matching[0] : null;
+                    if (page) break;
+                } catch (_) { /* DevTools is still starting. */ }
+                await delay(50);
+            }
+            if (!page) return { success: false, error: { code: 'PREVIEW_PAGE_NOT_FOUND' } };
+            if (!localDebuggerUrl(page.webSocketDebuggerUrl, port)) return { success: false, error: { code: 'PREVIEW_DEBUGGER_IDENTITY_MISMATCH' } };
+            session.port = port;
+            session.pageId = typeof page.id === 'string' ? page.id : new URL(page.webSocketDebuggerUrl).pathname.split('/').pop();
+            socket = session.socket = new socketApi(page.webSocketDebuggerUrl);
+            socket.on('error', () => { session.disconnected = true; });
+            socket.on('close', () => {
+                session.disconnected = true;
+                for (const settle of pending.values()) settle({ error: { message: 'PREVIEW_CDP_DISCONNECTED' } });
+                pending.clear();
+            });
+            await new Promise((resolve, reject) => {
+                const timer = setTimeout(() => finish(new Error('CDP_TIMEOUT_CONNECT')), Math.max(1, Math.min(5000, stopAt - now())));
+                const onOpen = () => finish();
+                const onError = (error) => finish(error);
+                const onClose = () => finish(new Error('PREVIEW_CDP_DISCONNECTED'));
+                const finish = (error) => {
+                    clearTimeout(timer); socket.removeListener('open', onOpen); socket.removeListener('error', onError); socket.removeListener('close', onClose);
+                    error ? reject(error) : resolve();
+                };
+                socket.once('open', onOpen); socket.once('error', onError); socket.once('close', onClose);
+            });
+            socket.on('message', (raw) => {
+                let message;
+                try { message = JSON.parse(raw.toString()); } catch (_) { return; }
+                if (message.id && pending.has(message.id)) { const settle = pending.get(message.id); pending.delete(message.id); settle(message); return; }
+                if (message.method === 'Page.frameNavigated' && message.params && message.params.frame && !message.params.frame.parentId) {
+                    session.pageGeneration = (session.pageGeneration || 0) + 1;
+                    session.pageUrl = message.params.frame.url;
+                    session.pageErrorCount = 0; pageErrors.length = 0; pageErrors.dropped = 0;
+                    errors.length = 0; warnings.length = 0; logs.length = 0;
+                    errors.dropped = 0; warnings.dropped = 0; logs.dropped = 0;
+                    session.lastObservationAt = null;
+                } else if (message.method === 'Runtime.exceptionThrown') {
+                    const details = message.params && message.params.exceptionDetails || {};
+                    const item = { source: 'uncaught-exception', message: sanitizeText(details.exception && details.exception.description || details.text || 'Uncaught exception'),
+                        location: locationFromStack(details.stackTrace) };
+                    addBounded(errors, item); addBounded(pageErrors, item); session.pageErrorCount = (session.pageErrorCount || 0) + 1;
+                } else if (message.method === 'Runtime.consoleAPICalled') {
+                    const params = message.params || {};
+                    const level = params.type === 'warning' ? 'warning' : params.type === 'error' || params.type === 'assert' ? 'error' : 'log';
+                    const item = { source: 'console', level, message: eventText(params), location: locationFromStack(params.stackTrace) };
+                    if (level === 'error') { addBounded(errors, item); addBounded(pageErrors, item); session.pageErrorCount = (session.pageErrorCount || 0) + 1; }
+                    else if (level === 'warning') addBounded(warnings, item);
+                    else addBounded(logs, item);
+                } else if (message.method === 'Log.entryAdded') {
+                    const entry = message.params && message.params.entry || {};
+                    const item = { source: 'browser', level: entry.level || 'error', message: sanitizeText(entry.text || 'Browser runtime error'),
+                        ...(entry.url ? { location: { resource: sanitizeText(String(entry.url).split(/[/?#]/).filter(Boolean).pop()).slice(0, 100) } } : {}) };
+                    if (entry.level === 'warning') addBounded(warnings, item);
+                    else if (entry.level === 'error') { addBounded(errors, item); addBounded(pageErrors, item); session.pageErrorCount = (session.pageErrorCount || 0) + 1; }
+                }
+            });
+            await send('Runtime.enable');
+            await send('Log.enable');
+            await send('Page.enable');
+        }
+        const reused = session.initialized === true;
+        const navigated = !session.initialized || session.refreshRequested;
+        if (navigated) {
+            if (session.persistent) {
+                errors.length = 0; warnings.length = 0; logs.length = 0;
+                errors.dropped = 0; warnings.dropped = 0; logs.dropped = 0;
+            }
+            session.initialized = true;
+            session.refreshRequested = false;
+            session.awaitingNavigationGeneration = session.persistent ? (session.pageGeneration || 0) + 1 : null;
+            const navigation = await send('Page.navigate', { url: PREVIEW_URL });
+            if (navigation.errorText) throw new Error('PREVIEW_NAVIGATION_FAILED');
+            session.lastObservationAt = null;
+        } else {
+            const response = await fetchImpl(`http://127.0.0.1:${session.port}/json/list`, { signal: AbortSignal.timeout(1000) });
+            const pages = await response.json();
+            const page = Array.isArray(pages) && pages.find((item) => item.type === 'page' && item.id === session.pageId);
+            if (!page) return { success: false, error: { code: 'PREVIEW_SESSION_PAGE_CLOSED' } };
+            if (!previewPageUrl(page.url)) return { success: false, error: { code: 'PREVIEW_SESSION_PAGE_NAVIGATED' } };
+        }
 
         let first = null;
-        while (now() < stopAt && !childExited) {
+        while (now() < stopAt && !session.childExited) {
+            if (session.awaitingNavigationGeneration && ((session.pageGeneration || 0) < session.awaitingNavigationGeneration
+                || !previewPageUrl(session.pageUrl))) { await delay(50); continue; }
             first = await evaluate(targetExpression(expectedScene, expectedSceneUuid, nodePath));
+            if (first && first.pageMismatch) return { success: false, error: { code: 'PREVIEW_SESSION_PAGE_NAVIGATED' } };
             if (first && first.sceneMismatch) {
                 return { success: false, error: { code: 'PREVIEW_SCENE_MISMATCH', expectedScene, actualScene: first.actualScene || null } };
             }
@@ -207,11 +319,21 @@ async function observeRuntime(input, options = {}) {
             await delay(150);
         }
         if (!first || first.sceneName !== expectedScene || first.sceneUuid !== expectedSceneUuid || !first.canvas) {
-            return { success: false, error: { code: childExited ? 'CHROME_EXITED' : 'PREVIEW_RUNTIME_TIMEOUT', expectedScene } };
+            return { success: false, error: { code: session.childExited ? 'CHROME_EXITED' : 'PREVIEW_RUNTIME_TIMEOUT', expectedScene } };
         }
+        session.awaitingNavigationGeneration = null;
+        if (session.persistent && (navigated || session.titleGeneration !== (session.pageGeneration || 0))) {
+            await evaluate(`(function(){if(location.origin===${JSON.stringify(new URL(PREVIEW_URL).origin)}
+                &&cc.director.getScene()&&(cc.director.getScene()._id||cc.director.getScene().uuid)===${JSON.stringify(expectedSceneUuid)})
+                document.title=${JSON.stringify(`CocosAgent 预览 · ${expectedScene}`)};})()`);
+            session.titleGeneration = session.pageGeneration || 0;
+            if (!reused) await send('Page.bringToFront');
+        }
+        const pageGeneration = session.pageGeneration || 0;
         await delay(Math.min(700, Math.max(300, timeoutMs / 20)));
         const second = await evaluate(targetExpression(expectedScene, expectedSceneUuid, nodePath));
-        if (!second || second.sceneName !== expectedScene || second.sceneUuid !== expectedSceneUuid) {
+        if (!second || second.sceneName !== expectedScene || second.sceneUuid !== expectedSceneUuid || !second.canvas
+            || (session.pageGeneration || 0) !== pageGeneration) {
             return { success: false, error: { code: 'PREVIEW_SCENE_CHANGED', expectedScene, expectedSceneUuid } };
         }
         const frameDelta = Math.max(0, second.frameCount - first.frameCount);
@@ -226,28 +348,120 @@ async function observeRuntime(input, options = {}) {
             screenshotBase64 = typeof screenshot.data === 'string' ? screenshot.data : null;
             if (!screenshotBase64) screenshotError = 'SCREENSHOT_DATA_MISSING';
         } catch (_) { screenshotError = 'SCREENSHOT_CAPTURE_FAILED'; }
-        const status = errors.length ? 'runtime-error' : runtimeStatus;
-        return {
+        const finalIdentity = await evaluate(targetExpression(expectedScene, expectedSceneUuid));
+        if (!finalIdentity || finalIdentity.sceneName !== expectedScene || finalIdentity.sceneUuid !== expectedSceneUuid
+            || (session.pageGeneration || 0) !== pageGeneration) {
+            return { success: false, error: { code: 'PREVIEW_SCENE_CHANGED', expectedScene, expectedSceneUuid } };
+        }
+        const status = session.pageErrorCount ? 'runtime-error' : runtimeStatus;
+        const observedAt = new Date().toISOString();
+        const result = {
             success: true, outcome: 'observed', creatorVersion: '2.4.15', previewUrl: PREVIEW_URL,
-            observedAt: new Date().toISOString(), scene: { name: second.sceneName, uuid: second.sceneUuid, matchesExpected: true },
+            observedAt, scene: { name: second.sceneName, uuid: second.sceneUuid, matchesExpected: true },
+            session: { id: session.id, pageId: session.pageId, reused, visible: session.persistent === true,
+                pageGeneration, observationIndex: (session.observationIndex || 0) + 1 },
             runtime: { status, frameCount: second.frameCount, frameDelta, paused: second.paused,
-                capturedErrorCount: errors.length },
-            diagnostics: { errors, warnings, logs, truncated: { errors: errors.length === MAX_EVENTS,
-                warnings: warnings.length === MAX_EVENTS, logs: logs.length === MAX_EVENTS } },
+                capturedErrorCount: errors.length, pageErrorCount: session.pageErrorCount || 0 },
+            diagnostics: { errors: [...errors], warnings: [...warnings], logs: [...logs],
+                pageErrors: [...pageErrors], pageErrorsTruncated: !!pageErrors.dropped,
+                since: session.lastObservationAt || 'page-start', until: observedAt,
+                truncated: { errors: !!errors.dropped, warnings: !!warnings.dropped, logs: !!logs.dropped } },
             ...(second.targetNode ? { targetNode: second.targetNode, targetNodeStatus: second.nodeStatus } : {}),
             screenshot: { available: !!screenshotBase64, mimeType: screenshotBase64 ? 'image/jpeg' : null,
                 width: clip.width, height: clip.height, ...(screenshotError ? { error: screenshotError } : {}) },
             ...(screenshotBase64 ? { screenshotBase64 } : {}),
         };
+        session.lastObservationAt = observedAt;
+        session.observationIndex = result.session.observationIndex;
+        errors.length = 0; warnings.length = 0; logs.length = 0;
+        errors.dropped = 0; warnings.dropped = 0; logs.dropped = 0;
+        return result;
     } catch (error) {
         return { success: false, error: { code: String(error && error.message || error).startsWith('CDP_TIMEOUT_') ? 'PREVIEW_CDP_TIMEOUT' : 'PREVIEW_OBSERVATION_FAILED' } };
     } finally {
-        if (socket && socket.readyState === socketApi.OPEN) socket.close();
-        try { child.kill(); } catch (_) {}
-        if (child.exitCode === null) await Promise.race([new Promise((resolve) => child.once('exit', resolve)), delay(1500)]);
-        for (const settle of pending.values()) { try { settle({ error: { message: 'PREVIEW_CLOSED' } }); } catch (_) {} }
-        fs.rmSync(profile, { recursive: true, force: true });
+        if (session.awaitingNavigationGeneration) session.requiresReload = true;
+        if (!session.persistent) await closeRuntimeSession(session);
     }
 }
 
-module.exports = { observeRuntime, targetExpression, sanitizeText, validNodePath, validSceneName, validSceneUuid, PREVIEW_URL };
+function createRuntimeObserver(options = {}) {
+    const sessions = new Map();
+    const restarts = new Set();
+    let closed = false;
+    const key = (projectRoot) => {
+        if (typeof projectRoot !== 'string' || !path.isAbsolute(projectRoot)) throw new Error('INVALID_RUNTIME_PROJECT_ROOT');
+        return fs.realpathSync(projectRoot);
+    };
+    const killOnExit = () => {
+        for (const session of sessions.values()) { try { session.child && session.child.kill(); } catch (_) {} }
+    };
+    process.once('exit', killOnExit);
+    return {
+        async observe(input) {
+            if (closed) return { success: false, error: { code: 'PREVIEW_OBSERVER_CLOSED' } };
+            let project;
+            try { project = key(input && input.projectRoot); }
+            catch (_) { return { success: false, error: { code: 'INVALID_RUNTIME_PROJECT_ROOT' } }; }
+            if (!validSceneUuid(input.instanceId) || !validSceneUuid(input.expectedSceneUuid) || !validSceneName(input.expectedScene)) {
+                return { success: false, error: { code: 'INVALID_RUNTIME_SESSION_IDENTITY' } };
+            }
+            let session = sessions.get(project);
+            if (session && session.busy) return { success: false, error: { code: 'PREVIEW_OBSERVATION_IN_PROGRESS' } };
+            const restart = restarts.has(project);
+            if (session && (session.closed || session.disconnected || session.childExited || session.instanceId !== input.instanceId
+                || session.sceneUuid !== input.expectedSceneUuid || session.sceneName !== input.expectedScene)) {
+                if (!restart) return { success: false, error: { code: 'PREVIEW_SESSION_RESTART_REQUIRED',
+                    message: 'The Agent preview was closed or its Creator/scene identity changed. Approve runtime.preview.start before observing again.' } };
+                session.busy = true;
+                await closeRuntimeSession(session);
+                sessions.delete(project); session = null;
+            }
+            if (session && session.requiresReload && !restart) return { success: false, error: { code: 'PREVIEW_RELOAD_REQUIRED',
+                message: 'Creator content changed. Approve runtime.preview.start to refresh this Agent preview before observing the new code or assets.' } };
+            if (!session) {
+                if (sessions.size >= 8) return { success: false, error: { code: 'PREVIEW_SESSION_LIMIT' } };
+                session = { id: randomUUID(), persistent: true, instanceId: input.instanceId,
+                    sceneUuid: input.expectedSceneUuid, sceneName: input.expectedScene };
+                sessions.set(project, session);
+            }
+            if (restart) { session.refreshRequested = session.initialized === true; session.requiresReload = false; restarts.delete(project); }
+            session.busy = true;
+            session.contentRevision = session.contentRevision || 0;
+            const revision = session.contentRevision;
+            try {
+                const result = await observeRuntime(input, { ...options, session });
+                if (closed) return { success: false, error: { code: 'PREVIEW_OBSERVER_CLOSED' } };
+                if (result.success === true && session.closed) return { success: false, error: { code: 'PREVIEW_SESSION_CLOSED' } };
+                if (result.success === true && (session.requiresReload || session.contentRevision !== revision)) {
+                    return { success: false, error: { code: 'PREVIEW_CONTENT_CHANGED_DURING_CAPTURE' } };
+                }
+                if (result.session) result.session.instanceId = session.instanceId;
+                return result;
+            } catch (_) {
+                return { success: false, error: { code: 'PREVIEW_OBSERVATION_FAILED' } };
+            } finally { session.busy = false; }
+        },
+        previewStarted(projectRoot) {
+            if (closed) return;
+            const project = key(projectRoot);
+            restarts.add(project);
+            const session = sessions.get(project);
+            if (session && session.busy) { session.requiresReload = true; session.contentRevision = (session.contentRevision || 0) + 1; }
+        },
+        contentChanged(projectRoot) {
+            const project = key(projectRoot);
+            restarts.delete(project);
+            const session = sessions.get(project);
+            if (session) { session.requiresReload = true; session.contentRevision = (session.contentRevision || 0) + 1; }
+        },
+        async closeAll() {
+            closed = true;
+            await Promise.allSettled([...sessions.values()].map(closeRuntimeSession));
+            process.removeListener('exit', killOnExit);
+            sessions.clear(); restarts.clear();
+        },
+    };
+}
+
+module.exports = { observeRuntime, createRuntimeObserver, discoverBrowser, targetExpression, sanitizeText,
+    validNodePath, validSceneName, validSceneUuid, PREVIEW_URL };

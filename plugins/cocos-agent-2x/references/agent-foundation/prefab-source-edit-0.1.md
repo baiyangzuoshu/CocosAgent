@@ -29,11 +29,16 @@
 
 2.4 官方[Prefab 手册](https://docs.cocos.com/creator/2.4/manual/zh/asset-workflow/prefab.html)描述了进入 Prefab 编辑模式、保存和关闭编辑模式的工作流。官方 [FAQ](https://docs.cocos.com/creator/2.4/manual/zh/getting-started/faq.html)列出通过 `Editor.Ipc.sendToAll('scene:enter-prefab-edit-mode', assetUuid)` 进入模式的扩展用法。
 
-当前实现用官方进入 IPC，并监听 `scene:ready`、`scene:saved`；保存和退出则调用 `Editor.require('scene://edit-mode').save/pop`。这两个内部方法不是上述手册或 FAQ 承诺的公开 API。目录只在 Creator 暴露这些方法时报告命令可用，但这项存在性检查不能证明完整时序正确；真实 2.4.15 编辑器验收必须覆盖进入、保存、退出、重新打开和磁盘读回。若任一步不匹配，操作必须失败或停在 `needs-review`，不能标记成功。
+扩展 0.3.14 把 `scene://edit-mode` 的加载、`curMode` 查询、`save` 和 `pop` 调用移到 `scene.js`。主进程通过 `Editor.Scene.callSceneScript` 调度，按官方[场景脚本机制](https://docs.cocos.com/creator/2.4/manual/zh/extension/scene-script.html)跨进程收取结果，避免主进程未注册 `scene://` 协议的错误。安装包中可确认模块位于 `editor/page/scene-utils/edit-mode/`；本轮没有读取加密 `.ccc` 模块的方法实现，不据此推断完整运行时行为。
+
+能力目录采用场景端的实际探测结果：必须处于非主进程，且 `curMode`、`save`、`pop` 都存在、当前模式可读。进入仍用官方 IPC；保存必须收到场景端保存回调与 `scene:saved`，退出必须收到场景端回执与 `scene:ready`，并读回原场景 UUID。保存、退出、预检、修改和重开读回均重验 Prefab 模式及 UUID；资源加载后写入前再次核对节点身份、路径、字段前值和同名冲突。场景脚本调用有 20 秒超时且只完成一次回调；修改后超时或读回不一致按可能有副作用上报，继续走现有操作账本恢复。
+
+`save/pop` 是内部接口，并非手册或 FAQ 承诺的公开 API。存在性探测不能证明完整时序正确；真实 2.4.15 编辑器验收必须覆盖进入、保存、退出、重新打开和磁盘读回。若任一步不匹配，操作必须失败或停在 `needs-review`，不能标记成功。
 
 ## 当前验证状态
 
 - 完成扩展消息、Host 持久操作记录、JSON Schema、MCP 命令目录、只读源检查和序列化层级校验。
+- 2026-10-13：0.3.14 场景进程桥接已实现，移除主进程固定返回 `null` 的入口；本轮构建与语法检查结果另行记录，未运行新的自动测试或真实 Prefab 写入。
 - 通过 Prefab 合同、差异逆转、目标节点路径/UUID、序列化父子关系与只读资源检查测试。Host 模拟扩展通道完成同一 Prefab 两轮修改、陈旧哈希拒绝、第二轮补偿/重放及首轮补偿，并逐轮检查哈希和父子、组件、SpriteFrame 引用关系；模拟通道只验证 Host 编排和持久记录，不验证 Creator 内部编辑模式时序。仓库内 Host 回归、双版本目录、多实例 Catalog Host 和 MCP schema/routing 测试均通过。
 - **真实 Creator 2.4.15 Prefab 多轮修改、保存/重开、SpriteFrame 引用改换、补偿与重放尚未验收。** 实机验收需在 Creator 窗口可交互时运行；内部 `scene://edit-mode.save/pop` 时序是主要待证据项。
 - 在实机验收完成前，不把此命令描述成已验证能力，也不在 `AGENTS.md` 中登记为完成项。

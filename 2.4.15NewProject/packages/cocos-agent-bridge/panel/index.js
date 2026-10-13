@@ -783,6 +783,12 @@ Editor.Panel.extend({
                     `警告：${(diagnostics.warnings || []).slice(0, 8).map((item) => item.message).join('；') || '无'}`,
                     `日志：${(diagnostics.logs || []).slice(0, 8).map((item) => item.message).join('；') || '无'}`,
                 ];
+                if (result.session) {
+                    const sessionId = String(result.session.id || '').slice(0, 8);
+                    lines.push(`预览会话：${sessionId} · 第 ${result.session.observationIndex || 1} 次观察 · ${result.session.reused ? '复用页面' : '首次打开'}`);
+                    if (result.session.visible) lines.push('在 Agent 专用预览窗口中操作，再观察可读取操作后的状态。');
+                }
+                if (result.runtime.pageErrorCount) lines.push(`当前页面累计错误：${result.runtime.pageErrorCount}（刷新前保留）`);
                 if (result.targetNode) lines.push(`目标节点：${result.targetNode.path} · ${result.targetNode.active ? '启用' : '未启用'}`);
                 if (result.screenshot) lines.push(`画面：${result.screenshot.available ? '已截取' : '不可用'}`);
                 summary = `${label}：${message.toolName}\n${lines.join('\n')}`;
@@ -1063,7 +1069,11 @@ Editor.Panel.extend({
         const card = document.createElement('section');
         card.className = 'run-card';
         const title = document.createElement('h4');
-        const statusLabels = { completed: '已完成', 'needs-review': '需要核对', interrupted: '服务重启中断', cancelled: '已取消' };
+        const statusLabels = { completed: run.mode === 'Plan'
+            ? (run.reason === 'plan-generated' ? '计划已生成' : '已结束') : '已完成',
+            failed: run.mode === 'Plan' ? '计划生成失败' : '失败',
+            stopped: run.goalEvaluation?.satisfied === false ? '未完成' : '已停止', 'awaiting-approval': '等待批准',
+            'needs-review': '需要核对', interrupted: '服务重启中断', cancelled: '已取消' };
         title.textContent = `${statusLabels[run.status] || run.status || '任务'} · ${(run.task || '').slice(0, 180)}`;
         card.appendChild(title);
         const meta = document.createElement('div');
@@ -1097,6 +1107,14 @@ Editor.Panel.extend({
             ...(activeWrite ? [`中断时正在执行 ${activeWrite.toolName || '未知工具'}；结果尚未读回${activeWrite.operationId ? ` · 操作 ${activeWrite.operationId}` : ''}`] : []),
         ].join('\n')}` : '已记录：没有得到写入回执。';
         card.appendChild(effectLine);
+        if (run.goalEvaluation?.satisfied === false && Array.isArray(run.goalEvaluation.outstanding)) {
+            const unmet = document.createElement('div');
+            unmet.className = 'run-unmet';
+            unmet.style.whiteSpace = 'pre-wrap';
+            unmet.textContent = `尚未完成验收：\n${run.goalEvaluation.outstanding.slice(0, 12)
+                .map((item) => `• ${String(item.description || item.id || '未完成项').slice(0, 500)}`).join('\n')}`;
+            card.appendChild(unmet);
+        }
         this.renderExecutionChecklist(run.executionChecklist, run.id, false, card);
         const recoveryTargets = [...receipts, ...(run.activeTool?.operationId ? [run.activeTool] : [])];
         const seenOperations = new Set();

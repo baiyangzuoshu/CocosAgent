@@ -7,10 +7,40 @@ const MAX_PATH_LENGTH = 80;
 
 module.exports = {
     'prefab-source-patch-mode'(event) {
-        event.reply(null, prefabSourceRootInfo());
+        try { event.reply(null, prefabEditModeState().state); }
+        catch (error) { replyPrefabModeError(event, error); }
+    },
+
+    'prefab-source-patch-save'(event, params) {
+        let target;
+        try { target = requirePrefabEditTarget(params, 'PREFAB_SAVE_TARGET_MISMATCH'); }
+        catch (error) { replyPrefabModeError(event, error); return; }
+        let settled = false;
+        const finish = (error) => {
+            if (settled) return;
+            settled = true;
+            if (error) { replyPrefabModeError(event, error, 'PREFAB_SAVE_FAILED'); return; }
+            try {
+                requirePrefabEditTarget(params, 'PREFAB_SAVE_TARGET_MISMATCH');
+                event.reply(null, { prefabUuid: params.prefabUuid, saved: true });
+            } catch (modeError) { replyPrefabModeError(event, modeError); }
+        };
+        try { target.editMode.save(finish); }
+        catch (error) { finish(error); }
+    },
+
+    'prefab-source-patch-exit'(event, params) {
+        try {
+            const target = requirePrefabEditTarget(params, 'PREFAB_EXIT_TARGET_MISMATCH');
+            target.editMode.pop();
+            // Main also waits for scene:ready and verifies the resulting mode.
+            event.reply(null, { prefabUuid: params.prefabUuid, exitRequested: true });
+        } catch (error) { replyPrefabModeError(event, error, 'PREFAB_EXIT_FAILED'); }
     },
 
     'prefab-source-patch-preflight'(event, params) {
+        try { requirePrefabEditTarget(params, 'PREFAB_MODE_TARGET_MISMATCH'); }
+        catch (error) { replyPrefabModeError(event, error); return; }
         const rootInfo = prefabSourceRootInfo();
         if (rootInfo.prefabUuid !== params.prefabUuid) {
             event.reply({ code: 'PREFAB_MODE_TARGET_MISMATCH', message: 'The requested Prefab is not the active Prefab edit target.' }); return;
@@ -30,6 +60,8 @@ module.exports = {
     },
 
     'prefab-source-patch-snapshot'(event, params) {
+        try { requirePrefabEditTarget(params, 'PREFAB_MODE_TARGET_MISMATCH'); }
+        catch (error) { replyPrefabModeError(event, error); return; }
         const rootInfo = prefabSourceRootInfo();
         if (rootInfo.prefabUuid !== params.prefabUuid) {
             event.reply({ code: 'PREFAB_MODE_TARGET_MISMATCH', message: 'The requested Prefab is not the active Prefab edit target.' }); return;
@@ -47,6 +79,8 @@ module.exports = {
     },
 
     'prefab-source-patch-mutate'(event, params) {
+        try { requirePrefabEditTarget(params, 'PREFAB_MODE_TARGET_MISMATCH'); }
+        catch (error) { replyPrefabModeError(event, error); return; }
         const rootInfo = prefabSourceRootInfo();
         if (rootInfo.prefabUuid !== params.prefabUuid) {
             event.reply({ code: 'PREFAB_MODE_TARGET_MISMATCH', message: 'The requested Prefab is not the active Prefab edit target.' }); return;
@@ -63,6 +97,13 @@ module.exports = {
         const spriteReferences = params.expectedDiff.filter((item) => item.path === 'component.cc.Sprite.spriteFrameUuid' && item.after !== null);
         const apply = (loadedFrames) => {
             try {
+                requirePrefabEditTarget(params, 'PREFAB_MODE_TARGET_MISMATCH');
+                const liveNode = findNodeByUuid(cc.director.getScene(), params.targetNodeUuid);
+                const liveBefore = liveNode && nodePatchSnapshot(liveNode, getNodePath(liveNode));
+                if (liveNode !== node || !liveBefore || !matchesPrefabTargetPath(liveBefore.path, params.targetNodePath)
+                    || !patchMatches(liveBefore, params.expectedDiff, 'before') || patchNameConflict(node, params.expectedDiff)) {
+                    event.reply({ code: 'EXPECTED_STATE_MISMATCH', message: 'Prefab target changed while loading references; no properties were written.' }); return;
+                }
                 params.expectedDiff.forEach((item) => setPatchValue(node, item, loadedFrames));
                 const changed = nodePatchSnapshot(node, getNodePath(node));
                 if (!patchMatches(changed, params.expectedDiff, 'after')) {
@@ -70,7 +111,7 @@ module.exports = {
                 }
                 event.reply(null, { prefabUuid: rootInfo.prefabUuid, node: changed, expectedDiff: params.expectedDiff });
             } catch (error) {
-                event.reply({ code: 'PROPERTY_WRITE_FAILED', message: String(error && error.message || error) });
+                event.reply({ code: error && error.code || 'PROPERTY_WRITE_FAILED', message: String(error && error.message || error) });
             }
         };
         if (!spriteReferences.length) { apply({}); return; }
@@ -253,10 +294,13 @@ module.exports = {
     },
     'catalog-context'(event) {
         const scene = cc.director.getScene();
+        let prefabSourcePatchApiReady = false;
+        try { prefabSourcePatchApiReady = !!prefabEditModeState(); } catch (_) {}
         event.reply(null, {
             sceneName: scene ? scene.name || '' : null,
             sceneUuid: scene && (typeof scene._id === 'string' ? scene._id : typeof scene.uuid === 'string' ? scene.uuid : null),
             hasCanvas: !!(scene && scene.getChildByName('Canvas')),
+            prefabSourcePatchApiReady,
         });
     },
 
@@ -553,6 +597,54 @@ function prefabSourceRootInfo() {
         if (typeof uuid === 'string' && /^[0-9a-f-]{36}$/i.test(uuid)) candidates.add(uuid);
     });
     return { prefabUuid: candidates.size === 1 ? [...candidates][0] : null };
+}
+
+function replyPrefabModeError(event, error, fallbackCode) {
+    event.reply({ code: error && error.code || fallbackCode || 'PREFAB_EDIT_MODE_QUERY_FAILED',
+        message: String(error && error.message || error) });
+}
+
+function prefabEditModeState() {
+    // scene:// is registered in the scene renderer, not the extension main process.
+    if (typeof Editor === 'undefined' || Editor.isMainProcess !== false || typeof Editor.require !== 'function') {
+        throw Object.assign(new Error('Prefab edit mode must be queried from the scene process.'), { code: 'PREFAB_EDIT_MODE_API_UNAVAILABLE' });
+    }
+    let editMode;
+    try { editMode = Editor.require('scene://edit-mode'); }
+    catch (error) { throw Object.assign(error, { code: 'PREFAB_EDIT_MODE_API_UNAVAILABLE' }); }
+    if (!editMode || typeof editMode.curMode !== 'function' || typeof editMode.save !== 'function' || typeof editMode.pop !== 'function') {
+        throw Object.assign(new Error('Creator did not expose the required Prefab edit mode APIs.'), { code: 'PREFAB_EDIT_MODE_API_UNAVAILABLE' });
+    }
+    const mode = editMode.curMode();
+    if (!mode || typeof mode.name !== 'string') {
+        throw Object.assign(new Error('Creator did not return the current editor mode.'), { code: 'PREFAB_EDIT_MODE_QUERY_FAILED' });
+    }
+    const candidates = new Set(); const visited = new Set();
+    const addUuid = (value) => {
+        if (typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value)) candidates.add(value);
+        else if (value && typeof value === 'object' && !visited.has(value)) {
+            visited.add(value);
+            for (const key of ['uuid', '_uuid', 'assetUuid', 'prefabUuid']) addUuid(value[key]);
+        }
+    };
+    const rootUuid = prefabSourceRootInfo().prefabUuid;
+    if (mode.name === 'prefab') {
+        Object.keys(mode).forEach((key) => { if (/prefab|asset|uuid/i.test(key)) addUuid(mode[key]); });
+        addUuid(rootUuid);
+    }
+    const scene = cc.director.getScene();
+    return { editMode, state: { modeName: mode.name,
+        prefabUuid: mode.name === 'prefab' && candidates.size === 1 && candidates.has(rootUuid) ? rootUuid : null,
+        sceneUuid: scene && (scene._id || scene.uuid) || null, saveAvailable: true, popAvailable: true } };
+}
+
+function requirePrefabEditTarget(params, code) {
+    const target = prefabEditModeState();
+    if (!params || !/^[0-9a-f-]{36}$/i.test(params.prefabUuid || '')
+        || target.state.modeName !== 'prefab' || target.state.prefabUuid !== params.prefabUuid) {
+        throw Object.assign(new Error('The requested Prefab is not the active Prefab edit target.'), { code });
+    }
+    return target;
 }
 
 function matchesPrefabTargetPath(actualPath, expectedPath) {

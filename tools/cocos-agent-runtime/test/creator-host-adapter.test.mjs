@@ -265,3 +265,42 @@ test('Creator Agent creates a durable project task and only closes it after succ
         assert.ok(events.some((event) => event.type === 'goal.evaluated' && event.satisfied));
     } finally { globalThis.fetch = originalFetch; }
 });
+
+test('free Agent modification requests cannot complete after scene inspection, with or without task persistence', async () => {
+    const definitions = [definition('cocos_2x_instances_list'), definition('cocos_2x_capabilities_list'), definition('cocos_2x_scene_snapshot')];
+    const client = { callTool: async ({ name }) => name === 'cocos_2x_instances_list'
+        ? { structuredContent: { success: true, data: [{ projectRoot, creatorVersion: '2.4.15', state: 'ready' }] } }
+        : name === 'cocos_2x_capabilities_list'
+            ? { structuredContent: { success: true, data: { instance: { projectRoot, creatorVersion: '2.4.15', state: 'ready' }, commands: [] } } }
+            : { structuredContent: { success: true, outcome: 'completed', scene: { name: 'helloworld' } } } };
+    const skillAdapter = { REQUIRED_COMMAND: new Map(), loadContext: async () => ({
+        toolsByName: new Map(definitions.map((item) => [item.name, item])), skillIndex: {}, messages: [],
+    }), invokeSkillTool: async () => { throw new Error('No skill tools expected.'); } };
+    const originalFetch = globalThis.fetch;
+    try {
+        for (const { persistent, repeatTools } of [{ persistent: false, repeatTools: false },
+            { persistent: true, repeatTools: false }, { persistent: false, repeatTools: true }]) {
+            let round = 0, tasks = [];
+            globalThis.fetch = async () => {
+                round += 1;
+                const useTool = round === 1 || repeatTools;
+                return new Response(JSON.stringify({ choices: [{ message: useTool
+                    ? { tool_calls: [{ id: `snapshot-only-${round}`, type: 'function', function: { name: 'cocos_2x_scene_snapshot', arguments: JSON.stringify({ projectRoot }) } }] }
+                    : { content: '网络连接弹窗已完成。' }, finish_reason: useTool ? 'tool_calls' : 'stop' }] }), { status: 200 });
+            };
+            const result = await runCreatorAgent({ client, task: '创建一个网络连接弹窗', projectRoot, skillFiles: [],
+                tracePath: '/tmp/cocos-agent-modification-test.jsonl', apiKey: 'test-key-only', model: 'deepseek-flash', mode: 'Agent',
+                history: [], projectContext: null, onEvent: () => {}, skillAdapter, formatProjectContext: () => null,
+                writeEvent: () => {}, approveWrite: async () => true,
+                ...(persistent ? { taskPersistence: { load: () => tasks, save: (value) => { tasks = structuredClone(value); } } } : {}) });
+            assert.equal(result.status, 'stopped');
+            assert.equal(result.goalEvaluation.satisfied, false);
+            assert.match(result.finalText, /任务尚未完成/);
+            assert.match(result.finalText, /交互验收入口/);
+            assert.doesNotMatch(result.finalText, /弹窗已完成/);
+            if (repeatTools) assert.ok(round > 4 && round <= 16, 'budget exhaustion still reports unmet acceptance');
+            else assert.equal(round, 4, 'continuation stays bounded and performs no further tools');
+            if (persistent) assert.equal(tasks[0].status, 'in_progress');
+        }
+    } finally { globalThis.fetch = originalFetch; }
+});

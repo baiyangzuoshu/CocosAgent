@@ -340,7 +340,7 @@ function onMessage(raw) {
             const sceneContext = error || !context ? { sceneName: null, hasCanvas: false } : context;
             const commands = commandCatalog({ ...sceneContext, assetDbReady: !!(Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
                 assetFolderRefreshReady: !!(Editor.assetdb && typeof Editor.assetdb.refresh === 'function'),
-                prefabSourcePatchApiReady: prefabEditModeApiReady() });
+                prefabSourcePatchApiReady: sceneContext.prefabSourcePatchApiReady === true });
             send({ type: 'response', id: message.id, ok: true, result: {
                 nonce: message.params && message.params.nonce, instanceId: INSTANCE_ID,
                 projectRoot: PROJECT_ROOT, creatorVersion: CREATOR_VERSION,
@@ -720,17 +720,16 @@ function verifyPrefabSourceAsset(operation, callback) {
 }
 
 function callPrefabSceneScript(method, params, callback) {
-    Editor.Scene.callSceneScript('cocos-agent-bridge', method, params || {}, (error, result) => callback(error || null, result));
+    let settled = false;
+    const finish = (error, result) => {
+        if (settled) return;
+        settled = true; clearTimeout(timeout); callback(error || null, result);
+    };
+    const timeout = setTimeout(() => finish(Object.assign(new Error(`Prefab scene script timed out: ${method}`),
+        { code: 'PREFAB_SCENE_SCRIPT_TIMEOUT' })), 20000);
+    try { Editor.Scene.callSceneScript('cocos-agent-bridge', method, params || {}, finish); }
+    catch (error) { finish(error); }
 }
-
-function prefabEditModeModule() {
-    // Creator 2.4.15 may not register scene://edit-mode in the main process.
-    // Calling Editor.require for an unregistered URL logs a protocol error even
-    // when caught, so report this optional capability as unavailable without probing it.
-    return null;
-}
-
-function prefabEditModeApiReady() { return !!prefabEditModeModule(); }
 
 function waitForNextSceneReady(callback) {
     if (pendingSceneReady) { callback(new Error('A scene-ready wait is already in progress.')); return () => {}; }
@@ -745,36 +744,17 @@ function waitForNextSceneReady(callback) {
 }
 
 function currentPrefabMode(callback) {
-    const editMode = prefabEditModeModule();
-    if (!editMode) {
-        callback(Object.assign(new Error('Prefab edit mode save/exit APIs are unavailable in the Creator main process.'), { code: 'PREFAB_EDIT_MODE_API_UNAVAILABLE' })); return;
-    }
-    let mode;
-    try { mode = editMode.curMode(); }
-    catch (error) { callback(Object.assign(error, { code: 'PREFAB_EDIT_MODE_QUERY_FAILED' })); return; }
-    if (!mode || typeof mode.name !== 'string') {
-        callback(Object.assign(new Error('Creator did not return the current editor mode.'), { code: 'PREFAB_EDIT_MODE_QUERY_FAILED' })); return;
-    }
-    callPrefabSceneScript('prefab-source-patch-mode', {}, (error, rootInfo) => {
+    callPrefabSceneScript('prefab-source-patch-mode', {}, (error, mode) => {
         if (error) { callback(error); return; }
-        const modeUuids = new Set();
-        const visited = new Set();
-        const addUuid = (value) => {
-            if (typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value)) modeUuids.add(value);
-            else if (value && typeof value === 'object' && !visited.has(value)) {
-                visited.add(value);
-                for (const key of ['uuid', '_uuid', 'assetUuid', 'prefabUuid']) addUuid(value[key]);
-            }
-        };
-        Object.keys(mode).forEach((key) => { if (/prefab|asset|uuid/i.test(key)) addUuid(mode[key]); });
-        if (mode.name === 'prefab' && rootInfo && rootInfo.prefabUuid) modeUuids.add(rootInfo.prefabUuid);
-        const prefabUuid = modeUuids.size === 1 ? [...modeUuids][0] : null;
-        callback(null, { modeName: mode.name, prefabUuid,
-            saveAvailable: typeof editMode.save === 'function', popAvailable: typeof editMode.pop === 'function' });
+        if (!mode || typeof mode.modeName !== 'string' || mode.saveAvailable !== true || mode.popAvailable !== true) {
+            callback(Object.assign(new Error('The scene process did not confirm Prefab edit mode APIs.'), { code: 'PREFAB_EDIT_MODE_API_UNAVAILABLE' })); return;
+        }
+        callback(null, mode);
     });
 }
 
 function enterPrefabSourceMode(uuid, callback) {
+    if (pendingSceneReady) { callback(Object.assign(new Error('Another editor mode transition is in progress.'), { code: 'EDITOR_BUSY' })); return; }
     const finishReady = waitForNextSceneReady((error) => {
         if (error) { callback(error); return; }
         currentPrefabMode((modeError, mode) => {
@@ -788,24 +768,39 @@ function enterPrefabSourceMode(uuid, callback) {
     catch (error) { finishReady(error); }
 }
 
-function exitPrefabSourceMode(uuid, callback) {
+function exitPrefabSourceMode(uuid, callback, expectedSceneUuid) {
     currentPrefabMode((modeError, current) => {
         if (modeError || !current || current.modeName !== 'prefab' || current.prefabUuid !== uuid) {
             callback(modeError || Object.assign(new Error('Refusing to exit a different editor mode or Prefab.'), { code: 'PREFAB_EXIT_TARGET_MISMATCH' })); return;
         }
-        const finishReady = waitForNextSceneReady((error) => {
-            if (error) { callback(error); return; }
+        if (pendingSceneReady) { callback(Object.assign(new Error('Another editor mode transition is in progress.'), { code: 'EDITOR_BUSY' })); return; }
+        let scriptDone = false; let readyDone = false; let settled = false;
+        const finish = (error, mode) => {
+            if (settled) return;
+            settled = true; callback(error || null, mode);
+        };
+        let checking = false;
+        const maybeFinish = () => {
+            if (settled || checking || !scriptDone || !readyDone) return;
+            checking = true;
             currentPrefabMode((afterError, mode) => {
-                if (afterError || mode.modeName === 'prefab') {
-                    callback(afterError || Object.assign(new Error('Editor remained in Prefab edit mode after exit.'), { code: 'PREFAB_EXIT_UNVERIFIED' })); return;
+                if (afterError || mode.modeName !== 'scene' || expectedSceneUuid && mode.sceneUuid !== expectedSceneUuid) {
+                    finish(afterError || Object.assign(new Error('Editor did not return to the original scene after Prefab exit.'), { code: 'PREFAB_EXIT_UNVERIFIED' })); return;
                 }
-                callback(null, mode);
+                finish(null, mode);
             });
+        };
+        const finishReady = waitForNextSceneReady((error) => {
+            if (error) { finish(error); return; }
+            readyDone = true; maybeFinish();
         });
-        const editMode = prefabEditModeModule();
-        if (!editMode) { finishReady(Object.assign(new Error('Prefab edit mode exit is unavailable.'), { code: 'PREFAB_EXIT_UNAVAILABLE' })); return; }
-        try { editMode.pop(); }
-        catch (error) { finishReady(Object.assign(error, { code: 'PREFAB_EXIT_FAILED' })); }
+        callPrefabSceneScript('prefab-source-patch-exit', { prefabUuid: uuid }, (error, result) => {
+            if (error || !result || result.prefabUuid !== uuid || result.exitRequested !== true) {
+                const failure = error || Object.assign(new Error('The scene process did not acknowledge Prefab exit.'), { code: 'PREFAB_EXIT_FAILED' });
+                finishReady(failure); finish(failure); return;
+            }
+            scriptDone = true; maybeFinish();
+        });
     });
 }
 
@@ -820,22 +815,19 @@ function savePrefabSource(uuid, callback) {
     const timeout = setTimeout(() => finish(Object.assign(new Error('Timed out waiting for Prefab save and scene:saved.'), { code: 'PREFAB_SAVE_UNVERIFIED' })), 20000);
     pendingSceneSave = (error) => { if (error) failure = error; else eventDone = true; maybeFinish(); };
     currentPrefabMode((modeError, mode) => {
+        if (settled) return;
         if (modeError || !mode || mode.modeName !== 'prefab' || mode.prefabUuid !== uuid) {
             failure = modeError || Object.assign(new Error('Refusing to save a different Prefab edit target.'), { code: 'PREFAB_SAVE_TARGET_MISMATCH' });
             maybeFinish(); return;
         }
-        const editMode = prefabEditModeModule();
-        if (!editMode) { failure = Object.assign(new Error('Prefab edit mode save is unavailable.'), { code: 'PREFAB_SAVE_UNAVAILABLE' }); maybeFinish(); return; }
-        try {
-            editMode.save((error) => {
-                if (error) failure = Object.assign(error, { code: 'PREFAB_SAVE_FAILED' });
-                else scriptDone = true;
-                maybeFinish();
-            });
-        } catch (error) {
-            failure = Object.assign(error, { code: 'PREFAB_SAVE_FAILED' });
+        callPrefabSceneScript('prefab-source-patch-save', { prefabUuid: uuid }, (error, result) => {
+            if (settled) return;
+            if (error) failure = error;
+            else if (!result || result.prefabUuid !== uuid || result.saved !== true) {
+                failure = Object.assign(new Error('The scene process did not confirm the requested Prefab save.'), { code: 'PREFAB_SAVE_UNVERIFIED' });
+            } else scriptDone = true;
             maybeFinish();
-        }
+        });
     });
 }
 
@@ -856,7 +848,7 @@ function runPrefabSourcePatch(message) {
         if (assetError) { fail(assetError); return; }
         currentPrefabMode((modeError, mode) => {
             if (modeError) { fail(modeError); return; }
-            if (mode.modeName !== 'scene') {
+            if (mode.modeName !== 'scene' || !/^[0-9a-f-]{36}$/i.test(mode.sceneUuid || '')) {
                 fail(Object.assign(new Error('Close the current editor sub-mode before editing a Prefab source.'), { code: 'EDITOR_BUSY' })); return;
             }
             enterPrefabSourceMode(operation.prefabUuid, (enterError) => {
@@ -864,7 +856,7 @@ function runPrefabSourcePatch(message) {
                 callPrefabSceneScript('prefab-source-patch-preflight', operation, (editorError, before) => {
                     if (editorError || !before || before.prefabUuid !== operation.prefabUuid
                         || !before.node || before.node.uuid !== operation.targetNodeUuid) {
-                        exitPrefabSourceMode(operation.prefabUuid, () => fail(editorError || new Error('Prefab preflight did not identify the target node.')));
+                        exitPrefabSourceMode(operation.prefabUuid, (exitError) => fail(exitError || editorError || new Error('Prefab preflight did not identify the target node.')), mode.sceneUuid);
                         return;
                     }
                     if (preflight) {
@@ -874,7 +866,7 @@ function runPrefabSourcePatch(message) {
                                 nonce: params.nonce, operationId: params.operationId, creatorVersion: CREATOR_VERSION,
                                 projectRoot: PROJECT_ROOT, prefabUuid: operation.prefabUuid, sourceSha256: identity.sha256,
                             }, before) });
-                        });
+                        }, mode.sceneUuid);
                         return;
                     }
                     callPrefabSceneScript('prefab-source-patch-mutate', operation, (mutateError, changed) => {
@@ -898,7 +890,11 @@ function runPrefabSourcePatch(message) {
                                         targetNodePath: operation.targetNodePath, targetNodeUuid: operation.targetNodeUuid,
                                         expectedDiff: operation.expectedDiff, side: 'after' }, (readbackError, reopened) => {
                                         exitPrefabSourceMode(operation.prefabUuid, (finalExitError) => {
-                                            if (readbackError || finalExitError) { fail(readbackError || finalExitError, 'possible'); return; }
+                                            if (readbackError || finalExitError || !reopened || reopened.prefabUuid !== operation.prefabUuid
+                                                || !reopened.node || reopened.node.uuid !== operation.targetNodeUuid || reopened.verifiedSide !== 'after') {
+                                                fail(readbackError || finalExitError || Object.assign(new Error('Reopened Prefab did not confirm the target node.'),
+                                                    { code: 'PREFAB_READBACK_MISMATCH' }), 'possible'); return;
+                                            }
                                             send({ type: 'response', id: message.id, ok: true, result: {
                                                 nonce: params.nonce, operationId: params.operationId, creatorVersion: CREATOR_VERSION,
                                                 projectRoot: PROJECT_ROOT, action: operation.action, prefabUuid: operation.prefabUuid,
@@ -907,10 +903,10 @@ function runPrefabSourcePatch(message) {
                                                 beforeSha256: identity.sha256, afterSha256: afterIdentity.sha256,
                                                 node: reopened.node,
                                             } });
-                                        });
+                                        }, mode.sceneUuid);
                                     });
                                 });
-                            });
+                            }, mode.sceneUuid);
                         });
                     });
                 });

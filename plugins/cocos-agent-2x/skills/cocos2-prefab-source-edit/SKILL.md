@@ -14,4 +14,4 @@ description: Inspect and make constrained, recoverable edits to existing Cocos C
 5. 如需撤销，只用已完成操作的 `sourceOperationId` 调用 `compensate`，并提供合同要求的逆向差异。补偿完成后如需重放，基于补偿记录和新的 operation ID 调用 `replay`。每轮都必须检查回执。
 6. 出现 `needs-review`、编辑器模式不匹配、保存超时、哈希变化或读回不一致时，停止后续写入。先读 `cocos_2x_operation_get` 和 `prefab.source.inspect`；不要盲目重试、直接改 `.prefab` 文件或推断写入没有发生。
 
-编辑器内部 `scene://edit-mode.save/pop` 尚未经过真实 2.4.15 Prefab 多轮验收；目录可用状态仅代表运行时检测到方法，不代表该时序已经证明稳定。核验能力和限制时以合同文档的状态为准。
+扩展 0.3.14 在场景进程加载 `scene://edit-mode`，通过场景脚本桥接保存和退出。内部 `save/pop` 尚未经过真实 2.4.15 Prefab 多轮验收；目录可用状态仅代表场景端探测通过，不代表该时序已经证明稳定。核验能力和限制时以合同文档的状态为准。

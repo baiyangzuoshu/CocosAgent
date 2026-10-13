@@ -129,6 +129,8 @@ export interface AgentGoalCriterion {
     id: string;
     description: string;
     requiredTools: string[];
+    toolMatch?: 'all' | 'any';
+    receiptRequirement?: string;
 }
 
 export interface AgentGoal {

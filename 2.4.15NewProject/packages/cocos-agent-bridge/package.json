@@ -1,6 +1,6 @@
 {
   "name": "cocos-agent-bridge",
-  "version": "0.3.11",
+  "version": "0.3.15",
   "description": "Local CocosAgent bridge prototype for Creator 2.4.15",
   "main": "main.js",
   "scene-script": "scene.js",

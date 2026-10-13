@@ -1,13 +1,25 @@
-import type { AgentGoal, AgentReceipt, AgentTool, AgentToolResult, JsonObject, ToolRegistry } from './contracts.js';
+import type { AgentGoal, AgentGoalCriterion, AgentReceipt, AgentTool, AgentToolResult, JsonObject, ToolRegistry } from './contracts.js';
 
 export type CreatorTaskStatus = 'pending' | 'in_progress' | 'completed';
 
-export interface CreatorTaskCriterion {
-    id: string;
-    description: string;
-    requiredTools: string[];
+export interface CreatorTaskCriterion extends AgentGoalCriterion {
     evidence: Array<{ callId: string; toolName: string }>;
     status: 'pending' | 'satisfied';
+}
+
+export type CriterionReceiptVerifier = (criterion: AgentGoalCriterion, receipt: AgentReceipt, receipts: AgentReceipt[]) => boolean;
+
+function matchesCriterion(criterion: AgentGoalCriterion, receipt: AgentReceipt, receipts: AgentReceipt[], verifier?: CriterionReceiptVerifier): boolean {
+    const toolMatches = criterion.requiredTools.includes(receipt.toolName)
+        || (criterion.requiredTools.includes('*') && receipt.role === 'task');
+    if (!toolMatches) return false;
+    return criterion.receiptRequirement ? verifier?.(criterion, receipt, receipts) === true : successfulReceipt(receipt);
+}
+
+function criterionSatisfied(criterion: AgentGoalCriterion, evidence: Array<{ toolName: string }>): boolean {
+    if (criterion.requiredTools.length === 0) return false;
+    return criterion.toolMatch === 'any' ? evidence.length > 0
+        : criterion.requiredTools.every((name) => name === '*' ? evidence.length > 0 : evidence.some((item) => item.toolName === name));
 }
 
 export interface CreatorTask {
@@ -79,7 +91,7 @@ function taskSystemTools(): AgentTool[] {
 export class CreatorTaskSystem {
     private tasks: CreatorTask[] | null = null;
 
-    constructor(private readonly persistence: CreatorTaskPersistence) {}
+    constructor(private readonly persistence: CreatorTaskPersistence, private readonly verifyReceipt?: CriterionReceiptVerifier) {}
 
     private async current(): Promise<CreatorTask[]> {
         if (!this.tasks) {
@@ -117,7 +129,13 @@ export class CreatorTaskSystem {
             if (!Array.isArray(item.requiredTools) || item.requiredTools.length < 1 || item.requiredTools.length > 12
                 || item.requiredTools.some((tool) => typeof tool !== 'string' || !tool.trim() || tool.length > 120)
                 || new Set(item.requiredTools).size !== item.requiredTools.length) throw new TypeError('TASK_CRITERION_TOOLS_INVALID');
-            return { id, description: criterionDescription, requiredTools: [...item.requiredTools] as string[], evidence: [], status: 'pending' };
+            if (item.toolMatch !== undefined && !['all', 'any'].includes(String(item.toolMatch))) throw new TypeError('TASK_CRITERION_MATCH_INVALID');
+            if (item.receiptRequirement !== undefined && (typeof item.receiptRequirement !== 'string'
+                || !/^[a-z0-9-]{1,64}$/.test(item.receiptRequirement))) throw new TypeError('TASK_CRITERION_REQUIREMENT_INVALID');
+            return { id, description: criterionDescription, requiredTools: [...item.requiredTools] as string[],
+                ...(item.toolMatch ? { toolMatch: item.toolMatch as 'all' | 'any' } : {}),
+                ...(item.receiptRequirement ? { receiptRequirement: item.receiptRequirement as string } : {}),
+                evidence: [], status: 'pending' };
         });
         const timestamp = new Date().toISOString();
         const task: CreatorTask = { id: `task_${globalThis.crypto.randomUUID().replaceAll('-', '').slice(0, 8)}`,
@@ -159,19 +177,20 @@ export class CreatorTaskSystem {
         if (!task) throw new Error('TASK_NOT_FOUND');
         for (const currentTask of tasks.filter((item) => item.id === taskId || item.status === 'in_progress')) {
           for (const criterion of currentTask.acceptanceCriteria) {
-            const matched = receipts.filter((receipt) => successfulReceipt(receipt)
-                && (criterion.requiredTools.includes('*') ? receipt.role === 'task' : criterion.requiredTools.includes(receipt.toolName))
-                && !criterion.evidence.some((evidence) => criterion.requiredTools.includes('*') || evidence.toolName === receipt.toolName));
-            criterion.evidence.push(...matched.map(({ callId, toolName }) => ({ callId, toolName })));
-            const evidenceNames = new Set(criterion.evidence.map((evidence) => evidence.toolName));
-            if (criterion.requiredTools.every((name) => name === '*' ? criterion.evidence.length > 0 : evidenceNames.has(name))) {
-                // Completion is evidence-derived; the model cannot edit this status.
-                criterion.status = 'satisfied';
+            const matched = receipts.filter((receipt) => matchesCriterion(criterion, receipt, receipts, this.verifyReceipt));
+            if (criterion.receiptRequirement) {
+                // Re-evaluate current receipts: a later write invalidates earlier readback.
+                criterion.evidence = matched.map(({ callId, toolName }) => ({ callId, toolName }));
+            } else {
+                criterion.evidence.push(...matched.filter((receipt) => !criterion.evidence.some((item) => item.toolName === receipt.toolName))
+                    .map(({ callId, toolName }) => ({ callId, toolName })));
             }
+            criterion.status = criterionSatisfied(criterion, criterion.evidence) ? 'satisfied' : 'pending';
           }
           const taskCriteriaSatisfied = currentTask.acceptanceCriteria.every((criterion) => criterion.status === 'satisfied');
           const taskDependenciesReady = currentTask.blockedBy.every((id) => tasks.find((dependency) => dependency.id === id)?.status === 'completed');
           if (finalizeSatisfiedTasks && taskCriteriaSatisfied && taskDependenciesReady) currentTask.status = 'completed';
+          else if (currentTask.acceptanceCriteria.some((criterion) => criterion.receiptRequirement)) currentTask.status = 'in_progress';
           currentTask.updatedAt = new Date().toISOString();
         }
         const outstanding = task.acceptanceCriteria.filter((criterion) => criterion.status !== 'satisfied').map((criterion) => ({
@@ -203,7 +222,9 @@ export class CreatorTaskSystem {
         if (!Number.isInteger(maxContinuationAttempts) || maxContinuationAttempts < 0 || maxContinuationAttempts > 4) {
             throw new RangeError('maxContinuationAttempts must be an integer from 0 to 4.');
         }
-        return { taskId, criteria: task.acceptanceCriteria.map(({ id, description, requiredTools }) => ({ id, description, requiredTools })), maxContinuationAttempts };
+        return { taskId, criteria: task.acceptanceCriteria.map(({ id, description, requiredTools, toolMatch, receiptRequirement }) => ({
+            id, description, requiredTools, ...(toolMatch ? { toolMatch } : {}), ...(receiptRequirement ? { receiptRequirement } : {}),
+        })), maxContinuationAttempts };
     }
 
     tools(): AgentTool[] { return taskSystemTools(); }
@@ -256,17 +277,16 @@ export class CreatorTaskToolRegistry implements ToolRegistry {
     }
 }
 
-export function evaluateGoalEvidence(goal: AgentGoal, receipts: AgentReceipt[]): {
+export function evaluateGoalEvidence(goal: AgentGoal, receipts: AgentReceipt[], verifier?: CriterionReceiptVerifier): {
     satisfied: boolean;
     outstanding: Array<{ id: string; description: string; missingTools: string[] }>;
 } {
-    const outstanding = goal.criteria.filter((criterion) => !criterion.requiredTools.every((name) => name === '*'
-        ? receipts.some((receipt) => successfulReceipt(receipt) && receipt.role === 'task')
-        : receipts.some((receipt) => successfulReceipt(receipt) && receipt.toolName === name))).map((criterion) => ({
+    const outstanding = goal.criteria.filter((criterion) => !criterionSatisfied(criterion,
+        receipts.filter((receipt) => matchesCriterion(criterion, receipt, receipts, verifier)))).map((criterion) => ({
         id: criterion.id, description: criterion.description,
         missingTools: criterion.requiredTools.filter((name) => name === '*'
-            ? !receipts.some((receipt) => successfulReceipt(receipt) && receipt.role === 'task')
-            : !receipts.some((receipt) => successfulReceipt(receipt) && receipt.toolName === name)),
+            ? !receipts.some((receipt) => matchesCriterion(criterion, receipt, receipts, verifier))
+            : !receipts.some((receipt) => receipt.toolName === name && matchesCriterion(criterion, receipt, receipts, verifier))),
     }));
     return { satisfied: goal.criteria.length > 0 && outstanding.length === 0, outstanding };
 }

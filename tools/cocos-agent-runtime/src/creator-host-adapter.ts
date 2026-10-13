@@ -4,7 +4,8 @@ import { DeepSeekProvider } from './deepseek-provider.js';
 import { CocosReadOnlyToolRegistry } from './cocos-ask.js';
 import { CreatorMemoryToolRegistry, CreatorProjectMemory } from './project-memory.js';
 import { AgentHookRegistry } from './lifecycle-hooks.js';
-import { CreatorTaskSystem, CreatorTaskToolRegistry, type CreatorTaskPersistence } from './task-system.js';
+import { CreatorTaskSystem, CreatorTaskToolRegistry, evaluateGoalEvidence, type CreatorTaskPersistence } from './task-system.js';
+import { creatorTaskCriteria, verifyCreatorTaskReceipt } from './creator-task-acceptance.js';
 import type {
     AgentEvent,
     AgentGoal,
@@ -211,15 +212,16 @@ async function runCreatorMode(options: CreatorAssistantModeRunOptions): Promise<
     }) : null;
     const registry = memory ? new CreatorMemoryToolRegistry(cocosRegistry, memory, () => cocosRegistry.canWrite) : cocosRegistry;
     const memoryTools = memory?.tools() || [];
+    const acceptanceCriteria = options.mode === 'Agent'
+        ? options.goalCriteria?.length ? options.goalCriteria : creatorTaskCriteria(options.task) : [];
     const taskSystem = options.mode === 'Agent' && options.taskPersistence
-        ? new CreatorTaskSystem(options.taskPersistence) : null;
+        ? new CreatorTaskSystem(options.taskPersistence, verifyCreatorTaskReceipt) : null;
     let activeTaskId = options.taskId;
     if (taskSystem && !activeTaskId) {
         const task = await taskSystem.create({
             subject: options.task.slice(0, 160) || 'Creator task',
             description: options.task.slice(0, 1200) || 'Creator Agent task',
-            acceptanceCriteria: options.goalCriteria?.length ? options.goalCriteria : [{ id: 'creator-task-receipt',
-                description: 'At least one requested Creator task command returns a successful resolved receipt.', requiredTools: ['*'] }],
+            acceptanceCriteria,
         });
         activeTaskId = task.id;
         await taskSystem.claim(task.id);
@@ -266,13 +268,19 @@ async function runCreatorMode(options: CreatorAssistantModeRunOptions): Promise<
                 'For user citations use messageIndex 0 for this task; prior user messages are indexed in chronological order starting at 1. Tool citations require the exact callId and a quote present in that receipt.',
             ].join('\n') : '',
             taskSystem ? `Persistent Creator task ID: ${activeTaskId}. Task graph state is project-isolated local metadata. A task is complete only when its dependencies are complete and its acceptance criteria have matching successful tool receipts. Do not mark criteria complete by assertion. These task tools never grant or replace Creator write approval.` : '',
+            acceptanceCriteria.length ? [
+                'Host-defined acceptance conditions for this request (local task metadata cannot weaken these conditions):',
+                ...acceptanceCriteria.map((criterion) => `- ${criterion.id}: ${criterion.description}`),
+                'Read-only results and starting preview never prove a requested content change. Read back the final target UUID/hash and expected fields after the last write, and query the matching operation ledger.',
+                'Do not repeat or create unrelated writes to satisfy a missing condition. If a required capability is absent, report the blocker. Initial preview observations cannot prove clicks or network behavior; do not invent interaction evidence.',
+            ].join('\n') : '',
         ].filter(Boolean).join('\n\n'),
         toolCatalog: options.mode === 'Plan' || options.mode === 'Agent' ? fullToolCatalog : '',
         approveWrite: async ({ tool, arguments: args }) => options.approveWrite
             ? options.approveWrite({ name: tool.name, access: tool.access }, args)
             : false,
     });
-    const runPolicy = taskSystem && activeTaskId ? {
+    const runPolicy = options.mode === 'Agent' ? {
         ...creatorPolicy,
         createRunPolicy(input: { runId: string; mode: AgentMode; task: string }) {
             const policy = creatorPolicy.createRunPolicy?.(input);
@@ -280,8 +288,11 @@ async function runCreatorMode(options: CreatorAssistantModeRunOptions): Promise<
             return {
                 ...policy,
                 async evaluateGoal({ goal, receipts }: { goal: AgentGoal; receipts: AgentReceipt[] }) {
-                    const progress = await taskSystem.recordReceipts(goal.taskId, receipts, false);
-                    return { satisfied: progress.outstanding.length === 0, outstanding: progress.outstanding };
+                    const acceptance = evaluateGoalEvidence({ ...goal, criteria: acceptanceCriteria }, receipts, verifyCreatorTaskReceipt);
+                    const progress = taskSystem && activeTaskId ? await taskSystem.recordReceipts(goal.taskId, receipts, false) : null;
+                    const outstanding = [...new Map([...acceptance.outstanding, ...(progress?.outstanding || [])]
+                        .map((item) => [item.id, item])).values()];
+                    return { satisfied: outstanding.length === 0, outstanding };
                 },
             };
         },
@@ -341,22 +352,32 @@ async function runCreatorMode(options: CreatorAssistantModeRunOptions): Promise<
         mode: options.mode,
         runId,
         history: initialHistory,
-        ...(taskSystem && activeTaskId ? { goal: await taskSystem.goalForTask(activeTaskId) } : {}),
+        ...(options.mode === 'Agent' ? { goal: taskSystem && activeTaskId ? await taskSystem.goalForTask(activeTaskId)
+            : { taskId: runId, criteria: acceptanceCriteria, maxContinuationAttempts: 2 } } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
     });
 
-    if (taskSystem && activeTaskId) await taskSystem.recordReceipts(activeTaskId, result.receipts,
-        result.status === 'completed' && result.goalEvaluation?.satisfied === true);
-
-    const status: CreatorAssistantReadOnlyRunResult['status'] = result.status;
-    const reason = result.reason;
+    const acceptance = options.mode === 'Agent' ? evaluateGoalEvidence({ taskId: activeTaskId || runId,
+        criteria: acceptanceCriteria }, result.receipts, verifyCreatorTaskReceipt) : undefined;
+    const progress = taskSystem && activeTaskId ? await taskSystem.recordReceipts(activeTaskId, result.receipts,
+        result.status === 'completed' && acceptance?.satisfied === true && result.goalEvaluation?.satisfied === true) : undefined;
+    const outstanding = acceptance ? [...new Map([...acceptance.outstanding, ...(progress?.outstanding || [])]
+        .map((item) => [item.id, item])).values()] : undefined;
+    const goalEvaluation = outstanding ? { satisfied: outstanding.length === 0, outstanding } : result.goalEvaluation;
+    const rejectedCompletion = result.status === 'completed' && goalEvaluation?.satisfied === false;
+    const status: CreatorAssistantReadOnlyRunResult['status'] = rejectedCompletion ? 'stopped' : result.status;
+    const reason = rejectedCompletion ? 'creator-acceptance-unmet' : result.reason;
+    const finalText = goalEvaluation?.satisfied === false && status !== 'completed'
+        ? `任务尚未完成。\n未完成验收：\n${goalEvaluation.outstanding.map((item) => `- ${item.description}`).join('\n')}`
+        : status === 'completed' ? result.finalText : null;
     options.writeEvent(options.tracePath, {
         event: 'run.stop', runId: result.runId, status, reason,
         toolCallCount: setupReceipts.length + result.receipts.length,
-        finalText: status === 'completed' ? result.finalText : null,
+        finalText,
     }, options.apiKey);
     return {
         ...result,
+        ...(goalEvaluation ? { goalEvaluation } : {}),
         receipts: [...setupReceipts.map((receipt) => ({ ...receipt, ...receipt.result })),
             ...result.receipts.map((receipt) => ({
                 name: receipt.toolName,
@@ -367,7 +388,7 @@ async function runCreatorMode(options: CreatorAssistantModeRunOptions): Promise<
             }))],
         status,
         reason,
-        finalText: status === 'completed' ? result.finalText : null,
+        finalText,
         tracePath: options.tracePath,
         toolCalls: setupReceipts.length + result.receipts.length,
         availableToolNames,
