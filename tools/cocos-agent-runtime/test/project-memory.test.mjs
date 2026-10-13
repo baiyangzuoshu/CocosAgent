@@ -175,6 +175,68 @@ test('correction uses revision compare, retains prior text and provenance, and r
     assert.equal(persistence.value.memories[0].body, 'Canvas width is 720.');
 });
 
+test('memory compaction merges reviewed revisions, retains provenance, and recovers its exact operation', async () => {
+    const persistence = new MemoryPersistence();
+    const { memory } = await setup({ task: 'The project uses a 640 by 960 portrait canvas and a 30 FPS target.', persistence });
+    const first = await memory.call(`${MEMORY}remember`, {
+        title: 'Portrait canvas', body: 'Canvas resolution is 640 by 960 portrait.', category: 'project-fact',
+        sources: [userSource('640 by 960 portrait canvas')],
+    }, 'remember-canvas');
+    const second = await memory.call(`${MEMORY}remember`, {
+        title: 'Frame target', body: 'The project targets 30 FPS.', category: 'project-fact',
+        sources: [userSource('30 FPS target', 0)],
+    }, 'remember-fps');
+    const targetId = first.structuredContent.memoryId;
+    const removedId = second.structuredContent.memoryId;
+
+    const merged = await memory.call(`${MEMORY}compact`, {
+        targetMemoryId: targetId,
+        memories: [{ memoryId: targetId, expectedRevision: 1 }, { memoryId: removedId, expectedRevision: 1 }],
+        body: 'The project uses a 640 by 960 portrait canvas and targets 30 FPS.',
+    }, 'compact-project-facts');
+
+    assert.equal(merged.structuredContent?.success, true);
+    assert.equal(merged.structuredContent?.outcome, 'compacted');
+    assert.deepEqual(merged.structuredContent?.memoryIds, [targetId, removedId]);
+    assert.equal(persistence.value.memories.length, 1);
+    assert.equal(persistence.value.memories[0].id, targetId);
+    assert.equal(persistence.value.memories[0].revision, 2);
+    assert.equal(persistence.value.memories[0].history[0].body, 'Canvas resolution is 640 by 960 portrait.');
+    assert.equal(persistence.value.memories[0].sources.length, 2);
+    assert.deepEqual(persistence.value.tombstones[0], {
+        id: removedId, lastRevision: 1, deletedAt: '2026-10-12T12:00:00.000Z', operationId: 'compact-project-facts',
+    });
+    assert.equal(JSON.stringify(persistence.value.tombstones).includes('30 FPS'), false);
+
+    const recovered = await memory.call(`${MEMORY}operation_get`, { operationId: 'compact-project-facts' }, 'recover-compaction');
+    assert.equal(recovered.structuredContent?.outcome, 'compacted');
+    assert.equal(recovered.structuredContent?.memory?.body, 'The project uses a 640 by 960 portrait canvas and targets 30 FPS.');
+    assert.deepEqual(recovered.structuredContent?.tombstones.map((item) => item.id), [removedId]);
+});
+
+test('memory compaction rejects stale revisions without changing the persistent snapshot', async () => {
+    const persistence = new MemoryPersistence();
+    const { memory } = await setup({ task: 'The scene uses 640 by 960 portrait dimensions and a 30 FPS target.', persistence });
+    const first = await memory.call(`${MEMORY}remember`, {
+        title: 'Portrait scene', body: 'Scene size is 640 by 960 portrait.', category: 'project-fact',
+        sources: [userSource('640 by 960 portrait dimensions')],
+    }, 'remember-scene');
+    const second = await memory.call(`${MEMORY}remember`, {
+        title: 'Frame target', body: 'Target is 30 FPS.', category: 'project-fact',
+        sources: [userSource('30 FPS target')],
+    }, 'remember-target');
+    const before = structuredClone(persistence.value);
+    const stale = await memory.call(`${MEMORY}compact`, {
+        targetMemoryId: first.structuredContent.memoryId,
+        memories: [{ memoryId: first.structuredContent.memoryId, expectedRevision: 2 },
+            { memoryId: second.structuredContent.memoryId, expectedRevision: 1 }],
+        body: 'Merged project facts.',
+    }, 'compact-stale-revision');
+    assert.equal(stale.structuredContent?.error?.code, 'MEMORY_REVISION_CONFLICT');
+    assert.equal(stale.structuredContent?.error?.sideEffect, 'none');
+    assert.deepEqual(persistence.value, before);
+});
+
 test('delete removes active content and revisions while retaining a content-free operation tombstone', async () => {
     const persistence = new MemoryPersistence();
     const { memory } = await setup({ task: 'Keep the exact local workflow.', persistence });
@@ -322,4 +384,44 @@ test('Agent memory mutation goes through the same panel approval policy as other
     assert.equal(approved.status, 'completed');
     assert.equal(approved.receipts[0].toolName, `${MEMORY}remember`);
     assert.equal(persistence.value.memories.length, 1);
+});
+
+test('Agent compaction requires successful reads of exact revisions and panel approval', async () => {
+    const task = 'Compact the two project memories about canvas dimensions and frame rate into one concise project memory.';
+    const { memory, persistence } = await setup({ task });
+    const canvas = await memory.call(`${MEMORY}remember`, {
+        title: 'Canvas dimensions', body: 'The canvas is 640 by 960 portrait.', category: 'project-fact',
+        sources: [userSource('canvas dimensions and frame rate')],
+    }, 'seed-canvas');
+    const frame = await memory.call(`${MEMORY}remember`, {
+        title: 'Frame rate', body: 'The target frame rate is 30 FPS.', category: 'project-fact',
+        sources: [userSource('canvas dimensions and frame rate')],
+    }, 'seed-frame');
+    const canvasId = canvas.structuredContent.memoryId;
+    const frameId = frame.structuredContent.memoryId;
+    const registry = new CreatorMemoryToolRegistry({ listTools: async () => [], callTool: async () => ({}) }, memory);
+    let approvals = 0;
+    const outputs = [
+        { role: 'assistant', content: null, toolCalls: [{ id: 'read-canvas', name: `${MEMORY}get`, arguments: { memoryId: canvasId } }] },
+        { role: 'assistant', content: null, toolCalls: [{ id: 'read-frame', name: `${MEMORY}get`, arguments: { memoryId: frameId } }] },
+        { role: 'assistant', content: null, toolCalls: [{ id: 'compact-approved', name: `${MEMORY}compact`, arguments: {
+            targetMemoryId: canvasId,
+            memories: [{ memoryId: canvasId, expectedRevision: 1 }, { memoryId: frameId, expectedRevision: 1 }],
+            body: 'The portrait canvas is 640 by 960 and targets 30 FPS.',
+        } }] },
+        { role: 'assistant', content: 'The reviewed memories were merged and saved.' },
+    ];
+    const kernel = new AgentKernel({
+        provider: { complete: async () => ({ message: outputs.shift(), finishReason: 'stop' }) },
+        tools: registry,
+        policy: createCreatorAgentPolicy({ mode: 'Agent', baseInstructions: '', approveWrite: async () => { approvals += 1; return true; } }),
+        systemPrompt: 'test',
+    });
+    const result = await kernel.run({ task, mode: 'Agent' });
+    assert.equal(result.status, 'completed', result.reason);
+    assert.equal(approvals, 1);
+    assert.deepEqual(result.receipts.slice(0, 3).map((receipt) => receipt.toolName),
+        [`${MEMORY}get`, `${MEMORY}get`, `${MEMORY}compact`]);
+    assert.equal(persistence.value.memories.length, 1);
+    assert.equal(persistence.value.memories[0].revision, 2);
 });

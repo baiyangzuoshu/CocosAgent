@@ -422,6 +422,7 @@ export class CreatorProjectMemory {
                 return memory ? success({ data: publicMemory(memory) }) : failure('MEMORY_NOT_FOUND', 'No active memory has this ID.');
             }
             if (name === `${MEMORY_PREFIX}operation_get`) return this.getOperation(args);
+            if (name === `${MEMORY_PREFIX}compact`) return await this.compact(args, callId!);
             if (![`${MEMORY_PREFIX}remember`, `${MEMORY_PREFIX}correct`, `${MEMORY_PREFIX}delete`].includes(name)) {
                 return failure('MEMORY_TOOL_UNKNOWN', 'Unknown project-memory tool.');
             }

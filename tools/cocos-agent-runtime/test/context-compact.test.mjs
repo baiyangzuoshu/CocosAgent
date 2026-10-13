@@ -292,3 +292,67 @@ test('kernel sends a compact view but returns the original complete call/result 
         && message.toolCallId === 'history-read-1' && message.content.includes('node-data-'.repeat(20))));
     assert.ok(result.messages.some((message) => message.role === 'user' && message.content === 'Check the active scene.'));
 });
+
+test('kernel uses a bounded provider dialogue summary during compaction and reports its source', async () => {
+    const history = Array.from({ length: 12 }, (_, index) => ({
+        role: index % 2 === 0 ? 'user' : 'assistant',
+        content: `Old discussion ${index}: ${`background detail ${index} `.repeat(180)}`,
+    }));
+    let summarizedDialogue = '';
+    let sentMessages;
+    const kernel = new AgentKernel({
+        provider: {
+            summarizeContext: async ({ task, dialogue }) => {
+                assert.equal(task, 'Inspect the current project constraints.');
+                summarizedDialogue = dialogue;
+                return 'Semantic summary: earlier discussion established a portrait project constraint.';
+            },
+            complete: async ({ messages }) => {
+                sentMessages = messages;
+                return { message: { role: 'assistant', content: 'Current constraints inspected.' }, finishReason: 'stop' };
+            },
+        },
+        tools: { listTools: async () => [], callTool: async () => ({}) },
+        policy: { approveWrite: async () => false },
+        contextBudget: { maxEstimatedTokens: 2_000, keepRecentMessages: 1, keepRecentToolInteractions: 1 },
+        systemPrompt: 'CocosAgent system instructions',
+    });
+    const result = await kernel.run({ task: 'Inspect the current project constraints.', mode: 'Ask', history });
+    assert.equal(result.status, 'completed');
+    assert.ok(summarizedDialogue.includes('Old discussion'));
+    assert.ok(summarizedDialogue.length <= 24_000);
+    assert.ok(sentMessages.some((message) => message.role === 'user'
+        && typeof message.content === 'string'
+        && message.content.includes('Semantic summary: earlier discussion established a portrait project constraint.')));
+    assert.ok(result.contextCompactions.some((report) => report.dialogueSummarySource === 'provider'));
+});
+
+test('provider context overflow triggers exactly one retry after compaction', async () => {
+    const history = Array.from({ length: 14 }, (_, index) => ({
+        role: index % 2 === 0 ? 'user' : 'assistant',
+        content: `Historical note ${index}: ${`project detail ${index} `.repeat(220)}`,
+    }));
+    let attempts = 0;
+    const kernel = new AgentKernel({
+        provider: {
+            summarizeContext: async () => 'Earlier dialogue summary: preserve only relevant project constraints.',
+            complete: async () => {
+                attempts += 1;
+                if (attempts === 1) {
+                    const error = new Error('request context exceeds maximum');
+                    error.code = 'DEEPSEEK_CONTEXT_TOO_LONG';
+                    throw error;
+                }
+                return { message: { role: 'assistant', content: 'Completed after bounded retry.' }, finishReason: 'stop' };
+            },
+        },
+        tools: { listTools: async () => [], callTool: async () => ({}) },
+        policy: { approveWrite: async () => false },
+        contextBudget: { maxEstimatedTokens: 4_000, keepRecentMessages: 1, keepRecentToolInteractions: 1 },
+        systemPrompt: 'CocosAgent system instructions',
+    });
+    const result = await kernel.run({ task: 'Continue the current project task.', mode: 'Ask', history });
+    assert.equal(result.status, 'completed', result.reason);
+    assert.equal(attempts, 2);
+    assert.ok(result.contextCompactions.some((report) => report.maxEstimatedTokens === 4_000));
+});
