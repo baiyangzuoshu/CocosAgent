@@ -11,10 +11,10 @@ test('tool result archive is private, chunked, and isolated by exact run and cal
     try {
         const archive = new AssistantToolResultArchive(trace);
         const directory = `${trace}.tool-results`;
-        assert.equal(fs.statSync(directory).mode & 0o777, 0o700);
+        if (process.platform !== 'win32') assert.equal(fs.statSync(directory).mode & 0o777, 0o700);
         const original = JSON.stringify({ structuredContent: { success: true, scene: 'S'.repeat(10_000) } });
         await archive.save({ runId: 'run-a', callId: 'call-a', toolName: 'scene.snapshot', payload: original });
-        assert.equal(fs.statSync(path.join(directory, `${(await import('node:crypto')).default.createHash('sha256').update('call-a').digest('hex')}.json`)).mode & 0o777, 0o600);
+        if (process.platform !== 'win32') assert.equal(fs.statSync(path.join(directory, `${(await import('node:crypto')).default.createHash('sha256').update('call-a').digest('hex')}.json`)).mode & 0o777, 0o600);
         const first = await archive.read({ runId: 'run-a', callId: 'call-a', offset: 0, limit: 4000 });
         assert.equal(first.payload, original.slice(0, 4000));
         assert.equal(first.totalChars, original.length);

@@ -9,6 +9,7 @@ import type {
     AgentToolResult,
     JsonObject,
 } from './contracts.js';
+import { creatorRecoveryResolved, ensureCreatorOperationIdentity, type CreatorPendingRecovery } from './creator-recovery.js';
 
 const PLAN_SKILL_RETRIES = 2;
 const AGENT_SKILL_RETRIES = 3;
@@ -138,8 +139,8 @@ function prompts(mode: AgentMode): string {
         'Use read-only tools only. Return a structured, reviewable plan and do not execute proposed changes.',
         'Before finalizing a task-specific plan, use cocos_2x_skills_list to find the best matching non-base skill, read it with cocos_2x_skill_read, and read a listed reference when it defines the exact workflow or command contract. These are research calls for this planning run, not future plan steps. If no task skill matches, begin the JSON summary exactly with "No matching installed Cocos skill applies: <brief reason>" and avoid skill-specific claims.',
         'After the required instance and capability receipts, return ONLY a JSON object (no prose or markdown fences): {"version":2,"title":"...","summary":"...","steps":[{"title":"...","description":"...","preconditions":["..."],"requiredTools":["cocos_2x_..."],"validation":"...","recovery":"...","acceptance":{"kind":"read"}}]}.',
-        'Follow this bounded schema: title <= 120 characters; summary <= 1200; 1-8 steps; every step has exactly title, description, preconditions, requiredTools, validation, recovery, acceptance; title <= 120, description <= 1600, validation <= 600, recovery <= 600; preconditions has 0-4 non-empty strings <= 300 characters; requiredTools has 1-6 unique exact names from the discovered MCP tools. acceptance has exactly kind, one of read, write, restore, runtime, interaction, memory.',
-        'Business acceptance is executable: read means a fresh task content read; write/restore means approved content effects, ledger and target UUID/hash/fields readback plus applicable compilation; runtime verifies prior write targets using fresh observation; interaction remains unmet until a native assertion tool exists; memory requires a durable approved memory write. Do not promise unsupported workflows. Tool success alone cannot finish the plan.',
+        'Follow this bounded schema: title <= 120 characters; summary <= 1200; 1-8 steps; every step has exactly title, description, preconditions, requiredTools, validation, recovery, acceptance; title <= 120, description <= 1600, validation <= 600, recovery <= 600; preconditions has 0-4 non-empty strings <= 300 characters; requiredTools has 1-6 unique exact names from the discovered MCP tools. acceptance has kind (read, write, restore, runtime, interaction, memory) and optional targets; write requires 1-16 explicit final targets. Each target has exactly target, field, equals. Never change a literal value in the original user task.',
+        'Business acceptance is executable: write acceptance MUST include targets: [{target: "exact live UUID or full scene node path", field: "node.position.x", equals: 200}]. Targets are reviewed final values, independent of operation receipts. Supported fields: node.name, node.active, node.position.x/y, node.scale.x/y, component.cc.Sprite.enabled, component.cc.Sprite.spriteFrameUuid, component.cc.Label.enabled, script.sourceSha256, prefab.sourceSha256. Non-write acceptance may include targets for final verification. Read means fresh task reads; write/restore also require ledgers and compilation; runtime verifies prior targets; interaction remains unmet until a native assertion tool exists. Do not promise unsupported workflows.',
         'The final step also validates the original user task across all approved steps. Include fresh operation and target readback tools plus runtime observation/preview acceptance when applicable in its requiredTools. Keep required preview acceptance in a write step if its command returns needs-preview. Do not downgrade a functional task into a read or compile-only plan.',
         'For each step, include the exact task and readback tools needed to perform and validate it. Do not list instance/capability setup tools. Ground project facts in current receipts, describe unknown facts as preconditions, and never claim execution.',
         'Use only exact names from the live MCP tool catalog in the system context. The Host already queried instance and capability setup tools; never list cocos_2x_instances_list, cocos_2x_instances_get, or cocos_2x_capabilities_list in requiredTools.',
@@ -167,7 +168,10 @@ export function createCreatorAgentPolicy(input: {
     baseInstructions: string;
     toolCatalog?: string;
     approveWrite(request: { runId: string; tool: AgentTool; arguments: JsonObject }): Promise<boolean>;
+    pendingRecovery?: CreatorPendingRecovery | null;
+    recoveryState?: () => CreatorPendingRecovery | null;
 }): AgentPolicy {
+    let inheritedPending: Identity | null = input.pendingRecovery || null;
     return {
         approveWrite: input.approveWrite,
         createRunPolicy: () => {
@@ -176,12 +180,13 @@ export function createCreatorAgentPolicy(input: {
             let agentGateRetries = 0;
             let recoveryTargets = 0;
             let previewRetries = 0;
-            let recoveryOnly = false;
+            let recoveryOnly = inheritedPending !== null;
             let recoveredMemoryMutation = false;
-            let pendingIdentity: Identity | null = null;
+            let pendingIdentity: Identity | null = inheritedPending;
             const previews = new Set<string>();
             const modePrompt = prompts(input.mode);
-            const systemPrompt = [input.baseInstructions, modePrompt + (input.toolCatalog || '' )].filter(Boolean).join('\n\n');
+            const systemPrompt = [input.baseInstructions, modePrompt + (input.toolCatalog || '' ),
+                pendingIdentity ? `Unresolved prior write: ${pendingIdentity.field}=${pendingIdentity.value}; tool=${input.pendingRecovery?.toolName || 'see original ledger'}. Resolve only this exact operation before any new task/write.` : ''].filter(Boolean).join('\n\n');
             return {
                 systemPrompt,
                 filterTools(tools) {
@@ -189,6 +194,7 @@ export function createCreatorAgentPolicy(input: {
                     return tools;
                 },
                 beforeTool(context: AgentPolicyToolContext) {
+                    if (context.tool.access === 'write') ensureCreatorOperationIdentity(context.tool.name, context.arguments);
                     if (input.mode === 'Agent' && context.tool.name === 'cocos_2x_memory_compact'
                         && !memoryCompactionReviewed(context)) {
                         return { action: 'block', code: 'MEMORY_COMPACTION_REVIEW_REQUIRED',
@@ -226,10 +232,12 @@ export function createCreatorAgentPolicy(input: {
                     const result = receipt.result;
                     if (isUncertain(receipt)) {
                         recoveryOnly = true;
-                        pendingIdentity = resultIdentity(result) || argumentIdentity(args);
+                        pendingIdentity = resultIdentity(result) || argumentIdentity(args) || input.recoveryState?.()
+                            || { field: 'callId', value: receipt.callId };
+                        inheritedPending = pendingIdentity;
                         return;
                     }
-                    if (recoveryOnly && receipt.role === 'recovery' && isResolved(result)
+                    if (recoveryOnly && receipt.role === 'recovery' && creatorRecoveryResolved(result)
                         && sameIdentity(pendingIdentity, argumentIdentity(args))
                         && sameIdentity(pendingIdentity, resultIdentity(result))) {
                         if (receipt.toolName === 'cocos_2x_memory_operation_get'
@@ -238,9 +246,12 @@ export function createCreatorAgentPolicy(input: {
                         }
                         recoveryOnly = false;
                         pendingIdentity = null;
+                        inheritedPending = null;
+                        const next = input.recoveryState?.();
+                        if (next) { inheritedPending = pendingIdentity = next; recoveryOnly = true; }
                     }
                     const data = result.structuredContent;
-                    if (input.mode === 'Agent' && receipt.access === 'write' && data?.outcome === 'needs-preview') {
+                    if (input.mode === 'Agent' && (receipt.access === 'write' || receipt.role === 'recovery') && data?.outcome === 'needs-preview') {
                         previews.add(typeof data.operationId === 'string' ? data.operationId : '(operation ID missing)');
                     }
                     if (input.mode === 'Agent' && previewAcceptance(receipt.toolName)

@@ -1,4 +1,5 @@
 import type { AgentGoalCriterion, AgentReceipt, JsonObject } from './contracts.js';
+import { creatorNodeField, literalCreatorTargets, matchesCreatorTarget, validateCreatorTargets, type CreatorExpectedTarget } from './creator-targets.js';
 
 const READ_TOOLS = ['cocos_2x_scene_snapshot', 'cocos_2x_scene_node_inspect', 'cocos_2x_script_read',
     'cocos_2x_asset_search_png', 'cocos_2x_operation_get', 'cocos_2x_script_operation_get', 'cocos_2x_runtime_observe', 'cocos_2x_command_execute'];
@@ -32,8 +33,9 @@ function removeNegatedScopes(task: string): string {
         // Chinese task prompts commonly enumerate forbidden actions up to a comma,
         // then continue with the permitted read-only request.
         .replace(/(?:禁止|严禁|不得|不允许|不可以|不要|无需|不必|无须|不需要)\s*(?:进行|执行|调用|任何|再)?[^，,。；;.!?\n]*/g, ' ')
+        .replace(/不(?:写入|修改|审批|预览|运行|补偿|恢复|重放|构建|删除|创建|保存)[^，,。；;.!?\n]*/g, ' ')
         // English prompts often list several prohibited actions separated by commas.
-        .replace(/\b(?:no|never|without|do\s+not|don['’]t|must\s+not|mustn['’]t|prohibit(?:ed)?)\b[^.!?;\n]*/gi, ' ')
+        .replace(/\b(?:no|never|without|do\s+not|don['’]t|must\s+not|mustn['’]t|prohibit(?:ed)?)\b[^.!?;\n]*?(?=,\s*(?:then|finally)\b|[.!?;\n]|$)/gi, ' ')
         .replace(/^[\s,，。；;]+|[\s,，。；;]+$/g, '')
         .trim();
 }
@@ -47,12 +49,18 @@ function requestedReadCriteria(task: string): AgentGoalCriterion[] {
         ['skill-reference', /\bdeclared\b.{0,120}\breferences?\b|\bcontract\s+references?\b|合同引用|声明的引用/i, 'cocos_2x_skill_reference_read'],
         ['scene-snapshot', /\bscene\s+snapshot\b|场景快照/i, 'cocos_2x_scene_snapshot'],
     ];
-    return requested.filter(([, pattern]) => pattern.test(task)).map(([id, , tool]) =>
+    const criteria = requested.filter(([, pattern]) => pattern.test(task)).map(([id, , tool]) =>
         criterion(`requested-${id}`, `取得 ${tool} 的本轮成功只读回执`, [tool], 'creator-requested-read'));
+    const scripts = [...new Set([...task.matchAll(/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\.[jt]s\b/g)].map((match) => match[0].trim().replace(/^assets\//, '')))];
+    scripts.forEach((scriptPath, index) => criteria.push({
+        ...criterion(`requested-script-${index + 1}`, `读取 ${scriptPath} 的本轮源码回执`, ['cocos_2x_script_read', 'cocos_2x_command_execute'], 'creator-requested-script'),
+        expectation: { scriptPath },
+    }));
+    return criteria;
 }
 
 /** Conservative scope recognition. Unknown requests require clarification, never a generic successful receipt. */
-export function creatorTaskCriteria(task: string): AgentGoalCriterion[] {
+export function creatorTaskCriteria(task: string, approvedTargets?: CreatorExpectedTarget[]): AgentGoalCriterion[] {
     const value = removeNegatedScopes(task);
     const read = /只读|只讀|read[ -]only|\b(?:read|inspect|check|query|analy[sz]e|explain|summari[sz]e|list|show|verify)\b|(?:阅读|读取|查看|检查|查询|分析|解释|总结|列出|核对)/i.test(value);
     const restore = /补偿|恢复|撤销|回滚|\bcompensate\b|\brestore\b|\bundo\b|\brollback\b/i.test(value);
@@ -80,7 +88,13 @@ export function creatorTaskCriteria(task: string): AgentGoalCriterion[] {
             restore ? 'creator-restoration-readback' : 'creator-readback'),
         criterion('script-compiled', '本轮脚本写入必须有对应源码哈希的 Creator 编译回执；无脚本写入时不适用', [...WRITE_TOOLS, ...LEDGER_TOOLS], 'creator-compile'),
     ];
-    const compileOnly = /仅编译|只需编译|不要运行|无需运行|不验证运行|\bcompile only\b|\bdo not run\b/i.test(task);
+    const temporalRestore = restore && /临时|暂时|再.*(?:补偿|恢复)|then.*(?:restore|undo)|temporary/i.test(value);
+    const targets = [...new Map([...(temporalRestore ? [] : literalCreatorTargets(value)), ...validateCreatorTargets(approvedTargets || [])]
+        .map((target) => [`${target.target}:${target.field}:${JSON.stringify(target.equals)}`, target])).values()];
+    if (!restore || targets.length) requirements.push(...(targets.length ? targets.map((target, index) => ({
+        ...criterion(`requested-target-${index + 1}`, `核对目标 ${target.target} 的 ${target.field} = ${String(target.equals)}`.slice(0, 280), READBACK_TOOLS, 'creator-user-target'), expectation: target,
+    })) : [criterion('requested-target-unbound', '最终目标尚未绑定：请在 Plan 中审阅目标 UUID/路径、字段和预期值，不能仅凭写入回执宣告完成', READBACK_TOOLS, 'creator-scope-unknown')]));
+    const compileOnly = /仅编译|只需编译|不要运行|无需运行|不验证运行|不预览|不要预览|无需预览|\bcompile only\b|\bdo not run\b|\bno preview\b/i.test(task);
     const functional = /点击|按钮|网络|连接|登录|存档|交互|玩法|碰撞|\b(?:click|button|network|connect|login|save game|interactive|gameplay|collision)\b/i.test(task);
     const visual = /界面|弹窗|窗口|场景|预览|运行|脚本|代码|\b(?:ui|gui|dialog|popup|scene|preview|runtime|script|code)\b|\.[jt]s\b/i.test(task);
     if (!restore && !compileOnly && (functional || visual)) {
@@ -133,14 +147,7 @@ function afterWrites(receipt: AgentReceipt, receipts: AgentReceipt[]): boolean {
 }
 
 function nodeField(node: JsonObject, field: string): unknown {
-    if (field === 'node.name') return node.name;
-    if (field === 'node.active') return node.active;
-    const transform = field.match(/^node\.(position|scale)\.(x|y)$/);
-    if (transform) return object(object(node.transform)[transform[1]!])[transform[2]!];
-    const component = field.match(/^component\.(cc\.(?:Sprite|Label))\.(enabled|spriteFrameUuid)$/);
-    if (!component) return undefined;
-    const matches = (Array.isArray(node.componentDetails) ? node.componentDetails : []).filter((item) => record(item) && item.classId === component[1]);
-    return matches.length === 1 ? object(matches[0])[component[2]!] : undefined;
+    return creatorNodeField(node, field);
 }
 
 function targetMatches(receipt: AgentReceipt, write: AgentReceipt, restoring: boolean): boolean {
@@ -189,6 +196,13 @@ export function verifyCreatorTaskReceipt(criterion: AgentGoalCriterion, receipt:
             : receipt.access === 'read' && READ_TOOLS.includes(receipt.toolName));
     if (requirement === 'creator-requested-read') return ['setup', 'task'].includes(receipt.role) && receipt.access === 'read'
         && good(receipt) && criterion.requiredTools.includes(receipt.toolName);
+    if (requirement === 'creator-requested-script') {
+        const path = text(detail(receipt).scriptPath), requested = text(criterion.expectation?.scriptPath);
+        return good(receipt) && (receipt.toolName === 'cocos_2x_script_read' || command(receipt) === 'script.read')
+            && !!requested && (path === requested || path.endsWith(`/${requested}`));
+    }
+    if (requirement === 'creator-user-target') return afterWrites(receipt, receipts)
+        && matchesCreatorTarget(receipt, criterion.expectation as CreatorExpectedTarget);
     if (requirement === 'creator-memory-write') return receipt.access === 'write' && good(receipt) && MEMORY_WRITES.includes(receipt.toolName)
         && ['remembered', 'corrected', 'deleted', 'compacted'].includes(text(data(receipt).outcome)) && !!operationId(receipt);
     if (requirement === 'creator-scope-unknown' || requirement === 'creator-interaction') return false;
@@ -196,7 +210,10 @@ export function verifyCreatorTaskReceipt(criterion: AgentGoalCriterion, receipt:
     if (!attempts.length) return false;
     const restoring = requirement?.startsWith('creator-restoration') === true;
     if (requirement === 'creator-content-write' || requirement === 'creator-restoration-write') {
-        return attempts.includes(receipt) && attempts.every((write) => verifiedWrite(write, restoring));
+        const compensating = (write: AgentReceipt) => detail(write).action === 'compensate'
+            || command(write) === 'script.patch' && object(detail(write).record).state === 'compensated';
+        return attempts.includes(receipt) && attempts.every((write) => verifiedWrite(write, compensating(write)))
+            && (restoring ? finalTargets(attempts).every(compensating) : finalTargets(attempts).every((write) => !compensating(write)));
     }
     if (requirement === 'creator-compile') {
         return good(receipt) && attempts.every((write) => command(write) !== 'script.patch'

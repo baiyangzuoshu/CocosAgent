@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { beginPlanStep, createPlan, finishPlanStep, hasPlanSetupReceipts, planView } from './assistant-plan-service.mjs';
 
-const data = { title: 'Two steps', summary: 'Check, then act.', steps: [
-    { title: 'Read', description: 'Inspect.', preconditions: [], requiredTools: ['cocos_2x_operation_get'], validation: 'Receipt.', recovery: 'Stop.' },
+const data = { version: 2, title: 'Two steps', summary: 'Check, then act.', steps: [
+    { title: 'Read', description: 'Inspect.', preconditions: [], requiredTools: ['cocos_2x_operation_get'], validation: 'Receipt.', recovery: 'Stop.', acceptance: { kind: 'read' } },
     { title: 'Write', description: 'Make the approved change.', preconditions: ['Fresh state'],
-        requiredTools: ['cocos_2x_scene_node_inspect'], validation: 'Read back.', recovery: 'Compensate.' },
+        requiredTools: ['cocos_2x_scene_node_inspect'], validation: 'Read back.', recovery: 'Compensate.', acceptance: { kind: 'read' } },
 ] };
 
 test('plan setup accepts successful receipts in the tool result shape', () => {
@@ -28,9 +28,9 @@ test('plan steps require explicit click, correct conversation, and strict order'
     beginPlanStep(plan, { conversationId: 'conversation-a', planId: plan.id, stepIndex: 0 });
     assert.equal(plan.status, 'running');
     assert.throws(() => beginPlanStep(plan, { conversationId: 'conversation-a', planId: plan.id, stepIndex: 1 }), /PLAN_STEP_OUT_OF_ORDER/);
-    finishPlanStep(plan, { status: 'completed', receipts: [{ name: 'cocos_2x_operation_get', access: 'read', structuredContent: {
+    finishPlanStep(plan, { status: 'completed', goalEvaluation: { satisfied: true }, receipts: [{ name: 'cocos_2x_operation_get', access: 'read', structuredContent: {
         success: true, outcome: 'completed', operationId: 'verified-source-operation',
-    } }] });
+    } }] }, { satisfied: true, outstanding: [], evidence: [{ callId: 'source', name: 'cocos_2x_operation_get', access: 'read', isError: false, payload: { success: true, operationId: 'verified-source-operation' } }] });
     assert.equal(plan.status, 'waiting-next');
     assert.equal(plan.completedSteps, 1);
     assert.equal(planView(plan).stepEvidence[0].stepIndex, 0);
@@ -39,9 +39,9 @@ test('plan steps require explicit click, correct conversation, and strict order'
     assert.match(nextTask, /verified-source-operation/);
     assert.throws(() => beginPlanStep(plan, { conversationId: 'conversation-a', planId: plan.id, stepIndex: 0 }), /PLAN_STEP_OUT_OF_ORDER/);
     assert.throws(() => beginPlanStep(plan, { conversationId: 'conversation-a', planId: plan.id, stepIndex: 1 }), /PLAN_NOT_READY/);
-    finishPlanStep(plan, { status: 'completed', receipts: [{ name: 'cocos_2x_scene_node_inspect', access: 'read', structuredContent: {
+    finishPlanStep(plan, { status: 'completed', goalEvaluation: { satisfied: true }, receipts: [{ name: 'cocos_2x_scene_node_inspect', access: 'read', structuredContent: {
         success: true, outcome: 'completed', result: { node: { status: 'not-found' } },
-    } }] });
+    } }] }, { satisfied: true, outstanding: [], evidence: [] });
     assert.equal(plan.status, 'completed');
     assert.equal(planView(plan).completedSteps, 2);
 });
@@ -81,7 +81,7 @@ test('a step stays retryable when preflight reads succeed but its required task 
     const plan = createPlan({ conversationId: 'conversation-a', userTask: 'Compensate the temporary node.', data: {
         ...data, steps: [{ title: 'Compensate and verify', description: 'Remove the temporary node and read back.',
             preconditions: [], requiredTools: ['cocos_2x_command_execute', 'cocos_2x_operation_get', 'cocos_2x_scene_node_inspect'],
-            validation: 'The source operation is compensated and the node is absent.', recovery: 'Stop if any identity differs.' }],
+            validation: 'The source operation is compensated and the node is absent.', recovery: 'Stop if any identity differs.', acceptance: { kind: 'restore' } }],
     } });
     beginPlanStep(plan, { conversationId: 'conversation-a', planId: plan.id, stepIndex: 0 });
     finishPlanStep(plan, { status: 'completed', receipts: [
@@ -97,7 +97,7 @@ test('a successful write with missing required readback stays locked for review'
     const plan = createPlan({ conversationId: 'conversation-a', userTask: 'Create a node.', data: {
         ...data, steps: [{ title: 'Create and verify', description: 'Create the node and read it back.', preconditions: [],
             requiredTools: ['cocos_2x_command_execute', 'cocos_2x_scene_node_inspect'],
-            validation: 'The node is present in the scene.', recovery: 'Compensate by operation ID.' }],
+            validation: 'The node is present in the scene.', recovery: 'Compensate by operation ID.', acceptance: { kind: 'write', targets: [{ target: 'scene/Canvas/Node', field: 'node.name', equals: 'Node' }] } }],
     } });
     beginPlanStep(plan, { conversationId: 'conversation-a', planId: plan.id, stepIndex: 0 });
     finishPlanStep(plan, { status: 'completed', receipts: [{ name: 'cocos_2x_command_execute', access: 'write-approved',
@@ -109,7 +109,7 @@ test('a successful write with missing required readback stays locked for review'
 test('a required write receipt without access classification cannot complete a step', () => {
     const plan = createPlan({ conversationId: 'conversation-a', userTask: 'Create a node.', data: {
         ...data, steps: [{ title: 'Create', description: 'Create the node.', preconditions: [],
-            requiredTools: ['cocos_2x_command_execute'], validation: 'Read back the write.', recovery: 'Review the operation receipt.' }],
+            requiredTools: ['cocos_2x_command_execute'], validation: 'Read back the write.', recovery: 'Review the operation receipt.', acceptance: { kind: 'write', targets: [{ target: 'scene/Canvas/Node', field: 'node.name', equals: 'Node' }] } }],
     } });
     beginPlanStep(plan, { conversationId: 'conversation-a', planId: plan.id, stepIndex: 0 });
     finishPlanStep(plan, { status: 'completed', receipts: [{ name: 'cocos_2x_command_execute', structuredContent: {

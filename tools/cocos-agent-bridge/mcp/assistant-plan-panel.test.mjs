@@ -25,6 +25,7 @@ class Element {
     replaceChild(next, old) { const index = this.children.indexOf(old); this.children[index] = next; next.parentNode = this; old.parentNode = null; }
     removeChild(child) { this.children.splice(this.children.indexOf(child), 1); child.parentNode = null; }
     addEventListener(name, handler) { this.listeners[name] = handler; }
+    querySelector(selector) { return this.children.find((child) => `.${child.className}` === selector) || null; }
 }
 
 test('plan card is rendered as text and starts only the selected Agent step', () => {
@@ -33,7 +34,7 @@ test('plan card is rendered as text and starts only the selected Agent step', ()
     class WebSocketMock { static OPEN = 1; }
     vm.runInNewContext(fs.readFileSync(path.join(root, '2.4.15NewProject/packages/cocos-agent-bridge/panel/index.js'), 'utf8'), {
         Editor: { Panel: { extend(value) { definition = value; } }, Ipc: { sendToMain(...args) { ipcMessages.push(args); } } },
-        document: { createElement: () => new Element() },
+        document: { createElement: () => new Element(), createTextNode: (text) => ({ textContent: text }) },
         window: { crypto: { randomUUID: () => 'request-id' } },
         localStorage: { getItem: () => null, setItem() {} }, WebSocket: WebSocketMock,
     });
@@ -61,7 +62,7 @@ test('plan card is rendered as text and starts only the selected Agent step', ()
     assert.equal(card.children[0].textContent, '<script>Title</script>');
     assert.match(card.children[2].children[1].children[0].textContent,
         /必需工具：cocos_2x_command_execute、cocos_2x_scene_node_inspect/);
-    const button = card.children.at(-1);
+    const button = card.children.find((child) => child.className === 'plan-action');
     button.listeners.click();
     const request = ipcMessages.at(-1);
     assert.equal(request.mode, 'Agent');
@@ -76,7 +77,7 @@ test('plan action is enabled after a Plan request finishes', () => {
     class WebSocketMock { static OPEN = 1; }
     vm.runInNewContext(fs.readFileSync(path.join(root, '2.4.15NewProject/packages/cocos-agent-bridge/panel/index.js'), 'utf8'), {
         Editor: { Panel: { extend(value) { definition = value; } }, Ipc: { sendToMain() {} } },
-        document: { createElement: () => new Element() },
+        document: { createElement: () => new Element(), createTextNode: (text) => ({ textContent: text }) },
         window: { crypto: { randomUUID: () => 'request-id' } },
         localStorage: { getItem: () => null, setItem() {} }, WebSocket: WebSocketMock,
     });
@@ -94,10 +95,10 @@ test('plan action is enabled after a Plan request finishes', () => {
         steps: [{ title: 'Create', description: 'Create.', preconditions: [], requiredTools: ['cocos_2x_command_execute'], validation: 'Read.', recovery: 'Check.' }],
         nextStepIndex: 0, completedSteps: 0, status: 'proposed' };
     definition.renderPlan(plan);
-    assert.equal(definition.$messages.children[0].children.at(-1).disabled, true);
+    assert.equal(definition.$messages.children[0].children.find((child) => child.className === 'plan-action').disabled, true);
     definition.finishRun();
     assert.equal(definition._busy, false);
-    assert.equal(definition.$messages.children[0].children.at(-1).disabled, false);
+    assert.equal(definition.$messages.children[0].children.find((child) => child.className === 'plan-action').disabled, false);
 });
 
 test('execution checklist stays visually separate from the user-approved Plan and survives a failed run display', () => {
@@ -105,7 +106,7 @@ test('execution checklist stays visually separate from the user-approved Plan an
     class WebSocketMock { static OPEN = 1; }
     vm.runInNewContext(fs.readFileSync(path.join(root, '2.4.15NewProject/packages/cocos-agent-bridge/panel/index.js'), 'utf8'), {
         Editor: { Panel: { extend(value) { panel = value; } }, Ipc: { sendToMain() {} } },
-        document: { createElement: () => new Element() },
+        document: { createElement: () => new Element(), createTextNode: (text) => ({ textContent: text }) },
         window: { crypto: { randomUUID: () => 'request-id' } },
         localStorage: { getItem: () => null, setItem() {} }, WebSocket: WebSocketMock,
     });
@@ -135,7 +136,7 @@ test('panel displays goal-loop decisions and outstanding receipt criteria', () =
     class WebSocketMock { static OPEN = 1; }
     vm.runInNewContext(fs.readFileSync(path.join(root, '2.4.15NewProject/packages/cocos-agent-bridge/panel/index.js'), 'utf8'), {
         Editor: { Panel: { extend(value) { panel = value; } }, Ipc: { sendToMain() {} } },
-        document: { createElement: () => new Element() }, window: { crypto: { randomUUID: () => 'request-id' } },
+        document: { createElement: () => new Element(), createTextNode: (text) => ({ textContent: text }) }, window: { crypto: { randomUUID: () => 'request-id' } },
         localStorage: { getItem: () => null, setItem() {} }, WebSocket: WebSocketMock,
     });
     for (const name of Object.keys(panel.$)) panel[`$${name}`] = new Element();
@@ -162,7 +163,7 @@ for (const [status, label] of [['completed', '已结束'], ['needs-review', '待
                     selectedNodes: [], selectionStatus: 'read', projectConventions: { status: 'missing' },
                 });
             } } },
-            document: { createElement: () => new Element() },
+            document: { createElement: () => new Element(), createTextNode: (text) => ({ textContent: text }) },
             window: { crypto: { randomUUID: () => `request-${++requestCount}` } },
             localStorage: { getItem: () => null, setItem() {} }, WebSocket: { OPEN: 1 },
         });
@@ -200,7 +201,7 @@ test('panel exposes safe cancellation, expected diff details, and exact-operatio
     class WebSocketMock { static OPEN = 1; }
     vm.runInNewContext(fs.readFileSync(path.join(root, '2.4.15NewProject/packages/cocos-agent-bridge/panel/index.js'), 'utf8'), {
         Editor: { Panel: { extend(value) { panel = value; } }, Ipc: { sendToMain() {} } },
-        document: { createElement: () => new Element() },
+        document: { createElement: () => new Element(), createTextNode: (text) => ({ textContent: text }) },
         window: { crypto: { randomUUID: () => 'request-id' } },
         localStorage: { getItem: () => null, setItem() {} }, WebSocket: WebSocketMock,
     });
@@ -220,8 +221,9 @@ test('panel exposes safe cancellation, expected diff details, and exact-operatio
     panel.receiveMessage(JSON.stringify({ type: 'tool.finished', requestId: 'run-id', toolName: 'cocos_2x_script_patch_plan',
         result: { success: true, expectedDiff: [{ before: 'old();', after: 'new();' }] } }));
     const activity = panel.$messages.children[0];
-    assert.equal(activity.children[0].children[0].textContent, '查看预期差异');
-    assert.match(activity.children[0].children[1].textContent, /old\(\);/);
+    const diff = activity.children.find((child) => child.className === 'diff-details');
+    assert.equal(diff.children[0].textContent, '查看预期差异');
+    assert.match(diff.children[1].textContent, /old\(\);/);
 
     const operationId = '11111111-1111-4111-8111-111111111111';
     panel.renderRecentRun({ id: 'run-id', conversationId: 'conversation-id', task: 'Edit button logic', mode: 'Agent',
@@ -243,7 +245,7 @@ test('panel explains context compaction and stops when required state exceeds th
     const activities = [];
     vm.runInNewContext(fs.readFileSync(path.join(root, '2.4.15NewProject/packages/cocos-agent-bridge/panel/index.js'), 'utf8'), {
         Editor: { Panel: { extend(value) { panel = value; } }, Ipc: { sendToMain() {} } },
-        document: { createElement: () => new Element() },
+        document: { createElement: () => new Element(), createTextNode: (text) => ({ textContent: text }) },
         window: { crypto: { randomUUID: () => 'request-id' } },
         localStorage: { getItem: () => null, setItem() {} }, WebSocket: { OPEN: 1 },
     });

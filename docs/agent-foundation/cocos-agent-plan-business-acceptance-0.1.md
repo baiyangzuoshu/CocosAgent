@@ -4,7 +4,11 @@
 
 ## 计划合同
 
-新计划使用 JSON `version: 2`。每步保留 `title/description/preconditions/requiredTools/validation/recovery`，增加 `acceptance: { kind }`；kind 只允许 `read/write/restore/runtime/interaction/memory`。`validation` 是可读说明，程序验收由 kind、实际工具回执和原始用户目标共同决定，模型不能提供任意表达式或自行写入 satisfied。
+新计划使用 JSON `version: 2`。每步保留 `title/description/preconditions/requiredTools/validation/recovery`，使用 `acceptance: { kind, targets? }`；kind 只允许 `read/write/restore/runtime/interaction/memory`。`write` 步骤必须声明 1–16 项目标，格式为 `{ target, field, equals }`：target 为精确 UUID 或完整场景节点路径，field 为受支持字段，equals 为最终值。面板逐条展示目标供用户审阅；`validation` 继续是可读说明，不能替代这些结构化条件。模型不能提供任意表达式或自行写入 satisfied。
+
+目标字段白名单：`node.name`、`node.active`、`node.position.x/y`、`node.scale.x/y`、`component.cc.Sprite.enabled`、`component.cc.Sprite.spriteFrameUuid`、`component.cc.Label.enabled`、`script.sourceSha256`、`prefab.sourceSha256`。数字、布尔和字符串分别校验类型；单步不接受同一目标/字段的重复定义。脚本预期哈希须先从只读 patch plan 得到，不能用写入后的实际值替换计划值。新节点可以使用预期的完整场景路径；已有对象优先用 UUID。
+
+例如用户要求 `x=200`，即使操作回执、账本和实时读回都一致为 `x=20`，目标条件仍不通过。原任务中可识别的字面值条件会与已批准计划目标共同校验，计划不能将原文的 200 替换为 20。自由 Agent 目前只确定性识别部分显式位置请求；无法绑定的内容写入保留 `requested-target-unbound`，需通过有明确目标的 Plan 验收，不宣称已经理解任意自然语言目标。
 
 | kind | 程序条件 |
 | --- | --- |
@@ -24,6 +28,10 @@ Host 给 TS 运行时传递已批准步骤的 kind、原始用户目标、步骤
 前序证据只来自 Host 收到的真实工具回执，按步骤保存有界白名单投影，保留调用、操作、UUID/hash、字段、阶段与运行身份，排除源码、技能正文、图片字节和凭据。运行观察仅保留图像可用状态。恢复时证据缺失或无法重建即停止；旧的 version 1 计划须先核对已有操作再重新生成，不能直接套用工具成功规则继续。
 
 当前内容验证复用受限节点、Prefab 源及已有 JS 合同。未有对应业务验收适配的写入工作流应在计划阶段报告范围缺口。出现不确定写入继续进入 needs-review，并按原 operationId 对账，业务验收失败不授权自动重试写入。
+
+2026-10-15 起，旧 version 2 计划如果含缺少 targets 的 write 步骤，也必须重新生成。最终步骤按各已批准步骤的目标计算最终值，后一步对相同目标/字段的明确修改替换中间值；补偿步骤按其显式目标或原操作 before-state 验收，不把前一步临时 apply 的中间值当成恢复目标。同轮 apply 和 compensate 分别验证各自阶段回执，再核对最后状态。
+
+工程未决写入另存于工程哈希隔离的用户状态目录 `write-recovery-v1.json`，不随最近会话裁剪。批准之后、实际分发之前先持久化操作身份；已知语义写入的 operationId 在批准卡片前生成。存储失败不发送命令；结果丢失、身份矛盾或副作用不确定时保留恢复门槛，下一轮和重启后只允许精确匹配的恢复调用。只有同一身份的明确结果才能解除；editor/disk 通过但仍待 preview/runtime 的操作，恢复确定性不代表运行验收完成。原生恢复面板在当前任务结束后才能核对历史操作。
 
 ## 验收状态
 

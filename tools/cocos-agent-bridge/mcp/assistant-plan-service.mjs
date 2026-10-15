@@ -65,6 +65,7 @@ export function createPlan({ conversationId, userTask, data }) {
 export function beginPlanStep(plan, { conversationId, planId, stepIndex }) {
     if (!plan || plan.id !== planId || plan.conversationId !== conversationId) throw new Error('PLAN_NOT_FOUND');
     if (plan.schemaVersion !== 2) throw new Error('PLAN_REGENERATION_REQUIRED');
+    if (plan.steps.some((step) => step.acceptance?.kind === 'write' && !step.acceptance.targets?.length)) throw new Error('PLAN_REGENERATION_REQUIRED');
     if (!Number.isInteger(stepIndex) || stepIndex !== plan.nextStepIndex || stepIndex >= plan.steps.length) {
         throw new Error('PLAN_STEP_OUT_OF_ORDER');
     }
@@ -119,7 +120,15 @@ export function planAcceptanceContext(plan) {
         || plan.evidenceSteps.some((entry, index) => entry.stepIndex !== index || !Array.isArray(entry.receipts) || entry.receipts.length > 32)) {
         throw new Error('PLAN_PRIOR_EVIDENCE_UNAVAILABLE');
     }
+    const finalTargets = new Map();
+    for (const reviewed of plan.steps.slice(0, plan.nextStepIndex + 1)) {
+        // Restoration without an explicit target uses the original ledger before-state,
+        // rather than retaining the preceding intermediate apply targets.
+        if (reviewed.acceptance.kind === 'restore') finalTargets.clear();
+        for (const target of reviewed.acceptance.targets || []) finalTargets.set(`${target.target}:${target.field}`, target);
+    }
     return { version: 2, kind: step.acceptance.kind, userTask: plan.userTask, requiredTools: [...step.requiredTools],
+        targets: step.acceptance.targets || [], finalTargets: [...finalTargets.values()],
         finalStep: plan.nextStepIndex === plan.steps.length - 1,
         priorEvidence: plan.evidenceSteps.flatMap((entry) => entry.receipts) };
 }
@@ -127,7 +136,7 @@ export function planAcceptanceContext(plan) {
 export function planView(plan) {
     const { id, conversationId, title, summary, steps, nextStepIndex, completedSteps, status, stepEvidence, businessEvaluation, schemaVersion } = plan;
     return { id, conversationId, title, summary, steps, nextStepIndex, completedSteps,
-        status: schemaVersion === 2 ? status : 'needs-regeneration', schemaVersion,
+        status: schemaVersion === 2 && !steps.some((step) => step.acceptance?.kind === 'write' && !step.acceptance.targets?.length) ? status : 'needs-regeneration', schemaVersion,
         ...(businessEvaluation ? { businessEvaluation } : {}),
         ...(Array.isArray(stepEvidence) ? { stepEvidence: stepEvidence.slice(-8) } : {}) };
 }

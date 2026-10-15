@@ -1,6 +1,7 @@
 import type { AgentGoalCriterion, AgentReceipt, AgentPolicyToolContext, JsonObject } from './contracts.js';
 import { creatorTaskCriteria, verifyCreatorTaskReceipt } from './creator-task-acceptance.js';
 import { evaluateGoalEvidence } from './task-system.js';
+import { validateCreatorTargets, type CreatorExpectedTarget } from './creator-targets.js';
 
 export type CreatorPlanStepKind = 'read' | 'write' | 'restore' | 'runtime' | 'interaction' | 'memory';
 export interface CreatorPlanAcceptanceContext {
@@ -10,6 +11,8 @@ export interface CreatorPlanAcceptanceContext {
     requiredTools: string[];
     finalStep: boolean;
     priorEvidence: CreatorPlanEvidence[];
+    targets?: CreatorExpectedTarget[];
+    finalTargets?: CreatorExpectedTarget[];
 }
 export interface CreatorPlanEvidence {
     callId: string;
@@ -26,7 +29,7 @@ const pick = (value: unknown, keys: string[]): JsonObject => {
     for (const key of keys) if (source[key] !== undefined) selected[key] = source[key];
     return selected;
 };
-const IDENTITY_FIELDS = ['operationId', 'action', 'prefabUuid', 'scriptUuid', 'nodeUuid', 'targetNodeUuid', 'nodeName',
+const IDENTITY_FIELDS = ['operationId', 'action', 'prefabUuid', 'scriptUuid', 'scriptPath', 'nodeUuid', 'targetNodeUuid', 'nodeName',
     'sourceSha256', 'beforeSha256', 'afterSha256', 'metaSha256', 'state', 'status'];
 function nodeProof(value: unknown): JsonObject {
     const result = pick(value, ['status', 'path', 'uuid', 'name', 'active']);
@@ -96,10 +99,12 @@ export function createCreatorPlanAcceptance(context: CreatorPlanAcceptanceContex
         throw new Error('PLAN_BUSINESS_CONTRACT_INVALID');
     }
     const prior = context.priorEvidence.map(hydrate);
+    const targets = validateCreatorTargets(context.targets || []);
+    if (context.kind === 'write' && !targets.length) throw new Error('PLAN_REGENERATION_REQUIRED');
     const priorSet = new Set(prior);
     const business: AgentGoalCriterion[] = context.kind === 'read' ? creatorTaskCriteria('只读检查')
-        : context.kind === 'write' ? creatorTaskCriteria('修改内容，仅编译')
-        : context.kind === 'restore' ? creatorTaskCriteria('恢复内容')
+        : context.kind === 'write' ? creatorTaskCriteria('修改内容，仅编译', targets)
+        : context.kind === 'restore' ? creatorTaskCriteria('恢复内容', targets)
         : context.kind === 'memory' ? creatorTaskCriteria('记住项目约定')
         : [{ id: context.kind, description: context.kind === 'runtime' ? '取得本步骤对前序目标的实时运行观察与适用的预览验收'
             : '交互功能仍缺原生可执行结果断言，不能以截图或模型声明完成',
@@ -109,7 +114,7 @@ export function createCreatorPlanAcceptance(context: CreatorPlanAcceptanceContex
         ...context.requiredTools.map((name, index) => ({ id: `plan-tool-${index + 1}`, description: `本步骤取得 ${name} 的成功回执`,
             requiredTools: [name], receiptRequirement: 'creator-plan-current-tool' })),
         ...business.map((item) => ({ ...item, id: `plan-step-${item.id}` })),
-        ...(context.finalStep ? creatorTaskCriteria(context.userTask).map((item) => ({ ...item, id: `plan-root-${item.id}`,
+        ...(context.finalStep ? creatorTaskCriteria(context.userTask, context.finalTargets || targets).map((item) => ({ ...item, id: `plan-root-${item.id}`,
             description: `整项计划：${item.description}` })) : []),
     ];
     const verify = (criterion: AgentGoalCriterion, receipt: AgentReceipt, receipts: AgentReceipt[]): boolean => {

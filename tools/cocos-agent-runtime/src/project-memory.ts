@@ -758,7 +758,7 @@ export class CreatorMemoryToolRegistry implements ToolRegistry {
     async callTool(input: { name: string; arguments: JsonObject; callId?: string }): Promise<AgentToolResult> {
         if (input.name.startsWith(MEMORY_PREFIX)) {
             if (input.name === `${MEMORY_PREFIX}remember` || input.name === `${MEMORY_PREFIX}correct`
-                || input.name === `${MEMORY_PREFIX}delete`) {
+                || input.name === `${MEMORY_PREFIX}delete` || input.name === `${MEMORY_PREFIX}compact`) {
                 if (!this.canWrite()) return failure('PROJECT_INSTRUCTIONS_REQUIRED',
                     'Read the current project AGENTS.md and match its sampled hash before any Agent write.');
             }

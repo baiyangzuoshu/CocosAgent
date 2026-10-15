@@ -14,6 +14,7 @@ import { AssistantStateStore } from './assistant-state-store.mjs';
 import { AssistantMemoryFileStore } from './assistant-memory-store.mjs';
 import { AssistantToolResultArchive } from './assistant-tool-result-archive.mjs';
 import { AssistantTaskStore } from './assistant-task-store.mjs';
+import { AssistantRecoveryStore } from './assistant-recovery-store.mjs';
 import { formatCreatorProjectContext, normalizeCreatorProjectContext } from './assistant-project-context.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -46,13 +47,13 @@ async function runTypeScriptReadOnly({ client, task, projectRoot, skillFiles, tr
 }
 
 async function runTypeScriptAgent({ client, task, projectRoot, skillFiles, tracePath, apiKey, model, history,
-    projectContext, signal, onEvent, approveWrite, memoryStore, taskStore, planAcceptance }) {
+    projectContext, signal, onEvent, approveWrite, memoryStore, taskStore, planAcceptance, recoveryStore }) {
     const runtimeUrl = pathToFileURL(path.join(REPOSITORY_ROOT, 'tools/cocos-agent-runtime/dist/index.js')).href;
     const runtime = await import(runtimeUrl);
     const legacyAdapter = await import('./deepseek-agent.mjs');
     return runtime.runCreatorAgent({
         client, task, projectRoot, skillFiles, tracePath, apiKey, model, mode: 'Agent', history,
-        projectContext, signal, onEvent, approveWrite,
+        projectContext, signal, onEvent, approveWrite, recoveryStore,
         toolResultArchive: new AssistantToolResultArchive(tracePath),
         skillAdapter: legacyAdapter,
         formatProjectContext: formatCreatorProjectContext,
@@ -298,6 +299,16 @@ async function start(options) {
     const apiKey = process.env.DEEPSEEK_API_KEY;
     if (typeof apiKey !== 'string' || apiKey.trim().length < 8) throw new Error('Set DEEPSEEK_API_KEY in the assistant process environment.');
 
+    const stateStore = new AssistantStateStore(options.project);
+    const memoryStore = new AssistantMemoryFileStore(options.project);
+    const taskStore = new AssistantTaskStore(options.project);
+    const restoredState = stateStore.load();
+    const conversations = new Map(restoredState.conversations.map((entry) => [entry.id, entry.messages]));
+    const plans = new Map(restoredState.plans.map((plan) => [plan.id, plan]));
+    const recentRuns = restoredState.runs;
+    const recoveryStore = new AssistantRecoveryStore(options.project);
+    await recoveryStore.migrateRuns(recentRuns);
+
     const childEnv = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^DEEPSEEK_/i.test(name)));
     const transport = new StdioClientTransport({
         command: process.execPath,
@@ -310,13 +321,6 @@ async function start(options) {
 
     const token = crypto.randomBytes(32).toString('hex');
     const wss = new WebSocketServer({ host: '127.0.0.1', port: 0, maxPayload: 16 * 1024 });
-    const stateStore = new AssistantStateStore(options.project);
-    const memoryStore = new AssistantMemoryFileStore(options.project);
-    const taskStore = new AssistantTaskStore(options.project);
-    const restoredState = stateStore.load();
-    const conversations = new Map(restoredState.conversations.map((entry) => [entry.id, entry.messages]));
-    const plans = new Map(restoredState.plans.map((plan) => [plan.id, plan]));
-    const recentRuns = restoredState.runs;
     const pendingApprovals = new Map();
     let activeRunState = null;
     const persistState = () => stateStore.save({
@@ -427,6 +431,11 @@ async function start(options) {
                 return;
             }
             if (message?.type === 'run.recover' && typeof message.runId === 'string' && typeof message.operationId === 'string') {
+                if (activeRunState) {
+                    send(socket, { type: 'run.recovery.result', runId: message.runId, operationId: message.operationId,
+                        error: '当前任务尚未结束；请等待写入回执返回后再核对历史操作。' });
+                    return;
+                }
                 const run = recentRuns.find((item) => item.id === message.runId
                     && item.conversationId === message.conversationId
                     && ((item.receipts || []).some((receipt) => receipt.operationId === message.operationId)
@@ -446,6 +455,12 @@ async function start(options) {
                     || writeReceipt?.command?.startsWith('script.') ? 'cocos_2x_script_operation_get' : 'cocos_2x_operation_get';
                 void (async () => {
                     const receipt = await readRecoveryReceipt(client, options.project, toolName, message.operationId, memoryStore);
+                    const pending = await recoveryStore.load();
+                    const runtime = await import(pathToFileURL(path.join(REPOSITORY_ROOT, 'tools/cocos-agent-runtime/dist/index.js')).href);
+                    if (pending.pending?.field === 'operationId' && pending.pending.value === message.operationId
+                        && runtime.creatorRecoveryResolved({ structuredContent: receipt }) && receipt.operationId === message.operationId) {
+                        await recoveryStore.save(null, pending.revision);
+                    }
                     run.recovery = { operationId: message.operationId, checkedAt: new Date().toISOString(), receipt };
                     run.updatedAt = run.recovery.checkedAt;
                     appendRun(run);
@@ -600,6 +615,7 @@ async function start(options) {
                     approveWrite,
                     memoryStore,
                     taskStore,
+                    recoveryStore,
                     ...(approvedPlanAcceptance ? { planAcceptance: approvedPlanAcceptance } : {}),
                 })
                 : runTypeScriptReadOnly({

@@ -20,8 +20,9 @@ const observe = (errors = [], uuid = sceneUuid) => receipt('cocos_2x_runtime_obs
     scene: { uuid, matchesExpected: true }, runtime: { status: errors.length ? 'runtime-error' : 'running', frameDelta: 10, capturedErrorCount: errors.length },
     diagnostics: { errors }, targetNode: { uuid: 'node-1' }, screenshot: { available: true },
 });
-function evaluate(task, receipts) {
-    return evaluateGoalEvidence({ taskId: 'task_1234abcd', criteria: creatorTaskCriteria(task) }, receipts, verifyCreatorTaskReceipt);
+const reviewedTarget = { target: 'node-1', field: 'node.position.x', equals: 20 };
+function evaluate(task, receipts, targets = [reviewedTarget]) {
+    return evaluateGoalEvidence({ taskId: 'task_1234abcd', criteria: creatorTaskCriteria(task, targets) }, receipts, verifyCreatorTaskReceipt);
 }
 
 test('scene inspection and starting preview cannot complete a requested network dialog', () => {
@@ -128,7 +129,7 @@ test('a later edit invalidates prior target readback and checks the latest targe
     const oldEvidence = [first, ledger(first), inspect()];
     assert.equal(evaluate('Move the node', oldEvidence).satisfied, true);
     assert.equal(evaluate('Move the node', [...oldEvidence, second]).satisfied, false);
-    assert.equal(evaluate('Move the node', [...oldEvidence, second, ledger(first), ledger(second), inspect('node-1', 30)]).satisfied, true);
+    assert.equal(evaluate('Move the node', [...oldEvidence, second, ledger(first), ledger(second), inspect('node-1', 30)], [{ ...reviewedTarget, equals: 30 }]).satisfied, true);
 });
 
 test('script modifications require exact current source/metadata and successful Creator compilation', () => {
@@ -138,7 +139,7 @@ test('script modifications require exact current source/metadata and successful 
         current: { scriptUuid: 'script-1', metaSha256: 'meta', sourceSha256: 'after' } };
     const change = receipt('cocos_2x_script_patch', { success: true, outcome: 'needs-runtime', command: 'script.patch', operationId: operation, result: payload }, 'write');
     const saved = receipt('cocos_2x_script_operation_get', { success: true, command: 'script.operation.get', operationId: operation, result: payload });
-    assert.equal(evaluate('修改脚本，仅编译', [change, saved]).satisfied, true);
+    assert.equal(evaluate('修改脚本，仅编译', [change, saved], [{ target: 'script-1', field: 'script.sourceSha256', equals: 'after' }]).satisfied, true);
     const failedCompile = structuredClone(change); failedCompile.result.structuredContent.result.record.compilation.status = 'failed';
     assert.equal(evaluate('修改脚本，仅编译', [failedCompile, saved]).satisfied, false);
     const stale = structuredClone(saved); stale.result.structuredContent.result.current.sourceSha256 = 'before';
@@ -149,7 +150,7 @@ test('semantic criteria persist and cannot complete when their verifier is unava
     let saved = [];
     const store = { load: () => saved, save: (tasks) => { saved = structuredClone(tasks); } };
     const system = new CreatorTaskSystem(store, verifyCreatorTaskReceipt);
-    const task = await system.create({ subject: 'Move node', description: 'Move node', acceptanceCriteria: creatorTaskCriteria('Move the node') });
+    const task = await system.create({ subject: 'Move node', description: 'Move node', acceptanceCriteria: creatorTaskCriteria('Move the node', [reviewedTarget]) });
     await system.claim(task.id);
     const change = write();
     assert.equal((await system.recordReceipts(task.id, [change, ledger(change), inspect()])).task.status, 'completed');

@@ -1,4 +1,6 @@
-const MAX_PLAN_CHARS = 12_000;
+import { validateCreatorTargets } from '../../cocos-agent-runtime/dist/creator-targets.js';
+
+const MAX_PLAN_CHARS = 16_000;
 const MAX_STEPS = 8;
 const PLAN_SETUP_TOOLS = new Set(['cocos_2x_instances_list', 'cocos_2x_instances_get', 'cocos_2x_capabilities_list',
     'cocos_2x_skills_list', 'cocos_2x_skill_read', 'cocos_2x_skill_reference_read', 'cocos_2x_project_instructions_read']);
@@ -94,8 +96,10 @@ export function parseStructuredPlan(text, { availableToolNames } = {}) {
         summary: boundedText(value.summary, 1200, 'summary'),
         steps: value.steps.map((step) => {
             exactKeys(step, ['title', 'description', 'preconditions', 'requiredTools', 'validation', 'recovery', 'acceptance'], 'step');
-            exactKeys(step.acceptance, ['kind'], 'acceptance');
+            exactKeys(step.acceptance, Object.hasOwn(step.acceptance || {}, 'targets') ? ['kind', 'targets'] : ['kind'], 'acceptance');
             if (!ACCEPTANCE_KINDS.has(step.acceptance.kind)) throw new TypeError('INVALID_PLAN_ACCEPTANCE_KIND');
+            const targets = validateCreatorTargets(step.acceptance.targets || []);
+            if (step.acceptance.kind === 'write' && !targets.length) throw new TypeError('INVALID_PLAN_TARGETS_REQUIRED');
             if (!Array.isArray(step.preconditions) || step.preconditions.length > 4) throw new TypeError('INVALID_PLAN_PRECONDITIONS');
             if (!Array.isArray(step.requiredTools) || step.requiredTools.length < 1 || step.requiredTools.length > 6
                 || step.requiredTools.some((name) => typeof name !== 'string'
@@ -131,7 +135,7 @@ export function parseStructuredPlan(text, { availableToolNames } = {}) {
                 requiredTools: step.requiredTools,
                 validation: boundedText(step.validation, 600, 'validation'),
                 recovery: boundedText(step.recovery, 600, 'recovery'),
-                acceptance: { kind: step.acceptance.kind },
+                acceptance: { kind: step.acceptance.kind, ...(step.acceptance.targets ? { targets } : {}) },
             };
         }),
     };
@@ -157,6 +161,7 @@ export function planStepTask(plan, index, stepEvidence = []) {
         `Preconditions: ${step.preconditions.length ? step.preconditions.join('; ') : 'None specified.'}`,
         `Validation: ${step.validation}`,
         `Host business acceptance kind: ${step.acceptance?.kind || 'unavailable'}. Tool success alone cannot complete this step.`,
+        `Reviewed final targets: ${JSON.stringify(step.acceptance?.targets || [])}. These target values are fixed; receipts cannot redefine them.`,
         index === plan.steps.length - 1 ? 'This is the final step. The Host also verifies the original user task against all approved-step receipts. Report missing business evidence; never repeat an earlier write to manufacture completion.'
             : 'This is an intermediate step. Verify its own business conditions; later functional acceptance remains pending.',
         `Recovery: ${step.recovery}`,

@@ -432,7 +432,7 @@ test('Creator Agent reads the selected skill and its declared reference on deman
         });
         const traceText = fs.readFileSync(value.tracePath, 'utf8');
         const events = readTrace(value.tracePath);
-        assert.ok(events.some((event) => event.event === 'skills.catalog.loaded' && event.packageVersion === '0.3.2'
+        assert.ok(events.some((event) => event.event === 'skills.catalog.loaded' && event.packageVersion === JSON.parse(fs.readFileSync(path.join(REPOSITORY_ROOT, 'plugins/cocos-agent-2x/agent-package.json'), 'utf8')).version
             && /^[a-f0-9]{64}$/.test(event.skillsIndexSha256)));
         assert.ok(events.some((event) => event.event === 'skill.read' && event.source === 'model-requested'
             && event.skillName === skillName && /^[a-f0-9]{64}$/.test(event.sha256)));
@@ -755,11 +755,19 @@ test('DeepSeek agent discovers instances, selects a ready project, queries live 
     } finally { fs.rmSync(value.parent, { recursive: true, force: true }); }
 });
 
-test('DeepSeek agent accepts a sanitized project alias while validating canonical instance identity', async () => {
+test('DeepSeek agent accepts a sanitized project alias while validating canonical instance identity', async (t) => {
     const value = fixture();
     const projectRoot = value.projects[0];
     const projectAlias = path.join(value.parent, 'registered-project');
-    fs.symlinkSync(projectRoot, projectAlias, 'dir');
+    try { fs.symlinkSync(projectRoot, projectAlias, process.platform === 'win32' ? 'junction' : 'dir'); }
+    catch (error) {
+        fs.rmSync(value.parent, { recursive: true, force: true });
+        if (process.platform === 'win32' && ['EPERM', 'EACCES'].includes(error.code)) {
+            t.skip('The Windows sandbox does not permit directory aliases; run this case on a host with junction/symlink permission.');
+            return;
+        }
+        throw error;
+    }
     const toolCalls = [];
     const modelRequests = [];
     const invokeAgent = async (request) => {

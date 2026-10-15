@@ -41,7 +41,7 @@ export interface CreatorTaskPersistence {
 
 const TASK_ID = /^task_[0-9a-f]{8}$/;
 const MAX_TASKS = 100;
-const MAX_CRITERIA = 24;
+const MAX_CRITERIA = 64;
 const MAX_TASK_TEXT = 1200;
 const SENSITIVE_VALUE = /\b(?:sk-[A-Za-z0-9_-]{12,}|Bearer\s+[A-Za-z0-9._-]{12,})\b/gi;
 
@@ -133,6 +133,7 @@ export class CreatorTaskSystem {
             if (item.receiptRequirement !== undefined && (typeof item.receiptRequirement !== 'string'
                 || !/^[a-z0-9-]{1,64}$/.test(item.receiptRequirement))) throw new TypeError('TASK_CRITERION_REQUIREMENT_INVALID');
             return { id, description: criterionDescription, requiredTools: [...item.requiredTools] as string[],
+                ...(item.expectation && isRecord(item.expectation) ? { expectation: structuredClone(item.expectation) } : {}),
                 ...(item.toolMatch ? { toolMatch: item.toolMatch as 'all' | 'any' } : {}),
                 ...(item.receiptRequirement ? { receiptRequirement: item.receiptRequirement as string } : {}),
                 evidence: [], status: 'pending' };
@@ -222,8 +223,9 @@ export class CreatorTaskSystem {
         if (!Number.isInteger(maxContinuationAttempts) || maxContinuationAttempts < 0 || maxContinuationAttempts > 4) {
             throw new RangeError('maxContinuationAttempts must be an integer from 0 to 4.');
         }
-        return { taskId, criteria: task.acceptanceCriteria.map(({ id, description, requiredTools, toolMatch, receiptRequirement }) => ({
+        return { taskId, criteria: task.acceptanceCriteria.map(({ id, description, requiredTools, toolMatch, receiptRequirement, expectation }) => ({
             id, description, requiredTools, ...(toolMatch ? { toolMatch } : {}), ...(receiptRequirement ? { receiptRequirement } : {}),
+            ...(expectation ? { expectation: structuredClone(expectation) } : {}),
         })), maxContinuationAttempts };
     }
 

@@ -9,9 +9,9 @@ import { finalizePlanResult } from './assistant-host.mjs';
 import { AssistantStateStore } from './assistant-state-store.mjs';
 
 const options = { conversationId: 'conversation-plan', userTask: 'Inspect the scene.' };
-const planData = { version: 1, title: 'Inspect scene', summary: 'Read the active scene.', steps: [
+const planData = { version: 2, title: 'Inspect scene', summary: 'Read the active scene.', steps: [
     { title: 'Inspect', description: 'Read the active scene.', preconditions: [],
-        requiredTools: ['cocos_2x_scene_snapshot'], validation: 'A scene snapshot is returned.', recovery: 'Stop on failure.' },
+        requiredTools: ['cocos_2x_scene_snapshot'], validation: 'A scene snapshot is returned.', recovery: 'Stop on failure.', acceptance: { kind: 'read' } },
 ] };
 
 function kernelResult(finalText = JSON.stringify(planData)) {

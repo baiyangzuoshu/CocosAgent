@@ -67,6 +67,9 @@ test('Creator bundle runs its MCP server outside the research repository without
         assert.ok(fs.existsSync(serverPath));
         assert.ok(fs.existsSync(runtimeObserverPath));
         assert.ok(fs.existsSync(assistantStateStorePath), 'Creator package contains durable Assistant state support');
+        assert.ok(fs.existsSync(path.join(runtimeRoot, 'tools/cocos-agent-bridge/mcp/assistant-recovery-store.mjs')));
+        assert.ok(fs.existsSync(path.join(runtimeRoot, 'tools/cocos-agent-runtime/dist/creator-recovery.js')));
+        assert.ok(fs.existsSync(path.join(runtimeRoot, 'tools/cocos-agent-runtime/dist/creator-targets.js')));
         assert.ok(fs.existsSync(path.join(runtimeRoot, 'tools/cocos-agent-bridge/mcp/node_modules/zod/package.json')));
         assert.ok(fs.existsSync(path.join(output, 'vendor/ws/index.js')));
         const bundledWebSocket = createRequire(import.meta.url)(path.join(output, 'vendor/ws'));

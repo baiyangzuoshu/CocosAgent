@@ -2,6 +2,8 @@
 
 ## CocosAgent 产品方向与执行顺序（2026-10-11）
 
+- **2026-10-15 流程修复已进入源码，原生实机待验收：** 工程级未决写入独立持久化并在实际分发前检查，批准计划 write 步骤须声明可审阅的最终目标；目标值不从写入回执反推。修复 Provider 降预算重试、组合补偿、已复现只读识别及 memory_compact 项目约定门槛；旧 v2 write 计划缺少 targets 时重新生成。验证和限制见 [流程修复记录](docs/agent-foundation/cocos-agent-execution-flow-repair-20261015.md)。
+
 - **当前主目标是让 CocosAgent 成为 Creator 内可独立工作的原生 Agent。** Creator 扩展提供 Agent 面板、项目上下文、模型接入与任务调度；经校验的 Creator 命令继续负责编辑器操作、保存读回、预览观察与失败恢复。已有 2.4.15 Assistant 原型由 Creator 扩展管理本地 Assistant 服务及其 MCP 子进程；这类内部传输可复用。运行时可由扩展直接承载，也可由扩展启动和管理本机 sidecar；不得依赖 Codex 进程、Codex 插件安装或 Codex MCP 配置才能完成任务。
 - **后续工作按[Creator 原生 Agent 开发计划](docs/agent-foundation/cocos-agent-real-project-development-plan.md)推进。** 现有面板和 Ask/Plan/Agent 原型已有部分 Creator 实机证据；先核对其真实链路、独立工程安装与凭据边界，再将现有只读/写入能力推广到真实项目，补齐 Creator 原生技能读取和端到端验收。Unity Editor 内助手是主要产品形态参考；Unity CLI/MCP 与外部插件只作为可选互操作路径。
 - **2026-10-13 新增能力统一按“命令合同 → 编辑器桥接 → 产品 skill → 原生实机验收”推进。** 先定义版本、输入 schema、访问级别、目标身份、前置条件、成功回执、失败对账与恢复；再完成 Creator/Host 接线和能力目录探测；随后在 `plugins/cocos-agent-2x/skills/` 发布对应步骤知识与引用，并纳入原生发现/读取/哈希校验；最后由 Creator 2.4.15 原生面板发起真实任务，核对编辑器、项目磁盘及相应运行结果，写入涉及补偿/重放时分别保留证据。已存在的合同、桥接和 skill 可复用，但必须核对其当前适用范围。各阶段分别标记“合同已定义”“桥接已实现”“skill 已发布”“原生实机验收通过”；只有实际验收完成，才登记为已验证能力。各阶段完成条件见[原生 Agent 开发计划](docs/agent-foundation/cocos-agent-real-project-development-plan.md#新增能力实施门槛2026-10-13)。

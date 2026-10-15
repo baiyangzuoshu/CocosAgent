@@ -6,6 +6,7 @@ import { CreatorMemoryToolRegistry, CreatorProjectMemory } from './project-memor
 import { AgentHookRegistry } from './lifecycle-hooks.js';
 import { CreatorTaskSystem, CreatorTaskToolRegistry, evaluateGoalEvidence, type CreatorTaskPersistence } from './task-system.js';
 import { creatorTaskCriteria, verifyCreatorTaskReceipt } from './creator-task-acceptance.js';
+import { CreatorRecoveryRegistry, type CreatorRecoveryPersistence } from './creator-recovery.js';
 import { createCreatorPlanAcceptance, creatorPlanToolAllowed, type CreatorPlanAcceptanceContext } from './creator-plan-acceptance.js';
 import type {
     AgentEvent,
@@ -77,6 +78,7 @@ export interface CreatorAssistantModeRunOptions {
     planAcceptance?: CreatorPlanAcceptanceContext;
     taskId?: string;
     toolResultArchive?: AgentToolResultArchive;
+    recoveryStore?: CreatorRecoveryPersistence;
     approveWrite?(tool: { name: string; access: 'read' | 'write' }, args: JsonObject): Promise<boolean>;
 }
 
@@ -244,6 +246,8 @@ async function runCreatorMode(options: CreatorAssistantModeRunOptions): Promise<
     }
     const taskTools = taskSystem?.tools() || [];
     const fullRegistry = taskSystem ? new CreatorTaskToolRegistry(registry, taskSystem) : registry;
+    const recoveryRegistry = options.mode === 'Agent' && options.recoveryStore
+        ? await CreatorRecoveryRegistry.open(fullRegistry, options.recoveryStore) : null;
     availableToolNames = [...availableToolNames, ...memoryTools.map((tool) => tool.name), ...taskTools.map((tool) => tool.name)];
     const memoryContext = memory ? await memory.relevantContext(options.task) : null;
     if (memoryContext) initialHistory.push({ role: 'user', content: memoryContext });
@@ -269,6 +273,8 @@ async function runCreatorMode(options: CreatorAssistantModeRunOptions): Promise<
     });
 
     const creatorPolicy = createCreatorAgentPolicy({
+        pendingRecovery: recoveryRegistry?.pending() || null,
+        ...(recoveryRegistry ? { recoveryState: () => recoveryRegistry.pending() } : {}),
         mode: options.mode,
         baseInstructions: [
             context.messages[0]?.content || '',
@@ -326,7 +332,7 @@ async function runCreatorMode(options: CreatorAssistantModeRunOptions): Promise<
 
     const result = await new AgentKernel({
         provider,
-        tools: fullRegistry,
+        tools: recoveryRegistry || fullRegistry,
         policy: runPolicy,
         systemPrompt: '',
         maxTurns: options.mode === 'Plan' ? 20 : 16,
@@ -441,7 +447,8 @@ function mapAgentEvent(event: AgentEvent): ReadOnlyPanelEvent {
     }
     if (event.type === 'tool.started') {
         return { type: 'tool.started', runId: event.runId, callId: event.callId,
-            toolName: event.tool.name, access: event.tool.access };
+            toolName: event.tool.name, access: event.tool.access, command: event.arguments?.command,
+            operationId: event.arguments?.operationId || (isRecord(event.arguments?.input) ? event.arguments.input.operationId : undefined) };
     }
     if (event.type === 'tool.finished') {
         return { type: 'tool.finished', runId: event.runId, callId: event.callId,

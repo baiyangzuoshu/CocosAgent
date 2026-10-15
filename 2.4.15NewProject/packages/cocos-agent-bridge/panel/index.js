@@ -404,7 +404,7 @@ Editor.Panel.extend({
             if (payload && payload.ready) this.connectRuntime(payload);
             else if (payload && payload.connecting) {
                 this.$connect.disabled = true;
-                this.setConnection('正在恢复本机加密凭据…', '');
+                this.setConnection('正在读取本机保存的凭据…', '');
             }
             else if (payload && payload.error) {
                 this.$connect.disabled = false;
@@ -950,6 +950,8 @@ Editor.Panel.extend({
             const acceptanceLabels = { read: '只读检查', write: '保存、账本和目标读回', restore: '恢复与读回',
                 runtime: '目标运行状态与画面', interaction: '交互功能（当前缺少自动验收入口）', memory: '记忆持久化' };
             detail.textContent += `\n业务验收：${acceptanceLabels[step.acceptance?.kind] || '旧计划尚未定义'}`;
+            if (step.acceptance?.targets?.length) detail.textContent += `\n最终目标：\n${step.acceptance.targets
+                .map((target) => `${target.target} · ${target.field} = ${JSON.stringify(target.equals)}`).join('\n')}`;
             const evidence = (plan.stepEvidence || []).find((item) => item.stepIndex === plan.steps.indexOf(step));
             if (evidence) detail.textContent += `\n已发生的副作用与回执：\n${JSON.stringify(evidence.receipts || [], null, 2).slice(0, 4000)}`;
             item.appendChild(detail);

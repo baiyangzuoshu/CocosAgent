@@ -133,6 +133,8 @@ export interface AgentGoalCriterion {
     requiredTools: string[];
     toolMatch?: 'all' | 'any';
     receiptRequirement?: string;
+    /** Host-bound target/query, persisted with the criterion; never inferred from a write receipt. */
+    expectation?: JsonObject;
 }
 
 export interface AgentGoal {
@@ -216,7 +218,7 @@ export type AgentEvent =
     | { type: 'context.compacted'; runId: string; round: number; report: ContextCompactionReport }
     | { type: 'context.budget-exceeded'; runId: string; round: number; report: ContextCompactionReport }
     | { type: 'tool.approval-required'; request: ToolApprovalRequest }
-    | { type: 'tool.started'; runId: string; callId: string; tool: AgentTool }
+    | { type: 'tool.started'; runId: string; callId: string; tool: AgentTool; arguments?: JsonObject }
     | { type: 'tool.finished'; runId: string; callId: string; tool: AgentTool; result: AgentToolResult }
     | { type: 'todo.updated'; runId: string; items: AgentTodoItem[] }
     | { type: 'goal.evaluated'; runId: string; taskId: string; satisfied: boolean; outstanding: Array<{ id: string; description: string; missingTools: string[] }>; continuationAttempt: number; maxContinuationAttempts: number }

@@ -150,6 +150,7 @@ export class AgentKernel {
         let goalEvaluation: { satisfied: boolean; outstanding: Array<{ id: string; description: string; missingTools: string[] }> } | undefined;
         let finalText: string | null = null;
         let reason = 'turn-limit';
+        let effectiveBudget = this.options.contextBudget;
 
         await this.emit({ type: 'run.started', runId, mode: input.mode });
 
@@ -183,7 +184,7 @@ export class AgentKernel {
                 tools: available,
                 activeTask: input.task.trim(),
                 receipts,
-                ...(this.options.contextBudget ? { options: this.options.contextBudget } : {}),
+                ...(effectiveBudget ? { options: effectiveBudget } : {}),
             };
             let prepared = prepareAgentContext(contextInput);
             const summarizePrepared = async (current: typeof prepared): Promise<typeof prepared> => {
@@ -193,7 +194,8 @@ export class AgentKernel {
                     const summary = await this.options.provider.summarizeContext({ task: input.task.trim(),
                         dialogue: current.dialogueToSummarize, ...(input.signal ? { signal: input.signal } : {}) });
                     if (!summary.trim()) return current;
-                    const candidate = prepareAgentContext({ ...contextInput, dialogueSummary: summary });
+                    const candidate = prepareAgentContext({ ...contextInput,
+                        options: { ...effectiveBudget, maxEstimatedTokens: current.report.maxEstimatedTokens }, dialogueSummary: summary });
                     return candidate.fitsBudget ? candidate : current;
                 } catch {
                     // Deterministic receipt/dialogue compaction remains the safe fallback.
@@ -241,8 +243,8 @@ export class AgentKernel {
                             finalText = '模型报告上下文超限，但本轮已达到最小本地预算；为避免重复发送相同请求，已停止运行。';
                             break;
                         }
-                        const retry = prepareAgentContext({ ...contextInput,
-                            options: { ...(this.options.contextBudget || {}), maxEstimatedTokens: reducedBudget } });
+                        effectiveBudget = { ...effectiveBudget, maxEstimatedTokens: reducedBudget };
+                        const retry = prepareAgentContext({ ...contextInput, options: effectiveBudget });
                         prepared = await summarizePrepared(retry);
                         if (!prepared.fitsBudget) {
                             contextCompactions.push(prepared.report);
@@ -486,7 +488,7 @@ export class AgentKernel {
                 }
             }
 
-            await this.emit({ type: 'tool.started', runId, callId: call.id, tool });
+            await this.emit({ type: 'tool.started', runId, callId: call.id, tool, arguments: call.arguments });
             let result: AgentToolResult;
             try {
                 // Deliberately do not pass the run AbortSignal into a tool call.

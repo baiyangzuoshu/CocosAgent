@@ -38,6 +38,8 @@ Read this skill's `agent-foundation/cocos-agent-plan-business-acceptance-0.1.md`
 
 Read steps require fresh content evidence. Write/restore steps require approved effects, operation and target readback, and applicable compilation. Runtime steps inspect earlier approved targets. The final step also verifies the original user goal and requires fresh ledger/target/runtime reads; include these tools in its requiredTools. A successful tool cannot replace a business condition. Native interaction assertions are still unavailable.
 
+Every write step must declare `acceptance.targets` as 1–16 objects with exactly `target`, `field`, and `equals`. Use an exact live UUID or full final node path and a supported field from the business-acceptance reference. These are reviewed final values, not values to copy from later write receipts. Read back them after the last write. Never change a literal value from the original request. Legacy v2 write plans without targets must be regenerated. Free Agent writes whose final intent cannot be bound remain incomplete; use a reviewed Plan with explicit targets.
+
 Execute only the current approved step. On unmet acceptance, report the missing evidence and actual effects; do not repeat a previous write to manufacture success. Old plans without business conditions must be regenerated after checking existing operation records. Prior-step evidence is identity/state metadata, not source text or image bytes, and is not new execution authority.
 
 ## Context compaction and project memory
@@ -51,6 +53,8 @@ Project memory is isolated by Creator project and is historical context. Read cu
 Scene edits, imports, deletion, release selection, and builds change project state. Explain the intended target and expected change before invoking a write tool when the user’s request is ambiguous. Respect MCP approval prompts.
 
 Read each tool result’s `success`, `outcome`, phase receipts, error code, operation ID, pipeline ID, and build ID. When a write is uncertain, query the matching receipt and reconcile only through its documented recovery path. Never repeat an import, scene write, or build blindly after a timeout. Do not claim preview acceptance from source files, disk readback, or headless-only observations. Compensation is a separate action; use it when the user asks to undo or when the selected workflow explicitly requires cleanup.
+
+An unresolved write persists independently of conversation history and applies to subsequent runs and Host restarts. Resolve the exact pending identity shown by the Host; a new chat, different operation ID, or successful-looking nonterminal receipt cannot unlock new writes. A definite saved result can still require preview/runtime acceptance. For a temporary apply followed by compensation, retain both operation receipts and inspect the final restored state.
 
 Do not describe 3.8 behavior as implemented. This plugin’s MCP tool set and validation status are version-specific to Creator 2.4.15.
 

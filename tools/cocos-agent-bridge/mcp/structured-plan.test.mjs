@@ -2,13 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseStructuredPlan, planStepTask } from './structured-plan.mjs';
 
-const valid = { version: 1, title: 'Create a node', summary: 'Create a temporary node after verifying its parent.', steps: [
+const valid = { version: 2, title: 'Create a node', summary: 'Create a temporary node after verifying its parent.', steps: [
     { title: 'Inspect parent', description: 'Read the Canvas identity.', preconditions: ['helloworld scene is open'],
         requiredTools: ['cocos_2x_scene_snapshot', 'cocos_2x_scene_node_inspect'],
-        validation: 'Parent UUID matches the live receipt.', recovery: 'Stop if the scene changed.' },
+        validation: 'Parent UUID matches the live receipt.', recovery: 'Stop if the scene changed.', acceptance: { kind: 'read' } },
     { title: 'Create node', description: 'Add an empty node with the approved name.', preconditions: [],
-        requiredTools: ['cocos_2x_command_execute', 'cocos_2x_scene_node_inspect'],
-        validation: 'Read the node and operation receipt.', recovery: 'Compensate by source operation ID.' },
+        requiredTools: ['cocos_2x_command_execute', 'cocos_2x_operation_get', 'cocos_2x_scene_node_inspect'],
+        validation: 'Read the node and operation receipt.', recovery: 'Compensate by source operation ID.',
+        acceptance: { kind: 'write', targets: [{ target: 'helloworld/Canvas/Temp', field: 'node.name', equals: 'Temp' }] } },
 ] };
 
 test('structured plans parse plain JSON and fenced JSON into a bounded schema', () => {
@@ -29,6 +30,7 @@ test('structured plans reject tools absent from the current Creator MCP catalog'
         'cocos_2x_scene_snapshot',
         'cocos_2x_scene_node_inspect',
         'cocos_2x_command_execute',
+        'cocos_2x_operation_get',
     ];
     assert.deepEqual(parseStructuredPlan(JSON.stringify(valid), { availableToolNames: allowedToolNames }), valid);
     const unknownToolPlan = structuredClone(valid);
@@ -76,12 +78,20 @@ test('structured plans reject executable fields, empty plans, long text, and ove
     assert.throws(() => parseStructuredPlan('x'.repeat(12_001)));
 });
 
+test('write plans require reviewed targets with typed values and reject old v1 plans', () => {
+    const missing = structuredClone(valid); delete missing.steps[1].acceptance.targets;
+    assert.throws(() => parseStructuredPlan(JSON.stringify(missing)), /INVALID_PLAN_TARGETS_REQUIRED/);
+    const wrong = structuredClone(valid); wrong.steps[1].acceptance.targets[0] = { target: 'node-1', field: 'node.active', equals: 'yes' };
+    assert.throws(() => parseStructuredPlan(JSON.stringify(wrong)), /CREATOR_TARGET_VALUE_INVALID/);
+    assert.throws(() => parseStructuredPlan(JSON.stringify({ ...valid, version: 1 })), /INVALID_PLAN_VERSION_OR_STEPS/);
+});
+
 test('step task contains only one plan step and forbids later or unrelated changes', () => {
     const plan = { ...valid, userTask: 'Create the requested node.' };
     const task = planStepTask(plan, 1);
     assert.match(task, /exactly the currently approved Plan step/);
     assert.match(task, /Current step 2\/2: Create node/);
     assert.match(task, /Do not execute, preview, or claim later steps/);
-    assert.match(task, /cocos_2x_command_execute, cocos_2x_scene_node_inspect/);
+    assert.match(task, /cocos_2x_command_execute, cocos_2x_operation_get, cocos_2x_scene_node_inspect/);
     assert.throws(() => planStepTask(plan, 2), /PLAN_STEP_OUT_OF_RANGE/);
 });

@@ -240,7 +240,7 @@ export class CocosReadOnlyToolRegistry implements ToolRegistry {
 }
 
 function normalizeResult(value: unknown): AgentToolResult {
-    if (!isRecord(value)) return failure('INVALID_MCP_RESULT');
+    if (!isRecord(value)) return failure('INVALID_MCP_RESULT', 'unknown');
     const result: AgentToolResult = {};
     if (value.isError === true) result.isError = true;
     if (isRecord(value.structuredContent)) result.structuredContent = value.structuredContent;
@@ -263,8 +263,8 @@ function validImage(mimeType: string, data: string): boolean {
     try { return atob(data).length <= MAX_TOOL_IMAGE_BYTES; } catch { return false; }
 }
 
-function failure(code: string): AgentToolResult {
-    return { isError: true, structuredContent: { success: false, error: { code } } };
+function failure(code: string, sideEffect: 'none' | 'unknown' = 'none'): AgentToolResult {
+    return { isError: true, structuredContent: { success: false, error: { code, sideEffect } } };
 }
 
 function isRecord(value: unknown): value is JsonObject {
