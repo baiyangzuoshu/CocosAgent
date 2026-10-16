@@ -40,8 +40,25 @@ export function literalCreatorTargets(task: string): CreatorExpectedTarget[] {
         ...matches.map((match) => ({ target: match[1]!.trim().replace(/\s+local$/i, ''), axis: match[2]!, value: match[3]! })),
         ...propertyFirst.map((match) => ({ target: match[2]!.trim(), axis: match[1]!, value: match[3]! })),
     ].filter((item) => !/^(?:preserve|keep|maintain|leave|to|from|of|for|at|on|in|the|only|local|position|coordinate|target|node|it|its|same|then|back|recorded|before|state)$/i.test(item.target));
-    try { return validateCreatorTargets(candidates.map((item) => ({ target: item.target,
-        field: `node.position.${item.axis.toLowerCase()}`, equals: Number(item.value) }))); }
+    const nodeNameChanges: CreatorExpectedTarget[] = [];
+    const addNameTarget = (rawTarget: string, value: string) => {
+        const uuid = rawTarget.match(/UUID\s*[:：]?\s*([A-Za-z0-9_+/=-]{20,64})/i)?.[1];
+        const target = uuid || rawTarget.replace(/[（(][^）)]*[）)]/g, '').trim().replace(/\s+节点$/, '');
+        if (!target || !value) return;
+        nodeNameChanges.push({ target, field: 'node.name', equals: value });
+    };
+    for (const part of actionText.split(/[，,。；;\n]/)) {
+        const chinese = part.match(/(?:将|把)\s*(.+?)\s*(?:节点)?(?:的\s*)?(?:node\.)?(?:name|名称|名字)\s*(?:从\s*([^\s，,。；;]+)\s*)?(?:改为|改成|设置为|设为|变为|为|=)\s*([^\s，,。；;]+)/i);
+        if (chinese) addNameTarget(chinese[1]!, chinese[3]!);
+        const english = part.match(/\b(?:rename|change|set)\s+(?:the\s+)?(.+?)\s+(?:node\.)?name\s+(?:from\s+\S+\s+)?(?:to|=)\s*([^\s,.;]+)/i)
+            || part.match(/\brename\s+(.+?)\s+from\s+\S+\s+to\s+([^\s,.;]+)/i);
+        if (english) addNameTarget(english[1]!, english[2]!);
+    }
+    try { return validateCreatorTargets([
+        ...candidates.map((item) => ({ target: item.target,
+            field: `node.position.${item.axis.toLowerCase()}`, equals: Number(item.value) })),
+        ...nodeNameChanges,
+    ]); }
     catch { return []; }
 }
 

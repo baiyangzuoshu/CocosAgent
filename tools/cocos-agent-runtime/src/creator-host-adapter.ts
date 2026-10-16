@@ -343,14 +343,18 @@ async function runCreatorMode(options: CreatorAssistantModeRunOptions): Promise<
                 filterTools(tools: Parameters<NonNullable<typeof policy.filterTools>>[0], mode: AgentMode) {
                     const available = policy.filterTools?.(tools, mode) || tools;
                     if (!intent || policy.recoveryRequired?.()) return available;
-                    return available.filter((tool) => creatorIntentToolAllowed(intent, { tool, arguments: {}, receipts: [], availableTools: available }));
+                    const reviewedTargets = options.planAcceptance?.finalTargets || options.planAcceptance?.targets || [];
+                    return available.filter((tool) => creatorIntentToolAllowed(intent, { tool, arguments: {}, receipts: [], availableTools: available }, reviewedTargets));
                 },
                 async beforeTool(context: AgentPolicyToolContext) {
                     const decision = await policy.beforeTool?.(context);
                     if (decision?.action === 'block') return decision;
-                    if (intent && !creatorIntentToolAllowed(intent, context)) return {
+                    const reviewedTargets = options.planAcceptance?.finalTargets || options.planAcceptance?.targets || [];
+                    if (intent && !creatorIntentToolAllowed(intent, context, reviewedTargets)) return {
                         action: 'block' as const, code: 'TASK_INTENT_WRITE_NOT_AUTHORIZED', continue: false,
-                        message: '当前任务仅授权解释/读取或指定类别的修改；模型不能扩大写入范围。', reason: 'task-intent-write-not-authorized',
+                        message: context.tool.name === 'cocos_2x_command_execute' && context.arguments.command === 'scene.node.patch'
+                            ? 'scene.node.patch 的目标 UUID/路径、字段和值必须与原始请求或已审阅 Plan 完全匹配；先补齐目标审阅，当前写入未执行。'
+                            : '当前任务仅授权解释/读取或指定类别的修改；模型不能扩大写入范围。', reason: 'task-intent-write-not-authorized',
                     };
                     if (options.planAcceptance && !creatorPlanToolAllowed(options.planAcceptance, context)) {
                         return { action: 'block' as const, code: 'PLAN_TOOL_OUT_OF_SCOPE', continue: true,

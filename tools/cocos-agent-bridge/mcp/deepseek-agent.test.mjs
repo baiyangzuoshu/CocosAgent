@@ -422,9 +422,17 @@ test('Creator Agent reads the selected skill and its declared reference on deman
                         assert.equal(read.skillName, skillName);
                         assert.match(read.sha256, /^[a-f0-9]{64}$/);
                         assert.match(read.content, /cocos_2x_workflow_plan/);
-                        return modelToolResponse(toolCall('reference', 'cocos_2x_skill_reference_read', { skillName, referenceId }));
+                        return modelToolResponse(toolCall('wrong-reference', 'cocos_2x_skill_reference_read', {
+                            skillName, referenceId: 'agent-foundation/cocos-agent-plan-business-acceptance-0.1.md',
+                        }));
                     }
                     if (round === 6) {
+                        const failed = JSON.parse(messages.at(-1).content).structuredContent;
+                        assert.equal(failed.error.code, 'SKILL_REFERENCE_NOT_DECLARED');
+                        assert.deepEqual(failed.error.allowedReferenceIds, ['agent-foundation/scene-composition-0.1.md']);
+                        return modelToolResponse(toolCall('reference', 'cocos_2x_skill_reference_read', { skillName, referenceId }));
+                    }
+                    if (round === 7) {
                         const read = JSON.parse(messages.at(-1).content).structuredContent;
                         assert.equal(read.referenceId, referenceId);
                         assert.match(read.sha256, /^[a-f0-9]{64}$/);
@@ -437,7 +445,7 @@ test('Creator Agent reads the selected skill and its declared reference on deman
             });
             assert.equal(result.status, 'completed', JSON.stringify({ result, round, hostMethods,
                 modelFailures: agentEvents.filter((event) => event.type === 'model.failed') }));
-            assert.equal(result.toolCalls, 6);
+            assert.equal(result.toolCalls, 7);
             assert.deepEqual(hostMethods, ['instances.list', 'capabilities.list', 'command.execute']);
         });
         const traceText = fs.readFileSync(value.tracePath, 'utf8');

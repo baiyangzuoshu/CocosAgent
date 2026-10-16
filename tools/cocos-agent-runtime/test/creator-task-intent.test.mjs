@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseCreatorTaskIntent, requestCreatorTaskIntent, creatorTaskCriteria, literalCreatorTargets, runCreatorAgent } from '../dist/index.js';
+import { parseCreatorTaskIntent, requestCreatorTaskIntent, creatorTaskCriteria, creatorIntentToolAllowed,
+    literalCreatorTargets, runCreatorAgent } from '../dist/index.js';
 
 const projectRoot = '/tmp/cocos-intent-contract-project';
 const target = { target: 'Canvas/Foo', field: 'node.position.x', equals: 200 };
@@ -33,6 +34,37 @@ test('a separately requested set remains a target when followed by read-only ver
     assert.deepEqual(literalCreatorTargets(task), [
         { target: 'helloworld/Canvas/AgentAcceptanceSprite', field: 'node.position.x', equals: -149 },
     ]);
+});
+
+test('a requested node rename binds its explicit UUID and final name before a write', () => {
+    const task = '请将 helloworld/Canvas/AgentAcceptanceSprite（UUID 596pYOww9MqobiatZyhu6v）节点的名称从 AgentAcceptanceSprite 改为 Button。仅修改名称。';
+    const expected = [{ target: '596pYOww9MqobiatZyhu6v', field: 'node.name', equals: 'Button' }];
+    assert.deepEqual(literalCreatorTargets(task), expected);
+    assert.deepEqual(parseCreatorTaskIntent(proposal(task, 'write', { targets: expected }), task).targets, expected);
+    assert.equal(creatorTaskCriteria(task, undefined, proposal(task, 'write', { targets: expected }))
+        .some((item) => item.id === 'requested-target-unbound'), false);
+    assert.deepEqual(literalCreatorTargets('Rename Canvas/Foo from AgentAcceptanceSprite to Button'), [
+        { target: 'Canvas/Foo', field: 'node.name', equals: 'Button' },
+    ]);
+    assert.deepEqual(literalCreatorTargets('Change Canvas/Foo node.name from AgentAcceptanceSprite to Button'), [
+        { target: 'Canvas/Foo', field: 'node.name', equals: 'Button' },
+    ]);
+});
+
+test('scene.node.patch is blocked before dispatch unless UUID, field, and final value match a bound target', () => {
+    const task = '将节点 UUID 596pYOww9MqobiatZyhu6v 的名称从 AgentAcceptanceSprite 改为 Button';
+    const intent = proposal(task, 'write', { targets: [
+        { target: '596pYOww9MqobiatZyhu6v', field: 'node.name', equals: 'Button' },
+    ] });
+    const tool = { name: 'cocos_2x_command_execute', access: 'write', role: 'task' };
+    const context = (uuid, after) => ({ tool, arguments: { command: 'scene.node.patch', input: {
+        targetNodeUuid: uuid, targetNodePath: 'helloworld/Canvas/AgentAcceptanceSprite', action: 'apply',
+        expectedDiff: [{ path: 'node.name', before: 'AgentAcceptanceSprite', after }],
+    } }, receipts: [], availableTools: [tool] });
+    assert.equal(creatorIntentToolAllowed(intent, context('596pYOww9MqobiatZyhu6v', 'Button')), true);
+    assert.equal(creatorIntentToolAllowed(intent, context('another-node-uuid000000000', 'Button')), false);
+    assert.equal(creatorIntentToolAllowed(intent, context('596pYOww9MqobiatZyhu6v', 'Wrong')), false);
+    assert.equal(creatorIntentToolAllowed(proposal(task, 'write'), context('596pYOww9MqobiatZyhu6v', 'Button')), false);
 });
 
 test('malformed Provider target hints fall back only to program-extracted literal targets', () => {
@@ -277,7 +309,10 @@ test('equivalent native modification requests share acceptance; internally consi
         for (const actual of [20, 200]) {
             const f = fixture(); f.state.x = actual;
             await withModel(proposal(task, 'write', { targets: [target] }), (round) => round === 1
-                ? call('apply', 'cocos_2x_command_execute', { command: 'scene.node.patch', input: { operationId: 'operation-1' } })
+                ? call('apply', 'cocos_2x_command_execute', { command: 'scene.node.patch', input: {
+                    targetNodeUuid: 'node-1', targetNodePath: 'Canvas/Foo', action: 'apply', operationId: 'operation-1',
+                    expectedDiff: [{ path: 'node.position.x', before: 0, after: 200 }],
+                } })
                 : round === 2 ? call('ledger', 'cocos_2x_operation_get', { operationId: 'operation-1' })
                     : round === 3 ? call('inspect', 'cocos_2x_scene_node_inspect', { input: { nodeUuid: 'node-1' } })
                         : answer('完成'), async () => {
@@ -307,7 +342,8 @@ test('reading a named script to explain changes stays read-only and requires tha
 test('denying a write approval still prevents dispatch after structured task interpretation', async () => {
     const f = fixture(), task = '将 Canvas/Foo 的 x 设置为 200';
     await withModel(proposal(task, 'write', { targets: [target] }), () => call('apply-denied', 'cocos_2x_command_execute', {
-        command: 'scene.node.patch', input: { operationId: 'operation-1' } }), async () => {
+        command: 'scene.node.patch', input: { targetNodeUuid: 'node-1', targetNodePath: 'Canvas/Foo', action: 'apply',
+            operationId: 'operation-1', expectedDiff: [{ path: 'node.position.x', before: 0, after: 200 }] } }), async () => {
         const result = await runCreatorAgent({ ...f.options, task, approveWrite: async () => false });
         assert.equal(result.status, 'awaiting-approval');
         assert.equal(f.calls.filter((item) => item.name === 'cocos_2x_command_execute').length, 0);

@@ -336,7 +336,11 @@ async function invokeSkillTool(client, skillIndex, toolName, args, tracePath, se
 
         if (toolName === 'cocos_2x_skill_reference_read') {
             const reference = skill.references.find((item) => item.id === args.referenceId);
-            if (!reference) throw new Error('SKILL_REFERENCE_NOT_DECLARED');
+            if (!reference) {
+                const error = new Error('SKILL_REFERENCE_NOT_DECLARED');
+                error.allowedReferenceIds = skill.references.map((item) => item.id);
+                throw error;
+            }
             const resource = await client.readResource({ uri: reference.uri });
             const content = (resource?.contents || []).find((item) => item.uri === reference.uri
                 && (typeof item.text === 'string' || typeof item.blob === 'string'));
@@ -358,7 +362,8 @@ async function invokeSkillTool(client, skillIndex, toolName, args, tracePath, se
         writeEvent(tracePath, { event: 'skill.read.failed', ...packageInfo, toolName,
             skillName: args?.name || args?.skillName || null, referenceId: args?.referenceId || null, errorCode: code }, secret);
         return { isError: true, structuredContent: { success: false, ...packageInfo,
-            error: { code, sideEffect: 'none' } } };
+            error: { code, sideEffect: 'none', ...(Array.isArray(error?.allowedReferenceIds)
+                ? { allowedReferenceIds: error.allowedReferenceIds } : {}) } } };
     }
 }
 
