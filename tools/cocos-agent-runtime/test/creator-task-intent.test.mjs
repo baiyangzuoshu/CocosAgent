@@ -74,6 +74,31 @@ test('structured intent preserves raw user targets even if the reviewed Plan sup
     assert.deepEqual(creatorTaskCriteria('解释如何创建一个按钮', undefined, proposal('解释如何创建一个按钮', 'explain')), []);
 });
 
+test('acceptance follows explicit task actions, not incidental node names', () => {
+    const task = '将 Canvas/Button 的 x 改为 200，仅修改位置。';
+    const target = { target: 'Canvas/Button', field: 'node.position.x', equals: 200 };
+    const intent = proposal(task, 'write', { targets: [target], verification: 'runtime' });
+    const criteria = creatorTaskCriteria(task, [target], intent);
+    assert.equal(criteria.some((item) => item.receiptRequirement === 'creator-interaction'), false);
+    assert.ok(criteria.some((item) => item.receiptRequirement === 'creator-runtime'));
+    const clickTask = '修改 Canvas/Plain 的按钮位置，然后实际点击按钮验证';
+    const clickIntent = proposal(clickTask, 'write', { targets: [], verification: 'interaction' });
+    assert.ok(creatorTaskCriteria(clickTask, [target], clickIntent).some((item) => item.receiptRequirement === 'creator-interaction'));
+    assert.throws(() => creatorTaskCriteria(clickTask, [target], { ...clickIntent, verification: 'runtime' }),
+        /VERIFICATION_DOWNGRADED/);
+});
+
+test('an explanation of how to click does not request interaction, while explicit compile-only cannot be dropped', () => {
+    const explanation = '解释如何点击按钮';
+    assert.deepEqual(creatorTaskCriteria(explanation, undefined, proposal(explanation, 'explain')), []);
+
+    const compileTask = '修改脚本，仅编译，不要运行';
+    assert.ok(creatorTaskCriteria(compileTask, undefined, proposal(compileTask, 'write', { verification: 'compile' }))
+        .some((item) => item.id === 'script-compiled'));
+    assert.throws(() => creatorTaskCriteria(compileTask, undefined, proposal(compileTask, 'write', { verification: 'none' })),
+        /VERIFICATION_DOWNGRADED|VERIFICATION_CONFLICT/);
+});
+
 test('intent analysis is tool-free, rejects tool calls/truncation, and honors cancellation', async () => {
     const task = '解释如何创建一个按钮';
     const provider = { complete: async (request) => {

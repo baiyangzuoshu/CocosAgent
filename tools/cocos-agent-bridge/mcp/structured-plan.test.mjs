@@ -15,6 +15,8 @@ const valid = { version: 2, title: 'Create a node', summary: 'Create a temporary
 test('structured plans parse plain JSON and fenced JSON into a bounded schema', () => {
     assert.deepEqual(parseStructuredPlan(JSON.stringify(valid)), valid);
     assert.deepEqual(parseStructuredPlan(`\`\`\`json\n${JSON.stringify(valid)}\n\`\`\``), valid);
+    assert.deepEqual(parseStructuredPlan(`Here is the reviewable plan:\n${JSON.stringify(valid)}`), valid);
+    assert.throws(() => parseStructuredPlan(`${JSON.stringify(valid)}\nA second claim follows.`), /INVALID_PLAN_TRAILING_TEXT/);
 });
 
 test('structured plans repair only unescaped quotes inside text values before strict schema validation', () => {
@@ -42,6 +44,20 @@ test('structured plans reject tools absent from the current Creator MCP catalog'
     assert.throws(() => parseStructuredPlan(JSON.stringify(setupToolPlan), { availableToolNames: [
         ...allowedToolNames, 'cocos_2x_capabilities_list',
     ] }), /INVALID_PLAN_REQUIRED_TOOLS/);
+});
+
+test('read-only Plan mode can name registered writer tools for later separately approved steps', () => {
+    assert.deepEqual(parseStructuredPlan(JSON.stringify(valid), { availableToolNames: [
+        'cocos_2x_scene_snapshot', 'cocos_2x_scene_node_inspect', 'cocos_2x_operation_get',
+    ] }), valid);
+});
+
+test('a read step may mention an available future write command without requiring writer tools', () => {
+    const plan = structuredClone(valid);
+    plan.steps[0].preconditions.push('scene.node.patch reports available for this project');
+    assert.deepEqual(parseStructuredPlan(JSON.stringify(plan), { availableToolNames: [
+        'cocos_2x_scene_snapshot', 'cocos_2x_scene_node_inspect', 'cocos_2x_operation_get',
+    ] }), plan);
 });
 
 test('structured plans require tools explicitly named by the step contract', () => {
