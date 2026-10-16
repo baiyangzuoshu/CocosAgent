@@ -40,14 +40,23 @@ export function parseCreatorTaskIntent(value: unknown, task: string): CreatorTas
         || raw.reads.some((name) => !CREATOR_INTENT_READ_TOOLS.includes(String(name)))
         || !['none', 'compile', 'runtime', 'interaction'].includes(String(raw.verification))
         || typeof raw.question !== 'string' || raw.question.length > 600) throw new Error('CREATOR_TASK_INTENT_INVALID');
-    const targets = validateCreatorTargets(raw.targets);
+    const literal = literalCreatorTargets(creatorActionText(task));
+    let targets: CreatorExpectedTarget[];
+    try { targets = validateCreatorTargets(raw.targets); }
+    catch (error) {
+        // Some Providers decorate otherwise usable target hints with unsupported
+        // fields or serialize a typed value inconsistently. Never trust those
+        // hints: when the user's text contains a program-validated literal, use
+        // that canonical target; otherwise keep the request blocked.
+        if (!literal.length || !(error instanceof Error) || !error.message.startsWith('CREATOR_TARGET_')) throw error;
+        targets = literal;
+    }
     const kind = raw.kind as CreatorTaskIntent['kind'];
     if (['explain', 'read', 'memory', 'clarify'].includes(kind) && targets.length
         || ['explain', 'read', 'memory', 'clarify'].includes(kind) && raw.verification !== 'none'
         || kind === 'explain' && raw.reads.length
         || kind === 'clarify' && !raw.question.trim()
         || kind !== 'clarify' && raw.question !== '') throw new Error('CREATOR_TASK_INTENT_INCONSISTENT');
-    const literal = literalCreatorTargets(creatorActionText(task));
     for (const target of targets) {
         // Model-only values are not user targets. Other fields need reviewed Plan
         // targets, whose schema and panel approval remain separately enforced.

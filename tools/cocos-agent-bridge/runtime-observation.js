@@ -22,6 +22,15 @@ function validNodePath(value) {
         && value.split('/').every((part) => /^[A-Za-z0-9_ -]{1,64}$/.test(part));
 }
 
+function validPreviewUrl(value) {
+    try {
+        const url = new URL(value || PREVIEW_URL);
+        return url.protocol === 'http:' && url.hostname === '127.0.0.1'
+            && Number.isInteger(Number(url.port)) && Number(url.port) >= 1 && Number(url.port) <= 65535
+            && !url.username && !url.password && url.pathname === '/' && !url.search && !url.hash;
+    } catch (_) { return false; }
+}
+
 function sanitizeText(value) {
     return String(value || '')
         .replace(/\b(?:sk|key|token)-[A-Za-z0-9_-]{12,}\b/gi, '[REDACTED]')
@@ -31,12 +40,12 @@ function sanitizeText(value) {
         .slice(0, MAX_EVENT_TEXT);
 }
 
-function targetExpression(expectedScene, expectedSceneUuid, nodePath) {
+function targetExpression(expectedScene, expectedSceneUuid, nodePath, previewUrl = PREVIEW_URL) {
     const expected = JSON.stringify(expectedScene || null);
     const expectedUuid = JSON.stringify(expectedSceneUuid || null);
     const parts = JSON.stringify(nodePath ? nodePath.split('/') : null);
     return `(function(){
-      if(location.origin!==${JSON.stringify(new URL(PREVIEW_URL).origin)}||location.pathname!=='/')return {pageMismatch:true};
+      if(location.origin!==${JSON.stringify(new URL(previewUrl).origin)}||location.pathname!=='/')return {pageMismatch:true};
       if(typeof cc==='undefined'||!cc.director)return null;
       var scene=cc.director.getScene();if(!scene)return null;
       var canvas=document.querySelector('#GameCanvas')||document.querySelector('canvas');
@@ -86,8 +95,8 @@ function addBounded(list, item) {
     list.push(item);
 }
 
-function previewPageUrl(value) {
-    try { const url = new URL(value); return url.origin === new URL(PREVIEW_URL).origin && url.pathname === '/'; }
+function previewPageUrl(value, previewUrl = PREVIEW_URL) {
+    try { const url = new URL(value); return url.origin === new URL(previewUrl).origin && url.pathname === '/'; }
     catch (_) { return false; }
 }
 
@@ -129,8 +138,10 @@ async function observeRuntime(input, options = {}) {
     const expectedScene = input && input.expectedScene;
     const expectedSceneUuid = input && input.expectedSceneUuid;
     const nodePath = input && input.nodePath;
+    const previewUrl = input && input.previewUrl || PREVIEW_URL;
     const timeoutMs = input && input.timeoutMs !== undefined ? input.timeoutMs : 20000;
     if (!input || typeof input !== 'object' || !validSceneName(expectedScene) || !validSceneUuid(expectedSceneUuid)
+        || !validPreviewUrl(previewUrl)
         || (nodePath !== undefined && !validNodePath(nodePath))
         || !Number.isInteger(timeoutMs) || timeoutMs < 3000 || timeoutMs > 30000) {
         return { success: false, error: { code: 'INVALID_RUNTIME_OBSERVATION_INPUT' } };
@@ -148,7 +159,7 @@ async function observeRuntime(input, options = {}) {
     let previewStatus = null;
     while (Date.now() < previewDeadline) {
         try {
-            const response = await fetchImpl(PREVIEW_URL, { signal: AbortSignal.timeout(750) });
+            const response = await fetchImpl(previewUrl, { signal: AbortSignal.timeout(750) });
             previewStatus = response.status;
             if (response.ok) { previewReady = true; break; }
         } catch (_) { /* Creator may still be starting its preview server. */ }
@@ -156,7 +167,7 @@ async function observeRuntime(input, options = {}) {
     }
     if (!previewReady) return { success: false, error: { code: 'PREVIEW_SERVER_UNAVAILABLE',
         ...(previewStatus ? { statusCode: previewStatus } : {}),
-        message: 'Creator 2.4.15 Web preview is not reachable on 127.0.0.1:7456.' } };
+        message: `Creator 2.4.15 Web preview is not reachable at ${previewUrl}.` } };
     if (session.closed || Date.now() >= stopAt) return { success: false, error: { code: session.closed ? 'PREVIEW_SESSION_CLOSED' : 'PREVIEW_RUNTIME_TIMEOUT' } };
 
     session.tempRoot = session.tempRoot || fs.realpathSync(options.tempRoot || os.tmpdir());
@@ -290,7 +301,7 @@ async function observeRuntime(input, options = {}) {
             session.initialized = true;
             session.refreshRequested = false;
             session.awaitingNavigationGeneration = session.persistent ? (session.pageGeneration || 0) + 1 : null;
-            const navigation = await send('Page.navigate', { url: PREVIEW_URL });
+            const navigation = await send('Page.navigate', { url: previewUrl });
             if (navigation.errorText) throw new Error('PREVIEW_NAVIGATION_FAILED');
             session.lastObservationAt = null;
         } else {
@@ -298,14 +309,14 @@ async function observeRuntime(input, options = {}) {
             const pages = await response.json();
             const page = Array.isArray(pages) && pages.find((item) => item.type === 'page' && item.id === session.pageId);
             if (!page) return { success: false, error: { code: 'PREVIEW_SESSION_PAGE_CLOSED' } };
-            if (!previewPageUrl(page.url)) return { success: false, error: { code: 'PREVIEW_SESSION_PAGE_NAVIGATED' } };
+            if (!previewPageUrl(page.url, previewUrl)) return { success: false, error: { code: 'PREVIEW_SESSION_PAGE_NAVIGATED' } };
         }
 
         let first = null;
         while (now() < stopAt && !session.childExited) {
             if (session.awaitingNavigationGeneration && ((session.pageGeneration || 0) < session.awaitingNavigationGeneration
-                || !previewPageUrl(session.pageUrl))) { await delay(50); continue; }
-            first = await evaluate(targetExpression(expectedScene, expectedSceneUuid, nodePath));
+                || !previewPageUrl(session.pageUrl, previewUrl))) { await delay(50); continue; }
+            first = await evaluate(targetExpression(expectedScene, expectedSceneUuid, nodePath, previewUrl));
             if (first && first.pageMismatch) return { success: false, error: { code: 'PREVIEW_SESSION_PAGE_NAVIGATED' } };
             if (first && first.sceneMismatch) {
                 return { success: false, error: { code: 'PREVIEW_SCENE_MISMATCH', expectedScene, actualScene: first.actualScene || null } };
@@ -323,7 +334,7 @@ async function observeRuntime(input, options = {}) {
         }
         session.awaitingNavigationGeneration = null;
         if (session.persistent && (navigated || session.titleGeneration !== (session.pageGeneration || 0))) {
-            await evaluate(`(function(){if(location.origin===${JSON.stringify(new URL(PREVIEW_URL).origin)}
+            await evaluate(`(function(){if(location.origin===${JSON.stringify(new URL(previewUrl).origin)}
                 &&cc.director.getScene()&&(cc.director.getScene()._id||cc.director.getScene().uuid)===${JSON.stringify(expectedSceneUuid)})
                 document.title=${JSON.stringify(`CocosAgent 预览 · ${expectedScene}`)};})()`);
             session.titleGeneration = session.pageGeneration || 0;
@@ -331,7 +342,7 @@ async function observeRuntime(input, options = {}) {
         }
         const pageGeneration = session.pageGeneration || 0;
         await delay(Math.min(700, Math.max(300, timeoutMs / 20)));
-        const second = await evaluate(targetExpression(expectedScene, expectedSceneUuid, nodePath));
+        const second = await evaluate(targetExpression(expectedScene, expectedSceneUuid, nodePath, previewUrl));
         if (!second || second.sceneName !== expectedScene || second.sceneUuid !== expectedSceneUuid || !second.canvas
             || (session.pageGeneration || 0) !== pageGeneration) {
             return { success: false, error: { code: 'PREVIEW_SCENE_CHANGED', expectedScene, expectedSceneUuid } };
@@ -348,7 +359,7 @@ async function observeRuntime(input, options = {}) {
             screenshotBase64 = typeof screenshot.data === 'string' ? screenshot.data : null;
             if (!screenshotBase64) screenshotError = 'SCREENSHOT_DATA_MISSING';
         } catch (_) { screenshotError = 'SCREENSHOT_CAPTURE_FAILED'; }
-        const finalIdentity = await evaluate(targetExpression(expectedScene, expectedSceneUuid));
+        const finalIdentity = await evaluate(targetExpression(expectedScene, expectedSceneUuid, undefined, previewUrl));
         if (!finalIdentity || finalIdentity.sceneName !== expectedScene || finalIdentity.sceneUuid !== expectedSceneUuid
             || (session.pageGeneration || 0) !== pageGeneration) {
             return { success: false, error: { code: 'PREVIEW_SCENE_CHANGED', expectedScene, expectedSceneUuid } };
@@ -356,7 +367,7 @@ async function observeRuntime(input, options = {}) {
         const status = session.pageErrorCount ? 'runtime-error' : runtimeStatus;
         const observedAt = new Date().toISOString();
         const result = {
-            success: true, outcome: 'observed', creatorVersion: '2.4.15', previewUrl: PREVIEW_URL,
+            success: true, outcome: 'observed', creatorVersion: '2.4.15', previewUrl,
             observedAt, scene: { name: second.sceneName, uuid: second.sceneUuid, matchesExpected: true },
             session: { id: session.id, pageId: session.pageId, reused, visible: session.persistent === true,
                 pageGeneration, observationIndex: (session.observationIndex || 0) + 1 },
@@ -408,8 +419,10 @@ function createRuntimeObserver(options = {}) {
             let session = sessions.get(project);
             if (session && session.busy) return { success: false, error: { code: 'PREVIEW_OBSERVATION_IN_PROGRESS' } };
             const restart = restarts.has(project);
+            const previewUrl = input.previewUrl || PREVIEW_URL;
             if (session && (session.closed || session.disconnected || session.childExited || session.instanceId !== input.instanceId
-                || session.sceneUuid !== input.expectedSceneUuid || session.sceneName !== input.expectedScene)) {
+                || session.sceneUuid !== input.expectedSceneUuid || session.sceneName !== input.expectedScene
+                || session.previewUrl !== previewUrl)) {
                 if (!restart) return { success: false, error: { code: 'PREVIEW_SESSION_RESTART_REQUIRED',
                     message: 'The Agent preview was closed or its Creator/scene identity changed. Approve runtime.preview.start before observing again.' } };
                 session.busy = true;
@@ -421,7 +434,7 @@ function createRuntimeObserver(options = {}) {
             if (!session) {
                 if (sessions.size >= 8) return { success: false, error: { code: 'PREVIEW_SESSION_LIMIT' } };
                 session = { id: randomUUID(), persistent: true, instanceId: input.instanceId,
-                    sceneUuid: input.expectedSceneUuid, sceneName: input.expectedScene };
+                    sceneUuid: input.expectedSceneUuid, sceneName: input.expectedScene, previewUrl };
                 sessions.set(project, session);
             }
             if (restart) { session.refreshRequested = session.initialized === true; session.requiresReload = false; restarts.delete(project); }
@@ -464,4 +477,4 @@ function createRuntimeObserver(options = {}) {
 }
 
 module.exports = { observeRuntime, createRuntimeObserver, discoverBrowser, targetExpression, sanitizeText,
-    validNodePath, validSceneName, validSceneUuid, PREVIEW_URL };
+    validNodePath, validSceneName, validSceneUuid, validPreviewUrl, PREVIEW_URL };

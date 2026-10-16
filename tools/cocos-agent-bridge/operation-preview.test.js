@@ -53,7 +53,7 @@ try {
         components: [{ classId: 'cc.Sprite', spriteFrameUuid }],
         transform: { position: { x: 12, y: -4 }, scale: { x: 2, y: 3 } } };
     const runtimeRequest = { projectRoot, creatorVersion: '2.4.15', operationId: nodeOperationId,
-        previewUrl: 'http://127.0.0.1:7456/', observedAt: new Date(Date.now() + 1000).toISOString(), runtimeState };
+        previewUrl: 'http://127.0.0.1:7457/', observedAt: new Date(Date.now() + 1000).toISOString(), runtimeState };
     assert.strictEqual(acceptRuntimePreview({ ...runtimeRequest, runtimeState: { ...runtimeState, nodeUuid: crypto.randomUUID() } }).error.code,
         'RUNTIME_PREVIEW_MISMATCH');
     const runtimeAccepted = acceptRuntimePreview(runtimeRequest);

@@ -9,7 +9,8 @@ const test = require('node:test');
 const { observeRuntime, sanitizeText, targetExpression, validNodePath, validSceneName, PREVIEW_URL } = require('./runtime-observation');
 const SCENE_UUID = '280c3aec-6492-4a9d-9f51-a9b00b570b4a';
 
-function fakeChrome({ sceneName = 'helloworld', sceneUuid = SCENE_UUID, screenshot = true } = {}) {
+function fakeChrome({ sceneName = 'helloworld', sceneUuid = SCENE_UUID, screenshot = true,
+    previewUrl = PREVIEW_URL } = {}) {
     const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-agent-runtime-observe-test-'));
     let evaluation = 0;
     const port = 49152;
@@ -46,7 +47,7 @@ function fakeChrome({ sceneName = 'helloworld', sceneUuid = SCENE_UUID, screensh
     }
     FakeCDPSocket.OPEN = 1;
     const fetch = async (url) => {
-        if (url === PREVIEW_URL) return { ok: true, status: 200 };
+        if (url === previewUrl) return { ok: true, status: 200 };
         if (String(url).endsWith('/json/list')) return { ok: true, status: 200, json: async () => [{
             type: 'page', url: 'about:blank', webSocketDebuggerUrl: `ws://127.0.0.1:${port}/devtools/page/1`,
         }] };
@@ -69,6 +70,7 @@ test('runtime observation validates bounded scene paths and redacts secrets from
     assert.equal(validNodePath('helloworld/Canvas/Button'), true);
     assert.equal(validNodePath('helloworld//Button'), false);
     assert.match(targetExpression('helloworld', SCENE_UUID, 'helloworld/Canvas/Button'), /targetNode/);
+    assert.match(targetExpression('helloworld', SCENE_UUID, undefined, 'http://127.0.0.1:7457/'), /127\.0\.0\.1:7457/);
     assert.doesNotMatch(sanitizeText('failed for sk-test-12345678901234567890 at /Users/alice/game'), /alice|1234567890/);
 });
 
@@ -114,4 +116,23 @@ test('runtime observation rejects malformed input without starting Chrome', asyn
     });
     assert.equal(result.error.code, 'INVALID_RUNTIME_OBSERVATION_INPUT');
     assert.equal(spawned, false);
+});
+
+test('runtime observation supports a Creator-assigned loopback preview port and returns its exact URL', async (t) => {
+    const previewUrl = 'http://127.0.0.1:7457/';
+    const harness = await fakeChrome({ previewUrl });
+    t.after(() => fs.rmSync(harness.tempRoot, { recursive: true, force: true }));
+    const result = await harness.observe({ expectedScene: 'helloworld', expectedSceneUuid: SCENE_UUID,
+        previewUrl, timeoutMs: 3000 });
+    assert.equal(result.success, true);
+    assert.equal(result.previewUrl, previewUrl);
+});
+
+test('runtime observation rejects non-loopback, non-root, or query-bearing preview URLs', async () => {
+    for (const previewUrl of ['https://127.0.0.1:7457/', 'http://localhost:7457/',
+        'http://127.0.0.1:7457/other', 'http://127.0.0.1:7457/?x=1']) {
+        const result = await observeRuntime({ expectedScene: 'helloworld', expectedSceneUuid: SCENE_UUID,
+            previewUrl, timeoutMs: 3000 }, { chromePath: 'mock-chrome', spawn: () => { throw new Error('should not spawn'); } });
+        assert.equal(result.error.code, 'INVALID_RUNTIME_OBSERVATION_INPUT', previewUrl);
+    }
 });

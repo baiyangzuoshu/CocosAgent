@@ -81,7 +81,7 @@ test('runtime observation verifies the active 2.4 scene and returns a separate i
         },
         observeRuntime: async (input) => {
             assert.deepEqual(input, { projectRoot: value.projects[0], instanceId: '280c3aec-6492-4a9d-9f51-a9b00b570b4a', expectedScene: 'helloworld', expectedSceneUuid: '280c3aec-6492-4a9d-9f51-a9b00b570b4a',
-                nodePath: 'Canvas/Button', timeoutMs: 12000 });
+                nodePath: 'Canvas/Button', previewUrl: 'http://127.0.0.1:7457/', timeoutMs: 12000 });
             return { success: true, outcome: 'observed', scene: { name: 'helloworld', matchesExpected: true },
                 runtime: { status: 'runtime-error', frameCount: 80, frameDelta: 12, paused: false, capturedErrorCount: 1 },
                 diagnostics: { errors: [{ message: 'TypeError in Button.js' }], warnings: [], logs: [], truncated: { errors: false, warnings: false, logs: false } },
@@ -95,7 +95,8 @@ test('runtime observation verifies the active 2.4 scene and returns a separate i
         await server.connect(serverTransport);
         await client.connect(clientTransport);
         const result = await client.callTool({ name: 'cocos_2x_runtime_observe', arguments: {
-            projectRoot: value.projects[0], expectedScene: 'helloworld', nodePath: 'Canvas/Button', timeoutMs: 12000,
+            projectRoot: value.projects[0], expectedScene: 'helloworld', nodePath: 'Canvas/Button',
+            previewUrl: 'http://127.0.0.1:7457/', timeoutMs: 12000,
         } });
         assert.deepEqual(seen, ['capabilities.list', 'capabilities.list']);
         assert.equal(result.structuredContent.runtime.status, 'runtime-error');

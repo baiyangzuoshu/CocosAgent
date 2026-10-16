@@ -246,7 +246,8 @@ async function runCreatorMode(options: CreatorAssistantModeRunOptions): Promise<
             const finalText = cancelled ? null : intent?.kind === 'clarify' ? intent.question
                 : invalid ? '无法可靠核对任务类型、原始要求和目标。请明确要解释、只读检查还是实际修改，并说明对象与目标值。'
                     : '任务理解阶段的模型请求失败，任务工具尚未执行。请检查模型连接后重试。';
-            options.writeEvent(options.tracePath, { event: 'run.stop', runId, status: cancelled ? 'cancelled' : 'stopped', reason }, options.apiKey);
+            options.writeEvent(options.tracePath, { event: 'run.stop', runId, status: cancelled ? 'cancelled' : 'stopped', reason,
+                ...(error instanceof Error && error.message.startsWith('CREATOR_') ? { taskIntentErrorCode: error.message } : {}) }, options.apiKey);
             return { runId, mode: options.mode, status: cancelled ? 'cancelled' : 'stopped', reason, finalText,
                 tracePath: options.tracePath, toolCalls: setupReceipts.length, availableToolNames,
                 receipts: setupReceipts.map((receipt) => ({ ...receipt, ...receipt.result })), messages: initialHistory,

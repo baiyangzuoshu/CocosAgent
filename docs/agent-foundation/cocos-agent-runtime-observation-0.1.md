@@ -1,6 +1,6 @@
 # CocosAgent Creator 2.4.15 Runtime Observation 0.1
 
-Date: 2026-10-13. Extension: 0.3.15. Status: **Windows browser discovery and persistent visible preview implemented; live same-page interaction, runtime-error injection and repair acceptance pending.** Historical simulated tests describe the earlier initial-observation implementation; this update has not run new automated tests.
+Date: 2026-10-16. Extension: 0.3.16. Status: **Creator-assigned loopback preview ports and a same-operation write/preview/compensation path are implemented and natively accepted in an isolated Creator 2.4.15 project; concurrent preview provenance, same-page interaction and runtime-error repair acceptance remain pending.** The runtime observation and operation preview code have automated coverage.
 
 ## Goal
 
@@ -16,7 +16,7 @@ This is a 2.4.15 Web-preview contract. It does not add 3.x support, native/mobil
 | `cocos_2x_runtime_observe` | read | Requires the registered project root and expected active scene name. The MCP host reads the selected Creator catalog's `activeSceneUuid`, then the preview must report the same scene name and UUID before logs or a screenshot are returned. Optional `nodePath` requests a limited node/component snapshot. |
 | `script.read`, `script.patch.plan`, `script.patch`, `script.operation.get` | read/read/write/read | Existing JavaScript repair workflow. `needs-runtime` means compilation and source readback only. A patch requires local approval and durable operation state. |
 
-The observer reads `http://127.0.0.1:7456/`; it does not start Creator or modify project assets. The native MCP Host maintains an isolated visible browser window titled `CocosAgent 预览 · <scene>`, enables DevTools Runtime/Log/Page events once, and reuses the exact owned page for later observations. User interactions must occur in this window. It does not attach to an unrelated ordinary Chrome tab or a user's normal browser profile. It returns a structured receipt with:
+The observer defaults to `http://127.0.0.1:7456/`; when Creator assigns another preview port, the caller may provide that project's exact `http://127.0.0.1:<port>/` URL. The observer validates the loopback URL and then checks the selected Creator project's exact active scene name and UUID before returning evidence. It does not start Creator or modify project assets. The native MCP Host maintains an isolated visible browser window titled `CocosAgent 预览 · <scene>`, enables DevTools Runtime/Log/Page events once, and reuses the exact owned page for later observations. User interactions must occur in this window. It does not attach to an unrelated ordinary Chrome tab or a user's normal browser profile. It returns a structured receipt with:
 
 - exact runtime scene name and UUID;
 - frame count and frame delta, pause state, and `running`, `paused`, `stalled` or `runtime-error` status;
@@ -28,7 +28,7 @@ The observer reads `http://127.0.0.1:7456/`; it does not start Creator or modify
 
 An observation can succeed while `runtime.status` is `runtime-error`; this means the evidence was captured, not that the scene passed. A timeout, scene-name mismatch, scene-UUID mismatch, or Creator context change during capture is a failed observation and returns no screenshot. Logs retain the latest 24 entries per severity and report truncation; each message is capped at 1200 characters and common credential/path patterns are redacted. Cumulative page error count and the latest 24 page errors are separate from the interval entries.
 
-## Browser discovery and owned session lifecycle (0.3.15)
+## Browser discovery and owned session lifecycle (0.3.16)
 
 - `COCOS_AGENT_CHROME_PATH` is an optional explicit absolute executable path. A missing/invalid override returns `CHROME_NOT_FOUND` rather than silently selecting another installation.
 - Windows discovers Chrome in `LOCALAPPDATA`, `ProgramW6432`, `ProgramFiles` and `ProgramFiles(x86)`, then bounded read-only `App Paths` registry queries and PATH directories; Edge is a fallback. Existing macOS Chrome/Chromium paths remain, with Edge and common Linux paths also supported. No shell execution, system browser setting changes or software installation is involved.
@@ -38,7 +38,7 @@ An observation can succeed while `runtime.status` is `runtime-error`; this means
 - Closing the page/browser, disconnecting DevTools or changing the instance/scene cannot silently substitute a new page. Approve `runtime.preview.start` to establish the new session. Host shutdown closes only its own browser processes, settles pending calls and removes only its generated profile after browser exit. Host restart creates a new runtime session; it does not persist live click state.
 - Low-level `observeRuntime` without a supplied owned session retains the temporary headless compatibility path. Native MCP uses the persistent visible observer; other browser tabs are not joined into its evidence.
 
-The preview is currently addressed through the shared default port 7456. Matching the selected scene UUID prevents most wrong-preview reads, but copied projects can preserve UUIDs and port ownership is not cryptographically attested to the Creator instance. If multiple previews compete for that port, or identity is uncertain, stop and report the ambiguity; do not treat the screenshot as proof for the selected project. This residual limit must be closed before claiming reliable concurrent-instance observation.
+The default remains the shared port 7456, but callers can select an exact loopback preview URL when Creator assigns a different port. In an isolated native acceptance project, Creator assigned port 7457 while 7456 belonged to another project; the Agent observed the exact 7457 page, matched scene and node UUIDs, accepted the original operation's preview, then compensated it and read the final saved scene. See [the 2026-10-16 recovery trace](traces/cocos-agent-native-recovery-2.4-20261016.md). Matching the selected scene UUID prevents many wrong-preview reads, but copied projects can preserve UUIDs and port ownership is not cryptographically attested to the Creator instance. If project/preview identity is uncertain, stop and report the ambiguity; do not treat the screenshot as proof for the selected project. Dynamic ports resolve endpoint reachability, not concurrent-instance provenance.
 
 ## Model and data boundary
 

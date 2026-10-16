@@ -217,8 +217,9 @@ function targetMatches(receipt: AgentReceipt, write: AgentReceipt, restoring: bo
 /** Product evidence checks consume actual receipts only. Unsupported checks fail closed. */
 export function verifyCreatorTaskReceipt(criterion: AgentGoalCriterion, receipt: AgentReceipt, receipts: AgentReceipt[]): boolean {
     const requirement = criterion.receiptRequirement;
-    if (requirement === 'creator-read') return receipt.role === 'task' && good(receipt)
-        && (receipt.toolName === 'cocos_2x_command_execute' ? READ_COMMANDS.has(command(receipt))
+    if (requirement === 'creator-read') return criterion.requiredTools.includes(receipt.toolName) && good(receipt)
+        && (receipt.toolName === 'cocos_2x_command_execute'
+            ? receipt.role === 'task' && READ_COMMANDS.has(command(receipt))
             : receipt.access === 'read' && READ_TOOLS.includes(receipt.toolName));
     if (requirement === 'creator-requested-read') return ['setup', 'task'].includes(receipt.role) && receipt.access === 'read'
         && good(receipt) && criterion.requiredTools.includes(receipt.toolName);

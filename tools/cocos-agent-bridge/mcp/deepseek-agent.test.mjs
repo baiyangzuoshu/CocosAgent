@@ -9,11 +9,21 @@ import { fileURLToPath } from 'node:url';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { createServer } from './mcp-server.mjs';
 import { DEFAULT_BASE_URL, appendToolImages, completionEndpoint, normalizeToolResult, parseArgs, requestDeepSeek,
-    runDeepSeekAgent, toolResultForModel, toolResultForTrace } from './deepseek-agent.mjs';
+    runDeepSeekAgent, SYSTEM_RULES, toolResultForModel, toolResultForTrace } from './deepseek-agent.mjs';
 import { compactReceipt, compactResult, assistantAnswer, projectContextMatchesProject, readRecoveryReceipt } from './assistant-host.mjs';
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const DEFAULT_SKILL = path.join(REPOSITORY_ROOT, 'plugins/cocos-agent-2x/skills/cocos-agent/SKILL.md');
+
+test('general explanations distinguish mandatory read-only preflight from project inspection and writes', () => {
+    assert.match(SYSTEM_RULES, /Never say that no Creator tools ran when those receipts exist/);
+    assert.match(SYSTEM_RULES, /the Host performed read-only instance\/capability preflight/);
+    const answer = assistantAnswer({ status: 'completed', finalText: 'Generic explanation. 按你的要求，本次未调用任何 Creator 工具、未读取项目内容。补充说明: Host 执行了预检。', receipts: [
+        { name: 'cocos_2x_instances_list', access: 'read' },
+        { name: 'cocos_2x_capabilities_list', access: 'read' },
+    ] }, 'Ask');
+    assert.equal(answer, 'Generic explanation. 本次没有读取项目内容或进行写入；Host 执行了只读实例/能力预检。');
+});
 
 function fixture() {
     const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-agent-deepseek-'));

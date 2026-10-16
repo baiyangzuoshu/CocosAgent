@@ -31,8 +31,17 @@ export function validateCreatorTargets(value: unknown): CreatorExpectedTarget[] 
 
 /** Recognize only literal, unambiguous property requests. Other writes need reviewed Plan targets. */
 export function literalCreatorTargets(task: string): CreatorExpectedTarget[] {
-    const matches = [...task.matchAll(/(?:将|把|set\s+|move\s+)?([A-Za-z0-9_-]+(?:\/[A-Za-z0-9_ -]+)*)\s*(?:的\s*|['’]s\s+)?(?:node\.)?(?:position\.)?([xy])\s*(?:坐标\s*)?(?:移动到|调整为|设置为|改为|设为|到|为|=|to\s+)\s*(-?\d+(?:\.\d+)?)(?![\d.])/gi)];
-    try { return validateCreatorTargets(matches.map((match) => ({ target: match[1]!.trim(), field: `node.position.${match[2]!.toLowerCase()}`, equals: Number(match[3]) }))); }
+    const actionText = task.split(/[，,。；;\n]|\b(?:and then|then)\b/i)
+        .filter((part) => !/^\s*(?:并|再|然后|and\s+)?\s*(?:请|please\s+)?(?:读取|查看|检查|核对|确认|查询|验证|报告|\bread\b|\binspect\b|\bcheck\b|\bconfirm\b|\bverify\b|\breport\b)/i.test(part))
+        .join('，');
+    const matches = [...actionText.matchAll(/(?:将|把|set\s+|move\s+|change\s+)?([A-Za-z0-9_-]+(?:\/[A-Za-z0-9_ -]+)*?)(?:\s+local)?\s*(?:的\s*|['’]s\s+)?(?:node\.)?(?:position\.)?(?:local\s+)?([xy])(?:\s*(?:position|coordinate))?\s*(?:坐标\s*)?(?:移动到|调整为|设置为|改为|设为|到|为|=|to\s+)\s*(-?\d+(?:\.\d+)?)(?!\d|\.\d)/gi)];
+    const propertyFirst = [...actionText.matchAll(/(?:将|把|set\s+(?:only\s+)?(?:the\s+)?|move\s+(?:only\s+)?(?:the\s+)?|change\s+(?:only\s+)?(?:the\s+)?)(?:local\s+)?([xy])\s+position\s+(?:of|for)\s+([A-Za-z0-9_-]+(?:\/[A-Za-z0-9_ -]+)*)\s*(?:to|=|设置为|改为|设为|移动到)\s*(-?\d+(?:\.\d+)?)(?!\d|\.\d)/gi)];
+    const candidates = [
+        ...matches.map((match) => ({ target: match[1]!.trim().replace(/\s+local$/i, ''), axis: match[2]!, value: match[3]! })),
+        ...propertyFirst.map((match) => ({ target: match[2]!.trim(), axis: match[1]!, value: match[3]! })),
+    ].filter((item) => !/^(?:preserve|keep|maintain|leave|to|from|of|for|at|on|in|the|only|local|position|coordinate|target|node|it|its|same|then|back|recorded|before|state)$/i.test(item.target));
+    try { return validateCreatorTargets(candidates.map((item) => ({ target: item.target,
+        field: `node.position.${item.axis.toLowerCase()}`, equals: Number(item.value) }))); }
     catch { return []; }
 }
 

@@ -58,6 +58,7 @@ const SYSTEM_RULES = [
     'Treat the user task as the only authorization. Use only the supplied MCP tools; never invent a projectRoot, Creator version, UUID, asset identity, or visual observation.',
     'Start by listing Creator instances. Select only a ready Creator 2.4.15 instance from that result, then query its capabilities before choosing a command.',
     'If multiple instances fit the user task, stop and report the ambiguity. Make at most one MCP tool call per model response so each decision follows the previous tool receipt.',
+    'For a general explanation that does not need project inspection, avoid project-content tools. The Host still performs read-only instance/capability preflight and may load skill metadata. If only preflight ran, say: "I did not inspect project contents or make changes; the Host performed read-only instance/capability preflight." Never say that no Creator tools ran when those receipts exist.',
     'Use a dedicated read-only MCP tool for inspection. A write is allowed only when the user task explicitly requests the specific change and the local runner approves it.',
     'After every tool result, inspect success, outcome, error code, operationId, and phase receipts before deciding the next tool. Never retry an uncertain write.',
     'For a needs-review scene operation, read its durable receipt and use operation.reconcile only when its preconditions are met. Do not claim success while recovery is unresolved.',
@@ -73,6 +74,7 @@ const SYSTEM_RULES = [
 const MODE_RULES = {
     Ask: [
         'The user selected Ask mode. Treat the request as read-only project exploration and explanation.',
+        'For general engine questions, use the system rule exact phrasing for read-only instance/capability preflight. Do not use a shorter contradictory claim that no Creator tools ran.',
         'Only use tools explicitly marked read-only. Do not say that a project change has been applied.',
         'Before making claims about project contents, require successful receipts from the relevant Creator read-only tools. If a capability is unavailable, a contract is mismatched, or the task tool fails, state plainly that the requested analysis was not completed; quote the blocking code and do not infer project contents from unavailable tools or unrelated local reads.',
     ].join('\n'),

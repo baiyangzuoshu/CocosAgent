@@ -118,7 +118,9 @@ function acceptRuntimePreview({ projectRoot, creatorVersion, operationId, previe
     }
     let url;
     try { url = new URL(previewUrl); } catch (_) { return failure('INVALID_PREVIEW_EVIDENCE', 'Invalid preview URL.'); }
-    if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || url.port !== '7456' || previewUrl.length > 256
+    if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || !Number.isInteger(Number(url.port))
+        || Number(url.port) < 1 || Number(url.port) > 65535 || url.username || url.password
+        || url.pathname !== '/' || url.search || url.hash || previewUrl.length > 256
         || typeof observedAt !== 'string' || !Number.isFinite(Date.parse(observedAt))) {
         return failure('INVALID_PREVIEW_EVIDENCE', 'Automatic preview evidence must come from the local 2.4 Web preview.');
     }

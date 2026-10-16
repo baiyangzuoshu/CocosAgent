@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseCreatorTaskIntent, requestCreatorTaskIntent, creatorTaskCriteria, runCreatorAgent } from '../dist/index.js';
+import { parseCreatorTaskIntent, requestCreatorTaskIntent, creatorTaskCriteria, literalCreatorTargets, runCreatorAgent } from '../dist/index.js';
 
 const projectRoot = '/tmp/cocos-intent-contract-project';
 const target = { target: 'Canvas/Foo', field: 'node.position.x', equals: 200 };
@@ -10,6 +10,42 @@ const jsonResponse = (value) => new Response(JSON.stringify({ choices: [{ messag
 const answer = (content) => new Response(JSON.stringify({ choices: [{ message: { content }, finish_reason: 'stop' }] }), { status: 200 });
 const call = (id, name, args) => new Response(JSON.stringify({ choices: [{ message: { tool_calls: [{ id, type: 'function',
     function: { name, arguments: JSON.stringify({ projectRoot, ...args }) } }] }, finish_reason: 'tool_calls' }] }), { status: 200 });
+
+test('equivalent set/change wording recognizes exact local position targets', () => {
+    const expected = [{ target: 'helloworld/Canvas/AgentAcceptanceSprite', field: 'node.position.x', equals: -149 }];
+    for (const task of [
+        'Set helloworld/Canvas/AgentAcceptanceSprite x to -149',
+        'Change helloworld/Canvas/AgentAcceptanceSprite x to -149',
+        'Set helloworld/Canvas/AgentAcceptanceSprite local x position to -149',
+        'Change helloworld/Canvas/AgentAcceptanceSprite local x position to -149',
+        'Set only the local x position of helloworld/Canvas/AgentAcceptanceSprite to -149; preserve y=180',
+        'Change only the local x position of helloworld/Canvas/AgentAcceptanceSprite to -149; preserve y=180',
+    ]) assert.deepEqual(literalCreatorTargets(task), expected, task);
+});
+
+test('read-only verification wording does not become a write target through the preposition to', () => {
+    const task = 'Read the compensation operation and its recorded state, then verify helloworld/Canvas/AgentAcceptanceSprite position.x to -150.';
+    assert.deepEqual(literalCreatorTargets(task), []);
+});
+
+test('a separately requested set remains a target when followed by read-only verification', () => {
+    const task = 'Set helloworld/Canvas/AgentAcceptanceSprite x to -149, then verify helloworld/Canvas/AgentAcceptanceSprite position.x is -149.';
+    assert.deepEqual(literalCreatorTargets(task), [
+        { target: 'helloworld/Canvas/AgentAcceptanceSprite', field: 'node.position.x', equals: -149 },
+    ]);
+});
+
+test('malformed Provider target hints fall back only to program-extracted literal targets', () => {
+    const task = 'Set only the local x position of helloworld/Canvas/AgentAcceptanceSprite to -149. Keep y at 180.';
+    const malformed = proposal(task, 'write', { targets: [{ ...{
+        target: 'helloworld/Canvas/AgentAcceptanceSprite', field: 'node.position.x', equals: -149,
+    }, confidence: 0.9 }] });
+    assert.deepEqual(parseCreatorTaskIntent(malformed, task).targets,
+        [{ target: 'helloworld/Canvas/AgentAcceptanceSprite', field: 'node.position.x', equals: -149 }]);
+    assert.throws(() => parseCreatorTaskIntent({ ...malformed,
+        targets: [{ target: 'invented', field: 'node.position.x', equals: -149 }],
+    }, task), /TARGET_NOT_IN_REQUEST/);
+});
 
 test('task proposals bind the original source and reject model-invented targets, approvals, or completion fields', () => {
     const task = '将 Canvas/Foo 的 x 设置为 200';

@@ -534,13 +534,14 @@ function createServer(projectRoots, options = {}) {
     }
 
     server.registerTool('cocos_2x_runtime_observe', {
-        description: 'Observe the registered Creator 2.4.15 Web preview with its exact active scene name, UUID and editor instance. Opens an isolated visible Agent preview window on first observation and reuses that exact page for later observations, retaining user clicks and logs between observations. Interact in this Agent window, not an unrelated ordinary browser tab. Returns session/page identity, bounded diagnostics, frame progress, optional whitelisted node state and a cropped canvas image. Requires the preview server on 127.0.0.1:7456. Content changes or a closed/changed session require an approved runtime.preview.start before a refresh; never restart preview between observations merely to read it. This tool does not inject game input. The image and diagnostics are supplied to the configured model.',
+        description: 'Observe the registered Creator 2.4.15 Web preview with its exact active scene name, UUID and editor instance. Opens an isolated visible Agent preview window on first observation and reuses that exact page, retaining diagnostics between observations. If Creator assigned a non-default port, provide its exact local URL from this project (http://127.0.0.1:<port>/); the observer validates the live scene UUID and project before returning. Content changes or a closed/changed session require an approved runtime.preview.start before a refresh. This tool does not inject game input. The image and diagnostics are supplied to the configured model.',
         inputSchema: z.object({ projectRoot, expectedScene: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
             nodePath: z.string().min(1).max(240).regex(/^[A-Za-z0-9_ -]+(?:\/[A-Za-z0-9_ -]+)*$/).optional(),
+            previewUrl: z.string().url().optional(),
             timeoutMs: z.number().int().min(3000).max(30000).optional() }).strict(),
         annotations: { title: 'Observe Creator runtime', readOnlyHint: true, destructiveHint: false,
             idempotentHint: true, openWorldHint: false },
-    }, async ({ projectRoot: selected, expectedScene, nodePath, timeoutMs }) => {
+    }, async ({ projectRoot: selected, expectedScene, nodePath, previewUrl, timeoutMs }) => {
         const project = path.resolve(selected);
         if (!targetList.some((target) => target.projectRoot === project)) {
             const unavailable = { success: false, outcome: 'failed', error: { code: 'PROJECT_NOT_REGISTERED' } };
@@ -563,6 +564,7 @@ function createServer(projectRoots, options = {}) {
         }
         let observation = await runtimeObserver({ projectRoot: project, instanceId: catalog.data.instance.instanceId,
             expectedScene, expectedSceneUuid, ...(nodePath ? { nodePath } : {}),
+            ...(previewUrl ? { previewUrl } : {}),
             timeoutMs: timeoutMs === undefined ? 20000 : timeoutMs });
         if (observation.success === true) {
             const after = await invoke('capabilities.list', { targets: targetList, projectRoot: project, creatorVersion: CREATOR_VERSION }, {});

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { creatorTaskCriteria } from '../dist/creator-task-acceptance.js';
+import { creatorTaskCriteria, verifyCreatorTaskReceipt } from '../dist/creator-task-acceptance.js';
 
 // Contract behavior remains independent of the model/parser implementation.
 const target = { target: 'Canvas/Foo', field: 'node.position.x', equals: 200 };
@@ -58,3 +58,16 @@ for (const scenario of scenarios) {
         }
     });
 }
+
+test('read-only operation ledger evidence satisfies the exact requested read regardless of tool role', () => {
+    const task = 'Read-only: inspect the compensation operation ledger';
+    const intent = { version: 1, task, kind: 'read', sourceQuotes: [task], reads: ['cocos_2x_operation_get'],
+        targets: [], verification: 'none', question: '' };
+    const [criterion] = creatorTaskCriteria(task, undefined, intent);
+    const receipt = { callId: 'operation-read', toolName: 'cocos_2x_operation_get', access: 'read', role: 'recovery',
+        result: { isError: false, structuredContent: { success: true, outcome: 'completed', operationId: 'op-1' } } };
+    assert.equal(verifyCreatorTaskReceipt(criterion, receipt, [receipt]), true);
+    assert.equal(verifyCreatorTaskReceipt(criterion, { ...receipt, role: 'context' }, [receipt]), true);
+    assert.equal(verifyCreatorTaskReceipt(criterion, { ...receipt, access: 'write' }, [receipt]), false);
+    assert.equal(verifyCreatorTaskReceipt(criterion, { ...receipt, toolName: 'cocos_2x_scene_node_inspect' }, [receipt]), false);
+});

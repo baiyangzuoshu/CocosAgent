@@ -288,9 +288,29 @@ function assistantAnswer(result, mode) {
     }
     const pendingScript = (result.receipts || []).some((receipt) => receipt.result?.structuredContent?.outcome === 'needs-runtime');
     if (mode === 'Agent' && pendingScript) return `${result.finalText || '脚本修改已取得编译回执。'}\n\n验收边界：本轮工具只证明源码读回和 Creator 编译，按钮点击等功能仍须实际预览验证。`;
-    return result.finalText || (result.status === 'awaiting-approval'
+    let finalText = result.finalText || (result.status === 'awaiting-approval'
         ? '操作未获批准，项目没有执行这一步修改。'
         : `任务已停止：${result.reason || result.status}`);
+    const receipts = Array.isArray(result.receipts) ? result.receipts : [];
+    const ranRequiredPreflight = receipts.some((receipt) => ['cocos_2x_instances_list', 'cocos_2x_capabilities_list'].includes(receipt.name));
+    if (ranRequiredPreflight) {
+        const inspectedProject = receipts.some((receipt) => receipt.access === 'read'
+            && !['cocos_2x_instances_list', 'cocos_2x_capabilities_list'].includes(receipt.name)
+            && !['cocos_2x_skills_list', 'cocos_2x_skill_read', 'cocos_2x_skill_reference_read'].includes(receipt.name));
+        const wroteProject = receipts.some((receipt) => receipt.access !== 'read');
+        const correction = !inspectedProject && !wroteProject
+            ? '本次没有读取项目内容或进行写入；Host 执行了只读实例/能力预检。'
+            : '本次实际工具调用及回执已记录在运行轨迹中；以上说明应以该轨迹为准。';
+        if (!inspectedProject && !wroteProject) {
+            const closingClaim = /(?:按你的要求|根据你的要求|As requested|At your request)[\s\S]*$/i;
+            finalText = closingClaim.test(finalText)
+                ? finalText.replace(closingClaim, correction)
+                : finalText.replace(/(?:本次)?(?:我)?(?:没有|未)(?:调用|使用)任何\s*Creator\s*工具[。.!]?|(?:I did not|I did not use|I did not call) any Creator tools/gi, correction);
+        } else {
+            finalText = finalText.replace(/(?:本次)?(?:我)?(?:没有|未)(?:调用|使用)任何\s*Creator\s*工具[。.!]?|(?:I did not|I did not use|I did not call) any Creator tools/gi, correction);
+        }
+    }
+    return finalText;
 }
 
 async function start(options) {
