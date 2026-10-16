@@ -45,6 +45,19 @@ node tools/cocos-agent-bridge/package-creator-extension.mjs restore-extension \
 
 ## 证据与边界
 
+### 2026-10-16 状态更新：证据分层
+
+| 证据类别 | 当前记录 | 能证明什么 |
+| --- | --- | --- |
+| 自动测试 | TypeScript runtime 定向测试 `context-compact.test.mjs` + `agent-loop.test.mjs`：42/42；Host 定向测试覆盖精确项目上下文、逐轮上下文刷新、AGENTS.md 写前读取/陈旧哈希拒绝、恢复前置检查和取消中的写回执：6/6。 | 模拟/单元层的规则与控制流行为，不证明 Creator 面板采样或真实 LinkUpClient 工具分发。 |
+| 磁盘只读核对 | LinkUpClient 工程 `project.json` 为 Creator 2.4.15、名称 `LinkUpClient`；`AGENTS.md` 8,140 字节，SHA-256 `ae984519b3f1a808dad20546311c11701a031b1ce749f741f2a117a6aefa6f14`，与旧记录前缀一致。仓库已有 `Art.meta` 删除及当前扩展/回滚目录未跟踪状态，本轮保持未改动。 | 当前磁盘项目身份和约定文件指纹；不证明 Creator 当前工程上下文或 Host 采样哈希。 |
+| Creator 原生面板 | 本轮未取得 LinkUpClient 面板运行证据。Dashboard 将 LinkUpClient 标为“已打开”，但 CUA 当前可读 Creator 窗口仍为 `/private/tmp/CocosAgentNativeAcceptance-20261016` 的 `helloworld` 场景。 | Dashboard 的打开状态只证明项目被登记/处于打开状态，不证明任务进入 LinkUpClient、面板 Host 已连接或工具成功。 |
+| 待验证路径 | 切到 LinkUpClient Creator 2.4.15 前台窗口后，依次验收当前工程/场景上下文、按需读取 `AGENTS.md`、改动哈希后的写前拒绝且零分发、面板取消时等待当前工具回执并停止后续调度、精确 operation ID 恢复与 Host 重启恢复；之后从 LinkUpClient 实时快照选目标，重新生成计划并按面板审批复跑目标任务。 | 仅原生面板轨迹及编辑器/磁盘/账本对应读回可将这些路径标记为实机通过。不得把研究工程 UUID 沿用到 LinkUpClient。 |
+
+本轮测试命令和结果：在 `tools/cocos-agent-runtime` 执行 `node --test test/context-compact.test.mjs test/agent-loop.test.mjs`（42/42）；在 `tools/cocos-agent-bridge/mcp` 使用 `--test-name-pattern` 运行 `deepseek-agent.test.mjs` 与 `assistant-recovery-store.test.mjs` 中相关测试（6/6）。这两组结果作为自动测试证据单独保存，不计为 Creator 实机验收。
+
+### 2026-10-11 历史实现与验收边界
+
 `tools/cocos-agent-bridge/mcp` 的 `npm test` 为 **69/69** 通过；包含逐轮选择上下文刷新、项目约定读取前置条件、读取后哈希陈旧拒绝且不再执行写入、整包升级保留回滚副本，以及暂存失败不改动已安装扩展。语法检查与 `git diff --check` 通过。LinkUpClient 磁盘包升级器回执为 0.3.3 → 0.3.4，并成功保留 0.3.3 回滚目录。自动化不证明 Creator 面板已发送上下文、Creator 已加载新扩展、非空选择传递或模型实际读取 `AGENTS.md`。
 
 本次桌面通道确认 Mac 处于锁屏，无法在 Creator 中关闭/重载扩展或执行上述实机步骤。磁盘升级已从 0.3.1 安全更新到 0.3.3，再更新到 0.3.4；两次升级均保留旧包。最终只读回读确认 extension 0.3.4 / MCP 0.3.3 / skills 0.3.2，工程原有 `Art.meta` 删除保持不变，项目另有当前包和回滚目录。Creator 可能仍在内存中运行旧代码；重载后才可验收新实现。未声称面板运行态升级成功。实机轨迹完成后，将本文件的证据状态和 `cocos-agent-real-project-development-plan.md` 状态表一起更新。
