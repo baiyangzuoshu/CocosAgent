@@ -2,6 +2,7 @@ import type { AgentGoalCriterion, AgentReceipt, AgentPolicyToolContext, JsonObje
 import { creatorTaskCriteria, verifyCreatorTaskReceipt } from './creator-task-acceptance.js';
 import { evaluateGoalEvidence } from './task-system.js';
 import { validateCreatorTargets, type CreatorExpectedTarget } from './creator-targets.js';
+import type { CreatorTaskIntent } from './creator-task-intent.js';
 
 export type CreatorPlanStepKind = 'read' | 'write' | 'restore' | 'runtime' | 'interaction' | 'memory';
 export interface CreatorPlanAcceptanceContext {
@@ -13,6 +14,8 @@ export interface CreatorPlanAcceptanceContext {
     priorEvidence: CreatorPlanEvidence[];
     targets?: CreatorExpectedTarget[];
     finalTargets?: CreatorExpectedTarget[];
+    /** Validated against the original user task by the native Host, never a plan-step paraphrase. */
+    intent?: CreatorTaskIntent;
 }
 export interface CreatorPlanEvidence {
     callId: string;
@@ -114,7 +117,7 @@ export function createCreatorPlanAcceptance(context: CreatorPlanAcceptanceContex
         ...context.requiredTools.map((name, index) => ({ id: `plan-tool-${index + 1}`, description: `本步骤取得 ${name} 的成功回执`,
             requiredTools: [name], receiptRequirement: 'creator-plan-current-tool' })),
         ...business.map((item) => ({ ...item, id: `plan-step-${item.id}` })),
-        ...(context.finalStep ? creatorTaskCriteria(context.userTask, context.finalTargets || targets).map((item) => ({ ...item, id: `plan-root-${item.id}`,
+        ...(context.finalStep ? creatorTaskCriteria(context.userTask, context.finalTargets || targets, context.intent).map((item) => ({ ...item, id: `plan-root-${item.id}`,
             description: `整项计划：${item.description}` })) : []),
     ];
     const verify = (criterion: AgentGoalCriterion, receipt: AgentReceipt, receipts: AgentReceipt[]): boolean => {

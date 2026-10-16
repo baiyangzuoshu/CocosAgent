@@ -8,6 +8,7 @@ import { CreatorTaskSystem, CreatorTaskToolRegistry, evaluateGoalEvidence, type 
 import { creatorTaskCriteria, verifyCreatorTaskReceipt } from './creator-task-acceptance.js';
 import { CreatorRecoveryRegistry, type CreatorRecoveryPersistence } from './creator-recovery.js';
 import { createCreatorPlanAcceptance, creatorPlanToolAllowed, type CreatorPlanAcceptanceContext } from './creator-plan-acceptance.js';
+import { creatorIntentToolAllowed, requestCreatorTaskIntent, type CreatorTaskIntent } from './creator-task-intent.js';
 import type {
     AgentEvent,
     AgentPolicyToolContext,
@@ -225,14 +226,42 @@ async function runCreatorMode(options: CreatorAssistantModeRunOptions): Promise<
     }) : null;
     const registry = memory ? new CreatorMemoryToolRegistry(cocosRegistry, memory, () => cocosRegistry.canWrite) : cocosRegistry;
     const memoryTools = memory?.tools() || [];
-    const planAcceptance = options.mode === 'Agent' && options.planAcceptance ? createCreatorPlanAcceptance(options.planAcceptance) : null;
+    let intent: CreatorTaskIntent | undefined;
+    const pendingRecovery = options.mode === 'Agent' && options.recoveryStore ? (await options.recoveryStore.load()).pending : null;
+    // Exact unresolved-operation recovery must stay available even if task interpretation fails.
+    if (options.mode === 'Agent' && !pendingRecovery) {
+        try {
+            const originalTask = options.planAcceptance?.userTask || options.task;
+            intent = await requestCreatorTaskIntent(provider, originalTask, options.mode, options.signal);
+            creatorTaskCriteria(originalTask, undefined, intent); // Validate source scope before exposing task tools.
+            options.writeEvent(options.tracePath, { event: 'task.intent', runId, kind: intent.kind,
+                targets: intent.targets, reads: intent.reads, verification: intent.verification }, options.apiKey);
+            options.onEvent({ type: 'task.intent', runId, kind: intent.kind, targets: intent.targets,
+                reads: intent.reads, verification: intent.verification });
+            if (intent.kind === 'clarify') throw new Error('CREATOR_TASK_CLARIFICATION_REQUIRED');
+        } catch (error) {
+            const cancelled = options.signal?.aborted === true;
+            const invalid = error instanceof Error && error.message.startsWith('CREATOR_');
+            const reason = cancelled ? 'cancelled' : invalid ? 'task-intent-needs-clarification' : 'task-intent-model-error';
+            const finalText = cancelled ? null : intent?.kind === 'clarify' ? intent.question
+                : invalid ? '无法可靠核对任务类型、原始要求和目标。请明确要解释、只读检查还是实际修改，并说明对象与目标值。'
+                    : '任务理解阶段的模型请求失败，任务工具尚未执行。请检查模型连接后重试。';
+            options.writeEvent(options.tracePath, { event: 'run.stop', runId, status: cancelled ? 'cancelled' : 'stopped', reason }, options.apiKey);
+            return { runId, mode: options.mode, status: cancelled ? 'cancelled' : 'stopped', reason, finalText,
+                tracePath: options.tracePath, toolCalls: setupReceipts.length, availableToolNames,
+                receipts: setupReceipts.map((receipt) => ({ ...receipt, ...receipt.result })), messages: initialHistory,
+                contextCompactions: [], executionChecklist: [] };
+        }
+    }
+    const reviewedPlan = options.planAcceptance ? { ...options.planAcceptance, ...(intent ? { intent } : {}) } : undefined;
+    const planAcceptance = options.mode === 'Agent' && reviewedPlan ? createCreatorPlanAcceptance(reviewedPlan) : null;
     const acceptanceCriteria = options.mode === 'Agent'
-        ? planAcceptance ? planAcceptance.criteria : options.goalCriteria?.length ? options.goalCriteria : creatorTaskCriteria(options.task) : [];
+        ? planAcceptance ? planAcceptance.criteria : options.goalCriteria?.length ? options.goalCriteria : creatorTaskCriteria(options.task, undefined, intent) : [];
     const verifyReceipt = planAcceptance?.verify || verifyCreatorTaskReceipt;
     const acceptanceReceipts = (receipts: AgentReceipt[]) => planAcceptance
         ? planAcceptance.receipts([...setupAgentReceipts, ...receipts])
         : [...setupAgentReceipts, ...receipts];
-    const taskSystem = options.mode === 'Agent' && options.taskPersistence
+    const taskSystem = options.mode === 'Agent' && options.taskPersistence && acceptanceCriteria.length > 0
         ? new CreatorTaskSystem(options.taskPersistence, verifyReceipt) : null;
     let activeTaskId = options.taskId;
     if (taskSystem && !activeTaskId) {
@@ -296,6 +325,7 @@ async function runCreatorMode(options: CreatorAssistantModeRunOptions): Promise<
                 'Read-only results and starting preview never prove a requested content change. Read back the final target UUID/hash and expected fields after the last write, and query the matching operation ledger.',
                 'Do not repeat or create unrelated writes to satisfy a missing condition. If a required capability is absent, report the blocker. Initial preview observations cannot prove clicks or network behavior; do not invent interaction evidence.',
             ].join('\n') : '',
+            intent ? `Validated task interpretation (a proposal, not approval): ${JSON.stringify(intent)}\nObey the original request and each normal approval/recovery gate. Explanations and reads do not authorize mutations.` : '',
         ].filter(Boolean).join('\n\n'),
         toolCatalog: options.mode === 'Plan' || options.mode === 'Agent' ? fullToolCatalog : '',
         approveWrite: async ({ tool, arguments: args }) => options.approveWrite
@@ -309,14 +339,32 @@ async function runCreatorMode(options: CreatorAssistantModeRunOptions): Promise<
             if (!policy) throw new Error('CREATOR_AGENT_RUN_POLICY_MISSING');
             return {
                 ...policy,
+                filterTools(tools: Parameters<NonNullable<typeof policy.filterTools>>[0], mode: AgentMode) {
+                    const available = policy.filterTools?.(tools, mode) || tools;
+                    if (!intent || policy.recoveryRequired?.()) return available;
+                    return available.filter((tool) => creatorIntentToolAllowed(intent, { tool, arguments: {}, receipts: [], availableTools: available }));
+                },
                 async beforeTool(context: AgentPolicyToolContext) {
                     const decision = await policy.beforeTool?.(context);
                     if (decision?.action === 'block') return decision;
+                    if (intent && !creatorIntentToolAllowed(intent, context)) return {
+                        action: 'block' as const, code: 'TASK_INTENT_WRITE_NOT_AUTHORIZED', continue: false,
+                        message: '当前任务仅授权解释/读取或指定类别的修改；模型不能扩大写入范围。', reason: 'task-intent-write-not-authorized',
+                    };
                     if (options.planAcceptance && !creatorPlanToolAllowed(options.planAcceptance, context)) {
                         return { action: 'block' as const, code: 'PLAN_TOOL_OUT_OF_SCOPE', continue: true,
                             message: '该工具或写入不属于当前批准步骤。报告缺少的验收条件；不得重复前序写入以满足整项计划。' };
                     }
                     return decision || { action: 'allow' as const };
+                },
+                async onAssistantStop(context: Parameters<NonNullable<typeof policy.onAssistantStop>>[0]) {
+                    const decision = await policy.onAssistantStop?.(context);
+                    if (intent?.kind === 'explain' && !planAcceptance && !policy.recoveryRequired?.()
+                        && context.message.content?.trim() && !acceptanceCriteria.length
+                        && (!decision || decision.action === 'finish' && decision.reason === 'missing-successful-task-receipt')) {
+                        return { action: 'finish' as const, reason: context.finishReason === 'length' ? 'model-output-truncated' : 'completed' };
+                    }
+                    return decision;
                 },
                 async evaluateGoal({ goal, receipts }: { goal: AgentGoal; receipts: AgentReceipt[] }) {
                     const evidenceReceipts = acceptanceReceipts(receipts);
@@ -384,12 +432,12 @@ async function runCreatorMode(options: CreatorAssistantModeRunOptions): Promise<
         mode: options.mode,
         runId,
         history: initialHistory,
-        ...(options.mode === 'Agent' ? { goal: taskSystem && activeTaskId ? await taskSystem.goalForTask(activeTaskId)
+        ...(options.mode === 'Agent' && acceptanceCriteria.length ? { goal: taskSystem && activeTaskId ? await taskSystem.goalForTask(activeTaskId)
             : { taskId: runId, criteria: acceptanceCriteria, maxContinuationAttempts: 2 } } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
     });
 
-    const acceptance = options.mode === 'Agent' ? evaluateGoalEvidence({ taskId: activeTaskId || runId,
+    const acceptance = options.mode === 'Agent' && acceptanceCriteria.length ? evaluateGoalEvidence({ taskId: activeTaskId || runId,
         criteria: acceptanceCriteria }, acceptanceReceipts(result.receipts), verifyReceipt) : undefined;
     const progress = taskSystem && activeTaskId ? await taskSystem.recordReceipts(activeTaskId, acceptanceReceipts(result.receipts),
         result.status === 'completed' && acceptance?.satisfied === true && result.goalEvaluation?.satisfied === true) : undefined;

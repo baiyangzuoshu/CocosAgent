@@ -5,6 +5,7 @@ import type {
     ModelProvider,
     ModelResponse,
 } from './contracts.js';
+import { ProviderError } from './contracts.js';
 
 export interface DeepSeekProviderOptions {
     apiKey: string;
@@ -33,10 +34,6 @@ function isContextLimitMessage(value: string): boolean {
     return /context_length_exceeded|maximum context|context.{0,20}(?:length|limit|window)|prompt.{0,30}(?:too long|too many tokens)|reduce.{0,30}(?:tokens|length)/i.test(value);
 }
 
-function providerError(message: string, code?: string): Error {
-    return Object.assign(new Error(message), code ? { code } : {});
-}
-
 function isRecord(value: unknown): value is JsonObject {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -49,6 +46,15 @@ function endpoint(baseUrl: string): string {
         throw new TypeError('DeepSeek base URL must use HTTPS and omit credentials, query, and fragment.');
     }
     return `${parsed.origin}${parsed.pathname.replace(/\/$/, '')}/chat/completions`;
+}
+
+function httpProviderError(status: number, message: string): ProviderError {
+    if (status === 429) return new ProviderError('PROVIDER_RATE_LIMIT', 'Provider rate limit reached.', { provider: 'deepseek', status });
+    if (status === 401 || status === 403) return new ProviderError('PROVIDER_AUTHENTICATION', 'Provider authentication failed.', { provider: 'deepseek', status });
+    if (status === 400 && isContextLimitMessage(message)) {
+        return new ProviderError('PROVIDER_CONTEXT_LIMIT', 'Provider rejected the request because its context limit was exceeded.', { provider: 'deepseek', status });
+    }
+    return new ProviderError('PROVIDER_REQUEST_FAILED', `Provider request failed with HTTP ${status}.`, { provider: 'deepseek', status });
 }
 
 function providerMessages(messages: AgentMessage[]): JsonObject[] {
@@ -82,12 +88,12 @@ function parseToolCalls(raw: unknown): ModelResponse['message']['toolCalls'] {
     if (!Array.isArray(raw)) return undefined;
     const calls = raw.map((item: OpenAiToolCall) => {
         if (typeof item?.id !== 'string' || !item.id || typeof item.function?.name !== 'string') {
-            throw new Error('DeepSeek returned an invalid tool call.');
+            throw new ProviderError('PROVIDER_INVALID_RESPONSE', 'Provider returned an invalid tool call.', { provider: 'deepseek' });
         }
         let args: unknown;
         try { args = typeof item.function.arguments === 'string' ? JSON.parse(item.function.arguments) : item.function.arguments; }
-        catch { throw new Error('DeepSeek returned malformed tool arguments.'); }
-        if (!isRecord(args)) throw new Error('DeepSeek tool arguments must be a JSON object.');
+        catch { throw new ProviderError('PROVIDER_INVALID_RESPONSE', 'Provider returned malformed tool arguments.', { provider: 'deepseek' }); }
+        if (!isRecord(args)) throw new ProviderError('PROVIDER_INVALID_RESPONSE', 'Provider tool arguments must be a JSON object.', { provider: 'deepseek' });
         return { id: item.id, name: item.function.name, arguments: args };
     });
     return calls;
@@ -133,25 +139,22 @@ export class DeepSeekProvider implements ModelProvider {
                 signal,
             });
         } catch {
-            if (input.signal?.aborted) throw new Error('USER_CANCELLED');
-            throw new Error('DEEPSEEK_NETWORK_ERROR');
+            if (input.signal?.aborted) throw new ProviderError('PROVIDER_CANCELLED', 'Provider request was cancelled.', { provider: 'deepseek' });
+            throw new ProviderError('PROVIDER_NETWORK_ERROR', 'Provider network request failed.', { provider: 'deepseek' });
         }
 
         let body: unknown;
         try { body = await response.json(); }
-        catch { throw new Error('DeepSeek returned a malformed response.'); }
-        if (!isRecord(body)) throw new Error('DeepSeek returned a malformed response.');
+        catch { throw new ProviderError('PROVIDER_INVALID_RESPONSE', 'Provider returned a malformed response.', { provider: 'deepseek', status: response.status }); }
+        if (!isRecord(body)) throw new ProviderError('PROVIDER_INVALID_RESPONSE', 'Provider returned a malformed response.', { provider: 'deepseek', status: response.status });
         const parsedBody = body as OpenAiResponse;
         if (!response.ok) {
             const message = typeof parsedBody.error?.message === 'string' ? parsedBody.error.message : '';
-            if (response.status === 400 && isContextLimitMessage(message)) {
-                throw providerError('DEEPSEEK_CONTEXT_TOO_LONG', 'DEEPSEEK_CONTEXT_TOO_LONG');
-            }
-            throw new Error(`DeepSeek request failed with HTTP ${response.status}.`);
+            throw httpProviderError(response.status, message);
         }
         const choice = (body as OpenAiResponse).choices?.[0];
         const message = choice?.message;
-        if (!message || typeof message !== 'object') throw new Error('DeepSeek response is missing its assistant message.');
+        if (!message || typeof message !== 'object') throw new ProviderError('PROVIDER_INVALID_RESPONSE', 'Provider response is missing its assistant message.', { provider: 'deepseek' });
         const content = typeof message.content === 'string' ? message.content : null;
         const toolCalls = parseToolCalls(message.tool_calls);
         return {
@@ -186,13 +189,17 @@ export class DeepSeekProvider implements ModelProvider {
                 signal,
             });
         } catch {
-            if (input.signal?.aborted) throw new Error('USER_CANCELLED');
-            throw new Error('DEEPSEEK_NETWORK_ERROR');
+            if (input.signal?.aborted) throw new ProviderError('PROVIDER_CANCELLED', 'Provider summary request was cancelled.', { provider: 'deepseek' });
+            throw new ProviderError('PROVIDER_NETWORK_ERROR', 'Provider summary network request failed.', { provider: 'deepseek' });
         }
         let body: unknown;
         try { body = await response.json(); }
-        catch { throw new Error('DeepSeek returned a malformed summary response.'); }
-        if (!isRecord(body) || !response.ok) throw new Error(`DeepSeek summary failed with HTTP ${response.status}.`);
+        catch { throw new ProviderError('PROVIDER_INVALID_RESPONSE', 'Provider returned a malformed summary response.', { provider: 'deepseek', status: response.status }); }
+        if (!isRecord(body)) throw new ProviderError('PROVIDER_INVALID_RESPONSE', 'Provider returned a malformed summary response.', { provider: 'deepseek', status: response.status });
+        if (!response.ok) {
+            const message = typeof (body as OpenAiResponse).error?.message === 'string' ? (body as OpenAiResponse).error!.message as string : '';
+            throw httpProviderError(response.status, message);
+        }
         const content = (body as OpenAiResponse).choices?.[0]?.message?.content;
         return typeof content === 'string' ? content.trim().slice(0, 2_400) : '';
     }

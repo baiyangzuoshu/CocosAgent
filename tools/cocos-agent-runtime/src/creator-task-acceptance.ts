@@ -1,11 +1,14 @@
 import type { AgentGoalCriterion, AgentReceipt, JsonObject } from './contracts.js';
 import { creatorNodeField, literalCreatorTargets, matchesCreatorTarget, validateCreatorTargets, type CreatorExpectedTarget } from './creator-targets.js';
+import { creatorActionText, parseCreatorTaskIntent, type CreatorTaskIntent } from './creator-task-intent.js';
 
 const READ_TOOLS = ['cocos_2x_scene_snapshot', 'cocos_2x_scene_node_inspect', 'cocos_2x_script_read',
-    'cocos_2x_asset_search_png', 'cocos_2x_operation_get', 'cocos_2x_script_operation_get', 'cocos_2x_runtime_observe', 'cocos_2x_command_execute'];
+    'cocos_2x_asset_search_png', 'cocos_2x_operation_get', 'cocos_2x_script_operation_get', 'cocos_2x_runtime_observe',
+    'cocos_2x_command_execute', 'cocos_2x_memory_search', 'cocos_2x_memory_get', 'cocos_2x_memory_operation_get'];
 const REQUESTABLE_READ_TOOLS = [
     'cocos_2x_instances_list', 'cocos_2x_instances_get', 'cocos_2x_capabilities_list', 'cocos_2x_skills_list',
-    'cocos_2x_skill_read', 'cocos_2x_skill_reference_read', 'cocos_2x_project_instructions_read'];
+    'cocos_2x_skill_read', 'cocos_2x_skill_reference_read', 'cocos_2x_project_instructions_read',
+    'cocos_2x_memory_search', 'cocos_2x_memory_get', 'cocos_2x_memory_operation_get'];
 const WRITE_TOOLS = ['cocos_2x_command_execute', 'cocos_2x_script_patch'];
 const LEDGER_TOOLS = ['cocos_2x_operation_get', 'cocos_2x_script_operation_get'];
 const READBACK_TOOLS = [...LEDGER_TOOLS, 'cocos_2x_scene_node_inspect', 'cocos_2x_script_read', 'cocos_2x_command_execute'];
@@ -60,18 +63,39 @@ function requestedReadCriteria(task: string): AgentGoalCriterion[] {
 }
 
 /** Conservative scope recognition. Unknown requests require clarification, never a generic successful receipt. */
-export function creatorTaskCriteria(task: string, approvedTargets?: CreatorExpectedTarget[]): AgentGoalCriterion[] {
-    const value = removeNegatedScopes(task);
-    const read = /只读|只讀|read[ -]only|\b(?:read|inspect|check|query|analy[sz]e|explain|summari[sz]e|list|show|verify)\b|(?:阅读|读取|查看|检查|查询|分析|解释|总结|列出|核对)/i.test(value);
-    const restore = /补偿|恢复|撤销|回滚|\bcompensate\b|\brestore\b|\bundo\b|\brollback\b/i.test(value);
-    const contentScope = value.replace(/(?:删除|修改|更新|纠正|压缩|整合|合并|整理)(?:这条|该|一条|所有|项目)?记忆|\b(?:delete|remove|modify|update|correct|compact|consolidate|merge|organize)\s+(?:the\s+|this\s+|project\s+)?memory\b/gi, '');
-    const modifies = restore || /写入|保存|创建|新建|新增|增加|添加|制作|搭建|修改|改名|重命名|改为|改成|更新|删除|实现|修复|重构|移动|调整|替换|实例化|生成|导入|做一个|建一个|帮我做|\b(?:write|save|create|make|build|add|modify|change|rename|update|delete|remove|implement|fix|refactor|move|replace|instantiate|import)\b/i.test(contentScope);
-    const memoryMutation = /记住|忘记|(?:删除|修改|更新|纠正|压缩|整合|合并|整理).*记忆|\bremember\b|\bforget\b|\b(?:delete|remove|modify|update|correct|compact|consolidate|merge|organize).*\bmemory\b/i.test(value);
+export function creatorTaskCriteria(task: string, approvedTargets?: CreatorExpectedTarget[], proposal?: CreatorTaskIntent): AgentGoalCriterion[] {
+    const intent = proposal ? parseCreatorTaskIntent(proposal, task) : undefined;
+    const value = creatorActionText(removeNegatedScopes(task));
+    const inferredRead = /只读|只讀|read[ -]only|\b(?:read|inspect|check|query|analy[sz]e|explain|summari[sz]e|list|show|verify)\b|(?:阅读|读取|查看|检查|查询|分析|解释|总结|列出|核对)/i.test(value);
+    const inferredRestore = /补偿|恢复|撤销|回滚|\bcompensate\b|\brestore\b|\bundo\b|\brollback\b/i.test(value);
+    const inferredMemory = /记住|忘记|(?:创建|新建|新增|添加|保存|写入|记录|删除|修改|更新|纠正|压缩|整合|合并|整理).*记忆|\bremember\b|\bforget\b|\b(?:create|save|write|delete|remove|modify|update|correct|compact|consolidate|merge|organize).*\bmemory\b/i.test(value);
+    const contentScope = value.replace(/(?:记住|忘记|删除|修改|更新|纠正|压缩|整合|合并|整理|创建|新建|新增|增加|添加|保存|写入|记录)(?:这条|该|一条|所有|项目|临时|测试|工程)?(?:\s+[A-Za-z0-9_-]+)?\s*记忆|\b(?:remember|forget|create|save|write|delete|remove|modify|update|correct|compact|consolidate|merge|organize)\s+(?:the\s+|this\s+|project\s+)?memory\b/gi, '');
+    const inferredContentModifies = inferredRestore || literalCreatorTargets(contentScope).length > 0
+        || /写入|保存|创建|新建|新增|增加|添加|制作|搭建|修改|改名|重命名|改为|改成|更新|删除|实现|修复|重构|移动|调整|替换|实例化|生成|导入|做一个|建一个|帮我做|\b(?:write|save|create|make|build|add|modify|change|rename|update|delete|remove|implement|fix|refactor|move|replace|instantiate|import)\b/i.test(contentScope);
+    const inferredModifies = inferredContentModifies || inferredMemory;
+    if (intent && ['read', 'explain'].includes(intent.kind) && (inferredModifies || inferredMemory)) throw new Error('CREATOR_TASK_INTENT_DOWNGRADED');
+    if (intent && ['write', 'mixed', 'restore', 'memory'].includes(intent.kind)
+        && (!value.trim() || inferredRead && !inferredModifies && !inferredMemory)) throw new Error('CREATOR_TASK_INTENT_NOT_AUTHORIZED');
+    if (intent && inferredMemory && !inferredContentModifies && intent.kind !== 'memory' && intent.kind !== 'clarify'
+        || intent?.kind === 'memory' && inferredContentModifies) throw new Error('CREATOR_TASK_INTENT_SCOPE_MISMATCH');
+    if (intent && intent.kind !== 'clarify' && (inferredRestore && intent.kind !== 'restore'
+        || inferredMemory && !inferredModifies && intent.kind !== 'memory'
+        || intent.kind === 'memory' && !inferredMemory)) throw new Error('CREATOR_TASK_INTENT_SCOPE_MISMATCH');
+    if (intent?.kind === 'clarify') return [criterion('request-scope', intent.question, READ_TOOLS, 'creator-scope-unknown')];
+    const read = intent ? ['read', 'mixed'].includes(intent.kind) || intent.reads.length > 0 : inferredRead;
+    const restore = intent ? intent.kind === 'restore' : inferredRestore;
+    const modifies = intent ? ['write', 'mixed', 'restore'].includes(intent.kind) : inferredModifies;
+    const memoryMutation = intent ? intent.kind === 'memory' : inferredMemory && !inferredContentModifies;
     const explicitReads = requestedReadCriteria(value);
-    if (memoryMutation && !modifies) {
+    for (const name of intent?.reads || []) if (!explicitReads.some((item) => item.requiredTools.includes(name))) {
+        explicitReads.push(criterion(`intent-read-${explicitReads.length + 1}`, `取得 ${name} 的本轮成功回执`, [name],
+            REQUESTABLE_READ_TOOLS.includes(name) ? 'creator-requested-read' : 'creator-read'));
+    }
+    if (intent?.kind === 'explain' || !intent && !value.trim()) return [];
+    if (memoryMutation) {
         const requirements = [criterion('memory-mutation', '取得经批准、已持久化的记忆变更回执', MEMORY_WRITES, 'creator-memory-write')];
         if (read) requirements.unshift(...(explicitReads.length ? explicitReads
-            : [criterion('requested-read', '取得本次只读检查所需的 Creator 内容回执', READ_TOOLS, 'creator-read')]));
+            : [criterion('requested-read', '取得本次记忆变更所需的记忆或项目上下文只读回执', [...READ_TOOLS, ...REQUESTABLE_READ_TOOLS], 'creator-read')]));
         return requirements;
     }
     // A read prefix must not downgrade a mixed inspect-and-create request.
@@ -95,8 +119,10 @@ export function creatorTaskCriteria(task: string, approvedTargets?: CreatorExpec
         ...criterion(`requested-target-${index + 1}`, `核对目标 ${target.target} 的 ${target.field} = ${String(target.equals)}`.slice(0, 280), READBACK_TOOLS, 'creator-user-target'), expectation: target,
     })) : [criterion('requested-target-unbound', '最终目标尚未绑定：请在 Plan 中审阅目标 UUID/路径、字段和预期值，不能仅凭写入回执宣告完成', READBACK_TOOLS, 'creator-scope-unknown')]));
     const compileOnly = /仅编译|只需编译|不要运行|无需运行|不验证运行|不预览|不要预览|无需预览|\bcompile only\b|\bdo not run\b|\bno preview\b/i.test(task);
-    const functional = /点击|按钮|网络|连接|登录|存档|交互|玩法|碰撞|\b(?:click|button|network|connect|login|save game|interactive|gameplay|collision)\b/i.test(task);
-    const visual = /界面|弹窗|窗口|场景|预览|运行|脚本|代码|\b(?:ui|gui|dialog|popup|scene|preview|runtime|script|code)\b|\.[jt]s\b/i.test(task);
+    const functional = /点击|按钮|网络|连接|登录|存档|交互|玩法|碰撞|\b(?:click|button|network|connect|login|save game|interactive|gameplay|collision)\b/i.test(value)
+        || intent?.verification === 'interaction';
+    const visual = /界面|弹窗|窗口|场景|预览|运行|脚本|代码|\b(?:ui|gui|dialog|popup|scene|preview|runtime|script|code)\b|\.[jt]s\b/i.test(value)
+        || intent?.verification === 'runtime';
     if (!restore && !compileOnly && (functional || visual)) {
         requirements.push(criterion('runtime-observed', '写入后观察相同场景/目标：帧推进、无捕获错误、截图可用；需要预览验收的操作须按相同 operationId 验收',
             ['cocos_2x_runtime_observe'], 'creator-runtime'));

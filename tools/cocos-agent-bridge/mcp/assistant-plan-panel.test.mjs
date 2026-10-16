@@ -227,12 +227,16 @@ test('panel exposes safe cancellation, expected diff details, and exact-operatio
 
     const operationId = '11111111-1111-4111-8111-111111111111';
     panel.renderRecentRun({ id: 'run-id', conversationId: 'conversation-id', task: 'Edit button logic', mode: 'Agent',
-        status: 'needs-review', activeTool: { toolName: 'cocos_2x_script_patch', access: 'write-approved', operationId },
+        status: 'needs-review', taskIntent: { kind: 'mixed', targets: [{ target: 'Canvas/Foo', field: 'node.position.x', equals: 200 }], verification: 'runtime' },
+        activeTool: { toolName: 'cocos_2x_script_patch', access: 'write-approved', operationId },
         receipts: [{ toolName: 'cocos_2x_script_patch_plan', access: 'read', operationId,
             expectedDiff: [{ before: 'old();', after: 'new();' }] }] });
     const card = panel._runCards.get('run-id');
     assert.ok(card.children.some((child) => child.className === 'diff-details'));
     const effects = card.children.find((child) => child.className === 'run-effects');
+    const intent = card.children.find((child) => child.className === 'run-meta' && child.textContent.includes('任务理解建议'));
+    assert.match(intent.textContent, /读写混合/);
+    assert.match(intent.textContent, /不代表批准或完成/);
     assert.match(effects.textContent, /中断时正在执行/);
     assert.match(effects.textContent, /结果尚未读回/);
     const recover = card.children.find((child) => child.className === 'run-recover');
@@ -258,6 +262,8 @@ test('panel explains context compaction and stops when required state exceeds th
         compactedToolResults: 2,
         outstandingAcceptance: [{ key: 'operationId=op-1', kind: 'preview', status: 'needs-preview' }],
     } }));
+    panel.receiveMessage(JSON.stringify({ type: 'task.intent', requestId: 'active-request', kind: 'write',
+        targets: [{ target: 'Canvas/Foo', field: 'node.position.x', equals: 200 }] }));
     panel.receiveMessage(JSON.stringify({ type: 'context.budget-exceeded', requestId: 'active-request', report: {
         estimatedTokens: 4_200, maxEstimatedTokens: 4_000,
     } }));
@@ -265,6 +271,8 @@ test('panel explains context compaction and stops when required state exceeds th
     assert.match(activities[0], /6 次旧工具调用/);
     assert.match(activities[0], /另缩短 2 条只读回执/);
     assert.match(activities[0], /保留 1 个操作身份和 1 项待验收\/恢复状态/);
-    assert.match(activities[1], /4200 \/ 4000 tokens/);
-    assert.match(activities[1], /停止后续模型调用/);
+    assert.match(activities[1], /任务理解建议：修改/);
+    assert.match(activities[1], /不代表批准或完成/);
+    assert.match(activities[2], /4200 \/ 4000 tokens/);
+    assert.match(activities[2], /停止后续模型调用/);
 });

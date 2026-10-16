@@ -1,6 +1,6 @@
 # CocosAgent 上下文预算与压缩 0.1
 
-日期：2026-10-12。适用范围：Creator 原生 Agent 的 TypeScript 内核；当前产品路径为 Cocos Creator 2.4.15。
+日期：2026-10-12；Host 会话摘要更新：2026-10-16。适用范围：Creator 原生 Agent 的 TypeScript 内核与 Host；当前产品路径为 Cocos Creator 2.4.15。
 
 ## 目标
 
@@ -20,6 +20,7 @@
 6. 待预览、待运行验收、待审核/恢复或缺回执交互不作为普通旧历史丢弃。缺失、重复、工具名不符或先后次序异常的 call/result 不会作为畸形消息对发给 Provider；摘要会明确记录配对状态和对应 operation ID。Agent 从本轮完整 receipt 中提取身份与状态，避免大回执被 Provider 消息的 100 KB 预览截断后丢失关键字段。恢复锁定期间，Creator policy 仍只允许精确恢复工具；证据读取不会绕过此限制。
 7. 工具结果缩减在历史摘要之前进行；运行记录及完整 receipts 不被压缩器原地修改。压缩报告继续记录省略结果的精确身份与验收状态，必要时模型再读取档案原文证据。
 8. 压缩后仍超本地预算时，内核停止本轮，不发 Provider 请求、不执行后续工具；回执和不确定写入状态仍留在结果及操作记录中。若 Provider 明确返回 context-length overflow，内核将本轮预算降至原预算的 65%，再压缩并重试一次；第二次 overflow 或较小预算仍装不下时停止。其他 Provider 错误不重试。面板收到压缩来源、`context.compacted` 或 `context.budget-exceeded` 事件。
+9. Assistant Host 另按 conversation ID 持久化摘要，在最近消息窗口裁剪前更新，Host 从工程隔离状态存储恢复后继续携带。摘要保存 Provider/确定性摘要正文、覆盖消息数、摘要来源与源哈希，并最多保留最近 24 条用户消息的 1,200 字符原文片段。原文片段不授予权限；若精确回忆所需文本不在片段内或已截断，模型必须说明无法从留存来源确认，不能从模型摘要猜测。摘要/片段只属于对话上下文，不是项目长期记忆。
 
 ## 完整轨迹与展示
 
@@ -27,11 +28,11 @@
 - `ContextCompactionReport` 记录压缩前后估算预算、折叠交互的 call/result ID、配对状态、工具、操作身份、验收摘要和未配对结果。Creator Host 将这些摘要事件写入本机 Agent 运行轨迹，并发送到 Creator 面板。
 - 结果档案保存在本机运行轨迹旁的 `<trace>.tool-results/`，按 run ID 和 call ID 双重核对；不写入游戏资产或 Git，不提供任意文件读取。每次运行有独立档案目录。
 - 面板显示压缩次数、折叠调用数、操作身份数和待验收/恢复项数；具体 operation ID 与状态在事件详情和本地轨迹内保留。
-- 本功能不是跨会话长期记忆，不替代 Creator 操作账本；Host 原有会话消息窗口仍独立受限。
+- 运行内压缩与跨 Host 恢复的会话摘要不是跨会话项目长期记忆，也不替代 Creator 操作账本；每段未压缩聊天仍受 24 条消息上限约束。
 
 ## 自动化验收与边界
 
-在 `tools/cocos-agent-runtime/` 执行 `npm test`：TypeScript 编译及 50 项 Node.js 测试通过。Creator Host 测试另有 81 项通过。针对性回归覆盖：
+在 `tools/cocos-agent-runtime/` 执行 `npm test`：TypeScript 编译、固定上游快照核验及 110 项 Node.js 测试通过。Creator Host/MCP/扩展测试另有 94 项通过。针对性回归覆盖：
 
 - 压缩后 call ID 与 result ID 成对、operation ID 保留、`needs-preview` 仍待验收；
 - 后续 `preview=passed` 清除对应的待验收状态，同时历史调用仍可追踪；
@@ -41,5 +42,8 @@
 - 压缩只修改 Provider 视图，运行结果仍返回原始完整消息；
 - 关键图片或未完成状态无法塞入预算时，停止 Provider 调用。
 - 51 项 Creator 工具目录在默认预算下可进入首轮请求，防止固定工具合同本身触发首轮超限。
+- Host 在裁剪前更新摘要、跨 state-store 重载继续携带摘要、原文用户约束片段独立于模型摘要保留；Provider 摘要失败/空响应转确定性回退，摘要不能作为授权或成功回执。
 
-Provider 摘要与 overflow 重试的 API 路径及 Creator 面板超预算/证据取回路径仍需原生实机验收。压缩阈值与图片估算仍是配置化启发值；只对 Provider 明确标记的上下文超限执行一次重试。运行归档保留策略随本机运行记录；尚无面板清理入口。
+2026-10-16 Creator 2.4.15 隔离工程的长会话预验收确实超过 24 条消息并在 Creator 界面重载后恢复对话，但旧 Host 摘要把早期精确约束 `KEEP-731` 错归纳为另一标记，重载后回答了错误标记 `MINT-4827`。这证明仅持久化模型摘要不足以支持精确历史回忆。本修复已将有界用户原文片段单独保存，并加入该失败形态的自动回归；新代码包已更新到隔离工程，但 Creator 当时的 Host 未退出，无法据界面重载声称新 Host 实机通过。Creator 主进程/Host 重启后，使用新的唯一标记重复长会话与回忆测试仍待完成。
+
+Provider 超限重试及 Creator 面板大型结果精确 call ID 取回路径仍需原生实机验收。压缩阈值与图片估算仍是配置化启发值；只对 Provider 明确标记的上下文超限执行一次重试。运行归档保留策略随本机运行记录；尚无面板清理入口。

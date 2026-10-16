@@ -5,6 +5,15 @@ import { hasPlanSetupReceipts } from '../../cocos-agent-bridge/mcp/assistant-pla
 
 const projectRoot = '/tmp/cocos-creator-adapter-project';
 
+function intentResponse(request, kind, reads = [], verification = 'none') {
+    const body = JSON.parse(request.body);
+    if (!body.messages[0]?.content.startsWith('COCOS_TASK_INTENT_V1')) return null;
+    assert.deepEqual(body.tools, []);
+    const { task } = JSON.parse(body.messages.at(-1).content);
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ version: 1,
+        task, kind, sourceQuotes: [task], reads, targets: [], verification, question: '' }) }, finish_reason: 'stop' }] }), { status: 200 });
+}
+
 function definition(name, readOnlyHint = true) {
     return {
         name,
@@ -177,6 +186,8 @@ test('Creator Agent persists approved project memory and recalls it in a later r
     const originalFetch = globalThis.fetch;
     let requestRound = 0;
     globalThis.fetch = async (_url, request) => {
+        const interpretation = intentResponse(request, 'memory');
+        if (interpretation) return interpretation;
         requestRound += 1;
         const body = JSON.parse(request.body);
         if (requestRound === 1) {
@@ -242,6 +253,8 @@ test('Creator Agent creates a durable project task and only closes it after succ
     let round = 0;
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async (_url, request) => {
+        const interpretation = intentResponse(request, 'read', ['cocos_2x_capabilities_list', 'cocos_2x_scene_snapshot']);
+        if (interpretation) return interpretation;
         round += 1;
         const body = JSON.parse(request.body);
         assert.ok(body.tools.some((tool) => tool.function.name === 'agent_task_list'));
@@ -282,7 +295,9 @@ test('free Agent modification requests cannot complete after scene inspection, w
         for (const { persistent, repeatTools } of [{ persistent: false, repeatTools: false },
             { persistent: true, repeatTools: false }, { persistent: false, repeatTools: true }]) {
             let round = 0, tasks = [];
-            globalThis.fetch = async () => {
+            globalThis.fetch = async (_url, request) => {
+                const interpretation = intentResponse(request, 'write', [], 'interaction');
+                if (interpretation) return interpretation;
                 round += 1;
                 const useTool = round === 1 || repeatTools;
                 return new Response(JSON.stringify({ choices: [{ message: useTool

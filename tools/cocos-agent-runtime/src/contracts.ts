@@ -2,6 +2,30 @@ export type AgentMode = 'Ask' | 'Plan' | 'Agent';
 export type ToolAccess = 'read' | 'write';
 export type ToolRole = 'setup' | 'task' | 'recovery' | 'todo' | 'context' | 'task-system';
 
+/** Provider-neutral failure categories shared by adapters and the agent loop. */
+export type ProviderErrorCode =
+    | 'PROVIDER_CONTEXT_LIMIT'
+    | 'PROVIDER_NETWORK_ERROR'
+    | 'PROVIDER_REQUEST_FAILED'
+    | 'PROVIDER_RATE_LIMIT'
+    | 'PROVIDER_AUTHENTICATION'
+    | 'PROVIDER_INVALID_RESPONSE'
+    | 'PROVIDER_CANCELLED';
+
+export class ProviderError extends Error {
+    readonly code: ProviderErrorCode;
+    readonly provider?: string;
+    readonly status?: number;
+
+    constructor(code: ProviderErrorCode, message: string, details: { provider?: string; status?: number } = {}) {
+        super(message);
+        this.name = 'ProviderError';
+        this.code = code;
+        if (details.provider !== undefined) this.provider = details.provider;
+        if (details.status !== undefined) this.status = details.status;
+    }
+}
+
 export type JsonObject = Record<string, unknown>;
 
 export interface AgentTool {

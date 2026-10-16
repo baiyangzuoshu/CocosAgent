@@ -169,6 +169,7 @@ function validateCreatorExtensionBundle(directory) {
         'scene.js',
         'panel/index.js',
         'assistant-runtime/tools/cocos-agent-bridge/mcp/assistant-host.mjs',
+        'assistant-runtime/tools/cocos-agent-bridge/mcp/assistant-conversation-summary.mjs',
         'assistant-runtime/tools/cocos-agent-bridge/mcp/assistant-memory-store.mjs',
         'assistant-runtime/tools/cocos-agent-bridge/mcp/assistant-tool-result-archive.mjs',
         'assistant-runtime/tools/cocos-agent-bridge/mcp/mcp-server.mjs',

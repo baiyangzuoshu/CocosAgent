@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { AgentKernel } from '../dist/agent-loop.js';
 import { prepareAgentContext } from '../dist/context-compact.js';
+import { ProviderError, DeepSeekProvider } from '../dist/index.js';
 
 function tool(name, access = 'read', role = 'task') {
     return { name, description: `${name} schema`, inputSchema: { type: 'object', properties: {}, additionalProperties: false }, access, role };
@@ -339,9 +340,7 @@ test('provider context overflow triggers exactly one retry after compaction', as
             complete: async () => {
                 attempts += 1;
                 if (attempts === 1) {
-                    const error = new Error('request context exceeds maximum');
-                    error.code = 'DEEPSEEK_CONTEXT_TOO_LONG';
-                    throw error;
+                    throw new ProviderError('PROVIDER_CONTEXT_LIMIT', 'Context exceeded.', { provider: 'synthetic-a' });
                 }
                 return { message: { role: 'assistant', content: 'Completed after bounded retry.' }, finishReason: 'stop' };
             },
@@ -355,4 +354,88 @@ test('provider context overflow triggers exactly one retry after compaction', as
     assert.equal(result.status, 'completed', result.reason);
     assert.equal(attempts, 2);
     assert.ok(result.contextCompactions.some((report) => report.maxEstimatedTokens === 4_000));
+});
+
+test('a repeated generic context-limit error stops after the single allowed retry', async () => {
+    let attempts = 0;
+    const kernel = new AgentKernel({
+        provider: {
+            complete: async () => {
+                attempts += 1;
+                throw new ProviderError('PROVIDER_CONTEXT_LIMIT', 'Context exceeded.', { provider: 'synthetic-b' });
+            },
+        },
+        tools: { listTools: async () => [], callTool: async () => ({}) },
+        policy: { approveWrite: async () => false },
+        contextBudget: { maxEstimatedTokens: 4_000, keepRecentMessages: 1, keepRecentToolInteractions: 1 },
+        systemPrompt: 'CocosAgent system instructions',
+    });
+    const result = await kernel.run({ task: 'Continue the project task.', mode: 'Ask' });
+    assert.equal(result.status, 'stopped');
+    assert.equal(result.reason, 'provider-context-limit-retry-exhausted');
+    assert.equal(attempts, 2);
+    assert.equal(result.receipts.length, 0);
+});
+
+test('non-context Provider failures do not trigger compaction retries', async () => {
+    let attempts = 0;
+    const kernel = new AgentKernel({
+        provider: { complete: async () => {
+            attempts += 1;
+            throw new ProviderError('PROVIDER_NETWORK_ERROR', 'Network unavailable.', { provider: 'synthetic' });
+        } },
+        tools: { listTools: async () => [], callTool: async () => ({}) },
+        policy: { approveWrite: async () => false },
+        systemPrompt: 'CocosAgent system instructions',
+    });
+    const result = await kernel.run({ task: 'Inspect the project.', mode: 'Ask' });
+    assert.equal(result.status, 'stopped');
+    assert.equal(result.reason, 'provider-error:provider_network_error');
+    assert.match(result.finalText, /Provider 网络请求失败/);
+    assert.equal(attempts, 1);
+    assert.equal(result.contextCompactions.length, 0);
+});
+
+test('cancellation during overflow compaction prevents the retry request', async () => {
+    const controller = new AbortController();
+    let completeCalls = 0;
+    let summaryCalls = 0;
+    const history = Array.from({ length: 14 }, (_, index) => ({
+        role: index % 2 === 0 ? 'user' : 'assistant',
+        content: `Historical note ${index}: ${`project detail ${index} `.repeat(220)}`,
+    }));
+    const kernel = new AgentKernel({
+        provider: {
+            summarizeContext: async () => {
+                summaryCalls += 1;
+                if (summaryCalls > 1) controller.abort();
+                return 'Compacted historical constraints.';
+            },
+            complete: async () => {
+                completeCalls += 1;
+                throw new ProviderError('PROVIDER_CONTEXT_LIMIT', 'Context exceeded.');
+            },
+        },
+        tools: { listTools: async () => [], callTool: async () => ({}) },
+        policy: { approveWrite: async () => false },
+        contextBudget: { maxEstimatedTokens: 4_000, keepRecentMessages: 1, keepRecentToolInteractions: 1 },
+        systemPrompt: 'CocosAgent system instructions',
+    });
+    const result = await kernel.run({ task: 'Continue the project task.', mode: 'Ask', history, signal: controller.signal });
+    assert.equal(result.status, 'cancelled');
+    assert.equal(result.reason, 'cancelled');
+    assert.equal(completeCalls, 1);
+    assert.ok(summaryCalls > 1);
+});
+
+test('DeepSeek context-limit responses are normalized to the generic ProviderError contract', async () => {
+    const provider = new DeepSeekProvider({
+        apiKey: 'test-api-key-valid', model: 'deepseek-flash',
+        fetcher: async () => new Response(JSON.stringify({ error: { message: 'maximum context length exceeded' } }), {
+            status: 400, headers: { 'content-type': 'application/json' },
+        }),
+    });
+    await assert.rejects(provider.complete({ messages: [{ role: 'user', content: 'hello' }], tools: [], mode: 'Ask' }),
+        (error) => error instanceof ProviderError && error.code === 'PROVIDER_CONTEXT_LIMIT'
+            && error.provider === 'deepseek' && error.status === 400);
 });

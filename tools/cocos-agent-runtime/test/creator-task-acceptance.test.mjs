@@ -95,6 +95,25 @@ test('preview startup, memory writes, and unrelated successful tools cannot subs
     assert.equal(evaluate('Create an empty node', [fake, inspect()]).satisfied, false);
 });
 
+test('memory mutations with prerequisite reads require memory receipts, never scene or script write evidence', () => {
+    const task = '读取技能索引并搜索工程记忆，然后创建一条 workflow 记忆';
+    const intent = { version: 1, task, kind: 'memory', sourceQuotes: [task],
+        reads: ['cocos_2x_skills_list', 'cocos_2x_memory_search'], targets: [], verification: 'none', question: '' };
+    const criteria = creatorTaskCriteria(task, undefined, intent);
+    assert.ok(criteria.some((item) => item.receiptRequirement === 'creator-memory-write'));
+    assert.ok(criteria.some((item) => item.requiredTools.includes('cocos_2x_skills_list')));
+    assert.ok(criteria.some((item) => item.requiredTools.includes('cocos_2x_memory_search')));
+    assert.equal(criteria.some((item) => ['creator-content-write', 'creator-ledger', 'creator-readback', 'creator-compile']
+        .includes(item.receiptRequirement)), false);
+
+    const reads = [receipt('cocos_2x_skills_list', { success: true }), receipt('cocos_2x_memory_search', { success: true })];
+    const memory = receipt('cocos_2x_memory_remember', { success: true, outcome: 'remembered', operationId: operation }, 'write');
+    assert.equal(evaluateGoalEvidence({ taskId: 'task_memory_01', criteria }, [...reads, memory], verifyCreatorTaskReceipt).satisfied, true);
+    assert.equal(evaluateGoalEvidence({ taskId: 'task_memory_01', criteria }, reads, verifyCreatorTaskReceipt).satisfied, false);
+    const sceneOnly = write();
+    assert.equal(evaluateGoalEvidence({ taskId: 'task_memory_01', criteria }, [...reads, sceneOnly], verifyCreatorTaskReceipt).satisfied, false);
+});
+
 test('initial runtime screenshots never prove button or network behavior, even with fabricated interaction fields', () => {
     const change = write(), runtime = observe();
     runtime.result.structuredContent.runtime.interactionVerified = true;

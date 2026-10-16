@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { AgentKernel, CreatorRecoveryRegistry, createCreatorAgentPolicy, creatorTaskCriteria, verifyCreatorTaskReceipt,
-    evaluateGoalEvidence, evaluateCreatorPlanAcceptance, projectCreatorPlanEvidence, estimateContextTokens } from '../dist/index.js';
+    evaluateGoalEvidence, evaluateCreatorPlanAcceptance, projectCreatorPlanEvidence, estimateContextTokens, ProviderError } from '../dist/index.js';
 import { CreatorMemoryToolRegistry } from '../dist/project-memory.js';
 
 const tool = (name, access, role = 'task') => ({ name, access, role, description: name, inputSchema: { type: 'object' } });
@@ -118,7 +118,7 @@ test('context overflow retries with a smaller request and retains the smaller bu
         summarizeContext: async () => 'Earlier constraints only.',
         complete: async ({ messages, tools }) => {
             estimates.push(estimateContextTokens(messages, tools));
-            if (estimates.length === 1) throw Object.assign(new Error('too long'), { code: 'DEEPSEEK_CONTEXT_TOO_LONG' });
+            if (estimates.length === 1) throw new ProviderError('PROVIDER_CONTEXT_LIMIT', 'too long', { provider: 'synthetic' });
             if (estimates.length === 2) return { message: { role: 'assistant', content: null, toolCalls: [{ id: 'read-1', name: 'scene.read', arguments: {} }] }, finishReason: 'tool_calls' };
             return { message: { role: 'assistant', content: 'Read complete.' }, finishReason: 'stop' };
         },

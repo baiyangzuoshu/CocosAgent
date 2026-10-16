@@ -9,7 +9,8 @@ const MAX_PLANS = 32;
 const MAX_RUNS = 24;
 const MAX_MESSAGES = 24;
 const MAX_STRING = 8000;
-const MAX_STATE_BYTES = 1_500_000;
+const MAX_SUMMARY = 32_000;
+const MAX_STATE_BYTES = 2_500_000;
 const SECRET_KEY = /(?:api.?key|authorization|secret|password|credential|token|imageDataUrl|dataBase64|screenshot)/i;
 const SECRET_VALUE = /\b(?:sk-[A-Za-z0-9_-]{12,}|Bearer\s+[A-Za-z0-9._-]{12,})\b/g;
 
@@ -43,6 +44,25 @@ function normalizedState(input) {
                 role: message?.role === 'assistant' ? 'assistant' : 'user',
                 content: safeString(message?.content),
             })),
+            ...(item?.summary && typeof item.summary === 'object' && !Array.isArray(item.summary)
+                && Number.isSafeInteger(item.summary.revision) && item.summary.revision > 0
+                && Number.isSafeInteger(item.summary.coveredMessages) && item.summary.coveredMessages > 0
+                && /^[0-9a-f]{64}$/i.test(item.summary.sourceHash || '')
+                && ['provider', 'deterministic'].includes(item.summary.source)
+                && typeof item.summary.content === 'string' && item.summary.content.trim()
+                ? { summary: {
+                    version: 1,
+                    revision: item.summary.revision,
+                    coveredMessages: item.summary.coveredMessages,
+                    sourceHash: item.summary.sourceHash.toLowerCase(),
+                    source: item.summary.source,
+                    content: safeString(item.summary.content, MAX_SUMMARY),
+                    preservedUserMessages: (Array.isArray(item.summary.preservedUserMessages)
+                        ? item.summary.preservedUserMessages : []).filter((message) => typeof message === 'string')
+                        .slice(-24).map((message) => safeString(message, 1_200)).filter(Boolean),
+                    updatedAt: safeString(item.summary.updatedAt, 40),
+                } }
+                : {}),
         })).filter((item) => item.id),
         plans: plans.map((item) => safeValue(item)).filter((item) => item && typeof item.id === 'string' && item.id),
         runs: runs.map((item) => safeValue(item)).filter((item) => item && typeof item.id === 'string' && item.id),

@@ -165,6 +165,14 @@ function renderAssistantMarkdown(container, markdown) {
     }
 }
 
+function describeTaskIntent(intent) {
+    const kinds = { explain: '解释', read: '只读检查', write: '修改', mixed: '读写混合',
+        restore: '恢复', memory: '项目记忆操作', clarify: '需要澄清' };
+    const targets = Array.isArray(intent?.targets) ? intent.targets.slice(0, 16).map((target) =>
+        `${String(target.target || '未绑定对象').slice(0, 160)} · ${String(target.field || '').slice(0, 80)} = ${JSON.stringify(target.equals)}`).join('；') : '';
+    return `任务理解建议：${kinds[intent?.kind] || '未分类'}${targets ? ` · 目标 ${targets}` : ''}。这是校验提案，不代表批准或完成；仍以原始要求、逐次审批和工具回执为准。`;
+}
+
 Editor.Panel.extend({
     style: `
         :host { display: block; height: 100%; color: #e7e9ec; background: #242629; font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
@@ -731,6 +739,7 @@ Editor.Panel.extend({
         if (message.type === 'connected') return;
         if (message.requestId && message.requestId !== this._requestId) return;
         if (message.type === 'run.started') { this.addActivity(`${message.mode} · 已开始`); return; }
+        if (message.type === 'task.intent') { this.addActivity(describeTaskIntent(message)); return; }
         if (message.type === 'todo.updated') {
             this.renderExecutionChecklist(message.items, message.requestId || message.runId, true);
             return;
@@ -750,7 +759,7 @@ Editor.Panel.extend({
             return;
         }
         if (message.type === 'run.recovery.result') { this.renderRecoveryResult(message); return; }
-        if (message.type === 'model.thinking') { this.addActivity('正在联系 DeepSeek…'); return; }
+        if (message.type === 'model.thinking') { this.addActivity('正在联系模型 Provider…'); return; }
         if (message.type === 'context.compacted') {
             const report = message.report || {};
             const identities = Array.isArray(report.operationIdentities) ? report.operationIdentities.length : 0;
@@ -765,7 +774,7 @@ Editor.Panel.extend({
             this.addActivity(`上下文仍超出预算（估算 ${report.estimatedTokens || '?'} / ${report.maxEstimatedTokens || '?'} tokens）；Agent 已停止后续模型调用。`);
             return;
         }
-        if (message.type === 'model.failed') { this.addActivity(`DeepSeek 请求失败：${message.message || '未知错误'}`); return; }
+        if (message.type === 'model.failed') { this.addActivity(`模型 Provider 请求失败：${message.message || '未知错误'}`); return; }
         if (message.type === 'tool.approval-required') { this.addActivity(`等待批准：${message.toolName}`); return; }
         if (message.type === 'tool.started') { this.addActivity(`${message.access === 'read' ? '读取' : '执行'}：${message.toolName}`); return; }
         if (message.type === 'tool.finished') {
@@ -1096,6 +1105,12 @@ Editor.Panel.extend({
                 ? `验收目标 ${run.goalEvaluation.taskId || ''}：已完成。`
                 : `验收目标 ${run.goalEvaluation.taskId || ''}：${outstanding.map((item) => `${item.id} 缺少 ${Array.isArray(item.missingTools) ? item.missingTools.join(', ') || '依赖任务' : '回执'}`).join('；') || '未满足'}。`;
             card.appendChild(goal);
+        }
+        if (run.taskIntent && typeof run.taskIntent === 'object') {
+            const intent = document.createElement('div');
+            intent.className = 'run-meta';
+            intent.textContent = describeTaskIntent(run.taskIntent);
+            card.appendChild(intent);
         }
         const receipts = Array.isArray(run.receipts) ? run.receipts : [];
         receipts.forEach((receipt) => {

@@ -70,6 +70,7 @@ test('Creator bundle runs its MCP server outside the research repository without
         assert.ok(fs.existsSync(path.join(runtimeRoot, 'tools/cocos-agent-bridge/mcp/assistant-recovery-store.mjs')));
         assert.ok(fs.existsSync(path.join(runtimeRoot, 'tools/cocos-agent-runtime/dist/creator-recovery.js')));
         assert.ok(fs.existsSync(path.join(runtimeRoot, 'tools/cocos-agent-runtime/dist/creator-targets.js')));
+        assert.ok(fs.existsSync(path.join(runtimeRoot, 'tools/cocos-agent-runtime/dist/creator-task-intent.js')));
         assert.ok(fs.existsSync(path.join(runtimeRoot, 'tools/cocos-agent-bridge/mcp/node_modules/zod/package.json')));
         assert.ok(fs.existsSync(path.join(output, 'vendor/ws/index.js')));
         const bundledWebSocket = createRequire(import.meta.url)(path.join(output, 'vendor/ws'));
@@ -106,13 +107,17 @@ test('Creator bundle runs its MCP server outside the research repository without
         const index = JSON.parse((await client.readResource({ uri: 'cocos://2x/skills/index' })).contents[0].text);
         assert.equal(index.agentPackage.name, 'cocos-agent-2x');
         assert.equal(index.skills.length, 14);
+        const baseSkill = index.skills.find((skill) => skill.name === 'cocos-agent');
+        const workflowRepairReference = baseSkill?.references.find((reference) =>
+            reference.id.endsWith('cocos-agent-intent-context-provider-repair-0.1.md'));
+        assert.ok(workflowRepairReference, 'base Agent skill declares the task understanding, summary and Provider contract');
         const indexedReferences = new Map();
         for (const skill of index.skills) {
             const skillText = (await client.readResource({ uri: skill.uri })).contents[0].text;
             assert.ok(skillText.includes(`skill ${skill.name} sha256 ${skill.sha256}`), `skill hash missing: ${skill.name}`);
             for (const reference of skill.references) indexedReferences.set(reference.uri, reference);
         }
-        assert.equal(indexedReferences.size, 32);
+        assert.equal(indexedReferences.size, 33);
         for (const reference of indexedReferences.values()) {
             const content = (await client.readResource({ uri: reference.uri })).contents[0];
             const bytes = content.blob ? Buffer.from(content.blob, 'base64') : Buffer.from(content.text || '', 'utf8');
@@ -242,6 +247,7 @@ test('Creator extension upgrade swaps a complete verified package and retains a 
         assert.equal(result.installedVersion, JSON.parse(fs.readFileSync(path.join(extension, 'package.json'), 'utf8')).version);
         assert.equal(result.creatorReloadRequired, true);
         assert.equal(fs.existsSync(path.join(extension, 'assistant-runtime/tools/cocos-agent-bridge/mcp/assistant-host.mjs')), true);
+        assert.equal(fs.existsSync(path.join(extension, 'assistant-runtime/tools/cocos-agent-bridge/mcp/assistant-conversation-summary.mjs')), true);
         assert.equal(fs.existsSync(path.join(extension, 'assistant-runtime/tools/cocos-agent-bridge/mcp/assistant-memory-store.mjs')), true);
         assert.equal(fs.existsSync(path.join(extension, 'assistant-runtime/tools/cocos-agent-bridge/mcp/assistant-tool-result-archive.mjs')), true);
         assert.equal(fs.existsSync(path.join(extension, 'assistant-runtime/tools/cocos-agent-bridge/mcp/assistant-task-store.mjs')), true);

@@ -14,6 +14,7 @@ import type {
     JsonObject,
     RunAgentInput,
 } from './contracts.js';
+import { ProviderError } from './contracts.js';
 import { prepareAgentContext } from './context-compact.js';
 import { AGENT_TODO_TOOL, updateExecutionChecklist } from './todo.js';
 import { evaluateGoalEvidence } from './task-system.js';
@@ -103,6 +104,18 @@ function finalStatus(reason: string): AgentRunResult['status'] {
     if (reason === 'write-not-approved') return 'awaiting-approval';
     if (reason === 'completed') return 'completed';
     return 'stopped';
+}
+
+function providerFailureText(code: string): string {
+    switch (code) {
+        case 'PROVIDER_NETWORK_ERROR': return '模型 Provider 网络请求失败；未执行后续工具。请检查连接后重试。';
+        case 'PROVIDER_RATE_LIMIT': return '模型 Provider 当前限流；未执行后续工具。';
+        case 'PROVIDER_AUTHENTICATION': return '模型 Provider 认证失败；未执行后续工具。请检查 Creator 中的凭据配置。';
+        case 'PROVIDER_INVALID_RESPONSE': return '模型 Provider 返回了无法读取的响应；未执行后续工具。';
+        case 'PROVIDER_REQUEST_FAILED': return '模型 Provider 请求失败；未执行后续工具。';
+        case 'PROVIDER_CANCELLED': return '模型 Provider 请求已取消。';
+        default: return '模型 Provider 遇到未处理错误；未执行后续工具。';
+    }
 }
 
 export class AgentKernel {
@@ -223,6 +236,7 @@ export class AgentKernel {
             let response;
             let providerAttempt = 0;
             while (true) {
+                if (input.signal?.aborted) { reason = 'cancelled'; break; }
                 await this.emit({ type: 'model.requested', runId, round });
                 try {
                     response = await this.options.provider.complete({
@@ -234,8 +248,7 @@ export class AgentKernel {
                     break;
                 } catch (error) {
                     if (input.signal?.aborted) { reason = 'cancelled'; break; }
-                    const code = isRecord(error) && typeof error.code === 'string' ? error.code : '';
-                    if (code === 'DEEPSEEK_CONTEXT_TOO_LONG' && providerAttempt === 0) {
+                    if (error instanceof ProviderError && error.code === 'PROVIDER_CONTEXT_LIMIT' && providerAttempt === 0) {
                         providerAttempt += 1;
                         const reducedBudget = Math.max(512, Math.floor(prepared.report.maxEstimatedTokens * 0.65));
                         if (reducedBudget >= prepared.report.maxEstimatedTokens) {
@@ -246,6 +259,7 @@ export class AgentKernel {
                         effectiveBudget = { ...effectiveBudget, maxEstimatedTokens: reducedBudget };
                         const retry = prepareAgentContext({ ...contextInput, options: effectiveBudget });
                         prepared = await summarizePrepared(retry);
+                        if (input.signal?.aborted) { reason = 'cancelled'; break; }
                         if (!prepared.fitsBudget) {
                             contextCompactions.push(prepared.report);
                             await this.emit({ type: 'context.budget-exceeded', runId, round, report: prepared.report });
@@ -259,9 +273,14 @@ export class AgentKernel {
                         }
                         continue;
                     }
-                    if (code === 'DEEPSEEK_CONTEXT_TOO_LONG') {
+                    if (error instanceof ProviderError && error.code === 'PROVIDER_CONTEXT_LIMIT') {
                         reason = 'provider-context-limit-retry-exhausted';
                         finalText = '模型在一次压缩重试后仍报告上下文超限；本轮已停止，未继续调用工具。';
+                        break;
+                    }
+                    if (error instanceof ProviderError) {
+                        reason = error.code === 'PROVIDER_CANCELLED' ? 'cancelled' : `provider-error:${error.code.toLowerCase()}`;
+                        finalText = providerFailureText(error.code);
                         break;
                     }
                     reason = `model-error:${errorName(error)}`;

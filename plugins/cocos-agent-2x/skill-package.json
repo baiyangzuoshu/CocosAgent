@@ -11,7 +11,10 @@
     "cocos2-mcp-tools"
   ],
   "skills": [
-    { "name": "cocos-agent", "uri": "cocos://2x/skills/cocos-agent", "references": ["agent-foundation/cocos-agent-plan-business-acceptance-0.1.md"] },
+    { "name": "cocos-agent", "uri": "cocos://2x/skills/cocos-agent", "references": [
+      "agent-foundation/cocos-agent-plan-business-acceptance-0.1.md",
+      "agent-foundation/cocos-agent-intent-context-provider-repair-0.1.md"
+    ] },
     { "name": "cocos2-mcp-tools", "uri": "cocos://2x/agent/mcp-tools", "references": [
       "agent-foundation/cocos-agent-mcp-0.1.md",
       "agent-foundation/cocos-agent-asset-search-0.1.md",
@@ -78,6 +81,7 @@
   ],
   "references": [
     { "id": "agent-foundation/cocos-agent-plan-business-acceptance-0.1.md", "source": "docs/agent-foundation/cocos-agent-plan-business-acceptance-0.1.md" },
+    { "id": "agent-foundation/cocos-agent-intent-context-provider-repair-0.1.md", "source": "docs/agent-foundation/cocos-agent-intent-context-provider-repair-0.1.md" },
     { "id": "agent-foundation/cocos-agent-mcp-0.1.md", "source": "docs/agent-foundation/cocos-agent-mcp-0.1.md" },
     { "id": "agent-foundation/cocos-agent-script-development-0.1.md", "source": "docs/agent-foundation/cocos-agent-script-development-0.1.md" },
     { "id": "agent-foundation/cocos-agent-runtime-observation-0.1.md", "source": "docs/agent-foundation/cocos-agent-runtime-observation-0.1.md" },

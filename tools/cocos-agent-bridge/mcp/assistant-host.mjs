@@ -16,6 +16,7 @@ import { AssistantToolResultArchive } from './assistant-tool-result-archive.mjs'
 import { AssistantTaskStore } from './assistant-task-store.mjs';
 import { AssistantRecoveryStore } from './assistant-recovery-store.mjs';
 import { formatCreatorProjectContext, normalizeCreatorProjectContext } from './assistant-project-context.mjs';
+import { persistentSummaryMessage, prepareConversationForTurn } from './assistant-conversation-summary.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPOSITORY_ROOT = process.env.COCOS_AGENT_RUNTIME_ROOT
@@ -304,6 +305,8 @@ async function start(options) {
     const taskStore = new AssistantTaskStore(options.project);
     const restoredState = stateStore.load();
     const conversations = new Map(restoredState.conversations.map((entry) => [entry.id, entry.messages]));
+    const conversationSummaries = new Map(restoredState.conversations
+        .filter((entry) => entry.summary?.content).map((entry) => [entry.id, entry.summary]));
     const plans = new Map(restoredState.plans.map((plan) => [plan.id, plan]));
     const recentRuns = restoredState.runs;
     const recoveryStore = new AssistantRecoveryStore(options.project);
@@ -324,7 +327,8 @@ async function start(options) {
     const pendingApprovals = new Map();
     let activeRunState = null;
     const persistState = () => stateStore.save({
-        conversations: [...conversations].map(([id, messages]) => ({ id, messages })),
+        conversations: [...conversations].map(([id, messages]) => ({ id, messages,
+            ...(conversationSummaries.has(id) ? { summary: conversationSummaries.get(id) } : {}) })),
         plans: [...plans.values()], runs: recentRuns,
     });
     const appendRun = (run) => {
@@ -343,7 +347,7 @@ async function start(options) {
         }
         send(socket, { type: 'connected', creatorVersion: '2.4.15', model: options.model, baseUrl: DEFAULT_BASE_URL });
 
-        socket.on('message', (buffer) => {
+        socket.on('message', async (buffer) => {
             let message;
             try {
                 if (buffer.length > 16 * 1024) return;
@@ -392,12 +396,15 @@ async function start(options) {
                     return;
                 }
                 const previousMessages = conversations.get(message.conversationId);
+                const previousSummary = conversationSummaries.get(message.conversationId);
                 conversations.delete(message.conversationId);
+                conversationSummaries.delete(message.conversationId);
                 try {
                     persistState();
                     send(socket, { type: 'conversation.cleared', conversationId: message.conversationId });
                 } catch (_) {
                     if (previousMessages) conversations.set(message.conversationId, previousMessages);
+                    if (previousSummary) conversationSummaries.set(message.conversationId, previousSummary);
                     send(socket, { type: 'conversation.cleared', conversationId: message.conversationId,
                         error: '本机聊天记录未能保存变更，请稍后重试。' });
                 }
@@ -418,11 +425,13 @@ async function start(options) {
                         pendingApprovals.delete(approvalId);
                         pending.resolve(false);
                     }
-                    active.runRecord.status = 'running';
-                    active.runRecord.reason = 'cancellation_requested';
-                    active.runRecord.updatedAt = new Date().toISOString();
-                    try { appendRun(active.runRecord); }
-                    catch (_) { send(socket, { type: 'run.persistence-error', requestId: active.requestId }); }
+                    if (active.runRecord) {
+                        active.runRecord.status = 'running';
+                        active.runRecord.reason = 'cancellation_requested';
+                        active.runRecord.updatedAt = new Date().toISOString();
+                        try { appendRun(active.runRecord); }
+                        catch (_) { send(socket, { type: 'run.persistence-error', requestId: active.requestId }); }
+                    }
                     send(socket, { type: 'run.cancelling', requestId: active.requestId,
                         message: active.activeTool?.access === 'write-approved'
                             ? '已请求停止；当前编辑器命令会先完成并读回回执，之后不再发起新命令。'
@@ -510,9 +519,35 @@ async function start(options) {
             const active = { requestId: message.requestId, socket, controller: new AbortController(),
                 cancelRequested: false, activeTool: null, runRecord: null };
             activeRunState = active;
-            const history = conversations.get(message.conversationId) || [];
-            const conversation = [...history, { role: 'user', content: taskText }];
-            conversations.set(message.conversationId, conversation.slice(-MAX_HISTORY));
+            const previousConversation = conversations.get(message.conversationId) || [];
+            const previousSummary = conversationSummaries.get(message.conversationId) || null;
+            let preparedConversation;
+            try {
+                preparedConversation = await prepareConversationForTurn({
+                    messages: previousConversation,
+                    summary: previousSummary,
+                    task: taskText,
+                    signal: active.controller.signal,
+                    maxMessages: MAX_HISTORY,
+                    summarize: async ({ task, dialogue, signal }) => {
+                        const runtimeUrl = pathToFileURL(path.join(REPOSITORY_ROOT, 'tools/cocos-agent-runtime/dist/index.js')).href;
+                        const runtime = await import(runtimeUrl);
+                        const provider = new runtime.DeepSeekProvider({ apiKey, model: options.model });
+                        return provider.summarizeContext({ task, dialogue, signal });
+                    },
+                });
+            } catch (error) {
+                if (activeRunState === active) activeRunState = null;
+                send(socket, { type: 'run.failed', requestId: message.requestId,
+                    message: `无法准备持久会话摘要，任务未发送：${String(error?.message || error).slice(0, 300)}` });
+                return;
+            }
+            const conversation = preparedConversation.messages;
+            conversations.set(message.conversationId, conversation);
+            if (preparedConversation.summary) conversationSummaries.set(message.conversationId, preparedConversation.summary);
+            const history = preparedConversation.history;
+            const summaryMessage = persistentSummaryMessage(preparedConversation.summary);
+            const modelHistory = [...(summaryMessage ? [summaryMessage] : []), ...history];
             const runRecord = { id: message.requestId, conversationId: message.conversationId,
                 planId: activePlan?.id, task: taskText.slice(0, MAX_MESSAGE_LENGTH), mode: message.mode,
                 status: 'running', reason: null, startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
@@ -520,6 +555,12 @@ async function start(options) {
             active.runRecord = runRecord;
             try { appendRun(runRecord); }
             catch (error) {
+                if (previousConversation.length) conversations.set(message.conversationId, previousConversation);
+                else conversations.delete(message.conversationId);
+                if (previousSummary) conversationSummaries.set(message.conversationId, previousSummary);
+                else conversationSummaries.delete(message.conversationId);
+                const failedRunIndex = recentRuns.findIndex((item) => item.id === runRecord.id);
+                if (failedRunIndex >= 0) recentRuns.splice(failedRunIndex, 1);
                 if (activeRunState === active) activeRunState = null;
                 send(socket, { type: 'run.failed', requestId: message.requestId,
                     message: `无法保存 Agent 会话状态，任务未发送：${String(error?.message || error).slice(0, 300)}` });
@@ -543,6 +584,24 @@ async function start(options) {
             runRecord.tracePath = runTracePath;
             try { appendRun(runRecord); } catch (_) { delete runRecord.tracePath; }
             const onAgentEvent = (event) => {
+                    if (event.type === 'task.intent') {
+                        // Persist the validated interpretation as a display-only proposal, never as approval or task evidence.
+                        runRecord.taskIntent = {
+                            kind: event.kind,
+                            targets: Array.isArray(event.targets) ? event.targets.slice(0, 16) : [],
+                            reads: Array.isArray(event.reads) ? event.reads.slice(0, 16) : [],
+                            verification: event.verification,
+                        };
+                        runRecord.updatedAt = new Date().toISOString();
+                        try { appendRun(runRecord); }
+                        catch (_) {
+                            active.persistenceError = true;
+                            active.controller.abort();
+                            send(socket, { type: 'run.persistence-error', requestId: message.requestId });
+                        }
+                        send(socket, { ...event, requestId: message.requestId });
+                        return;
+                    }
                     if (event.type === 'run.finished') {
                         runRecord.executionChecklist = Array.isArray(event.executionChecklist) ? event.executionChecklist : [];
                         runRecord.updatedAt = new Date().toISOString();
@@ -608,7 +667,7 @@ async function start(options) {
                     tracePath: runTracePath,
                     apiKey,
                     model: options.model,
-                    history: history.slice(-MAX_HISTORY),
+                    history: modelHistory,
                     projectContext: normalizeCreatorProjectContext(message.projectContext),
                     signal: active.controller.signal,
                     onEvent: onAgentEvent,
@@ -627,7 +686,7 @@ async function start(options) {
                     apiKey,
                     model: options.model,
                     mode: message.mode,
-                    history: history.slice(-MAX_HISTORY),
+                    history: modelHistory,
                     projectContext: normalizeCreatorProjectContext(message.projectContext),
                     signal: active.controller.signal,
                     onEvent: onAgentEvent,
@@ -668,7 +727,7 @@ async function start(options) {
                         stepIndex: message.planExecution.stepIndex, runStatus: result.status, reason: result.reason }, apiKey);
                 }
                 conversation.push({ role: 'assistant', content: assistantText.slice(0, MAX_MESSAGE_LENGTH) });
-                conversations.set(message.conversationId, conversation.slice(-MAX_HISTORY));
+                conversations.set(message.conversationId, conversation);
                 runRecord.status = result.status;
                 runRecord.reason = result.reason;
                 if (result.goalEvaluation) runRecord.goalEvaluation = result.goalEvaluation;
