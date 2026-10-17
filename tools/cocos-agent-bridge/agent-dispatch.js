@@ -97,6 +97,7 @@ function validInput(command, input, creatorVersion) {
     if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
     const keys = Object.keys(input);
     if (command.startsWith('script.')) return creatorVersion === '2.4.15' && scriptContract.validInput(command, input);
+    if (command === 'project.search') return creatorVersion === '2.4.15' && scriptContract.validInput(command, input);
     if (command === 'scene.snapshot') return keys.length === 0;
     if (command === 'runtime.preview.start') return creatorVersion === '2.4.15' && keys.length === 0;
     if (command === 'scene.node.inspect') return keys.length === 1 && typeof input.nodePath === 'string'
@@ -225,7 +226,7 @@ function dispatchCommand(request, invoke) {
         return problem('CATALOG_CHANGED', 'Creator instance or scene changed during selection. Query again.');
     }
     const capability = catalog.data.commands.find((item) => item.id === command);
-    const expectedContractVersion = command === 'content.stress.run' ? '0.2' : '0.1';
+    const expectedContractVersion = command.startsWith('script.') || command === 'content.stress.run' ? '0.2' : '0.1';
     if (!capability || capability.contractVersion !== expectedContractVersion || capability.status !== 'available') {
         return problem('COMMAND_UNAVAILABLE', 'Command is not currently available.', { reason: capability && capability.reason || null });
     }
@@ -237,7 +238,7 @@ function dispatchCommand(request, invoke) {
         executionArgs.push('--expected-scene-uuid', selected.activeSceneUuid);
     }
     let operationId = null;
-    if (command.startsWith('script.')) executionArgs.push('--command', command, '--input', JSON.stringify(input));
+    if (command.startsWith('script.') || command === 'project.search') executionArgs.push('--command', command, '--input', JSON.stringify(input));
     if (command === 'asset.importPng') executionArgs.push('--png', path.resolve(input.sourcePath));
     if (command === 'asset.removeImportedPng') executionArgs.push('--asset-remove', input.assetName,
         '--texture-uuid', input.textureUuid, '--sprite-frame-uuid', input.spriteFrameUuid, '--source-sha256', input.sha256);
@@ -282,7 +283,7 @@ function dispatchCommand(request, invoke) {
     if (command === 'runtime.preview.start') executionArgs.push('--runtime-preview-start');
     const patchOperation = command === 'scene.node.patch';
     const prefabSourcePatch = command === 'prefab.source.patch';
-    const hostScript = command.startsWith('script.') ? 'script-host.js' : command === 'scene.node.create' ? 'node-create-host.js'
+    const hostScript = command.startsWith('script.') || command === 'project.search' ? 'script-host.js' : command === 'scene.node.create' ? 'node-create-host.js'
         : patchOperation ? 'scene-node-patch-host.js' : prefabSourcePatch ? 'prefab-source-patch-host.js'
             : command === 'prefab.source.inspect' ? 'prefab-source-inspect-host.js'
                 : command === 'content.stress.run' ? 'content-stress-host.js' : 'bridge-host.js';
@@ -291,7 +292,7 @@ function dispatchCommand(request, invoke) {
     if (!operationId) {
         if (execution.status !== 0) return problem('EXECUTION_FAILED', 'Command execution failed.', { ...base, stderr: execution.stderr.trim() }, 'execution', capability.access === 'read' ? 'none' : 'possible');
         const result = parseCommandResult(execution.stdout, command);
-        if (result && command.startsWith('script.')) return { success: result.success !== false, outcome: result.outcome || 'completed', ...base,
+        if (result && (command.startsWith('script.') || command === 'project.search')) return { success: result.success !== false, outcome: result.outcome || 'completed', ...base,
             ...(result.operationId ? { operationId: result.operationId } : {}), ...(result.error ? { error: result.error } : {}), result };
         return result ? { success: true, outcome: 'completed', ...base, result }
             : problem('RESULT_MISSING', 'Command finished without a structured result.', base, 'execution', capability.access === 'read' ? 'none' : 'possible');

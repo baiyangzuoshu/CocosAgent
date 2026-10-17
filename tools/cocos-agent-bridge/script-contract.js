@@ -1,16 +1,20 @@
 'use strict';
-// Creator 2.4.15 existing-JS editing. Source is parsed, never executed in the main process.
+// Creator 2.4.15 bounded project search and existing JS/TS editing. Source is parsed, never executed in the main process.
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const vm = require('vm');
 const HASH = { type: 'string', pattern: '^[0-9a-f]{64}$' };
 const UUID = { type: 'string', format: 'uuid' };
-const SCRIPT = { type: 'string', minLength: 4, maxLength: 240, pattern: '^[A-Za-z0-9_ -]+(?:/[A-Za-z0-9_. -]+)*\\.js$' };
+const SCRIPT = { type: 'string', minLength: 4, maxLength: 240, pattern: '^[A-Za-z0-9_ -]+(?:/[A-Za-z0-9_. -]+)*\\.(?:js|ts)$' };
 const EDITS = { type: 'array', minItems: 1, maxItems: 8, items: { type: 'object', additionalProperties: false,
     required: ['before', 'after'], properties: { before: { type: 'string', minLength: 1, maxLength: 16384 }, after: { type: 'string', maxLength: 16384 } } } };
 const identity = { scriptPath: SCRIPT, scriptUuid: UUID, expectedSha256: HASH, edits: EDITS };
+const projectSearch = { type: 'object', additionalProperties: false, required: ['query', 'scope'], properties: {
+    query: { type: 'string', minLength: 1, maxLength: 120 }, scope: { type: 'string', enum: ['code', 'assets', 'all'] },
+    limit: { type: 'integer', minimum: 1, maximum: 50 }, offset: { type: 'integer', minimum: 0, maximum: 100000 } } };
 const inputs = {
+    'project.search': projectSearch,
     'script.read': { type: 'object', additionalProperties: false, required: ['scriptPath'], properties: { scriptPath: SCRIPT } },
     'script.patch.plan': { type: 'object', additionalProperties: false, required: Object.keys(identity), properties: identity },
     'script.patch': { type: 'object', additionalProperties: false, required: ['action', 'operationId'], properties: {
@@ -28,12 +32,15 @@ function validInput(command, input) {
             && (def.minLength === undefined || value.length >= def.minLength) && (def.maxLength === undefined || value.length <= def.maxLength)
             && (!def.pattern || new RegExp(def.pattern).test(value)) && (!def.enum || def.enum.includes(value))
             && (!def.format || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value));
+        if (def.type === 'integer') return Number.isInteger(value)
+            && (def.minimum === undefined || value >= def.minimum) && (def.maximum === undefined || value <= def.maximum);
         if (def.type === 'array') return Array.isArray(value) && value.length >= def.minItems && value.length <= def.maxItems && value.every((v) => check(v, def.items));
         return value && typeof value === 'object' && !Array.isArray(value) && def.required.every((k) => value[k] !== undefined)
             && Object.keys(value).every((k) => def.properties[k] && check(value[k], def.properties[k]));
     }
     if (!Object.keys(input).every((k) => check(input[k], schema.properties[k]))) return false;
     if (input.scriptPath && input.scriptPath.split('/').some((p) => p === '.' || p === '..')) return false;
+    if (command === 'project.search') return !/[\u0000-\u001f\u007f]/.test(input.query);
     if (command !== 'script.patch') return true;
     const fields = Object.keys(identity);
     if (input.action === 'apply') return fields.every((k) => input[k] !== undefined) && input.sourceOperationId === undefined;
@@ -63,8 +70,9 @@ function readScript(root, scriptPath) {
     const source = bytes.toString('utf8');
     if (!Buffer.from(source).equals(bytes)) fail('SCRIPT_NOT_UTF8');
     const metaBytes = fs.readFileSync(metaFile); const meta = JSON.parse(metaBytes);
-    if (meta.importer !== 'javascript' || !/^[0-9a-f-]{36}$/i.test(meta.uuid || '')) fail('SCRIPT_METADATA_INVALID');
-    return { scriptPath, scriptUrl: `db://assets/${scriptPath}`, scriptUuid: meta.uuid, sourceSha256: sha(bytes),
+    const scriptType = path.extname(scriptPath) === '.ts' ? 'typescript' : 'javascript';
+    if (meta.importer !== scriptType || !/^[0-9a-f-]{36}$/i.test(meta.uuid || '')) fail('SCRIPT_METADATA_INVALID');
+    return { scriptPath, scriptType, scriptUrl: `db://assets/${scriptPath}`, scriptUuid: meta.uuid, sourceSha256: sha(bytes),
         metaSha256: sha(metaBytes), source, filename };
 }
 function plan(root, input) {
@@ -79,10 +87,12 @@ function plan(root, input) {
     }
     if (Buffer.byteLength(after) > 65536) fail('SCRIPT_TOO_LARGE');
     if (after === before.source) fail('NO_CHANGE');
-    try { new vm.Script(after, { filename: before.scriptUrl }); }
-    catch (error) { fail('SCRIPT_SYNTAX_ERROR', String(error.message).slice(0, 800)); }
+    if (before.scriptType === 'javascript') {
+        try { new vm.Script(after, { filename: before.scriptUrl }); }
+        catch (error) { fail('SCRIPT_SYNTAX_ERROR', String(error.message).slice(0, 800)); }
+    }
     return { ...before, after, afterSha256: sha(after), expectedDiff: input.edits,
-        syntax: 'parsed-only', compilation: 'not-run', runtime: 'not-run' };
+        syntax: before.scriptType === 'javascript' ? 'parsed-only' : 'creator-compiler-required', compilation: 'not-run', runtime: 'not-run' };
 }
 function atomic(filename, value) {
     const temporary = `${filename}.${crypto.randomBytes(6).toString('hex')}.tmp`;

@@ -1,6 +1,6 @@
-# Creator 2.4.15 现有 JavaScript 编辑合同 0.1
+# Creator 2.4.15 现有 JS/TS 文件编辑合同 0.2
 
-日期：2026-10-11。状态：**实现与模拟测试完成；Creator 原生面板已验证脚本写入、编译对账和补偿；实际浏览器点击与恢复后点击已验证。原生新 ID 重放及真实错误修复仍待做。**
+日期：2026-10-11，合同范围于 2026-10-17 扩展。状态：**JS 0.1 已有原生写入/编译/补偿与交互证据；0.2 将精确单文件命令扩展到 Creator 2.4.15 TypeScript importer 并新增只读项目搜索，尚未打包或原生验收 TS 分支。原生新 ID 重放及真实错误修复仍待做。**
 
 ## 任务与依据
 
@@ -8,14 +8,15 @@
 
 ## 命令
 
-| 命令 | 访问 | 输入与结果 |
+| 命令 | 版本/访问 | 输入与结果 |
 | --- | --- | --- |
-| `script.read` | read | assets 相对 `.js` 路径；返回源正文、UUID、源和元数据 SHA-256 |
-| `script.patch.plan` | read | 路径、UUID、预期源哈希、1–8 个唯一 before/after 替换；返回差异、候选哈希及语法检查 |
-| `script.patch` | write | apply/compensate/reconcile/replay；操作 UUID 与动作专属输入；写入、编译回执和恢复状态 |
-| `script.operation.get` | read | 原操作 UUID；只读账本摘要与当前磁盘身份，不暴露备份全文 |
+| `project.search` | 0.1/read | JS/TS 内容及 assets 资源路径/元数据查询；详见通用项目开发工具合同。 |
+| `script.read` | 0.2/read | assets 相对 `.js`/`.ts` 路径；返回源正文、类型/importer、UUID、源和元数据 SHA-256。 |
+| `script.patch.plan` | 0.2/read | 路径、UUID、预期源哈希、1–8 个唯一 before/after 替换；JS 做语法解析，TS 明确返回 Creator 编译要求；返回差异和候选哈希。 |
+| `script.patch` | 0.2/write | apply/compensate/reconcile/replay；操作 UUID 与动作专属输入；经 Creator importer 写入/编译并返回逐操作恢复状态。 |
+| `script.operation.get` | 0.2/read | 原操作 UUID；只读账本摘要与当前磁盘身份，不暴露备份全文。 |
 
-MCP 提供同名含义的 `cocos_2x_script_*` 工具；仍校验注册工程、Creator 实例、版本、能力合同与写入审批。路径限 assets 下已有 UTF-8 JS（最多 64 KiB），拒绝目录穿越与符号链接。修改保留元数据；UUID 或源哈希陈旧、替换不唯一、语法错误在写前拒绝。
+MCP 提供同名含义的 `cocos_2x_script_*` 工具；仍校验注册工程、Creator 实例、版本、能力合同与写入审批。路径限 assets 下已有 UTF-8 JS/TS（最多 64 KiB），拒绝目录穿越与符号链接。JS/TS 分别须与 `javascript`/`typescript` `.meta` importer 匹配。修改保留元数据；UUID 或源哈希陈旧、替换不唯一、JS 语法错误在写前拒绝。TS 不由 Node `vm.Script` 解析，必须以本次 Creator 导入和精确编译产物作为编译证据；无法核对时不得成功判定。
 
 ## 编译与恢复
 
@@ -31,7 +32,7 @@ MCP 提供同名含义的 `cocos_2x_script_*` 工具；仍校验注册工程、C
 
 上述只读证据不是原生面板模型写入验收；本轮新增原生写入、编译对账、实际点击与补偿证据见下节。仍需补原生新 ID 重放、真实错误注入与有界修复。临时 Button 场景夹具不作为产品成果提交。
 
-暂不覆盖新建脚本、TypeScript、多文件重构、自动场景事件绑定、自动点击、完整 Console 历史、原生或 3.x。Creator 2.4.15 Web 的有界日志、帧状态、目标节点和截图观察另见[运行观察合同](cocos-agent-runtime-observation-0.1.md)；它不替代输入测试，真实错误注入、修复和二次观察仍待实机验收。
+暂不覆盖新建脚本、多文件重构、自动场景事件绑定、自动点击、完整 Console 历史、原生或 3.x。Creator 2.4.15 Web 的有界日志、帧状态、目标节点和截图观察另见[运行观察合同](cocos-agent-runtime-observation-0.1.md)；它不替代输入测试，真实错误注入、修复和二次观察仍待实机验收。0.2 的新增搜索和 TS 编译分支必须单独原生验收，不能沿用既有 JS 证据。
 
 ## 2026-10-11 按钮任务续验准备
 

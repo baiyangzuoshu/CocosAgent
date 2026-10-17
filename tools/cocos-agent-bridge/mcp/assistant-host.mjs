@@ -15,6 +15,7 @@ import { AssistantMemoryFileStore } from './assistant-memory-store.mjs';
 import { AssistantToolResultArchive } from './assistant-tool-result-archive.mjs';
 import { AssistantTaskStore } from './assistant-task-store.mjs';
 import { AssistantRecoveryStore } from './assistant-recovery-store.mjs';
+import { buildTaskReview } from './assistant-task-review.mjs';
 import { formatCreatorProjectContext, normalizeCreatorProjectContext } from './assistant-project-context.mjs';
 import { persistentSummaryMessage, prepareConversationForTurn } from './assistant-conversation-summary.mjs';
 
@@ -329,6 +330,7 @@ async function start(options) {
         .filter((entry) => entry.summary?.content).map((entry) => [entry.id, entry.summary]));
     const plans = new Map(restoredState.plans.map((plan) => [plan.id, plan]));
     const recentRuns = restoredState.runs;
+    for (const run of recentRuns) run.review = buildTaskReview(run);
     const recoveryStore = new AssistantRecoveryStore(options.project);
     await recoveryStore.migrateRuns(recentRuns);
 
@@ -352,6 +354,7 @@ async function start(options) {
         plans: [...plans.values()], runs: recentRuns,
     });
     const appendRun = (run) => {
+        run.review = buildTaskReview(run);
         const index = recentRuns.findIndex((item) => item.id === run.id);
         if (index >= 0) recentRuns.splice(index, 1);
         recentRuns.push(run);
@@ -493,7 +496,7 @@ async function start(options) {
                     run.recovery = { operationId: message.operationId, checkedAt: new Date().toISOString(), receipt };
                     run.updatedAt = run.recovery.checkedAt;
                     appendRun(run);
-                    send(socket, { type: 'run.recovery.result', runId: message.runId, operationId: message.operationId, receipt });
+                    send(socket, { type: 'run.recovery.result', runId: message.runId, operationId: message.operationId, receipt, review: run.review });
                 })().catch((error) => send(socket, { type: 'run.recovery.result', runId: message.runId,
                     operationId: message.operationId, error: String(error?.message || error).slice(0, 500) }));
                 return;
@@ -664,7 +667,16 @@ async function start(options) {
                             success: result.success, outcome: result.outcome, operationId: result.operationId,
                             command: result.command, errorCode: result.error?.code,
                             sideEffect: result.error?.sideEffect || (result.outcome === 'needs-review' ? 'unknown' : undefined),
-                            expectedDiff: result.expectedDiff || result.script?.expectedDiff };
+                            expectedDiff: result.expectedDiff || result.script?.expectedDiff,
+                            ...(result.script ? { script: { scriptPath: result.script.scriptPath, scriptUuid: result.script.scriptUuid,
+                                sourceSha256: result.script.sourceSha256, afterSha256: result.script.afterSha256,
+                                expectedDiff: result.script.expectedDiff } } : {}),
+                            ...(result.targetNode || result.node ? { sceneTarget: {
+                                path: result.targetNode?.path || result.node?.path,
+                                uuid: result.targetNode?.uuid || result.node?.uuid,
+                                name: result.targetNode?.name || result.node?.name,
+                            } } : {}),
+                            ...(result.scene?.name ? { sceneName: String(result.scene.name).slice(0, 120) } : {}) };
                         runRecord.receipts = [...runRecord.receipts, receipt].slice(-32);
                         active.activeTool = null;
                         runRecord.activeTool = null;
@@ -763,7 +775,16 @@ async function start(options) {
                             success: compact.success, outcome: compact.outcome, operationId: compact.operationId,
                             command: compact.command, errorCode: compact.error?.code,
                             sideEffect: compact.error?.sideEffect || (compact.outcome === 'needs-review' ? 'unknown' : undefined),
-                            expectedDiff: compact.expectedDiff || compact.script?.expectedDiff });
+                            expectedDiff: compact.expectedDiff || compact.script?.expectedDiff,
+                            ...(compact.script ? { script: { scriptPath: compact.script.scriptPath, scriptUuid: compact.script.scriptUuid,
+                                sourceSha256: compact.script.sourceSha256, afterSha256: compact.script.afterSha256,
+                                expectedDiff: compact.script.expectedDiff } } : {}),
+                            ...(compact.targetNode || compact.node ? { sceneTarget: {
+                                path: compact.targetNode?.path || compact.node?.path,
+                                uuid: compact.targetNode?.uuid || compact.node?.uuid,
+                                name: compact.targetNode?.name || compact.node?.name,
+                            } } : {}),
+                            ...(compact.scene?.name ? { sceneName: String(compact.scene.name).slice(0, 120) } : {}) });
                     }
                 }
                 appendRun(runRecord);
