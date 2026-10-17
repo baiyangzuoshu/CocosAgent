@@ -76,16 +76,26 @@ function renderAssistantMarkdown(container, markdown) {
     while (index < lines.length) {
         const line = lines[index];
         if (!line.trim()) { index += 1; continue; }
-        if (/^\s*```/.test(line)) {
+        const codeFence = line.match(/^\s*```([\w#+.-]*)/);
+        if (codeFence) {
             index += 1;
             const code = [];
             while (index < lines.length && !/^\s*```/.test(lines[index])) code.push(lines[index++]);
             if (index < lines.length) index += 1;
+            const block = document.createElement('div');
+            block.className = 'code-block';
+            if (codeFence[1]) {
+                const language = document.createElement('div');
+                language.className = 'code-language';
+                language.textContent = codeFence[1];
+                block.appendChild(language);
+            }
             const pre = document.createElement('pre');
             const codeNode = document.createElement('code');
             codeNode.textContent = code.join('\n');
             pre.appendChild(codeNode);
-            container.appendChild(pre);
+            block.appendChild(pre);
+            container.appendChild(block);
             continue;
         }
         const heading = line.match(/^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/);
@@ -158,8 +168,11 @@ function renderAssistantMarkdown(container, markdown) {
         while (index < lines.length && lines[index].trim() && !isBlockStart(index)) paragraphLines.push(lines[index++]);
         if (!paragraphLines.length) paragraphLines.push(lines[index++]);
         paragraphLines.forEach((part, partIndex) => {
-            if (partIndex) paragraph.appendChild(document.createElement('br'));
-            appendInlineMarkdown(paragraph, part);
+            if (partIndex) {
+                const hardBreak = /(?: {2,}|\\)$/.test(paragraphLines[partIndex - 1]);
+                paragraph.appendChild(hardBreak ? document.createElement('br') : document.createTextNode(' '));
+            }
+            appendInlineMarkdown(paragraph, part.replace(/(?: {2,}|\\)$/, ''));
         });
         container.appendChild(paragraph);
     }
@@ -231,7 +244,9 @@ Editor.Panel.extend({
         .message-body blockquote { margin: 6px 0 10px; padding: 3px 10px; border-left: 3px solid #65758a; color: #c0c6ce; }
         .message-body blockquote p { margin: 2px 0; }
         .message-body code { padding: 1px 4px; border-radius: 3px; background: #202226; color: #d7e5fa; font: 0.92em Consolas, monospace; }
-        .message-body pre { margin: 6px 0 10px; padding: 9px; max-height: 360px; overflow: auto; border: 1px solid #454a52; border-radius: 4px; background: #202226; white-space: pre; }
+        .code-block { margin: 10px 0 14px; overflow: hidden; border: 1px solid #41464e; border-radius: 8px; background: #1d1f22; }
+        .code-language { padding: 6px 10px; border-bottom: 1px solid #383c42; color: #9da6b2; font-size: 10px; text-transform: uppercase; letter-spacing: .45px; }
+        .message-body pre { margin: 0; padding: 11px 13px; max-height: 360px; overflow: auto; white-space: pre; }
         .message-body pre code { padding: 0; background: transparent; }
         .message-body a { color: #8dbdff; }
         .message-body hr { border: 0; border-top: 1px solid #4a4e55; margin: 10px 0; }
@@ -259,6 +274,9 @@ Editor.Panel.extend({
         .run-meta, .run-effects { color: #c2c0ba; font-size: 10px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
         .run-recover { margin: 5px 5px 0 0; padding: 3px 6px; font-size: 10px; }
         .run-receipt { max-height: 180px; overflow: auto; color: #c2c0ba; font: 10px Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .tool-receipt { margin-top: 5px; font-size: 10px; }
+        .tool-receipt summary { color: #9fc5ff; cursor: pointer; }
+        .tool-receipt pre { max-height: 220px; overflow: auto; margin: 5px 0 0; padding: 7px; border: 1px solid #454a52; border-radius: 4px; background: #202226; color: #cdd2da; white-space: pre-wrap; overflow-wrap: anywhere; }
         .copy-button { position: absolute; z-index: 3; top: 6px; right: 7px; padding: 2px 6px; font-size: 10px; line-height: 1.25; opacity: .82; }
         .copy-button:hover { opacity: 1; }
         .diff-details { margin-top: 5px; font-size: 10px; }
@@ -277,37 +295,127 @@ Editor.Panel.extend({
         .hint { color: #9097a1; font-size: 10px; }
         .send { min-width: 72px; background: #2867bc; border-color: #3979cf; }
         .send-row { display: flex; justify-content: flex-end; }
+
+        /* Assistant-style workspace: keep the conversation dominant and move
+           mode/model controls next to the prompt where they affect the next run. */
+        .top { flex: 0 0 auto; padding: 9px 14px 7px; border-bottom: 1px solid #383b40; background: #25272a; }
+        .brand { margin: 0; min-height: 28px; }
+        .brand strong { display: flex; align-items: baseline; gap: 7px; font-size: 13px; }
+        .brand-actions { gap: 6px; }
+        .connection { max-width: 35%; overflow: hidden; padding: 3px 8px; border-radius: 12px; background: #303338; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+        .connection[data-state="ready"] { background: #23382d; }
+        .project-context { margin: 7px 0 0; padding: 0; border: 0; background: transparent; color: #b9bec7; }
+        .project-context > summary { display: flex; align-items: center; gap: 8px; min-height: 26px; cursor: pointer; list-style: none; }
+        .project-context > summary::-webkit-details-marker { display: none; }
+        .project-context > summary::before { content: '›'; color: #8e98a5; font-size: 16px; transform: rotate(0); transition: transform .12s; }
+        .project-context[open] > summary::before { transform: rotate(90deg); }
+        .context-project { min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e0e3e8; font-size: 11px; }
+        .context-scene { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #969da7; font-size: 10px; }
+        .context-label { margin-left: auto; color: #8e98a5; font-size: 10px; white-space: nowrap; }
+        .context-expanded { margin: 2px 0 4px 17px; padding: 7px 9px; border-left: 1px solid #484d55; background: #202225; }
+        .project-context-head { margin-bottom: 5px; }
+        .project-context-head strong { font-size: 10px; }
+        .context-line { padding: 2px 0; }
+        .connection-settings { margin-top: 4px; color: #a9afb8; font-size: 10px; }
+        .connection-settings > summary { display: inline-block; padding: 3px 1px; cursor: pointer; color: #a9afb8; }
+        .connection-settings[open] { padding-bottom: 4px; }
+        .model-row { margin-top: 4px; }
+        .key { padding: 6px 8px; }
+        .credential-row { margin-top: 5px; }
+        .modebar { flex: 0 0 auto; gap: 3px; margin: 0 0 6px; }
+        .mode { flex: 0 0 auto; min-width: 56px; padding: 4px 10px; border-radius: 14px; font-size: 10px; }
+        .mode.active { color: #f4f7fb; background: #3b4149; border-color: #58616d; }
+        .mode-note { align-self: center; min-height: 0; margin: 0 0 6px 8px; color: #9299a3; font-size: 10px; }
+        .messages { width: 100%; max-width: 1040px; align-self: center; padding: 24px 42px; }
+        .empty { max-width: 600px; margin: auto; padding: 14vh 12px 8vh; text-align: center; font-size: 14px; }
+        .message { position: relative; max-width: 100%; margin-bottom: 24px; padding: 0; background: transparent; }
+        .message.user { margin-left: auto; padding: 9px 12px; border: 1px solid #41464e; border-radius: 14px 14px 4px 14px; background: #343940; }
+        .message.assistant { margin-right: auto; padding: 2px 2px 8px; }
+        .message-header { display: flex; min-height: 24px; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 5px; }
+        .message .role { padding: 0; color: #aeb6c1; font-size: 11px; text-transform: none; letter-spacing: 0; }
+        .message.assistant .role { color: #aeb6c1; font-weight: 600; }
+        .message.user .message-header { display: none; }
+        .message.assistant .copy-button { position: static; flex: 0 0 auto; opacity: 0; border-color: transparent; background: transparent; color: #aeb5bf; }
+        .message.assistant:hover .copy-button, .message.assistant .copy-button:focus { opacity: .8; }
+        .message.assistant .copy-button:hover { background: #34383e; color: #fff; }
+        .message-body { font-size: 13px; line-height: 1.75; color: #e1e4e8; }
+        .message-body p { margin-bottom: 12px; }
+        .message-body h1, .message-body h2, .message-body h3, .message-body h4 { letter-spacing: -.15px; }
+        .message-body h1 { margin-top: 22px; padding-bottom: 7px; border-bottom: 1px solid #3b4047; font-size: 20px; }
+        .message-body h2 { margin-top: 20px; font-size: 17px; }
+        .message-body h3, .message-body h4 { margin-top: 16px; font-size: 14px; }
+        .message-body ul, .message-body ol { margin-top: 7px; margin-bottom: 14px; padding-left: 26px; }
+        .message-body li { padding: 3px 0; }
+        .message-body blockquote { margin: 10px 0 14px; padding: 5px 13px; border-left-width: 2px; border-radius: 0 5px 5px 0; background: #292d32; color: #c4cad2; }
+        .message-body code { padding: 2px 5px; border-radius: 4px; background: #30343a; color: #d7e5fa; }
+        .message-body a { text-decoration: none; }
+        .message-body a:hover { text-decoration: underline; }
+        .message-body th, .message-body td { padding: 7px 9px; }
+        .copyable.message.assistant > .copy-button { display: none; }
+        .activity { width: 100%; max-width: 760px; margin: 3px auto 8px; padding: 6px 10px 6px 22px; border-left: 2px solid #454a52; color: #aeb5bf; font-size: 10px; }
+        .activity::before { content: ''; position: absolute; top: 11px; left: 7px; width: 5px; height: 5px; border-radius: 50%; background: #7d8998; }
+        .plan-card, .run-card { width: 100%; max-width: 800px; margin: 10px auto 16px; padding: 13px 15px; border-color: #444a53; border-radius: 10px; background: #292c31; }
+        .plan-card { border-left: 3px solid #6da9ff; }
+        .plan-card[data-status="completed"] { border-left-color: #66bd84; }
+        .plan-card[data-status="needs-review"], .plan-card[data-status="needs-regeneration"] { border-left-color: #d7a65b; }
+        .plan-card[data-status="paused"] { border-left-color: #db785f; }
+        .plan-card h3 { font-size: 14px; }
+        .plan-summary { margin: 3px 0 8px; font-size: 11px; }
+        .plan-steps { margin-top: 7px; padding-left: 20px; }
+        .plan-steps li { padding: 6px 0; border-top: 1px solid #3c4148; }
+        .plan-detail { margin-top: 5px; color: #9fa7b2; }
+        .plan-status { padding: 8px 0; border-top: 1px solid #3c4148; }
+        .plan-action { min-width: 116px; padding: 7px 12px; border-radius: 5px; }
+        .run-card { background: #292b2e; }
+        .approval { flex: 0 0 auto; border-top: 1px solid #836938; }
+        .composer { flex: 0 0 auto; width: 100%; max-width: 920px; align-self: center; padding: 8px 14px 12px; border: 0; }
+        .composer-box { padding: 9px 10px 7px; border: 1px solid #50555e; border-radius: 11px; background: #202225; box-shadow: 0 4px 18px rgba(0,0,0,.16); }
+        .composer textarea { min-height: 58px; max-height: 180px; border: 0; background: transparent; font: inherit; }
+        .composer textarea:focus { border: 0; }
+        .composer-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+        .composer-foot { flex: 1 1 240px; margin: 0; }
+        .composer-foot .hint { padding-left: 2px; }
+        .send { min-width: 64px; padding: 6px 11px; border-radius: 7px; }
+        @media (max-width: 520px) {
+            .brand-actions { gap: 3px; }
+            .export-log, .clear-chat { padding: 3px 5px; font-size: 9px; }
+            .connection { max-width: 90px; }
+            .context-project { max-width: 55%; }
+            .context-scene { display: none; }
+            .composer-foot { flex-basis: 100%; }
+            .messages { padding: 14px 12px; }
+            .message { max-width: 100%; }
+            .message-body { font-size: 12px; }
+        }
     `,
 
     template: `
         <div class="root">
             <header class="top">
-                <div class="brand"><strong>CocosAgent <span class="extension-version" id="extension-version">v…</span></strong><div class="brand-actions"><button class="export-log" id="export-log">导出日志</button><button class="clear-chat" id="clear-chat" title="清除当前会话的聊天文本">清空聊天</button><span class="connection" id="connection">未连接</span></div></div>
-                <div class="project-context" id="project-context">
-                    <div class="project-context-head"><strong>当前工程上下文</strong><span class="context-actions"><button class="context-copy" id="context-copy">复制上下文</button><button class="context-refresh" id="context-refresh">刷新</button></span></div>
-                    <div class="context-line" id="context-project">正在读取工程…</div>
-                    <div class="context-line" id="context-scene">活动场景：读取中…</div>
-                    <div class="context-line" id="context-selection">选中对象：读取中…</div>
-                    <div class="context-line context-muted" id="context-conventions">项目约定：读取中…</div>
-                </div>
-                <div class="model-row">
-                    <input id="api-key" class="key" type="password" autocomplete="off" placeholder="DeepSeek API Key（连接后清空）" />
-                    <select id="model" aria-label="DeepSeek 模型">
-                        <option value="deepseek-flash">DeepSeek Flash</option>
-                        <option value="deepseek-v4-pro">DeepSeek V4 Pro</option>
-                    </select>
-                    <button id="connect" class="connect">连接</button>
-                </div>
-                <div class="credential-row">
-                    <label class="remember-option"><input id="remember-key" type="checkbox" checked />保存到本机用户配置</label>
-                    <button id="forget-key" class="forget">忘记 Key</button>
-                </div>
-                <div class="modebar" role="tablist" aria-label="Agent 模式">
-                    <button class="mode active" id="mode-ask" data-mode="Ask" role="tab">Ask</button>
-                    <button class="mode" id="mode-plan" data-mode="Plan" role="tab">Plan</button>
-                    <button class="mode" id="mode-agent" data-mode="Agent" role="tab">Agent</button>
-                </div>
-                <div class="mode-note" id="mode-note">只读询问工程、场景和资源。</div>
+                <div class="brand"><strong>CocosAgent <span class="extension-version" id="extension-version">v…</span></strong><div class="brand-actions"><span class="connection" id="connection">未连接</span><button class="export-log" id="export-log">导出日志</button><button class="clear-chat" id="clear-chat" title="清除当前会话的聊天文本">清空聊天</button></div></div>
+                <details class="project-context" id="project-context">
+                    <summary><span class="context-project" id="context-project">正在读取工程…</span><span class="context-scene" id="context-scene">场景：读取中…</span><span class="context-label">工程上下文</span></summary>
+                    <div class="context-expanded">
+                        <div class="project-context-head"><strong>当前 Creator 项目</strong><span class="context-actions"><button class="context-copy" id="context-copy">复制上下文</button><button class="context-refresh" id="context-refresh">刷新</button></span></div>
+                        <div class="context-line" id="context-selection">选中对象：读取中…</div>
+                        <div class="context-line context-muted" id="context-conventions">项目约定：读取中…</div>
+                    </div>
+                </details>
+                <details class="connection-settings" id="connection-settings">
+                    <summary>模型连接与凭据</summary>
+                    <div class="model-row">
+                        <input id="api-key" class="key" type="password" autocomplete="off" placeholder="DeepSeek API Key（连接后清空）" />
+                        <select id="model" aria-label="DeepSeek 模型">
+                            <option value="deepseek-flash">DeepSeek Flash</option>
+                            <option value="deepseek-v4-pro">DeepSeek V4 Pro</option>
+                        </select>
+                        <button id="connect" class="connect">连接</button>
+                    </div>
+                    <div class="credential-row">
+                        <label class="remember-option"><input id="remember-key" type="checkbox" checked />保存到本机用户配置</label>
+                        <button id="forget-key" class="forget">忘记 Key</button>
+                    </div>
+                </details>
             </header>
             <section class="messages" id="messages" aria-live="polite">
                 <div class="empty" id="empty">选择模式并连接 DeepSeek，然后直接用自然语言描述你要了解或完成的工作。</div>
@@ -319,15 +427,25 @@ Editor.Panel.extend({
                 <div class="approval-actions"><button id="reject">拒绝</button><button id="approve" class="approve">批准并执行</button></div>
             </section>
             <footer class="composer">
-                <textarea id="prompt" maxlength="8000" placeholder="向 CocosAgent 提问…"></textarea>
-                <div class="composer-foot"><span class="hint">Enter 发送 · Shift+Enter 换行</span><div><button id="cancel-run" hidden>停止任务</button> <button class="send" id="send">发送</button></div></div>
+                <div class="composer-box">
+                    <textarea id="prompt" maxlength="8000" placeholder="向 CocosAgent 提问…"></textarea>
+                    <div class="composer-controls">
+                        <div class="modebar" role="tablist" aria-label="Agent 模式">
+                            <button class="mode active" id="mode-ask" data-mode="Ask" role="tab">Ask</button>
+                            <button class="mode" id="mode-plan" data-mode="Plan" role="tab">Plan</button>
+                            <button class="mode" id="mode-agent" data-mode="Agent" role="tab">Agent</button>
+                        </div>
+                        <div class="mode-note" id="mode-note">只读询问工程、场景和资源。</div>
+                        <div class="composer-foot"><span class="hint">Enter 发送 · Shift+Enter 换行</span><div><button id="cancel-run" hidden>停止任务</button> <button class="send" id="send">发送</button></div></div>
+                    </div>
+                </div>
             </footer>
         </div>
     `,
 
     $: {
         connection: '#connection', extensionVersion: '#extension-version', exportLog: '#export-log', clearChat: '#clear-chat', apiKey: '#api-key', model: '#model', connect: '#connect', rememberKey: '#remember-key', forgetKey: '#forget-key',
-        projectContext: '#project-context', contextCopy: '#context-copy', contextRefresh: '#context-refresh', contextProject: '#context-project', contextScene: '#context-scene',
+        projectContext: '#project-context', connectionSettings: '#connection-settings', contextCopy: '#context-copy', contextRefresh: '#context-refresh', contextProject: '#context-project', contextScene: '#context-scene',
         contextSelection: '#context-selection', contextConventions: '#context-conventions',
         modeAsk: '#mode-ask', modePlan: '#mode-plan', modeAgent: '#mode-agent', modeNote: '#mode-note', messages: '#messages', empty: '#empty',
         prompt: '#prompt', send: '#send', cancelRun: '#cancel-run', approval: '#approval', approvalTool: '#approval-tool',
@@ -455,6 +573,7 @@ Editor.Panel.extend({
     setConnection(text, state) {
         this.$connection.textContent = text;
         this.$connection.dataset.state = state || '';
+        if (state === 'error' && this.$connectionSettings) this.$connectionSettings.open = true;
     },
 
     clearChat() {
@@ -808,6 +927,16 @@ Editor.Panel.extend({
             const activity = this.addActivity(summary);
             const diff = result.expectedDiff || result.script?.expectedDiff;
             if (diff !== undefined) this.appendDiffDetails(activity, diff);
+            const receipt = document.createElement('details');
+            receipt.className = 'tool-receipt';
+            const receiptSummary = document.createElement('summary');
+            receiptSummary.textContent = '展开工具回执';
+            const receiptBody = document.createElement('pre');
+            receiptBody.textContent = JSON.stringify({ toolName: message.toolName, access: message.access,
+                arguments: message.arguments, isError: Boolean(message.isError), result: details }, null, 2).slice(0, 12000);
+            receipt.appendChild(receiptSummary);
+            receipt.appendChild(receiptBody);
+            activity.appendChild(receipt);
             if (typeof imageDataUrl === 'string' && imageDataUrl.startsWith('data:image/jpeg;base64,')
                 && imageDataUrl.length <= 2 * 1024 * 1024 * 4 / 3 + 64) {
                 const screenshot = document.createElement('div');
@@ -943,6 +1072,7 @@ Editor.Panel.extend({
         this._plans.set(plan.id, plan);
         const card = document.createElement('section');
         card.className = 'plan-card';
+        card.dataset.status = plan.status || 'unknown';
         const title = document.createElement('h3');
         title.textContent = plan.title;
         card.appendChild(title);
@@ -1003,17 +1133,24 @@ Editor.Panel.extend({
         if (!['user', 'assistant'].includes(role) || typeof text !== 'string') return;
         const article = document.createElement('article');
         article.className = `message ${role}`;
+        const header = document.createElement('div');
+        header.className = 'message-header';
         const label = document.createElement('span');
         label.className = 'role';
-        label.textContent = role === 'user' ? 'You' : 'CocosAgent';
+        label.textContent = role === 'user' ? '你' : 'CocosAgent';
         const body = document.createElement('div');
         body.className = 'message-body';
         if (role === 'assistant') renderAssistantMarkdown(body, text);
         else body.textContent = text;
-        article.appendChild(label);
+        header.appendChild(label);
+        article.appendChild(header);
         article.appendChild(body);
         this.$messages.appendChild(article);
         this.addCopyButton(article);
+        if (role === 'assistant') {
+            const copyButton = article.querySelector('.copy-button');
+            if (copyButton) header.appendChild(copyButton);
+        }
         this.$messages.scrollTop = this.$messages.scrollHeight;
     },
 
