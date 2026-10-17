@@ -3,9 +3,10 @@
 ## Agent 回复与工具回执呈现（2026-10-17）
 
 - 必须区分 Unity 的两条产品线：**Unity 自有 Editor Assistant** 是 Unity 在 Editor 内提供的 Agent/AI 产品；**Unity 第三方 Agent 插件**则给 Codex、Claude 等已有 Agent 提供 Unity skills、CLI 与第一方 MCP，让第三方 Agent 学会 Unity 工作流并调用 Editor 命令。第三方插件使用的是第三方 Agent 的 Host/模型，不是把请求转交给 Unity Assistant 的模型或额度；它与自有 Assistant 的内部实现也不能混为一谈。Unity MCP 通过运行时工具目录暴露已连接 Editor 的命令，并支持工具目录变化通知。
+- **原生 CocosAgent 面板的产品、交互和评测基准是 Unity 自有 Editor Assistant。** 参照其 Editor 内 Ask（只读项目问答）、Plan（可审阅和批准的步骤）、Agent（执行并验证）、实时项目上下文、逐项工具活动、操作授权与可审阅/可恢复结果。Codex 只作为第三方 Host 插件的接入对象或一般交互参考，不是原生面板的产品对标。逐项比较当前 Cocos 实现与原生验收缺口见[Unity Assistant 面板对齐评测](docs/agent-foundation/cocos-agent-unity-alignment-development-direction-20261017.md#原生面板对齐基准与当前差距2026-10-17)。
 - **CocosAgent 采用与 Unity 对齐的双产品线方向：** 保留 Creator 内自有 Agent（本机 Host/TS 内核、用户配置的 Provider、Creator 面板和内部 MCP）；另行设计面向 Codex/Claude 等第三方 Host 的 Cocos 插件，提供 Cocos skills、CLI/MCP 与 Creator 工具能力，由第三方 Host/模型负责对话。第三方入口不调用 CocosAgent 自有模型服务，也不成为原生 Agent 的依赖。当前只是方向已确认；第三方插件合同、打包、运行接线和验收尚未完成。
 - CocosAgent 沿用清晰的职责边界：TS Host 负责模型往返、工具调度和最终 `finalText`；MCP 返回工具 schema、结构化结果及错误；Creator 面板负责呈现最终回复与任务过程。最终回复按安全 Markdown 正文渲染；用户消息紧凑靠右，Agent 回复靠左且限制可读宽度。工具调用状态单独进入活动时间线，回执 JSON、差异和详细证据用可展开区域呈现，不把原始 MCP JSON 塞入最终回复气泡。
-- 修改回复 UI 时以 `2.4.15NewProject/packages/cocos-agent-bridge/panel/index.js` 为面板源码，并检查与 `tools/cocos-agent-bridge/package-creator-extension.mjs` 的打包同步。源码改动不等于 Creator 已加载或原生面板验收；报告时区分代码实现、打包部署和 Creator 重载后的实测状态。
+- 修改回复 UI 时以 `2.4.15NewProject/packages/cocos-agent-bridge/panel/index.js` 为面板源码，并检查与 `tools/cocos-agent-bridge/package-creator-extension.mjs` 的打包同步。2026-10-17 新源码/包版本 0.3.21 收紧长回复阅读宽度、明确移除助手整块底色，并将工具活动呈现为轻量卡片；LinkUpClient 工程扩展已从 0.3.20 升级至 0.3.21，面板源码哈希与仓库一致，旧版回滚目录已保留。Creator 原生截图现已确认显示 0.3.21 且助手灰底消失。随后 0.3.22 增加三栏工作区：左侧任务/计划/执行清单，中间对话，右侧 Creator 工程上下文/最近工具结果/差异摘要；初版原生截图发现中间聊天区高度溢出并被输入框遮挡。0.3.23 修正网格行高与消息区垂直拉伸/独立滚动。用户复测发现收起侧栏后缺少显眼恢复入口；0.3.24 新增贴边“展开任务/展开审阅”按钮，窄面板在栏关闭时也保留边缘恢复按钮。重载后的最新布局复验仍待执行，不得描述为已通过。
 
 ## Creator 工程打开与身份核验
 

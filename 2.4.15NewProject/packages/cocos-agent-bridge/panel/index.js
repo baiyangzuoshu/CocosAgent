@@ -302,6 +302,7 @@ Editor.Panel.extend({
         .brand { margin: 0; min-height: 28px; }
         .brand strong { display: flex; align-items: baseline; gap: 7px; font-size: 13px; }
         .brand-actions { gap: 6px; }
+        .side-toggle { padding: 3px 7px; color: #b9c0ca; background: transparent; border-color: #41464e; font-size: 10px; white-space: nowrap; }
         .connection { max-width: 35%; overflow: hidden; padding: 3px 8px; border-radius: 12px; background: #303338; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
         .connection[data-state="ready"] { background: #23382d; }
         .project-context { margin: 7px 0 0; padding: 0; border: 0; background: transparent; color: #b9bec7; }
@@ -326,11 +327,11 @@ Editor.Panel.extend({
         .mode { flex: 0 0 auto; min-width: 56px; padding: 4px 10px; border-radius: 14px; font-size: 10px; }
         .mode.active { color: #f4f7fb; background: #3b4149; border-color: #58616d; }
         .mode-note { align-self: center; min-height: 0; margin: 0 0 6px 8px; color: #9299a3; font-size: 10px; }
-        .messages { width: 100%; max-width: 960px; align-self: center; padding: 24px 36px; }
+        .messages { width: 100%; max-width: 900px; align-self: center; padding: 24px 32px; }
         .empty { max-width: 600px; margin: auto; padding: 14vh 12px 8vh; text-align: center; font-size: 14px; }
-        .message { position: relative; max-width: 100%; margin-bottom: 26px; padding: 0; background: transparent; }
-        .message.user { width: fit-content; max-width: min(78%, 720px); margin-left: auto; padding: 10px 14px; border: 1px solid #41464e; border-radius: 14px 14px 4px 14px; background: #343940; }
-        .message.assistant { width: 100%; max-width: 860px; margin-right: auto; padding: 2px 0 8px; }
+        .message { position: relative; max-width: 100%; margin-bottom: 24px; padding: 0; background: transparent; }
+        .message.user { width: fit-content; max-width: min(74%, 720px); margin-left: auto; padding: 10px 14px; border: 1px solid #41464e; border-radius: 14px 14px 4px 14px; background: #343940; }
+        .message.assistant { width: 100%; max-width: 820px; margin-right: auto; padding: 2px 0 8px; border: 0; border-radius: 0; background: transparent !important; box-shadow: none; }
         .message-header { display: flex; min-height: 24px; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 5px; }
         .message .role { padding: 0; color: #aeb6c1; font-size: 11px; text-transform: none; letter-spacing: 0; }
         .message.assistant .role { color: #aeb6c1; font-weight: 600; }
@@ -338,15 +339,15 @@ Editor.Panel.extend({
         .message.assistant .copy-button { position: static; flex: 0 0 auto; opacity: 0; border-color: transparent; background: transparent; color: #aeb5bf; }
         .message.assistant:hover .copy-button, .message.assistant .copy-button:focus { opacity: .8; }
         .message.assistant .copy-button:hover { background: #34383e; color: #fff; }
-        .message-body { max-width: 82ch; font-size: 13px; line-height: 1.72; color: #e1e4e8; }
+        .message-body { max-width: 76ch; font-size: 13px; line-height: 1.68; color: #e1e4e8; }
         .message.user .message-body { max-width: none; }
         .message-body p { margin-bottom: 11px; }
         .message-body h1, .message-body h2, .message-body h3, .message-body h4 { letter-spacing: -.15px; }
-        .message-body h1 { margin-top: 22px; padding-bottom: 7px; border-bottom: 1px solid #3b4047; font-size: 20px; }
-        .message-body h2 { margin-top: 20px; font-size: 17px; }
-        .message-body h3, .message-body h4 { margin-top: 16px; font-size: 14px; }
-        .message-body ul, .message-body ol { margin-top: 7px; margin-bottom: 14px; padding-left: 26px; }
-        .message-body li { padding: 3px 0; }
+        .message-body h1 { margin-top: 20px; padding-bottom: 7px; border-bottom: 1px solid #3b4047; font-size: 19px; }
+        .message-body h2 { margin-top: 18px; font-size: 16px; }
+        .message-body h3, .message-body h4 { margin-top: 14px; font-size: 13px; }
+        .message-body ul, .message-body ol { margin-top: 6px; margin-bottom: 12px; padding-left: 24px; }
+        .message-body li { padding: 2px 0; }
         .message-body blockquote { margin: 10px 0 14px; padding: 5px 13px; border-left-width: 2px; border-radius: 0 5px 5px 0; background: #292d32; color: #c4cad2; }
         .message-body code { padding: 2px 5px; border-radius: 4px; background: #30343a; color: #d7e5fa; }
         .message-body a { text-decoration: none; }
@@ -354,7 +355,7 @@ Editor.Panel.extend({
         .message-body table { table-layout: auto; min-width: 100%; width: max-content; }
         .message-body th, .message-body td { padding: 7px 9px; }
         .copyable.message.assistant > .copy-button { display: none; }
-        .activity { width: 100%; max-width: 760px; margin: 3px auto 8px; padding: 6px 10px 6px 22px; border-left: 2px solid #454a52; color: #aeb5bf; font-size: 10px; }
+        .activity { width: 100%; max-width: 760px; margin: 3px auto 8px; padding: 7px 10px 7px 22px; border: 1px solid #383d44; border-left: 2px solid #59616c; border-radius: 7px; background: #26292d; color: #b8c0ca; font-size: 10px; }
         .activity::before { content: ''; position: absolute; top: 11px; left: 7px; width: 5px; height: 5px; border-radius: 50%; background: #7d8998; }
         .plan-card, .run-card { width: 100%; max-width: 800px; margin: 10px auto 16px; padding: 13px 15px; border-color: #444a53; border-radius: 10px; background: #292c31; }
         .plan-card { border-left: 3px solid #6da9ff; }
@@ -378,6 +379,42 @@ Editor.Panel.extend({
         .composer-foot { flex: 1 1 240px; margin: 0; }
         .composer-foot .hint { padding-left: 2px; }
         .send { min-width: 64px; padding: 6px 11px; border-radius: 7px; }
+        .workspace { position: relative; flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(190px, 230px) minmax(0, 1fr) minmax(220px, 270px); grid-template-rows: minmax(0, 1fr); }
+        .side-panel { min-width: 0; min-height: 0; overflow: auto; padding: 13px 12px; background: #222427; color: #c8cdd4; }
+        .task-sidebar { border-right: 1px solid #383b40; }
+        .review-sidebar { border-left: 1px solid #383b40; }
+        .side-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 12px; color: #e4e7eb; font-size: 11px; font-weight: 650; }
+        .side-heading button { padding: 2px 6px; color: #aeb5bf; background: transparent; border-color: transparent; font-size: 10px; }
+        .side-section { margin: 0 0 16px; }
+        .side-section h4 { margin: 0 0 7px; color: #929aa5; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .35px; }
+        .side-summary, .side-list { margin: 0; color: #c8cdd4; font-size: 11px; line-height: 1.55; overflow-wrap: anywhere; }
+        .side-muted { color: #858d98; }
+        .side-list { padding-left: 17px; }
+        .side-list li { margin: 0 0 6px; }
+        .side-status { display: inline-flex; align-items: center; gap: 5px; margin-top: 7px; padding: 3px 7px; border: 1px solid #41464e; border-radius: 10px; color: #b9c2cd; font-size: 10px; }
+        .side-status[data-state="running"] { color: #9fc5ff; border-color: #405b7c; }
+        .side-status[data-state="completed"] { color: #8bd1a3; border-color: #365b43; }
+        .side-status[data-state="failed"] { color: #ef9c8c; border-color: #71443b; }
+        .workspace .messages { width: 100%; height: auto; max-width: 1120px; min-width: 0; min-height: 0; align-self: stretch; justify-self: center; }
+        .review-sidebar .project-context { display: block; margin: 0; padding: 0; border: 0; background: transparent; }
+        .review-sidebar .project-context > summary { min-height: 22px; margin-bottom: 6px; cursor: default; }
+        .review-sidebar .context-expanded { margin: 0; padding: 0; border: 0; background: transparent; }
+        .review-sidebar .project-context-head { align-items: flex-start; }
+        .review-sidebar .context-actions { flex-shrink: 0; }
+        .review-sidebar .context-line { margin: 0 0 7px; color: #c2c8d0; }
+        .review-sidebar .context-muted { color: #929aa5; }
+        .review-detail { max-height: 220px; overflow: auto; margin: 0; padding: 8px; border: 1px solid #3b4047; border-radius: 6px; background: #1d1f22; color: #c8cdd4; font: 10px/1.5 Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .workspace.left-collapsed { grid-template-columns: minmax(0, 1fr) minmax(220px, 270px); }
+        .workspace.left-collapsed .task-sidebar { display: none; }
+        .workspace.right-collapsed { grid-template-columns: minmax(190px, 230px) minmax(0, 1fr); }
+        .workspace.right-collapsed .review-sidebar { display: none; }
+        .workspace.left-collapsed.right-collapsed { grid-template-columns: minmax(0, 1fr); }
+        .workspace.left-collapsed.right-collapsed .messages { max-width: 1120px; }
+        .restore-sidebar { display: none; position: absolute; z-index: 6; top: 12px; align-items: center; justify-content: center; padding: 8px 7px; border: 1px solid #4a515b; border-radius: 7px; background: #30343a; color: #d5dbe3; font-size: 10px; writing-mode: vertical-rl; box-shadow: 0 3px 12px rgba(0,0,0,.22); }
+        .restore-sidebar:hover { background: #3e444c; }
+        .restore-left { left: 5px; }
+        .restore-right { right: 5px; }
+        .workspace.left-collapsed .restore-left, .workspace.right-collapsed .restore-right { display: inline-flex; }
         @media (max-width: 520px) {
             .brand-actions { gap: 3px; }
             .export-log, .clear-chat { padding: 3px 5px; font-size: 9px; }
@@ -387,23 +424,26 @@ Editor.Panel.extend({
             .composer-foot { flex-basis: 100%; }
             .messages { padding: 14px 12px; }
             .message { max-width: 100%; }
+            .message.assistant { max-width: 100%; }
             .message.user { max-width: 88%; }
             .message-body { font-size: 12px; }
+        }
+        @media (max-width: 1080px) {
+            .workspace { display: block; position: relative; }
+            .workspace .messages { height: 100%; max-width: 100%; }
+            .workspace .side-panel { display: none; position: absolute; z-index: 5; top: 0; bottom: 0; width: min(310px, 86vw); box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+            .workspace .task-sidebar { left: 0; border-right: 1px solid #484d55; }
+            .workspace .review-sidebar { right: 0; border-left: 1px solid #484d55; }
+            .workspace.show-left .task-sidebar, .workspace.show-right .review-sidebar { display: block; }
+            .workspace:not(.show-left) .restore-left, .workspace:not(.show-right) .restore-right { display: inline-flex; writing-mode: horizontal-tb; }
+            .workspace.left-collapsed, .workspace.right-collapsed, .workspace.left-collapsed.right-collapsed { display: block; }
         }
     `,
 
     template: `
         <div class="root">
             <header class="top">
-                <div class="brand"><strong>CocosAgent <span class="extension-version" id="extension-version">v…</span></strong><div class="brand-actions"><span class="connection" id="connection">未连接</span><button class="export-log" id="export-log">导出日志</button><button class="clear-chat" id="clear-chat" title="清除当前会话的聊天文本">清空聊天</button></div></div>
-                <details class="project-context" id="project-context">
-                    <summary><span class="context-project" id="context-project">正在读取工程…</span><span class="context-scene" id="context-scene">场景：读取中…</span><span class="context-label">工程上下文</span></summary>
-                    <div class="context-expanded">
-                        <div class="project-context-head"><strong>当前 Creator 项目</strong><span class="context-actions"><button class="context-copy" id="context-copy">复制上下文</button><button class="context-refresh" id="context-refresh">刷新</button></span></div>
-                        <div class="context-line" id="context-selection">选中对象：读取中…</div>
-                        <div class="context-line context-muted" id="context-conventions">项目约定：读取中…</div>
-                    </div>
-                </details>
+                <div class="brand"><strong>CocosAgent <span class="extension-version" id="extension-version">v…</span></strong><div class="brand-actions"><button class="side-toggle" id="show-left" title="显示或收起任务栏">任务</button><button class="side-toggle" id="show-right" title="显示或收起上下文与审阅栏">审阅</button><span class="connection" id="connection">未连接</span><button class="export-log" id="export-log">导出日志</button><button class="clear-chat" id="clear-chat" title="清除当前会话的聊天文本">清空聊天</button></div></div>
                 <details class="connection-settings" id="connection-settings">
                     <summary>模型连接与凭据</summary>
                     <div class="model-row">
@@ -420,9 +460,35 @@ Editor.Panel.extend({
                     </div>
                 </details>
             </header>
-            <section class="messages" id="messages" aria-live="polite">
-                <div class="empty" id="empty">选择模式并连接 DeepSeek，然后直接用自然语言描述你要了解或完成的工作。</div>
-            </section>
+            <div class="workspace" id="workspace">
+                <aside class="side-panel task-sidebar" aria-label="任务与计划">
+                    <div class="side-heading"><span>任务</span><button id="hide-left" title="收起任务栏" aria-label="收起任务栏">收起</button></div>
+                    <section class="side-section"><h4>当前任务</h4><p class="side-summary side-muted" id="task-summary">还没有进行中的任务。</p><span class="side-status" id="task-status" data-state="idle">空闲</span></section>
+                    <section class="side-section"><h4>计划</h4><p class="side-summary side-muted" id="task-plan">生成计划后会显示在这里。</p></section>
+                    <section class="side-section"><h4>执行清单</h4><ul class="side-list side-muted" id="task-checklist"><li>暂无执行项</li></ul></section>
+                </aside>
+                <section class="messages" id="messages" aria-live="polite">
+                    <div class="empty" id="empty">选择模式并连接 DeepSeek，然后直接用自然语言描述你要了解或完成的工作。</div>
+                </section>
+                <aside class="side-panel review-sidebar" aria-label="工程上下文与审阅">
+                    <div class="side-heading"><span>上下文与审阅</span><button id="hide-right" title="收起审阅栏" aria-label="收起审阅栏">收起</button></div>
+                    <section class="side-section">
+                        <h4>Creator 工程</h4>
+                        <details class="project-context" id="project-context" open>
+                            <summary><span class="context-project" id="context-project">正在读取工程…</span><span class="context-scene" id="context-scene">场景：读取中…</span><span class="context-label">工程上下文</span></summary>
+                            <div class="context-expanded">
+                                <div class="project-context-head"><strong class="context-project" id="context-project-detail">当前 Creator 项目</strong><span class="context-actions"><button class="context-copy" id="context-copy">复制</button><button class="context-refresh" id="context-refresh">刷新</button></span></div>
+                                <div class="context-line" id="context-selection">选中对象：读取中…</div>
+                                <div class="context-line context-muted" id="context-conventions">项目约定：读取中…</div>
+                            </div>
+                        </details>
+                    </section>
+                    <section class="side-section"><h4>最近工具结果</h4><p class="side-summary side-muted" id="review-latest">尚无工具回执。</p></section>
+                    <section class="side-section"><h4>差异 / 操作摘要</h4><pre class="review-detail" id="review-detail">工具回执和可用差异会显示在这里。</pre></section>
+                </aside>
+                <button class="restore-sidebar restore-left" id="restore-left" title="重新展开任务栏" aria-label="重新展开任务栏">展开任务</button>
+                <button class="restore-sidebar restore-right" id="restore-right" title="重新展开上下文与审阅栏" aria-label="重新展开上下文与审阅栏">展开审阅</button>
+            </div>
             <section class="approval" id="approval">
                 <div class="approval-title">Agent 请求执行一项编辑器操作</div>
                 <div class="approval-tool" id="approval-tool"></div>
@@ -448,7 +514,9 @@ Editor.Panel.extend({
 
     $: {
         connection: '#connection', extensionVersion: '#extension-version', exportLog: '#export-log', clearChat: '#clear-chat', apiKey: '#api-key', model: '#model', connect: '#connect', rememberKey: '#remember-key', forgetKey: '#forget-key',
-        projectContext: '#project-context', connectionSettings: '#connection-settings', contextCopy: '#context-copy', contextRefresh: '#context-refresh', contextProject: '#context-project', contextScene: '#context-scene',
+        workspace: '#workspace', hideLeft: '#hide-left', hideRight: '#hide-right', showLeft: '#show-left', showRight: '#show-right', restoreLeft: '#restore-left', restoreRight: '#restore-right',
+        taskSummary: '#task-summary', taskStatus: '#task-status', taskPlan: '#task-plan', taskChecklist: '#task-checklist', reviewLatest: '#review-latest', reviewDetail: '#review-detail',
+        projectContext: '#project-context', connectionSettings: '#connection-settings', contextCopy: '#context-copy', contextRefresh: '#context-refresh', contextProject: '#context-project', contextProjectDetail: '#context-project-detail', contextScene: '#context-scene',
         contextSelection: '#context-selection', contextConventions: '#context-conventions',
         modeAsk: '#mode-ask', modePlan: '#mode-plan', modeAgent: '#mode-agent', modeNote: '#mode-note', messages: '#messages', empty: '#empty',
         prompt: '#prompt', send: '#send', cancelRun: '#cancel-run', approval: '#approval', approvalTool: '#approval-tool',
@@ -468,6 +536,8 @@ Editor.Panel.extend({
         this._plans = new Map();
         this._runCards = new Map();
         this._projectContext = null;
+        this._latestPlan = null;
+        this._latestChecklist = [];
         this._clearChatArmed = false;
         this._clearChatTimer = null;
         this._copyRequests = new Map();
@@ -493,6 +563,12 @@ Editor.Panel.extend({
             this.$contextSelection.textContent, this.$contextConventions.textContent,
         ].join('\n'), this.$contextCopy));
         this.$contextRefresh.addEventListener('click', () => this.refreshProjectContext());
+        this.$hideLeft.addEventListener('click', () => this.hideSidebar('left'));
+        this.$hideRight.addEventListener('click', () => this.hideSidebar('right'));
+        this.$showLeft.addEventListener('click', () => this.toggleSidebar('left'));
+        this.$showRight.addEventListener('click', () => this.toggleSidebar('right'));
+        this.$restoreLeft.addEventListener('click', () => this.openSidebar('left'));
+        this.$restoreRight.addEventListener('click', () => this.openSidebar('right'));
         this.$prompt.addEventListener('keydown', (event) => {
             if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); this.sendPrompt(); }
         });
@@ -781,6 +857,7 @@ Editor.Panel.extend({
         this.$cancelRun.textContent = '停止任务';
         this.$prompt.value = '';
         this.addMessage('user', text);
+        this.updateTaskSidebar(text, `${this._mode} · 正在处理`, 'running');
         this._runActivity = this.addActivity(`${this._mode} · 正在刷新工程上下文…`);
         this.refreshProjectContext((error) => {
             if (this._requestId !== requestId) return;
@@ -822,6 +899,7 @@ Editor.Panel.extend({
             this._projectContext = context;
             const projectName = context.projectName || '未命名工程';
             this.$contextProject.textContent = `${projectName} · Creator ${context.creatorVersion || '未知版本'}`;
+            this.$contextProjectDetail.textContent = `${projectName} · Creator ${context.creatorVersion || '未知版本'}`;
             this.$contextProject.title = context.projectRoot || '';
             this.$contextScene.textContent = `活动场景：${context.activeScene || '无活动场景'}`;
             const selected = Array.isArray(context.selectedNodes) ? context.selectedNodes : [];
@@ -930,6 +1008,11 @@ Editor.Panel.extend({
             const activity = this.addActivity(summary);
             const diff = result.expectedDiff || result.script?.expectedDiff;
             if (diff !== undefined) this.appendDiffDetails(activity, diff);
+            this.$reviewLatest.textContent = `${label} · ${message.toolName}${result.operationId ? ` · operation ${result.operationId}` : ''}`;
+            this.$reviewDetail.textContent = diff !== undefined
+                ? JSON.stringify({ toolName: message.toolName, operationId: result.operationId || null, diff }, null, 2).slice(0, 8000)
+                : JSON.stringify({ toolName: message.toolName, operationId: result.operationId || null,
+                    summary: summary.slice(0, 1800) }, null, 2).slice(0, 8000);
             const receipt = document.createElement('details');
             receipt.className = 'tool-receipt';
             const receiptSummary = document.createElement('summary');
@@ -1005,6 +1088,39 @@ Editor.Panel.extend({
         this.addActivity(approved ? '已批准。' : '已拒绝。');
     },
 
+    toggleSidebar(side) {
+        const narrow = typeof matchMedia === 'function' && matchMedia('(max-width: 1080px)').matches;
+        const shownClass = narrow ? `show-${side}` : `${side}-collapsed`;
+        const otherShownClass = narrow ? `show-${side === 'left' ? 'right' : 'left'}` : null;
+        this.$workspace.classList.toggle(shownClass);
+        if (otherShownClass) this.$workspace.classList.remove(otherShownClass);
+    },
+
+    openSidebar(side) {
+        const narrow = typeof matchMedia === 'function' && matchMedia('(max-width: 1080px)').matches;
+        if (narrow) {
+            this.$workspace.classList.add(`show-${side}`);
+            this.$workspace.classList.remove(`show-${side === 'left' ? 'right' : 'left'}`);
+        } else {
+            this.$workspace.classList.remove(`${side}-collapsed`);
+        }
+    },
+
+    hideSidebar(side) {
+        const narrow = typeof matchMedia === 'function' && matchMedia('(max-width: 1080px)').matches;
+        this.$workspace.classList.remove(narrow ? `show-${side}` : `${side}-collapsed`);
+        if (!narrow) this.$workspace.classList.add(`${side}-collapsed`);
+    },
+
+    updateTaskSidebar(task, status, state) {
+        if (typeof task === 'string' && task.trim()) {
+            this.$taskSummary.textContent = task.trim().slice(0, 280);
+            this.$taskSummary.classList.remove('side-muted');
+        }
+        if (typeof status === 'string') this.$taskStatus.textContent = status;
+        if (typeof state === 'string') this.$taskStatus.dataset.state = state;
+    },
+
     finishRun(reason, status = 'stopped') {
         const labels = { completed: '已结束', cancelled: '已取消', 'needs-review': '待核对',
             'awaiting-approval': '等待批准', stopped: '已停止', failed: '失败' };
@@ -1016,6 +1132,10 @@ Editor.Panel.extend({
         if (reason && status !== 'completed') this.addActivity(`${label}：${reason}`);
         this._runActivity = null;
         this._busy = false;
+        const state = status === 'completed' ? 'completed' : status === 'failed' ? 'failed' : status === 'needs-review' ? 'failed' : 'idle';
+        this.$taskStatus.dataset.state = state;
+        this.$taskStatus.textContent = label;
+        if (reason) this.$reviewLatest.textContent = `${label} · ${String(reason).slice(0, 160)}`;
         this.$cancelRun.hidden = true;
         this.$cancelRun.disabled = false;
         this.$cancelRun.textContent = '停止任务';
@@ -1037,6 +1157,8 @@ Editor.Panel.extend({
             : `验收目标 ${goal.taskId || ''}：仍有 ${outstanding.length} 项未完成（续跑 ${goal.continuationAttempt || 0}/${goal.maxContinuationAttempts || 0}）。`;
         const details = outstanding.map((item) => `- ${item.id}: ${item.description} · 缺少回执 ${Array.isArray(item.missingTools) ? item.missingTools.join(', ') || '依赖任务' : '未知'}`);
         this.addActivity([summary, ...details].join('\n'));
+        this.$reviewLatest.textContent = goal.satisfied === true ? '任务验收条件已满足。'
+            : `任务验收未完成 · ${outstanding.length} 项仍需处理。`;
     },
 
     cancelRun() {
@@ -1073,6 +1195,19 @@ Editor.Panel.extend({
     renderPlan(plan) {
         if (!plan || !Array.isArray(plan.steps)) return;
         this._plans.set(plan.id, plan);
+        this._latestPlan = plan;
+        this.$taskPlan.textContent = `${plan.title || '未命名计划'} · ${plan.steps.length} 步 · ${plan.status || '状态未知'}${Number.isInteger(plan.completedSteps) ? ` · 完成 ${plan.completedSteps}` : ''}`;
+        const planSection = this.$taskPlan.closest('.side-section');
+        const previousSteps = planSection.querySelector('.sidebar-plan-steps');
+        if (previousSteps) previousSteps.remove();
+        const sidebarSteps = document.createElement('ol');
+        sidebarSteps.className = 'side-list sidebar-plan-steps';
+        plan.steps.slice(0, 12).forEach((step, index) => {
+            const row = document.createElement('li');
+            row.textContent = `${index + 1}. ${step.title || '未命名步骤'}`;
+            sidebarSteps.appendChild(row);
+        });
+        planSection.appendChild(sidebarSteps);
         const card = document.createElement('section');
         card.className = 'plan-card';
         card.dataset.status = plan.status || 'unknown';
@@ -1184,6 +1319,20 @@ Editor.Panel.extend({
 
     renderExecutionChecklist(items, id, live = false, parent = null) {
         if (!Array.isArray(items)) return;
+        this._latestChecklist = items.slice();
+        clearChildren(this.$taskChecklist);
+        for (const item of items) {
+            if (!item || typeof item.content !== 'string') continue;
+            const row = document.createElement('li');
+            const marker = item.status === 'completed' ? '✓' : item.status === 'in_progress' ? '›' : '○';
+            row.textContent = `${marker} ${item.content}`;
+            this.$taskChecklist.appendChild(row);
+        }
+        if (!items.length) {
+            const row = document.createElement('li');
+            row.textContent = '暂无执行项';
+            this.$taskChecklist.appendChild(row);
+        }
         const key = String(id || 'unknown');
         if (!this._checklistCards) this._checklistCards = new Map();
         let card = this._checklistCards.get(key);
@@ -1234,6 +1383,8 @@ Editor.Panel.extend({
             stopped: run.goalEvaluation?.satisfied === false ? '未完成' : '已停止', 'awaiting-approval': '等待批准',
             'needs-review': '需要核对', interrupted: '服务重启中断', cancelled: '已取消' };
         title.textContent = `${statusLabels[run.status] || run.status || '任务'} · ${(run.task || '').slice(0, 180)}`;
+        const restoredState = run.status === 'completed' ? 'completed' : run.status === 'failed' || run.status === 'needs-review' ? 'failed' : 'idle';
+        this.updateTaskSidebar(run.task || '', `${run.mode || 'Agent'} · ${statusLabels[run.status] || run.status || '任务'}`, restoredState);
         card.appendChild(title);
         const meta = document.createElement('div');
         meta.className = 'run-meta';
