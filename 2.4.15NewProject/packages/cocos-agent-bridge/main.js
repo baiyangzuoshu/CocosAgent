@@ -9,6 +9,7 @@ const { searchPngAssets } = require('./asset-search');
 const { CredentialStore } = require('./credential-store.cjs');
 const extensionPackage = require('./package.json');
 const scriptOperations = require('./script-operations');
+const commandContract = require('./command-contract');
 
 const CREATOR_VERSION = '2.4.15';
 const EXTENSION_VERSION = extensionPackage.version;
@@ -52,224 +53,86 @@ instanceBytes[6] = (instanceBytes[6] & 0x0f) | 0x40;
 instanceBytes[8] = (instanceBytes[8] & 0x3f) | 0x80;
 const instanceHex = instanceBytes.toString('hex');
 const INSTANCE_ID = `${instanceHex.slice(0, 8)}-${instanceHex.slice(8, 12)}-${instanceHex.slice(12, 16)}-${instanceHex.slice(16, 20)}-${instanceHex.slice(20)}`;
-function listRelativeFiles(root, relative = '') {
-    return fs.readdirSync(path.join(root, relative), { withFileTypes: true }).flatMap((entry) => {
-        const child = path.join(relative, entry.name);
-        if (entry.isDirectory()) return listRelativeFiles(root, child);
-        return entry.isFile() ? [child.replace(/\\/g, '/')] : [];
-    }).sort();
+const runtimeFingerprintPath = path.resolve(__dirname, 'assistant-runtime/tools/cocos-agent-bridge/runtime-fingerprint.js');
+let runtimeFingerprint = null;
+for (const filename of [runtimeFingerprintPath, path.resolve(__dirname, '../../../tools/cocos-agent-bridge/runtime-fingerprint.js')]) {
+    try {
+        const candidate = require(filename);
+        if (typeof candidate.fingerprintCreatorExtension === 'function') { runtimeFingerprint = candidate; break; }
+    } catch (_) {}
 }
-const EXTENSION_SOURCE_FILES = ['asset-search.js', 'credential-store.cjs', 'main.js', 'script-operations.js', 'package-lock.json', 'package.json', 'scene.js',
-    ...listRelativeFiles(__dirname, 'vendor/ws')].sort();
-const EXTENSION_SOURCE_FINGERPRINT = (() => {
-    const hash = crypto.createHash('sha256');
-    for (const relativePath of EXTENSION_SOURCE_FILES) {
-        hash.update(relativePath);
-        hash.update('\0');
-        hash.update(fs.readFileSync(path.join(__dirname, relativePath)));
-        hash.update('\0');
-    }
-    return hash.digest('hex');
-})();
-const COMMAND_INPUTS = {
-    snapshot: { type: 'object', additionalProperties: false,
-        properties: { targetNodeName: { type: 'string', minLength: 1, maxLength: 64 } } },
-    runtimePreviewStart: { type: 'object', additionalProperties: false, properties: {} },
-    nodeInspect: { type: 'object', additionalProperties: false, required: ['nodePath'],
-        properties: { nodePath: { type: 'string', minLength: 1, maxLength: 240 } } },
-    searchPng: { type: 'object', additionalProperties: false, required: ['query'],
-        properties: { query: { type: 'string', minLength: 1, maxLength: 80, pattern: '^[^\\u0000-\\u001f\\u007f]+$' },
-            limit: { type: 'integer', minimum: 1, maximum: 50 }, offset: { type: 'integer', minimum: 0, maximum: 100000 } } },
-    importPng: { type: 'object', additionalProperties: false, required: ['sourcePath'],
-        properties: { sourcePath: { type: 'string', minLength: 1 } } },
-    removeImportedPng: { type: 'object', additionalProperties: false, required: ['assetName', 'textureUuid', 'spriteFrameUuid', 'sha256'],
-        properties: {
-            assetName: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$' },
-            textureUuid: { type: 'string', pattern: '^[0-9a-fA-F-]{36}$' },
-            spriteFrameUuid: { type: 'string', pattern: '^[0-9a-fA-F-]{36}$' },
-            sha256: { type: 'string', pattern: '^[0-9a-f]{64}$' },
-        } },
-    validatePng: { type: 'object', additionalProperties: false, required: ['pipelineId', 'assetName'],
-        properties: { pipelineId: { type: 'string', format: 'uuid' },
-            assetName: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$' } } },
-    refreshFolder: { type: 'object', additionalProperties: false, required: ['folderPath'],
-        properties: { folderPath: { type: 'string', minLength: 1, maxLength: 240,
-            pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]*(?:/[A-Za-z0-9][A-Za-z0-9_.-]*){0,7}$' } } },
-    refreshPng: { type: 'object', additionalProperties: false, required: ['pipelineId', 'assetName'],
-        properties: { pipelineId: { type: 'string', format: 'uuid' },
-            assetName: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$' } } },
-    pngSprite: { type: 'object', additionalProperties: false, required: ['assetName', 'action'],
-        properties: {
-            assetName: { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$' },
-            action: { enum: ['apply', 'compensate', 'replay'] },
-            operationId: { type: 'string', pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' },
-            position: { $ref: '#/$defs/canvasPosition' },
-        } },
-    nodeCreate: { type: 'object', additionalProperties: false, required: ['parentPath', 'parentUuid', 'nodeName', 'action'],
-        properties: {
-            parentPath: { type: 'string', minLength: 1, maxLength: 240 },
-            parentUuid: { type: 'string', minLength: 1, maxLength: 64 },
-            nodeName: { type: 'string', pattern: '^[A-Za-z0-9_ -]{1,64}$' },
-            action: { enum: ['apply', 'compensate', 'replay'] },
-            components: { type: 'array', maxItems: 1, items: { oneOf: [
-                { type: 'object', additionalProperties: false, required: ['classId', 'spriteFrameUuid'], properties: {
-                    classId: { const: 'cc.Sprite' }, spriteFrameUuid: { type: 'string', pattern: '^[0-9a-fA-F-]{36}$' } } },
-                { type: 'object', additionalProperties: false, required: ['classId', 'text'], properties: {
-                    classId: { const: 'cc.Label' }, text: { type: 'string', maxLength: 256 } } },
-            ] } },
-            transform: { type: 'object', additionalProperties: false, properties: {
-                position: { $ref: '#/$defs/canvasPosition' }, scale: { $ref: '#/$defs/canvasPosition' },
-            } },
-            prefabMode: { enum: ['create', 'instantiate'] },
-            prefabUuid: { type: 'string', pattern: '^[0-9a-fA-F-]{36}$' },
-            sourceOperationId: { type: 'string', pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' },
-            operationId: { type: 'string', pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' },
-        },
-        allOf: [
-            { if: { properties: { prefabMode: { const: 'instantiate' } }, required: ['prefabMode'] }, then: { required: ['prefabUuid'] } },
-            { if: { properties: { prefabMode: { const: 'create' } }, required: ['prefabMode'] }, then: { not: { required: ['prefabUuid'] } } },
-        ] },
-    nodePatch: { type: 'object', additionalProperties: false, required: ['targetNodePath', 'targetNodeUuid', 'action', 'expectedDiff'],
-        properties: {
-            targetNodePath: { type: 'string', minLength: 1, maxLength: 240 },
-            targetNodeUuid: { type: 'string', minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_+/=-]+$' },
-            action: { enum: ['apply', 'compensate', 'replay'] },
-            expectedDiff: { type: 'array', minItems: 1, maxItems: 16, items: { type: 'object', additionalProperties: false,
-                required: ['path', 'before', 'after'], properties: { path: { enum: ['node.name', 'node.active', 'node.position.x', 'node.position.y',
-                    'node.scale.x', 'node.scale.y', 'component.cc.Sprite.enabled', 'component.cc.Sprite.spriteFrameUuid',
-                    'component.cc.Label.enabled'] }, before: {}, after: {} } } },
-            sourceOperationId: { type: 'string', pattern: '^[0-9a-fA-F-]{36}$' },
-            operationId: { type: 'string', pattern: '^[0-9a-fA-F-]{36}$' },
-        } },
-    prefabSourcePatch: { type: 'object', additionalProperties: false,
-        required: ['prefabUuid', 'targetNodePath', 'targetNodeUuid', 'action', 'expectedDiff'],
-        properties: {
-            prefabUuid: { type: 'string', pattern: '^[0-9a-fA-F-]{36}$' },
-            targetNodePath: { type: 'string', minLength: 1, maxLength: 240 },
-            targetNodeUuid: { type: 'string', minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_+/=-]+$' },
-            expectedPrefabSha256: { type: 'string', pattern: '^[a-f0-9]{64}$' },
-            action: { enum: ['apply', 'compensate', 'replay'] },
-            expectedDiff: { type: 'array', minItems: 1, maxItems: 16, items: { type: 'object', additionalProperties: false,
-                required: ['path', 'before', 'after'], properties: { path: { enum: ['node.name', 'node.active', 'node.position.x', 'node.position.y',
-                    'node.scale.x', 'node.scale.y', 'component.cc.Sprite.enabled', 'component.cc.Sprite.spriteFrameUuid',
-                    'component.cc.Label.enabled'] }, before: {}, after: {} } } },
-            sourceOperationId: { type: 'string', pattern: '^[0-9a-fA-F-]{36}$' },
-            operationId: { type: 'string', pattern: '^[0-9a-fA-F-]{36}$' },
-        }, allOf: [
-            { if: { properties: { action: { const: 'apply' } }, required: ['action'] },
-                then: { required: ['expectedPrefabSha256'], not: { required: ['sourceOperationId'] } } },
-            { if: { properties: { action: { enum: ['compensate', 'replay'] } }, required: ['action'] },
-                then: { required: ['sourceOperationId'] } },
-        ] },
-    prefabSourceInspect: { type: 'object', additionalProperties: false, required: ['prefabUuid'],
-        properties: { prefabUuid: { type: 'string', pattern: '^[0-9a-fA-F-]{36}$' } } },
-    contentStressRun: { type: 'object', additionalProperties: false,
-        required: ['buildId', 'resourcePaths', 'parseFixturePaths', 'failureResourcePath', 'cycles', 'nodeCount', 'packable', 'profileId', 'loadMode', 'budgetProfileId', 'budgets'],
-        properties: {
-            buildId: { type: 'string', pattern: '^[a-z0-9][a-z0-9-]{2,31}$' },
-            resourcePaths: { type: 'array', minItems: 2, maxItems: 16, uniqueItems: true,
-                items: { type: 'string', pattern: '^[A-Za-z0-9_-]{1,64}(?:/[A-Za-z0-9_-]{1,64}){0,7}$' } },
-            parseFixturePaths: { type: 'array', minItems: 2, maxItems: 16, uniqueItems: true,
-                items: { type: 'string', pattern: '^[A-Za-z0-9_-]{1,64}(?:/[A-Za-z0-9_-]{1,64}){0,7}$' } },
-            failureResourcePath: { type: 'string', pattern: '^[A-Za-z0-9_-]{1,64}(?:/[A-Za-z0-9_-]{1,64}){0,7}$' },
-            cycles: { type: 'integer', minimum: 8, maximum: 256 },
-            nodeCount: { type: 'integer', minimum: 32, maximum: 1024 },
-            packable: { type: 'boolean' },
-            profileId: { const: 'macos-arm64-chrome-headless-swiftshader-1280x800' },
-            loadMode: { const: 'cold-and-warm' },
-            budgetProfileId: { const: 'macos-arm64-headless-swiftshader-host-screening-v1' },
-            budgets: { type: 'object', additionalProperties: false,
-                required: ['targetFps', 'maxColdResourceLoadP95Ms', 'maxWarmResourceLoadP95Ms', 'maxImportParserP95Ms', 'maxPngParserP95Ms', 'maxReleaseCallP95Ms', 'maxEstimatedRgbaWorkingSetBytes'],
-                properties: {
-                    targetFps: { type: 'number', minimum: 1, maximum: 360 },
-                    maxColdResourceLoadP95Ms: { type: 'number', minimum: 0.01, maximum: 60000 },
-                    maxWarmResourceLoadP95Ms: { type: 'number', minimum: 0.01, maximum: 60000 },
-                    maxImportParserP95Ms: { type: 'number', minimum: 0.01, maximum: 60000 },
-                    maxPngParserP95Ms: { type: 'number', minimum: 0.01, maximum: 60000 },
-                    maxReleaseCallP95Ms: { type: 'number', minimum: 0.01, maximum: 60000 },
-                    maxEstimatedRgbaWorkingSetBytes: { type: 'integer', minimum: 1048576, maximum: 1073741824 },
-                } },
-        } },
-};
+if (!runtimeFingerprint) throw new Error('COCOS_AGENT_RUNTIME_FINGERPRINT_MISSING');
+const EXTENSION_SOURCE_FINGERPRINT = runtimeFingerprint.fingerprintCreatorExtension(__dirname);
 
 function commandCatalog(context) {
     const sceneReady = typeof context.sceneName === 'string' && context.sceneName.length > 0;
     const spriteReady = sceneReady && context.hasCanvas === true;
     const assetDbReady = context.assetDbReady === true;
-    return [
+    const commands = [
         { id: 'project.search', contractVersion: '0.1', access: 'read',
-            inputSchema: 'catalog.schema.json#/$defs/projectSearchInput2x', input: scriptOperations.inputs['project.search'],
             preconditions: ['projectAssetsAvailable'], status: 'available', reason: null },
         { id: 'script.read', contractVersion: '0.2', access: 'read',
-            inputSchema: 'catalog.schema.json#/$defs/scriptReadInput2x', input: scriptOperations.inputs['script.read'],
             preconditions: ['existingProjectScript', 'assetDbReady'],
             status: assetDbReady ? 'available' : 'unavailable', reason: assetDbReady ? null : 'ASSETDB_UNAVAILABLE' },
         { id: 'script.patch.plan', contractVersion: '0.2', access: 'read',
-            inputSchema: 'catalog.schema.json#/$defs/scriptPatchPlanInput2x', input: scriptOperations.inputs['script.patch.plan'],
             preconditions: ['existingProjectScript', 'assetDbReady'],
             status: assetDbReady ? 'available' : 'unavailable', reason: assetDbReady ? null : 'ASSETDB_UNAVAILABLE' },
         { id: 'script.patch', contractVersion: '0.2', access: 'write',
-            inputSchema: 'catalog.schema.json#/$defs/scriptPatchInput2x', input: scriptOperations.inputs['script.patch'],
             preconditions: ['existingProjectScript', 'assetDbReady'],
             status: assetDbReady ? 'available' : 'unavailable', reason: assetDbReady ? null : 'ASSETDB_UNAVAILABLE' },
         { id: 'script.operation.get', contractVersion: '0.2', access: 'read',
-            inputSchema: 'catalog.schema.json#/$defs/scriptOperationGetInput2x', input: scriptOperations.inputs['script.operation.get'],
             preconditions: ['existingProjectScript', 'assetDbReady'],
             status: assetDbReady ? 'available' : 'unavailable', reason: assetDbReady ? null : 'ASSETDB_UNAVAILABLE' },
-        { id: 'scene.snapshot', contractVersion: '0.1', access: 'read',
-            inputSchema: 'catalog.schema.json#/$defs/snapshotInput', input: COMMAND_INPUTS.snapshot, preconditions: ['activeScene'],
+        { id: 'scene.snapshot', contractVersion: '0.1', access: 'read', preconditions: ['activeScene'],
             status: sceneReady ? 'available' : 'unavailable', reason: sceneReady ? null : 'NO_OPEN_SCENE' },
-        { id: 'runtime.preview.start', contractVersion: '0.1', access: 'write',
-            inputSchema: 'catalog.schema.json#/$defs/runtimePreviewStartInput2x', input: COMMAND_INPUTS.runtimePreviewStart, preconditions: ['activeScene'],
+        { id: 'runtime.preview.start', contractVersion: '0.1', access: 'write', preconditions: ['activeScene'],
             status: sceneReady ? 'available' : 'unavailable', reason: sceneReady ? null : 'NO_OPEN_SCENE' },
-        { id: 'scene.node.inspect', contractVersion: '0.1', access: 'read',
-            inputSchema: 'catalog.schema.json#/$defs/nodeInspectInput', input: COMMAND_INPUTS.nodeInspect, preconditions: ['activeScene'],
+        { id: 'scene.node.inspect', contractVersion: '0.1', access: 'read', preconditions: ['activeScene'],
             status: sceneReady ? 'available' : 'unavailable', reason: sceneReady ? null : 'NO_OPEN_SCENE' },
-        { id: 'asset.searchPng', contractVersion: '0.1', access: 'read',
-            inputSchema: 'catalog.schema.json#/$defs/pngAssetSearchInput', input: COMMAND_INPUTS.searchPng, preconditions: ['assetDbReady'],
+        { id: 'asset.searchPng', contractVersion: '0.1', access: 'read', preconditions: ['assetDbReady'],
             status: assetDbReady ? 'available' : 'unavailable', reason: assetDbReady ? null : 'ASSETDB_UNAVAILABLE' },
-        { id: 'asset.importPng', contractVersion: '0.1', access: 'write',
-            inputSchema: 'catalog.schema.json#/$defs/importPngInput', input: COMMAND_INPUTS.importPng, preconditions: ['stagedPng', 'destinationFree'],
+        { id: 'asset.importPng', contractVersion: '0.1', access: 'write', preconditions: ['stagedPng', 'destinationFree'],
             status: 'available', reason: null },
         { id: 'asset.removeImportedPng', contractVersion: '0.1', access: 'write',
-            inputSchema: 'catalog.schema.json#/$defs/removeImportedPngInput', input: COMMAND_INPUTS.removeImportedPng,
             preconditions: ['assetIdentityMatches', 'noSerializedReferences'], status: 'available', reason: null },
         { id: 'asset.validatePng', contractVersion: '0.1', access: 'read',
-            inputSchema: 'catalog.schema.json#/$defs/pipelinePngInput', input: COMMAND_INPUTS.validatePng,
             preconditions: ['pipelineOwnedAsset', 'importedMetadata'], status: 'available', reason: null },
         { id: 'asset.refreshPng', contractVersion: '0.1', access: 'write',
-            inputSchema: 'catalog.schema.json#/$defs/pipelinePngInput', input: COMMAND_INPUTS.refreshPng,
             preconditions: ['pipelineOwnedAsset', 'assetDbMappingStale', 'stableUuid'], status: 'available', reason: null },
         { id: 'asset.refreshFolder', contractVersion: '0.1', access: 'write',
-            inputSchema: 'catalog.schema.json#/$defs/assetFolderRefreshInput', input: COMMAND_INPUTS.refreshFolder,
             preconditions: ['folderUnderAssets', 'assetDbRefreshAvailable'],
             status: context.assetFolderRefreshReady === true ? 'available' : 'unavailable',
             reason: context.assetFolderRefreshReady === true ? null : 'ASSETDB_REFRESH_UNAVAILABLE' },
-        { id: 'scene.pngSprite', contractVersion: '0.1', access: 'write',
-            inputSchema: 'catalog.schema.json#/$defs/pngSpriteInput2x', input: COMMAND_INPUTS.pngSprite, preconditions: ['activeScene', 'canvasExisting', 'spriteFrameImported'],
+        { id: 'scene.pngSprite', contractVersion: '0.1', access: 'write', preconditions: ['activeScene', 'canvasExisting', 'spriteFrameImported'],
             status: spriteReady ? 'available' : 'unavailable', reason: spriteReady ? null : sceneReady ? 'CANVAS_NOT_FOUND' : 'NO_OPEN_SCENE' },
-        { id: 'scene.node.create', contractVersion: '0.1', access: 'write',
-            inputSchema: 'catalog.schema.json#/$defs/nodeCreateInput2x', input: COMMAND_INPUTS.nodeCreate, preconditions: ['activeScene', 'parentIdentity', 'componentTypesWhitelisted', 'componentSetCompatible', 'resourceReferencesResolvable', 'prefabAssetResolvableIfRequested'],
+        { id: 'scene.node.create', contractVersion: '0.1', access: 'write', preconditions: ['activeScene', 'parentIdentity', 'componentTypesWhitelisted', 'componentSetCompatible', 'resourceReferencesResolvable', 'prefabAssetResolvableIfRequested'],
             status: sceneReady ? 'available' : 'unavailable', reason: sceneReady ? null : 'NO_OPEN_SCENE' },
         { id: 'scene.node.patch', contractVersion: '0.1', access: 'write',
-            inputSchema: 'catalog.schema.json#/$defs/nodePatchInput2x', input: COMMAND_INPUTS.nodePatch,
             preconditions: ['activeScene', 'nodePathAndUuidMatch', 'expectedBeforeValues', 'propertyWhitelist', 'resourceReferencesResolvable'],
             status: sceneReady ? 'available' : 'unavailable', reason: sceneReady ? null : 'NO_OPEN_SCENE' },
         { id: 'prefab.source.patch', contractVersion: '0.1', access: 'write',
-            inputSchema: 'catalog.schema.json#/$defs/prefabSourcePatchInput2x', input: COMMAND_INPUTS.prefabSourcePatch,
             preconditions: ['activeScene', 'prefabUuidResolvable', 'sourceShaMatches', 'prefabEditModeAvailable', 'nodePathAndUuidMatch', 'expectedBeforeValues'],
             status: sceneReady && context.prefabSourcePatchApiReady === true ? 'available' : 'unavailable',
             reason: !sceneReady ? 'NO_OPEN_SCENE' : context.prefabSourcePatchApiReady === true ? null : 'PREFAB_EDIT_MODE_API_UNAVAILABLE' },
         { id: 'prefab.source.inspect', contractVersion: '0.1', access: 'read',
-            inputSchema: 'catalog.schema.json#/$defs/prefabSourceInspectInput2x', input: COMMAND_INPUTS.prefabSourceInspect,
             preconditions: ['prefabUuidResolvable', 'serializedPrefabReadable'],
             status: context.assetDbReady === true ? 'available' : 'unavailable',
             reason: context.assetDbReady === true ? null : 'ASSETDB_UNAVAILABLE' },
         { id: 'content.stress.run', contractVersion: '0.2', access: 'read',
-            inputSchema: 'catalog.schema.json#/$defs/contentStressRunInput2x', input: COMMAND_INPUTS.contentStressRun,
             preconditions: ['completedWebMobileBuild', 'complexPackagedPngResources', 'coldCacheProfile', 'explicitDeviceScreeningBudget'],
             status: 'available', reason: null },
     ];
+    const knownIds = new Set(commands.map((command) => command.id));
+    for (const id of Object.keys(commandContract['x-cocos-command-inputs-2x'])) {
+        if (!knownIds.has(id)) commands.push({ id, status: 'unavailable', reason: 'COMMAND_NOT_IMPLEMENTED' });
+    }
+    return commands.map((command) => {
+        const contract = commandContract['x-cocos-command-inputs-2x'][command.id];
+        const input = contract && commandContract.$defs[contract.input];
+        if (!contract || !input) throw new Error(`MISSING_COMMAND_INPUT_CONTRACT:${command.id}`);
+        return { ...command, contractVersion: contract.contractVersion, access: contract.access,
+            preconditions: contract.preconditions, inputSchema: `catalog.schema.json#/$defs/${contract.input}`, input };
+    });
 }
 
 function commandContractFingerprint(commands) {

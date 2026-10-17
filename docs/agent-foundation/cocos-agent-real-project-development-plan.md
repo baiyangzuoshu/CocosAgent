@@ -4,7 +4,7 @@
 
 主线调整为 **Creator 真实游戏功能开发助手**：保留原生面板、TS 内核、Host/内部 MCP 和既有操作账本，优先补可组合的项目搜索与 JS/TS 开发、节点/组件/引用及事件绑定、编译和运行反馈、项目技能与工具扩展，以及整项任务的审阅与恢复。以 LinkUpClient 的实际功能完成率、人工介入、耗时和恢复结果衡量进展。
 
-完整决策、Unity 对照、M1–M5 交付门槛和功能样本要求见[开发方向调整](cocos-agent-unity-alignment-development-direction-20261017.md)。新增范围均为规划，不代表现有能力或实机验收。自有内核继续作为当前执行路径；Gateway 为后续可选评估。Creator 2.4.15、项目边界与不确定写入恢复规则继续有效。
+完整决策、Unity 对照、M1–M5 交付门槛和功能样本要求见[开发方向调整](cocos-agent-unity-alignment-development-direction-20261017.md)。产品方向现明确为双线：Creator 原生 CocosAgent 自有 Host/模型接入继续独立工作；另行设计面向第三方 Host 的 Cocos 插件，提供 Cocos skills、CLI/MCP 与 Creator 工具能力，由 Codex/Claude 等第三方 Host/模型负责对话。第三方插件不调用 CocosAgent 自有模型服务，也不作为原生 Agent 依赖。新增方向尚未完成合同、打包或验收。Creator 2.4.15、项目边界与不确定写入恢复规则继续有效。
 
 下方保留既有实现与验收证据；旧日期的阶段顺序不再决定当前优先级。先修授权和数据完整性缺陷，其他历史验收结合真实功能需要安排；不要求完成全部历史研究分支后才开始通用开发能力。
 
@@ -45,7 +45,7 @@ Creator 2.4.15 原生 Assistant 面板在 Codex 插件卸载后重启并重新�
 
 让开发者在 Cocos Creator 内直接向 CocosAgent 描述真实游戏功能。Agent 能搜索并理解项目代码、场景、Prefab、组件和资源关系，形成可审阅计划，协同完成 JS/TS 与编辑器修改，再读取编译、Console、画面和实际交互结果验证功能。用户可审阅整项任务差异，并在失败或取消后核对副作用与恢复状态。通用开发与任务恢复的新增范围以 M1–M5 规划为准，不能由目标描述推定已经实现。
 
-**主产品不依赖 Codex 进程、Codex 插件缓存、Codex MCP 配置或其他外部 Agent。** Codex-hosted CocosAgent MCP 插件和本地注册配置已移除；Creator 扩展管理自己的 Agent 生命周期与本机 sidecar，sidecar 内部 MCP stdio 只作为 CocosAgent 的 Creator-owned transport。以后若要支持外部互操作，需作为单独适配器重新设计与验收，不属于当前产品路径。
+**原生产品不依赖 Codex 进程、Codex 插件缓存、Codex MCP 配置或其他外部 Agent。** Creator 扩展管理自有 Agent 生命周期与本机 sidecar，sidecar 内部 MCP stdio 作为原生 Agent 的 Creator-owned transport。另设第三方 Host 插件产品线：外部 Host/模型拥有对话和模型调用，Cocos 提供项目工作流 skills、CLI/MCP 与 Creator 命令接入；两条线可复用底层 Creator 命令合同，但安装、进程、凭据、权限界面、工具发现和故障恢复分别负责、分别验收。既有 Codex-hosted CocosAgent MCP 插件和本地注册配置已移除，不代表新产品线已实现。
 
 ## 2. 产品与进程边界
 
@@ -107,7 +107,7 @@ Creator Agent 不加入通用 shell 工具、团队/子 Agent 协作或定时任
 
 ## 3. Unity 对照原则
 
-Unity 官方提供内置 Assistant、Editor 内接入第三方 coding agent 的 Gateway，以及外部 CLI/MCP 和插件。当前选择保留 **Editor 内原生助手与自有 TS 内核**，重点对齐通用项目开发能力、项目级 skill/工具扩展、可配置权限和任务 checkpoint 体验。Gateway 单独评估，不在本轮切换内核或引入外部 Agent 依赖。
+Unity 官方产品线须区分：自有 Editor Assistant、第三方 Host 的 skills/CLI/MCP 插件，以及 Gateway 等不同接入方式。本项目保留 **Editor 内原生助手与自有 TS 内核**，重点对齐通用项目开发能力、项目级 skill/工具扩展、可配置权限和任务 checkpoint；同时正式规划第三方 Host 插件线。Gateway 仍单独评估，不与 MCP 插件混称，不在原生产品路径中引入外部 Agent 依赖。
 
 2026-10-17 对照采用官方产品页与 Assistant 2.9.0-pre.2 文档，未做同条件实测，也不推定其为最新版本。详细差距与官方链接见[Unity 对照与当前差距](cocos-agent-unity-alignment-development-direction-20261017.md#2-unity-对照与当前差距)。
 
@@ -171,11 +171,13 @@ Unity 官方提供内置 Assistant、Editor 内接入第三方 coding agent 的 
 
 **完成标准：** 同一真实项目多轮修改可延续上下文，面板清楚展示实际差异、验证结果和恢复状态。持久操作账本与 JSONL 轨迹本身不等于会话/计划持久化。
 
-### 7：可选外部 Agent 适配
+### 7：第三方 Host 插件产品线（方向已确认，设计待完成）
 
-在原生 Agent 已能独立完成任务后，再决定是否继续维护 Codex/其他客户端的 MCP、CLI 与 skills 插件接入。它们复用同一命令合同、实例选择、权限和账本，不得成为 Creator 内 Agent 的运行依赖。
+单独设计面向 Codex、Claude 等第三方 Host 的 Cocos 插件，包含 Cocos 工作流 skills、CLI、第一方 MCP 服务和 Creator 扩展侧工具接入。第三方 Host/模型负责对话及模型调用；该插件不把请求代理到 CocosAgent 自有 Provider/Host，也不要求 Creator 原生 Agent 依赖第三方进程。
 
-**完成标准：** 外部工具的启停、schema 更新或卸载不影响 Creator 内 Agent；两条入口对同一命令使用相同版本与安全规则。
+产品设计阶段先确定：支持的 Host 与 Creator 版本；安装/卸载和配置更新；CLI 如何发现并绑定 Dashboard/Creator 实例；MCP 工具目录、能力变化通知与合同版本；内置 skills 的权威源和分发/刷新；读写权限与逐次批准如何由 Creator 端强制；工具结果、操作账本、取消、断连和恢复回执；模型凭据隔离及诊断日志边界。复用共享 Creator 命令 schema、目标身份、操作账本和安全检查；Host-specific 配置与外部 MCP 生命周期不可复用原生 Assistant 生命周期假设。
+
+**完成标准：** 至少一个受支持的第三方 Host 能安装并识别目标 Creator 实例、动态发现当前工具、读取并使用匹配版本的 skill；真实只读调用成功；一次获批写入在 Creator 中执行并读回，回执进入同一 operation 账本；工具变更通知、Host/Creator 断连、取消、卸载及原生 Agent 独立运行均有可重复验收。没有这些证据前，标为“方向已确认/设计中/实现中”，不能标成已支持。
 
 ### 8：真实项目持续验证与 3.x 后续规划
 
@@ -211,7 +213,7 @@ Unity 官方提供内置 Assistant、Editor 内接入第三方 coding agent 的 
 | 4：脚本开发闭环 | 原生面板完成既有 JS 的读取、精确差异、审批、写入和 Creator 编译；本次实际点击显示 `Clicked: 1/2`，原操作补偿后刷新预览再点不变。脚本源 SHA、UUID/meta 与按钮位置已读回恢复；记录见 AGENTS.md 的 2026-10-12 复验 | 补原生新 ID 重放、真实错误修复及独立游戏工程脚本任务；Plan 结构输出和多次提示调度缺口仍在 |
 | 5：运行结果观察 | **实现与模拟编排测试完成；原生初始观察已有实机证据，错误修复闭环待做。** 新增 2.4.15 Web 预览日志、帧/暂停状态、可选节点状态和画布截图观察；Agent 可按同一场景 UUID 读回，再走现有脚本读取、差异计划、批准补丁和二次观察。研究工程当前扩展 0.3.4 / MCP 0.3.3 合同匹配；原生已批准启动预览并观察同场景 UUID、帧、Label、日志和截图。每次观察为独立新页面，不能读取已点击页面状态 | 在隔离的 2.4.15 工程安装新运行时，注入已知可逆脚本错误，验证面板观察、窄补丁、Creator 编译和同场景二次观察；再恢复基线。另需解决共享预览端口 7456 的实例归属认证 |
 | 6：连续任务体验 | **实现与自动测试完成，Creator 实机验收待做。** 会话/计划、最近任务、副作用、停止、差异与只读账本核对入口已接入；2026-10-16 runtime 定向测试 42/42、Host 定向测试 6/6 通过，覆盖摘要/压缩控制流、取消等待写入回执、项目约定陈旧哈希拒绝及精确恢复前置条件 | 在真实 2.4.15 面板跨 Host 重启验证会话与恢复状态；面板发起真实取消并确认当前命令回执、后续调度停止且无自动回滚。自动测试不算 Creator 实机证据 |
-| 7：外部 Agent 适配 | 可选 | 原生路径稳定后再决定维护范围 |
+| 7：第三方 Host 插件 | 方向已确认，设计待完成 | 形成独立于原生 Host 的 skills + CLI/MCP + Creator 接入合同；之后排实现与实机验收，不阻塞 M1–M5 |
 | 8：持续验证与 3.x | 2.4 持续推进；3.x 暂停新增 | 以真实工程可重复验收作为后续 3.x 规划门槛 |
 | 9：LinkUpClient 持续使用 | **自动测试已验证，磁盘身份/AGENTS 指纹已只读核对；原生面板未验证。** 2026-10-17 完整 runtime 126/126、MCP/扩展 99/99；只读确认 `AGENTS.md` 8,140 字节、SHA-256 为 `ae984519b3f1a808dad20546311c11701a031b1ce749f741f2a117a6aefa6f14`。Dashboard 显示 LinkUpClient“已打开”，但可读 Creator 前台仍为隔离工程，切换/打开尝试后编辑器超时；未取得 LinkUpClient 面板证据。详见[前台验收尝试记录](traces/cocos-agent-linkup-front-window-attempt-20261017.md) | 在 LinkUpClient 面板验证上下文/扩展指纹/场景快照、AGENTS 按需读取及陈旧哈希零分发拒绝、非空选择、多轮跟进、面板取消和精确账本恢复；之后从 LinkUpClient 实时快照选取目标并经批准复跑任务，不复用隔离工程 UUID |
 | 10：工程隔离长期记忆 | TS/Host 本地持久化、来源核验、候选提取、纠正/删除、准确恢复与任务召回已实现；TS runtime 58/58、MCP/扩展 84/84 | Creator 面板验收候选审阅、创建批准、来源查看、纠正后保留旧版本来源、删除后检索为空及 Host 重启后仍按当前工程隔离 |

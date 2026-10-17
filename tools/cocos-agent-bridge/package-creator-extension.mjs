@@ -98,11 +98,13 @@ function copyExtensionSources(sourceRoot, extensionDestination) {
     const extensionSource = path.join(sourceRoot, EXTENSION_RELATIVE);
     if (!fs.existsSync(path.join(extensionSource, 'package.json'))) throw new Error('CREATOR_EXTENSION_SOURCE_MISSING');
     fs.mkdirSync(extensionDestination, { recursive: true });
-    for (const name of ['asset-search.js', 'credential-store.cjs', 'main.js', 'script-operations.js', 'package-lock.json', 'package.json', 'scene.js']) {
+    for (const name of ['asset-search.js', 'command-contract.js', 'credential-store.cjs', 'main.js', 'script-operations.js', 'package-lock.json', 'package.json', 'scene.js']) {
         const source = path.join(extensionSource, name);
         if (!fs.existsSync(source)) throw new Error(`CREATOR_EXTENSION_FILE_MISSING:${name}`);
         fs.copyFileSync(source, path.join(extensionDestination, name));
     }
+    fs.copyFileSync(path.join(sourceRoot, RUNTIME_TOOLS_RELATIVE, 'catalog.schema.json'),
+        path.join(extensionDestination, 'command-contract.json'));
     for (const name of ['panel', 'vendor']) {
         copyTree(path.join(extensionSource, name), path.join(extensionDestination, name));
     }
@@ -166,6 +168,8 @@ function validateCreatorExtensionBundle(directory) {
     const extensionPackage = readCreatorExtension(directory);
     const requiredFiles = [
         'main.js',
+        'command-contract.js',
+        'command-contract.json',
         'scene.js',
         'panel/index.js',
         'assistant-runtime/tools/cocos-agent-bridge/mcp/assistant-host.mjs',

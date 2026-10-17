@@ -4,23 +4,11 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const vm = require('vm');
-const HASH = { type: 'string', pattern: '^[0-9a-f]{64}$' };
-const UUID = { type: 'string', format: 'uuid' };
-const SCRIPT = { type: 'string', minLength: 4, maxLength: 240, pattern: '^[A-Za-z0-9_ -]+(?:/[A-Za-z0-9_. -]+)*\\.(?:js|ts)$' };
-const EDITS = { type: 'array', minItems: 1, maxItems: 8, items: { type: 'object', additionalProperties: false,
-    required: ['before', 'after'], properties: { before: { type: 'string', minLength: 1, maxLength: 16384 }, after: { type: 'string', maxLength: 16384 } } } };
-const identity = { scriptPath: SCRIPT, scriptUuid: UUID, expectedSha256: HASH, edits: EDITS };
-const projectSearch = { type: 'object', additionalProperties: false, required: ['query', 'scope'], properties: {
-    query: { type: 'string', minLength: 1, maxLength: 120 }, scope: { type: 'string', enum: ['code', 'assets', 'all'] },
-    limit: { type: 'integer', minimum: 1, maximum: 50 }, offset: { type: 'integer', minimum: 0, maximum: 100000 } } };
-const inputs = {
-    'project.search': projectSearch,
-    'script.read': { type: 'object', additionalProperties: false, required: ['scriptPath'], properties: { scriptPath: SCRIPT } },
-    'script.patch.plan': { type: 'object', additionalProperties: false, required: Object.keys(identity), properties: identity },
-    'script.patch': { type: 'object', additionalProperties: false, required: ['action', 'operationId'], properties: {
-        ...identity, action: { type: 'string', enum: ['apply', 'compensate', 'reconcile', 'replay'] }, operationId: UUID, sourceOperationId: UUID } },
-    'script.operation.get': { type: 'object', additionalProperties: false, required: ['operationId'], properties: { operationId: UUID } },
-};
+const commandContract = require('./command-contract');
+const identityFields = commandContract.$defs.scriptPatchPlanInput2x.required;
+const inputs = Object.fromEntries(Object.entries(commandContract['x-cocos-command-inputs-2x'])
+    .filter(([id]) => id === 'project.search' || id.startsWith('script.'))
+    .map(([id, contract]) => [id, commandContract.$defs[contract.input]]));
 const sha = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 const fail = (code, message = code) => { const error = new Error(message); error.code = code; throw error; };
 function validInput(command, input) {
@@ -42,7 +30,7 @@ function validInput(command, input) {
     if (input.scriptPath && input.scriptPath.split('/').some((p) => p === '.' || p === '..')) return false;
     if (command === 'project.search') return !/[\u0000-\u001f\u007f]/.test(input.query);
     if (command !== 'script.patch') return true;
-    const fields = Object.keys(identity);
+    const fields = identityFields;
     if (input.action === 'apply') return fields.every((k) => input[k] !== undefined) && input.sourceOperationId === undefined;
     if (input.action === 'replay') return !!input.sourceOperationId && fields.every((k) => input[k] === undefined) && input.sourceOperationId !== input.operationId;
     return fields.every((k) => input[k] === undefined) && input.sourceOperationId === undefined;

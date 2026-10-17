@@ -1,6 +1,6 @@
 # CocosAgent 对照 Unity Agent 的开发方向调整
 
-日期：2026-10-17。状态：**开发方向已确认；M1 通用项目开发工具合同已定义，`project.search` 源码桥接和 skill 已接入；Creator 原生验收待做，其余 M1 写入命令仍在规划/待实现。** 当前版本范围为 Cocos Creator 2.4.15。
+日期：2026-10-17。状态：**开发方向已确认；M1 通用项目开发工具合同已定义，`project.search` 源码桥接和 skill 已接入；Creator 原生验收待做，其余 M1 写入命令仍在规划/待实现。另已确认采用 Unity 式双产品线：原生 CocosAgent 保留，面向第三方 Host 的 Cocos 插件单独设计，尚未实现/验收。** 当前版本范围为 Cocos Creator 2.4.15。
 
 本记录承接用户本轮确认的 Unity Agent 对比与开发建议，调整[原生 Agent 开发计划](cocos-agent-real-project-development-plan.md)的执行优先级。此前的源码、合同、测试与实机证据按各自版本保留；本记录不改变历史验收结果。与旧文档中的“近期顺序”冲突时，以本记录和主计划的 2026-10-17 方向调整为准。
 
@@ -9,10 +9,11 @@
 主目标调整为：**让开发者在 Creator 内描述真实游戏功能，Agent 能理解现有项目，完成代码、场景、组件和资源的协同修改，读取编译与运行反馈，并交付可审阅、可恢复的结果。**
 
 - 保留 Creator 原生面板、TypeScript + Node.js 内核、Creator 管理的 Host/内部 MCP、Provider 接口及既有命令与操作账本。
+- 明确对齐 Unity 的双产品线，而非把第三方插件解释为调用 Unity/Cocos 自有模型：CocosAgent 原生 Assistant 使用自有 Host/TS 内核和用户配置的 Provider；独立的第三方 Host 插件为 Codex/Claude 等提供 Cocos skills、CLI/MCP 和 Creator 工具接入，由第三方 Host/模型负责对话。原生链路独立运行，不依赖第三方插件；第三方链路不代理到 CocosAgent 自有模型。
 - 将主要开发投入转向可组合的项目开发基础能力：项目搜索与文件操作、JS/TS 开发、编辑器对象与组件操作、运行观察和功能验证。
 - 新增操作优先复用公共的目标发现、类型/schema、权限、差异、读回和回执设施；不把每个业务功能都固化为新的专属命令或自然语言正则分支。
 - 以 LinkUpClient 的实际任务作为主要产品验收样本，隔离工程用于故障注入和回归；任务目标须来自当前项目检查，不复用历史 UUID 或凭空假设业务 API。
-- 首版继续由自有内核独立执行。Gateway 接入成熟 coding agent 作为可选架构评估，不作为本轮实施承诺，也不改变当前不依赖 Codex 或外部 Agent 的启动边界。
+- 原生 Creator Agent 继续由自有内核独立执行。第三方 Host 插件作为第二产品线进入设计，不阻塞原生 M1–M5，也不改变原生路径不依赖 Codex 或外部 Agent 的边界。Unity AI Gateway 是另一种 Agent 接入形态，单独评估，不与 skills/CLI/MCP 插件混同。
 
 “通用”指 Creator 项目内可复用的开发能力。通用 shell、任意系统文件写入、团队/子 Agent 和定时任务仍不在产品范围。项目代码及配置文件操作也须有明确注册根、文件类型和读写合同；场景、Prefab 与资源元数据继续使用经核对的 Creator API 和身份校验。
 
@@ -22,19 +23,19 @@
 
 | 维度 | Unity 官方公开能力 | CocosAgent 当前依据 | 本轮调整 |
 | --- | --- | --- | --- |
-| 产品入口 | 内置 Assistant 的 Ask/Plan/Agent；另有 Gateway、CLI/MCP | 原生三模式已有接线和部分实机证据 | 复用面板和内核，优先完善任务能力 |
+| 产品入口 | 自有 Editor Assistant；面向第三方 Host 的 skills/CLI/MCP；Gateway 是另一接入方式 | 原生三模式已有接线和部分实机证据；第三方产品线仅确认方向 | 继续完善原生任务能力，并独立设计第三方接入 |
 | 项目理解 | 项目文件、场景对象与组件查询；截图及代码操作 | 场景快照、选择上下文、现有脚本读取和 PNG 查询 | 补项目代码/资源搜索、引用关系与组件属性发现 |
 | 代码与编辑器开发 | 编辑/运行 C#，内置动作及自定义工具组合 | 现有 JS 精确替换、有限字段及专属资源流程 | 补 JS/TS 新建、多文件修改、组件和事件绑定；不直接照搬 C# 执行机制 |
 | 权限 | 操作级 Allow / Ask Permission / Deny，可配置 Autorun | 写入逐次审批及程序门槛 | 设计用户明确选择的任务权限范围，保留审批与拒绝模式 |
 | 恢复 | 可启用逐提示 Git checkpoint，使用项目外本地存储 | 精确 operation 对账、补偿和重放 | 增加任务差异与 checkpoint 方案，复用账本核对副作用 |
 | 技能与工具扩展 | 项目/用户/包内 skill，按需加载；自动发现自定义工具 | 产品包内 skill/reference 读取与哈希校验 | 增加项目级 skill 和项目工具注册合同 |
-| Agent 来源 | 自有 Assistant 与 Gateway 第三方 Agent | 自建 TS 内核，当前 Provider 适配主要为 DeepSeek | 保留自有内核，Gateway 单独评估，不作为前置条件 |
+| 产品划分 | 自有 Editor Assistant；第三方 Host 插件提供 skills/CLI/MCP；Gateway 另属一种接入 | 原生自有 TS Host/Provider 已接线；第三方插件方向已确认，合同/安装/运行接线尚无 | 保留独立原生 Agent，同时设计第三方 Host 插件；Gateway 分开评估 |
 
 本项目当前证据以[主计划最新状态](cocos-agent-real-project-development-plan.md)及其链接轨迹为准。现有脚本合同限定已有 JS 的读取和精确替换；原生交互断言入口仍缺失。部分观察和记忆能力已在隔离 Creator 工程实测，不能据此宣称真实项目通用开发闭环已经完成。
 
 ## 3. 开发顺序与交付门槛
 
-五个里程碑按下表推进，每个里程碑围绕同一真实功能样本增量交付。可提前读取该样本及项目约定；无需等所有基础设施一次实现完毕才开始项目验证。
+原生 Agent 的五个里程碑按下表推进，每个里程碑围绕同一真实功能样本增量交付。第三方 Host 插件另设产品设计与交付阶段，不要求原生 M1–M5 等它，也不将其接线算作原生 Agent 验收。
 
 | 里程碑 | 交付范围 | 完成条件 | 当前状态 |
 | --- | --- | --- | --- |
@@ -120,7 +121,8 @@
 
 以下来源于 2026-10-17 本轮对照；Unity 的实现方式、版本要求与安全边界不直接视为 Cocos 的实现方案。
 
-- [Unity AI 工具入口](https://unity.com/features/ai)：内置 Assistant、官方插件与 CLI/MCP 的产品区分。
+- [Unity AI 工具入口](https://unity.com/features/ai)：自有 Editor Assistant、第三方 Agent 插件和 CLI/MCP 的产品区分。
+- [Unity 第三方 Agent 插件说明](https://docs.unity.com/en-us/ai/unity-plugin/about-unity-plugin)：Unity skills 供第三方 Host 按任务加载；第三方 Agent 仍由其宿主提供。
 - [Assistant 模式](https://docs.unity.cn/Packages/com.unity.ai.assistant@2.9/manual/about/assistant-modes.html)：Ask、Plan、Agent 与计划批准后的执行。
 - [Assistant 技能](https://docs.unity3d.com/Packages/com.unity.ai.assistant@2.9/manual/skills/skills-overview.html)：项目/用户/包来源、按需读取、内置动作和项目 API。
 - [自定义工具](https://docs.unity.cn/Packages/com.unity.ai.assistant@2.9/manual/integration/custom-agent-tool.html)：带声明的 C# 方法自动发现与工具参数。

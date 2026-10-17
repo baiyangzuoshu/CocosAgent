@@ -326,11 +326,11 @@ Editor.Panel.extend({
         .mode { flex: 0 0 auto; min-width: 56px; padding: 4px 10px; border-radius: 14px; font-size: 10px; }
         .mode.active { color: #f4f7fb; background: #3b4149; border-color: #58616d; }
         .mode-note { align-self: center; min-height: 0; margin: 0 0 6px 8px; color: #9299a3; font-size: 10px; }
-        .messages { width: 100%; max-width: 1040px; align-self: center; padding: 24px 42px; }
+        .messages { width: 100%; max-width: 960px; align-self: center; padding: 24px 36px; }
         .empty { max-width: 600px; margin: auto; padding: 14vh 12px 8vh; text-align: center; font-size: 14px; }
-        .message { position: relative; max-width: 100%; margin-bottom: 24px; padding: 0; background: transparent; }
-        .message.user { margin-left: auto; padding: 9px 12px; border: 1px solid #41464e; border-radius: 14px 14px 4px 14px; background: #343940; }
-        .message.assistant { margin-right: auto; padding: 2px 2px 8px; }
+        .message { position: relative; max-width: 100%; margin-bottom: 26px; padding: 0; background: transparent; }
+        .message.user { width: fit-content; max-width: min(78%, 720px); margin-left: auto; padding: 10px 14px; border: 1px solid #41464e; border-radius: 14px 14px 4px 14px; background: #343940; }
+        .message.assistant { width: 100%; max-width: 860px; margin-right: auto; padding: 2px 0 8px; }
         .message-header { display: flex; min-height: 24px; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 5px; }
         .message .role { padding: 0; color: #aeb6c1; font-size: 11px; text-transform: none; letter-spacing: 0; }
         .message.assistant .role { color: #aeb6c1; font-weight: 600; }
@@ -338,8 +338,9 @@ Editor.Panel.extend({
         .message.assistant .copy-button { position: static; flex: 0 0 auto; opacity: 0; border-color: transparent; background: transparent; color: #aeb5bf; }
         .message.assistant:hover .copy-button, .message.assistant .copy-button:focus { opacity: .8; }
         .message.assistant .copy-button:hover { background: #34383e; color: #fff; }
-        .message-body { font-size: 13px; line-height: 1.75; color: #e1e4e8; }
-        .message-body p { margin-bottom: 12px; }
+        .message-body { max-width: 82ch; font-size: 13px; line-height: 1.72; color: #e1e4e8; }
+        .message.user .message-body { max-width: none; }
+        .message-body p { margin-bottom: 11px; }
         .message-body h1, .message-body h2, .message-body h3, .message-body h4 { letter-spacing: -.15px; }
         .message-body h1 { margin-top: 22px; padding-bottom: 7px; border-bottom: 1px solid #3b4047; font-size: 20px; }
         .message-body h2 { margin-top: 20px; font-size: 17px; }
@@ -350,6 +351,7 @@ Editor.Panel.extend({
         .message-body code { padding: 2px 5px; border-radius: 4px; background: #30343a; color: #d7e5fa; }
         .message-body a { text-decoration: none; }
         .message-body a:hover { text-decoration: underline; }
+        .message-body table { table-layout: auto; min-width: 100%; width: max-content; }
         .message-body th, .message-body td { padding: 7px 9px; }
         .copyable.message.assistant > .copy-button { display: none; }
         .activity { width: 100%; max-width: 760px; margin: 3px auto 8px; padding: 6px 10px 6px 22px; border-left: 2px solid #454a52; color: #aeb5bf; font-size: 10px; }
@@ -385,6 +387,7 @@ Editor.Panel.extend({
             .composer-foot { flex-basis: 100%; }
             .messages { padding: 14px 12px; }
             .message { max-width: 100%; }
+            .message.user { max-width: 88%; }
             .message-body { font-size: 12px; }
         }
     `,

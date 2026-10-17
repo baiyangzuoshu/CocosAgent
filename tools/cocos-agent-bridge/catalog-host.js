@@ -7,7 +7,7 @@ const path = require('path');
 const { isDeepStrictEqual } = require('util');
 const WebSocket = require('./vendor/ws');
 const catalogSchema = require('./catalog.schema.json');
-const { fingerprintFiles, listFiles } = require('./runtime-fingerprint');
+const { fingerprintFiles, listFiles, mcpRuntimeFiles, fingerprintCreatorExtension } = require('./runtime-fingerprint');
 const HOST_VERSION = '0.2.0';
 const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
 function readMcpRuntime(value) {
@@ -28,10 +28,11 @@ const AGENT_PACKAGE_ROOT = path.resolve(__dirname, '../../plugins/cocos-agent-2x
 const AGENT_PACKAGE_PATH = path.join(AGENT_PACKAGE_ROOT, 'agent-package.json');
 const mcpPackage = JSON.parse(fs.readFileSync(MCP_PACKAGE_PATH, 'utf8'));
 const agentPackage = JSON.parse(fs.readFileSync(AGENT_PACKAGE_PATH, 'utf8'));
-const expectedMcpSourceFingerprint = fingerprintFiles(path.dirname(MCP_SOURCE_PATH), ['mcp-server.mjs', 'package.json', 'package-lock.json']);
+const expectedMcpSourceFingerprint = fingerprintFiles(path.dirname(MCP_SOURCE_PATH), mcpRuntimeFiles(path.dirname(MCP_SOURCE_PATH)));
 const expectedSchemaFingerprint = sha256(fs.readFileSync(path.join(__dirname, 'catalog.schema.json')));
 const expectedHostFingerprint = fingerprintFiles(__dirname, [
     'catalog-host.js', 'agent-jsonl.js', 'agent-dispatch.js', 'catalog.schema.json', 'runtime-fingerprint.js',
+    'script-contract.js', 'command-contract.js',
 ]);
 const hostRuntime = { version: HOST_VERSION, sourceFingerprint: expectedHostFingerprint, contractSchemaFingerprint: expectedSchemaFingerprint };
 const expectedAgentPackageVersion = agentPackage.version;
@@ -52,11 +53,7 @@ function expectedExtensionFingerprint(projectRoot) {
         ? bundledExtensionRoot
         : projectExtensionRoot;
     if (!fs.existsSync(path.join(extensionRoot, 'vendor/ws'))) return null;
-    const relativeFiles = ['asset-search.js', 'credential-store.cjs', 'main.js', 'script-operations.js', 'scene.js', 'package.json', 'package-lock.json',
-        ...listFiles(extensionRoot, 'vendor/ws')];
-    const files = relativeFiles.map((name) => path.join(extensionRoot, name));
-    if (!files.every((file) => fs.existsSync(file))) return null;
-    return fingerprintFiles(extensionRoot, relativeFiles);
+    return fingerprintCreatorExtension(extensionRoot);
 }
 
 function expectedExtensionVersion(projectRoot) {
@@ -272,6 +269,7 @@ function runtimeCompatibility(target, result, actualContractFingerprint) {
 }
 
 function runtimeStateMatches(command, sceneReady) {
+    if (command.reason === 'COMMAND_NOT_IMPLEMENTED') return command.status === 'unavailable';
     const mustMatchScene = ['scene.snapshot', 'scene.node.inspect', 'scene.node.create', 'scene.node.patch'];
     if (mustMatchScene.includes(command.id)) {
         return sceneReady
@@ -348,6 +346,16 @@ function validCatalog(target, result) {
         'content.stress.run': { contractVersion: '0.2', access: 'read', inputSchema: 'catalog.schema.json#/$defs/contentStressRunInput2x',
             input: catalogSchema.$defs.contentStressRunInput2x, preconditions: ['completedWebMobileBuild', 'complexPackagedPngResources', 'coldCacheProfile', 'explicitDeviceScreeningBudget'] } } : {}),
     };
+    if (target.creatorVersion === '2.4.15') {
+        for (const [id, contract] of Object.entries(catalogSchema['x-cocos-command-inputs-2x'])) {
+            const input = catalogSchema.$defs[contract.input];
+            if (!input || !['read', 'write'].includes(contract.access)
+                || typeof contract.contractVersion !== 'string' || !Array.isArray(contract.preconditions)) return false;
+            expected[id] = { contractVersion: contract.contractVersion, access: contract.access,
+                inputSchema: `catalog.schema.json#/$defs/${contract.input}`, input,
+                preconditions: contract.preconditions };
+        }
+    }
     const actualRevision = sha256(JSON.stringify({ scene: result.activeScene,
         ...(result.activeSceneUuid ? { sceneUuid: result.activeSceneUuid } : {}), commands: result.commands }));
     if (actualRevision !== result.catalogRevision) return false;

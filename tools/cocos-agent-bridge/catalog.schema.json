@@ -2,6 +2,28 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "catalog.schema.json",
   "title": "CocosAgent command catalog",
+  "x-cocos-command-inputs-2x": {
+    "project.search": {"input": "projectSearchInput2x", "contractVersion": "0.1", "access": "read", "preconditions": ["projectAssetsAvailable"]},
+    "scene.snapshot": {"input": "snapshotInput", "contractVersion": "0.1", "access": "read", "preconditions": ["activeScene"]},
+    "scene.node.inspect": {"input": "nodeInspectInput", "contractVersion": "0.1", "access": "read", "preconditions": ["activeScene"]},
+    "asset.searchPng": {"input": "pngAssetSearchInput", "contractVersion": "0.1", "access": "read", "preconditions": ["assetDbReady"]},
+    "asset.importPng": {"input": "importPngInput", "contractVersion": "0.1", "access": "write", "preconditions": ["stagedPng", "destinationFree"]},
+    "asset.removeImportedPng": {"input": "removeImportedPngInput", "contractVersion": "0.1", "access": "write", "preconditions": ["assetIdentityMatches", "noSerializedReferences"]},
+    "asset.validatePng": {"input": "pipelinePngInput", "contractVersion": "0.1", "access": "read", "preconditions": ["pipelineOwnedAsset", "importedMetadata"]},
+    "asset.refreshPng": {"input": "pipelinePngInput", "contractVersion": "0.1", "access": "write", "preconditions": ["pipelineOwnedAsset", "assetDbMappingStale", "stableUuid"]},
+    "asset.refreshFolder": {"input": "assetFolderRefreshInput", "contractVersion": "0.1", "access": "write", "preconditions": ["folderUnderAssets", "assetDbRefreshAvailable"]},
+    "scene.pngSprite": {"input": "pngSpriteInput2x", "contractVersion": "0.1", "access": "write", "preconditions": ["activeScene", "canvasExisting", "spriteFrameImported"]},
+    "scene.node.create": {"input": "nodeCreateInput2x", "contractVersion": "0.1", "access": "write", "preconditions": ["activeScene", "parentIdentity", "componentTypesWhitelisted", "componentSetCompatible", "resourceReferencesResolvable", "prefabAssetResolvableIfRequested"]},
+    "scene.node.patch": {"input": "nodePatchInput2x", "contractVersion": "0.1", "access": "write", "preconditions": ["activeScene", "nodePathAndUuidMatch", "expectedBeforeValues", "propertyWhitelist", "resourceReferencesResolvable"]},
+    "prefab.source.patch": {"input": "prefabSourcePatchInput2x", "contractVersion": "0.1", "access": "write", "preconditions": ["activeScene", "prefabUuidResolvable", "sourceShaMatches", "prefabEditModeAvailable", "nodePathAndUuidMatch", "expectedBeforeValues"]},
+    "prefab.source.inspect": {"input": "prefabSourceInspectInput2x", "contractVersion": "0.1", "access": "read", "preconditions": ["prefabUuidResolvable", "serializedPrefabReadable"]},
+    "content.stress.run": {"input": "contentStressRunInput2x", "contractVersion": "0.2", "access": "read", "preconditions": ["completedWebMobileBuild", "complexPackagedPngResources", "coldCacheProfile", "explicitDeviceScreeningBudget"]},
+    "script.read": {"input": "scriptReadInput2x", "contractVersion": "0.2", "access": "read", "preconditions": ["existingProjectScript", "assetDbReady"]},
+    "script.patch.plan": {"input": "scriptPatchPlanInput2x", "contractVersion": "0.2", "access": "read", "preconditions": ["existingProjectScript", "assetDbReady"]},
+    "script.patch": {"input": "scriptPatchInput2x", "contractVersion": "0.2", "access": "write", "preconditions": ["existingProjectScript", "assetDbReady"]},
+    "script.operation.get": {"input": "scriptOperationGetInput2x", "contractVersion": "0.2", "access": "read", "preconditions": ["existingProjectScript", "assetDbReady"]},
+    "runtime.preview.start": {"input": "runtimePreviewStartInput2x", "contractVersion": "0.1", "access": "write", "preconditions": ["activeScene"]}
+  },
   "$defs": {
     "snapshotInput": {
       "type": "object",

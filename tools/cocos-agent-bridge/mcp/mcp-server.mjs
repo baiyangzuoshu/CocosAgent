@@ -10,18 +10,13 @@ import * as z from 'zod/v4';
 const require = createRequire(import.meta.url);
 const { handleAsync } = require('../agent-jsonl.js');
 const { createRuntimeObserver } = require('../runtime-observation.js');
-const { fingerprintFiles, listFiles } = require('../runtime-fingerprint.js');
+const { fingerprintFiles, listFiles, mcpRuntimeFiles } = require('../runtime-fingerprint.js');
 const catalogSchema = require('../catalog.schema.json');
+const COMMAND_INPUTS_2X = catalogSchema['x-cocos-command-inputs-2x'];
 const mcpPackage = require('./package.json');
 const CREATOR_VERSION = '2.4.15';
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-const COMMANDS_2X = [
-    'project.search',
-    'scene.snapshot', 'scene.node.inspect', 'asset.searchPng', 'asset.importPng', 'asset.removeImportedPng',
-    'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder', 'scene.pngSprite', 'scene.node.create', 'scene.node.patch',
-    'prefab.source.patch', 'prefab.source.inspect', 'content.stress.run',
-    'script.read', 'script.patch.plan', 'script.patch', 'script.operation.get', 'runtime.preview.start',
-];
+const COMMANDS_2X = Object.keys(COMMAND_INPUTS_2X);
 const CONTENT_BUILD_ID = z.string().regex(/^[a-z0-9][a-z0-9-]{2,31}$/);
 const RELEASE_ID = z.string().regex(/^(?!(selected|effective)$)[a-z0-9][a-z0-9._-]{0,63}$/);
 const SHA256 = z.string().regex(/^[a-f0-9]{64}$/);
@@ -34,9 +29,7 @@ const MCP_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const AGENT_PACKAGE_ROOT = path.join(REPOSITORY_ROOT, 'plugins/cocos-agent-2x');
 const SKILL_PACKAGE = require(path.join(AGENT_PACKAGE_ROOT, 'skill-package.json'));
 const AGENT_PACKAGE = require(path.join(AGENT_PACKAGE_ROOT, 'agent-package.json'));
-const MCP_SOURCE_FINGERPRINT = fingerprintFiles(MCP_ROOT, ['mcp-server.mjs', 'deepseek-agent.mjs', 'assistant-host.mjs',
-    'assistant-state-store.mjs', 'assistant-task-review.mjs', '../runtime-observation.js',
-    'package.json', 'package-lock.json']);
+const MCP_SOURCE_FINGERPRINT = fingerprintFiles(MCP_ROOT, mcpRuntimeFiles(MCP_ROOT));
 const MCP_CONTRACT_SCHEMA_FINGERPRINT = hashBytes(fs.readFileSync(path.join(REPOSITORY_ROOT, 'tools/cocos-agent-bridge/catalog.schema.json')));
 const AGENT_PACKAGE_FINGERPRINT = fingerprintFiles(AGENT_PACKAGE_ROOT, [
     'agent-package.json', 'skill-package.json',
@@ -95,8 +88,8 @@ const PROJECT_SKILL_MAX_COUNT = 32;
 const PROJECT_REFERENCE_MAX_BYTES = 65536;
 const PROJECT_TOOL_MANIFEST_MAX_BYTES = 32768;
 const PROJECT_TOOL_ID = /^[a-z][a-z0-9-]{0,47}$/;
-const PROJECT_READ_ONLY_COMMANDS = new Set(['project.search', 'script.read', 'script.patch.plan', 'scene.snapshot', 'scene.node.inspect',
-    'asset.searchPng', 'asset.validatePng', 'prefab.source.inspect', 'script.operation.get']);
+const PROJECT_READ_ONLY_COMMANDS = new Set(Object.entries(COMMAND_INPUTS_2X)
+    .filter(([, contract]) => contract.access === 'read').map(([id]) => id));
 
 function projectRelativeFile(root, relative, maxBytes, codePrefix) {
     const filename = path.join(root, ...relative.split('/'));
@@ -299,6 +292,41 @@ function contentStressRunInputSchema() {
 
 const CONTENT_STRESS_RUN_INPUT = contentStressRunInputSchema();
 
+function zodCompatibleContract(schema) {
+    if (Array.isArray(schema)) return schema.map(zodCompatibleContract);
+    if (!schema || typeof schema !== 'object') return schema;
+    const copy = {};
+    for (const [key, value] of Object.entries(schema)) {
+        // Zod's JSON Schema importer does not support conditionals. The two
+        // command-specific rules are reapplied below as Zod refinements.
+        if (['if', 'then', 'else', 'not', 'allOf'].includes(key)) continue;
+        copy[key] = zodCompatibleContract(value);
+    }
+    return copy;
+}
+
+function addCommandRules(command, schema) {
+    if (command === 'scene.node.create') return schema.superRefine((input, context) => {
+        if (input.prefabMode === 'create' && input.prefabUuid)
+            context.addIssue({ code: 'custom', path: ['prefabUuid'], message: 'Prefab creation assigns its own UUID.' });
+        if (input.prefabMode === 'instantiate' && input.action === 'apply' && !input.prefabUuid)
+            context.addIssue({ code: 'custom', path: ['prefabUuid'], message: 'Instantiation requires an imported Prefab UUID.' });
+        if (input.prefabMode !== 'instantiate' && input.prefabUuid)
+            context.addIssue({ code: 'custom', path: ['prefabUuid'], message: 'Prefab UUID is only accepted for instantiation.' });
+        if (input.prefabMode === 'instantiate' && input.components && input.components.length)
+            context.addIssue({ code: 'custom', path: ['components'], message: 'Prefab instances take their components from the Prefab asset.' });
+    });
+    if (command === 'prefab.source.patch') return schema.superRefine((input, context) => {
+        if (input.action === 'apply' && !input.expectedPrefabSha256)
+            context.addIssue({ code: 'custom', path: ['expectedPrefabSha256'], message: 'Apply requires the source hash returned by prefab.source.inspect.' });
+        if (input.action === 'apply' && input.sourceOperationId)
+            context.addIssue({ code: 'custom', path: ['sourceOperationId'], message: 'Apply does not accept a source operation.' });
+        if (input.action !== 'apply' && !input.sourceOperationId)
+            context.addIssue({ code: 'custom', path: ['sourceOperationId'], message: 'Compensation and replay require a completed source operation.' });
+    });
+    return schema;
+}
+
 function positionSchema() {
     return z.object({
         x: z.number().min(-4096).max(4096),
@@ -307,83 +335,15 @@ function positionSchema() {
 }
 
 function commandInputSchema(projectRoot) {
-    const definitions = {
-        'project.search': z.fromJSONSchema(catalogSchema.$defs.projectSearchInput2x),
-        'script.read': z.fromJSONSchema(catalogSchema.$defs.scriptReadInput2x),
-        'script.patch.plan': z.fromJSONSchema(catalogSchema.$defs.scriptPatchPlanInput2x),
-        'script.patch': z.fromJSONSchema(catalogSchema.$defs.scriptPatchInput2x),
-        'script.operation.get': z.fromJSONSchema(catalogSchema.$defs.scriptOperationGetInput2x),
-        'scene.snapshot': z.object({ targetNodeName: z.string().min(1).max(64).optional() }).strict(),
-        'runtime.preview.start': z.object({}).strict(),
-        'scene.node.inspect': z.object({ nodePath: z.string().min(1).max(240) }).strict(),
-        'asset.searchPng': z.object({ query: z.string().min(1).max(80).regex(/^[^\u0000-\u001f\u007f]+$/), limit: z.number().int().min(1).max(50).optional(),
-            offset: z.number().int().min(0).max(100000).optional() }).strict(),
-        'asset.importPng': z.object({ sourcePath: z.string().min(1) }).strict(),
-        'asset.removeImportedPng': z.object({ assetName: RESOURCE_NAME, textureUuid: UUID,
-            spriteFrameUuid: UUID, sha256: SHA256 }).strict(),
-        'asset.validatePng': z.object({ pipelineId: UUID, assetName: RESOURCE_NAME }).strict(),
-        'asset.refreshPng': z.object({ pipelineId: UUID, assetName: RESOURCE_NAME }).strict(),
-        'asset.refreshFolder': z.object({ folderPath: ASSET_FOLDER_PATH }).strict(),
-        'scene.pngSprite': z.object({ assetName: RESOURCE_NAME, action: z.enum(['apply', 'compensate', 'replay']),
-            operationId: UUID.optional(), position: positionSchema().optional() }).strict(),
-        'scene.node.create': z.object({
-            parentPath: z.string().min(1).max(240),
-            parentUuid: z.string().min(1).max(64),
-            nodeName: z.string().regex(/^[A-Za-z0-9_ -]{1,64}$/),
-            action: z.enum(['apply', 'compensate', 'replay']),
-            components: z.array(z.union([
-                z.object({ classId: z.literal('cc.Sprite'), spriteFrameUuid: UUID }).strict(),
-                z.object({ classId: z.literal('cc.Label'), text: z.string().max(256) }).strict(),
-            ])).max(1).optional(),
-            transform: z.object({ position: positionSchema().optional(), scale: positionSchema().optional() }).strict().optional(),
-            prefabMode: z.enum(['create', 'instantiate']).optional(),
-            prefabUuid: UUID.optional(),
-            sourceOperationId: UUID.optional(),
-            operationId: UUID.optional(),
-        }).strict().superRefine((input, context) => {
-            if (input.prefabMode === 'create' && input.prefabUuid) context.addIssue({ code: 'custom', path: ['prefabUuid'], message: 'Prefab creation assigns its own UUID.' });
-            if (input.prefabMode === 'instantiate' && input.action === 'apply' && !input.prefabUuid) context.addIssue({ code: 'custom', path: ['prefabUuid'], message: 'Instantiation requires an imported Prefab UUID.' });
-            if (input.prefabMode !== 'instantiate' && input.prefabUuid) context.addIssue({ code: 'custom', path: ['prefabUuid'], message: 'Prefab UUID is only accepted for instantiation.' });
-            if (input.prefabMode === 'instantiate' && input.components && input.components.length) context.addIssue({ code: 'custom', path: ['components'], message: 'Prefab instances take their components from the Prefab asset.' });
-        }),
-        'scene.node.patch': z.object({
-            targetNodePath: z.string().min(1).max(240),
-            targetNodeUuid: z.string().min(1).max(64).regex(/^[A-Za-z0-9_+/=-]+$/),
-            action: z.enum(['apply', 'compensate', 'replay']),
-            expectedDiff: z.array(z.object({
-                path: z.enum(['node.name', 'node.active', 'node.position.x', 'node.position.y', 'node.scale.x', 'node.scale.y',
-                    'component.cc.Sprite.enabled', 'component.cc.Sprite.spriteFrameUuid', 'component.cc.Label.enabled']),
-                before: z.union([z.string(), z.number(), z.boolean(), z.null()]),
-                after: z.union([z.string(), z.number(), z.boolean(), z.null()]),
-            }).strict()).min(1).max(16),
-            sourceOperationId: UUID.optional(),
-            operationId: UUID.optional(),
-        }).strict(),
-        'prefab.source.patch': z.object({
-            prefabUuid: UUID,
-            targetNodePath: z.string().min(1).max(240),
-            targetNodeUuid: z.string().min(1).max(64).regex(/^[A-Za-z0-9_+/=-]+$/),
-            expectedPrefabSha256: SHA256.optional(),
-            action: z.enum(['apply', 'compensate', 'replay']),
-            expectedDiff: z.array(z.object({
-                path: z.enum(['node.name', 'node.active', 'node.position.x', 'node.position.y', 'node.scale.x', 'node.scale.y',
-                    'component.cc.Sprite.enabled', 'component.cc.Sprite.spriteFrameUuid', 'component.cc.Label.enabled']),
-                before: z.union([z.string(), z.number(), z.boolean(), z.null()]),
-                after: z.union([z.string(), z.number(), z.boolean(), z.null()]),
-            }).strict()).min(1).max(16),
-            sourceOperationId: UUID.optional(),
-            operationId: UUID.optional(),
-        }).strict().superRefine((input, context) => {
-            if (input.action === 'apply' && !input.expectedPrefabSha256)
-                context.addIssue({ code: 'custom', path: ['expectedPrefabSha256'], message: 'Apply requires the source hash returned by prefab.source.inspect.' });
-            if (input.action === 'apply' && input.sourceOperationId)
-                context.addIssue({ code: 'custom', path: ['sourceOperationId'], message: 'Apply does not accept a source operation.' });
-            if (input.action !== 'apply' && !input.sourceOperationId)
-                context.addIssue({ code: 'custom', path: ['sourceOperationId'], message: 'Compensation and replay require a completed source operation.' });
-        }),
-        'prefab.source.inspect': z.object({ prefabUuid: UUID }).strict(),
-        'content.stress.run': CONTENT_STRESS_RUN_INPUT,
-    };
+    const definitions = Object.fromEntries(COMMANDS_2X.map((command) => {
+        const definition = COMMAND_INPUTS_2X[command];
+        if (!definition || !catalogSchema.$defs[definition.input]) throw new Error(`MISSING_COMMAND_INPUT_CONTRACT:${command}`);
+        const schema = command === 'content.stress.run'
+            ? CONTENT_STRESS_RUN_INPUT
+            : addCommandRules(command, z.fromJSONSchema(zodCompatibleContract({
+                $schema: catalogSchema.$schema, $defs: catalogSchema.$defs, $ref: `#/$defs/${definition.input}` })));
+        return [command, schema];
+    }));
     return z.discriminatedUnion('command', COMMANDS_2X.map((command) => z.object({
         projectRoot,
         command: z.literal(command),
