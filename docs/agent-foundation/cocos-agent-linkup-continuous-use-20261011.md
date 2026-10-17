@@ -56,6 +56,13 @@ node tools/cocos-agent-bridge/package-creator-extension.mjs restore-extension \
 
 本轮测试命令和结果：在 `tools/cocos-agent-runtime` 执行 `node --test test/context-compact.test.mjs test/agent-loop.test.mjs`（42/42）；在 `tools/cocos-agent-bridge/mcp` 使用 `--test-name-pattern` 运行 `deepseek-agent.test.mjs` 与 `assistant-recovery-store.test.mjs` 中相关测试（6/6）。这两组结果作为自动测试证据单独保存，不计为 Creator 实机验收。
 
+### 2026-10-17 状态复核：LinkUpClient 原生窗口尚未取得
+
+- **自动测试：** runtime 完整套件 `npm test` 通过 126/126，包含 TypeScript 构建与固定上游快照检查；MCP/扩展完整套件 `npm test` 通过 99/99。两者分别验证任务意图、上下文/授权/恢复控制流与 Host/扩展合同，不证明 LinkUpClient 面板实际发送了上下文或分发了工具。
+- **Creator 原生面板证据：** 本次没有新增 LinkUpClient 面板证据。Dashboard 将 LinkUpClient 显示为“已打开”，但可读的 Creator 2.4.15 窗口仍是 `/private/tmp/CocosAgentNativeAcceptance-20261016` 的 `helloworld` 场景。尝试使用 Creator 菜单切换/打开项目后，CUA 对 2.4.15 编辑器出现超时，未能取得 LinkUpClient 面板或运行回执。不能将 Dashboard 状态或磁盘文件检查记作面板验收。
+- **磁盘只读核对：** LinkUpClient 根目录为 `/Users/youjunmao/WORK/GitHub/cc_framework/project/LinkUpClient/LinkUpClient/LinkUpClient`；`project.json` 名称为 `LinkUpClient`；`AGENTS.md` 为 8,140 字节，SHA-256 为 `ae984519b3f1a808dad20546311c11701a031b1ce749f741f2a117a6aefa6f14`。本次没有修改该工程。检查时其 Git 状态为 `main...origin/main [behind 1]`，已有 `assets/BundleLLK/Art.meta` 删除、当前扩展包及三个回滚目录未跟踪；这些现存状态保持原样。
+- **仍待验证：** 需要从 LinkUpClient 的 Creator 2.4.15 前台窗口继续验收工程/场景上下文、`AGENTS.md` 读取与陈旧哈希零分发门槛、取消时等待当前工具回执、精确 operation ID 恢复、Host 重启恢复。完成只读目标实时快照后，才生成新计划并按面板审批复跑任务；不得复用隔离工程 UUID。此次窗口访问失败与磁盘状态详见[LinkUpClient 前台实机验收尝试](traces/cocos-agent-linkup-front-window-attempt-20261017.md)。
+
 ### 2026-10-11 历史实现与验收边界
 
 `tools/cocos-agent-bridge/mcp` 的 `npm test` 为 **69/69** 通过；包含逐轮选择上下文刷新、项目约定读取前置条件、读取后哈希陈旧拒绝且不再执行写入、整包升级保留回滚副本，以及暂存失败不改动已安装扩展。语法检查与 `git diff --check` 通过。LinkUpClient 磁盘包升级器回执为 0.3.3 → 0.3.4，并成功保留 0.3.3 回滚目录。自动化不证明 Creator 面板已发送上下文、Creator 已加载新扩展、非空选择传递或模型实际读取 `AGENTS.md`。

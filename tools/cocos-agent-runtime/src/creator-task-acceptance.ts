@@ -107,7 +107,6 @@ export function creatorTaskCriteria(task: string, approvedTargets?: CreatorExpec
     const contentScope = value.replace(/(?:记住|忘记|删除|修改|更新|纠正|压缩|整合|合并|整理|创建|新建|新增|增加|添加|保存|写入|记录)(?:这条|该|一条|所有|项目|临时|测试|工程)?(?:\s+[A-Za-z0-9_-]+)?\s*记忆|\b(?:remember|forget|create|save|write|delete|remove|modify|update|correct|compact|consolidate|merge|organize)\s+(?:the\s+|this\s+|project\s+)?memory\b/gi, '');
     const inferredContentModifies = inferredRestore || literalCreatorTargets(contentScope).length > 0
         || /写入|保存|创建|新建|新增|增加|添加|制作|搭建|修改|改名|重命名|改为|改成|更新|删除|实现|修复|重构|移动|调整|替换|实例化|生成|导入|做一个|建一个|帮我做|\b(?:write|save|create|make|build|add|modify|change|rename|update|delete|remove|implement|fix|refactor|move|replace|instantiate|import)\b/i.test(contentScope);
-    if (intent && inferredContentModifies && ['explain', 'read'].includes(intent.kind)) throw new Error('CREATOR_TASK_INTENT_DOWNGRADED');
     if (intent && inferredMemory && !inferredContentModifies && !['memory', 'clarify'].includes(intent.kind)
         || intent?.kind === 'memory' && inferredContentModifies
         || intent && inferredRestore && intent.kind !== 'restore'

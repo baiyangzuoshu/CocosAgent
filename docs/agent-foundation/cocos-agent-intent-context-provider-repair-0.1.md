@@ -2,7 +2,7 @@
 
 日期：2026-10-16。审查基线：`6cd416f`。适用范围：Creator 2.4.15 原生面板、扩展管理的 Host 与 TypeScript 单 Agent 内核。
 
-状态（2026-10-16，证据分层更新）：**自动测试、Creator 原生面板证据与待验收路径分别记录；不得用磁盘包状态或自动测试替代面板证据。** 结构化任务意图规则收敛、双语目标/验收回归、Provider 中立错误与上下文摘要已有自动测试；Creator 2.4.15 原生 TS Agent 的一般只读、批准写入和补偿闭环有既有实机证据。此次 INT-10/11/12 细化、英中文等价验收映射及错误 operation ID 拒绝尚无 Creator 原生面板实机证据。长会话原生预验收曾发现旧 Host 摘要漏保早期精确约束；摘要修复仍需新 Host 真正重启后复验。2026-10-16 本轮针对上下文、约定哈希、取消与恢复的自动回归通过；LinkUpClient 的磁盘工程身份/哈希已核对，但当前 Creator 前台仍为隔离工程，本轮没有新增 LinkUpClient 原生面板证据。详见 [LinkUpClient 持续使用记录](cocos-agent-linkup-continuous-use-20261011.md)。本文不替换[批准计划业务验收合同](cocos-agent-plan-business-acceptance-0.1.md)、[上下文压缩合同](cocos-agent-context-compaction-0.1.md)或原操作账本。任务意图只作为程序校验的提案，不增加 Creator/MCP 命令或授权。
+状态（2026-10-17，证据分层更新）：**自动测试、Creator 原生面板证据与待验收路径分别记录；不得用磁盘包状态或自动测试替代面板证据。** 结构化任务意图、双语等价验收、Provider 中立错误及上下文摘要有自动测试；截至本日完整回归 runtime 126/126、MCP/扩展 99/99。Creator 2.4.15 原生 TS Agent 的一般只读、批准写入和补偿闭环有既有实机证据；新增解释零写入、Button 名称边界、错误最终值/operation ID 负向场景仍无面板证据。长会话旧 Host 曾漏保精确约束；摘要修复仍需新 Host 真正重启后复验。LinkUpClient 磁盘工程身份/AGENTS 哈希已只读核对，但 10 月 17 日无法从当前可读隔离工程窗口切到 LinkUpClient Creator 面板，因此没有新增 LinkUpClient 原生证据。详见[LinkUpClient 持续使用记录](cocos-agent-linkup-continuous-use-20261011.md)及[前台验收尝试记录](traces/cocos-agent-linkup-front-window-attempt-20261017.md)。本文不替换[批准计划业务验收合同](cocos-agent-plan-business-acceptance-0.1.md)、[上下文压缩合同](cocos-agent-context-compaction-0.1.md)或原操作账本。任务意图只作为程序校验的提案，不增加 Creator/MCP 命令或授权。
 
 ## 1. 阶段与交付边界
 
@@ -88,7 +88,7 @@ Agent 在首次任务工具请求前发送一次无工具的 Provider 请求。�
 
 ### 持续摘要实现检查结果（2026-10-16）
 
-- 当前完整回归：`tools/cocos-agent-runtime` **123/123**、`tools/cocos-agent-bridge/mcp` **99/99** 项通过，其中会话摘要测试覆盖超出 24 条窗口、摘要存储与新 store 实例重载、后续回合携带、Provider 抛错和空摘要回退、原文片段截断上限。
+- 截至 2026-10-16 当时的完整回归：`tools/cocos-agent-runtime` **123/123**、`tools/cocos-agent-bridge/mcp` **99/99** 项通过，其中会话摘要测试覆盖超出 24 条窗口、摘要存储与新 store 实例重载、后续回合携带、Provider 抛错和空摘要回退、原文片段截断上限。2026-10-17 更新结果见下方最新状态。
 - 扩展打包测试确认新 Host helper 会进入 Creator 2.4.15 扩展包；`git diff --check` 通过。
 - Creator 2.4.15 隔离工程在原生面板中确实超过 24 条消息并在“开发者 → 重新加载界面”后恢复同一对话；旧 Host 摘要将用户最初要求保留的 `KEEP-731` 错误归纳为另一个历史标记，重载后对精确回忆回答 `MINT-4827`。因此这次原生预验收判为失败，不能登记摘要恢复通过。
 - 有界用户原文片段修复及新扩展包已经生成/安装到隔离工程，但 Creator 主进程仍运行旧 Host；相同凭据下点击“连接”会复用服务。由于 macOS 后续进入锁屏，未能重启 Creator/确认新 Host、也没有对补丁版进行重启后精确回忆测试。Provider 摘要接口仍只由模拟回调覆盖；真实 Provider 超限与面板大型结果 call ID 取回也待实机验收。
@@ -136,7 +136,7 @@ Agent 在首次任务工具请求前发送一次无工具的 Provider 请求。�
 
 - `contracts.ts` 导出共享 `ProviderError` 与 `ProviderErrorCode`。DeepSeek 适配器在边界处将上下文超限、网络、HTTP 限流/认证/请求失败及无效响应归一化；Agent loop 不含 DeepSeek 专属错误判断。
 - 首次 `PROVIDER_CONTEXT_LIMIT` 将预算收紧至 65% 并重试一次；第二次超限停止且不发起工具调用。新的测试还覆盖第一次请求超限后预算缩小并在后续轮次保持、非超限网络错误不重试，以及压缩摘要阶段取消后不发送第二次 Provider 请求。
-- `tools/cocos-agent-runtime` 构建及当前 **123/123** 自动测试通过。测试使用模拟 Provider/HTTP 响应；没有调用真实 Provider 做上下文超限注入，原生超限实机验收仍待完成。
+- 当次记录的 `tools/cocos-agent-runtime` 构建及 **123/123** 自动测试通过。测试使用模拟 Provider/HTTP 响应；没有调用真实 Provider 做上下文超限注入，原生超限实机验收仍待完成。
 
 ### Host、Creator 面板与产品知识接线（2026-10-16）
 
@@ -162,6 +162,12 @@ npm test
 
 CTX/PRV 待补场景不能按既有 run-local 压缩测试或接口声明计为通过。
 
+### 2026-10-17 最新证据分层复核
+
+- **自动测试：** runtime `npm test` 126/126 通过，包含 TypeScript 构建与 18 个固定 upstream 文件检查；MCP/扩展 `npm test` 99/99 通过。新增意图回归确保“解释如何创建”及英文等价表达不派发写工具、只读 Button 检查不要求写回执、读后修改保留读写两项条件与未绑定目标门槛。
+- **Creator 面板证据：** 本轮没有运行 LinkUpClient 面板。既有隔离工程大型结果归档与按精确 call ID 分块取回证据单独登记在[实机记录](traces/cocos-agent-tool-result-archive-2.4-20261016.md)；它不证明 Provider 超限路径或 LinkUpClient 分发。
+- **仍待验证：** Creator 面板中英文意图链路及负向验收、当前摘要修复版的真实 Host 重启、真实 Provider 超限与降预算重试，以及 LinkUpClient 上下文/AGENTS 哈希门槛/取消/精确恢复/获批任务复跑。见 LinkUpClient 前台验收尝试记录。
+
 ### 合同基线检查结果（2026-10-15）
 
 - TypeScript 编译通过；运行时共 92 项，**89 通过、0 普通失败、3 TODO**。其中原有 84 项通过；新增 INT 场景 5 项通过，INT-02/03/07 的预期断言仍失败并明确列为 TODO，不计通过。
@@ -174,7 +180,7 @@ CTX/PRV 待补场景不能按既有 run-local 压缩测试或接口声明计为�
 - 新增 `creator-task-intent.ts`：Agent 任务动作前发起无工具结构化意图请求，校验精确原文、引述、类型、只读工具白名单和模型提出的位置目标；解释/读取/修改混合及全程只读冲突有确定门槛。Creator policy 再按该提案过滤工具并逐次阻止未授权写入；用户原文目标和现有 Plan targets 独立参与验收。
 - `creatorTaskCriteria` 和 Plan acceptance 接收经校验的意图，同时保留显式读取、目标/运行验收和回执账本条件。等价“设置为/改为”位置目标均按原文 200 绑定；测试中实际最终值为 20 时未满足目标，不能完成。
 - Creator Agent 产品 skill 源已说明此边界；扩展包检查确认运行时意图模块进入打包输入。尚未从 Creator 面板读回新 skill/哈希或运行真实 Provider。
-- 当次结构意图检查通过：runtime **104/104**、MCP/扩展 **92/92**；后续修复继续扩充测试，当前完整套件结果为 runtime **123/123**、MCP/扩展 **99/99**。
+- 当次结构意图检查通过：runtime **104/104**、MCP/扩展 **92/92**；后续修复继续扩充测试。截至 2026-10-16，完整套件为 runtime **123/123**、MCP/扩展 **99/99**；2026-10-17 最新结果见上方状态。
 - 限制：尚未证明任意自然语言都能由模型正确分类；对无法从原文规则独立绑定的写入目标仍依赖已批准 Plan 和保守校验。运行时解释成功门槛只免除不适用的工具收据，不代表项目事实已被实时读取。
 - 本步未操作 Creator 编辑器、真实 Provider 或项目资产。Creator 原生面板下的解释、等价修改、错误值拒绝、审批卡片、长会话摘要读取及 Host 重启恢复仍待实机验收。Provider 中立错误已在随后单独完成代码与模拟自动回归；实机验收仍待进行，详见下节。
 

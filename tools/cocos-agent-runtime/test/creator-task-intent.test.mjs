@@ -93,8 +93,47 @@ test('task proposals bind the original source and reject model-invented targets,
     ]) assert.throws(() => parseCreatorTaskIntent(changed, task));
     assert.throws(() => creatorTaskCriteria(task, undefined, proposal(task, 'explain')), /DOWNGRADED/);
     const explanation = '解释如何创建一个按钮';
+    assert.deepEqual(creatorTaskCriteria(explanation, undefined, proposal(explanation, 'explain')), []);
     assert.throws(() => creatorTaskCriteria(explanation, undefined, proposal(explanation, 'write')), /NOT_AUTHORIZED/);
-    assert.throws(() => creatorTaskCriteria('创建一个节点', undefined, proposal('创建一个节点', 'read')), /DOWNGRADED/);
+    assert.deepEqual(creatorTaskCriteria('创建一个节点', undefined, proposal('创建一个节点', 'read'))
+        .map((item) => item.receiptRequirement), ['creator-read']);
+});
+
+test('structured explain and read requests stay non-writing across Chinese and English paraphrases', () => {
+    const explanations = [
+        '解释如何创建按钮',
+        '为什么创建后看不到',
+        'Explain how to create a button',
+        'Why can’t I see it after creating it?',
+    ];
+    for (const task of explanations) {
+        const intent = proposal(task, 'explain');
+        assert.deepEqual(creatorTaskCriteria(task, undefined, intent), [], task);
+        const writeTool = { name: 'cocos_2x_command_execute', access: 'write', role: 'task' };
+        assert.equal(creatorIntentToolAllowed(intent, { tool: writeTool, arguments: { command: 'scene.node.patch', input: {
+            targetNodeUuid: 'node-1', expectedDiff: [{ path: 'node.name', before: 'Sprite', after: 'Button' }],
+        } }, receipts: [], availableTools: [writeTool] }), false, task);
+    }
+
+    for (const task of ['只读检查 Button 节点', 'Read-only inspect the Button node']) {
+        const intent = proposal(task, 'read', { reads: ['cocos_2x_scene_node_inspect'] });
+        const criteria = creatorTaskCriteria(task, undefined, intent);
+        assert.ok(criteria.length > 0, task);
+        assert.equal(criteria.some((item) => item.requiredTools.includes('cocos_2x_command_execute')
+            && item.receiptRequirement === 'creator-content-write'), false, task);
+        const writeTool = { name: 'cocos_2x_command_execute', access: 'write', role: 'task' };
+        assert.equal(creatorIntentToolAllowed(intent, { tool: writeTool, arguments: { command: 'scene.node.patch' },
+            receipts: [], availableTools: [writeTool] }), false, task);
+    }
+
+    for (const task of ['先读取 Canvas/Foo，再修改它的 x 位置为 200', 'Read Canvas/Foo, then change its x position to 200']) {
+        const intent = proposal(task, 'mixed', { reads: ['cocos_2x_scene_node_inspect'] });
+        const criteria = creatorTaskCriteria(task, undefined, intent);
+        assert.ok(criteria.some((item) => item.receiptRequirement === 'creator-content-write'), task);
+        assert.ok(criteria.some((item) => item.receiptRequirement === 'creator-read'), task);
+        assert.ok(criteria.some((item) => item.id === 'requested-target-unbound'), task,
+            'an unbound final target must remain incomplete pending a reviewed Plan target');
+    }
 });
 
 test('structured intent preserves raw user targets even if the reviewed Plan supplies a different value', () => {
