@@ -1,12 +1,12 @@
 # CocosAgent Creator 2.4.15 Runtime Observation 0.1
 
-Date: 2026-10-16. Extension: 0.3.16. Status: **Creator-assigned loopback preview ports and a same-operation write/preview/compensation path are implemented and natively accepted in an isolated Creator 2.4.15 project; concurrent preview provenance, same-page interaction and runtime-error repair acceptance remain pending.** The runtime observation and operation preview code have automated coverage.
+Date: 2026-10-16, M2 update 2026-10-17 (MCP/Agent package 0.3.5; Creator extension source 0.3.17). Status: **Creator-assigned loopback preview ports, bounded Console/status/screenshot observation, and same-operation write/preview/compensation are implemented; initial observation is natively accepted in an isolated project. The M2 same-page single-click/assertion bridge is defined in [the runtime interaction contract](cocos-agent-runtime-interaction-0.1.md) and implemented in source; native click/assertion and repair-loop acceptance remain pending. Concurrent preview provenance remains limited.**
 
 ## Goal
 
-Distinguish a source/compile success from runtime evidence. Give the native Agent a bounded read path for runtime logs, execution state, selected node state and the game canvas, then let it propose a narrow, approved existing-JavaScript repair and observe again.
+Distinguish a source/compile success from runtime evidence. Give the native Agent a bounded read path for runtime logs, execution state, selected node state and the game canvas, then let it propose a narrow, approved existing JS/TS single-file repair and observe again.
 
-This is a 2.4.15 Web-preview contract. It does not add 3.x support, native/mobile observation, arbitrary code execution, or input synthesis.
+This is a 2.4.15 Web-preview observation contract. It does not add 3.x support, native/mobile observation, or arbitrary code execution. The separately versioned [runtime interaction contract](cocos-agent-runtime-interaction-0.1.md) defines its bounded click path.
 
 ## Commands and receipts
 
@@ -14,7 +14,8 @@ This is a 2.4.15 Web-preview contract. It does not add 3.x support, native/mobil
 | --- | --- | --- |
 | `runtime.preview.start` | write | Starts the active scene's Creator preview through the selected 2.4.15 extension. Input is empty; host pins the selected project, instance, version and expected scene. Local approval is required. |
 | `cocos_2x_runtime_observe` | read | Requires the registered project root and expected active scene name. The MCP host reads the selected Creator catalog's `activeSceneUuid`, then the preview must report the same scene name and UUID before logs or a screenshot are returned. Optional `nodePath` requests a limited node/component snapshot. |
-| `script.read`, `script.patch.plan`, `script.patch`, `script.operation.get` | read/read/write/read | Existing JavaScript repair workflow. `needs-runtime` means compilation and source readback only. A patch requires local approval and durable operation state. |
+| `cocos_2x_runtime_interact` | write | Sends one approved click and evaluates finite before/after state assertions against the same owned session. Input schema, one-use identity and uncertain-result behavior are defined in [the runtime interaction contract](cocos-agent-runtime-interaction-0.1.md). |
+| `script.read`, `script.patch.plan`, `script.patch`, `script.operation.get` | read/read/write/read | Existing JS/TS single-file repair workflow. For TS, require exact Creator compiler evidence for the edited source hash; `needs-runtime` means compilation and source readback only. A patch requires local approval and durable operation state. |
 
 The observer defaults to `http://127.0.0.1:7456/`; when Creator assigns another preview port, the caller may provide that project's exact `http://127.0.0.1:<port>/` URL. The observer validates the loopback URL and then checks the selected Creator project's exact active scene name and UUID before returning evidence. It does not start Creator or modify project assets. The native MCP Host maintains an isolated visible browser window titled `CocosAgent 预览 · <scene>`, enables DevTools Runtime/Log/Page events once, and reuses the exact owned page for later observations. User interactions must occur in this window. It does not attach to an unrelated ordinary Chrome tab or a user's normal browser profile. It returns a structured receipt with:
 
@@ -49,9 +50,9 @@ The captured diagnostics and screenshot are supplied to the configured DeepSeek 
 1. Select the exact ready Creator project and query its live capabilities. Record active scene name and UUID.
 2. If preview is absent, start only that project's exact active scene with the approved `runtime.preview.start` command.
 3. Observe and correlate runtime errors with source readback. If there is no deterministic source link, stop at diagnosis.
-4. For one existing JavaScript file, use `script.read` → `script.patch.plan` → review exact diff → locally approved `script.patch`. Respect source hash, UUID, import and compile checks.
+4. For one existing JS/TS file, use `script.read` → `script.patch.plan` → review exact diff → locally approved `script.patch`. Respect source hash, UUID, importer and compile checks. TS is not parsed by Node; require exact Creator compiler evidence or stop without claiming success.
 5. Preserve the original operation ID. Reconcile/compensate uncertain writes from that ledger; never blindly retry.
-6. After the approved patch, approve `runtime.preview.start` to reload the compiled content, then observe the same scene UUID. For a user interaction check, let the user operate in the Agent preview window and observe that same session/page again without another restart. State before/after error evidence and whether the requested runtime behavior was actually tested. The observer does not generate clicks or input, and a count/screenshot alone does not automatically satisfy the free-task interaction acceptance condition.
+6. After the approved patch, approve `runtime.preview.start` to reload the compiled content, then observe the same scene UUID in the refreshed session. For a supported one-click check, follow [the same-session interaction contract](cocos-agent-runtime-interaction-0.1.md); for other input types, let the user operate in the Agent preview and observe that same session/page. State compile, before/after diagnostics and business assertions separately.
 
 ## Verification state and acceptance gap
 

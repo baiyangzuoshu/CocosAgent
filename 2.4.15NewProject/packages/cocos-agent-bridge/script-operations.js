@@ -1,16 +1,20 @@
 'use strict';
-// Creator 2.4.15 existing-JS editing. Source is parsed, never executed in the main process.
+// Creator 2.4.15 bounded project search and existing JS/TS editing. Source is parsed, never executed in the main process.
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const vm = require('vm');
 const HASH = { type: 'string', pattern: '^[0-9a-f]{64}$' };
 const UUID = { type: 'string', format: 'uuid' };
-const SCRIPT = { type: 'string', minLength: 4, maxLength: 240, pattern: '^[A-Za-z0-9_ -]+(?:/[A-Za-z0-9_. -]+)*\\.js$' };
+const SCRIPT = { type: 'string', minLength: 4, maxLength: 240, pattern: '^[A-Za-z0-9_ -]+(?:/[A-Za-z0-9_. -]+)*\\.(?:js|ts)$' };
+const SEARCH = { type: 'object', additionalProperties: false, required: ['query', 'scope'], properties: {
+    query: { type: 'string', minLength: 1, maxLength: 120 }, scope: { type: 'string', enum: ['code', 'assets', 'all'] },
+    limit: { type: 'integer', minimum: 1, maximum: 50 }, offset: { type: 'integer', minimum: 0, maximum: 100000 } } };
 const EDITS = { type: 'array', minItems: 1, maxItems: 8, items: { type: 'object', additionalProperties: false,
     required: ['before', 'after'], properties: { before: { type: 'string', minLength: 1, maxLength: 16384 }, after: { type: 'string', maxLength: 16384 } } } };
 const identity = { scriptPath: SCRIPT, scriptUuid: UUID, expectedSha256: HASH, edits: EDITS };
 const inputs = {
+    'project.search': SEARCH,
     'script.read': { type: 'object', additionalProperties: false, required: ['scriptPath'], properties: { scriptPath: SCRIPT } },
     'script.patch.plan': { type: 'object', additionalProperties: false, required: Object.keys(identity), properties: identity },
     'script.patch': { type: 'object', additionalProperties: false, required: ['action', 'operationId'], properties: {
@@ -28,12 +32,15 @@ function validInput(command, input) {
             && (def.minLength === undefined || value.length >= def.minLength) && (def.maxLength === undefined || value.length <= def.maxLength)
             && (!def.pattern || new RegExp(def.pattern).test(value)) && (!def.enum || def.enum.includes(value))
             && (!def.format || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value));
+        if (def.type === 'integer') return Number.isInteger(value)
+            && (def.minimum === undefined || value >= def.minimum) && (def.maximum === undefined || value <= def.maximum);
         if (def.type === 'array') return Array.isArray(value) && value.length >= def.minItems && value.length <= def.maxItems && value.every((v) => check(v, def.items));
         return value && typeof value === 'object' && !Array.isArray(value) && def.required.every((k) => value[k] !== undefined)
             && Object.keys(value).every((k) => def.properties[k] && check(value[k], def.properties[k]));
     }
     if (!Object.keys(input).every((k) => check(input[k], schema.properties[k]))) return false;
     if (input.scriptPath && input.scriptPath.split('/').some((p) => p === '.' || p === '..')) return false;
+    if (command === 'project.search') return !/[\u0000-\u001f\u007f]/.test(input.query);
     if (command !== 'script.patch') return true;
     const fields = Object.keys(identity);
     if (input.action === 'apply') return fields.every((k) => input[k] !== undefined) && input.sourceOperationId === undefined;
@@ -63,9 +70,89 @@ function readScript(root, scriptPath) {
     const source = bytes.toString('utf8');
     if (!Buffer.from(source).equals(bytes)) fail('SCRIPT_NOT_UTF8');
     const metaBytes = fs.readFileSync(metaFile); const meta = JSON.parse(metaBytes);
-    if (meta.importer !== 'javascript' || !/^[0-9a-f-]{36}$/i.test(meta.uuid || '')) fail('SCRIPT_METADATA_INVALID');
-    return { scriptPath, scriptUrl: `db://assets/${scriptPath}`, scriptUuid: meta.uuid, sourceSha256: sha(bytes),
+    const scriptType = path.extname(scriptPath) === '.ts' ? 'typescript' : 'javascript';
+    if (meta.importer !== scriptType || !/^[0-9a-f-]{36}$/i.test(meta.uuid || '')) fail('SCRIPT_METADATA_INVALID');
+    return { scriptPath, scriptType, scriptUrl: `db://assets/${scriptPath}`, scriptUuid: meta.uuid, sourceSha256: sha(bytes),
         metaSha256: sha(metaBytes), source, filename };
+}
+function searchProject(root, input) {
+    if (!validInput('project.search', input)) fail('INVALID_INPUT');
+    const rootStat = fs.lstatSync(root);
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) fail('UNSAFE_PATH');
+    const assetsRoot = safeDirectory(root, 'assets');
+    const query = input.query.toLocaleLowerCase();
+    const scope = input.scope;
+    const limit = input.limit === undefined ? 20 : input.limit;
+    const offset = input.offset === undefined ? 0 : input.offset;
+    const matches = [];
+    let visited = 0;
+    let scannedCodeBytes = 0;
+    let scanLimitReached = false;
+    function walk(directory, relative, depth) {
+        if (depth > 14 || visited >= 20000) return;
+        const entries = fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+        for (const entry of entries) {
+            if (visited >= 20000) break;
+            if (entry.name.startsWith('.') || ['library', 'local', 'temp', 'build', 'node_modules'].includes(entry.name)) continue;
+            const filename = path.join(directory, entry.name);
+            const itemPath = relative ? `${relative}/${entry.name}` : entry.name;
+            const stat = fs.lstatSync(filename);
+            if (stat.isSymbolicLink()) continue;
+            if (stat.isDirectory()) { walk(filename, itemPath, depth + 1); continue; }
+            if (!stat.isFile() || entry.name.endsWith('.meta')) continue;
+            visited++;
+            const extension = path.extname(entry.name).toLowerCase();
+            const isCode = ['.js', '.ts'].includes(extension);
+            if ((scope === 'code' && !isCode) || (scope === 'assets' && isCode)) continue;
+            const nameHit = itemPath.toLocaleLowerCase().includes(query);
+            let snippets = [];
+            if (isCode && stat.size <= 262144 && scannedCodeBytes + stat.size <= 50 * 1024 * 1024
+                && (scope === 'code' || scope === 'all')) {
+                scannedCodeBytes += stat.size;
+                const bytes = fs.readFileSync(filename);
+                const text = bytes.toString('utf8');
+                if (Buffer.from(text).equals(bytes)) {
+                    snippets = text.split(/\r?\n/).flatMap((line, index) => line.toLocaleLowerCase().includes(query)
+                        ? [{ line: index + 1, text: line.slice(0, 400) }] : []).slice(0, 3);
+                }
+            } else if (isCode && (scope === 'code' || scope === 'all')) {
+                scanLimitReached = true;
+            }
+            if (!nameHit && snippets.length === 0) continue;
+            const metaFile = `${filename}.meta`;
+            let uuid = null; let importer = null; let metaSha256 = null; let subAssets = [];
+            try {
+                const metaStat = fs.lstatSync(metaFile);
+                if (metaStat.isFile() && !metaStat.isSymbolicLink() && metaStat.size <= 16384) {
+                    const metaBytes = fs.readFileSync(metaFile);
+                    const meta = JSON.parse(metaBytes.toString('utf8'));
+                    if (typeof meta.uuid === 'string') uuid = meta.uuid;
+                    if (typeof meta.importer === 'string') importer = meta.importer;
+                    subAssets = Object.entries(meta.subMetas || {}).slice(0, 32).flatMap(([name, sub]) =>
+                        sub && typeof sub.uuid === 'string' ? [{ name: String(sub.displayName || name).slice(0, 120),
+                            uuid: sub.uuid, importer: typeof sub.importer === 'string' ? sub.importer : null,
+                            ...(typeof sub.rawTextureUuid === 'string' ? { rawTextureUuid: sub.rawTextureUuid } : {}) }] : []);
+                    metaSha256 = sha(metaBytes);
+                }
+            } catch (_) { /* Metadata can be absent for folders or pending imports. */ }
+            const bytes = stat.size <= 5 * 1024 * 1024 ? fs.readFileSync(filename) : null;
+            matches.push({ path: itemPath, kind: isCode ? 'code' : 'asset', extension,
+                sizeBytes: stat.size, sha256: bytes ? sha(bytes) : null, uuid, importer, metaSha256, nameMatch: nameHit,
+                ...(subAssets.length ? { subAssets } : {}),
+                ...(snippets.length ? { matches: snippets } : {}) });
+        }
+    }
+    function safeDirectory(projectRoot, relative) {
+        const filename = path.join(projectRoot, relative);
+        const stat = fs.lstatSync(filename);
+        if (!stat.isDirectory() || stat.isSymbolicLink()) fail('UNSAFE_PATH');
+        return filename;
+    }
+    walk(assetsRoot, '', 0);
+    matches.sort((a, b) => a.path.localeCompare(b.path));
+    return { query: input.query, scope, total: matches.length, offset, limit,
+        nextOffset: offset + limit < matches.length ? offset + limit : null,
+        truncated: visited >= 20000 || scanLimitReached, items: matches.slice(offset, offset + limit) };
 }
 function plan(root, input) {
     if (!validInput('script.patch.plan', input)) fail('INVALID_INPUT');
@@ -79,10 +166,13 @@ function plan(root, input) {
     }
     if (Buffer.byteLength(after) > 65536) fail('SCRIPT_TOO_LARGE');
     if (after === before.source) fail('NO_CHANGE');
-    try { new vm.Script(after, { filename: before.scriptUrl }); }
-    catch (error) { fail('SCRIPT_SYNTAX_ERROR', String(error.message).slice(0, 800)); }
+    let syntax = 'parsed-only';
+    if (before.scriptType === 'javascript') {
+        try { new vm.Script(after, { filename: before.scriptUrl }); }
+        catch (error) { fail('SCRIPT_SYNTAX_ERROR', String(error.message).slice(0, 800)); }
+    } else syntax = 'creator-compiler-required';
     return { ...before, after, afterSha256: sha(after), expectedDiff: input.edits,
-        syntax: 'parsed-only', compilation: 'not-run', runtime: 'not-run' };
+        syntax, compilation: 'not-run', runtime: 'not-run' };
 }
 function atomic(filename, value) {
     const temporary = `${filename}.${crypto.randomBytes(6).toString('hex')}.tmp`;
@@ -174,6 +264,7 @@ function createScriptService(root, editor, options = {}) {
     }
     async function execute(command, input) {
         if (!validInput(command, input)) fail('INVALID_INPUT');
+        if (command === 'project.search') return searchProject(root, input);
         if (command === 'script.read') { const { filename, ...script } = readScript(root, input.scriptPath); return script; }
         if (command === 'script.patch.plan') { const { filename, source, after, ...proposal } = plan(root, input); return proposal; }
         if (command === 'script.operation.get') return receipt(load(input.operationId));
@@ -195,7 +286,7 @@ function createScriptService(root, editor, options = {}) {
                 }
                 if (!mappingMatches(proposal)) fail('SCRIPT_ASSETDB_MISMATCH');
                 record = { operationId: input.operationId, projectRoot: root, creatorVersion: '2.4.15', capabilityId: 'script.patch',
-                    contractVersion: '0.1', scriptPath: proposal.scriptPath, scriptUuid: proposal.scriptUuid, metaSha256: proposal.metaSha256,
+                    contractVersion: '0.2', scriptPath: proposal.scriptPath, scriptUuid: proposal.scriptUuid, metaSha256: proposal.metaSha256,
                     beforeSha256: proposal.sourceSha256, afterSha256: proposal.afterSha256, beforeSource: proposal.source,
                     afterSource: proposal.after, expectedDiff: proposal.expectedDiff, state: 'writing', runtime: 'not-verified',
                     createdAt: new Date().toISOString(), ...(input.sourceOperationId ? { sourceOperationId: input.sourceOperationId } : {}) };
@@ -245,4 +336,4 @@ function createScriptService(root, editor, options = {}) {
     return { execute, importFailed(args) { let text; try { text = JSON.stringify(args); } catch (_) { text = 'Unserializable compiler error'; }
         failures.push({ at: Date.now(), text: text.slice(0, 2000) }); if (failures.length > 64) failures.shift(); } };
 }
-module.exports = { inputs, validInput, readScript, plan, createScriptService };
+module.exports = { inputs, validInput, readScript, plan, searchProject, createScriptService };

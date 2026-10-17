@@ -8,7 +8,9 @@
     "cocos2-asset-bundle-content",
     "cocos2-runtime-performance",
     "cocos2-runtime-observation",
-    "cocos2-mcp-tools"
+    "cocos2-mcp-tools",
+    "cocos2-project-extensions",
+    "cocos2-task-review-recovery"
   ],
   "skills": [
     { "name": "cocos-agent", "uri": "cocos://2x/skills/cocos-agent", "references": [
@@ -18,6 +20,8 @@
     { "name": "cocos2-mcp-tools", "uri": "cocos://2x/agent/mcp-tools", "references": [
       "agent-foundation/cocos-agent-mcp-0.1.md",
       "agent-foundation/cocos-agent-asset-search-0.1.md",
+      "agent-foundation/cocos-agent-runtime-observation-0.1.md",
+      "agent-foundation/cocos-agent-runtime-interaction-0.1.md",
       "agent-foundation/traces/cocos-agent-mcp-2.4.jsonl",
       "agent-foundation/traces/cocos-agent-mcp-cancel-2.4.jsonl",
       "agent-foundation/traces/cocos-agent-asset-bundle-host-2.4-web.jsonl"
@@ -74,9 +78,20 @@
       "agent-foundation/cocos-agent-script-development-0.1.md",
       "agent-foundation/cocos-agent-runtime-observation-0.1.md"
     ]},
+    {"name": "cocos2-project-development", "uri": "cocos://2x/skills/project-development", "references": [
+      "agent-foundation/cocos-agent-project-development-0.1.md",
+      "agent-foundation/cocos-agent-script-development-0.1.md"
+    ]},
     {"name": "cocos2-runtime-observation", "uri": "cocos://2x/skills/runtime-observation", "references": [
       "agent-foundation/cocos-agent-runtime-observation-0.1.md",
+      "agent-foundation/cocos-agent-runtime-interaction-0.1.md",
       "agent-foundation/cocos-agent-script-development-0.1.md"
+    ]},
+    {"name": "cocos2-project-extensions", "uri": "cocos://2x/skills/project-extensions", "references": [
+      "agent-foundation/cocos-agent-project-extensions-0.1.md"
+    ]},
+    {"name": "cocos2-task-review-recovery", "uri": "cocos://2x/skills/task-review-recovery", "references": [
+      "agent-foundation/cocos-agent-task-review-recovery-0.1.md"
     ]}
   ],
   "references": [
@@ -84,7 +99,11 @@
     { "id": "agent-foundation/cocos-agent-intent-context-provider-repair-0.1.md", "source": "docs/agent-foundation/cocos-agent-intent-context-provider-repair-0.1.md" },
     { "id": "agent-foundation/cocos-agent-mcp-0.1.md", "source": "docs/agent-foundation/cocos-agent-mcp-0.1.md" },
     { "id": "agent-foundation/cocos-agent-script-development-0.1.md", "source": "docs/agent-foundation/cocos-agent-script-development-0.1.md" },
+    { "id": "agent-foundation/cocos-agent-project-development-0.1.md", "source": "docs/agent-foundation/cocos-agent-project-development-0.1.md" },
     { "id": "agent-foundation/cocos-agent-runtime-observation-0.1.md", "source": "docs/agent-foundation/cocos-agent-runtime-observation-0.1.md" },
+    { "id": "agent-foundation/cocos-agent-runtime-interaction-0.1.md", "source": "docs/agent-foundation/cocos-agent-runtime-interaction-0.1.md" },
+    { "id": "agent-foundation/cocos-agent-project-extensions-0.1.md", "source": "docs/agent-foundation/cocos-agent-project-extensions-0.1.md" },
+    { "id": "agent-foundation/cocos-agent-task-review-recovery-0.1.md", "source": "docs/agent-foundation/cocos-agent-task-review-recovery-0.1.md" },
     { "id": "agent-foundation/cocos-agent-asset-search-0.1.md", "source": "docs/agent-foundation/cocos-agent-asset-search-0.1.md" },
     { "id": "agent-foundation/traces/cocos-agent-mcp-2.4.jsonl", "source": "docs/agent-foundation/traces/cocos-agent-mcp-2.4.jsonl" },
     { "id": "agent-foundation/traces/cocos-agent-mcp-cancel-2.4.jsonl", "source": "docs/agent-foundation/traces/cocos-agent-mcp-cancel-2.4.jsonl" },

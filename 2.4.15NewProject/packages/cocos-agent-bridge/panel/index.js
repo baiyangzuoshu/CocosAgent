@@ -253,6 +253,8 @@ Editor.Panel.extend({
         .plan-status { margin: 8px 0; color: #d4d8de; font-size: 11px; }
         .plan-action { background: #2867bc; border-color: #3979cf; }
         .run-card { margin: 0 0 10px; padding: 9px; border: 1px solid #57504a; border-radius: 6px; background: #302d29; }
+        .task-review { margin-top: 8px; padding: 7px; border: 1px solid #514c44; border-radius: 4px; background: #292824; }
+        .task-review h5 { margin: 0 0 5px; font-size: 11px; color: #e2d4bb; }
         .run-card h4 { margin: 0 0 5px; padding-right: 50px; font-size: 12px; }
         .run-meta, .run-effects { color: #c2c0ba; font-size: 10px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
         .run-recover { margin: 5px 5px 0 0; padding: 3px 6px; font-size: 10px; }
@@ -1113,9 +1115,45 @@ Editor.Panel.extend({
             card.appendChild(intent);
         }
         const receipts = Array.isArray(run.receipts) ? run.receipts : [];
-        receipts.forEach((receipt) => {
+        if (!run.review) receipts.forEach((receipt) => {
             if (receipt.expectedDiff !== undefined) this.appendDiffDetails(card, receipt.expectedDiff);
         });
+        if (run.review && typeof run.review === 'object') {
+            const review = run.review;
+            const section = document.createElement('section');
+            section.className = 'task-review';
+            const heading = document.createElement('h5');
+            heading.textContent = '任务差异审阅';
+            section.appendChild(heading);
+            const summary = document.createElement('div');
+            summary.className = 'run-meta';
+            summary.textContent = `状态 ${review.status || run.status} · 代码 ${review.codeChanges?.length || 0} · 场景/Prefab ${review.sceneChanges?.length || 0} · 其他写入 ${review.otherWrites?.length || 0}`;
+            section.appendChild(summary);
+            const renderChanges = (label, changes) => {
+                for (const change of (Array.isArray(changes) ? changes : []).slice(0, 24)) {
+                    const row = document.createElement('div');
+                    row.className = 'run-meta';
+                    const target = change.path || change.sceneTarget?.path || change.sceneName || change.command || '目标未记录';
+                    row.textContent = `${label} · ${target} · ${change.status || '已记录'}${change.operationId ? ` · operation ${change.operationId}` : ''}`;
+                    section.appendChild(row);
+                    if (change.expectedDiff !== undefined) this.appendDiffDetails(section, change.expectedDiff);
+                    if (change.beforeSha256 || change.afterSha256) {
+                        const hashes = document.createElement('div');
+                        hashes.className = 'run-meta';
+                        hashes.textContent = `SHA-256 · before ${change.beforeSha256 || '未记录'} · after ${change.afterSha256 || '未记录'}`;
+                        section.appendChild(hashes);
+                    }
+                }
+            };
+            renderChanges('代码', review.codeChanges);
+            renderChanges('场景/Prefab', review.sceneChanges);
+            renderChanges('其他写入', review.otherWrites);
+            const note = document.createElement('div');
+            note.className = 'run-meta';
+            note.textContent = review.note || '差异仅按已记录工具回执汇总。';
+            section.appendChild(note);
+            card.appendChild(section);
+        }
         const effects = receipts.filter((receipt) => receipt.access !== 'read'
             && (receipt.success === true || receipt.sideEffect === 'possible' || receipt.sideEffect === 'unknown'
                 || receipt.outcome === 'needs-review'));
@@ -1176,6 +1214,12 @@ Editor.Panel.extend({
                 receipt: message.receipt || { error: message.error } } };
         const previous = this._runCards.get(run.id);
         if (previous?.parentNode) {
+            if (message.review) {
+                const review = document.createElement('div');
+                review.className = 'run-meta';
+                review.textContent = `恢复状态：${message.review.status || '已读回'}${message.review.recovery?.disposition ? ` · ${message.review.recovery.disposition}` : ''}`;
+                previous.appendChild(review);
+            }
             const pre = document.createElement('pre');
             pre.className = 'run-receipt';
             pre.textContent = `只读核对结果：${JSON.stringify(message.receipt || { error: message.error }, null, 2).slice(0, 5000)}`;

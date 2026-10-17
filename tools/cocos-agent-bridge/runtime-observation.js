@@ -40,10 +40,11 @@ function sanitizeText(value) {
         .slice(0, MAX_EVENT_TEXT);
 }
 
-function targetExpression(expectedScene, expectedSceneUuid, nodePath, previewUrl = PREVIEW_URL) {
+function targetExpression(expectedScene, expectedSceneUuid, nodePath, previewUrl = PREVIEW_URL, assertionPaths = []) {
     const expected = JSON.stringify(expectedScene || null);
     const expectedUuid = JSON.stringify(expectedSceneUuid || null);
     const parts = JSON.stringify(nodePath ? nodePath.split('/') : null);
+    const assertionTargets = JSON.stringify([...new Set(assertionPaths)]);
     return `(function(){
       if(location.origin!==${JSON.stringify(new URL(previewUrl).origin)}||location.pathname!=='/')return {pageMismatch:true};
       if(typeof cc==='undefined'||!cc.director)return null;
@@ -54,23 +55,76 @@ function targetExpression(expectedScene, expectedSceneUuid, nodePath, previewUrl
         canvas:canvas&&rect?{width:Math.round(rect.width),height:Math.round(rect.height),x:Math.max(0,rect.x),y:Math.max(0,rect.y)}:null};
       var expected=${expected};if(expected&&result.sceneName!==expected)return {sceneMismatch:true,actualScene:result.sceneName};
       var expectedUuid=${expectedUuid};if(expectedUuid&&result.sceneUuid!==expectedUuid)return {sceneUuidMismatch:true,actualSceneUuid:result.sceneUuid};
-      var parts=${parts};if(parts){
-        if(parts[0]!==result.sceneName)return {nodeStatus:'scene-path-mismatch',...result};
+      var parts=${parts};var assertionTargets=${assertionTargets};
+      function inspectNode(nodeParts){
+        if(nodeParts[0]!==result.sceneName)return {status:'scene-path-mismatch'};
         var node=scene;
-        for(var i=1;i<parts.length;i++){var found=(node.children||[]).filter(function(child){return child.name===parts[i];});
-          if(found.length!==1)return {nodeStatus:found.length?'ambiguous':'not-found',...result};node=found[0];}
-        var components=(node._components||[]).map(function(component){
+        for(var i=1;i<nodeParts.length;i++){var found=(node.children||[]).filter(function(child){return child.name===nodeParts[i];});
+          if(found.length!==1)return {status:found.length?'ambiguous':'not-found'};node=found[0];}
+        var rawComponents=node._components||[];var components=rawComponents.slice(0,32).map(function(component){
           var id=cc.js.getClassName(component);var item={classId:id,enabled:component.enabled};
           if(id==='cc.Label')item.text=String(component.string||'').slice(0,256);
           if(id==='cc.Sprite')item.spriteFrameUuid=component.spriteFrame&&component.spriteFrame._uuid||null;
           if(id==='cc.Button')item.interactable=!!component.interactable;
           return item;
         });
-        result.targetNode={path:parts.join('/'),uuid:node.uuid,name:node.name,active:node.active,
-          position:{x:node.x,y:node.y},components:components};result.nodeStatus='found';
+        return {status:'found',node:{path:nodeParts.join('/'),uuid:node.uuid,name:node.name,active:node.active,
+          position:{x:node.x,y:node.y},components:components,componentsTruncated:rawComponents.length>32}};
       }
+      if(parts){var inspected=inspectNode(parts);result.nodeStatus=inspected.status;if(inspected.node)result.targetNode=inspected.node;}
+      if(assertionTargets.length){result.assertionNodes={};assertionTargets.forEach(function(targetPath){var inspected=inspectNode(targetPath.split('/'));
+        result.assertionNodes[targetPath]=inspected.node?inspected.node:{status:inspected.status};});}
       return result;
     })()`;
+}
+
+const ASSERTION_FIELDS = new Set(['node.active', 'node.x', 'node.y', 'label.text', 'button.interactable', 'sprite.spriteFrameUuid']);
+function validInteraction(interaction, session) {
+    if (!interaction || typeof interaction !== 'object' || Array.isArray(interaction)
+        || Object.keys(interaction).some((key) => !['interactionId', 'sessionId', 'pageId', 'pageGeneration', 'sceneName',
+            'sceneUuid', 'previewUrl', 'observationIndex', 'action', 'before', 'after', 'noNewConsoleErrors', 'settleMs'].includes(key))) return false;
+    if (typeof interaction.interactionId !== 'string' || !/^[0-9a-f-]{36}$/i.test(interaction.interactionId)
+        || interaction.sessionId !== session.id || interaction.pageId !== session.pageId
+        || interaction.pageGeneration !== session.pageGeneration || interaction.observationIndex !== session.observationIndex
+        || interaction.sceneName !== session.sceneName
+        || interaction.sceneUuid !== session.sceneUuid || interaction.previewUrl !== session.previewUrl
+        || !interaction.action || Object.keys(interaction.action).some((key) => !['type', 'x', 'y'].includes(key))
+        || interaction.action.type !== 'pointer.click' || !Number.isInteger(interaction.action.x)
+        || !Number.isInteger(interaction.action.y) || interaction.action.x < 0 || interaction.action.y < 0
+        || interaction.action.x > 4096 || interaction.action.y > 4096
+        || !Array.isArray(interaction.before) || interaction.before.length < 1 || interaction.before.length > 8
+        || !Array.isArray(interaction.after) || interaction.after.length < 1 || interaction.after.length > 8
+        || (interaction.noNewConsoleErrors !== undefined && interaction.noNewConsoleErrors !== true)
+        || (interaction.settleMs !== undefined && (!Number.isInteger(interaction.settleMs) || interaction.settleMs < 0 || interaction.settleMs > 1500))) return false;
+    return [...interaction.before, ...interaction.after].every((assertion) => assertion && typeof assertion === 'object'
+        && Object.keys(assertion).length === 3 && Object.keys(assertion).every((key) => ['nodePath', 'field', 'equals'].includes(key))
+        && validNodePath(assertion.nodePath) && ASSERTION_FIELDS.has(assertion.field)
+        && (typeof assertion.equals === 'string' ? assertion.equals.length <= 256
+            : typeof assertion.equals === 'boolean' || (typeof assertion.equals === 'number' && Number.isFinite(assertion.equals)
+                && assertion.equals >= -100000 && assertion.equals <= 100000)));
+}
+
+function assertionValue(snapshot, assertion) {
+    const target = snapshot && snapshot.assertionNodes && snapshot.assertionNodes[assertion.nodePath];
+    if (!target || target.status !== 'found') return { available: false, reason: target && target.status || 'not-found' };
+    if (assertion.field === 'node.active') return { available: true, value: target.active };
+    if (assertion.field === 'node.x') return { available: true, value: target.position.x };
+    if (assertion.field === 'node.y') return { available: true, value: target.position.y };
+    const componentId = assertion.field === 'label.text' ? 'cc.Label'
+        : assertion.field === 'button.interactable' ? 'cc.Button' : 'cc.Sprite';
+    const components = target.components.filter((component) => component.classId === componentId);
+    if (components.length !== 1) return { available: false, reason: components.length ? 'ambiguous-component' : 'component-not-found' };
+    const property = assertion.field === 'label.text' ? 'text'
+        : assertion.field === 'button.interactable' ? 'interactable' : 'spriteFrameUuid';
+    return { available: true, value: components[0][property] === undefined ? null : components[0][property] };
+}
+
+function checkAssertions(snapshot, assertions) {
+    return assertions.map((assertion) => {
+        const actual = assertionValue(snapshot, assertion);
+        return { ...assertion, passed: actual.available && actual.value === assertion.equals,
+            ...(actual.available ? { actual: actual.value } : { unavailable: actual.reason }) };
+    });
 }
 
 function eventText(event) {
@@ -140,6 +194,10 @@ async function observeRuntime(input, options = {}) {
     const nodePath = input && input.nodePath;
     const previewUrl = input && input.previewUrl || PREVIEW_URL;
     const timeoutMs = input && input.timeoutMs !== undefined ? input.timeoutMs : 20000;
+    const interaction = input && input.interaction;
+    const interactionPaths = interaction && Array.isArray(interaction.before) && Array.isArray(interaction.after)
+        ? [...new Set([...interaction.before, ...interaction.after].filter((assertion) => assertion && typeof assertion.nodePath === 'string')
+            .map((assertion) => assertion.nodePath))] : [];
     if (!input || typeof input !== 'object' || !validSceneName(expectedScene) || !validSceneUuid(expectedSceneUuid)
         || !validPreviewUrl(previewUrl)
         || (nodePath !== undefined && !validNodePath(nodePath))
@@ -148,6 +206,12 @@ async function observeRuntime(input, options = {}) {
     }
     const stopAt = Date.now() + timeoutMs;
     const session = options.session || { id: randomUUID(), persistent: false };
+    if (interaction && (!validInteraction(interaction, session) || !session.persistent || !session.initialized
+        || session.refreshRequested || session.requiresReload || session.sceneName !== expectedScene
+        || session.sceneUuid !== expectedSceneUuid || session.previewUrl !== previewUrl)) {
+        return { success: false, outcome: 'precondition-failed', inputDispatched: false,
+            error: { code: 'PREVIEW_INTERACTION_SESSION_MISMATCH' } };
+    }
     if (session.closed || session.childExited || session.disconnected) {
         return { success: false, error: { code: 'PREVIEW_SESSION_CLOSED', message: 'Approve runtime.preview.start to open a new Agent preview session.' } };
     }
@@ -213,6 +277,7 @@ async function observeRuntime(input, options = {}) {
         if (result.exceptionDetails) throw new Error(result.exceptionDetails.text || 'PREVIEW_EVALUATION_FAILED');
         return result.result && result.result.value;
     };
+    let dispatchedInteraction = null;
     try {
         if (!socket) {
             let port = null;
@@ -316,7 +381,7 @@ async function observeRuntime(input, options = {}) {
         while (now() < stopAt && !session.childExited) {
             if (session.awaitingNavigationGeneration && ((session.pageGeneration || 0) < session.awaitingNavigationGeneration
                 || !previewPageUrl(session.pageUrl, previewUrl))) { await delay(50); continue; }
-            first = await evaluate(targetExpression(expectedScene, expectedSceneUuid, nodePath, previewUrl));
+            first = await evaluate(targetExpression(expectedScene, expectedSceneUuid, nodePath, previewUrl, interactionPaths));
             if (first && first.pageMismatch) return { success: false, error: { code: 'PREVIEW_SESSION_PAGE_NAVIGATED' } };
             if (first && first.sceneMismatch) {
                 return { success: false, error: { code: 'PREVIEW_SCENE_MISMATCH', expectedScene, actualScene: first.actualScene || null } };
@@ -340,12 +405,52 @@ async function observeRuntime(input, options = {}) {
             session.titleGeneration = session.pageGeneration || 0;
             if (!reused) await send('Page.bringToFront');
         }
+        const interactionStartedAt = interaction ? new Date().toISOString() : null;
+        const pageErrorCountBefore = session.pageErrorCount || 0;
+        let interactionResult = null;
+        if (interaction) {
+            const before = checkAssertions(first, interaction.before);
+            if (before.some((item) => !item.passed)) {
+                interactionResult = { interactionId: interaction.interactionId, outcome: 'precondition-failed', inputDispatched: false, before };
+            } else if (interaction.action.x >= Math.min(first.canvas.width, 1280)
+                || interaction.action.y >= Math.min(first.canvas.height, 720)) {
+                interactionResult = { interactionId: interaction.interactionId, outcome: 'precondition-failed', inputDispatched: false,
+                    before, error: 'INPUT_COORDINATE_OUTSIDE_CANVAS' };
+            } else {
+                const x = first.canvas.x + interaction.action.x;
+                const y = first.canvas.y + interaction.action.y;
+                let pressAttempted = false;
+                try {
+                    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none' });
+                    dispatchedInteraction = { interactionId: interaction.interactionId, inputDispatched: 'uncertain', action: interaction.action };
+                    pressAttempted = true;
+                    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 });
+                    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1 });
+                    dispatchedInteraction = { interactionId: interaction.interactionId, inputDispatched: true, action: interaction.action };
+                    interactionResult = { interactionId: interaction.interactionId, outcome: 'input-dispatched', inputDispatched: true,
+                        action: interaction.action, canvas: { width: Math.min(first.canvas.width, 1280), height: Math.min(first.canvas.height, 720) }, before,
+                        dispatchedAt: new Date().toISOString(), startedAt: interactionStartedAt };
+                } catch (_) {
+                    if (pressAttempted) await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y,
+                        button: 'left', buttons: 0, clickCount: 1 }).catch(() => {});
+                    session.interactionNeedsReview = true;
+                    return { success: false, outcome: 'needs-review', interaction: { interactionId: interaction.interactionId,
+                        inputDispatched: 'uncertain', action: interaction.action }, session: { id: session.id, pageId: session.pageId,
+                        pageGeneration: session.pageGeneration, instanceId: session.instanceId },
+                    error: { code: 'INPUT_DISPATCH_UNCERTAIN', message: 'Do not repeat this input. Observe the current session first.' } };
+                }
+            }
+        }
         const pageGeneration = session.pageGeneration || 0;
-        await delay(Math.min(700, Math.max(300, timeoutMs / 20)));
-        const second = await evaluate(targetExpression(expectedScene, expectedSceneUuid, nodePath, previewUrl));
+        await delay(interaction ? (interaction.settleMs === undefined ? 300 : interaction.settleMs)
+            : Math.min(700, Math.max(300, timeoutMs / 20)));
+        const second = await evaluate(targetExpression(expectedScene, expectedSceneUuid, nodePath, previewUrl, interactionPaths));
         if (!second || second.sceneName !== expectedScene || second.sceneUuid !== expectedSceneUuid || !second.canvas
             || (session.pageGeneration || 0) !== pageGeneration) {
-            return { success: false, error: { code: 'PREVIEW_SCENE_CHANGED', expectedScene, expectedSceneUuid } };
+            if (dispatchedInteraction) session.interactionNeedsReview = true;
+            return { success: false, outcome: dispatchedInteraction ? 'needs-review' : undefined,
+                ...(dispatchedInteraction ? { interaction: dispatchedInteraction } : {}),
+                error: { code: 'PREVIEW_SCENE_CHANGED', expectedScene, expectedSceneUuid } };
         }
         const frameDelta = Math.max(0, second.frameCount - first.frameCount);
         const runtimeStatus = second.paused ? 'paused' : frameDelta > 0 ? 'running' : 'stalled';
@@ -362,12 +467,26 @@ async function observeRuntime(input, options = {}) {
         const finalIdentity = await evaluate(targetExpression(expectedScene, expectedSceneUuid, undefined, previewUrl));
         if (!finalIdentity || finalIdentity.sceneName !== expectedScene || finalIdentity.sceneUuid !== expectedSceneUuid
             || (session.pageGeneration || 0) !== pageGeneration) {
-            return { success: false, error: { code: 'PREVIEW_SCENE_CHANGED', expectedScene, expectedSceneUuid } };
+            if (dispatchedInteraction) session.interactionNeedsReview = true;
+            return { success: false, outcome: dispatchedInteraction ? 'needs-review' : undefined,
+                ...(dispatchedInteraction ? { interaction: dispatchedInteraction } : {}),
+                error: { code: 'PREVIEW_SCENE_CHANGED', expectedScene, expectedSceneUuid } };
         }
         const status = session.pageErrorCount ? 'runtime-error' : runtimeStatus;
         const observedAt = new Date().toISOString();
+        if (interaction && interactionResult && interactionResult.inputDispatched === true) {
+            const after = checkAssertions(second, interaction.after);
+            const newConsoleErrorCount = Math.max(0, (session.pageErrorCount || 0) - pageErrorCountBefore);
+            const consoleAssertion = interaction.noNewConsoleErrors === true
+                ? [{ field: 'console.noNewErrors', expected: 0, actual: newConsoleErrorCount, passed: newConsoleErrorCount === 0 }] : [];
+            const assertions = [...after, ...consoleAssertion];
+            interactionResult = { ...interactionResult, outcome: assertions.every((item) => item.passed)
+                ? 'assertions-passed' : 'assertions-failed', after: assertions,
+                pageErrorCountBefore, pageErrorCountAfter: session.pageErrorCount || 0,
+                observedAt };
+        }
         const result = {
-            success: true, outcome: 'observed', creatorVersion: '2.4.15', previewUrl,
+            success: true, outcome: interactionResult ? interactionResult.outcome : 'observed', creatorVersion: '2.4.15', previewUrl,
             observedAt, scene: { name: second.sceneName, uuid: second.sceneUuid, matchesExpected: true },
             session: { id: session.id, pageId: session.pageId, reused, visible: session.persistent === true,
                 pageGeneration, observationIndex: (session.observationIndex || 0) + 1 },
@@ -378,6 +497,7 @@ async function observeRuntime(input, options = {}) {
                 since: session.lastObservationAt || 'page-start', until: observedAt,
                 truncated: { errors: !!errors.dropped, warnings: !!warnings.dropped, logs: !!logs.dropped } },
             ...(second.targetNode ? { targetNode: second.targetNode, targetNodeStatus: second.nodeStatus } : {}),
+            ...(interactionResult ? { interaction: interactionResult } : {}),
             screenshot: { available: !!screenshotBase64, mimeType: screenshotBase64 ? 'image/jpeg' : null,
                 width: clip.width, height: clip.height, ...(screenshotError ? { error: screenshotError } : {}) },
             ...(screenshotBase64 ? { screenshotBase64 } : {}),
@@ -388,6 +508,11 @@ async function observeRuntime(input, options = {}) {
         errors.dropped = 0; warnings.dropped = 0; logs.dropped = 0;
         return result;
     } catch (error) {
+        if (dispatchedInteraction) {
+            session.interactionNeedsReview = true;
+            return { success: false, outcome: 'needs-review', interaction: dispatchedInteraction,
+                error: { code: 'PREVIEW_INTERACTION_RESULT_UNCERTAIN', message: 'Do not repeat this input. Observe the current session first.' } };
+        }
         return { success: false, error: { code: String(error && error.message || error).startsWith('CDP_TIMEOUT_') ? 'PREVIEW_CDP_TIMEOUT' : 'PREVIEW_OBSERVATION_FAILED' } };
     } finally {
         if (session.awaitingNavigationGeneration) session.requiresReload = true;
@@ -448,10 +573,54 @@ function createRuntimeObserver(options = {}) {
                 if (result.success === true && (session.requiresReload || session.contentRevision !== revision)) {
                     return { success: false, error: { code: 'PREVIEW_CONTENT_CHANGED_DURING_CAPTURE' } };
                 }
+                if (result.success === true) session.interactionNeedsReview = false;
                 if (result.session) result.session.instanceId = session.instanceId;
                 return result;
             } catch (_) {
                 return { success: false, error: { code: 'PREVIEW_OBSERVATION_FAILED' } };
+            } finally { session.busy = false; }
+        },
+        async interact(input) {
+            if (closed) return { success: false, outcome: 'failed', inputDispatched: false, error: { code: 'PREVIEW_OBSERVER_CLOSED' } };
+            let project;
+            try { project = key(input && input.projectRoot); }
+            catch (_) { return { success: false, outcome: 'failed', inputDispatched: false, error: { code: 'INVALID_RUNTIME_PROJECT_ROOT' } }; }
+            const session = sessions.get(project);
+            if (!session || !session.initialized) return { success: false, outcome: 'precondition-failed', inputDispatched: false,
+                error: { code: 'PREVIEW_SESSION_NOT_ESTABLISHED', message: 'Observe the running preview before sending input.' } };
+            if (session.busy) return { success: false, outcome: 'precondition-failed', inputDispatched: false,
+                error: { code: 'PREVIEW_OBSERVATION_IN_PROGRESS' } };
+            const interaction = input && input.interaction;
+            if (!validSceneUuid(input.instanceId) || !validSceneUuid(input.expectedSceneUuid) || !validSceneName(input.expectedScene)
+                || !validInteraction(interaction, session) || session.closed || session.disconnected || session.childExited
+                || session.requiresReload || session.interactionNeedsReview || restarts.has(project) || session.instanceId !== input.instanceId
+                || session.sceneUuid !== input.expectedSceneUuid || session.sceneName !== input.expectedScene
+                || session.previewUrl !== (input.previewUrl || PREVIEW_URL)) {
+                return { success: false, outcome: 'precondition-failed', inputDispatched: false,
+                    error: { code: 'PREVIEW_INTERACTION_SESSION_MISMATCH', message: 'Refresh and observe the exact current session before interacting.' } };
+            }
+            session.interactionIds = session.interactionIds || new Set();
+            if (session.interactionIds.has(interaction.interactionId)) return { success: false, outcome: 'precondition-failed',
+                inputDispatched: false, error: { code: 'INTERACTION_ID_REUSED' } };
+            if (session.interactionIds.size >= 128) return { success: false, outcome: 'precondition-failed', inputDispatched: false,
+                error: { code: 'PREVIEW_INTERACTION_LIMIT', message: 'Restart and observe a new preview session before more interactions.' } };
+            session.interactionIds.add(interaction.interactionId);
+            session.busy = true;
+            const revision = session.contentRevision || 0;
+            try {
+                const result = await observeRuntime(input, { ...options, session });
+                if (closed) return { success: false, outcome: 'needs-review', error: { code: 'PREVIEW_OBSERVER_CLOSED' },
+                    ...(result.interaction ? { interaction: result.interaction } : {}) };
+                if (session.requiresReload || session.contentRevision !== revision) {
+                    if (result.interaction) session.interactionNeedsReview = true;
+                    return { success: false, outcome: 'needs-review', error: { code: 'PREVIEW_CONTENT_CHANGED_DURING_INTERACTION' },
+                        ...(result.interaction ? { interaction: result.interaction } : {}) };
+                }
+                if (result.outcome === 'needs-review') session.interactionNeedsReview = true;
+                return result;
+            } catch (_) {
+                return { success: false, outcome: 'needs-review', error: { code: 'PREVIEW_INTERACTION_FAILED' },
+                    interactionId: interaction && interaction.interactionId };
             } finally { session.busy = false; }
         },
         previewStarted(projectRoot) {
