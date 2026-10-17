@@ -1,5 +1,7 @@
 # Cocos Creator 2.x 与 3.x 源码研究计划
 
+另一个独立研究线现已覆盖本地 [Cocos2d-x 4.0 与 Creator 2.4.15 对照](cocos2d-x-creator2x-source-study-plan.md)。该工作不改变本文 2.x/3.x 的研究对象；跨栈对照需按新计划分别核对 C++ 框架与 Creator 编辑器项目模型。
+
 ## 目标与范围
 
 系统理解 Cocos Creator 2.4.15 和 3.8.7 的源码架构，在研究过程中把经过验证的源码能力逐步制作成 skill，为后续设计 Cocos agent 建立可核查、可复用的基础。本计划不以版本迁移为目标，也不预先认定两代引擎采用相同的内部设计。
