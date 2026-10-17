@@ -75,6 +75,85 @@ function readScript(root, scriptPath) {
     return { scriptPath, scriptType, scriptUrl: `db://assets/${scriptPath}`, scriptUuid: meta.uuid, sourceSha256: sha(bytes),
         metaSha256: sha(metaBytes), source, filename };
 }
+function searchProject(root, input) {
+    if (!validInput('project.search', input)) fail('INVALID_INPUT');
+    const rootStat = fs.lstatSync(root);
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) fail('UNSAFE_PATH');
+    const assetsRoot = safeDirectory(root, 'assets');
+    const query = input.query.toLocaleLowerCase();
+    const scope = input.scope;
+    const limit = input.limit === undefined ? 20 : input.limit;
+    const offset = input.offset === undefined ? 0 : input.offset;
+    const matches = [];
+    let visited = 0;
+    let scannedCodeBytes = 0;
+    let scanLimitReached = false;
+    function walk(directory, relative, depth) {
+        if (depth > 14 || visited >= 20000) return;
+        const entries = fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+        for (const entry of entries) {
+            if (visited >= 20000) break;
+            if (entry.name.startsWith('.') || ['library', 'local', 'temp', 'build', 'node_modules'].includes(entry.name)) continue;
+            const filename = path.join(directory, entry.name);
+            const itemPath = relative ? `${relative}/${entry.name}` : entry.name;
+            const stat = fs.lstatSync(filename);
+            if (stat.isSymbolicLink()) continue;
+            if (stat.isDirectory()) { walk(filename, itemPath, depth + 1); continue; }
+            if (!stat.isFile() || entry.name.endsWith('.meta')) continue;
+            visited++;
+            const extension = path.extname(entry.name).toLowerCase();
+            const isCode = ['.js', '.ts'].includes(extension);
+            if ((scope === 'code' && !isCode) || (scope === 'assets' && isCode)) continue;
+            const nameHit = itemPath.toLocaleLowerCase().includes(query);
+            let snippets = [];
+            if (isCode && stat.size <= 262144 && scannedCodeBytes + stat.size <= 50 * 1024 * 1024
+                && (scope === 'code' || scope === 'all')) {
+                scannedCodeBytes += stat.size;
+                const bytes = fs.readFileSync(filename);
+                const text = bytes.toString('utf8');
+                if (Buffer.from(text).equals(bytes)) {
+                    snippets = text.split(/\r?\n/).flatMap((line, index) => line.toLocaleLowerCase().includes(query)
+                        ? [{ line: index + 1, text: line.slice(0, 400) }] : []).slice(0, 3);
+                }
+            } else if (isCode && (scope === 'code' || scope === 'all')) {
+                scanLimitReached = true;
+            }
+            if (!nameHit && snippets.length === 0) continue;
+            const metaFile = `${filename}.meta`;
+            let uuid = null; let importer = null; let metaSha256 = null; let subAssets = [];
+            try {
+                const metaStat = fs.lstatSync(metaFile);
+                if (metaStat.isFile() && !metaStat.isSymbolicLink() && metaStat.size <= 16384) {
+                    const metaBytes = fs.readFileSync(metaFile);
+                    const meta = JSON.parse(metaBytes.toString('utf8'));
+                    if (typeof meta.uuid === 'string') uuid = meta.uuid;
+                    if (typeof meta.importer === 'string') importer = meta.importer;
+                    subAssets = Object.entries(meta.subMetas || {}).slice(0, 32).flatMap(([name, sub]) =>
+                        sub && typeof sub.uuid === 'string' ? [{ name: String(sub.displayName || name).slice(0, 120),
+                            uuid: sub.uuid, importer: typeof sub.importer === 'string' ? sub.importer : null,
+                            ...(typeof sub.rawTextureUuid === 'string' ? { rawTextureUuid: sub.rawTextureUuid } : {}) }] : []);
+                    metaSha256 = sha(metaBytes);
+                }
+            } catch (_) { /* Metadata can be absent for folders or pending imports. */ }
+            const bytes = stat.size <= 5 * 1024 * 1024 ? fs.readFileSync(filename) : null;
+            matches.push({ path: itemPath, kind: isCode ? 'code' : 'asset', extension,
+                sizeBytes: stat.size, sha256: bytes ? sha(bytes) : null, uuid, importer, metaSha256, nameMatch: nameHit,
+                ...(subAssets.length ? { subAssets } : {}),
+                ...(snippets.length ? { matches: snippets } : {}) });
+        }
+    }
+    function safeDirectory(projectRoot, relative) {
+        const filename = path.join(projectRoot, relative);
+        const stat = fs.lstatSync(filename);
+        if (!stat.isDirectory() || stat.isSymbolicLink()) fail('UNSAFE_PATH');
+        return filename;
+    }
+    walk(assetsRoot, '', 0);
+    matches.sort((a, b) => a.path.localeCompare(b.path));
+    return { query: input.query, scope, total: matches.length, offset, limit,
+        nextOffset: offset + limit < matches.length ? offset + limit : null,
+        truncated: visited >= 20000 || scanLimitReached, items: matches.slice(offset, offset + limit) };
+}
 function plan(root, input) {
     if (!validInput('script.patch.plan', input)) fail('INVALID_INPUT');
     const before = readScript(root, input.scriptPath);
@@ -184,6 +263,7 @@ function createScriptService(root, editor, options = {}) {
     }
     async function execute(command, input) {
         if (!validInput(command, input)) fail('INVALID_INPUT');
+        if (command === 'project.search') return searchProject(root, input);
         if (command === 'script.read') { const { filename, ...script } = readScript(root, input.scriptPath); return script; }
         if (command === 'script.patch.plan') { const { filename, source, after, ...proposal } = plan(root, input); return proposal; }
         if (command === 'script.operation.get') return receipt(load(input.operationId));
@@ -205,7 +285,7 @@ function createScriptService(root, editor, options = {}) {
                 }
                 if (!mappingMatches(proposal)) fail('SCRIPT_ASSETDB_MISMATCH');
                 record = { operationId: input.operationId, projectRoot: root, creatorVersion: '2.4.15', capabilityId: 'script.patch',
-                    contractVersion: '0.1', scriptPath: proposal.scriptPath, scriptUuid: proposal.scriptUuid, metaSha256: proposal.metaSha256,
+                    contractVersion: '0.2', scriptPath: proposal.scriptPath, scriptUuid: proposal.scriptUuid, metaSha256: proposal.metaSha256,
                     beforeSha256: proposal.sourceSha256, afterSha256: proposal.afterSha256, beforeSource: proposal.source,
                     afterSource: proposal.after, expectedDiff: proposal.expectedDiff, state: 'writing', runtime: 'not-verified',
                     createdAt: new Date().toISOString(), ...(input.sourceOperationId ? { sourceOperationId: input.sourceOperationId } : {}) };
@@ -255,4 +335,4 @@ function createScriptService(root, editor, options = {}) {
     return { execute, importFailed(args) { let text; try { text = JSON.stringify(args); } catch (_) { text = 'Unserializable compiler error'; }
         failures.push({ at: Date.now(), text: text.slice(0, 2000) }); if (failures.length > 64) failures.shift(); } };
 }
-module.exports = { inputs, validInput, readScript, plan, createScriptService };
+module.exports = { inputs, validInput, readScript, plan, searchProject, createScriptService };

@@ -7,14 +7,14 @@ const vm = require('vm');
 const HASH = { type: 'string', pattern: '^[0-9a-f]{64}$' };
 const UUID = { type: 'string', format: 'uuid' };
 const SCRIPT = { type: 'string', minLength: 4, maxLength: 240, pattern: '^[A-Za-z0-9_ -]+(?:/[A-Za-z0-9_. -]+)*\\.(?:js|ts)$' };
-const SEARCH = { type: 'object', additionalProperties: false, required: ['query', 'scope'], properties: {
-    query: { type: 'string', minLength: 1, maxLength: 120 }, scope: { type: 'string', enum: ['code', 'assets', 'all'] },
-    limit: { type: 'integer', minimum: 1, maximum: 50 }, offset: { type: 'integer', minimum: 0, maximum: 100000 } } };
 const EDITS = { type: 'array', minItems: 1, maxItems: 8, items: { type: 'object', additionalProperties: false,
     required: ['before', 'after'], properties: { before: { type: 'string', minLength: 1, maxLength: 16384 }, after: { type: 'string', maxLength: 16384 } } } };
 const identity = { scriptPath: SCRIPT, scriptUuid: UUID, expectedSha256: HASH, edits: EDITS };
+const projectSearch = { type: 'object', additionalProperties: false, required: ['query', 'scope'], properties: {
+    query: { type: 'string', minLength: 1, maxLength: 120 }, scope: { type: 'string', enum: ['code', 'assets', 'all'] },
+    limit: { type: 'integer', minimum: 1, maximum: 50 }, offset: { type: 'integer', minimum: 0, maximum: 100000 } } };
 const inputs = {
-    'project.search': SEARCH,
+    'project.search': projectSearch,
     'script.read': { type: 'object', additionalProperties: false, required: ['scriptPath'], properties: { scriptPath: SCRIPT } },
     'script.patch.plan': { type: 'object', additionalProperties: false, required: Object.keys(identity), properties: identity },
     'script.patch': { type: 'object', additionalProperties: false, required: ['action', 'operationId'], properties: {
@@ -166,13 +166,12 @@ function plan(root, input) {
     }
     if (Buffer.byteLength(after) > 65536) fail('SCRIPT_TOO_LARGE');
     if (after === before.source) fail('NO_CHANGE');
-    let syntax = 'parsed-only';
     if (before.scriptType === 'javascript') {
         try { new vm.Script(after, { filename: before.scriptUrl }); }
         catch (error) { fail('SCRIPT_SYNTAX_ERROR', String(error.message).slice(0, 800)); }
-    } else syntax = 'creator-compiler-required';
+    }
     return { ...before, after, afterSha256: sha(after), expectedDiff: input.edits,
-        syntax, compilation: 'not-run', runtime: 'not-run' };
+        syntax: before.scriptType === 'javascript' ? 'parsed-only' : 'creator-compiler-required', compilation: 'not-run', runtime: 'not-run' };
 }
 function atomic(filename, value) {
     const temporary = `${filename}.${crypto.randomBytes(6).toString('hex')}.tmp`;

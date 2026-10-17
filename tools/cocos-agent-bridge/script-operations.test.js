@@ -42,6 +42,23 @@ function setup(t, behavior = 'compile') {
 test('packaged Creator and Host script contracts use identical implementation', () => {
     assert.equal(fs.readFileSync(path.join(__dirname, 'script-contract.js'), 'utf8'), fs.readFileSync(path.resolve(__dirname, '../../2.4.15NewProject/packages/cocos-agent-bridge/script-operations.js'), 'utf8'));
 });
+test('bounded project search finds TypeScript by content and returns asset identity', async (t) => {
+    const { root, service } = setup(t);
+    const scriptPath = path.join(root, 'assets/Scripts/UI/UIRootUICtrl.ts');
+    fs.mkdirSync(path.dirname(scriptPath), { recursive: true });
+    const source = 'class UIRootUICtrl { loginFailure() { return "retry"; } }\n';
+    const meta = JSON.stringify({ importer: 'typescript', uuid: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' });
+    fs.writeFileSync(scriptPath, source);
+    fs.writeFileSync(`${scriptPath}.meta`, meta);
+
+    const result = await service.execute('project.search', { query: 'loginFailure', scope: 'code' });
+    assert.equal(result.total, 1);
+    assert.equal(result.items[0].path, 'Scripts/UI/UIRootUICtrl.ts');
+    assert.equal(result.items[0].uuid, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+    assert.equal(result.items[0].importer, 'typescript');
+    assert.equal(result.items[0].matches[0].line, 1);
+    assert.equal(scripts.readScript(root, 'Scripts/UI/UIRootUICtrl.ts').source, source);
+});
 test('read/plan reject traversal, symlinks, stale identity, ambiguous edits and syntax errors before a write', (t) => {
     const { root, identity } = setup(t);
     assert.throws(() => scripts.readScript(root, '../Test.js'), /INVALID_INPUT/);
