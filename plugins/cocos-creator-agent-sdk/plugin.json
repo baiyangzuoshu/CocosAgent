@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "cocos-creator-agent-sdk",
+  "version": "0.1.0",
+  "description": "Optional vendor SDK workflow skills for Cocos Creator 2.4.x. Install only when the task names a matching SDK."
+}

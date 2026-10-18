@@ -1,0 +1,5 @@
+{
+  "name": "cocos-creator-agent",
+  "version": "0.1.0",
+  "description": "Cocos Creator 2.4.x workflow skills for Claude Code."
+}

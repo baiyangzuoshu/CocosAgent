@@ -2,7 +2,7 @@
 
 This directory is the maintained source for Creator 2.4.15 workflow skills and their references. The Creator extension packages them with the native Assistant. Creator owns the panel, model provider, approval flow, and local service lifecycle; the local MCP stdio child process is an internal CocosAgent transport started and stopped by its Assistant Host. This product does not register a Codex MCP server or require a Codex plugin.
 
-The package is the single maintained source for its 2.4 task skills. It currently contains 14 task skills and ships their linked contracts, probes and acceptance records under `references/`. Docs entries for packaged skills point back to this source. Before installing or updating, validate the package and its reference hashes:
+The package is the single maintained source for the Creator-native Agent's 2.4.15 task skills. It currently contains 17 skills and ships their linked contracts, probes and acceptance records under `references/`. Docs entries for packaged skills point back to this source. This package is separate from the Codex / Claude Code skill-only plugin at `plugins/cocos-creator-agent/`; its optional SDK skill package is `plugins/cocos-creator-agent-sdk/`. Neither third-party package is loaded by this Creator extension. Before installing or updating the native package, validate its contents and reference hashes:
 
 ```sh
 node plugins/cocos-agent-2x/scripts/package-skills.mjs --check

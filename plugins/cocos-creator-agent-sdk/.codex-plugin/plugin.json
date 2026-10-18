@@ -1,0 +1,6 @@
+{
+  "name": "cocos-creator-agent-sdk",
+  "version": "0.1.0",
+  "description": "Optional vendor SDK skills for Codex working with Cocos Creator 2.4.x.",
+  "skills": "./skills/"
+}
