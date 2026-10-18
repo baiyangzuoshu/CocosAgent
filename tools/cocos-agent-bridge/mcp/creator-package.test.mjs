@@ -276,3 +276,24 @@ test('Creator extension upgrade leaves the installed extension intact when packa
         assert.equal(fs.readdirSync(path.dirname(extension)).some((name) => name.includes('rollback-') || name.includes('upgrade-')), false);
     } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
 });
+
+test('Creator extension upgrade supports a project-local package target inside the source repository', () => {
+    const temporary = fs.mkdtempSync(path.join(SOURCE_ROOT, '.creator-package-project-install-'));
+    const extension = path.join(temporary, 'packages', 'cocos-agent-bridge');
+    fs.mkdirSync(extension, { recursive: true });
+    fs.writeFileSync(path.join(extension, 'package.json'), JSON.stringify({
+        name: 'cocos-agent-bridge',
+        version: '0.3.24',
+        'cocos-agent': { creatorVersion: '2.4.15' },
+    }));
+    try {
+        const result = upgradeCreatorExtension({ sourceRoot: SOURCE_ROOT, extensionDirectory: extension });
+        assert.equal(result.previousVersion, '0.3.24');
+        assert.equal(result.installedVersion, '0.3.25');
+        assert.equal(result.creatorReloadRequired, true);
+        assert.ok(fs.existsSync(path.join(result.rollbackDirectory, 'package.json')));
+        assert.ok(fs.existsSync(path.join(extension, 'assistant-runtime/tools/cocos-agent-bridge/mcp/mcp-server.mjs')));
+    } finally {
+        fs.rmSync(temporary, { recursive: true, force: true });
+    }
+});

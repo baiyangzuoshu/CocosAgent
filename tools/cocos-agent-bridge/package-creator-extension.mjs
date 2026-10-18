@@ -21,6 +21,18 @@ function ensureAbsolute(value, flag) {
     return path.resolve(value);
 }
 
+function assertDisjointFromPackageSources(sourceRoot, candidate, errorCode) {
+    const sourcePaths = [
+        EXTENSION_RELATIVE,
+        RUNTIME_TOOLS_RELATIVE,
+        AGENT_RUNTIME_RELATIVE,
+        RUNTIME_SKILLS_RELATIVE,
+        'docs/agent-foundation/probes',
+    ].map((relative) => path.join(sourceRoot, relative));
+    if (sourcePaths.some((sourcePath) => inside(sourcePath, candidate) || inside(candidate, sourcePath)))
+        throw new Error(errorCode);
+}
+
 function copyTree(source, destination, filter = () => true) {
     if (!fs.existsSync(source)) throw new Error(`PACKAGE_SOURCE_MISSING:${source}`);
     fs.cpSync(source, destination, { recursive: true, dereference: true, filter });
@@ -103,6 +115,12 @@ function copyExtensionSources(sourceRoot, extensionDestination) {
         if (!fs.existsSync(source)) throw new Error(`CREATOR_EXTENSION_FILE_MISSING:${name}`);
         fs.copyFileSync(source, path.join(extensionDestination, name));
     }
+    const packagedMainPath = path.join(extensionDestination, 'main.js');
+    const packagedMain = fs.readFileSync(packagedMainPath, 'utf8');
+    const sourceTreeFingerprintFallback = ", path.resolve(__dirname, '../../../tools/cocos-agent-bridge/runtime-fingerprint.js')";
+    if (packagedMain.includes(sourceTreeFingerprintFallback)) {
+        fs.writeFileSync(packagedMainPath, packagedMain.replace(sourceTreeFingerprintFallback, ''));
+    }
     fs.copyFileSync(path.join(sourceRoot, RUNTIME_TOOLS_RELATIVE, 'catalog.schema.json'),
         path.join(extensionDestination, 'command-contract.json'));
     for (const name of ['panel', 'vendor']) {
@@ -113,7 +131,7 @@ function copyExtensionSources(sourceRoot, extensionDestination) {
 export function buildCreatorExtensionBundle({ sourceRoot = DEFAULT_SOURCE_ROOT, outputDirectory }) {
     const source = path.resolve(sourceRoot);
     const output = ensureAbsolute(outputDirectory, 'output');
-    if (inside(source, output) || inside(output, source)) throw new Error('OUTPUT_MUST_BE_OUTSIDE_SOURCE_ROOT');
+    assertDisjointFromPackageSources(source, output, 'OUTPUT_OVERLAPS_PACKAGE_SOURCES');
     if (fs.existsSync(output)) throw new Error('OUTPUT_ALREADY_EXISTS');
     if (!fs.existsSync(path.join(source, EXTENSION_RELATIVE, 'package.json'))) throw new Error('CREATOR_EXTENSION_SOURCE_MISSING');
     buildAgentRuntime(source);
@@ -191,7 +209,7 @@ function validateCreatorExtensionBundle(directory) {
 export function upgradeCreatorExtension({ sourceRoot = DEFAULT_SOURCE_ROOT, extensionDirectory }) {
     const source = path.resolve(sourceRoot);
     const extension = ensureAbsolute(extensionDirectory, 'extension');
-    if (inside(source, extension) || inside(extension, source)) throw new Error('UPGRADE_TARGET_MUST_BE_OUTSIDE_SOURCE_ROOT');
+    assertDisjointFromPackageSources(source, extension, 'UPGRADE_TARGET_OVERLAPS_PACKAGE_SOURCES');
     const previousPackage = readCreatorExtension(extension);
     const parent = path.dirname(extension);
     const suffix = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
