@@ -2,14 +2,14 @@
 
 ## 比较范围
 
-本页比较仓库中的 `cocos2d-x-4/` 快照（README/CHANGELOG 标记 4.0）与 `2.4.15engine/`、`2.4.15NewProject/`。包含源码架构对照，以及 2026-10-17 在 macOS 上分别启动两边最小首屏 Demo 的运行时观察。当前运行后端并不相同，因此不将现场 FPS 显示值作为性能排名。
+本页比较仓库中的 `cocos2d-x-4/` 快照（README/CHANGELOG 标记 4.0）与 `2.4.15engine/`、`2.4.15NewProject/`。包括源码架构对照，以及 2026-10-17 在 macOS 上的首屏运行和相同交互切片：点击 Sprite 后计数递增并向右移动。Cocos2d-x 使用 x86_64 原生窗口，Creator 使用浏览器 WebGL 预览；不将两端 FPS 读数当作性能排名。
 
 ## Demo 构建与运行状态（2026-10-17）
 
-- 选定 macOS 桌面作为共同观察环境。Cocos2d-x v4 使用官方 `cpp-template-default`，通过独立 CMake wrapper 构建为 x86_64 macOS app bundle；Creator 使用 2.4.15 Web 预览。两边画面区域均约为 960×640，场景都显示一个 Sprite 和一个 Label，但素材、背景、标签文本、运行后端和构建模式不同。
+- 选定 macOS 桌面作为共同观察环境。Cocos2d-x v4 使用官方 `cpp-template-default`，通过独立 CMake wrapper 构建为 x86_64 macOS app bundle；Creator 使用 2.4.15 Web 预览。两边画面区域均约为 960×640，均显示一个 Sprite 和一个 Label；素材、背景、运行后端和构建模式不同。Demo 增加同一交互：鼠标左键点击 Sprite 后计数加一、x 坐标增加 40。
 - CMake 4.4.4 安装在 `/private/tmp/cocos-cmake-runtime`，Apple Clang 21 编译器探测通过。GitHub 官方 `metal-support-22` 包已下载并通过 ZIP 完整性检查，按引擎脚本布局安装到忽略目录 `cocos2d-x-4/external/`。包大小为 109,325,429 字节，与 `external/config.json` 的旧估值不同；ZIP 检查无错误，所需目录与库文件存在。
 - macOS x86_64 的官方 `cpp-tests` 已通过 CMake Unix Makefiles 构建并启动；它验证依赖、链接、窗口创建和基础渲染，但不替代模板 Demo。
-- Cocos2d-x 官方 `cpp-template-default` 的 `HelloCpp` 已构建并通过桌面应用启动。启动方式为从桌面会话打开生成的 app bundle；此前在命令行直接运行二进制会在 GLFW/macOS `NSApplication` 注册阶段 abort，这不是场景代码失败。运行窗口显示默认 Cocos2d-x 标志、`Hello World` 标签和实时统计；构建产物是 x86_64，Apple Silicon 上经 Rosetta 运行。
+- Cocos2d-x 官方 `cpp-template-default` 的 `HelloCpp` 已重建并通过桌面应用启动。启动方式为从桌面会话打开生成的 app bundle；此前在命令行直接运行二进制会在 GLFW/macOS `NSApplication` 注册阶段 abort，这不是场景代码失败。交互版窗口显示默认 Cocos2d-x 标志、`Clicks` 计数和实时统计；构建产物是 x86_64，Apple Silicon 上经 Rosetta 运行。
 - Creator Dashboard、编辑器窗口和目标工程身份一致：`/Users/youjunmao/WORK/Cocos_Engine/2.4.15NewProject`、Creator 2.4.15。独立场景 `assets/Scene/Cocos2dComparison.fire` 已从 Creator 预览场景列表选择并成功启动，浏览器运行画面显示 Cocos Sprite、`Label` 和深色背景。没有改动原 `helloworld.fire` 或 `settings/project.json`。
 - 运行时现场结果：两端均成功显示场景并持续绘制；Creator 预览统计面板显示约 3 个 Draw Call。截图瞬间的两端 FPS 文本分别约为 Cocos2d-x 57 FPS、Creator 116 FPS，但这只是单帧/短时现场读数，且一侧为原生 OpenGL/GLFW app、一侧为 Chrome WebGL 预览，浏览器合成、垂直同步、CPU 架构及统计口径未统一，不作为性能比较结论。
 - 构建期间在引擎源码做了两项窄修正以适配当前 Apple SDK：`CCFontAtlas.cpp` 对保存为 `void*` 的 `iconv_t` 调用做显式转换；`AudioCache.h` 显式包含其使用的 `<functional>`。构建时还禁用了 CMake 预编译头以避开 Objective-C++ PCH 冲突。这些修改须与构建证据一并审阅，不是上游 v4 的原样构建。
@@ -34,7 +34,7 @@
 ### 运行时观察与结论
 
 - **运行结果：** Cocos2d-x HelloCpp 原生窗口与 Creator Cocos2dComparison 浏览器预览均已启动，均持续绘制并显示一个精灵和文字。Creator 预览由 Editor 的预览目标下拉框选择 `Cocos2dComparison` 后启动；无需修改工程默认启动场景。
-- **可观察差异：** Cocos2d-x 模板的场景入口写在 `AppDelegate`，运行时直接构造 Scene/Sprite/Label；Creator 的场景对象和资源引用存在 `.fire` 资产中，由 Editor 预览宿主加载后交给 JS runtime。画面显示 Cocos2d-x 默认 `Hello World` 与品牌图；Creator 显示 `Label`、Cocos 标志和场景背景。
+- **可观察差异：** Cocos2d-x 模板的场景入口写在 `AppDelegate`，运行时直接构造 Scene/Sprite/Label；Creator 的场景对象和资源引用存在 `.fire` 资产中，由 Editor 预览宿主加载后交给 JS runtime。当前交互版显示两侧各自的 `Clicks` 计数、Sprite 和背景；首轮基线截图中的静态标签曾为 `Hello World` 与 `Label`。
 - **性能状态：** 不下性能胜负结论。当前 Cocos2d-x 使用 x86_64 原生 macOS app（Rosetta），Creator 使用 Chrome WebGL 预览；虽画布同为约 960×640，渲染后端、宿主合成和刷新节奏不一致。两边截图里的瞬时 FPS 只能作现场状态参考，不能当作可复现基准。
 
 - **要直接控制 C++ 生命周期、平台入口、窗口循环和原生工程构建，选 Cocos2d-x。** 代价是团队承担资源打包、平台工程和场景结构代码维护。
@@ -45,6 +45,8 @@
 证据入口：Cocos2d-x `templates/cpp-template-default/Classes/AppDelegate.cpp`、`HelloWorldScene.cpp`、`proj.ios_mac/mac/main.cpp`、`cocos/platform/mac/CCApplication-mac.mm`；Creator `2.4.15engine/cocos2d/core/CCGame.js`、`CCDirector.js`、`2.4.15NewProject/assets/Scene/Cocos2dComparison.fire`。运行证据为 2026-10-17 桌面会话中两端实际窗口/预览画面；没有录制帧时间序列或完成统一后端基准。
 
 ## 架构路径
+
+专题级比较已拆分为[工程构建](cocos2d-x-4-vs-creator-2.4/01-project-build.md)、[启动与帧循环](cocos2d-x-4-vs-creator-2.4/02-startup-and-frame.md)、[Scene/Node 生命周期](cocos2d-x-4-vs-creator-2.4/03-scene-node-lifecycle.md)和[输入事件](cocos2d-x-4-vs-creator-2.4/04-input-events.md)。本页保留架构总览和跨专题结论；专题工作流位于 `plugins/cocos2d-x-4/skills/`，不另设比较 Skill。
 
 ```mermaid
 flowchart LR
@@ -85,7 +87,9 @@ flowchart LR
 - **Cocos2d-x macOS desktop 模板源码：** `proj.ios_mac/mac/main.cpp` 创建 `AppDelegate` 并调用 `Application::run()`；`CCApplication-mac.mm` 调用 `applicationDidFinishLaunching()`，然后在窗口循环中调用 `Director::mainLoop()`。模板 AppDelegate 设置 GLView/分辨率，创建 HelloWorld Scene 并调用 `runWithScene()`。每帧由 `Director::mainLoop()` → `drawScene()` 驱动 Scheduler、Scene/Renderer 和 autorelease pool 清理。细节见[Cocos2d-x 启动说明](../cocos2d-x/01-startup-and-frame.md)。
 - **Creator 2.4.15 浏览器预览：** 已有独立实测记录：Creator Editor `boot.js` 加载预览模块和项目场景后调用 `cc.game.run()`；`CCGame._prepareFinished()` 初始化 engine 并启动主循环；浏览器动画帧驱动 `CCDirector.mainLoop()`，依次执行组件、Scheduler、延迟销毁和 Renderer。详细证据与限制见[Creator 2.4.15 启动分析](../2.x/01-startup-and-frame.md)。
 - **静态链路结论：** 两边都用 Director 管理场景流转，但 Cocos2d-x 的桌面平台循环由 C++ `Application` 驱动；Creator Web 预览由 Creator Editor 宿主装配场景，再由 JS runtime 的 animation-frame 循环驱动。它们的 Editor/内容工作流、运行时语言和内存管理不同，不能从相同的 `Director`/`Scene` 名称推导实现等价。
-- **运行验证状态：** 本轮已在 Creator Chrome 预览启动独立场景，并通过桌面会话启动 Cocos2d-x `HelloCpp` 原生 app。两端画面可用于首屏与运行链路观察；本轮没有做首帧同步、逐帧业务更新或稳定性能采样。
+- **新增运行时切片：输入到回调。** Cocos2d-x 在 `HelloWorldScene` 注册 `EventListenerMouse`，将监听器绑定到 Sprite 节点；应用回调检查左键并以 Sprite 包围盒命中测试，再更新 Label 和 Sprite x 坐标。Creator 在 `ComparisonInteraction` 组件的 `onLoad` 中用 `node.on(MOUSE_DOWN, ...)` 监听 Sprite 节点，在回调中更新同级 Label 与节点位置，并在 `onDestroy` 移除监听。
+- **实机结果（2026-10-17）：** 两个 Demo 各进行两次桌面点击，屏幕均显示 `Clicks: 2`，Sprite 每次向右移动 40 个设计单位；Cocos2d-x 新构建和 Creator 浏览器预览均通过此切片。对照的是功能结果与各自事件链，不是输入延迟、触摸设备适配、事件吞吐或渲染性能。
+- **事件参考：** [Cocos2d-x v4 事件监听注册](https://docs.cocos2d-x.org/cocos2d-x/v4/en/event_dispatcher/registering.html)；[Creator 2.4 事件系统](https://docs.cocos.com/creator/2.4/manual/en/scripting/events.html)。运行后端、素材与构建配置不同，因此现场帧率仍不构成性能结论。
 
 ## 第二个切片：节点与组件生命周期
 

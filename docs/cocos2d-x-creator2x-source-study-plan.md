@@ -55,17 +55,34 @@
 
 ## 技能产出规则
 
-- 第一份跨栈 skill 为 `docs/agent-foundation/skills/cocos2d-x-creator2-comparison/SKILL.md`，用于识别项目栈、建立证据链、解释差异和规划移植验证。
-- 该 skill 当前是研究阶段草案，不表示两个栈都完成实机验证，也不直接进入 `plugins/cocos-agent-2x/` 的 Creator 产品技能包。
-- 后续某专题只有在拥有足够源码地图和至少一个可复核验证切片后，才制作具体诊断/开发 skill；跨栈操作确实共享时才合并，否则分别保留版本/框架专属流程。
+- Cocos2d-x 专属专题 Skill 按“一项开发主题一个 `SKILL.md`”组织在 `plugins/cocos2d-x-4/skills/<skill-name>/`，作为后续 Agent 可接入的独立技能源；不放入 `plugins/cocos-agent-2x/skills/`，避免把 C++ 框架工作流混入 Creator 原生 Agent 产品包。当前技能源目录不代表已经完成 Agent 安装、发现或运行时接线。
+- 每个专题 Skill 只负责一个具体开发/诊断任务，必须包含该专题自己的流程图，前置标明 Cocos2d-x 版本、平台范围和证据状态，并链接对应源码地图/验证记录。专题在形成可复核源码地图及验证切片后独立发布；只有静态研究的主题必须明确“未做运行验证”，不得写成已验收。不能以一个通用 Cocos2d-x Skill 或比较 Skill 代替专题技能。
+- 每个已研究的跨引擎专题独立维护一份比较 MD，放在 `docs/comparisons/cocos2d-x-4-vs-creator-2.4/`；它记录双方实现、源码/文档/运行证据、平台差异与未验证项。专题 Skill 是“如何完成 Cocos2d-x 任务”的流程说明，比较 MD 是按需读取的对照资料；Agent 只在跨引擎比较/移植任务中加载相关 MD，不默认加载整套比较文档。无需通用比较 Skill。
 - 每份 skill 需覆盖一个真实开发任务，至少检查一个正常请求和一个容易误映射或证据不足的请求；记录试用结论和未覆盖平台。
+
+### Cocos2d-x 专题目录
+
+| 专题 | 技能源 | 状态 |
+| --- | --- | --- |
+| 工程配置与构建 | `cocos2d-x-4-project-build` | Skill 与[比较 MD](comparisons/cocos2d-x-4-vs-creator-2.4/01-project-build.md)已建立；macOS x86_64 模板构建/启动有运行证据，其他平台未验证 |
+| 应用启动与帧循环 | `cocos2d-x-4-startup-frame` | Skill 与[比较 MD](comparisons/cocos2d-x-4-vs-creator-2.4/02-startup-and-frame.md)已建立；macOS 桌面路径源码追踪并运行，其他平台未验证 |
+| Scene/Node/Component 生命周期 | `cocos2d-x-4-scene-node-lifecycle` | Skill 与[比较 MD](comparisons/cocos2d-x-4-vs-creator-2.4/03-scene-node-lifecycle.md)已建立；当前为静态源码研究，析构/回收时序未运行验证 |
+| 鼠标/触摸输入事件 | `cocos2d-x-4-input-events` | Skill 与[比较 MD](comparisons/cocos2d-x-4-vs-creator-2.4/04-input-events.md)已建立；鼠标点击切片已验证，触摸与其他平台未验证 |
+| 资源寻址、缓存与释放 | 后续独立建项 | 待源码地图与可复核验证切片 |
+| 2D UI 与布局 | 后续独立建项 | 待源码地图与可复核验证切片 |
+| Action、动画与 Scheduler | 后续独立建项 | 待源码地图与可复核验证切片 |
+| 音频生命周期 | 后续独立建项 | 待源码地图与可复核验证切片 |
+| 物理与空间查询 | 后续独立建项 | 待源码地图与可复核验证切片 |
+| 渲染与性能诊断 | 后续独立建项 | 先完成统一条件的可重复测量，再独立建项 |
+| 测试、日志与平台调试 | 后续独立建项 | 按真实调试场景建立可复用验证切片 |
 
 ## 当前状态
 
 - 已确认比较对象为本地 Cocos2d-x 4.0 源码树与 Creator 2.4.15 源码/示例工程。
-- 已建立[架构层面对照](comparisons/cocos2d-x-4-vs-creator-2.4.md)及跨栈比较 skill 草案。
+- 已建立[架构层面对照](comparisons/cocos2d-x-4-vs-creator-2.4.md)及四份按专题拆分的比较 MD；不维护通用比较 Skill。
+- 已按专题建立 Cocos2d-x 技能源 `plugins/cocos2d-x-4/skills/`：项目构建、启动/帧循环、Scene/Node 生命周期、输入事件各有独立 Skill。项目构建、启动/首屏和桌面鼠标交互有 macOS 示例运行证据；Scene/Node 生命周期目前是静态源码研究，Skill 明确标记未验证析构/回收时序。Agent 的发现/加载集成尚未接线。
 - 阶段 1 的 [Cocos2d-x 启动与帧循环](cocos2d-x/01-startup-and-frame.md) 已完成源码静态追踪；Creator 一侧复用已有[2.4.15 启动研究与 Chrome 预览轨迹](2.x/01-startup-and-frame.md)。
 - 阶段 2 已补 [Cocos2d-x Scene/Node/Component 生命周期源码地图](cocos2d-x/02-objects-and-lifecycle.md)，并确认本地 v4 含有 `Component`/`ComponentContainer`。Creator 2.4.15 对应源码与 Chrome 运行轨迹复用既有[对象与场景研究](2.x/02-objects-and-scenes.md)。两边尚未做相同行为运行对照。
-- Cocos2d-x 构建可行性检查发现本机没有 CMake、外部依赖 payload 缺失、三个 submodule 目录为空且模板没有生成的 Xcode 工程。本轮未下载依赖或改项目；Cocos2d-x 运行验证暂时无法进行。
-- 首个[启动到帧循环对照](comparisons/cocos2d-x-4-vs-creator-2.4.md#首个切片启动到帧循环)已补充两边证据来源和平台限制。当前不能比较帧耗时，也不能称为同平台运行验收。
-- 阶段 1 下一步是在依赖和 CMake 可用后构建 Cocos2d-x macOS desktop 模板，再评估 Creator 2.4.15 可用的同平台构建目标；之后追加运行轨迹。再进入阶段 2 的节点生命周期切片。
+- 先前发现系统环境缺少 CMake、依赖 payload 与初始化 submodule；随后已在 `/private/tmp` 准备本轮专用 CMake/runtime，恢复构建依赖，并构建、启动 macOS x86_64 `cpp-tests` 与 `HelloCpp`。详细命令、补丁和限制见[Demo 记录](cocos2d-x-creator2x-demo.md)。这是本次对照验证环境，不代表其他机器具备相同构建条件。
+- 首个[启动到帧循环对照](comparisons/cocos2d-x-4-vs-creator-2.4.md#首个切片启动到帧循环)已扩展为两边 Demo 实际启动及同一鼠标交互行为验证。运行后端不同，不能据此比较性能或帧耗时。
+- 下一步按专题补齐源码地图与验证：优先节点/组件生命周期、资源加载与释放、UI/布局；每完成一专题再发布对应 Skill。性能对照须另行统一后端、平台、架构、素材与 Release 配置。

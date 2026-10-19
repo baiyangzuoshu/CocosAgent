@@ -33,6 +33,11 @@ public:
     static cocos2d::Scene* createScene();
 
     virtual bool init();
+
+    void onSpriteMouseDown(cocos2d::EventMouse* event);
+    cocos2d::Sprite* _comparisonSprite = nullptr;
+    cocos2d::Label* _comparisonLabel = nullptr;
+    int _comparisonClickCount = 0;
     
     // a selector callback
     void menuCloseCallback(cocos2d::Ref* pSender);

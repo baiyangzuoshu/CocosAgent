@@ -85,7 +85,7 @@ bool HelloWorld::init()
     // add a label shows "Hello World"
     // create and initialize a label
 
-    auto label = Label::createWithTTF("Hello World", "fonts/Marker Felt.ttf", 24);
+    auto label = Label::createWithTTF("Clicks: 0", "fonts/Marker Felt.ttf", 24);
     if (label == nullptr)
     {
         problemLoading("'fonts/Marker Felt.ttf'");
@@ -113,8 +113,36 @@ bool HelloWorld::init()
 
         // add the sprite as a child to this layer
         this->addChild(sprite, 0);
+        _comparisonSprite = sprite;
+    }
+
+    _comparisonLabel = label;
+    if (_comparisonSprite != nullptr && _comparisonLabel != nullptr)
+    {
+        auto mouseListener = EventListenerMouse::create();
+        mouseListener->onMouseDown = CC_CALLBACK_1(HelloWorld::onSpriteMouseDown, this);
+        _eventDispatcher->addEventListenerWithSceneGraphPriority(mouseListener, _comparisonSprite);
     }
     return true;
+}
+
+void HelloWorld::onSpriteMouseDown(EventMouse* event)
+{
+    if (_comparisonSprite == nullptr || _comparisonLabel == nullptr ||
+        event->getMouseButton() != EventMouse::MouseButton::BUTTON_LEFT)
+    {
+        return;
+    }
+
+    const auto location = this->convertToNodeSpace(event->getLocation());
+    if (!_comparisonSprite->getBoundingBox().containsPoint(location))
+    {
+        return;
+    }
+
+    ++_comparisonClickCount;
+    _comparisonLabel->setString(StringUtils::format("Clicks: %d", _comparisonClickCount));
+    _comparisonSprite->setPositionX(_comparisonSprite->getPositionX() + 40.0f);
 }
 
 
