@@ -13,10 +13,10 @@ Inspect or manage packages and dependencies in a Cocos Creator 2.4.x project.
 
 1. Identify the exact project root from the Host workspace and verify the Creator patch from project metadata or an editor integration. Determine the active scene/target only through tools that report it; never infer it from a neighboring project.
 2. Inspect the relevant source, asset, scene or runtime evidence and record exact identities/current state before proposing a change.
-3. Inspect the project manifest, lock data, Creator patch version, and package source before proposing a change.
-4. Check package compatibility and transitive requirements from the package’s authoritative metadata.
-5. Apply only an explicitly authorized dependency change through a supported Creator/package workflow; do not install or download silently.
-6. Read back manifest/lock changes, allow Creator to resolve and compile, and report unresolved or version-conflicting dependencies.
+3. Inspect only the manifests and lock files that actually exist, along with the Creator patch and dependency source. Do not assume a generated project has an npm manifest, lock file, or automatic dependency resolver.
+4. Check compatibility and transitive requirements from the package's authoritative metadata; distinguish npm dependencies from Creator extension packages under `packages/`.
+5. Apply only an explicitly authorized dependency change through an available package tool or documented manual workflow; do not install or download silently.
+6. Read back the files actually changed and verify package resolution/Creator loading with the relevant tool. Do not claim Creator resolves or compiles a dependency unless that result was observed.
 
 ## Capability and safety gate
 
@@ -28,4 +28,4 @@ Use the bundled `../../references/2x/` notes only when the task needs engine API
 
 ## Completion evidence
 
-Report the target project/version, exact changed or inspected identities, command/operation receipts, readback, and applicable compile/build/preview/runtime evidence. Separate source saved, Creator accepted, and runtime behavior verified. On timeout or uncertain writes, reconcile the original operation ID before any retry; stop on a conflict.
+Report the target project and Creator version, exact inspected or changed identities, and evidence that the available tools actually returned. Distinguish source readback, Creator readback, compile/build results, and runtime observations. For an uncertain tool write, reconcile its original operation ID if the tool provides one; for source-file changes, inspect the version-control diff and read the changed files back.

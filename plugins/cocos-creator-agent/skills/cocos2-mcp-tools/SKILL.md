@@ -14,9 +14,9 @@ Use this skill when Codex, Claude Code, or another supported Host is configured 
 1. Inspect the Host's registered Cocos CLI/MCP tools and the integration's documented version.
 2. Identify the exact Creator project root and match it to the intended running Creator instance before using editor commands.
 3. Read the current tool catalog and each relevant input schema. Treat that live contract as authoritative over old docs and examples.
-4. Prefer dedicated read operations for project, scene, asset, script, runtime, and operation receipts.
+4. Use dedicated read operations only when the live catalog exposes them; inspect operation receipts only if that integration provides them.
 5. Before a write, capture the affected identities and current state; follow the Host and Creator-side approval policy.
-6. Read back the same target after the operation. For uncertain writes, reconcile the original operation ID before retrying.
+6. Read back the same target after the operation. For uncertain writes, reconcile the original operation ID before retrying if the tool supplies one.
 
 ## If the integration is unavailable
 
@@ -24,4 +24,4 @@ Do not invent tool names, MCP resource URIs, command schemas, or an active Creat
 
 ## Evidence
 
-Report the Host, plugin/integration version, Creator version and project identity, tool/operation receipts, readback, and applicable compile/build/runtime evidence. A successful MCP handshake does not prove an editor operation or game behavior succeeded.
+Report the Host, plugin/integration version, Creator version and project identity, and the readback or tool/operation receipt actually returned. A successful MCP handshake does not prove an editor operation or game behavior succeeded.

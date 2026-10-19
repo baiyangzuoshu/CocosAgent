@@ -1,22 +1,22 @@
 ---
 name: cocos2-sprite-atlas
-description: Create, configure, or diagnose SpriteAtlas packing and references in Creator 2.4.x.
+description: Configure or diagnose Creator 2.4.x Atlas assets, Auto Atlas builds, SpriteAtlas references, and dynamic atlas behavior.
 ---
 
-# SpriteAtlas workflows
+# Atlas and SpriteAtlas workflows
 
 ## Scope
 
-Create, configure, or diagnose SpriteAtlas packing and references in Creator 2.4.x.
+Configure or diagnose Atlas assets and packing in Creator 2.4.x. Distinguish imported `.plist`/`.png` Atlas assets, the editor's `.pac` Auto Atlas build setting, runtime `cc.SpriteAtlas`, and runtime dynamic atlasing; they are different paths.
 
 ## Workflow
 
 1. Identify the exact project root from the Host workspace and verify the Creator patch from project metadata or an editor integration. Determine the active scene/target only through tools that report it; never infer it from a neighboring project.
 2. Inspect the relevant source, asset, scene or runtime evidence and record exact identities/current state before proposing a change.
-3. Inventory candidate SpriteFrames, atlas settings, platform targets, and current references.
-4. Choose pack groups by co-use and platform constraints; do not move assets without identifying all references.
-5. Use Creator atlas/import APIs and preserve asset UUIDs and metadata.
-6. Build or preview the atlas, inspect packed output and draw-call/memory effects, and keep rollback information.
+3. Identify which path the project uses: imported Atlas (`.plist` and `.png`), Auto Atlas (`.pac`), runtime `cc.SpriteAtlas`, or dynamic atlas. Inventory the SpriteFrames, platform/build settings, and references for that path.
+4. Choose Auto Atlas folder membership based on the actual build target and resource use; do not move assets without checking references.
+5. Edit atlas/import settings through Creator only when the current integration exposes those fields; otherwise provide the manual Creator steps and preserve UUIDs and metadata.
+6. Verify build output for Auto Atlas, or runtime use for imported/runtime atlases. Measure draw calls or memory only with a matching before/after runtime observation; packing alone does not prove an improvement.
 
 ## Capability and safety gate
 
@@ -24,7 +24,7 @@ This Skill is workflow guidance and does not install tools. Inspect the tools av
 
 ## Completion evidence
 
-Report the target project/version, exact changed or inspected identities, command/operation receipts, readback, and applicable compile/build/preview/runtime evidence. Separate source saved, Creator accepted, and runtime behavior verified. On timeout or uncertain writes, reconcile the original operation ID before any retry; stop on a conflict.
+Report the target project and Creator version, exact inspected or changed identities, and evidence that the available tools actually returned. Distinguish source readback, Creator readback, compile/build results, and runtime observations. For an uncertain tool write, reconcile its original operation ID if the tool provides one; for source-file changes, inspect the version-control diff and read the changed files back.
 
 ## Creator 2.4.x version evidence
 

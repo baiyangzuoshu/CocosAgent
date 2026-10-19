@@ -11,14 +11,14 @@ Build a Web/mobile target, stage content, publish an Asset Bundle release, or op
 
 ## Route
 
-Web/mobile build receipt → `cocos2-content-build`; content/Bundle release → `cocos2-asset-bundle-content`; size/startup/platform budget → `cocos2-web-mobile-optimization`.
+Web/mobile build planning and output review → `cocos2-content-build`; Asset Bundle content planning → `cocos2-asset-bundle-content`; size/startup/platform budget → `cocos2-web-mobile-optimization`.
 
 ## Routing rules
 
 - For a conceptual question, answer directly without activating an edit workflow.
 - Read the selected specialist Skill before task-specific Creator tools; load only references needed for its contract.
 - If multiple domains are needed, order their read/modify/verify steps and keep each write target explicit. Do not imply that one Skill’s acceptance covers another domain.
-- If the selected specialist’s required command is missing or unavailable in the live Creator capability catalog, report the precise gap and stop before writing.
+- If a task requires changing Creator-owned scene, Prefab, importer, or runtime state and the matching Creator-aware operation is absent, stop that part, report the exact gap, and provide manual Creator steps. Continue ordinary source-file work only when the Host tools and approved task scope support it.
 - Route by the user’s actual task and current project evidence, not by a remembered project name or assumed framework.
 
 ## Creator 2.4.x version evidence

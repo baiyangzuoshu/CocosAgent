@@ -16,7 +16,7 @@ Import, configure, or use Tiled Map assets in Cocos Creator 2.4.x.
 3. Inspect the map file, tileset images, map orientation, tile dimensions, layers, and external dependencies.
 4. Confirm the Creator 2.4.x TileMap component and importer support for the actual map format.
 5. Preserve source assets and UUID references; avoid manual edits to generated map metadata.
-6. Load the target scene and verify visible layers, collision data when requested, and representative runtime movement.
+6. Load the target scene and verify visible layers. Verify collision or movement only when the project has an explicit collision/pathfinding integration; TiledMap import alone does not establish those behaviors.
 
 ## Capability and safety gate
 
@@ -24,7 +24,7 @@ This Skill is workflow guidance and does not install tools. Inspect the tools av
 
 ## Completion evidence
 
-Report the target project/version, exact changed or inspected identities, command/operation receipts, readback, and applicable compile/build/preview/runtime evidence. Separate source saved, Creator accepted, and runtime behavior verified. On timeout or uncertain writes, reconcile the original operation ID before any retry; stop on a conflict.
+Report the target project and Creator version, exact inspected or changed identities, and evidence that the available tools actually returned. Distinguish source readback, Creator readback, compile/build results, and runtime observations. For an uncertain tool write, reconcile its original operation ID if the tool provides one; for source-file changes, inspect the version-control diff and read the changed files back.
 
 ## Creator 2.4.x version evidence
 
