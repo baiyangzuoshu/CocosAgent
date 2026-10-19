@@ -15,8 +15,8 @@ Create or update a related Cocos Creator 2.4.x scene hierarchy with a bounded, v
 2. Inspect the relevant source, asset, scene or runtime evidence and record exact identities/current state before proposing a change.
 3. Inspect the active scene, target parent, existing assets/components, and relevant UI resolution before planning.
 4. List the desired nodes, parent-child order, transforms, components, and final values before execution.
-5. Execute through a supported workflow plan with one approved scope; do not hand-edit serialized scene files.
-6. Read back every node and reference, verify compensation boundaries, and use preview evidence if the request requires visible behavior.
+5. Use a Creator-aware node operation only when its live schema supports the exact change; otherwise provide the manual Creator steps. Do not hand-edit serialized scene files.
+6. Read back every node and reference through Creator when available. For manual work, ask the user to verify in Creator; use preview evidence only when the requested behavior is actually observed.
 
 ## Capability and safety gate
 
@@ -24,7 +24,7 @@ This Skill is workflow guidance and does not install tools. Inspect the tools av
 
 ## Completion evidence
 
-Report the target project/version, exact changed or inspected identities, command/operation receipts, readback, and applicable compile/build/preview/runtime evidence. Separate source saved, Creator accepted, and runtime behavior verified. On timeout or uncertain writes, reconcile the original operation ID before any retry; stop on a conflict.
+Report the target project and Creator version, exact inspected or changed identities, and evidence that the available tools actually returned. Distinguish source readback, Creator readback, compile/build results, and runtime observations. For an uncertain tool write, reconcile its original operation ID if the tool provides one; for source-file changes, inspect the version-control diff and read the changed files back.
 
 ## Creator 2.4.x version evidence
 

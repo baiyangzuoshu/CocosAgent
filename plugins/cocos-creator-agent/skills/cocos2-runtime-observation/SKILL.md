@@ -13,8 +13,8 @@ Observe a running Creator 2.4.x Web preview, diagnose runtime errors, and verify
 
 1. Identify the exact project root from the Host workspace and verify the Creator patch from project metadata or an editor integration. Determine the active scene/target only through tools that report it; never infer it from a neighboring project.
 2. Inspect the relevant source, asset, scene or runtime evidence and record exact identities/current state before proposing a change.
-3. Use the exact project/build preview session and capture its session identity before interacting.
-4. Read Console deltas, runtime state, and screenshot evidence; distinguish stale preview from the current run.
+3. Use the exact project/build preview session and capture its identity only when the available runtime tool exposes it. This plugin does not ship a preview-control or Console tool.
+4. Read Console changes, runtime state, and screenshot evidence only through available tools; identify the source and time of each observation. If these tools are absent, provide manual verification steps and do not claim runtime results.
 5. For a user-requested interaction, preserve the exact input and business assertion and execute only once per approved session.
 6. After an approved repair, refresh/restart the same intended runtime path and re-check the original assertion.
 
@@ -24,7 +24,7 @@ This Skill is workflow guidance and does not install tools. Inspect the tools av
 
 ## Completion evidence
 
-Report the target project/version, exact changed or inspected identities, command/operation receipts, readback, and applicable compile/build/preview/runtime evidence. Separate source saved, Creator accepted, and runtime behavior verified. On timeout or uncertain writes, reconcile the original operation ID before any retry; stop on a conflict.
+Report the target project and Creator version, exact inspected or changed identities, and evidence that the available tools actually returned. Distinguish source readback, Creator readback, compile/build results, and runtime observations. For an uncertain tool write, reconcile its original operation ID if the tool provides one; for source-file changes, inspect the version-control diff and read the changed files back.
 
 ## Creator 2.4.x version evidence
 

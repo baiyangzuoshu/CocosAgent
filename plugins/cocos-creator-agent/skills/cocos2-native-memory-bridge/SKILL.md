@@ -1,13 +1,13 @@
 ---
 name: cocos2-native-memory-bridge
-description: Build or use a bounded Creator 2.4.x JSB native-memory diagnostic bridge.
+description: Inspect or plan a project-specific JSB native-memory diagnostic bridge for the exact Creator 2.4.x target.
 ---
 
 # Native memory bridge diagnostics
 
 ## Scope
 
-Build or use a bounded Creator 2.4.x JSB native-memory diagnostic bridge.
+Inspect or plan a project-specific JSB native-memory diagnostic bridge. This Skill does not provide a bridge or claim that Creator exposes a general native-memory API.
 
 ## Workflow
 
@@ -28,4 +28,4 @@ Use the bundled `../../references/2x/` notes only when the task needs engine API
 
 ## Completion evidence
 
-Report the target project/version, exact changed or inspected identities, command/operation receipts, readback, and applicable compile/build/preview/runtime evidence. Separate source saved, Creator accepted, and runtime behavior verified. On timeout or uncertain writes, reconcile the original operation ID before any retry; stop on a conflict.
+Report the target project and Creator version, exact inspected or changed identities, and evidence that the available tools actually returned. Distinguish source readback, Creator readback, compile/build results, and runtime observations. For an uncertain tool write, reconcile its original operation ID if the tool provides one; for source-file changes, inspect the version-control diff and read the changed files back.

@@ -1,22 +1,22 @@
 ---
 name: cocos2-asset-bundle-content
-description: Stage, build, preview, and roll back Asset Bundle or content releases for Creator 2.4.x.
+description: Plan and verify Creator 2.4.x Asset Bundle builds and content updates using the tools available in the project.
 ---
 
 # Asset Bundle content delivery
 
 ## Scope
 
-Stage, build, preview, and roll back Asset Bundle or content releases for Creator 2.4.x.
+Plan and verify Asset Bundle builds and content updates for Creator 2.4.x. This Skill does not provide a release manager, deployment command, receipt, or rollback ledger.
 
 ## Workflow
 
 1. Identify the exact project root from the Host workspace and verify the Creator patch from project metadata or an editor integration. Determine the active scene/target only through tools that report it; never infer it from a neighboring project.
 2. Inspect the relevant source, asset, scene or runtime evidence and record exact identities/current state before proposing a change.
-3. Inspect Bundle name, folder membership, cross-Bundle dependencies, asset UUIDs, and current selected/effective release.
-4. Create a release plan and stage only the exact approved content set.
-5. Build and preview only from the verified release receipt; distinguish selected, built, and effective content.
-6. On failure, read the release ledger and use the exact documented recovery operation; never re-stage blindly.
+3. Inspect Bundle configuration, folder membership, platform settings, dependencies, and the current build output if one exists.
+4. Prepare an explicit list of content and configuration changes; do not assume the project has a staging or release-management service.
+5. Use a build or deployment operation only when the current Host/project exposes it and the user requested it. Record the actual command/result and output identity; otherwise give the matching manual Creator steps.
+6. Before replacing published files, preserve their current versions. Recover from a failure only through a documented operation or a verified backup; do not invent a release receipt or ledger.
 
 ## Capability and safety gate
 
@@ -24,7 +24,7 @@ This Skill is workflow guidance and does not install tools. Inspect the tools av
 
 ## Completion evidence
 
-Report the target project/version, exact changed or inspected identities, command/operation receipts, readback, and applicable compile/build/preview/runtime evidence. Separate source saved, Creator accepted, and runtime behavior verified. On timeout or uncertain writes, reconcile the original operation ID before any retry; stop on a conflict.
+Report the target project and Creator version, exact inspected or changed identities, and evidence that the available tools actually returned. Distinguish source readback, Creator readback, compile/build results, and runtime observations. For an uncertain tool write, reconcile its original operation ID if the tool provides one; for source-file changes, inspect the version-control diff and read the changed files back.
 
 ## Creator 2.4.x version evidence
 

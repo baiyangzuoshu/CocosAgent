@@ -15,7 +15,7 @@ Plan and implement a bounded feature spanning multiple JavaScript/TypeScript or 
 2. Inspect the relevant source, asset, scene or runtime evidence and record exact identities/current state before proposing a change.
 3. First identify the existing entry points, framework conventions, relevant source files, project configuration, and acceptance behavior.
 4. Propose a minimal file list and exact behavior; preserve unrelated working-tree changes.
-5. Use only the approved multi-file write capability when present; if unavailable, stop before partial edits and report the missing contract.
+5. Use the current Host's available file tools for source changes, keeping the approved file list explicit. If the task also requires Creator scene, Prefab, importer, or runtime changes, use a Creator-aware tool only when its live contract supports them; otherwise stop that part and give manual Creator steps.
 6. Read every changed file back, compile with the project’s Creator version, inspect errors, and verify runtime behavior when requested.
 
 ## Capability and safety gate
@@ -24,7 +24,7 @@ This Skill is workflow guidance and does not install tools. Inspect the tools av
 
 ## Completion evidence
 
-Report the target project/version, exact changed or inspected identities, command/operation receipts, readback, and applicable compile/build/preview/runtime evidence. Separate source saved, Creator accepted, and runtime behavior verified. On timeout or uncertain writes, reconcile the original operation ID before any retry; stop on a conflict.
+Report the target project and Creator version, exact inspected or changed identities, and evidence that the available tools actually returned. Distinguish source readback, Creator readback, compile/build results, and runtime observations. For an uncertain tool write, reconcile its original operation ID if the tool provides one; for source-file changes, inspect the version-control diff and read the changed files back.
 
 ## Creator 2.4.x version evidence
 

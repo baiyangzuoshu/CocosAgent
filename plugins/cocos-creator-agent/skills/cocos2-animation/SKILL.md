@@ -15,7 +15,7 @@ Create or diagnose node, skeletal, or UI animation workflows in a Cocos Creator 
 2. Inspect the relevant source, asset, scene or runtime evidence and record exact identities/current state before proposing a change.
 3. Identify the animation system and asset type already used by the project before choosing a workflow.
 4. Inspect clip names, target node/component identities, duration, wrap mode, and event callbacks.
-5. Edit through a supported Creator API or the approved animation source workflow; preserve asset IDs and references.
+5. Edit through a documented Creator editor workflow or a live Creator-aware operation that supports the target fields. Do not hand-edit serialized animation assets without format-specific evidence; preserve asset IDs and references.
 6. Preview the animation from a clean state and verify event timing and final pose.
 
 ## Capability and safety gate
@@ -24,7 +24,7 @@ This Skill is workflow guidance and does not install tools. Inspect the tools av
 
 ## Completion evidence
 
-Report the target project/version, exact changed or inspected identities, command/operation receipts, readback, and applicable compile/build/preview/runtime evidence. Separate source saved, Creator accepted, and runtime behavior verified. On timeout or uncertain writes, reconcile the original operation ID before any retry; stop on a conflict.
+Report the target project and Creator version, exact inspected or changed identities, and evidence that the available tools actually returned. Distinguish source readback, Creator readback, compile/build results, and runtime observations. For an uncertain tool write, reconcile its original operation ID if the tool provides one; for source-file changes, inspect the version-control diff and read the changed files back.
 
 ## Creator 2.4.x version evidence
 
