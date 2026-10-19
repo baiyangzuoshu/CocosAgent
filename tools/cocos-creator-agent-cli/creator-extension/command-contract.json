@@ -54,6 +54,231 @@
       "access": "read",
       "description": "Read a bounded hierarchy snapshot of the current Creator scene.",
       "input": { "type": "object", "properties": {}, "additionalProperties": false }
+    },
+    {
+      "id": "creator.scene.node.read",
+      "access": "read",
+      "description": "Read one exact node in the active scene by scene UUID and node UUID, including its full bounded path and active state.",
+      "input": {
+        "type": "object",
+        "required": ["sceneUuid", "nodeUuid"],
+        "properties": {
+          "sceneUuid": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "nodeUuid": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.node.set-active.plan",
+      "access": "plan",
+      "description": "Plan a single active-state change for one existing node in the active scene, bound to scene/node UUIDs and the observed before-state. Does not modify or save the scene.",
+      "input": {
+        "type": "object",
+        "required": ["sceneUuid", "nodeUuid", "active"],
+        "properties": {
+          "sceneUuid": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "nodeUuid": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "active": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.node.set-active.commit",
+      "access": "write",
+      "approval": true,
+      "description": "Apply one planned active-state change after a native Creator confirmation, live scene/node identity and before-state checks, then request scene save and read the node state back from the same Creator scene session.",
+      "input": {
+        "type": "object",
+        "required": ["operationId", "planHash"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.node.set-active.reconcile",
+      "access": "plan",
+      "description": "Read and reconcile one planned scene-node active-state operation after interruption; never retries the mutation or claims disk-save completion without a Creator save acknowledgement.",
+      "input": {
+        "type": "object",
+        "required": ["operationId"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.script.create.plan",
+      "access": "plan",
+      "description": "Prepare a Creator AssetDB script-creation plan in an existing assets folder, with an absent-target precondition, source hash, operation ID, and recovery conditions. Does not modify project assets or create folders.",
+      "input": {
+        "type": "object",
+        "required": ["scriptPath", "source"],
+        "properties": {
+          "scriptPath": { "type": "string", "minLength": 1, "maxLength": 240, "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?($|/))(?!.*(?:^|/)\\.)[^\\\\]+\\.(?:js|ts)$" },
+          "source": { "type": "string", "minLength": 1, "maxLength": 16384 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.script.create.commit",
+      "access": "write",
+      "description": "Create the exact script asset described by a pending plan after an explicit Creator confirmation dialog and a fresh absent-target precondition check; returns AssetDB identity, readback hashes, and recovery conditions.",
+      "input": {
+        "type": "object",
+        "required": ["operationId", "planHash"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.script.create.reconcile",
+      "access": "plan",
+      "description": "Reconcile a planned or uncertain script-creation operation by reading the same Creator AssetDB target and matching source/.meta identities; never retries or writes the asset.",
+      "input": {
+        "type": "object",
+        "required": ["operationId"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.diagnostics.read",
+      "access": "read",
+      "execution": "creator",
+      "description": "Read bounded Creator compile events, script import failures, and editor Console messages since a sequence cursor.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "afterSequence": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.preview.start",
+      "access": "control",
+      "execution": "creator",
+      "approval": true,
+      "description": "After a native Creator approval, request the active scene Web preview and attach a dedicated local browser session bound to this Creator instance and scene.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "port": { "type": "integer", "minimum": 1024, "maximum": 65535 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.preview.observe",
+      "access": "read",
+      "execution": "bridge",
+      "description": "Read runtime Console entries, active page, canvas, and scene from the exact attached preview session.",
+      "input": {
+        "type": "object",
+        "required": ["previewSessionId"],
+        "properties": {
+          "previewSessionId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "afterSequence": { "type": "integer", "minimum": 0, "maximum": 2147483647 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.preview.screenshot",
+      "access": "read",
+      "execution": "bridge",
+      "description": "Capture a PNG from the same attached preview session and return its local path, SHA-256, and scene identity.",
+      "input": {
+        "type": "object",
+        "required": ["previewSessionId"],
+        "properties": {
+          "previewSessionId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.preview.interact",
+      "access": "control",
+      "execution": "bridge",
+      "description": "Apply bounded keyboard or normalized canvas clicks in the same preview session and evaluate declarative runtime assertions.",
+      "input": {
+        "type": "object",
+        "required": ["previewSessionId", "actions"],
+        "properties": {
+          "previewSessionId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "actions": {
+            "type": "array", "minItems": 1, "maxItems": 12,
+            "items": {
+              "type": "object", "required": ["type"],
+              "properties": {
+                "type": { "type": "string", "enum": ["key", "click"] },
+                "key": { "type": "string", "maxLength": 20 },
+                "durationMs": { "type": "integer", "minimum": 1, "maximum": 2000 },
+                "x": { "type": "number", "minimum": 0, "maximum": 1 },
+                "y": { "type": "number", "minimum": 0, "maximum": 1 }
+              },
+              "additionalProperties": false
+            }
+          },
+          "assertions": {
+            "type": "array", "minItems": 1, "maxItems": 12,
+            "items": {
+              "type": "object", "required": ["type"],
+              "properties": {
+                "type": { "type": "string", "enum": ["no-errors", "console-contains", "scene", "node-exists", "node-property", "component-property"] },
+                "text": { "type": "string", "maxLength": 240 },
+                "name": { "type": "string", "maxLength": 120 },
+                "uuid": { "type": "string", "maxLength": 80 },
+                "path": { "type": "string", "maxLength": 240 },
+                "property": { "type": "string", "enum": ["active", "x", "y"] },
+                "componentType": { "type": "string", "maxLength": 100 },
+                "componentProperty": { "type": "string", "maxLength": 64, "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$" },
+                "expected": { "type": ["string", "number", "boolean"] },
+                "tolerance": { "type": "number", "minimum": 0, "maximum": 100 }
+              },
+              "additionalProperties": false
+            }
+          },
+          "settleMs": { "type": "integer", "minimum": 100, "maximum": 3000 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.preview.refresh",
+      "access": "control",
+      "execution": "bridge",
+      "description": "Reload the attached preview browser page and re-check the expected scene inside the same preview session.",
+      "input": {
+        "type": "object", "required": ["previewSessionId"],
+        "properties": { "previewSessionId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" } },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.preview.stop",
+      "access": "control",
+      "execution": "bridge",
+      "description": "Close the Agent-owned preview browser session; the Creator preview server remains under Creator control.",
+      "input": {
+        "type": "object", "required": ["previewSessionId"],
+        "properties": { "previewSessionId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" } },
+        "additionalProperties": false
+      }
     }
   ]
 }

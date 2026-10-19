@@ -3,10 +3,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { randomUUID } from 'node:crypto';
-import { PROTOCOL_VERSION, validateCommand } from './contracts.mjs';
+import { createHash, randomUUID } from 'node:crypto';
+import { CREATOR_VERSION, PROTOCOL_VERSION, validateCommand } from './contracts.mjs';
 
 const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const CLI_PACKAGE = JSON.parse(fs.readFileSync(path.join(PLUGIN_ROOT, 'package.json'), 'utf8'));
+const EXTENSION_PACKAGE = JSON.parse(fs.readFileSync(path.join(PLUGIN_ROOT, 'creator-extension/package.json'), 'utf8'));
+const CONTRACT_FINGERPRINT = createHash('sha256').update(fs.readFileSync(path.join(PLUGIN_ROOT, 'creator-extension/command-contract.json'))).digest('hex');
 export const DATA_ROOT = path.join(os.homedir(), '.cocos-creator-agent');
 export const STATE_FILE = path.join(DATA_ROOT, 'third-party-bridge.json');
 
@@ -23,11 +26,11 @@ function readState() {
   return value;
 }
 
-export async function bridgeRequest(method, endpoint, body) {
+export async function bridgeRequest(method, endpoint, body, { timeoutMs = 35000 } = {}) {
   const state = readState();
   if (!state) throw new Error('BRIDGE_NOT_RUNNING');
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 35000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(`http://127.0.0.1:${state.port}${endpoint}`, {
       method,
@@ -48,7 +51,15 @@ export async function bridgeRequest(method, endpoint, body) {
 export async function ensureBridge() {
   if (Number(process.versions.node.split('.')[0]) < 20) throw new Error('NODE_20_REQUIRED');
   const probe = async () => {
-    try { await bridgeRequest('GET', '/v1/health'); return readState(); }
+    try {
+      const health = await bridgeRequest('GET', '/v1/health');
+      if (health.protocolVersion !== PROTOCOL_VERSION || health.cliVersion !== CLI_PACKAGE.version || health.creatorVersion !== CREATOR_VERSION
+        || health.extensionVersion !== EXTENSION_PACKAGE.version || health.contractFingerprint !== CONTRACT_FINGERPRINT) {
+        try { await bridgeRequest('POST', '/v1/stop', {}); } catch (_) {}
+        return null;
+      }
+      return readState();
+    }
     catch (error) {
       if (['BRIDGE_NOT_RUNNING', 'BRIDGE_HTTP_ECONNREFUSED', 'ECONNREFUSED', 'fetch failed'].includes(error.message)) return null;
       throw error;
@@ -106,14 +117,14 @@ export async function ensureBridge() {
   }
 }
 
-export async function listInstances() {
-  await ensureBridge();
+export async function listInstances({ start = true } = {}) {
+  if (start) await ensureBridge();
   return bridgeRequest('GET', '/v1/instances');
 }
 
-export async function getCapabilities(instanceId) {
+export async function getCapabilities(instanceId, { start = true } = {}) {
   if (typeof instanceId !== 'string' || !instanceId) throw new Error('INSTANCE_ID_REQUIRED');
-  await ensureBridge();
+  if (start) await ensureBridge();
   return bridgeRequest('GET', `/v1/instances/${encodeURIComponent(instanceId)}/capabilities`);
 }
 
@@ -124,7 +135,65 @@ export async function callCommand(instanceId, command, input = {}) {
   await ensureBridge();
   return bridgeRequest('POST', `/v1/instances/${encodeURIComponent(instanceId)}/call`, {
     requestId: randomUUID(), command, input,
-  });
+  }, { timeoutMs: ['write', 'control'].includes(checked.command.access) ? 190000 : 35000 });
+}
+
+export async function getProjectTools(instanceId) {
+  if (typeof instanceId !== 'string' || !instanceId) throw new Error('INSTANCE_ID_REQUIRED');
+  await ensureBridge();
+  return bridgeRequest('GET', `/v1/instances/${encodeURIComponent(instanceId)}/project-tools`);
+}
+
+export async function callProjectTool(instanceId, toolId, input = {}, { expectedRegistryHash } = {}) {
+  if (typeof toolId !== 'string' || !/^[a-z][a-z0-9-]{0,47}$/.test(toolId)) throw new Error('PROJECT_TOOL_ID_INVALID');
+  const catalog = await getProjectTools(instanceId);
+  if (expectedRegistryHash && catalog.registryHash !== expectedRegistryHash) throw new Error('PROJECT_TOOL_REGISTRY_CHANGED');
+  const tool = catalog.tools?.find((item) => item.id === toolId);
+  if (!tool) throw new Error('PROJECT_TOOL_NOT_FOUND');
+  const receipt = await callCommand(instanceId, tool.commandId, input);
+  return { ...receipt, projectTool: { id: tool.id, title: tool.title, registryHash: catalog.registryHash,
+    commandId: tool.commandId } };
+}
+
+export async function startTask(instanceId, command, input = {}) {
+  if (typeof instanceId !== 'string' || !instanceId) throw new Error('INSTANCE_ID_REQUIRED');
+  await ensureBridge();
+  return bridgeRequest('POST', `/v1/instances/${encodeURIComponent(instanceId)}/tasks`, { command, input }, { timeoutMs: 35000 });
+}
+
+export async function listTasks(instanceId) {
+  if (instanceId !== undefined && (typeof instanceId !== 'string' || !instanceId)) throw new Error('INSTANCE_ID_INVALID');
+  await ensureBridge();
+  return bridgeRequest('GET', `/v1/tasks${instanceId ? `?instanceId=${encodeURIComponent(instanceId)}` : ''}`);
+}
+
+export async function getTask(taskId) {
+  if (typeof taskId !== 'string' || !/^[0-9a-f-]{36}$/i.test(taskId)) throw new Error('TASK_ID_INVALID');
+  await ensureBridge();
+  return bridgeRequest('GET', `/v1/tasks/${encodeURIComponent(taskId)}`);
+}
+
+export async function waitTask(taskId, { afterSequence = 0, waitMs = 25000 } = {}) {
+  if (typeof taskId !== 'string' || !/^[0-9a-f-]{36}$/i.test(taskId)) throw new Error('TASK_ID_INVALID');
+  if (!Number.isSafeInteger(afterSequence) || afterSequence < 0) throw new Error('TASK_EVENT_CURSOR_INVALID');
+  if (!Number.isSafeInteger(waitMs) || waitMs < 0 || waitMs > 30000) throw new Error('TASK_WAIT_DURATION_INVALID');
+  await ensureBridge();
+  const query = new URLSearchParams({ afterSequence: String(afterSequence), waitMs: String(waitMs) });
+  return bridgeRequest('GET', `/v1/tasks/${encodeURIComponent(taskId)}/wait?${query}`, undefined,
+    { timeoutMs: waitMs + 5000 });
+}
+
+export async function cancelTask(taskId) {
+  if (typeof taskId !== 'string' || !/^[0-9a-f-]{36}$/i.test(taskId)) throw new Error('TASK_ID_INVALID');
+  await ensureBridge();
+  return bridgeRequest('POST', `/v1/tasks/${encodeURIComponent(taskId)}/cancel`, {});
+}
+
+export async function resumeTask(instanceId, taskId) {
+  if (typeof instanceId !== 'string' || !instanceId) throw new Error('INSTANCE_ID_REQUIRED');
+  if (typeof taskId !== 'string' || !/^[0-9a-f-]{36}$/i.test(taskId)) throw new Error('TASK_ID_INVALID');
+  await ensureBridge();
+  return bridgeRequest('POST', `/v1/instances/${encodeURIComponent(instanceId)}/tasks/${encodeURIComponent(taskId)}/resume`, {});
 }
 
 export async function bridgeStatus() {

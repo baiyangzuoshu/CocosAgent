@@ -1,6 +1,6 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "cocos-creator-agent",
-  "version": "0.2.0",
+  "version": "0.6.0",
   "description": "Cocos Creator 2.4.15 workflow skills and MCP adapter for third-party coding agents; uses the separately installed Cocos Creator CLI."
 }

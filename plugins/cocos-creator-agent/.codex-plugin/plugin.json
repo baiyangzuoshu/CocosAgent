@@ -1,6 +1,6 @@
 {
   "name": "cocos-creator-agent",
-  "version": "0.2.0",
+  "version": "0.6.0",
   "description": "Cocos Creator 2.4.15 workflow skills and MCP adapter for Codex; uses the separately installed Cocos Creator CLI.",
   "skills": "./skills/"
 }

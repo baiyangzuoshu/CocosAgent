@@ -13,10 +13,12 @@ Review task changes made by Codex, Claude Code, or another supported coding Host
 
 1. Identify the exact project root from the Host workspace and verify the Creator patch from project metadata or an editor integration. Determine the active scene/target only through tools that report it; never infer it from a neighboring project.
 2. Inspect the relevant source, asset, scene or runtime evidence and record exact identities/current state before proposing a change.
-3. Collect whatever the current Host actually exposes: run receipts or operation IDs when present, version-control diffs, target identities, hashes, compile/runtime evidence, and unresolved writes. Do not assume a third-party Creator operation ledger or checkpoint exists.
+3. Collect whatever the current Host actually exposes: task IDs and transition events, Creator operation IDs, version-control diffs, target identities, hashes, compile/runtime evidence, and unresolved writes. The third-party bridge persists async task records outside the project; Creator writes keep their separate operation ledger.
 4. Classify source, scene/Prefab, resource, build, and runtime changes separately; do not call receipt summaries a complete disk diff.
-5. Reconcile an uncertain tool write using its original operation identity if the tool supplies one; also inspect current source/diff state before deciding what happened.
+5. On interruption, inspect the exact task ID. Explicitly resume an interrupted read only after confirming project/Creator identity. A script-creation commit resumes through `creator.script.create.reconcile`; a scene-node active-state commit resumes through `creator.scene.node.set-active.reconcile`, both with the original operation ID. Never replay either write. Other dispatched plans, writes, or controls require manual reconciliation because their side effects are uncertain.
 6. Compensate only through a documented tool operation or a reviewed source-control/manual restore whose target is still unchanged; otherwise stop and report the conflict.
+
+Cancellation is cooperative after dispatch. A cancelled write/control may move to `needs-reconciliation`; this state does not mean the operation was rolled back. Check its receipt, operation ID, and current project state before taking another action.
 
 ## Capability and safety gate
 

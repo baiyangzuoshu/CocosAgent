@@ -1,0 +1,47 @@
+name: Release Cocos Creator Agent CLI
+
+on:
+  push:
+    tags:
+      - 'cocos-creator-agent-cli-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Pack and verify the tagged CLI version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#cocos-creator-agent-cli-v}"
+          package_version="$(node -p "require('./tools/cocos-creator-agent-cli/package.json').version")"
+          if [ "$version" != "$package_version" ]; then
+            echo "Tag version $version does not match CLI package version $package_version" >&2
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/cocos-creator-agent-cli-release"
+          npm pack ./tools/cocos-creator-agent-cli --pack-destination "$RUNNER_TEMP/cocos-creator-agent-cli-release" --json > "$RUNNER_TEMP/cocos-creator-agent-cli-pack.json"
+          packed_name="$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'))[0].filename)" "$RUNNER_TEMP/cocos-creator-agent-cli-pack.json")"
+          archive="$RUNNER_TEMP/cocos-creator-agent-cli-release/cocos-creator-agent-cli-v${version}.tgz"
+          mv "$RUNNER_TEMP/cocos-creator-agent-cli-release/$packed_name" "$archive"
+          node -e "const fs=require('fs'),crypto=require('crypto'); const file=process.argv[1]; const sum=crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'); fs.writeFileSync(file+'.sha256',sum+String.fromCharCode(10));" "$archive"
+          echo "CLI_RELEASE_ARCHIVE=$archive" >> "$GITHUB_ENV"
+          echo "CLI_RELEASE_CHECKSUM=$archive.sha256" >> "$GITHUB_ENV"
+          echo "CLI_RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Publish GitHub Release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" "$CLI_RELEASE_ARCHIVE" "$CLI_RELEASE_CHECKSUM" \
+            --title "Cocos Creator Agent CLI v$CLI_RELEASE_VERSION" \
+            --generate-notes

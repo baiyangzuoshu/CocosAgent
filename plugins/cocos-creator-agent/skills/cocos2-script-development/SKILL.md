@@ -15,8 +15,9 @@ Create, inspect, or modify a Cocos Creator 2.4.x JavaScript or TypeScript compon
 2. Inspect the relevant source, asset, scene or runtime evidence and record exact identities/current state before proposing a change.
 3. Inspect the component class, imports, serialized properties, lifecycle methods, and existing call sites before editing.
 4. Keep the change within the approved script scope; preserve class identity and Creator metadata.
-5. Use Creator compilation as authoritative evidence for Creator-specific TS APIs and decorators.
-6. Read back exact source and compile result; do not infer scene attachment or runtime success from compilation.
+5. For a new JS/TS asset, use `creator.script.create.plan` when the live catalog provides it; review the target, complete source, source hash, and absent-target precondition. Commit only after the user authorizes that plan and the Creator native dialog approves it. Reconcile the same operation ID after uncertainty; never retry automatically.
+6. Use Creator compilation as authoritative evidence for Creator-specific TS APIs and decorators.
+7. Read back exact source and compile result; do not infer scene attachment or runtime success from compilation. The current write command creates an asset only and does not attach its component to a scene.
 
 ## Capability and safety gate
 
