@@ -1,8 +1,8 @@
 # Cocos Creator Agent
 
-This is the third-party Codex / Claude Code plugin for Cocos Creator 2.4.15. It is independent of the Creator-native CocosAgent, its model provider, and its internal Assistant Host/MCP process.
+This is the third-party Codex / Claude Code plugin for Cocos Creator 2.4.15. It has its own Host integration and does not require the retired Creator-native CocosAgent runtime.
 
-The package contains 51 workflow Skills, a local MCP adapter, and Creator workflow guidance. It also provides a Skill for installing, updating, and invoking the separate host-independent Cocos Creator CLI package. The CLI serves people, scripts, CI, and Agents without requiring this plugin.
+The package contains 51 core Creator workflow Skills plus one CLI operations Skill (52 Skills total), a local MCP adapter, and Creator workflow guidance. The CLI Skill covers installing, updating, and invoking the separate host-independent Cocos Creator CLI package. The CLI also serves people, scripts, and CI without requiring this plugin.
 
 ## First vertical slice
 

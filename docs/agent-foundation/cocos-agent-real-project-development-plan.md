@@ -1,5 +1,7 @@
 # CocosAgent Creator 原生 Agent 开发计划
 
+> **已归档（2026-10-19）：** Creator 原生 CocosAgent 已停止，相关实现已从仓库移除。本文只保留历史设计和验收记录，不应据此恢复或继续原生产品开发。当前活跃产品为[第三方 Codex / Claude 接入](cocos-creator-third-party-integration-mvp-0.1.md)。
+
 ## 2026-10-18 第三方 Host Skill 包
 
 Creator 2.4.x 的 51 项通用路由/专项 Skills 已归入独立 Codex / Claude Code 插件 `plugins/cocos-creator-agent/`；5 项可选 SDK Skills 位于独立包 `plugins/cocos-creator-agent-sdk/`。第三方插件现有独立 MCP、CLI、本机桥接服务和 Creator 2.4.15 扩展；Codex 当前会话完成 MCP 工具目录重载、8 工具发现、CLI 状态调用、tank 实例确认及 5 条 Creator 只读命令验收。Claude Code Host 尚未验收；写入审批、预览控制、编译/Console、运行交互与业务断言尚未实现。详见[第三方 Skill 系统设计](cocos-agent-skill-system-creator-2x.md)和[第三方接入实现](cocos-creator-third-party-integration-mvp-0.1.md)。

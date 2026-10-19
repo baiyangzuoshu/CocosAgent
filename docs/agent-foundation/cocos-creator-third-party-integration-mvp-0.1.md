@@ -1,6 +1,6 @@
 # Cocos Creator 第三方 Host 接入实现 0.1
 
-日期：2026-10-18（2026-10-19 更新验收）。范围：Codex / Claude Code → MCP/CLI → 本机桥接 → Creator 2.4.15 项目扩展。状态：**CLI 已拆为独立 npm 包；本地目录/tarball 安装、隔离升级、命令目录一致性及 MCP stdio 委托验收通过。Codex 插件与 Creator 2.4.15 实机握手、8 工具目录发现、CLI 状态调用及 5 条 Creator 只读命令已通过；Claude Code 尚未验收。** 本实现不调用或导入 Creator 原生 CocosAgent 的 Host、Provider、MCP 子进程、技能索引或操作账本。
+日期：2026-10-18（2026-10-19 更新验收）。范围：Codex / Claude Code → MCP/CLI → 本机桥接 → Creator 2.4.15 项目扩展。状态：**CLI 已拆为独立 npm 包；本地目录/tarball 安装、隔离升级、命令目录一致性及 MCP stdio 委托验收通过。Codex 插件与 Creator 2.4.15 实机握手、8 工具目录发现、CLI 状态调用及 5 条 Creator 只读命令已通过；Claude Code 尚未验收。** Creator 原生 CocosAgent 已停止并从仓库移除；本实现不依赖其历史 Host、Provider、MCP 子进程、技能索引或操作账本。
 
 ## 目标链路
 
@@ -94,16 +94,52 @@ MCP 工具为 `cocos_cli_status`、`cocos_instances_list`、`cocos_capabilities_
 - CLI 的 `extension install --project-root <absolute-path>` 仅在显式调用时写入项目 `packages/cocos-creator-agent-extension/`，拒绝覆盖既有目录和经过符号链接的 `packages/` 路径。安装后仍须在 Creator 重载项目扩展。
 - 目前所有命令都标注只读；Host 的 MCP 确认机制不能替代 Creator 侧逐次写入授权。服务不持有或转发模型凭据。
 
-## 未实现与验收顺序
+## 当前状态与后续开发计划
 
-1. **Codex / tank 已完成：** 按工程身份规则核对目标实例；Creator 2.4.15 扩展版本 `0.1.0`、项目路径及实时 Bridge 实例一致。Codex MCP 发现 8 个工具；CLI 状态及 5 条只读 Creator 命令均有实际回执，桥接重启后实例恢复。完整回执见[Codex MCP 实机验收](traces/cocos-creator-mcp-codex-acceptance-20261019.md)。
-2. **后续：** 在 Claude Code 导入插件，验收 MCP 启动、工具发现、实例配对、能力目录和只读命令；Codex 已完成部分不需重复作为未验收项。
-3. 再设计 Creator 侧获批写入：操作前身份/前值校验、逐次审批、AssetDB/编辑器 API 调用、保存读回和 operation 账本。当前不存在 `script.create`、`script.patch` 或场景写入命令。
-4. 之后设计预览会话归属、编译错误/Console、截图、同一会话输入和业务断言，再以 Creator 运行证据验证 Agent 修复闭环。
-5. 补充取消/断连/重启、命令未决回执、扩展卸载和恢复冲突策略。
+### 当前基线
 
-2026-10-19 已完成 CLI 独立包与 MCP 适配器验收：静态语法检查通过；CLI 0.1.0 从本地目录和 npm tarball 安装到隔离 prefix 后可在仓库外运行；`catalog` 的 5 条命令与合同一致；用临时 0.1.1 包在同 prefix 验证升级；MCP stdio 发现 8 个工具、脚本 schema 与 CLI 合同一致、状态读取显示当前安装版本；CLI 缺失时 MCP 仅公布基础工具并返回安装指引；tarball CLI 可向临时 Creator 项目安装扩展模板。
+- 产品边界：`plugins/cocos-creator-agent/` 是 Codex / Claude Code 第三方插件；`tools/cocos-creator-agent-cli/` 是独立本机 CLI；Creator 原生 CocosAgent 已停用并移除，不属于当前产品或运行依赖。
+- 版本：第三方 Host 插件 `0.2.0`、独立 CLI `0.1.0`、Creator 项目扩展 `0.1.0`；当前实机合同只支持 Creator `2.4.15`，CLI 需要 Node.js 20+。
+- Skills：主插件有 51 项 Creator 工作流 Skills 和 1 项 `cocos2-cli` 操作 Skill，共 52 项；5 项厂商 SDK Skills 单独放在可选包 `plugins/cocos-creator-agent-sdk/`。
+- MCP：CLI 可用时 Host 发现 8 个工具，其中 3 个用于 CLI 状态、实例与能力发现，5 个是 Creator 内容只读工具。CLI 不可用时 MCP 保留基础诊断工具并报告安装提示。工具数量不代表编辑器写入能力。
+- Creator 命令：共享合同只有 5 条只读命令：工程信息、工程搜索、AssetDB 搜索、JS/TS 读取、场景快照。写入、编译/Console、预览控制、输入注入和业务断言均未实现。
+- 已验收：CLI 本地目录/tarball 安装与隔离升级、MCP stdio 委托、合同/schema 一致性和桥接负向协议检查通过；Codex 当前会话重载后发现 8 工具，tank 的 Creator 2.4.15 实例握手、5 条只读命令与桥接重启恢复通过。Claude Code Host、Skill 自动路由效果和公开 CLI 分发尚未验收。回执见[CLI 验收](traces/cocos-creator-cli-independent-install-acceptance-20261019.md)、[Codex MCP 验收](traces/cocos-creator-mcp-codex-acceptance-20261019.md)和[桥接边界检查](traces/cocos-creator-third-party-boundary-check-20261019.md)。
 
-本节记录的是 CLI 独立包与隔离 MCP subprocess 验收；其模拟编辑器测试不能替代 Creator 实机证据。后续 Codex/Creator 实机握手、只读命令、Host 工具目录重载及 CLI 状态调用结果，见[Codex MCP 实机验收轨迹](traces/cocos-creator-mcp-codex-acceptance-20261019.md)。Claude Host、Creator 写入、运行预览和截图仍未验收，因此完整 Creator 工作流尚未通过验收。
+### 阶段计划
 
-2026-10-19 本机桥接负向协议检查及未完成项见[验收轨迹](traces/cocos-creator-third-party-boundary-check-20261019.md)。
+**P1：完成第三方 Host 与分发基线（可与 Creator 功能开发并行）**
+
+- 在 Claude Code 安装插件，验证 MCP 启动、8 工具目录、实例配对及同一组只读命令；验证 Skills 能选中路由/专项 Skill 和 `cocos2-cli`，不把 Skill 正文当成工具授权。
+- 确定 CLI 的版本发布源与升级方式。当前仅验证本地目录/tarball 安装，尚无公开 registry/release 更新源；发布前锁定 CLI、插件、Creator 扩展和合同指纹的兼容规则。
+- 验收条件：Codex 和 Claude 的工具/schema 一致；CLI 缺失、版本不兼容、Creator 断连时均给出可诊断错误，且不猜测目标工程。
+
+**P2：Creator 写入最小闭环（下一个 Creator 能力里程碑）**
+
+- 先只实现一个可恢复纵向切片：通过 Creator AssetDB 创建一份 JS/TS 组件脚本，取得 Creator 生成的 `.meta` / UUID / importer / class ID，挂到指定节点，保存后从同一实例读回并核对哈希与组件引用。
+- 合同加入逐次审批、operation ID、目标身份和前态哈希、窄差异预览、幂等拒绝、失败后的 reconcile/compensate；编辑器写入必须由 Creator 扩展执行，不能让 CLI/MCP 直接改场景序列化文件冒充 Creator 操作。
+- 验收条件：未批准不产生副作用；批准后 Creator 回执、资产身份和场景状态一致；取消/超时不自动重试不确定写入；重读可证明成功或准确报告待恢复状态。
+
+**P3：运行反馈与同会话复验**
+
+- 先以 Creator 2.4.15 Web 预览为目标，建立有明确实例和场景身份的预览会话；收集编译错误、Console、运行状态和截图。
+- 支持该会话内的有限输入操作和结构化业务断言，让 Agent 能定位失败、修改后再次运行同一验收。
+- 验收条件：日志/截图/断言都绑定同一 Creator 实例、场景和运行会话；没有运行回执时不报告功能通过。
+
+**P4：项目级 Skills 与工具扩展**
+
+- 定义项目级 Skill 和工具清单的发现、来源、版本/哈希、输入 schema 与能力声明；Host 只按任务加载相关内容，运行时再以 Creator 实际能力为准。
+- 验收条件：LinkUpClient 或 tank 的项目约定能被按需读取并验证来源；陈旧哈希、未知工具、未声明输入均拒绝执行；项目 Skill 不能扩大 Host 或 Creator 授权。
+
+**P5：任务审阅、checkpoint 与恢复**
+
+- 汇总代码、场景和资源差异；形成项目外 checkpoint/operation 账本；覆盖取消、Host/Creator/Bridge 重启、未决回执、恢复冲突和用户选择。
+- 验收条件：从任一中断点能识别已产生的副作用；只恢复或补偿明确可证明的操作，不覆盖后来修改。
+
+**P6：Tank 真实功能验收**
+
+- 从当前空 tank 工程完成首个可玩切片：简化战场、玩家坦克移动与发射、击中固定目标显示结果、重开；不依赖美术或厂商 SDK。
+- 记录每一步是否由 Agent 独立完成、工具/Skill 缺口、人工介入次数、耗时、编译/运行证据及中断恢复结果。该实测才用于判断是否扩展到完整小游戏。
+
+### 已完成的 2026-10-19 验收
+
+CLI 独立包从本地目录与 tarball 安装到隔离 prefix，在同一 prefix 验证升级；MCP 从 CLI 获取唯一命令目录/schema 并委托调用。Codex 与 tank Creator 2.4.15 的只读实机链路已通过，Creator 临时脚本样本已删除并恢复资源基线。完整回执见上方三份轨迹。此阶段未运行写入、预览控制或游戏行为验收。

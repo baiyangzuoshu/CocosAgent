@@ -1,5 +1,7 @@
 # CocosAgent 对照 Unity Agent 的开发方向调整
 
+> **已归档（2026-10-19）：** 用户决定停止 Creator 原生 CocosAgent。原生面板、运行时、MCP/桥接、Creator 扩展和内置 Skill 包已从仓库移除。下文保留当时的产品分析与验收记录，不再作为开发计划；当前活跃路线见[第三方接入实现](cocos-creator-third-party-integration-mvp-0.1.md)。
+
 日期：2026-10-17。状态：**开发方向已确认；M1 原生只读搜索和 TS 读取已验收，M1 写入闭环仍未通过。第三方 Host 已有 51 项核心 Skill、5 项可选 SDK Skill、独立 MCP/CLI/本机桥及 Creator 2.4.15 只读扩展；Codex 工具目录、tank 实例握手和 5 条只读命令已实机验收，Claude Host 尚未验收。** 原生实现与近期验收版本范围为 Cocos Creator 2.4.15。
 
 **当前状态补记（2026-10-17）：** 后续 LinkUpClient Creator 2.4.15 原生复验已通过 M1 只读工具发现、`.ts` 搜索与 `script.read` 身份/哈希交叉核对；详细回执及边界见[只读验收摘要](traces/cocos-agent-m1-linkup-readonly-acceptance-20261017.md)。这覆盖旧状态中“Creator 原生只读链路未验收”的判断，但不代表 JS/TS 写入或 M1 整体通过；M5 有效功能样本仍为 0。
