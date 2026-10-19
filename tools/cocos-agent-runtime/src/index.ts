@@ -1,4 +1,5 @@
 export * from './contracts.js';
+export * from './model-usage.js';
 export * from './agent-loop.js';
 export * from './context-compact.js';
 export * from './deepseek-provider.js';
@@ -14,3 +15,4 @@ export * from './creator-plan-acceptance.js';
 export * from './creator-targets.js';
 export * from './creator-recovery.js';
 export * from './creator-task-intent.js';
+export * from './creator-tool-loader.js';

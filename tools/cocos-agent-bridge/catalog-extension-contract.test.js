@@ -6,24 +6,26 @@ const path = require('path');
 const { isDeepStrictEqual } = require('util');
 const inputs = require('./catalog.schema.json').$defs;
 
-function loadCatalog(relativePath) {
+function loadCatalog(relativePath, editor = {}) {
     const filename = path.resolve(__dirname, '..', '..', relativePath);
     const module = { exports: {} };
     const localRequire = (name) => name === 'ws' ? {} : name.startsWith('./')
         ? require(path.resolve(path.dirname(filename), name)) : require(name);
     const source = `${fs.readFileSync(filename, 'utf8')}\nmodule.exports.testCatalog = commandCatalog;`;
-    new Function('require', 'module', 'exports', '__dirname', 'Editor', source)(localRequire, module, module.exports, path.dirname(filename), {});
+    new Function('require', 'module', 'exports', '__dirname', 'Editor', source)(localRequire, module, module.exports, path.dirname(filename), editor);
     return module.exports.testCatalog;
 }
 
-const catalog2 = loadCatalog('2.4.15NewProject/packages/cocos-agent-bridge/main.js');
+const catalog2 = loadCatalog('2.4.15NewProject/packages/cocos-agent-bridge/main.js', {
+    assetdb: { create() {}, delete() {} }, Utils: { UuidUtils: { compressUuid: () => '0123456789012345678901' } },
+});
 const catalog3 = loadCatalog('3.8,7NewProject/extensions/cocos-agent-bridge/dist/main.js');
 for (const [version, catalog] of [['2.4.15', catalog2], ['3.8.7', catalog3]]) {
     const commands = catalog({ sceneName: 'example', hasCanvas: true, assetDbReady: true, prefabSourcePatchApiReady: true });
     const expectedIds = ['scene.snapshot', ...(version === '2.4.15' ? ['runtime.preview.start'] : []), 'scene.node.inspect', ...(version === '2.4.15' ? ['asset.searchPng'] : []), 'asset.importPng', ...(version === '2.4.15' ? ['asset.removeImportedPng', 'asset.validatePng', 'asset.refreshPng', 'asset.refreshFolder'] : []), 'scene.pngSprite', 'scene.node.create', ...(version === '2.4.15' ? ['scene.node.patch', 'prefab.source.patch', 'prefab.source.inspect', 'content.stress.run'] : [])];
-    assert.deepStrictEqual(commands.map((item) => item.id), [...(version === '2.4.15' ? ['project.search', 'script.read', 'script.patch.plan', 'script.patch', 'script.operation.get'] : []), ...expectedIds]);
+    assert.deepStrictEqual(commands.map((item) => item.id), [...(version === '2.4.15' ? ['project.search', 'script.read', 'script.create', 'script.patch.plan', 'script.patch', 'script.operation.get'] : []), ...expectedIds]);
     assert.ok(commands.every((item) => item.contractVersion === (item.id === 'content.stress.run' || item.id.startsWith('script.') ? '0.2' : '0.1')));
-    assert.deepStrictEqual(commands.map((item) => item.access), [...(version === '2.4.15' ? ['read', 'read', 'read', 'write', 'read'] : []), 'read', ...(version === '2.4.15' ? ['write'] : []), 'read', ...(version === '2.4.15' ? ['read'] : []), 'write', ...(version === '2.4.15' ? ['write', 'read', 'write', 'write'] : []), 'write', 'write', ...(version === '2.4.15' ? ['write', 'write', 'read', 'read'] : [])]);
+    assert.deepStrictEqual(commands.map((item) => item.access), [...(version === '2.4.15' ? ['read', 'read', 'write', 'read', 'write', 'read'] : []), 'read', ...(version === '2.4.15' ? ['write'] : []), 'read', ...(version === '2.4.15' ? ['read'] : []), 'write', ...(version === '2.4.15' ? ['write', 'read', 'write', 'write'] : []), 'write', 'write', ...(version === '2.4.15' ? ['write', 'write', 'read', 'read'] : [])]);
     assert.ok(isDeepStrictEqual(commands.find((item) => item.id === 'scene.snapshot').input, inputs.snapshotInput));
     assert.ok(isDeepStrictEqual(commands.find((item) => item.id === 'scene.node.inspect').input, inputs.nodeInspectInput));
     assert.ok(isDeepStrictEqual(commands.find((item) => item.id === 'asset.importPng').input, inputs.importPngInput));
@@ -32,11 +34,12 @@ for (const [version, catalog] of [['2.4.15', catalog2], ['3.8.7', catalog3]]) {
         assert.ok(isDeepStrictEqual(preview.input, inputs.runtimePreviewStartInput2x));
         assert.deepStrictEqual(preview.preconditions, ['activeScene']);
         assert.strictEqual(preview.status, 'available');
-        for (const [id, definition] of [['script.read', 'scriptReadInput2x'], ['script.patch.plan', 'scriptPatchPlanInput2x'], ['script.patch', 'scriptPatchInput2x'], ['script.operation.get', 'scriptOperationGetInput2x']]) {
+        for (const [id, definition] of [['script.read', 'scriptReadInput2x'], ['script.create', 'scriptCreateInput2x'], ['script.patch.plan', 'scriptPatchPlanInput2x'], ['script.patch', 'scriptPatchInput2x'], ['script.operation.get', 'scriptOperationGetInput2x']]) {
             const item = commands.find((candidate) => candidate.id === id);
             assert.ok(isDeepStrictEqual(item.input, inputs[definition]), id);
             assert.equal(item.status, 'available');
-            assert.equal(catalog({ assetDbReady: false }).find((candidate) => candidate.id === id).reason, 'ASSETDB_UNAVAILABLE');
+            const unavailable = catalog({ assetDbReady: false }).find((candidate) => candidate.id === id);
+            assert.equal(unavailable.reason, id === 'script.create' ? 'SCRIPT_ASSET_IMPORTER_UNAVAILABLE' : 'ASSETDB_UNAVAILABLE');
         }
         const search = commands.find((item) => item.id === 'asset.searchPng');
         assert.ok(isDeepStrictEqual(search.input, inputs.pngAssetSearchInput));

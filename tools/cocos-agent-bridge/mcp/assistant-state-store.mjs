@@ -9,10 +9,16 @@ const MAX_PLANS = 32;
 const MAX_RUNS = 24;
 const MAX_MESSAGES = 24;
 const MAX_STRING = 8000;
-const MAX_SUMMARY = 32_000;
+const MAX_SUMMARY = 4_000;
 const MAX_STATE_BYTES = 2_500_000;
 const SECRET_KEY = /(?:api.?key|authorization|secret|password|credential|token|imageDataUrl|dataBase64|screenshot)/i;
 const SECRET_VALUE = /\b(?:sk-[A-Za-z0-9_-]{12,}|Bearer\s+[A-Za-z0-9._-]{12,})\b/g;
+
+// Only numeric usage metrics may pass the general credential-token filter.
+export function isUsageCount(key, value) {
+    return /^(?:inputTokens|outputTokens|totalTokens|cacheHitTokens|cacheMissTokens|reasoningTokens)$/.test(key)
+        && (value === null || Number.isSafeInteger(value) && value >= 0);
+}
 
 function safeString(value, limit = MAX_STRING) {
     return typeof value === 'string' ? value.replace(SECRET_VALUE, '[redacted]').slice(0, limit) : '';
@@ -26,7 +32,7 @@ function safeValue(value, depth = 0) {
     if (typeof value !== 'object') return null;
     const output = {};
     for (const [key, item] of Object.entries(value).slice(0, 128)) {
-        if (SECRET_KEY.test(key)) continue;
+        if (SECRET_KEY.test(key) && !isUsageCount(key, item)) continue;
         output[safeString(key, 100)] = safeValue(item, depth + 1);
     }
     return output;

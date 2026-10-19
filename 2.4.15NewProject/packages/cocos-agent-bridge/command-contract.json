@@ -1,0 +1,287 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "catalog.schema.json",
+  "title": "CocosAgent command catalog",
+  "x-cocos-command-inputs-2x": {
+    "project.search": {"input": "projectSearchInput2x", "contractVersion": "0.1", "access": "read", "preconditions": ["projectAssetsAvailable"]},
+    "scene.snapshot": {"input": "snapshotInput", "contractVersion": "0.1", "access": "read", "preconditions": ["activeScene"]},
+    "scene.node.inspect": {"input": "nodeInspectInput", "contractVersion": "0.1", "access": "read", "preconditions": ["activeScene"]},
+    "asset.searchPng": {"input": "pngAssetSearchInput", "contractVersion": "0.1", "access": "read", "preconditions": ["assetDbReady"]},
+    "asset.importPng": {"input": "importPngInput", "contractVersion": "0.1", "access": "write", "preconditions": ["stagedPng", "destinationFree"]},
+    "asset.removeImportedPng": {"input": "removeImportedPngInput", "contractVersion": "0.1", "access": "write", "preconditions": ["assetIdentityMatches", "noSerializedReferences"]},
+    "asset.validatePng": {"input": "pipelinePngInput", "contractVersion": "0.1", "access": "read", "preconditions": ["pipelineOwnedAsset", "importedMetadata"]},
+    "asset.refreshPng": {"input": "pipelinePngInput", "contractVersion": "0.1", "access": "write", "preconditions": ["pipelineOwnedAsset", "assetDbMappingStale", "stableUuid"]},
+    "asset.refreshFolder": {"input": "assetFolderRefreshInput", "contractVersion": "0.1", "access": "write", "preconditions": ["folderUnderAssets", "assetDbRefreshAvailable"]},
+    "scene.pngSprite": {"input": "pngSpriteInput2x", "contractVersion": "0.1", "access": "write", "preconditions": ["activeScene", "canvasExisting", "spriteFrameImported"]},
+    "scene.node.create": {"input": "nodeCreateInput2x", "contractVersion": "0.1", "access": "write", "preconditions": ["activeScene", "parentIdentity", "componentTypesWhitelisted", "componentSetCompatible", "resourceReferencesResolvable", "prefabAssetResolvableIfRequested"]},
+    "scene.node.patch": {"input": "nodePatchInput2x", "contractVersion": "0.1", "access": "write", "preconditions": ["activeScene", "nodePathAndUuidMatch", "expectedBeforeValues", "propertyWhitelist", "resourceReferencesResolvable"]},
+    "prefab.source.patch": {"input": "prefabSourcePatchInput2x", "contractVersion": "0.1", "access": "write", "preconditions": ["activeScene", "prefabUuidResolvable", "sourceShaMatches", "prefabEditModeAvailable", "nodePathAndUuidMatch", "expectedBeforeValues"]},
+    "prefab.source.inspect": {"input": "prefabSourceInspectInput2x", "contractVersion": "0.1", "access": "read", "preconditions": ["prefabUuidResolvable", "serializedPrefabReadable"]},
+    "content.stress.run": {"input": "contentStressRunInput2x", "contractVersion": "0.2", "access": "read", "preconditions": ["completedWebMobileBuild", "complexPackagedPngResources", "coldCacheProfile", "explicitDeviceScreeningBudget"]},
+    "script.read": {"input": "scriptReadInput2x", "contractVersion": "0.2", "access": "read", "preconditions": ["existingProjectScript", "assetDbReady"]},
+    "script.create": {"input": "scriptCreateInput2x", "contractVersion": "0.2", "access": "write", "preconditions": ["destinationFree", "assetDbReady", "creatorImporter"]},
+    "script.patch.plan": {"input": "scriptPatchPlanInput2x", "contractVersion": "0.2", "access": "read", "preconditions": ["existingProjectScript", "assetDbReady"]},
+    "script.patch": {"input": "scriptPatchInput2x", "contractVersion": "0.2", "access": "write", "preconditions": ["existingProjectScript", "assetDbReady"]},
+    "script.operation.get": {"input": "scriptOperationGetInput2x", "contractVersion": "0.2", "access": "read", "preconditions": ["existingProjectScript", "assetDbReady"]},
+    "runtime.preview.start": {"input": "runtimePreviewStartInput2x", "contractVersion": "0.1", "access": "write", "preconditions": ["activeScene"]}
+  },
+  "$defs": {
+    "snapshotInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "targetNodeName": { "type": "string", "minLength": 1, "maxLength": 64 }
+      }
+    },
+    "runtimePreviewStartInput2x": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "nodeInspectInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodePath"],
+      "properties": { "nodePath": { "type": "string", "minLength": 1, "maxLength": 240 } }
+    },
+    "pngAssetSearchInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query"],
+      "properties": {
+        "query": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[^\\u0000-\\u001f\\u007f]+$" },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 50 },
+        "offset": { "type": "integer", "minimum": 0, "maximum": 100000 }
+      }
+    },
+    "importPngInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourcePath"],
+      "properties": {
+        "sourcePath": { "type": "string", "minLength": 1 }
+      }
+    },
+    "removeImportedPngInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assetName", "textureUuid", "spriteFrameUuid", "sha256"],
+      "properties": {
+        "assetName": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$" },
+        "textureUuid": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$" },
+        "spriteFrameUuid": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "pipelinePngInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pipelineId", "assetName"],
+      "properties": {
+        "pipelineId": { "type": "string", "format": "uuid" },
+        "assetName": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$" }
+      }
+    },
+    "assetFolderRefreshInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["folderPath"],
+      "properties": {
+        "folderPath": { "type": "string", "minLength": 1, "maxLength": 240,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*(?:/[A-Za-z0-9][A-Za-z0-9_.-]*){0,7}$" }
+      }
+    },
+    "pngSpriteInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assetName", "action"],
+      "properties": {
+        "assetName": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$" },
+        "action": { "enum": ["apply", "compensate", "replay"] },
+        "operationId": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" }
+      }
+    },
+    "pngSpriteInput2x": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assetName", "action"],
+      "properties": {
+        "assetName": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,94}\\.png$" },
+        "action": { "enum": ["apply", "compensate", "replay"] },
+        "operationId": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" },
+        "position": { "$ref": "#/$defs/canvasPosition" }
+      }
+    },
+    "canvasPosition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "number", "minimum": -4096, "maximum": 4096 },
+        "y": { "type": "number", "minimum": -4096, "maximum": 4096 }
+      }
+    },
+    "nodeCreateInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parentPath", "parentUuid", "nodeName", "action"],
+      "properties": {
+        "parentPath": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "parentUuid": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "nodeName": { "type": "string", "pattern": "^[A-Za-z0-9_ -]{1,64}$" },
+        "action": { "enum": ["apply", "compensate", "replay"] },
+        "sourceOperationId": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" },
+        "operationId": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" }
+      }
+    },
+    "nodeCreateInput2x": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parentPath", "parentUuid", "nodeName", "action"],
+      "properties": {
+        "parentPath": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "parentUuid": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "nodeName": { "type": "string", "pattern": "^[A-Za-z0-9_ -]{1,64}$" },
+        "action": { "enum": ["apply", "compensate", "replay"] },
+        "components": { "type": "array", "maxItems": 1, "items": { "oneOf": [
+          { "type": "object", "additionalProperties": false, "required": ["classId", "spriteFrameUuid"], "properties": {
+            "classId": { "const": "cc.Sprite" }, "spriteFrameUuid": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$" } } },
+          { "type": "object", "additionalProperties": false, "required": ["classId", "text"], "properties": {
+            "classId": { "const": "cc.Label" }, "text": { "type": "string", "maxLength": 256 } } },
+          { "type": "object", "additionalProperties": false, "required": ["classId", "scriptPath", "scriptUuid", "scriptClassId"], "properties": {
+            "classId": { "const": "cocosScript" },
+            "scriptPath": { "type": "string", "minLength": 4, "maxLength": 240, "pattern": "^[A-Za-z0-9_ -]+(?:/[A-Za-z0-9_. -]+)*\\.(?:js|ts)$" },
+            "scriptUuid": { "type": "string", "format": "uuid" },
+            "scriptClassId": { "type": "string", "minLength": 20, "maxLength": 24, "pattern": "^[A-Za-z0-9_+/=-]+$" } } }
+        ] } },
+        "transform": { "type": "object", "additionalProperties": false, "properties": {
+          "position": { "$ref": "#/$defs/canvasPosition" },
+          "scale": { "$ref": "#/$defs/canvasPosition" }
+        } },
+        "prefabMode": { "enum": ["create", "instantiate"] },
+        "prefabUuid": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$" },
+        "sourceOperationId": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" },
+        "operationId": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" }
+      },
+      "allOf": [
+        { "if": { "properties": { "prefabMode": { "const": "instantiate" } }, "required": ["prefabMode"] }, "then": { "required": ["prefabUuid"] } },
+        { "if": { "properties": { "prefabMode": { "const": "create" } }, "required": ["prefabMode"] }, "then": { "not": { "required": ["prefabUuid"] } } }
+      ]
+    },
+    "nodePatchInput2x": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetNodePath", "targetNodeUuid", "action", "expectedDiff"],
+      "properties": {
+        "targetNodePath": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "targetNodeUuid": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9_+/=-]+$" },
+        "action": { "enum": ["apply", "compensate", "replay"] },
+        "expectedDiff": { "type": "array", "minItems": 1, "maxItems": 16, "items": {
+          "type": "object", "additionalProperties": false, "required": ["path", "before", "after"],
+          "properties": {
+            "path": { "enum": ["node.name", "node.active", "node.position.x", "node.position.y", "node.scale.x", "node.scale.y",
+              "component.cc.Sprite.enabled", "component.cc.Sprite.spriteFrameUuid", "component.cc.Label.enabled"] },
+            "before": {}, "after": {}
+          }
+        } },
+        "sourceOperationId": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$" },
+        "operationId": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$" }
+      }
+    },
+    "prefabSourceInspectInput2x": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prefabUuid"],
+      "properties": { "prefabUuid": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$" } }
+    },
+    "contentStressRunInput2x": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["buildId", "resourcePaths", "parseFixturePaths", "failureResourcePath", "cycles", "nodeCount", "packable", "profileId", "loadMode", "budgetProfileId", "budgets"],
+      "properties": {
+        "buildId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,31}$" },
+        "resourcePaths": { "type": "array", "minItems": 2, "maxItems": 16, "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}(?:/[A-Za-z0-9_-]{1,64}){0,7}$" } },
+        "parseFixturePaths": { "type": "array", "minItems": 2, "maxItems": 16, "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}(?:/[A-Za-z0-9_-]{1,64}){0,7}$" } },
+        "failureResourcePath": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}(?:/[A-Za-z0-9_-]{1,64}){0,7}$" },
+        "cycles": { "type": "integer", "minimum": 8, "maximum": 256 },
+        "nodeCount": { "type": "integer", "minimum": 32, "maximum": 1024 },
+        "packable": { "type": "boolean" },
+        "profileId": { "const": "macos-arm64-chrome-headless-swiftshader-1280x800" },
+        "loadMode": { "const": "cold-and-warm" },
+        "budgetProfileId": { "const": "macos-arm64-headless-swiftshader-host-screening-v1" },
+        "budgets": { "type": "object", "additionalProperties": false,
+          "required": ["targetFps", "maxColdResourceLoadP95Ms", "maxWarmResourceLoadP95Ms", "maxImportParserP95Ms", "maxPngParserP95Ms", "maxReleaseCallP95Ms", "maxEstimatedRgbaWorkingSetBytes"],
+          "properties": {
+            "targetFps": { "type": "number", "minimum": 1, "maximum": 360 },
+            "maxColdResourceLoadP95Ms": { "type": "number", "minimum": 0.01, "maximum": 60000 },
+            "maxWarmResourceLoadP95Ms": { "type": "number", "minimum": 0.01, "maximum": 60000 },
+            "maxImportParserP95Ms": { "type": "number", "minimum": 0.01, "maximum": 60000 },
+            "maxPngParserP95Ms": { "type": "number", "minimum": 0.01, "maximum": 60000 },
+            "maxReleaseCallP95Ms": { "type": "number", "minimum": 0.01, "maximum": 60000 },
+            "maxEstimatedRgbaWorkingSetBytes": { "type": "integer", "minimum": 1048576, "maximum": 1073741824 }
+          } }
+      }
+    },
+    "prefabSourcePatchInput2x": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prefabUuid", "targetNodePath", "targetNodeUuid", "action", "expectedDiff"],
+      "properties": {
+        "prefabUuid": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$" },
+        "targetNodePath": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "targetNodeUuid": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9_+/=-]+$" },
+        "expectedPrefabSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "action": { "enum": ["apply", "compensate", "replay"] },
+        "expectedDiff": { "type": "array", "minItems": 1, "maxItems": 16, "items": {
+          "type": "object", "additionalProperties": false, "required": ["path", "before", "after"],
+          "properties": {
+            "path": { "enum": ["node.name", "node.active", "node.position.x", "node.position.y", "node.scale.x", "node.scale.y",
+              "component.cc.Sprite.enabled", "component.cc.Sprite.spriteFrameUuid", "component.cc.Label.enabled"] },
+            "before": {}, "after": {}
+          }
+        } },
+        "sourceOperationId": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$" },
+        "operationId": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$" }
+      },
+      "allOf": [
+        { "if": { "properties": { "action": { "const": "apply" } }, "required": ["action"] },
+          "then": { "required": ["expectedPrefabSha256"], "not": { "required": ["sourceOperationId"] } } },
+        { "if": { "properties": { "action": { "enum": ["compensate", "replay"] } }, "required": ["action"] },
+          "then": { "required": ["sourceOperationId"] } }
+      ]
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "contractVersion", "access", "inputSchema", "input", "preconditions", "status", "reason"],
+      "properties": {
+        "id": { "enum": ["project.search", "script.read", "script.create", "script.patch.plan", "script.patch", "script.operation.get", "scene.snapshot", "scene.node.inspect", "asset.searchPng", "asset.importPng", "asset.removeImportedPng", "asset.validatePng", "asset.refreshPng", "asset.refreshFolder", "scene.pngSprite", "scene.node.create", "scene.node.patch", "prefab.source.inspect", "prefab.source.patch", "content.stress.run"] },
+        "contractVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
+        "access": { "enum": ["read", "write"] },
+        "inputSchema": { "type": "string" },
+        "input": { "type": "object" },
+        "preconditions": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "status": { "enum": ["available", "unavailable"] },
+        "reason": { "type": ["string", "null"] }
+      }
+    },
+    "scriptReadInput2x": {"type": "object", "additionalProperties": false, "required": ["scriptPath"], "properties": {"scriptPath": {"type": "string", "minLength": 4, "maxLength": 240, "pattern": "^[A-Za-z0-9_ -]+(?:/[A-Za-z0-9_. -]+)*\\.(?:js|ts)$"}}},
+    "scriptCreateInput2x": {"type": "object", "additionalProperties": false, "required": ["action", "operationId"], "properties": {
+      "scriptPath": {"type": "string", "minLength": 4, "maxLength": 240, "pattern": "^[A-Za-z0-9_ -]+(?:/[A-Za-z0-9_. -]+)*\\.(?:js|ts)$"},
+      "source": {"type": "string", "maxLength": 65536},
+      "action": {"type": "string", "enum": ["apply", "compensate", "reconcile", "replay"]},
+      "operationId": {"type": "string", "format": "uuid"},
+      "sourceOperationId": {"type": "string", "format": "uuid"}
+    }, "allOf": [
+      {"if": {"properties": {"action": {"const": "apply"}}, "required": ["action"]}, "then": {"required": ["scriptPath", "source"], "not": {"required": ["sourceOperationId"]}}},
+      {"if": {"properties": {"action": {"const": "replay"}}, "required": ["action"]}, "then": {"required": ["sourceOperationId"], "not": {"anyOf": [{"required": ["scriptPath"]}, {"required": ["source"]}]}}},
+      {"if": {"properties": {"action": {"enum": ["compensate", "reconcile"]}}, "required": ["action"]}, "then": {"not": {"anyOf": [{"required": ["scriptPath"]}, {"required": ["source"]}, {"required": ["sourceOperationId"]}]}}}
+    ]},
+    "projectSearchInput2x": {"type": "object", "additionalProperties": false, "required": ["query", "scope"], "properties": {"query": {"type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[^\\u0000-\\u001f\\u007f]+$"}, "scope": {"type": "string", "enum": ["code", "assets", "all"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 50}, "offset": {"type": "integer", "minimum": 0, "maximum": 100000}}},
+    "scriptPatchPlanInput2x": {"type": "object", "additionalProperties": false, "required": ["scriptPath", "scriptUuid", "expectedSha256", "edits"], "properties": {"scriptPath": {"type": "string", "minLength": 4, "maxLength": 240, "pattern": "^[A-Za-z0-9_ -]+(?:/[A-Za-z0-9_. -]+)*\\.(?:js|ts)$"}, "scriptUuid": {"type": "string", "format": "uuid"}, "expectedSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "edits": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"type": "object", "additionalProperties": false, "required": ["before", "after"], "properties": {"before": {"type": "string", "minLength": 1, "maxLength": 16384}, "after": {"type": "string", "maxLength": 16384}}}}}},
+    "scriptPatchInput2x": {"type": "object", "additionalProperties": false, "required": ["action", "operationId"], "properties": {"scriptPath": {"type": "string", "minLength": 4, "maxLength": 240, "pattern": "^[A-Za-z0-9_ -]+(?:/[A-Za-z0-9_. -]+)*\\.(?:js|ts)$"}, "scriptUuid": {"type": "string", "format": "uuid"}, "expectedSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "edits": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"type": "object", "additionalProperties": false, "required": ["before", "after"], "properties": {"before": {"type": "string", "minLength": 1, "maxLength": 16384}, "after": {"type": "string", "maxLength": 16384}}}}, "action": {"type": "string", "enum": ["apply", "compensate", "reconcile", "replay"]}, "operationId": {"type": "string", "format": "uuid"}, "sourceOperationId": {"type": "string", "format": "uuid"}}},
+    "scriptOperationGetInput2x": {"type": "object", "additionalProperties": false, "required": ["operationId"], "properties": {"operationId": {"type": "string", "format": "uuid"}}}
+  }
+}

@@ -36,6 +36,7 @@ function loadRunPanel() {
     panel.$messages = new Element();
     panel._runCards = new Map();
     panel.renderExecutionChecklist = () => {};
+    panel.updateTaskSidebar = () => {};
     panel.addCopyButton = () => {};
     return panel;
 }

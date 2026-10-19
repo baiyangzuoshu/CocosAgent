@@ -1,0 +1,76 @@
+{
+  "date": "2026-10-18",
+  "evidence": "Static serialization of current installed-package metadata, no model requests or project operations. Adapter system only; excludes native policy, memory, task and history. Bytes are not tokens.",
+  "modes": {
+    "Ask": {
+      "full": {
+        "adapterSystemBytes": 27753,
+        "toolCount": 33,
+        "toolsJsonBytes": 24162,
+        "commandSchemaCount": 0
+      },
+      "lazyInitial": {
+        "adapterSystemBytes": 5970,
+        "toolCount": 7,
+        "toolsJsonBytes": 3662,
+        "commandSchemaCount": 0
+      },
+      "scriptSkillLoaded": {
+        "toolCount": 16,
+        "toolsJsonBytes": 10450,
+        "commandSchemaCount": 0,
+        "skillReceiptJsonBytes": 5393,
+        "planningWriteSchemaCount": 0
+      }
+    },
+    "Plan": {
+      "full": {
+        "adapterSystemBytes": 29223,
+        "toolCount": 33,
+        "toolsJsonBytes": 24162,
+        "commandSchemaCount": 0
+      },
+      "lazyInitial": {
+        "adapterSystemBytes": 5970,
+        "toolCount": 7,
+        "toolsJsonBytes": 3662,
+        "commandSchemaCount": 0
+      },
+      "scriptSkillLoaded": {
+        "toolCount": 16,
+        "toolsJsonBytes": 10450,
+        "commandSchemaCount": 0,
+        "skillReceiptJsonBytes": 13551,
+        "planningWriteSchemaCount": 5
+      }
+    },
+    "Agent": {
+      "full": {
+        "adapterSystemBytes": 27531,
+        "toolCount": 59,
+        "toolsJsonBytes": 68964,
+        "commandSchemaCount": 21
+      },
+      "lazyInitial": {
+        "adapterSystemBytes": 5970,
+        "toolCount": 7,
+        "toolsJsonBytes": 3662,
+        "commandSchemaCount": 0
+      },
+      "scriptSkillLoaded": {
+        "toolCount": 21,
+        "toolsJsonBytes": 18980,
+        "commandSchemaCount": 2,
+        "skillReceiptJsonBytes": 5393,
+        "planningWriteSchemaCount": 0
+      }
+    }
+  },
+  "sourceSha256": {
+    "tools/cocos-agent-bridge/mcp/deepseek-agent.mjs": "fdc231f2cf479c519a4de43dee8829aaabd22e5cb9c194f22eb600687f47a791",
+    "tools/cocos-agent-runtime/src/creator-tool-loader.ts": "4e7268908396b828a7afcb7e158ee5b21d0c95974c8117590eb46b2d51188a70",
+    "tools/cocos-agent-runtime/src/creator-host-adapter.ts": "57f84e1f2dc90bcb2b99d657eaf62b4302b6dedb8ece6d5fb944f7379d32e756",
+    "tools/cocos-agent-runtime/src/creator-policy.ts": "b779876790cd582408a948d36376d0012391c5112ca2bd8877a6e375a6ac7e55",
+    "tools/cocos-agent-runtime/src/agent-loop.ts": "8ae865dd6e1abc62127561a0910c97710c62c4a64868705119602eb246c48d3d"
+  }
+}

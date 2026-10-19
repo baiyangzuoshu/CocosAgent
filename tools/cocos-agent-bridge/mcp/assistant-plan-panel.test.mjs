@@ -26,6 +26,8 @@ class Element {
     removeChild(child) { this.children.splice(this.children.indexOf(child), 1); child.parentNode = null; }
     addEventListener(name, handler) { this.listeners[name] = handler; }
     querySelector(selector) { return this.children.find((child) => `.${child.className}` === selector) || null; }
+    closest() { return this.parentNode || this; }
+    remove() { if (this.parentNode) this.parentNode.removeChild(this); }
 }
 
 test('plan card is rendered as text and starts only the selected Agent step', () => {

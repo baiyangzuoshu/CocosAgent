@@ -408,7 +408,6 @@ test('cancellation during overflow compaction prevents the retry request', async
         provider: {
             summarizeContext: async () => {
                 summaryCalls += 1;
-                if (summaryCalls > 1) controller.abort();
                 return 'Compacted historical constraints.';
             },
             complete: async () => {
@@ -419,13 +418,16 @@ test('cancellation during overflow compaction prevents the retry request', async
         tools: { listTools: async () => [], callTool: async () => ({}) },
         policy: { approveWrite: async () => false },
         contextBudget: { maxEstimatedTokens: 4_000, keepRecentMessages: 1, keepRecentToolInteractions: 1 },
+        hooks: { onEvent: (event) => {
+            if (event.type === 'context.compacted' && completeCalls === 1) controller.abort();
+        } },
         systemPrompt: 'CocosAgent system instructions',
     });
     const result = await kernel.run({ task: 'Continue the project task.', mode: 'Ask', history, signal: controller.signal });
     assert.equal(result.status, 'cancelled');
     assert.equal(result.reason, 'cancelled');
     assert.equal(completeCalls, 1);
-    assert.ok(summaryCalls > 1);
+    assert.equal(summaryCalls, 1, 'the overflow preparation reuses the prior summary before cancellation');
 });
 
 test('DeepSeek context-limit responses are normalized to the generic ProviderError contract', async () => {

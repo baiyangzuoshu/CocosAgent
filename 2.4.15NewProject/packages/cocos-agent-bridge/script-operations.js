@@ -1,5 +1,5 @@
 'use strict';
-// Creator 2.4.15 bounded project search and existing JS/TS editing. Source is parsed, never executed in the main process.
+// Creator 2.4.15 bounded project search and JS/TS asset creation/editing. Source is parsed, never executed in the main process.
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -29,6 +29,12 @@ function validInput(command, input) {
     if (!Object.keys(input).every((k) => check(input[k], schema.properties[k]))) return false;
     if (input.scriptPath && input.scriptPath.split('/').some((p) => p === '.' || p === '..')) return false;
     if (command === 'project.search') return !/[\u0000-\u001f\u007f]/.test(input.query);
+    if (command === 'script.create') {
+        if (input.action === 'apply') return typeof input.scriptPath === 'string' && typeof input.source === 'string' && input.sourceOperationId === undefined;
+        if (input.action === 'replay') return !!input.sourceOperationId && input.scriptPath === undefined && input.source === undefined
+            && input.sourceOperationId !== input.operationId;
+        return input.scriptPath === undefined && input.source === undefined && input.sourceOperationId === undefined;
+    }
     if (command !== 'script.patch') return true;
     const fields = identityFields;
     if (input.action === 'apply') return fields.every((k) => input[k] !== undefined) && input.sourceOperationId === undefined;
@@ -62,6 +68,42 @@ function readScript(root, scriptPath) {
     if (meta.importer !== scriptType || !/^[0-9a-f-]{36}$/i.test(meta.uuid || '')) fail('SCRIPT_METADATA_INVALID');
     return { scriptPath, scriptType, scriptUrl: `db://assets/${scriptPath}`, scriptUuid: meta.uuid, sourceSha256: sha(bytes),
         metaSha256: sha(metaBytes), source, filename };
+}
+function assetTarget(root, scriptPath) {
+    if (!validInput('script.read', { scriptPath })) fail('INVALID_INPUT');
+    const parts = scriptPath.split('/');
+    if (parts.some((part) => !part || part === '.' || part === '..')) fail('UNSAFE_PATH');
+    let directory = path.join(root, 'assets');
+    const rootStat = fs.lstatSync(directory);
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) fail('UNSAFE_PATH');
+    for (const part of parts.slice(0, -1)) {
+        directory = path.join(directory, part);
+        const stat = fs.lstatSync(directory);
+        if (!stat.isDirectory() || stat.isSymbolicLink()) fail('UNSAFE_PATH');
+    }
+    return { filename: path.join(directory, parts[parts.length - 1]), url: `db://assets/${scriptPath}` };
+}
+function classIdFor(editor, scriptUuid) {
+    const utils = editor && editor.Utils && editor.Utils.UuidUtils;
+    if (!utils || typeof utils.compressUuid !== 'function') fail('SCRIPT_CLASS_ID_UNAVAILABLE');
+    const classId = utils.compressUuid(scriptUuid);
+    if (typeof classId !== 'string' || !/^[A-Za-z0-9_+/=-]{20,24}$/.test(classId)) fail('SCRIPT_CLASS_ID_UNAVAILABLE');
+    return classId;
+}
+function maybeClassIdFor(editor, scriptUuid) { try { return classIdFor(editor, scriptUuid); } catch (_) { return null; } }
+function createAsset(editor, url, source) {
+    return new Promise((resolve, reject) => {
+        if (!editor.assetdb || typeof editor.assetdb.create !== 'function') { reject(Object.assign(new Error('ASSETDB_CREATE_UNAVAILABLE'), { code: 'ASSETDB_CREATE_UNAVAILABLE' })); return; }
+        try { editor.assetdb.create(url, source, (error, result) => error ? reject(error) : resolve(result)); }
+        catch (error) { reject(error); }
+    });
+}
+function deleteAsset(editor, url) {
+    return new Promise((resolve, reject) => {
+        if (!editor.assetdb || typeof editor.assetdb.delete !== 'function') { reject(Object.assign(new Error('ASSETDB_DELETE_UNAVAILABLE'), { code: 'ASSETDB_DELETE_UNAVAILABLE' })); return; }
+        try { editor.assetdb.delete([url], (error, result) => error ? reject(error) : resolve(result)); }
+        catch (error) { reject(error); }
+    });
 }
 function searchProject(root, input) {
     if (!validInput('project.search', input)) fail('INVALID_INPUT');
@@ -178,22 +220,136 @@ function createScriptService(root, editor, options = {}) {
         const record = JSON.parse(fs.readFileSync(file));
         if (record.operationId !== id || record.projectRoot !== root || record.creatorVersion !== '2.4.15'
             || sha(record.beforeSource || '') !== record.beforeSha256 || sha(record.afterSource || '') !== record.afterSha256
-            || !validInput('script.read', { scriptPath: record.scriptPath })) fail('SCRIPT_RECORD_INVALID');
+            || !validInput('script.read', { scriptPath: record.scriptPath })
+            || !['script.patch', 'script.create'].includes(record.capabilityId)
+            || (record.capabilityId === 'script.create' && record.beforeSource !== '')) fail('SCRIPT_RECORD_INVALID');
         return record;
     }
     function receipt(record) {
         const { beforeSource, afterSource, expectedDiff, ...summary } = record;
         let current = null;
         try { const live = readScript(root, record.scriptPath); current = { sourceSha256: live.sourceSha256, scriptUuid: live.scriptUuid,
-            metaSha256: live.metaSha256, matchesBefore: live.sourceSha256 === record.beforeSha256, matchesAfter: live.sourceSha256 === record.afterSha256 }; } catch (_) {}
+            metaSha256: live.metaSha256, scriptClassId: maybeClassIdFor(editor, live.scriptUuid),
+            matchesBefore: live.sourceSha256 === record.beforeSha256, matchesAfter: live.sourceSha256 === record.afterSha256 }; } catch (_) {}
         const review = ['writing', 'compiling', 'compensating', 'needs-review'].includes(record.state);
         return { success: !review && record.state !== 'compile-failed', outcome: review ? 'needs-review'
             : record.state === 'compile-failed' ? 'failed' : record.state === 'completed' ? 'needs-runtime' : 'completed',
             operationId: record.operationId, record: summary, current,
+            ...(record.capabilityId === 'script.create' ? { script: { scriptPath: record.scriptPath,
+                scriptUuid: record.scriptUuid || current && current.scriptUuid || null,
+                scriptClassId: record.scriptClassId || current && current.scriptClassId || null,
+                sourceSha256: record.afterSha256, metaSha256: record.metaSha256 || current && current.metaSha256 || null } } : {}),
             ...(record.error ? { error: record.error } : {}) };
     }
     function mappingMatches(script) {
         return editor.assetdb && typeof editor.assetdb.urlToUuid === 'function' && editor.assetdb.urlToUuid(script.scriptUrl) === script.scriptUuid;
+    }
+    function sourceReferences(scriptPath, scriptUuid, scriptClassId) {
+        const assetsRoot = path.join(root, 'assets'); let visited = 0; let referenced = false; let complete = true;
+        const tokens = [scriptPath, scriptPath.replace(/\.(?:js|ts)$/i, ''), scriptUuid, scriptClassId].filter(Boolean);
+        function walk(directory, relative, depth) {
+            if (referenced) return;
+            if (depth > 14 || visited >= 20000) { complete = false; return; }
+            let entries; try { entries = fs.readdirSync(directory, { withFileTypes: true }); } catch (_) { complete = false; return; }
+            for (const entry of entries) {
+                if (referenced) break;
+                if (visited >= 20000) { complete = false; break; }
+                if (entry.name.startsWith('.') || ['library', 'local', 'temp', 'build', 'node_modules'].includes(entry.name)) continue;
+                const filename = path.join(directory, entry.name); let stat;
+                try { stat = fs.lstatSync(filename); } catch (_) { complete = false; continue; }
+                if (stat.isSymbolicLink()) { complete = false; continue; }
+                if (stat.isDirectory()) { walk(filename, relative ? `${relative}/${entry.name}` : entry.name, depth + 1); continue; }
+                if (!stat.isFile() || entry.name.endsWith('.meta')) continue;
+                const itemPath = relative ? `${relative}/${entry.name}` : entry.name;
+                if (itemPath === scriptPath) continue;
+                const extension = path.extname(entry.name).toLowerCase();
+                if (!['.fire', '.prefab', '.js', '.ts'].includes(extension)) continue;
+                if (stat.size > 2 * 1024 * 1024) { complete = false; continue; }
+                visited++;
+                let body; try { body = fs.readFileSync(filename, 'utf8'); } catch (_) { complete = false; continue; }
+                if (tokens.some((token) => token && body.includes(token))) referenced = true;
+            }
+        }
+        walk(assetsRoot, '', 0); return { referenced, complete };
+    }
+    async function waitForCreatedAsset(record, started) {
+        const target = assetTarget(root, record.scriptPath); const deadline = Date.now() + timeoutMs;
+        while (Date.now() < deadline) {
+            try {
+                const script = readScript(root, record.scriptPath);
+                if (script.source !== record.afterSource) fail('SCRIPT_CHANGED_DURING_CREATE');
+                if (!mappingMatches(script)) { await new Promise((resolve) => setTimeout(resolve, 100)); continue; }
+                record.scriptUuid = script.scriptUuid; record.metaSha256 = script.metaSha256;
+                record.scriptClassId = classIdFor(editor, script.scriptUuid);
+                record.createdAtImporter = started; persist(record); return script;
+            } catch (error) {
+                if (['SCRIPT_CHANGED_DURING_CREATE'].includes(error.code)) throw error;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        fail('SCRIPT_IMPORT_TIMEOUT', 'Creator did not generate readable source metadata and an AssetDB UUID for this script. Query the original operation before retrying.');
+    }
+    async function createNewAsset(operationId, scriptPath, source, sourceOperationId) {
+        if (fs.existsSync(recordFile(operationId))) fail('OPERATION_ID_EXISTS');
+        const target = assetTarget(root, scriptPath);
+        if (fs.existsSync(target.filename) || fs.existsSync(`${target.filename}.meta`)
+            || (editor.assetdb && typeof editor.assetdb.exists === 'function' && editor.assetdb.exists(target.url))) fail('SCRIPT_DESTINATION_EXISTS');
+        if (path.extname(scriptPath) === '.js') {
+            try { new vm.Script(source, { filename: target.url }); }
+            catch (error) { fail('SCRIPT_SYNTAX_ERROR', String(error.message).slice(0, 800)); }
+        }
+        const record = { operationId, projectRoot: root, creatorVersion: '2.4.15', capabilityId: 'script.create', contractVersion: '0.2',
+            scriptPath, scriptUuid: null, scriptClassId: null, metaSha256: null, beforeSha256: sha(''), afterSha256: sha(source),
+            beforeSource: '', afterSource: source, expectedDiff: [], state: 'writing', intent: 'create', runtime: 'not-verified',
+            createdAt: new Date().toISOString(), ...(sourceOperationId ? { sourceOperationId } : {}) };
+        persist(record);
+        try {
+            const started = Date.now(); record.compileStartedAt = started; persist(record);
+            await createAsset(editor, target.url, source);
+            await waitForCreatedAsset(record, started);
+            record.state = 'compiling'; persist(record);
+            record.compilation = await refreshCompile(record, source, started);
+            record.state = 'completed'; persist(record); return receipt(record);
+        } catch (error) {
+            if (['writing', 'compiling'].includes(record.state)) {
+                record.state = ['SCRIPT_IMPORT_FAILED', 'SCRIPT_COMPILE_FAILED'].includes(error.code) ? 'compile-failed' : 'needs-review';
+                record.error = { code: error.code || 'SCRIPT_CREATE_FAILED', message: String(error.message).slice(0, 800),
+                    phase: record.state === 'writing' ? 'create' : 'compile', sideEffect: 'possible', retryable: false };
+                persist(record); return receipt(record);
+            }
+            throw error;
+        }
+    }
+    async function reconcileCreate(record) {
+        const target = assetTarget(root, record.scriptPath);
+        const present = fs.existsSync(target.filename) || fs.existsSync(`${target.filename}.meta`)
+            || (editor.assetdb && typeof editor.assetdb.urlToUuid === 'function' && !!editor.assetdb.urlToUuid(target.url));
+        if (!present) { record.state = 'compensated'; record.compilation = { status: 'write-reconciled-no-effect' };
+            delete record.error; persist(record); return receipt(record); }
+        const current = readScript(root, record.scriptPath);
+        if (current.sourceSha256 !== record.afterSha256 || current.source !== record.afterSource
+            || record.scriptUuid && current.scriptUuid !== record.scriptUuid
+            || record.metaSha256 && current.metaSha256 !== record.metaSha256 || !mappingMatches(current)) fail('SCRIPT_RECONCILE_CONFLICT');
+        record.scriptUuid = current.scriptUuid; record.metaSha256 = current.metaSha256;
+        record.scriptClassId = classIdFor(editor, current.scriptUuid);
+        if (record.intent === 'compensate') fail('SCRIPT_RECONCILE_REQUIRES_REVIEW');
+        record.compilation = await refreshCompile(record, record.afterSource, record.compileStartedAt || Date.now());
+        record.state = 'completed'; delete record.error; persist(record); return receipt(record);
+    }
+    async function compensateCreate(record) {
+        if (record.state === 'compensated') return receipt(record);
+        const current = readScript(root, record.scriptPath);
+        if (current.sourceSha256 !== record.afterSha256 || current.scriptUuid !== record.scriptUuid
+            || current.metaSha256 !== record.metaSha256 || !mappingMatches(current)) fail('SCRIPT_COMPENSATION_CONFLICT');
+        const references = sourceReferences(record.scriptPath, record.scriptUuid, record.scriptClassId);
+        if (references.referenced) fail('SCRIPT_ASSET_REFERENCED');
+        if (!references.complete) fail('SCRIPT_REFERENCE_CHECK_INCOMPLETE', 'Cannot prove the new script asset has no references; nothing was deleted.');
+        record.intent = 'compensate'; record.state = 'compensating'; persist(record);
+        await deleteAsset(editor, current.scriptUrl);
+        const target = assetTarget(root, record.scriptPath);
+        if (fs.existsSync(target.filename) || fs.existsSync(`${target.filename}.meta`)
+            || (editor.assetdb && typeof editor.assetdb.urlToUuid === 'function' && editor.assetdb.urlToUuid(target.url))) fail('SCRIPT_DELETE_UNVERIFIED');
+        record.state = 'compensated'; delete record.error; persist(record); return receipt(record);
     }
     function compileEvidence(record, expectedSource, started) {
         const prefix = `temp/quick-scripts/src/assets/${record.scriptPath}`;
@@ -252,13 +408,28 @@ function createScriptService(root, editor, options = {}) {
     async function execute(command, input) {
         if (!validInput(command, input)) fail('INVALID_INPUT');
         if (command === 'project.search') return searchProject(root, input);
-        if (command === 'script.read') { const { filename, ...script } = readScript(root, input.scriptPath); return script; }
+        if (command === 'script.read') { const { filename, ...script } = readScript(root, input.scriptPath);
+            return { ...script, scriptClassId: maybeClassIdFor(editor, script.scriptUuid) }; }
         if (command === 'script.patch.plan') { const { filename, source, after, ...proposal } = plan(root, input); return proposal; }
         if (command === 'script.operation.get') return receipt(load(input.operationId));
         if (busy) fail('SCRIPT_OPERATION_BUSY');
         busy = true;
         let record;
         try {
+            if (command === 'script.create') {
+                if (input.action === 'apply') return await createNewAsset(input.operationId, input.scriptPath, input.source);
+                if (input.action === 'replay') {
+                    const original = load(input.sourceOperationId);
+                    if (original.capabilityId !== 'script.create' || original.state !== 'compensated') fail('REPLAY_REQUIRES_COMPENSATED_RECORD');
+                    return await createNewAsset(input.operationId, original.scriptPath, original.afterSource, original.operationId);
+                }
+                record = load(input.operationId);
+                if (record.capabilityId !== 'script.create') fail('OPERATION_CAPABILITY_MISMATCH');
+                if (input.action === 'reconcile') return await reconcileCreate(record);
+                if (record.state === 'needs-review' || record.state === 'writing' || record.state === 'compiling' || record.state === 'compile-failed')
+                    fail('SCRIPT_CREATE_RECONCILE_REQUIRED');
+                return await compensateCreate(record);
+            }
             if (input.action === 'apply' || input.action === 'replay') {
                 if (fs.existsSync(recordFile(input.operationId))) fail('OPERATION_ID_EXISTS');
                 let proposal;

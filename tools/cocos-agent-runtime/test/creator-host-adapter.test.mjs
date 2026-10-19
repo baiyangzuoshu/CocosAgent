@@ -93,9 +93,11 @@ test('Creator Plan adapter returns preflight receipts and the live tool catalog 
         assert.match(systemPrompt, /cocos_2x_operation_get \[read\]/);
         assert.match(systemPrompt, /never list cocos_2x_instances_list, cocos_2x_instances_get, or cocos_2x_capabilities_list/);
         assert.match(systemPrompt, /Before finalizing a task-specific plan, use cocos_2x_skills_list/);
-        assert.match(systemPrompt, /asset\.validatePng tool requires an existing pipelineId/);
-        assert.match(systemPrompt, /workflow\.plan is only for its supported multi-node workflow/);
-        assert.match(systemPrompt, /runtime\.preview\.start through command execution/);
+        assert.match(systemPrompt, /Follow the selected task skill and command contract/);
+        assert.doesNotMatch(systemPrompt, /asset\.validatePng tool requires an existing pipelineId/);
+        assert.ok(!body.tools.some((tool) => tool.function.name === 'cocos_2x_command_execute'), 'writer catalog names do not grant Plan execution');
+        assert.equal(body.tools.some((tool) => tool.function.name === 'cocos_2x_asset_search_png'), requestRound >= 4,
+            'resource tools become executable only after the matching skill receipt');
         const toolResponse = (id, name, args) => ({ choices: [{ message: { tool_calls: [{ id, type: 'function',
             function: { name, arguments: JSON.stringify(args) } }] }, finish_reason: 'tool_calls' }] });
         const payload = requestRound === 1 ? { choices: [{ message: { content: plan }, finish_reason: 'stop' }] }
@@ -131,7 +133,7 @@ test('Creator Plan adapter returns preflight receipts and the live tool catalog 
 
         assert.equal(result.status, 'completed', `reason=${result.reason}; skills=${JSON.stringify(skillCalls)}`);
         assert.equal(hasPlanSetupReceipts(result.receipts), true);
-        assert.deepEqual(result.availableToolNames, definitions.map(({ name }) => name));
+        assert.deepEqual(result.availableToolNames, [...definitions.map(({ name }) => name), 'cocos_2x_tools_load']);
         assert.deepEqual(result.receipts.slice(0, 2).map(({ name }) => name), [
             'cocos_2x_instances_list', 'cocos_2x_capabilities_list',
         ]);
@@ -299,7 +301,10 @@ test('free Agent modification requests cannot complete after scene inspection, w
                 const interpretation = intentResponse(request, 'write', [], 'interaction');
                 if (interpretation) return interpretation;
                 round += 1;
-                const useTool = round === 1 || repeatTools;
+                if (round === 1) return new Response(JSON.stringify({ choices: [{ message: { tool_calls: [{
+                    id: 'load-scene-tools', type: 'function', function: { name: 'cocos_2x_tools_load', arguments: JSON.stringify({ groups: ['scene'] }) },
+                }] }, finish_reason: 'tool_calls' }] }), { status: 200 });
+                const useTool = round === 2 || repeatTools;
                 return new Response(JSON.stringify({ choices: [{ message: useTool
                     ? { tool_calls: [{ id: `snapshot-only-${round}`, type: 'function', function: { name: 'cocos_2x_scene_snapshot', arguments: JSON.stringify({ projectRoot }) } }] }
                     : { content: '网络连接弹窗已完成。' }, finish_reason: useTool ? 'tool_calls' : 'stop' }] }), { status: 200 });
@@ -314,8 +319,8 @@ test('free Agent modification requests cannot complete after scene inspection, w
             assert.match(result.finalText, /任务尚未完成/);
             assert.match(result.finalText, /交互验收入口/);
             assert.doesNotMatch(result.finalText, /弹窗已完成/);
-            if (repeatTools) assert.ok(round > 4 && round <= 16, 'budget exhaustion still reports unmet acceptance');
-            else assert.equal(round, 4, 'continuation stays bounded and performs no further tools');
+            if (repeatTools) assert.ok(round > 5 && round <= 16, 'budget exhaustion still reports unmet acceptance');
+            else assert.equal(round, 5, 'one loading round plus bounded continuation; performs no further Creator tools');
             if (persistent) assert.equal(tasks[0].status, 'in_progress');
         }
     } finally { globalThis.fetch = originalFetch; }

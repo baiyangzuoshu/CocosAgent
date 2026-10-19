@@ -1,0 +1,200 @@
+{
+  "date": "2026-10-18",
+  "platform": "macOS",
+  "projectRoot": "/Users/youjunmao/WORK/Cocos_Engine/tank",
+  "scope": "Live Creator 2.4.15 extension via installed MCP stdio; read-only instance and capability discovery",
+  "before": {
+    "error": "CAPABILITY_CATALOG_INVALID",
+    "field": "activeSceneUuid",
+    "receivedIdentifier": "3bhlmU29dDT5oFjrgZs7wk"
+  },
+  "sourceSha256": "fd2e819f53cbcf4bdf614635382018ec2ca64d95168770771329aad48ec562a0",
+  "calls": [
+    {
+      "tool": "cocos_2x_instances_list",
+      "success": true
+    },
+    {
+      "tool": "cocos_2x_instances_get",
+      "success": true
+    },
+    {
+      "tool": "cocos_2x_capabilities_list",
+      "success": true
+    }
+  ],
+  "after": {
+    "instance": {
+      "instanceId": "e3b61d61-176f-4add-a081-e2fa2bc7caaa",
+      "projectRoot": "/Users/youjunmao/WORK/Cocos_Engine/tank",
+      "creatorVersion": "2.4.15",
+      "extensionVersion": "0.3.24",
+      "state": "ready",
+      "extensionSourceFingerprint": "f07069331abfc7deb54215e67b954b74e6956a99dbc7c86abe1a5154af82a1e1",
+      "commandContractFingerprint": "6b56ea600512f7e05ef684885eb8fb82e8fe362b0c00bef13e1b377f816efe5c",
+      "activeScene": "New Node",
+      "activeSceneUuid": null,
+      "catalogRevision": "2bd293e3adf468155521ee4582b89627204c43ed03e5f393e1a9c0a1549a092f",
+      "hostRuntime": {
+        "version": "0.2.0",
+        "sourceFingerprint": "6e0b449b0e3c5feb6efe46ec93e9ec4048229cb54f54980e8251de88ec9211dd",
+        "contractSchemaFingerprint": "b14378154c76fd6be0227c815deba86477639604b90e31b2785d31fbeb19a32c"
+      },
+      "expectedRuntime": {
+        "agentPackage": {
+          "version": "0.3.7",
+          "fingerprint": "cb15a17e4e15e5e2580c0df9a3ef0104a4b251671a5deff637d2994e6afd93c9"
+        },
+        "mcp": {
+          "version": "0.3.7",
+          "sourceFingerprint": "b709260f8c8147cec66f27393028591edb680ed8fd6e5f628bbc4d52f6e39f56",
+          "contractSchemaFingerprint": "b14378154c76fd6be0227c815deba86477639604b90e31b2785d31fbeb19a32c"
+        },
+        "creatorExtension": {
+          "version": "0.3.24",
+          "sourceFingerprint": "f07069331abfc7deb54215e67b954b74e6956a99dbc7c86abe1a5154af82a1e1"
+        }
+      },
+      "mcpRuntime": {
+        "version": "0.3.7",
+        "agentPackageVersion": "0.3.7",
+        "agentPackageFingerprint": "cb15a17e4e15e5e2580c0df9a3ef0104a4b251671a5deff637d2994e6afd93c9",
+        "sourceFingerprint": "b709260f8c8147cec66f27393028591edb680ed8fd6e5f628bbc4d52f6e39f56",
+        "contractSchemaFingerprint": "b14378154c76fd6be0227c815deba86477639604b90e31b2785d31fbeb19a32c",
+        "status": "reported"
+      },
+      "contractCompatibility": {
+        "status": "matched",
+        "blockers": [],
+        "editorContractStatus": "matched",
+        "hostContractStatus": "matched"
+      },
+      "contractDiagnostics": [
+        {
+          "component": "scene",
+          "status": "unavailable",
+          "code": "SCENE_IDENTITY_UNAVAILABLE",
+          "fields": [
+            "activeSceneUuid"
+          ],
+          "reason": "SCENE_ASSET_NOT_IDENTIFIED"
+        }
+      ],
+      "error": null
+    },
+    "commands": [
+      {
+        "id": "project.search",
+        "status": "available",
+        "reason": null
+      },
+      {
+        "id": "script.read",
+        "status": "available",
+        "reason": null
+      },
+      {
+        "id": "script.patch.plan",
+        "status": "available",
+        "reason": null
+      },
+      {
+        "id": "script.patch",
+        "status": "available",
+        "reason": null
+      },
+      {
+        "id": "script.operation.get",
+        "status": "available",
+        "reason": null
+      },
+      {
+        "id": "scene.snapshot",
+        "status": "available",
+        "reason": null
+      },
+      {
+        "id": "runtime.preview.start",
+        "status": "unavailable",
+        "reason": "SCENE_IDENTITY_UNAVAILABLE"
+      },
+      {
+        "id": "scene.node.inspect",
+        "status": "available",
+        "reason": null
+      },
+      {
+        "id": "asset.searchPng",
+        "status": "available",
+        "reason": null
+      },
+      {
+        "id": "asset.importPng",
+        "status": "available",
+        "reason": null
+      },
+      {
+        "id": "asset.removeImportedPng",
+        "status": "available",
+        "reason": null
+      },
+      {
+        "id": "asset.validatePng",
+        "status": "available",
+        "reason": null
+      },
+      {
+        "id": "asset.refreshPng",
+        "status": "available",
+        "reason": null
+      },
+      {
+        "id": "asset.refreshFolder",
+        "status": "available",
+        "reason": null
+      },
+      {
+        "id": "scene.pngSprite",
+        "status": "available",
+        "reason": null
+      },
+      {
+        "id": "scene.node.create",
+        "status": "available",
+        "reason": null
+      },
+      {
+        "id": "scene.node.patch",
+        "status": "available",
+        "reason": null
+      },
+      {
+        "id": "prefab.source.patch",
+        "status": "available",
+        "reason": null
+      },
+      {
+        "id": "prefab.source.inspect",
+        "status": "available",
+        "reason": null
+      },
+      {
+        "id": "content.stress.run",
+        "status": "available",
+        "reason": null
+      }
+    ]
+  },
+  "tests": {
+    "command": "node tools/cocos-agent-bridge/catalog-host.mock-test.js",
+    "result": "passed"
+  },
+  "limits": [
+    "Current scene is unsaved; no persisted scene asset UUID is claimed.",
+    "No game assets, scenes, preview, gameplay, model request or panel interaction was tested or modified."
+  ],
+  "deployment": {
+    "target": "tank/packages/cocos-agent-bridge/assistant-runtime/tools/cocos-agent-bridge/catalog-host.js",
+    "sourceMatchesInstalled": true
+  }
+}

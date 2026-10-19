@@ -93,6 +93,7 @@ export interface AgentToolCall {
 export interface ModelResponse {
     message: AssistantMessage;
     finishReason: string | null;
+    usage?: import('./model-usage.js').ModelTokenUsage | null;
 }
 
 export interface ModelProvider {
@@ -101,10 +102,12 @@ export interface ModelProvider {
         messages: AgentMessage[];
         tools: AgentTool[];
         mode: AgentMode;
+        purpose?: import('./model-usage.js').ModelRequestPurpose;
         signal?: AbortSignal;
     }): Promise<ModelResponse>;
     /** Optional tool-free summary of historical dialogue during context compaction. */
-    summarizeContext?(input: { task: string; dialogue: string; signal?: AbortSignal }): Promise<string>;
+    summarizeContext?(input: { task: string; dialogue: string; signal?: AbortSignal;
+        summaryKind?: 'context' | 'conversation' }): Promise<string>;
 }
 
 export interface ToolRegistry {
@@ -237,8 +240,10 @@ export interface ContextCompactionReport {
 
 export type AgentEvent =
     | { type: 'run.started'; runId: string; mode: AgentMode }
-    | { type: 'model.requested'; runId: string; round: number }
-    | { type: 'model.responded'; runId: string; round: number; toolCount: number }
+    | { type: 'model.requested'; runId: string; round: number; attempt?: number;
+        inputProfile?: { toolCount: number; commandSchemaCount: number; toolsJsonBytes: number;
+            messagesJsonBytes: number; systemTextBytes: number } }
+    | { type: 'model.responded'; runId: string; round: number; toolCount: number; usage?: import('./model-usage.js').ModelTokenUsage | null }
     | { type: 'context.compacted'; runId: string; round: number; report: ContextCompactionReport }
     | { type: 'context.budget-exceeded'; runId: string; round: number; report: ContextCompactionReport }
     | { type: 'tool.approval-required'; request: ToolApprovalRequest }

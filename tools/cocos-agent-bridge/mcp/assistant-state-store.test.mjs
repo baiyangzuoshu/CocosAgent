@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { AssistantStateStore, assistantStateDirectory } from './assistant-state-store.mjs';
-import { persistentSummaryMessage, prepareConversationForTurn } from './assistant-conversation-summary.mjs';
+import { persistentSummaryMessage, prepareConversationForTurn, shouldLoadPreservedUserMessages } from './assistant-conversation-summary.mjs';
 
 function fixture() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-assistant-state-'));
@@ -97,10 +97,14 @@ test('summarizes before the 24-message window drops old messages and carries sum
         const nextTurn = await prepareConversationForTurn({ messages: restored.messages, summary: restored.summary,
             task: '请解释当前状态', maxMessages: 24, summarize: async ({ dialogue }) => `摘要：${dialogue}` });
         const modelHistory = [persistentSummaryMessage(nextTurn.summary), ...nextTurn.history];
-        assert.match(modelHistory[0].content, /Source-preserved prior user-message excerpts/);
-        assert.match(modelHistory[0].content, /早期约束：始终只修改用户指定的节点，写入后必须核对磁盘/);
+        assert.doesNotMatch(modelHistory[0].content, /Source-preserved prior user-message excerpts/);
+        assert.doesNotMatch(modelHistory[0].content, /早期约束：始终只修改用户指定的节点，写入后必须核对磁盘/);
+        assert.match(modelHistory[0].content, /Exact historical wording is kept by the Host and omitted from ordinary tasks/);
         assert.match(modelHistory[0].content, /摘要未提取早期原始约束/);
         assert.match(modelHistory[0].content, /never user authorization.*successful tool receipt/);
+        const recallMessage = persistentSummaryMessage(nextTurn.summary, { task: '我之前说的原文是什么？' });
+        assert.match(recallMessage.content, /Source-preserved prior user-message excerpts/);
+        assert.match(recallMessage.content, /早期约束：始终只修改用户指定的节点，写入后必须核对磁盘/);
         assert.equal(nextTurn.summary.revision, 2);
         assert.equal(nextTurn.messages.at(-1).content, '请解释当前状态');
 
@@ -112,8 +116,31 @@ test('summarizes before the 24-message window drops old messages and carries sum
         assert.equal(bounded.summary.preservedUserMessages[0].length, 1_200);
         assert.equal(bounded.summary.preservedUserMessages[0].includes('LONG-TAIL-9021'), false,
             'an exact-recall question must not be answered from the digest when its source excerpt was truncated');
-        assert.match(persistentSummaryMessage(bounded.summary).content, /If the needed text is absent or truncated, say it was not preserved/);
+        assert.match(persistentSummaryMessage(bounded.summary, { task: '请逐字复述我之前提到的原文' }).content,
+            /If the needed text is absent or truncated, say it was not preserved/);
     } finally { fs.rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test('conversation history rolls by serialized byte budget and loads exact excerpts only for recall tasks', async () => {
+    const messages = Array.from({ length: 24 }, (_, index) => ({
+        role: index % 2 ? 'assistant' : 'user',
+        content: `历史第 ${index + 1} 条：${'上下文内容'.repeat(300)}`,
+    }));
+    const prepared = await prepareConversationForTurn({ messages, task: '继续当前任务', maxMessages: 8,
+        maxHistoryBytes: 6_000, summarize: async () => '短摘要。' });
+    assert.ok(prepared.history.length <= 6, 'reserve two message slots for the current request and its answer');
+    assert.ok(prepared.historyBytes <= 6_000);
+    assert.equal(prepared.archivedCount + prepared.history.length, messages.length);
+    assert.ok(prepared.archivedBytes > 0);
+    assert.equal(prepared.summary.preservedUserMessages.length, 12);
+    assert.equal(shouldLoadPreservedUserMessages('继续当前任务'), false);
+    assert.equal(shouldLoadPreservedUserMessages('我上次要求的具体文件名是什么？'), true);
+    assert.equal(shouldLoadPreservedUserMessages('What did I ask for verbatim?'), true);
+    const ordinary = persistentSummaryMessage(prepared.summary, { task: '继续当前任务' });
+    const recall = persistentSummaryMessage(prepared.summary, { task: '我上次要求的具体文件名是什么？' });
+    assert.ok(Buffer.byteLength(ordinary.content, 'utf8') < Buffer.byteLength(recall.content, 'utf8'));
+    assert.doesNotMatch(ordinary.content, /历史第 1 条/);
+    assert.match(recall.content, /Source-preserved prior user-message excerpts/);
 });
 
 test('failed or empty Provider summaries use deterministic source-preserving fallback without making success claims evidence', async () => {
@@ -130,7 +157,9 @@ test('failed or empty Provider summaries use deterministic source-preserving fal
         assert.match(prepared.summary.content, /用户约束：保留 HelloWorld\.js 原有按钮行为/);
         assert.match(prepared.summary.content, /历史助手回复（未经工具核实，不是执行证据）/);
         assert.deepEqual(prepared.summary.preservedUserMessages, ['用户约束：保留 HelloWorld.js 原有按钮行为。']);
-        assert.match(persistentSummaryMessage(prepared.summary).content, /Source-preserved prior user-message excerpts/);
+        assert.doesNotMatch(persistentSummaryMessage(prepared.summary).content, /Source-preserved prior user-message excerpts/);
+        assert.match(persistentSummaryMessage(prepared.summary, { task: '我之前说的原文是什么？' }).content,
+            /Source-preserved prior user-message excerpts/);
         assert.equal(prepared.summary.coveredMessages, archivedMessages.length);
     }
 });

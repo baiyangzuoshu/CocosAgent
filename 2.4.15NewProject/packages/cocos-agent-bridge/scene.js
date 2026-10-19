@@ -284,6 +284,13 @@ module.exports = {
                     } else if (spec.classId === 'cc.Label') {
                         const component = node.addComponent(cc.Label);
                         component.string = spec.text;
+                    } else if (spec.classId === 'cocosScript') {
+                        const ScriptClass = cc.js._getClassById(spec.scriptClassId);
+                        if (!ScriptClass || !(ScriptClass.prototype instanceof cc.Component)
+                            || cc.js._getClassId(ScriptClass, false) !== spec.scriptClassId) {
+                            throw new Error('SCRIPT_CLASS_NOT_REGISTERED');
+                        }
+                        node.addComponent(ScriptClass);
                     }
                 }
             } catch (componentError) {
@@ -521,13 +528,20 @@ function validObjectSpec(params) {
     const seen = new Set();
     for (const component of components) {
         if (!component || typeof component !== 'object' || Array.isArray(component)
-            || !['cc.Sprite', 'cc.Label'].includes(component.classId) || seen.has(component.classId)) return false;
+            || !['cc.Sprite', 'cc.Label', 'cocosScript'].includes(component.classId) || seen.has(component.classId)) return false;
         seen.add(component.classId);
         if (component.classId === 'cc.Sprite') {
             if (Object.keys(component).some((key) => !['classId', 'spriteFrameUuid'].includes(key))
                 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(component.spriteFrameUuid || '')) return false;
-        } else if (Object.keys(component).some((key) => !['classId', 'text'].includes(key))
-            || typeof component.text !== 'string' || component.text.length > 256) return false;
+        } else if (component.classId === 'cc.Label') {
+            if (Object.keys(component).some((key) => !['classId', 'text'].includes(key))
+                || typeof component.text !== 'string' || component.text.length > 256) return false;
+        } else if (component.classId === 'cocosScript') {
+            if (Object.keys(component).some((key) => !['classId', 'scriptPath', 'scriptUuid', 'scriptClassId'].includes(key))
+                || !/^[A-Za-z0-9_ -]+(?:\/[A-Za-z0-9_. -]+)*\.(?:js|ts)$/.test(component.scriptPath || '')
+                || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(component.scriptUuid || '')
+                || !/^[A-Za-z0-9_+/=-]{20,24}$/.test(component.scriptClassId || '')) return false;
+        }
     }
     const transform = params.transform;
     if (transform !== undefined) {
@@ -576,6 +590,8 @@ function componentDetails(node) {
         if (classId === 'cc.Sprite') return { classId, enabled: component.enabled !== false,
             spriteFrameUuid: component.spriteFrame && component.spriteFrame._uuid || null };
         if (classId === 'cc.Label') return { classId, enabled: component.enabled !== false, text: component.string };
+        const scriptClassId = cc.js._getClassId(component, false);
+        if (scriptClassId) return { classId: 'cocosScript', scriptClassId, scriptName: classId, enabled: component.enabled !== false };
         return { classId };
     }).filter((item) => item.classId);
 }
@@ -757,6 +773,7 @@ function nodeMatchesSpec(node, params) {
         if (actual[i].classId !== expected[i].classId) return false;
         if (expected[i].classId === 'cc.Sprite' && actual[i].spriteFrameUuid !== expected[i].spriteFrameUuid) return false;
         if (expected[i].classId === 'cc.Label' && actual[i].text !== expected[i].text) return false;
+        if (expected[i].classId === 'cocosScript' && actual[i].scriptClassId !== expected[i].scriptClassId) return false;
     }
     if (params.prefabMode === 'instantiate' || params.prefabMode === 'create') {
         if (prefabUuidOf(node) !== params.prefabUuid) return false;

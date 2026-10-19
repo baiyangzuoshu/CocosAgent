@@ -25,7 +25,7 @@ function finish(result) {
     process.stdout.write(`command.result ${JSON.stringify({ command, result })}\n`);
 }
 function uncertain(code) {
-    const write = command === 'script.patch' && sent;
+    const write = ['script.patch', 'script.create'].includes(command) && sent;
     finish({ success: false, outcome: write ? 'needs-review' : 'failed', ...(input.operationId ? { operationId: input.operationId } : {}),
         error: { code, phase: 'execution', sideEffect: write ? 'possible' : 'none', retryable: false,
             message: write ? 'Query the original script operation and reconcile or compensate. Never repeat apply.' : code } });

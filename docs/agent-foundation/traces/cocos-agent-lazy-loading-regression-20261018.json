@@ -1,0 +1,72 @@
+{
+  "date": "2026-10-18",
+  "generatedAt": "2026-10-18T06:37:56.892Z",
+  "node": "v22.22.2",
+  "typescript": "5.9.3",
+  "platform": "darwin",
+  "arch": "arm64",
+  "evidence": "Automated local regression; real MCP metadata/resources and native TS adapter, simulated Creator and model responses. No real Creator project operations or billable model requests.",
+  "checks": {
+    "typescriptBuild": "passed",
+    "upstreamBaseline": {
+      "status": "passed",
+      "files": 18,
+      "commit": "0dcafa2ae053a1ddd6a72f265431104b08a5aa13"
+    },
+    "javascriptSyntax": "passed",
+    "diffWhitespace": "passed"
+  },
+  "suites": [
+    {
+      "name": "runtime",
+      "command": "node --test test/*.test.mjs",
+      "cwd": "tools/cocos-agent-runtime",
+      "log": "/private/tmp/cocos-runtime-lazy-regression-20261018.log",
+      "tests": 156,
+      "pass": 156,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0,
+      "logSha256": "0d34432ae1c9808bdf1132cefd1ad3170284e7de795b613b436b4f5a665bee78"
+    },
+    {
+      "name": "bridge",
+      "command": "npm test",
+      "cwd": "tools/cocos-agent-bridge/mcp",
+      "log": "/private/tmp/cocos-bridge-lazy-regression-20261018.log",
+      "tests": 109,
+      "pass": 109,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0,
+      "logSha256": "64e6d7ce0aafcbebc223a112f342a0355adbfab4eafefbc3d1e920fb017fd2cd"
+    }
+  ],
+  "totals": {
+    "tests": 265,
+    "pass": 265,
+    "fail": 0
+  },
+  "addedTests": {
+    "loader": 13,
+    "nativeMcpIntegration": 5
+  },
+  "fixes": [
+    "Reject null/non-object loader inputs and explicit null arrays with structured errors",
+    "Enforce mode and recovery tool filtering within the loader as well as existing outer gates"
+  ],
+  "sourceSha256": {
+    "tools/cocos-agent-runtime/src/creator-tool-loader.ts": "4e7268908396b828a7afcb7e158ee5b21d0c95974c8117590eb46b2d51188a70",
+    "tools/cocos-agent-runtime/src/creator-host-adapter.ts": "57f84e1f2dc90bcb2b99d657eaf62b4302b6dedb8ece6d5fb944f7379d32e756",
+    "tools/cocos-agent-runtime/src/creator-policy.ts": "b779876790cd582408a948d36376d0012391c5112ca2bd8877a6e375a6ac7e55",
+    "tools/cocos-agent-runtime/src/agent-loop.ts": "8ae865dd6e1abc62127561a0910c97710c62c4a64868705119602eb246c48d3d",
+    "tools/cocos-agent-runtime/test/creator-tool-loader.test.mjs": "ac12c299a5390fadcc56abc90f3dfe3243e60d8e721683b199ee1e1fd4d6d488",
+    "tools/cocos-agent-runtime/test/creator-host-adapter.test.mjs": "21ae175ec926e7ad9e4863a0d30e346a8755648a0c83b24cf52b872e760d70d5",
+    "tools/cocos-agent-runtime/test/creator-task-intent.test.mjs": "5a3071419be8fe09688b305b432970d464cf1b48d73904dc9bf10e06acc4d4ad",
+    "tools/cocos-agent-bridge/mcp/deepseek-agent.mjs": "fdc231f2cf479c519a4de43dee8829aaabd22e5cb9c194f22eb600687f47a791",
+    "tools/cocos-agent-bridge/mcp/native-lazy.test.mjs": "bc2aba38f3cccb7e7a3e0501d44381b46526fdf074fc6b156b9c92a4e2a4c737",
+    "tools/cocos-agent-bridge/mcp/package.json": "f05d8438909f459c4a0d9f9c2b4ab0ff2bc08dc5fb150f25a389fd951dd3f55b"
+  }
+}

@@ -100,6 +100,7 @@ function runtimeStateMatches(record, observed) {
         if (observed.components[i].classId !== expected[i].classId) return false;
         if (expected[i].classId === 'cc.Sprite' && observed.components[i].spriteFrameUuid !== expected[i].spriteFrameUuid) return false;
         if (expected[i].classId === 'cc.Label' && observed.components[i].text !== expected[i].text) return false;
+        if (expected[i].classId === 'cocosScript' && observed.components[i].scriptClassId !== expected[i].scriptClassId) return false;
         if (typeof expected[i].enabled === 'boolean' && observed.components[i].enabled !== expected[i].enabled) return false;
     }
     const transform = record.manifest.transform || {};

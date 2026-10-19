@@ -139,7 +139,9 @@ if (query !== 'instances.list') {
 
 const server = http.createServer((_request, response) => { response.writeHead(404); response.end(); });
 const wss = new WebSocket.Server({
-    server, path: '/cocos-agent-bridge', maxPayload: 16 * 1024,
+    // The capability catalog alone can exceed 16 KiB; script.read also supports
+    // bounded 64 KiB source files. Keep a finite ceiling while allowing those receipts.
+    server, path: '/cocos-agent-bridge', maxPayload: 512 * 1024,
     verifyClient: (info, done) => done(targets.some((target) => {
         const candidate = info.req.headers['x-cocos-agent-token'];
         const expected = Buffer.from(target.token);
@@ -147,6 +149,10 @@ const wss = new WebSocket.Server({
         return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
     })),
 });
+const bridgeDebugEnabled = process.env.COCOS_AGENT_BRIDGE_DEBUG === '1';
+function bridgeDebug(event, details = {}) {
+    if (bridgeDebugEnabled) process.stderr.write(`COCOS_AGENT_BRIDGE_DEBUG ${JSON.stringify({ event, ...details })}\n`);
+}
 let timer;
 let finished = false;
 
@@ -192,7 +198,9 @@ function finish() {
     else {
         const matches = targets.filter((target) => target.projectRoot === selectedProject);
         if (matches.length !== 1) output(false, null, { code: matches.length ? 'AMBIGUOUS_EDITOR' : 'EDITOR_NOT_FOUND', message: 'Target project does not select exactly one Editor.' });
-        else if (matches[0].state !== 'ready') output(false, null, { code: matches[0].error || 'EDITOR_NOT_CONNECTED', message: `Creator catalog is unavailable: ${selectedProject}` });
+        else if (matches[0].state !== 'ready') output(false, null, { code: matches[0].error || 'EDITOR_NOT_CONNECTED',
+            message: `Creator catalog is unavailable: ${selectedProject}`,
+            diagnostics: matches[0].contractDiagnostics });
         else if (query === 'instances.get') output(true, publicInstance(matches[0]));
         else output(true, { instance: publicInstance(matches[0]), commands: matches[0].commands });
     }
@@ -306,14 +314,32 @@ function runtimeStateMatches(command, sceneReady) {
 }
 
 function validCatalog(target, result) {
-    if (!Array.isArray(result.commands) || result.commands.length > 64
-        || !(result.activeScene === null || typeof result.activeScene === 'string')
-        || !(result.activeSceneUuid === undefined || result.activeSceneUuid === null
-            || typeof result.activeSceneUuid === 'string' && /^[0-9a-fA-F-]{36}$/.test(result.activeSceneUuid))
-        || !/^[0-9a-f]{64}$/.test(result.catalogRevision || '')) return false;
+    const reject = (field, reason) => {
+        target.contractDiagnostics.push({ component: 'catalog', status: 'invalid',
+            code: 'CAPABILITY_CATALOG_INVALID', fields: [field], reason,
+            ...(field === 'activeSceneUuid' && typeof result[field] === 'string'
+                ? { receivedIdentifier: result[field].slice(0, 128) } : {}) });
+        return false;
+    };
+    if (!Array.isArray(result.commands) || result.commands.length > 64)
+        return reject('commands', 'EXPECTED_BOUNDED_COMMAND_ARRAY');
+    if (!(result.activeScene === null || typeof result.activeScene === 'string'))
+        return reject('activeScene', 'EXPECTED_SCENE_NAME_OR_NULL');
+    // Creator 2.4 gives an unsaved scene a compressed object ID. It is useful
+    // for detecting a scene switch, but is not a persisted scene asset UUID.
+    const transientSceneId = target.creatorVersion === '2.4.15'
+        && typeof result.activeSceneUuid === 'string'
+        && /^[0-9a-fA-F]{2}[A-Za-z0-9+/]{20}$/.test(result.activeSceneUuid);
+    if (!(result.activeSceneUuid === undefined || result.activeSceneUuid === null || transientSceneId
+        || typeof result.activeSceneUuid === 'string' && /^[0-9a-fA-F-]{36}$/.test(result.activeSceneUuid)))
+        return reject('activeSceneUuid', 'EXPECTED_ASSET_UUID_OR_NULL');
+    if (!/^[0-9a-f]{64}$/.test(result.catalogRevision || ''))
+        return reject('catalogRevision', 'EXPECTED_SHA256');
+    const sceneAssetUuid = transientSceneId ? null : result.activeSceneUuid || null;
     const expected = {
         ...(target.creatorVersion === '2.4.15' ? { 'project.search': { access: 'read', inputSchema: 'catalog.schema.json#/$defs/projectSearchInput2x', input: catalogSchema.$defs.projectSearchInput2x, preconditions: ['projectAssetsAvailable'] } } : {}),
         ...(target.creatorVersion === '2.4.15' ? { 'script.read': { contractVersion: '0.2', access: 'read', inputSchema: 'catalog.schema.json#/$defs/scriptReadInput2x', input: catalogSchema.$defs.scriptReadInput2x, preconditions: ['existingProjectScript', 'assetDbReady'] } } : {}),
+        ...(target.creatorVersion === '2.4.15' ? { 'script.create': { contractVersion: '0.2', access: 'write', inputSchema: 'catalog.schema.json#/$defs/scriptCreateInput2x', input: catalogSchema.$defs.scriptCreateInput2x, preconditions: ['destinationFree', 'assetDbReady', 'creatorImporter'] } } : {}),
         ...(target.creatorVersion === '2.4.15' ? { 'script.patch.plan': { contractVersion: '0.2', access: 'read', inputSchema: 'catalog.schema.json#/$defs/scriptPatchPlanInput2x', input: catalogSchema.$defs.scriptPatchPlanInput2x, preconditions: ['existingProjectScript', 'assetDbReady'] } } : {}),
         ...(target.creatorVersion === '2.4.15' ? { 'script.patch': { contractVersion: '0.2', access: 'write', inputSchema: 'catalog.schema.json#/$defs/scriptPatchInput2x', input: catalogSchema.$defs.scriptPatchInput2x, preconditions: ['existingProjectScript', 'assetDbReady'] } } : {}),
         ...(target.creatorVersion === '2.4.15' ? { 'script.operation.get': { contractVersion: '0.2', access: 'read', inputSchema: 'catalog.schema.json#/$defs/scriptOperationGetInput2x', input: catalogSchema.$defs.scriptOperationGetInput2x, preconditions: ['existingProjectScript', 'assetDbReady'] } } : {}),
@@ -358,7 +384,7 @@ function validCatalog(target, result) {
     }
     const actualRevision = sha256(JSON.stringify({ scene: result.activeScene,
         ...(result.activeSceneUuid ? { sceneUuid: result.activeSceneUuid } : {}), commands: result.commands }));
-    if (actualRevision !== result.catalogRevision) return false;
+    if (actualRevision !== result.catalogRevision) return reject('catalogRevision', 'CATALOG_REVISION_MISMATCH');
     const actualFingerprint = commandContractFingerprint(result.commands);
     const compatibility = runtimeCompatibility(target, result, actualFingerprint);
     const byId = new Map();
@@ -369,6 +395,8 @@ function validCatalog(target, result) {
         else byId.set(command.id, command);
     }
     const diagnostics = [...compatibility.diagnostics];
+    if (result.activeScene && !sceneAssetUuid) diagnostics.push({ component: 'scene', status: 'unavailable',
+        code: 'SCENE_IDENTITY_UNAVAILABLE', fields: ['activeSceneUuid'], reason: 'SCENE_ASSET_NOT_IDENTIFIED' });
     const normalized = [];
     const sceneReady = typeof result.activeScene === 'string' && result.activeScene.length > 0;
     for (const [id, rule] of Object.entries(expected)) {
@@ -404,6 +432,9 @@ function validCatalog(target, result) {
         } else if (compatibility.blockers.length) {
             status = 'unavailable';
             reason = compatibility.blockers[0];
+        } else if (actual.id === 'runtime.preview.start' && !sceneAssetUuid) {
+            status = 'unavailable';
+            reason = 'SCENE_IDENTITY_UNAVAILABLE';
         }
         normalized.push({ ...actual, status, reason,
             editorStatus, editorReason,
@@ -421,7 +452,8 @@ function validCatalog(target, result) {
     }
     target.commands = normalized;
     target.activeScene = result.activeScene;
-    target.activeSceneUuid = result.activeSceneUuid || null;
+    target.editorSceneUuid = result.activeSceneUuid;
+    target.activeSceneUuid = sceneAssetUuid;
     target.catalogRevision = result.catalogRevision;
     target.extensionVersion = result.extensionVersion || null;
     target.extensionSourceFingerprint = result.extensionSourceFingerprint || null;
@@ -435,11 +467,14 @@ function validCatalog(target, result) {
 
 wss.on('connection', (socket, request) => {
     const target = targets.find((item) => item.token === request.headers['x-cocos-agent-token']);
+    bridgeDebug('connection', { targetFound: !!target, path: request.url, state: target?.state || null });
     if (!target || target.socket) { socket.close(1008); return; }
     target.socket = socket;
     socket.on('message', (raw) => {
         let message;
         try { message = JSON.parse(raw.toString()); } catch (_) { unavailable(target, 'INVALID_RESPONSE'); return; }
+        bridgeDebug('message', { type: message.type, method: message.method || null, bytes: Buffer.byteLength(raw), state: target.state,
+            idMatches: message.id === target.requestId, ok: typeof message.ok === 'boolean' ? message.ok : null });
         if (message.type === 'hello') {
             if (message.creatorVersion !== target.creatorVersion) {
                 socket.send(JSON.stringify({ type: 'helloAck', accepted: false, reason: 'creator-version-mismatch' }));
@@ -479,7 +514,9 @@ wss.on('connection', (socket, request) => {
         if (target.state === 'catalogued') {
             if (message.ok === true) {
                 if (result.nonce !== target.nonce || result.creatorVersion !== target.creatorVersion
-                    || path.resolve(result.projectRoot || '') !== target.projectRoot || result.sceneName !== target.activeScene) {
+                    || path.resolve(result.projectRoot || '') !== target.projectRoot || result.sceneName !== target.activeScene
+                    || target.creatorVersion === '2.4.15' && target.editorSceneUuid !== undefined
+                        && (result.sceneUuid || null) !== target.editorSceneUuid) {
                     unavailable(target, 'SCENE_CHANGED');
                     return;
                 }
@@ -491,8 +528,14 @@ wss.on('connection', (socket, request) => {
             maybeFinish();
         }
     });
-    socket.on('close', () => { if (!finished && target.state !== 'ready' && target.state !== 'unavailable') unavailable(target, 'EDITOR_DISCONNECTED'); });
-    socket.on('error', () => { if (!finished) unavailable(target, 'EDITOR_DISCONNECTED'); });
+    socket.on('close', (code, reason) => {
+        bridgeDebug('close', { code, reason: Buffer.from(reason || '').toString('utf8').slice(0, 120), state: target.state });
+        if (!finished && target.state !== 'ready' && target.state !== 'unavailable') unavailable(target, 'EDITOR_DISCONNECTED');
+    });
+    socket.on('error', (error) => {
+        bridgeDebug('socket-error', { code: error?.code || null, message: String(error?.message || error).slice(0, 160), state: target.state });
+        if (!finished) unavailable(target, 'EDITOR_DISCONNECTED');
+    });
 });
 
 server.listen(0, '127.0.0.1', () => {

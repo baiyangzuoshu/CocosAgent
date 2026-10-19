@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "recordedAt": "2026-10-18T02:44:59.744Z",
+  "scope": "Creator 2.4.15 native Agent TypeScript kernel",
+  "evidence": "Deterministic local fixtures executed against the built runtime before and after this phase; no Provider requests or Creator operations",
+  "fixtureSha256": "6b26e1c9126e511be9dbbd689885d13c37d74138df63e0ebad8c2d184bd5d6cc",
+  "sourceSha256": "db6c66a26a43f134bfb291591cf5e3f1078a6b5ac5b01b6049ba33e931eeaca0",
+  "builtSha256": "a7a897ec69a6d59ab94b62e7ee51cf51f79141f634d2a1f526ec75d344e1f425",
+  "before": {
+    "kind": "deterministic local fixture, no API calls",
+    "dedup": {
+      "toolPacketBytes": 16396,
+      "secondRequestBytes": 16917,
+      "rawReceiptPreserved": true,
+      "status": "completed"
+    },
+    "historyReuse": {
+      "mainLoopCalls": 4,
+      "summaryCalls": 4,
+      "summarySourceChars": 96000,
+      "modelMessageBytes": 5706,
+      "canonicalMessages": 21,
+      "compactions": 4,
+      "status": "completed"
+    }
+  },
+  "after": {
+    "kind": "deterministic local fixture, no API calls",
+    "dedup": {
+      "toolPacketBytes": 8193,
+      "secondRequestBytes": 8673,
+      "rawReceiptPreserved": true,
+      "status": "completed"
+    },
+    "historyReuse": {
+      "mainLoopCalls": 4,
+      "summaryCalls": 1,
+      "summarySourceChars": 24000,
+      "modelMessageBytes": 6470,
+      "canonicalMessages": 21,
+      "compactions": 1,
+      "status": "completed"
+    }
+  },
+  "checks": {
+    "rawReceiptsPreserved": true,
+    "canonicalMessageCountPreserved": true,
+    "mainLoopCallCountUnchanged": true
+  },
+  "localValidation": {
+    "runtimeTests": {
+      "passed": 143,
+      "failed": 0
+    },
+    "bridgeCompatibilityTests": {
+      "passed": 43,
+      "failed": 0
+    },
+    "typeScriptBuild": "passed"
+  },
+  "limitations": [
+    "Fixture byte and character counts are not billed token counts",
+    "The retained active model view contains more recent paired messages than repeated aggressive compaction; its accumulated model-message bytes increased in this fixture",
+    "Native installation, same-task real API usage comparison and restart acceptance remain pending for this phase"
+  ]
+}

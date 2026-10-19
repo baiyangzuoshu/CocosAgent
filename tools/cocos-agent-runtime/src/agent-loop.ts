@@ -55,16 +55,33 @@ function hasSuccessfulTaskReceipt(receipts: AgentReceipt[]): boolean {
         && receipt.result.structuredContent?.success === true);
 }
 
+function sameJsonValue(left: unknown, right: unknown, depth = 0): boolean {
+    if (left === right) return true;
+    if (depth >= 100) return false; // Leave unusually deep output untouched if equivalence cannot be proved.
+    if (Array.isArray(left) || Array.isArray(right)) {
+        return Array.isArray(left) && Array.isArray(right) && left.length === right.length
+            && left.every((value, index) => sameJsonValue(value, right[index], depth + 1));
+    }
+    if (!isRecord(left) || !isRecord(right)) return false;
+    const keys = Object.keys(left);
+    return keys.length === Object.keys(right).length
+        && keys.every((key) => Object.hasOwn(right, key) && sameJsonValue(left[key], right[key], depth + 1));
+}
+
 function modelResult(result: AgentToolResult, maxChars = MAX_TOOL_RESULT_CHARS): string {
-    const blocks = (result.content || []).filter((block) => block.type === 'text');
-    const payload = {
-        isError: result.isError === true,
-        structuredContent: result.structuredContent,
-        content: blocks,
-    };
     let encoded: string;
     try {
-        encoded = JSON.stringify(payload);
+        const structuredJson = JSON.stringify(result.structuredContent);
+        const structured = structuredJson === undefined ? undefined : JSON.parse(structuredJson);
+        const blocks = (result.content || []).filter((block) => {
+            if (block.type !== 'text') return false;
+            if (structuredJson === undefined) return true;
+            if (block.text === structuredJson) return false;
+            try { return !sameJsonValue(JSON.parse(block.text), structured); }
+            catch { return true; }
+        });
+        encoded = JSON.stringify({ isError: result.isError === true,
+            structuredContent: structured, content: blocks });
     } catch {
         return JSON.stringify({ isError: true, error: { code: 'TOOL_RESULT_UNSERIALIZABLE' } });
     }
@@ -155,6 +172,10 @@ export class AgentKernel {
             ...history,
             { role: 'user', content: input.task.trim() },
         ];
+        // Keep the complete audit history above. Only append new messages to the reusable model view.
+        let activeMessages: AgentMessage[] = [];
+        let activeHistoryLength = 0;
+        const dialogueSummaryCache = new Map<string, string>();
         const callIds = new Set<string>();
         let toolCallCount = 0;
         let emptyAgentResponses = 0;
@@ -192,21 +213,37 @@ export class AgentKernel {
                 discovered.push(TOOL_RESULT_ARCHIVE_TOOL);
             }
             const available = runPolicy?.filterTools?.(discovered, input.mode) || discovered;
-            const contextInput = {
-                messages,
+            activeMessages = [...activeMessages, ...messages.slice(activeHistoryLength)];
+            activeHistoryLength = messages.length;
+            let contextInput = {
+                messages: activeMessages,
                 tools: available,
                 activeTask: input.task.trim(),
                 receipts,
                 ...(effectiveBudget ? { options: effectiveBudget } : {}),
             };
             let prepared = prepareAgentContext(contextInput);
+            if (prepared.report.compacted) {
+                // Rebuild indexes from exact original calls and full receipts whenever another
+                // compaction is necessary; never summarize a previous summary/index as fresh evidence.
+                contextInput = { ...contextInput, messages };
+                prepared = prepareAgentContext(contextInput);
+            }
             const summarizePrepared = async (current: typeof prepared): Promise<typeof prepared> => {
                 if (!current.report.compacted || !current.dialogueToSummarize?.trim()
                     || !this.options.provider.summarizeContext || input.signal?.aborted) return current;
                 try {
-                    const summary = await this.options.provider.summarizeContext({ task: input.task.trim(),
-                        dialogue: current.dialogueToSummarize, ...(input.signal ? { signal: input.signal } : {}) });
-                    if (!summary.trim()) return current;
+                    const dialogue = current.dialogueToSummarize;
+                    let summary = dialogueSummaryCache.get(dialogue);
+                    if (summary === undefined) {
+                        try {
+                            summary = (await this.options.provider.summarizeContext({ task: input.task.trim(),
+                                dialogue, summaryKind: 'context', ...(input.signal ? { signal: input.signal } : {}) })).trim().slice(0, 2_400);
+                        } catch { summary = ''; }
+                        // Empty/failed summaries also use the deterministic fallback once for this exact source.
+                        dialogueSummaryCache.set(dialogue, summary);
+                    }
+                    if (!summary) return current;
                     const candidate = prepareAgentContext({ ...contextInput,
                         options: { ...effectiveBudget, maxEstimatedTokens: current.report.maxEstimatedTokens }, dialogueSummary: summary });
                     return candidate.fitsBudget ? candidate : current;
@@ -233,16 +270,27 @@ export class AgentKernel {
                 reason = 'context-budget-exceeded';
                 break;
             }
+            activeMessages = prepared.messages;
             let response;
             let providerAttempt = 0;
             while (true) {
                 if (input.signal?.aborted) { reason = 'cancelled'; break; }
-                await this.emit({ type: 'model.requested', runId, round });
+                const bytes = (value: string) => new TextEncoder().encode(value).byteLength;
+                const commandTool = available.find((tool) => tool.name === 'cocos_2x_command_execute');
+                await this.emit({ type: 'model.requested', runId, round, attempt: providerAttempt + 1, inputProfile: {
+                    toolCount: available.length,
+                    commandSchemaCount: Array.isArray(commandTool?.inputSchema.oneOf) ? commandTool.inputSchema.oneOf.length : 0,
+                    toolsJsonBytes: bytes(JSON.stringify(available.map((tool) => ({ type: 'function',
+                        function: { name: tool.name, description: tool.description, parameters: tool.inputSchema } })))),
+                    messagesJsonBytes: bytes(JSON.stringify(prepared.messages)),
+                    systemTextBytes: prepared.messages.reduce((total, message) => total + (message.role === 'system' ? bytes(message.content) : 0), 0),
+                } });
                 try {
                     response = await this.options.provider.complete({
                         messages: prepared.messages,
                         tools: available,
                         mode: input.mode,
+                        purpose: 'main-loop',
                         ...(input.signal ? { signal: input.signal } : {}),
                     });
                     break;
@@ -257,7 +305,8 @@ export class AgentKernel {
                             break;
                         }
                         effectiveBudget = { ...effectiveBudget, maxEstimatedTokens: reducedBudget };
-                        const retry = prepareAgentContext({ ...contextInput, options: effectiveBudget });
+                        contextInput = { ...contextInput, messages, options: effectiveBudget };
+                        const retry = prepareAgentContext(contextInput);
                         prepared = await summarizePrepared(retry);
                         if (input.signal?.aborted) { reason = 'cancelled'; break; }
                         if (!prepared.fitsBudget) {
@@ -271,6 +320,7 @@ export class AgentKernel {
                             contextCompactions.push(prepared.report);
                             await this.emit({ type: 'context.compacted', runId, round, report: prepared.report });
                         }
+                        activeMessages = prepared.messages;
                         continue;
                     }
                     if (error instanceof ProviderError && error.code === 'PROVIDER_CONTEXT_LIMIT') {
@@ -300,7 +350,8 @@ export class AgentKernel {
             const assistant = response.message;
             const calls = assistant.toolCalls || [];
             await runPolicy?.onAssistantMessage?.(assistant, receipts);
-            await this.emit({ type: 'model.responded', runId, round, toolCount: calls.length });
+            await this.emit({ type: 'model.responded', runId, round, toolCount: calls.length,
+                ...(response.usage !== undefined ? { usage: response.usage } : {}) });
 
             const responseCallIds = new Set<string>();
             let invalidCallId = false;

@@ -688,6 +688,45 @@ test('Creator Ask gates tools behind exact 2.4.15 instance and capability receip
     assert.deepEqual(calls[2], { name: 'cocos_2x_scene_snapshot', args: { projectRoot: root, input: {} } });
 });
 
+test('Creator Ask exposes only the fixed script-create reconciler under a matching recovery lock', async () => {
+    const root = '/tmp/cocos-ask-recovery-project';
+    const calls = [];
+    const definitions = [
+        { name: 'cocos_2x_instances_list', description: 'instances', inputSchema: {}, annotations: { readOnlyHint: true } },
+        { name: 'cocos_2x_capabilities_list', description: 'capabilities', inputSchema: {}, annotations: { readOnlyHint: true } },
+        { name: 'cocos_2x_command_execute', description: 'generic command', inputSchema: {}, annotations: { readOnlyHint: false } },
+        { name: 'cocos_2x_script_create_reconcile', description: 'fixed reconcile', inputSchema: {}, annotations: { readOnlyHint: false } },
+    ];
+    const registry = new CocosReadOnlyToolRegistry({
+        callTool: async ({ name, arguments: args }) => {
+            calls.push({ name, args });
+            if (name === 'cocos_2x_instances_list') return { structuredContent: { success: true, data: [
+                { projectRoot: root, creatorVersion: '2.4.15', state: 'ready' },
+            ] } };
+            if (name === 'cocos_2x_capabilities_list') return { structuredContent: { success: true, data: {
+                instance: { projectRoot: root, creatorVersion: '2.4.15', state: 'ready' },
+                commands: [{ id: 'script.create', status: 'available' }],
+            } } };
+            return { structuredContent: { success: true, outcome: 'completed', operationId: args.operationId } };
+        },
+    }, definitions, root, { cocos_2x_script_create_reconcile: 'script.create' }, undefined, true);
+    await registry.verifyCreator();
+    const offered = await registry.listTools();
+    const reconcile = offered.find((tool) => tool.name === 'cocos_2x_script_create_reconcile');
+    assert.equal(reconcile?.role, 'recovery');
+    const policy = createCreatorAgentPolicy({ mode: 'Agent', baseInstructions: '',
+        pendingRecovery: { field: 'operationId', value: 'operation-1', toolName: 'cocos_2x_command_execute' },
+        approveWrite: async () => true });
+    const run = policy.createRunPolicy({});
+    const recoveryTools = run.filterTools(offered);
+    assert.deepEqual(recoveryTools.map((tool) => tool.name), ['cocos_2x_script_create_reconcile']);
+    assert.deepEqual(run.beforeTool({ tool: reconcile, arguments: { projectRoot: root, operationId: 'operation-1' },
+        receipts: [], availableTools: recoveryTools }), { action: 'allow' });
+    const result = await registry.callTool({ name: reconcile.name, arguments: { projectRoot: root, operationId: 'operation-1' } });
+    assert.equal(result.structuredContent.success, true);
+    assert.equal(calls.at(-1).name, 'cocos_2x_script_create_reconcile');
+});
+
 test('Creator read-only preflight deterministically verifies the selected project before exposing task tools', async () => {
     const root = '/tmp/cocos-ask-project';
     const calls = [];

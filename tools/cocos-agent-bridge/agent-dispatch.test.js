@@ -156,6 +156,17 @@ assert.strictEqual(result.outcome, 'needs-preview');
 assert.deepStrictEqual(result.result.components, nodeComponents);
 assert(nodeInvokeCalls.some((call) => call.script === 'node-create-host.js' && call.args.includes('--components')
     && call.args.includes(JSON.stringify(nodeComponents)) && call.args.includes('--transform') && call.args.includes(JSON.stringify(nodeTransform))));
+const scriptComponents = [{ classId: 'cocosScript', scriptPath: 'TankGame.ts',
+    scriptUuid: 'd5cce470-1e42-4917-a416-332e905525c0', scriptClassId: '0123456789012345678901' }];
+const scriptRecord = { ...nodeRecord, manifest: { ...nodeRecord.manifest, components: scriptComponents, transform: {} } };
+result = dispatch({ ...nodeRequest, input: { ...nodeRequest.input, components: scriptComponents, transform: undefined } },
+    (script, args) => script === 'node-create-host.js' && args.includes('--operation-get')
+        ? { status: 0, stdout: JSON.stringify({ success: true, data: scriptRecord }) }
+        : nodeInvoke(script, args));
+assert.strictEqual(result.outcome, 'needs-preview');
+assert.deepStrictEqual(result.result.components, scriptComponents);
+assert(nodeInvokeCalls.some((call) => call.script === 'node-create-host.js' && call.args.includes('--components')
+    && call.args.includes(JSON.stringify(scriptComponents))));
 const prefabUuid = 'a95b3432-8b0f-41a5-83d7-4485249126b5';
 const prefabInput = { ...nodeRequest.input, components: undefined, transform: { position: { x: 32, y: -16 } },
     prefabMode: 'instantiate', prefabUuid };
@@ -168,6 +179,11 @@ assert.strictEqual(dispatch({ ...nodeRequest, input: { ...nodeRequest.input, pre
 assert.strictEqual(dispatch({ ...request, input: { ...request.input, prefabMode: 'instantiate', prefabUuid } }, mock().invoke).error.code, 'INVALID_ARGUMENT');
 assert.strictEqual(dispatch({ ...nodeRequest, input: { ...nodeRequest.input, components: [{ classId: 'cc.Camera' }] } }, nodeInvoke).error.code,
     'INVALID_ARGUMENT');
+const beforeInvalidScriptComponent = nodeInvokeCalls.length;
+assert.strictEqual(dispatch({ ...nodeRequest, input: { ...nodeRequest.input,
+    components: [{ classId: 'cocosScript', scriptPath: 'TankGame.ts', scriptUuid: 'invalid', scriptClassId: 'short' }] } }, nodeInvoke).error.code,
+    'INVALID_ARGUMENT');
+assert.strictEqual(nodeInvokeCalls.length, beforeInvalidScriptComponent, 'custom scripts require exact UUID and serialized class ID');
 const stressProject = '/tmp/cocos-agent-dispatch-performance-2x';
 const stressInstance = { ...instance, creatorVersion: '2.4.15', projectRoot: stressProject, activeScene: 'helloworld' };
 const stressInput = { buildId: 'p1-web-20261009', resourcePaths: ['RedReleaseOct09', 'BlueReleaseOct09'],

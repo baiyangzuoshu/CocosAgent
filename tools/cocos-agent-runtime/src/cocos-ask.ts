@@ -6,7 +6,7 @@ const SKILL_TOOLS = new Set(['cocos_2x_skills_list', 'cocos_2x_skill_read', 'coc
 const SETUP_TOOLS = new Set([INSTANCE_LIST, CAPABILITIES_LIST, ...SKILL_TOOLS]);
 const RECOVERY_TOOLS = new Set([
     'cocos_2x_operation_get', 'cocos_2x_operation_reconcile', 'cocos_2x_script_operation_get',
-    'cocos_2x_script_patch', 'cocos_2x_workflow_get', 'cocos_2x_workflow_compensate',
+    'cocos_2x_script_patch', 'cocos_2x_script_create_reconcile', 'cocos_2x_workflow_get', 'cocos_2x_workflow_compensate',
     'cocos_2x_assets_scene_get', 'cocos_2x_assets_scene_validate', 'cocos_2x_assets_scene_compensate',
     'cocos_2x_content_build_get', 'cocos_2x_content_build_reconcile', 'cocos_2x_content_preview_get',
     'cocos_2x_content_get', 'cocos_2x_bundle_dependencies_get',

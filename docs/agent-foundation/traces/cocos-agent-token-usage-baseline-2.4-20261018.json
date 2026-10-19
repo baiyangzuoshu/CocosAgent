@@ -1,0 +1,477 @@
+{
+  "version": 1,
+  "recordedAt": "2026-10-18T02:36:09.260Z",
+  "provenance": "Observed existing completed Creator-native runs; no additional model requests submitted by this baseline audit",
+  "projectRoot": "/Users/youjunmao/WORK/Cocos_Engine/tank",
+  "creatorVersion": "2.4.15",
+  "extensionVersion": "0.3.26",
+  "model": "deepseek-v4-pro",
+  "stateFile": "/Users/youjunmao/.local/state/CocosAgent/assistant-sessions/97ab02a6554d4fd34c7a8bbd36663bf5a8cd09a950f9cb9799c28644345d7d64/state-v1.json",
+  "installedTelemetryHashes": [
+    {
+      "target": "panel/index.js",
+      "source": "2.4.15NewProject/packages/cocos-agent-bridge/panel/index.js",
+      "installedSha256": "eb73d33c66d9ca1b3286dd3481c6acc584acf7717d489f751a8b6d8f95eb9196",
+      "sourceSha256": "eb73d33c66d9ca1b3286dd3481c6acc584acf7717d489f751a8b6d8f95eb9196",
+      "matches": true
+    },
+    {
+      "target": "assistant-runtime/tools/cocos-agent-runtime/dist/deepseek-provider.js",
+      "source": "tools/cocos-agent-runtime/dist/deepseek-provider.js",
+      "installedSha256": "369a1dcfae0ef4de3bfa50d1fce30466935ae8480c2e983c773755240080c349",
+      "sourceSha256": "369a1dcfae0ef4de3bfa50d1fce30466935ae8480c2e983c773755240080c349",
+      "matches": true
+    },
+    {
+      "target": "assistant-runtime/tools/cocos-agent-runtime/dist/model-usage.js",
+      "source": "tools/cocos-agent-runtime/dist/model-usage.js",
+      "installedSha256": "d7d0c55961333dc3700798d98ad31b7a96fb2d4467747daa25fdbea4696bd769",
+      "sourceSha256": "d7d0c55961333dc3700798d98ad31b7a96fb2d4467747daa25fdbea4696bd769",
+      "matches": true
+    },
+    {
+      "target": "assistant-runtime/tools/cocos-agent-runtime/dist/creator-host-adapter.js",
+      "source": "tools/cocos-agent-runtime/dist/creator-host-adapter.js",
+      "installedSha256": "a55060e3a1a7e2ca919d8848f72e7a73bb59b8e22e9bba14f43a1e55b03557b8",
+      "sourceSha256": "a55060e3a1a7e2ca919d8848f72e7a73bb59b8e22e9bba14f43a1e55b03557b8",
+      "matches": true
+    },
+    {
+      "target": "assistant-runtime/tools/cocos-agent-bridge/mcp/assistant-host.mjs",
+      "source": "tools/cocos-agent-bridge/mcp/assistant-host.mjs",
+      "installedSha256": "7bb5eb1dea3963867dde2cf5a4f21ee63a88d004e38d67acd640e8cd490c4d34",
+      "sourceSha256": "7bb5eb1dea3963867dde2cf5a4f21ee63a88d004e38d67acd640e8cd490c4d34",
+      "matches": true
+    },
+    {
+      "target": "assistant-runtime/tools/cocos-agent-bridge/mcp/assistant-state-store.mjs",
+      "source": "tools/cocos-agent-bridge/mcp/assistant-state-store.mjs",
+      "installedSha256": "9f2bd3aa2ecb43b6f13949965f983daf431c8a8bc09ab1b5d87f106b85b03348",
+      "sourceSha256": "9f2bd3aa2ecb43b6f13949965f983daf431c8a8bc09ab1b5d87f106b85b03348",
+      "matches": true
+    }
+  ],
+  "samples": [
+    {
+      "runId": "cocos-1792290802500-8a0fad253bd96",
+      "mode": "Ask",
+      "task": "只读重新核对当前 Creator 2.4.15 实例与能力目录：工程必须为 /Users/youjunmao/WORK/Cocos_Engine/tank，列出 script.read、script.operation.get、script.create、script.create.reconcile 对应工具的实时可用状态，并提供同一份 Host 回执的 contractCompatibility 与 MCP expected/actual sourceFingerprint。不要读取脚本内容，不要调用写入或恢复命令，不修改项目。",
+      "status": "completed",
+      "reason": "completed",
+      "startedAt": "2026-10-18T02:33:22.543Z",
+      "finishedAt": "2026-10-18T02:33:34.390Z",
+      "tracePath": "/Users/youjunmao/.local/state/CocosAgent/agent-runs/2026-10-18T02-33-22-541Z-b494f425.jsonl",
+      "traceSha256": "790726789f92c16e8437fe987447714551cb9d1253dd8cac7efac4938d15b62f",
+      "requests": [
+        {
+          "requestId": "8955382b-227d-4dfd-aa5c-7acc752acaac",
+          "provider": "deepseek",
+          "model": "deepseek-v4-pro",
+          "purpose": "summary",
+          "summaryKind": "conversation",
+          "startedAt": "2026-10-18T02:33:22.570Z",
+          "durationMs": 1760,
+          "status": "completed",
+          "httpStatus": 200,
+          "usage": {
+            "inputTokens": 1045,
+            "outputTokens": 132,
+            "totalTokens": 1177,
+            "cacheHitTokens": 0,
+            "cacheMissTokens": 1045,
+            "reasoningTokens": null
+          }
+        },
+        {
+          "requestId": "d5d32951-db49-45b2-ab58-b2369c5e7eb2",
+          "provider": "deepseek",
+          "model": "deepseek-v4-pro",
+          "purpose": "main-loop",
+          "startedAt": "2026-10-18T02:33:26.210Z",
+          "durationMs": 8156,
+          "status": "completed",
+          "httpStatus": 200,
+          "usage": {
+            "inputTokens": 31226,
+            "outputTokens": 776,
+            "totalTokens": 32002,
+            "cacheHitTokens": 1408,
+            "cacheMissTokens": 29818,
+            "reasoningTokens": null
+          }
+        }
+      ],
+      "summary": {
+        "requestCount": 2,
+        "reportedRequestCount": 2,
+        "totals": {
+          "inputTokens": 32271,
+          "outputTokens": 908,
+          "totalTokens": 33179,
+          "cacheHitTokens": 1408,
+          "cacheMissTokens": 30863,
+          "reasoningTokens": null
+        },
+        "coverage": {
+          "inputTokens": 2,
+          "outputTokens": 2,
+          "totalTokens": 2,
+          "cacheHitTokens": 2,
+          "cacheMissTokens": 2,
+          "reasoningTokens": 0
+        },
+        "byPurpose": {
+          "task-understanding": {
+            "requestCount": 0,
+            "reportedRequestCount": 0,
+            "totals": {
+              "inputTokens": null,
+              "outputTokens": null,
+              "totalTokens": null,
+              "cacheHitTokens": null,
+              "cacheMissTokens": null,
+              "reasoningTokens": null
+            },
+            "coverage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "cacheHitTokens": 0,
+              "cacheMissTokens": 0,
+              "reasoningTokens": 0
+            }
+          },
+          "main-loop": {
+            "requestCount": 1,
+            "reportedRequestCount": 1,
+            "totals": {
+              "inputTokens": 31226,
+              "outputTokens": 776,
+              "totalTokens": 32002,
+              "cacheHitTokens": 1408,
+              "cacheMissTokens": 29818,
+              "reasoningTokens": null
+            },
+            "coverage": {
+              "inputTokens": 1,
+              "outputTokens": 1,
+              "totalTokens": 1,
+              "cacheHitTokens": 1,
+              "cacheMissTokens": 1,
+              "reasoningTokens": 0
+            }
+          },
+          "summary": {
+            "requestCount": 1,
+            "reportedRequestCount": 1,
+            "totals": {
+              "inputTokens": 1045,
+              "outputTokens": 132,
+              "totalTokens": 1177,
+              "cacheHitTokens": 0,
+              "cacheMissTokens": 1045,
+              "reasoningTokens": null
+            },
+            "coverage": {
+              "inputTokens": 1,
+              "outputTokens": 1,
+              "totalTokens": 1,
+              "cacheHitTokens": 1,
+              "cacheMissTokens": 1,
+              "reasoningTokens": 0
+            }
+          }
+        }
+      },
+      "checks": {
+        "traceAndStateRequestIdsMatch": true,
+        "traceAndStateTotalsMatch": true,
+        "writeToolCalls": 0
+      },
+      "traceToolEvents": [
+        {
+          "event": "tool.call",
+          "toolName": "cocos_2x_instances_list",
+          "callId": "63398911-bfe4-49d1-a515-59707ff7a5f0",
+          "access": "read",
+          "preflight": true
+        },
+        {
+          "event": "tool.result",
+          "toolName": "cocos_2x_instances_list",
+          "callId": "63398911-bfe4-49d1-a515-59707ff7a5f0",
+          "preflight": true,
+          "success": true,
+          "isError": false
+        },
+        {
+          "event": "tool.call",
+          "toolName": "cocos_2x_capabilities_list",
+          "callId": "5fb5ab7e-3350-4a2e-814b-303d6998e59b",
+          "access": "read",
+          "preflight": true
+        },
+        {
+          "event": "tool.result",
+          "toolName": "cocos_2x_capabilities_list",
+          "callId": "5fb5ab7e-3350-4a2e-814b-303d6998e59b",
+          "preflight": true,
+          "success": true,
+          "isError": false
+        }
+      ],
+      "nativePanel": {
+        "evidence": "Observed with cua accessibility snapshot; usage summary and expanded request details",
+        "summaryMatches": true,
+        "requestIds": [
+          "8955382b-227d-4dfd-aa5c-7acc752acaac",
+          "d5d32951-db49-45b2-ab58-b2369c5e7eb2"
+        ]
+      }
+    },
+    {
+      "runId": "cocos-1792290876144-89429e46e0eb",
+      "mode": "Ask",
+      "task": "读取当前已安装的 CocosAgent 技能目录，并读取 cocos2-script-development 的完整技能正文；只执行这两项只读技能查询，不读取或修改项目资产。",
+      "status": "completed",
+      "reason": "completed",
+      "startedAt": "2026-10-18T02:34:36.170Z",
+      "finishedAt": "2026-10-18T02:34:51.868Z",
+      "tracePath": "/Users/youjunmao/.local/state/CocosAgent/agent-runs/2026-10-18T02-34-36-170Z-f2c89a19.jsonl",
+      "traceSha256": "33382557a60e76b0824dc52c2dd0f153d78bba6b71ed639287b321a2213c082a",
+      "requests": [
+        {
+          "requestId": "6c36a6bb-963b-41a7-bb84-002a1373fa51",
+          "provider": "deepseek",
+          "model": "deepseek-v4-pro",
+          "purpose": "summary",
+          "summaryKind": "conversation",
+          "startedAt": "2026-10-18T02:34:36.175Z",
+          "durationMs": 1339,
+          "status": "completed",
+          "httpStatus": 200,
+          "usage": {
+            "inputTokens": 532,
+            "outputTokens": 49,
+            "totalTokens": 581,
+            "cacheHitTokens": 0,
+            "cacheMissTokens": 532,
+            "reasoningTokens": null
+          }
+        },
+        {
+          "requestId": "c31b49b2-c54b-4cea-a175-6b12dbacb032",
+          "provider": "deepseek",
+          "model": "deepseek-v4-pro",
+          "purpose": "main-loop",
+          "startedAt": "2026-10-18T02:34:39.536Z",
+          "durationMs": 4001,
+          "status": "completed",
+          "httpStatus": 200,
+          "usage": {
+            "inputTokens": 31874,
+            "outputTokens": 60,
+            "totalTokens": 31934,
+            "cacheHitTokens": 7168,
+            "cacheMissTokens": 24706,
+            "reasoningTokens": null
+          }
+        },
+        {
+          "requestId": "cf0be08a-b123-4713-b9ca-2d58e0deba11",
+          "provider": "deepseek",
+          "model": "deepseek-v4-pro",
+          "purpose": "main-loop",
+          "startedAt": "2026-10-18T02:34:43.580Z",
+          "durationMs": 1621,
+          "status": "completed",
+          "httpStatus": 200,
+          "usage": {
+            "inputTokens": 32866,
+            "outputTokens": 73,
+            "totalTokens": 32939,
+            "cacheHitTokens": 31872,
+            "cacheMissTokens": 994,
+            "reasoningTokens": null
+          }
+        },
+        {
+          "requestId": "7a3f8b6e-b49f-4188-846b-7fd53a5c1790",
+          "provider": "deepseek",
+          "model": "deepseek-v4-pro",
+          "purpose": "main-loop",
+          "startedAt": "2026-10-18T02:34:45.247Z",
+          "durationMs": 6588,
+          "status": "completed",
+          "httpStatus": 200,
+          "usage": {
+            "inputTokens": 34377,
+            "outputTokens": 855,
+            "totalTokens": 35232,
+            "cacheHitTokens": 32896,
+            "cacheMissTokens": 1481,
+            "reasoningTokens": null
+          }
+        }
+      ],
+      "summary": {
+        "requestCount": 4,
+        "reportedRequestCount": 4,
+        "totals": {
+          "inputTokens": 99649,
+          "outputTokens": 1037,
+          "totalTokens": 100686,
+          "cacheHitTokens": 71936,
+          "cacheMissTokens": 27713,
+          "reasoningTokens": null
+        },
+        "coverage": {
+          "inputTokens": 4,
+          "outputTokens": 4,
+          "totalTokens": 4,
+          "cacheHitTokens": 4,
+          "cacheMissTokens": 4,
+          "reasoningTokens": 0
+        },
+        "byPurpose": {
+          "task-understanding": {
+            "requestCount": 0,
+            "reportedRequestCount": 0,
+            "totals": {
+              "inputTokens": null,
+              "outputTokens": null,
+              "totalTokens": null,
+              "cacheHitTokens": null,
+              "cacheMissTokens": null,
+              "reasoningTokens": null
+            },
+            "coverage": {
+              "inputTokens": 0,
+              "outputTokens": 0,
+              "totalTokens": 0,
+              "cacheHitTokens": 0,
+              "cacheMissTokens": 0,
+              "reasoningTokens": 0
+            }
+          },
+          "main-loop": {
+            "requestCount": 3,
+            "reportedRequestCount": 3,
+            "totals": {
+              "inputTokens": 99117,
+              "outputTokens": 988,
+              "totalTokens": 100105,
+              "cacheHitTokens": 71936,
+              "cacheMissTokens": 27181,
+              "reasoningTokens": null
+            },
+            "coverage": {
+              "inputTokens": 3,
+              "outputTokens": 3,
+              "totalTokens": 3,
+              "cacheHitTokens": 3,
+              "cacheMissTokens": 3,
+              "reasoningTokens": 0
+            }
+          },
+          "summary": {
+            "requestCount": 1,
+            "reportedRequestCount": 1,
+            "totals": {
+              "inputTokens": 532,
+              "outputTokens": 49,
+              "totalTokens": 581,
+              "cacheHitTokens": 0,
+              "cacheMissTokens": 532,
+              "reasoningTokens": null
+            },
+            "coverage": {
+              "inputTokens": 1,
+              "outputTokens": 1,
+              "totalTokens": 1,
+              "cacheHitTokens": 1,
+              "cacheMissTokens": 1,
+              "reasoningTokens": 0
+            }
+          }
+        }
+      },
+      "checks": {
+        "traceAndStateRequestIdsMatch": true,
+        "traceAndStateTotalsMatch": true,
+        "writeToolCalls": 0
+      },
+      "traceToolEvents": [
+        {
+          "event": "tool.call",
+          "toolName": "cocos_2x_instances_list",
+          "callId": "d8dd1081-b6c7-4074-b5f7-fd9937f7d366",
+          "access": "read",
+          "preflight": true
+        },
+        {
+          "event": "tool.result",
+          "toolName": "cocos_2x_instances_list",
+          "callId": "d8dd1081-b6c7-4074-b5f7-fd9937f7d366",
+          "preflight": true,
+          "success": true,
+          "isError": false
+        },
+        {
+          "event": "tool.call",
+          "toolName": "cocos_2x_capabilities_list",
+          "callId": "374b30b5-61d1-49a8-9f76-fda87b83caec",
+          "access": "read",
+          "preflight": true
+        },
+        {
+          "event": "tool.result",
+          "toolName": "cocos_2x_capabilities_list",
+          "callId": "374b30b5-61d1-49a8-9f76-fda87b83caec",
+          "preflight": true,
+          "success": true,
+          "isError": false
+        },
+        {
+          "event": "tool.call",
+          "toolName": "cocos_2x_skills_list",
+          "callId": "call_00_WuJd8IjhgYMohYXXEyIo1075",
+          "access": "read",
+          "preflight": false
+        },
+        {
+          "event": "tool.result",
+          "toolName": "cocos_2x_skills_list",
+          "callId": "call_00_WuJd8IjhgYMohYXXEyIo1075",
+          "preflight": false,
+          "success": true,
+          "isError": false
+        },
+        {
+          "event": "tool.call",
+          "toolName": "cocos_2x_skill_read",
+          "callId": "call_00_BNqqv44dTHW3epGnEVak3249",
+          "access": "read",
+          "preflight": false
+        },
+        {
+          "event": "tool.result",
+          "toolName": "cocos_2x_skill_read",
+          "callId": "call_00_BNqqv44dTHW3epGnEVak3249",
+          "preflight": false,
+          "success": true,
+          "isError": false
+        }
+      ],
+      "nativePanel": {
+        "evidence": "Not separately visually confirmed; persistent state and JSONL cross-checked"
+      }
+    }
+  ],
+  "limitations": [
+    "Ask-mode read-only samples only",
+    "Task understanding, run-time context summarization, failures and retries not exercised by these two samples",
+    "No Provider billing statement comparison",
+    "First sample has native panel accessibility evidence; second has state/trace evidence only"
+  ]
+}

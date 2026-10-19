@@ -538,7 +538,8 @@ test('recovery reads the live instance and capability contract before the exact 
         'cocos_2x_instances_list', 'cocos_2x_capabilities_list', 'cocos_2x_script_operation_get',
     ]);
     assert.deepEqual(calls[1].arguments, { projectRoot });
-    assert.deepEqual(calls[2].arguments, { operationId }, 'script operation schema receives only the exact operation ID');
+    assert.deepEqual(calls[2].arguments, { projectRoot, input: { operationId } },
+        'script operation tool receives its required projectRoot and nested input contract');
 });
 
 test('scene ledger recovery does not require Host operation.get to appear in the Creator command catalog', async () => {
@@ -711,6 +712,93 @@ for (const approved of [false, true]) {
         } finally { fs.rmSync(value.parent, { recursive: true, force: true }); }
     });
 }
+
+test('uncertain script.create permits only its original reconcile action without a second write approval', async () => {
+    const value = fixture();
+    const operationId = '7a7aa726-71e8-4ce9-867f-27d89b350130';
+    const calls = [];
+    let round = 0;
+    let approvalCount = 0;
+    const invokeAgent = async (request) => {
+        calls.push(request);
+        if (request.method === 'instances.list') return { id: request.id, result: { success: true, data: [
+            { projectRoot: value.projects[0], creatorVersion: '2.4.15', state: 'ready', activeScene: 'TankArena' },
+        ] } };
+        if (request.method === 'capabilities.list') return { id: request.id, result: { success: true, data: {
+            instance: { projectRoot: value.projects[0], creatorVersion: '2.4.15', state: 'ready' },
+            commands: [{ id: 'script.create', access: 'write', status: 'available' }],
+        } } };
+        if (request.method === 'command.execute' && request.params.command === 'script.create') {
+            if (request.params.input.action === 'apply') return { id: request.id, result: { success: false, outcome: 'needs-review', command: 'script.create',
+                operationId, error: { code: 'SCRIPT_COMPILE_TIMEOUT', sideEffect: 'possible' } } };
+            if (request.params.input.action === 'reconcile') return { id: request.id, result: { success: true, outcome: 'needs-runtime', command: 'script.create',
+                operationId, record: { state: 'completed' } } };
+        }
+        throw new Error(`Unexpected dispatch ${request.method}`);
+    };
+    try {
+        const result = await withMcp([value.projects[0]], invokeAgent, (client) => runDeepSeekAgent({
+            client, mode: 'Agent', task: 'Create a script and reconcile its exact operation after an uncertain receipt.',
+            projectRoots: [value.projects[0]], skillFiles: [DEFAULT_SKILL], tracePath: value.tracePath,
+            apiKey: 'test-secret', allowWrite: true, approveWrite: async () => { approvalCount += 1; return true; },
+            callModel: async () => {
+                round += 1;
+                if (round === 1) return modelToolResponse(toolCall('instances', 'cocos_2x_instances_list', {}));
+                if (round === 2) return modelToolResponse(toolCall('caps', 'cocos_2x_capabilities_list', { projectRoot: value.projects[0] }));
+                if (round === 3) return modelToolResponse(toolCall('create', 'cocos_2x_command_execute', { projectRoot: value.projects[0],
+                    command: 'script.create', input: { action: 'apply', operationId, scriptPath: 'TankGame.ts', source: 'cc.Class({ extends: cc.Component });' } }));
+                if (round === 4) return modelToolResponse(toolCall('reconcile', 'cocos_2x_script_create_reconcile', {
+                    projectRoot: value.projects[0], operationId }));
+                return { id: 'final', choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: 'The original operation is reconciled.' } }] };
+            },
+        }));
+        assert.equal(result.status, 'completed');
+        assert.equal(approvalCount, 2, 'the original write and its recovery each pass the local approval gate');
+        const writes = calls.filter((call) => call.method === 'command.execute');
+        assert.equal(writes.length, 2);
+        assert.deepEqual(writes.map((call) => call.params.input.action), ['apply', 'reconcile']);
+        assert.ok(writes.every((call) => call.params.input.operationId === operationId));
+    } finally { fs.rmSync(value.parent, { recursive: true, force: true }); }
+});
+
+test('uncertain script.create blocks a different operation ID while recovery is required', async () => {
+    const value = fixture();
+    const operationId = '7a7aa726-71e8-4ce9-867f-27d89b350131';
+    const calls = [];
+    let round = 0;
+    const invokeAgent = async (request) => {
+        calls.push(request);
+        if (request.method === 'instances.list') return { id: request.id, result: { success: true, data: [
+            { projectRoot: value.projects[0], creatorVersion: '2.4.15', state: 'ready', activeScene: 'TankArena' },
+        ] } };
+        if (request.method === 'capabilities.list') return { id: request.id, result: { success: true, data: {
+            instance: { projectRoot: value.projects[0], creatorVersion: '2.4.15', state: 'ready' },
+            commands: [{ id: 'script.create', access: 'write', status: 'available' }, { id: 'scene.node.create', access: 'write', status: 'available' }],
+        } } };
+        if (request.method === 'command.execute') return { id: request.id, result: { success: false, outcome: 'needs-review', command: 'script.create',
+            operationId, error: { code: 'SCRIPT_COMPILE_TIMEOUT', sideEffect: 'possible' } } };
+        throw new Error(`Unexpected dispatch ${request.method}`);
+    };
+    try {
+        const result = await withMcp([value.projects[0]], invokeAgent, (client) => runDeepSeekAgent({
+            client, mode: 'Agent', task: 'Create a script.', projectRoots: [value.projects[0]],
+            skillFiles: [DEFAULT_SKILL], tracePath: value.tracePath, apiKey: 'test-secret', allowWrite: true,
+            approveWrite: async () => true,
+            callModel: async () => {
+                round += 1;
+                if (round === 1) return modelToolResponse(toolCall('instances', 'cocos_2x_instances_list', {}));
+                if (round === 2) return modelToolResponse(toolCall('caps', 'cocos_2x_capabilities_list', { projectRoot: value.projects[0] }));
+                if (round === 3) return modelToolResponse(toolCall('create', 'cocos_2x_command_execute', { projectRoot: value.projects[0],
+                    command: 'script.create', input: { action: 'apply', operationId, scriptPath: 'TankGame.ts', source: 'cc.Class({ extends: cc.Component });' } }));
+                return modelToolResponse(toolCall('wrong-operation', 'cocos_2x_command_execute', { projectRoot: value.projects[0],
+                    command: 'script.create', input: { action: 'compensate', operationId: '8a8a8a8a-8888-4888-8888-888888888888' } }));
+            },
+        }));
+        assert.equal(result.status, 'needs-review');
+        assert.equal(calls.filter((call) => call.method === 'command.execute').length, 1, 'blocked write never reaches Creator');
+        assert.equal(result.reason, 'unresolved_operation_receipt');
+    } finally { fs.rmSync(value.parent, { recursive: true, force: true }); }
+});
 
 test('DeepSeek agent discovers instances, selects a ready project, queries live capabilities, then inspects read-only', async () => {
     const value = fixture();

@@ -211,11 +211,7 @@ function packageSkillIndex() {
                 references: skill.references.map((id) => {
                     const reference = references.get(id);
                     if (!reference) throw new Error(`Unknown skill package reference: ${id}`);
-                    return {
-                        id,
-                        uri: `cocos://2x/references/${id}`,
-                        sha256: packageFile(path.join('references', id)).sha256,
-                    };
+                    return { id, uri: `cocos://2x/references/${id}`, sha256: packageFile(path.join('references', id)).sha256 };
                 }),
             };
         }),
@@ -241,7 +237,6 @@ function packageSkillText(skill) {
 }
 
 function registerSkillPackageResources(server) {
-    const references = new Map(SKILL_PACKAGE.references.map((reference) => [reference.id, reference]));
     const indexUri = 'cocos://2x/skills/index';
     server.registerResource('cocos2-skills-index', indexUri, {
         title: 'CocosAgent 2.x skill and reference index',
@@ -306,6 +301,17 @@ function zodCompatibleContract(schema) {
 }
 
 function addCommandRules(command, schema) {
+    if (command === 'script.create') return schema.superRefine((input, context) => {
+        if (input.action === 'apply') {
+            if (!input.scriptPath || typeof input.source !== 'string') context.addIssue({ code: 'custom', path: ['scriptPath'], message: 'Apply requires a target script path and source.' });
+            if (input.sourceOperationId) context.addIssue({ code: 'custom', path: ['sourceOperationId'], message: 'Apply does not accept a source operation.' });
+        } else if (input.action === 'replay') {
+            if (!input.sourceOperationId) context.addIssue({ code: 'custom', path: ['sourceOperationId'], message: 'Replay requires a compensated source operation.' });
+            if (input.scriptPath || input.source !== undefined) context.addIssue({ code: 'custom', path: ['scriptPath'], message: 'Replay takes its path and source from the original operation.' });
+        } else if (input.scriptPath || input.source !== undefined || input.sourceOperationId) {
+            context.addIssue({ code: 'custom', path: ['operationId'], message: 'Compensate and reconcile only accept an operation ID.' });
+        }
+    });
     if (command === 'scene.node.create') return schema.superRefine((input, context) => {
         if (input.prefabMode === 'create' && input.prefabUuid)
             context.addIssue({ code: 'custom', path: ['prefabUuid'], message: 'Prefab creation assigns its own UUID.' });
@@ -481,7 +487,7 @@ function createServer(projectRoots, options = {}) {
         };
         try {
             const contentWrite = method === 'command.execute'
-                ? ['script.patch', 'scene.node.create', 'scene.node.patch', 'scene.pngSprite', 'prefab.source.patch',
+                ? ['script.create', 'script.patch', 'scene.node.create', 'scene.node.patch', 'scene.pngSprite', 'prefab.source.patch',
                     'asset.importPng', 'asset.removeImportedPng', 'asset.refreshPng', 'asset.refreshFolder'].includes(params.command)
                 : /^(?:assets|scene|workflow)\..*\.(?:execute|compensate|replay|repair)$/.test(method);
             // Invalidate before dispatch, including uncertain writes and captures in flight.
@@ -656,6 +662,14 @@ function createServer(projectRoots, options = {}) {
             }), { title: tool.name, readOnlyHint: tool.command !== 'content.stress.run', destructiveHint: false,
                 idempotentHint: tool.command !== 'content.stress.run', openWorldHint: false });
     }
+
+    register('cocos_2x_script_create_reconcile',
+        'Reconcile one exact uncertain Creator 2.4.15 script.create operation. This tool accepts only the original operationId and always runs action=reconcile; it cannot create, compensate, replay, or select another command.',
+        z.object({ projectRoot, operationId: OPERATION_ID }).strict(), 'command.execute',
+        ({ projectRoot: selected, operationId }) => ({ targets: targetList, projectRoot: selected,
+            creatorVersion: CREATOR_VERSION, command: 'script.create', input: { action: 'reconcile', operationId } }),
+        { title: 'Reconcile one script creation', readOnlyHint: false, destructiveHint: false,
+            idempotentHint: true, openWorldHint: false });
 
     server.registerTool('cocos_2x_runtime_observe', {
         description: 'Observe the registered Creator 2.4.15 Web preview with its exact active scene name, UUID and editor instance. Opens an isolated visible Agent preview window on first observation and reuses that exact page, retaining diagnostics between observations. If Creator assigned a non-default port, provide its exact local URL from this project (http://127.0.0.1:<port>/); the observer validates the live scene UUID and project before returning. Content changes or a closed/changed session require an approved runtime.preview.start before a refresh. This tool does not inject game input. The image and diagnostics are supplied to the configured model.',

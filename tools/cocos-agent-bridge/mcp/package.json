@@ -1,6 +1,6 @@
 {
   "name": "cocos-agent-mcp-bridge",
-  "version": "0.3.7",
+  "version": "0.3.9",
   "private": true,
   "type": "module",
   "engines": {
@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node mcp-server.mjs",
-    "test": "node --test mcp-server.test.mjs deepseek-agent.test.mjs structured-plan.test.mjs assistant-host-plan.test.mjs assistant-plan-service.test.mjs assistant-plan-panel.test.mjs assistant-state-store.test.mjs assistant-task-store.test.mjs assistant-memory-store.test.mjs assistant-tool-result-archive.test.mjs assistant-recovery-store.test.mjs credential-store.test.mjs creator-package.test.mjs ../runtime-observation.test.js"
+    "test": "node --test mcp-server.test.mjs deepseek-agent.test.mjs native-lazy.test.mjs structured-plan.test.mjs assistant-host-plan.test.mjs assistant-plan-service.test.mjs assistant-plan-panel.test.mjs assistant-state-store.test.mjs assistant-usage.test.mjs assistant-task-store.test.mjs assistant-memory-store.test.mjs assistant-tool-result-archive.test.mjs assistant-recovery-store.test.mjs credential-store.test.mjs creator-package.test.mjs ../runtime-observation.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "2.3.1",

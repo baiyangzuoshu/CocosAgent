@@ -19,6 +19,7 @@
     "prefab.source.inspect": {"input": "prefabSourceInspectInput2x", "contractVersion": "0.1", "access": "read", "preconditions": ["prefabUuidResolvable", "serializedPrefabReadable"]},
     "content.stress.run": {"input": "contentStressRunInput2x", "contractVersion": "0.2", "access": "read", "preconditions": ["completedWebMobileBuild", "complexPackagedPngResources", "coldCacheProfile", "explicitDeviceScreeningBudget"]},
     "script.read": {"input": "scriptReadInput2x", "contractVersion": "0.2", "access": "read", "preconditions": ["existingProjectScript", "assetDbReady"]},
+    "script.create": {"input": "scriptCreateInput2x", "contractVersion": "0.2", "access": "write", "preconditions": ["destinationFree", "assetDbReady", "creatorImporter"]},
     "script.patch.plan": {"input": "scriptPatchPlanInput2x", "contractVersion": "0.2", "access": "read", "preconditions": ["existingProjectScript", "assetDbReady"]},
     "script.patch": {"input": "scriptPatchInput2x", "contractVersion": "0.2", "access": "write", "preconditions": ["existingProjectScript", "assetDbReady"]},
     "script.operation.get": {"input": "scriptOperationGetInput2x", "contractVersion": "0.2", "access": "read", "preconditions": ["existingProjectScript", "assetDbReady"]},
@@ -146,7 +147,12 @@
           { "type": "object", "additionalProperties": false, "required": ["classId", "spriteFrameUuid"], "properties": {
             "classId": { "const": "cc.Sprite" }, "spriteFrameUuid": { "type": "string", "pattern": "^[0-9a-fA-F-]{36}$" } } },
           { "type": "object", "additionalProperties": false, "required": ["classId", "text"], "properties": {
-            "classId": { "const": "cc.Label" }, "text": { "type": "string", "maxLength": 256 } } }
+            "classId": { "const": "cc.Label" }, "text": { "type": "string", "maxLength": 256 } } },
+          { "type": "object", "additionalProperties": false, "required": ["classId", "scriptPath", "scriptUuid", "scriptClassId"], "properties": {
+            "classId": { "const": "cocosScript" },
+            "scriptPath": { "type": "string", "minLength": 4, "maxLength": 240, "pattern": "^[A-Za-z0-9_ -]+(?:/[A-Za-z0-9_. -]+)*\\.(?:js|ts)$" },
+            "scriptUuid": { "type": "string", "format": "uuid" },
+            "scriptClassId": { "type": "string", "minLength": 20, "maxLength": 24, "pattern": "^[A-Za-z0-9_+/=-]+$" } } }
         ] } },
         "transform": { "type": "object", "additionalProperties": false, "properties": {
           "position": { "$ref": "#/$defs/canvasPosition" },
@@ -251,7 +257,7 @@
       "additionalProperties": false,
       "required": ["id", "contractVersion", "access", "inputSchema", "input", "preconditions", "status", "reason"],
       "properties": {
-        "id": { "enum": ["project.search", "scene.snapshot", "scene.node.inspect", "asset.searchPng", "asset.importPng", "asset.removeImportedPng", "asset.validatePng", "asset.refreshPng", "asset.refreshFolder", "scene.pngSprite", "scene.node.create", "scene.node.patch", "prefab.source.inspect", "prefab.source.patch", "content.stress.run"] },
+        "id": { "enum": ["project.search", "script.read", "script.create", "script.patch.plan", "script.patch", "script.operation.get", "scene.snapshot", "scene.node.inspect", "asset.searchPng", "asset.importPng", "asset.removeImportedPng", "asset.validatePng", "asset.refreshPng", "asset.refreshFolder", "scene.pngSprite", "scene.node.create", "scene.node.patch", "prefab.source.inspect", "prefab.source.patch", "content.stress.run"] },
         "contractVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
         "access": { "enum": ["read", "write"] },
         "inputSchema": { "type": "string" },
@@ -262,6 +268,17 @@
       }
     },
     "scriptReadInput2x": {"type": "object", "additionalProperties": false, "required": ["scriptPath"], "properties": {"scriptPath": {"type": "string", "minLength": 4, "maxLength": 240, "pattern": "^[A-Za-z0-9_ -]+(?:/[A-Za-z0-9_. -]+)*\\.(?:js|ts)$"}}},
+    "scriptCreateInput2x": {"type": "object", "additionalProperties": false, "required": ["action", "operationId"], "properties": {
+      "scriptPath": {"type": "string", "minLength": 4, "maxLength": 240, "pattern": "^[A-Za-z0-9_ -]+(?:/[A-Za-z0-9_. -]+)*\\.(?:js|ts)$"},
+      "source": {"type": "string", "maxLength": 65536},
+      "action": {"type": "string", "enum": ["apply", "compensate", "reconcile", "replay"]},
+      "operationId": {"type": "string", "format": "uuid"},
+      "sourceOperationId": {"type": "string", "format": "uuid"}
+    }, "allOf": [
+      {"if": {"properties": {"action": {"const": "apply"}}, "required": ["action"]}, "then": {"required": ["scriptPath", "source"], "not": {"required": ["sourceOperationId"]}}},
+      {"if": {"properties": {"action": {"const": "replay"}}, "required": ["action"]}, "then": {"required": ["sourceOperationId"], "not": {"anyOf": [{"required": ["scriptPath"]}, {"required": ["source"]}]}}},
+      {"if": {"properties": {"action": {"enum": ["compensate", "reconcile"]}}, "required": ["action"]}, "then": {"not": {"anyOf": [{"required": ["scriptPath"]}, {"required": ["source"]}, {"required": ["sourceOperationId"]}]}}}
+    ]},
     "projectSearchInput2x": {"type": "object", "additionalProperties": false, "required": ["query", "scope"], "properties": {"query": {"type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[^\\u0000-\\u001f\\u007f]+$"}, "scope": {"type": "string", "enum": ["code", "assets", "all"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 50}, "offset": {"type": "integer", "minimum": 0, "maximum": 100000}}},
     "scriptPatchPlanInput2x": {"type": "object", "additionalProperties": false, "required": ["scriptPath", "scriptUuid", "expectedSha256", "edits"], "properties": {"scriptPath": {"type": "string", "minLength": 4, "maxLength": 240, "pattern": "^[A-Za-z0-9_ -]+(?:/[A-Za-z0-9_. -]+)*\\.(?:js|ts)$"}, "scriptUuid": {"type": "string", "format": "uuid"}, "expectedSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "edits": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"type": "object", "additionalProperties": false, "required": ["before", "after"], "properties": {"before": {"type": "string", "minLength": 1, "maxLength": 16384}, "after": {"type": "string", "maxLength": 16384}}}}}},
     "scriptPatchInput2x": {"type": "object", "additionalProperties": false, "required": ["action", "operationId"], "properties": {"scriptPath": {"type": "string", "minLength": 4, "maxLength": 240, "pattern": "^[A-Za-z0-9_ -]+(?:/[A-Za-z0-9_. -]+)*\\.(?:js|ts)$"}, "scriptUuid": {"type": "string", "format": "uuid"}, "expectedSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "edits": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"type": "object", "additionalProperties": false, "required": ["before", "after"], "properties": {"before": {"type": "string", "minLength": 1, "maxLength": 16384}, "after": {"type": "string", "maxLength": 16384}}}}, "action": {"type": "string", "enum": ["apply", "compensate", "reconcile", "replay"]}, "operationId": {"type": "string", "format": "uuid"}, "sourceOperationId": {"type": "string", "format": "uuid"}}},

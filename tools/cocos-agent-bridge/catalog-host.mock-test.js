@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const WebSocket = require('./vendor/ws');
-const { fingerprintFiles, listFiles } = require('./runtime-fingerprint');
+const { fingerprintFiles, listFiles, mcpRuntimeFiles } = require('./runtime-fingerprint');
 const inputs = require('./catalog.schema.json').$defs;
 const schemaPath = path.join(__dirname, 'catalog.schema.json');
 const agentPackagePath = path.resolve(__dirname, '../../plugins/cocos-agent-2x/agent-package.json');
@@ -20,7 +20,7 @@ const mcpRuntime = {
         'agent-package.json', 'skill-package.json',
         ...listFiles(agentPackageRoot, 'skills'), ...listFiles(agentPackageRoot, 'references'),
     ]),
-    sourceFingerprint: fingerprintFiles(path.dirname(mcpSourcePath), ['mcp-server.mjs', 'package.json', 'package-lock.json']),
+    sourceFingerprint: fingerprintFiles(path.dirname(mcpSourcePath), mcpRuntimeFiles(path.dirname(mcpSourcePath))),
     contractSchemaFingerprint: crypto.createHash('sha256').update(fs.readFileSync(schemaPath)).digest('hex'),
 };
 
@@ -133,7 +133,8 @@ async function mockEditor(index, options = {}) {
                 inputSchema: command.inputSchema, input: command.input, preconditions: command.preconditions,
             })))).digest('hex');
             const sceneName = index === 0 ? options.sceneName || 'helloworld' : null;
-            const sceneUuid = sceneName ? '280c3aec-6492-4a9d-9f51-a9b00b570b4a' : null;
+            const sceneUuid = sceneName ? options.sceneUuid !== undefined ? options.sceneUuid
+                : '280c3aec-6492-4a9d-9f51-a9b00b570b4a' : null;
             const result = {
                 nonce: message.params.nonce, instanceId, creatorVersion: options.wrongCatalogVersion && index === 0 ? versions[1] : versions[index], projectRoot: project,
                 extensionVersion: index === 0 ? options.extensionVersion || '0.3.2' : '0.1.0',
@@ -151,7 +152,10 @@ async function mockEditor(index, options = {}) {
             socket.send(JSON.stringify(index === 0
                 ? { type: 'response', id: message.id, ok: true, result: {
                     nonce: message.params.nonce, creatorVersion: versions[index], projectRoot: project,
-                    sceneName: snapshotSceneName, sceneUuid: snapshotSceneName ? '280c3aec-6492-4a9d-9f51-a9b00b570b4a' : null,
+                    sceneName: snapshotSceneName, sceneUuid: snapshotSceneName
+                        ? options.snapshotSceneUuid !== undefined ? options.snapshotSceneUuid
+                            : options.sceneUuid !== undefined ? options.sceneUuid
+                                : '280c3aec-6492-4a9d-9f51-a9b00b570b4a' : null,
                     nodes: [{ name: 'Canvas' }],
                 } }
                 : { type: 'response', id: message.id, ok: false, error: { code: 'NO_OPEN_SCENE' } }));
@@ -212,6 +216,28 @@ async function run(query, project, options = {}) {
     assert.strictEqual(folderRefreshCommand.reason, 'ASSETDB_REFRESH_UNAVAILABLE');
     const changedDuringRead = await run('instances.get', projects[0], { snapshotSceneName: 'another-scene' });
     assert.strictEqual(changedDuringRead.data.error.code, 'SCENE_CHANGED');
+    const transientId = '3bhlmU29dDT5oFjrgZs7wk';
+    const unsaved = await run('capabilities.list', projects[0], { sceneName: 'New Scene', sceneUuid: transientId });
+    assert.equal(unsaved.exit, 0);
+    assert.equal(unsaved.data.data.instance.state, 'ready');
+    assert.equal(unsaved.data.data.instance.activeSceneUuid, null, 'object ID must not become an asset UUID');
+    assert.equal(unsaved.data.data.instance.contractCompatibility.status, first.data.data.instance.contractCompatibility.status);
+    assert.equal(unsaved.data.data.commands.find((item) => item.id === 'scene.snapshot').status, 'available');
+    assert.equal(unsaved.data.data.commands.find((item) => item.id === 'runtime.preview.start').reason,
+        first.data.data.instance.contractCompatibility.blockers[0] || 'SCENE_IDENTITY_UNAVAILABLE');
+    const noAssetUuid = await run('capabilities.list', projects[0], { sceneUuid: null });
+    assert.equal(noAssetUuid.exit, 0);
+    assert.equal(noAssetUuid.data.data.commands.find((item) => item.id === 'runtime.preview.start').reason,
+        'SCENE_IDENTITY_UNAVAILABLE');
+    const changedIdentity = await run('instances.get', projects[0], { sceneUuid: transientId,
+        snapshotSceneUuid: '4bhlmU29dDT5oFjrgZs7wk' });
+    assert.equal(changedIdentity.data.error.code, 'SCENE_CHANGED', 'same-name scene changes must be rejected');
+    const changedSavedIdentity = await run('instances.get', projects[0], {
+        snapshotSceneUuid: '380c3aec-6492-4a9d-9f51-a9b00b570b4a' });
+    assert.equal(changedSavedIdentity.data.error.code, 'SCENE_CHANGED');
+    const invalidIdentity = await run('instances.get', projects[0], { sceneUuid: 'malformed-scene-id' });
+    assert.equal(invalidIdentity.data.error.code, 'CAPABILITY_CATALOG_INVALID');
+    assert.deepEqual(invalidIdentity.data.error.diagnostics[0].fields, ['activeSceneUuid']);
     const missing = spawnSync(process.execPath, ['catalog-host.js', '--target', `2.4.15=${projects[0]}`, '--query', 'instances.get', '--project', temporary], { cwd: __dirname, encoding: 'utf8' });
     assert.strictEqual(missing.status, 1);
     assert.strictEqual(JSON.parse(missing.stdout).error.code, 'EDITOR_NOT_FOUND');

@@ -61,12 +61,16 @@ function validObjectComponents(components) {
     const seen = new Set();
     return components.every((component) => {
         if (!component || typeof component !== 'object' || Array.isArray(component)
-            || !['cc.Sprite', 'cc.Label'].includes(component.classId) || seen.has(component.classId)) return false;
+            || !['cc.Sprite', 'cc.Label', 'cocosScript'].includes(component.classId) || seen.has(component.classId)) return false;
         seen.add(component.classId);
         if (component.classId === 'cc.Sprite') return Object.keys(component).every((key) => ['classId', 'spriteFrameUuid'].includes(key))
             && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(component.spriteFrameUuid || '');
-        return Object.keys(component).every((key) => ['classId', 'text'].includes(key))
+        if (component.classId === 'cc.Label') return Object.keys(component).every((key) => ['classId', 'text'].includes(key))
             && typeof component.text === 'string' && component.text.length <= 256;
+        return Object.keys(component).every((key) => ['classId', 'scriptPath', 'scriptUuid', 'scriptClassId'].includes(key))
+            && typeof component.scriptPath === 'string' && /^[A-Za-z0-9_ -]+(?:\/[A-Za-z0-9_. -]+)*\.(?:js|ts)$/.test(component.scriptPath)
+            && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(component.scriptUuid || '')
+            && /^[A-Za-z0-9_+/=-]{20,24}$/.test(component.scriptClassId || '');
     });
 }
 function validTransform(transform) {

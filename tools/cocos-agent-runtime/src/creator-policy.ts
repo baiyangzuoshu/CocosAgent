@@ -9,7 +9,7 @@ import type {
     AgentToolResult,
     JsonObject,
 } from './contracts.js';
-import { creatorRecoveryResolved, ensureCreatorOperationIdentity, type CreatorPendingRecovery } from './creator-recovery.js';
+import { creatorRecoveryResolved, ensureCreatorOperationIdentity, isCreatorScriptCreateReconcile, type CreatorPendingRecovery } from './creator-recovery.js';
 
 const PLAN_SKILL_RETRIES = 2;
 const AGENT_SKILL_RETRIES = 3;
@@ -21,6 +21,23 @@ type Identity = { field: string; value: string };
 
 function isRecord(value: unknown): value is JsonObject {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** Bind explicit read requests to exact installed skill names; explanations/negations grant no read requirement. */
+export function creatorRequestedSkillReads(task: string, index: unknown): string[] {
+    if (!isRecord(index) || !Array.isArray(index.skills)) return [];
+    const clauses = task.split(/[，,。；;\n]/).filter((clause) => {
+        if (/(?:不要|禁止|勿|无需|不必|不再|不\s*|do\s+not\s+|don't\s+|never\s+)(?:再次|重新|再|再度|\s)*(?:读取|读入|加载|查阅|read\b|load\b)/i.test(clause)) return false;
+        if (/如何|怎么|怎样|\bhow\s+to\b|\bexplain\b/i.test(clause)) return false;
+        return /读取|读入|加载|查阅|\bread\b|\bload\b/i.test(clause);
+    });
+    return [...new Set(index.skills.flatMap((skill) => isRecord(skill) && typeof skill.name === 'string'
+        && clauses.some((clause) => clause.toLowerCase().split(/[^a-z0-9-]+/).includes(skill.name as string)) ? [skill.name] : []))];
+}
+
+export function creatorExplicitSkillQueryOnly(task: string, requestedSkillReads: string[]): boolean {
+    if (typeof task !== 'string' || requestedSkillReads.length === 0) return false;
+    return /(?:只|仅)执行(?:这两项|这两件|以下两项|这几项)?只读技能查询|\bonly\s+(?:perform|execute|run)\s+(?:these\s+)?(?:two\s+)?read-only\s+skill\s+queries\b/i.test(task);
 }
 
 function isProjectMemoryTool(name: string): boolean {
@@ -133,7 +150,7 @@ function previewAcceptance(toolName: string): boolean {
     return toolName === 'cocos_2x_operation_preview_accept' || toolName === 'cocos_2x_assets_scene_preview_accept';
 }
 
-function prompts(mode: AgentMode): string {
+function prompts(mode: AgentMode, taskGuidanceOnDemand = false): string {
     if (mode === 'Ask') return 'Use Creator read-only tools and ground findings in current tool receipts.';
     if (mode === 'Plan') return [
         'Use read-only tools only. Return a structured, reviewable plan and do not execute proposed changes.',
@@ -144,9 +161,12 @@ function prompts(mode: AgentMode): string {
         'The final step also validates the original user task across all approved steps. Include fresh operation and target readback tools plus runtime observation/preview acceptance when applicable in its requiredTools. Keep required preview acceptance in a write step if its command returns needs-preview. Do not downgrade a functional task into a read or compile-only plan.',
         'For each step, include the exact task and readback tools needed to perform and validate it. Do not list instance/capability setup tools. Ground project facts in current receipts, describe unknown facts as preconditions, and never claim execution.',
         'Use only exact names from the live MCP tool catalog in the system context. The Host already queried instance and capability setup tools; never list cocos_2x_instances_list, cocos_2x_instances_get, or cocos_2x_capabilities_list in requiredTools.',
-        'Use the discovered tool descriptions and input schemas literally. Do not plan a call when its required identity is unavailable; describe that identity as a precondition. The asset.validatePng tool requires an existing pipelineId and must not be used to validate an arbitrary project PNG.',
-        'Match preflight tools to their contracts: workflow.plan is only for its supported multi-node workflow, not a single-node scene.node.create preflight. For one existing PNG placement, use asset.searchPng to obtain the verified SpriteFrame UUID, inspect the target Canvas, and use scene.node.create only for the explicitly approved write. Do not claim direct disk reads unless a selected tool receipt contains disk verification.',
-        'A preview step must identify how preview is started, observed, and visually accepted. Use runtime.preview.start through command execution, runtime.observe for the screenshot and diagnostics, and operation.preview.accept only after inspecting the exact operation in the matching preview.',
+        'Use the discovered tool descriptions and input schemas literally. Research write schemas through the tool loader without executing them. Describe any missing required identity as a precondition. Follow the selected task skill and command contract for task-specific preflight, validation and preview.',
+        ...(!taskGuidanceOnDemand ? [
+            'The asset.validatePng tool requires an existing pipelineId and must not be used to validate an arbitrary project PNG.',
+            'Match preflight tools to their contracts: workflow.plan is only for its supported multi-node workflow, not a single-node scene.node.create preflight. For one existing PNG placement, use asset.searchPng to obtain the verified SpriteFrame UUID, inspect the target Canvas, and use scene.node.create only for the explicitly approved write. Do not claim direct disk reads unless a selected tool receipt contains disk verification.',
+            'A preview step must identify how preview is started, observed, and visually accepted. Use runtime.preview.start through command execution, runtime.observe for the screenshot and diagnostics, and operation.preview.accept only after inspecting the exact operation in the matching preview.',
+        ] : []),
         'Do not put a numeric step count in summary; the panel displays the validated step count separately.',
         'For any step that performs a semantic Creator write, include cocos_2x_command_execute and cocos_2x_operation_get plus the required readback tools. A step that claims a write cannot list read-only tools alone. Semantic command IDs are not MCP tool names.',
         'Avoid literal double quote characters inside JSON text values.',
@@ -167,24 +187,32 @@ export function createCreatorAgentPolicy(input: {
     mode: AgentMode;
     baseInstructions: string;
     toolCatalog?: string;
+    /** Genuine catalog receipts obtained by the Host during this run's preparation. */
+    skillReceipts?: AgentReceipt[];
+    taskGuidanceOnDemand?: boolean;
+    requiredSkillReads?: string[];
     approveWrite(request: { runId: string; tool: AgentTool; arguments: JsonObject }): Promise<boolean>;
     pendingRecovery?: CreatorPendingRecovery | null;
     recoveryState?: () => CreatorPendingRecovery | null;
 }): AgentPolicy {
     let inheritedPending: Identity | null = input.pendingRecovery || null;
+    let inheritedRecovery = input.pendingRecovery || null;
     return {
         approveWrite: input.approveWrite,
         createRunPolicy: () => {
+            const skillEvidence = (receipts: AgentReceipt[]) => [...(input.skillReceipts || []), ...receipts];
             let noApplicable = false;
             let planGateRetries = 0;
+            let requestedSkillRetries = 0;
             let agentGateRetries = 0;
             let recoveryTargets = 0;
             let previewRetries = 0;
             let recoveryOnly = inheritedPending !== null;
+            let pendingRecovery = inheritedRecovery;
             let recoveredMemoryMutation = false;
             let pendingIdentity: Identity | null = inheritedPending;
             const previews = new Set<string>();
-            const modePrompt = prompts(input.mode);
+            const modePrompt = prompts(input.mode, input.taskGuidanceOnDemand);
             const systemPrompt = [input.baseInstructions, modePrompt + (input.toolCatalog || '' ),
                 pendingIdentity ? `Unresolved prior write: ${pendingIdentity.field}=${pendingIdentity.value}; tool=${input.pendingRecovery?.toolName || 'see original ledger'}. Resolve only this exact operation before any new task/write.` : ''].filter(Boolean).join('\n\n');
             return {
@@ -203,6 +231,10 @@ export function createCreatorAgentPolicy(input: {
                     }
                     if (input.mode === 'Agent' && recoveryOnly) {
                         let permitted = context.tool.role === 'recovery';
+                        if (permitted && context.tool.name === 'cocos_2x_command_execute') {
+                            permitted = pendingRecovery !== null
+                                && isCreatorScriptCreateReconcile(context.tool.name, context.arguments, pendingRecovery);
+                        }
                         if (permitted && context.tool.name === 'cocos_2x_script_patch') {
                             const action = isRecord(context.arguments.input) ? context.arguments.input.action : undefined;
                             permitted = action === 'compensate' || action === 'reconcile';
@@ -220,8 +252,8 @@ export function createCreatorAgentPolicy(input: {
                         }
                     }
                     if (input.mode === 'Agent' && context.tool.role === 'task' && !isProjectMemoryTool(context.tool.name)
-                        && context.availableTools.some((tool) => tool.name === 'cocos_2x_skills_list')) {
-                        const missing = missingSkillEvidence(context.receipts, noApplicable);
+                        && (context.availableTools.some((tool) => tool.name === 'cocos_2x_skills_list') || skillCatalog(skillEvidence(context.receipts)))) {
+                        const missing = missingSkillEvidence(skillEvidence(context.receipts), noApplicable);
                         if (missing) return { action: 'block', code: 'TASK_SKILL_READ_REQUIRED',
                             message: skillPrompt(missing, context.receipts, input.mode), continue: true };
                     }
@@ -232,9 +264,14 @@ export function createCreatorAgentPolicy(input: {
                     const result = receipt.result;
                     if (isUncertain(receipt)) {
                         recoveryOnly = true;
-                        pendingIdentity = resultIdentity(result) || argumentIdentity(args) || input.recoveryState?.()
+                        const storedRecovery = input.recoveryState?.() || null;
+                        pendingIdentity = resultIdentity(result) || argumentIdentity(args) || storedRecovery
                             || { field: 'callId', value: receipt.callId };
+                        pendingRecovery = storedRecovery || { ...pendingIdentity, toolName: receipt.toolName,
+                            ...(receipt.toolName === 'cocos_2x_command_execute' && typeof args.command === 'string'
+                                ? { command: args.command } : {}) };
                         inheritedPending = pendingIdentity;
+                        inheritedRecovery = pendingRecovery;
                         return;
                     }
                     if (recoveryOnly && receipt.role === 'recovery' && creatorRecoveryResolved(result)
@@ -246,9 +283,11 @@ export function createCreatorAgentPolicy(input: {
                         }
                         recoveryOnly = false;
                         pendingIdentity = null;
+                        pendingRecovery = null;
                         inheritedPending = null;
+                        inheritedRecovery = null;
                         const next = input.recoveryState?.();
-                        if (next) { inheritedPending = pendingIdentity = next; recoveryOnly = true; }
+                        if (next) { inheritedPending = pendingIdentity = next; inheritedRecovery = pendingRecovery = next; recoveryOnly = true; }
                     }
                     const data = result.structuredContent;
                     if (input.mode === 'Agent' && (receipt.access === 'write' || receipt.role === 'recovery') && data?.outcome === 'needs-preview') {
@@ -258,11 +297,23 @@ export function createCreatorAgentPolicy(input: {
                         && data?.success === true && typeof data.operationId === 'string') previews.delete(data.operationId);
                 },
                 onAssistantMessage(message, receipts) {
-                    if (skillCatalog(receipts) && noApplicableSkill(message.content, input.mode)) noApplicable = true;
+                    if (skillCatalog(skillEvidence(receipts)) && noApplicableSkill(message.content, input.mode)) noApplicable = true;
                 },
                 onAssistantStop({ message, finishReason, receipts, availableTools }): AgentPolicyStopDecision | undefined {
+                    if (!(input.mode === 'Agent' && recoveryOnly)) {
+                        const missingReads = (input.requiredSkillReads || []).filter((name) => !skillEvidence(receipts).some((receipt) =>
+                            receipt.toolName === 'cocos_2x_skill_read' && isResolved(receipt.result)
+                            && receipt.result.structuredContent?.skillName === name));
+                        if (missingReads.length) {
+                            requestedSkillRetries += 1;
+                            if (requestedSkillRetries > 2 || finishReason === 'length') return {
+                                action: 'finish', reason: 'requested-skill-body-not-read', finalText: null,
+                            };
+                            return { action: 'continue', message: `The current request explicitly requires fresh skill body reads: ${missingReads.join(', ')}. No successful cocos_2x_skill_read receipt for them exists in this run. Read each exact name now; historical answers and the Host catalog are not body-read evidence. Do not claim completion without these receipts.` };
+                        }
+                    }
                     if (input.mode === 'Plan') {
-                        const missing = missingSkillEvidence(receipts, noApplicable);
+                        const missing = missingSkillEvidence(skillEvidence(receipts), noApplicable);
                         if (missing) {
                             planGateRetries += 1;
                             if (planGateRetries > PLAN_SKILL_RETRIES) return { action: 'finish', reason: `plan-task-${missing}-not-read`, finalText: null };
@@ -271,8 +322,8 @@ export function createCreatorAgentPolicy(input: {
                     }
                     if (input.mode === 'Agent') {
                         const hasTask = receipts.some((receipt) => receipt.role === 'task' && !isProjectMemoryTool(receipt.toolName));
-                        if (hasTask && availableTools.some((tool) => tool.name === 'cocos_2x_skills_list')) {
-                            const missing = missingSkillEvidence(receipts, noApplicable);
+                        if (hasTask && (availableTools.some((tool) => tool.name === 'cocos_2x_skills_list') || skillCatalog(skillEvidence(receipts)))) {
+                            const missing = missingSkillEvidence(skillEvidence(receipts), noApplicable);
                             if (missing) {
                                 agentGateRetries += 1;
                                 if (agentGateRetries > AGENT_SKILL_RETRIES) return { action: 'finish', reason: `agent-task-${missing}-not-read`, finalText: null };

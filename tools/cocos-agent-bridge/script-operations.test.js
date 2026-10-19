@@ -39,6 +39,47 @@ function setup(t, behavior = 'compile') {
     const identity = { scriptPath: 'Script/Test.js', scriptUuid: uuid, expectedSha256: before.sourceSha256, edits: [{ before: 'count = 0', after: 'count = 1' }] };
     return { root, service, identity, before, editor };
 }
+function setupCreate(t) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-script-create-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const assets = path.join(root, 'assets'); fs.mkdirSync(assets, { recursive: true });
+    const uuids = ['12345678-1234-4123-8123-123456789012', '22345678-1234-4123-8123-123456789012'];
+    let uuidIndex = 0; let activeUuid = null;
+    const assetdb = {
+        exists(url) { return fs.existsSync(path.join(assets, url.slice('db://assets/'.length))); },
+        urlToUuid(url) { return url === 'db://assets/Player.js' ? activeUuid : null; },
+        create(url, source, callback) {
+            const filename = path.join(assets, url.slice('db://assets/'.length));
+            fs.writeFileSync(filename, source);
+            activeUuid = uuids[uuidIndex++];
+            fs.writeFileSync(`${filename}.meta`, JSON.stringify({ importer: 'javascript', uuid: activeUuid }));
+            callback(null, { uuid: activeUuid, url });
+        },
+        refresh(url, callback) {
+            const source = fs.readFileSync(path.join(assets, url.slice('db://assets/'.length)), 'utf8');
+            const scriptPath = url.slice('db://assets/'.length);
+            const src = path.join(root, 'temp/quick-scripts/src/assets', scriptPath);
+            const dst = path.join(root, 'temp/quick-scripts/dst/assets', scriptPath);
+            fs.mkdirSync(path.dirname(src), { recursive: true }); fs.mkdirSync(path.dirname(dst), { recursive: true });
+            fs.writeFileSync(src, source);
+            fs.writeFileSync(`${src}.map`, JSON.stringify({ sources: [`assets/${scriptPath}`], sourcesContent: [source] }));
+            fs.writeFileSync(dst, source);
+            fs.writeFileSync(path.join(root, 'temp/quick-scripts/dst/__file_stats__.json'), JSON.stringify({ version: 'fixture', stats: { [src]: fs.statSync(src).mtime.toISOString() } }));
+            callback(null);
+        },
+        delete(urls, callback) {
+            for (const url of urls) {
+                const filename = path.join(assets, url.slice('db://assets/'.length));
+                fs.rmSync(filename, { force: true }); fs.rmSync(`${filename}.meta`, { force: true });
+                activeUuid = null;
+            }
+            callback(null, []);
+        },
+    };
+    const editor = { assetdb, Utils: { UuidUtils: { compressUuid: () => '0123456789012345678901' } } };
+    const service = scripts.createScriptService(root, editor, { timeoutMs: 350 });
+    return { root, service, assetdb };
+}
 test('packaged Creator and Host script contracts use identical implementation', () => {
     assert.equal(fs.readFileSync(path.join(__dirname, 'script-contract.js'), 'utf8'), fs.readFileSync(path.resolve(__dirname, '../../2.4.15NewProject/packages/cocos-agent-bridge/script-operations.js'), 'utf8'));
 });
@@ -99,6 +140,40 @@ test('known import error reports confirmed source side effect and a recoverable 
     const result = await service.execute('script.patch', { ...identity, action: 'apply', operationId });
     assert.equal(result.record.state, 'compile-failed'); assert.equal(result.error.code, 'SCRIPT_IMPORT_FAILED');
     assert.equal(result.error.sideEffect, 'confirmed'); assert.equal(result.current.matchesAfter, true);
+});
+test('script.create uses Creator AssetDB, verifies compiled source/UUID, and recovers by compensation and replay', async (t) => {
+    const { root, service, assetdb } = setupCreate(t);
+    const operationId = '32345678-1234-4123-8123-123456789012';
+    const replayId = '42345678-1234-4123-8123-123456789012';
+    const source = 'var Player = cc.Class({ extends: cc.Component });\n';
+    const created = await service.execute('script.create', { action: 'apply', operationId, scriptPath: 'Player.js', source });
+    assert.equal(created.success, true);
+    assert.equal(created.outcome, 'needs-runtime');
+    assert.equal(created.script.scriptUuid, '12345678-1234-4123-8123-123456789012');
+    assert.equal(created.script.scriptClassId, '0123456789012345678901');
+    assert.equal(fs.readFileSync(path.join(root, 'assets/Player.js'), 'utf8'), source);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'assets/Player.js.meta'))).uuid, created.script.scriptUuid);
+    const read = await service.execute('script.read', { scriptPath: 'Player.js' });
+    assert.equal(read.scriptClassId, created.script.scriptClassId);
+    assert.equal((await service.execute('script.create', { action: 'compensate', operationId })).record.state, 'compensated');
+    assert.equal(assetdb.urlToUuid('db://assets/Player.js'), null);
+    assert.equal(fs.existsSync(path.join(root, 'assets/Player.js')), false);
+    const replay = await service.execute('script.create', { action: 'replay', operationId: replayId, sourceOperationId: operationId });
+    assert.equal(replay.success, true);
+    assert.equal(replay.script.scriptUuid, '22345678-1234-4123-8123-123456789012');
+    assert.equal(replay.record.sourceOperationId, operationId);
+});
+
+test('script.create compensation refuses to delete while a bounded reference scan is incomplete', async (t) => {
+    const { root, service } = setupCreate(t);
+    const operationId = '52345678-1234-4123-8123-123456789012';
+    const source = 'var Player = cc.Class({ extends: cc.Component });\n';
+    const created = await service.execute('script.create', { action: 'apply', operationId, scriptPath: 'Player.js', source });
+    assert.equal(created.success, true);
+    fs.writeFileSync(path.join(root, 'assets/large-scene.fire'), `[${' '.repeat(2 * 1024 * 1024 + 1)}]`);
+    await assert.rejects(service.execute('script.create', { action: 'compensate', operationId }),
+        (error) => error.code === 'SCRIPT_REFERENCE_CHECK_INCOMPLETE');
+    assert.equal(fs.existsSync(path.join(root, 'assets/Player.js')), true, 'unknown reference state must preserve the asset');
 });
 
 test('incremental destination inline map verifies exact source despite stale side map/stats, including restore', async (t) => {

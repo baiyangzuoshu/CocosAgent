@@ -198,6 +198,7 @@ function validateCreatorExtensionBundle(directory) {
         'assistant-runtime/tools/cocos-agent-runtime/dist/index.js',
         'assistant-runtime/tools/cocos-agent-runtime/LICENSE.learn-claude-code',
         'assistant-runtime/plugins/cocos-agent-2x/agent-package.json',
+        'assistant-runtime/plugins/cocos-agent-2x/skill-package.json',
     ];
     for (const relative of requiredFiles) {
         if (!fs.statSync(path.join(directory, relative), { throwIfNoEntry: false })?.isFile())

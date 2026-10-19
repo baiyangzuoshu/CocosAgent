@@ -1,6 +1,6 @@
 import type { AgentToolResult, JsonObject, ToolRegistry } from './contracts.js';
 
-export interface CreatorPendingRecovery { field: string; value: string; toolName: string }
+export interface CreatorPendingRecovery { field: string; value: string; toolName: string; command?: string }
 export interface CreatorRecoveryPersistence {
     load(): Promise<{ revision: number; pending: CreatorPendingRecovery | null }>;
     save(pending: CreatorPendingRecovery | null, expectedRevision: number): Promise<void>;
@@ -14,11 +14,24 @@ export function creatorRecoveryIdentity(args: JsonObject): { field: string; valu
     return null;
 }
 export function ensureCreatorOperationIdentity(name: string, args: JsonObject): void {
-    if (name === 'cocos_2x_command_execute' && ['scene.node.create', 'scene.node.patch', 'scene.pngSprite', 'prefab.source.patch', 'script.patch'].includes(String(args.command))) {
+    if (name === 'cocos_2x_command_execute' && ['scene.node.create', 'scene.node.patch', 'scene.pngSprite', 'prefab.source.patch', 'script.patch', 'script.create'].includes(String(args.command))) {
         const input = object(args.input);
         if (!input.operationId) input.operationId = globalThis.crypto.randomUUID();
         args.input = input;
     }
+}
+export function isCreatorScriptCreateReconcile(name: string, args: JsonObject, pending: CreatorPendingRecovery): boolean {
+    if (name !== 'cocos_2x_command_execute' || pending.toolName !== name || pending.field !== 'operationId'
+        || (pending.command !== undefined && pending.command !== 'script.create') || args.command !== 'script.create') return false;
+    const argumentKeys = Object.keys(args);
+    if (argumentKeys.length !== 3 || !argumentKeys.includes('projectRoot') || !argumentKeys.includes('command')
+        || !argumentKeys.includes('input') || typeof args.projectRoot !== 'string') return false;
+    const input = args.input;
+    if (input === null || typeof input !== 'object' || Array.isArray(input)) return false;
+    const data = input as JsonObject;
+    const keys = Object.keys(data);
+    return keys.length === 2 && keys.includes('action') && keys.includes('operationId')
+        && data.action === 'reconcile' && data.operationId === pending.value;
 }
 export function creatorRecoveryResolved(result: AgentToolResult): boolean {
     const data = object(result.structuredContent);
@@ -53,21 +66,32 @@ export class CreatorRecoveryRegistry implements ToolRegistry {
         return new CreatorRecoveryRegistry(inner, persistence, await persistence.load());
     }
     pending(): CreatorPendingRecovery | null { return this.state.pending; }
-    listTools() { return this.inner.listTools(); }
+    async listTools() {
+        this.state = await this.persistence.load();
+        const pending = this.state.pending;
+        const tools = await this.inner.listTools();
+        if (!pending || pending.toolName !== 'cocos_2x_command_execute' || pending.field !== 'operationId'
+            || (pending.command !== undefined && pending.command !== 'script.create')) return tools;
+        return tools.map((tool) => tool.name === 'cocos_2x_command_execute' ? { ...tool, role: 'recovery' as const } : tool);
+    }
     async callTool(input: { name: string; arguments: JsonObject; callId?: string }): Promise<AgentToolResult> {
         this.state = await this.persistence.load();
-        const tool = (await this.inner.listTools()).find((item) => item.name === input.name);
-        if (!tool) throw new Error('RECOVERY_TOOL_UNKNOWN');
         const pending = this.state.pending;
+        const tool = (await this.listTools()).find((item) => item.name === input.name);
+        if (!tool) throw new Error('RECOVERY_TOOL_UNKNOWN');
         const requested = creatorRecoveryIdentity(input.arguments);
-        const matchingRecovery = pending && tool.role === 'recovery' && requested?.field === pending.field && requested.value === pending.value;
+        const matchingRecovery = pending && tool.role === 'recovery' && requested?.field === pending.field
+            && requested.value === pending.value
+            && (input.name !== 'cocos_2x_command_execute' || isCreatorScriptCreateReconcile(input.name, input.arguments, pending));
         if (pending && !matchingRecovery) return { isError: true, structuredContent: { success: false,
             error: { code: 'PROJECT_RECOVERY_REQUIRED', sideEffect: 'none' }, pending } };
         if (tool.access === 'write' && !pending) {
             ensureCreatorOperationIdentity(input.name, input.arguments);
             const identity = creatorRecoveryIdentity(input.arguments)
                 || { field: input.name.startsWith('cocos_2x_memory_') ? 'operationId' : 'callId', value: input.callId || globalThis.crypto.randomUUID() };
-            await this.persistence.save({ ...identity, toolName: input.name }, this.state.revision);
+            const command = input.name === 'cocos_2x_command_execute' && typeof input.arguments.command === 'string'
+                ? { command: input.arguments.command } : {};
+            await this.persistence.save({ ...identity, toolName: input.name, ...command }, this.state.revision);
             this.state = await this.persistence.load();
         }
         const result = await this.inner.callTool(input);

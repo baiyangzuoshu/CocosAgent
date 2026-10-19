@@ -289,7 +289,7 @@ test('Creator extension upgrade supports a project-local package target inside t
     try {
         const result = upgradeCreatorExtension({ sourceRoot: SOURCE_ROOT, extensionDirectory: extension });
         assert.equal(result.previousVersion, '0.3.24');
-        assert.equal(result.installedVersion, '0.3.25');
+        assert.equal(result.installedVersion, '0.3.26');
         assert.equal(result.creatorReloadRequired, true);
         assert.ok(fs.existsSync(path.join(result.rollbackDirectory, 'package.json')));
         assert.ok(fs.existsSync(path.join(extension, 'assistant-runtime/tools/cocos-agent-bridge/mcp/mcp-server.mjs')));

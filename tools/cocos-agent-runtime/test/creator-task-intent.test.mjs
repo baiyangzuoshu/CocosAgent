@@ -10,7 +10,7 @@ const proposal = (task, kind, extra = {}) => ({ version: 1, task, kind, sourceQu
 const jsonResponse = (value) => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(value) }, finish_reason: 'stop' }] }), { status: 200 });
 const answer = (content) => new Response(JSON.stringify({ choices: [{ message: { content }, finish_reason: 'stop' }] }), { status: 200 });
 const call = (id, name, args) => new Response(JSON.stringify({ choices: [{ message: { tool_calls: [{ id, type: 'function',
-    function: { name, arguments: JSON.stringify({ projectRoot, ...args }) } }] }, finish_reason: 'tool_calls' }] }), { status: 200 });
+    function: { name, arguments: JSON.stringify(name === 'cocos_2x_tools_load' ? args : { projectRoot, ...args }) } }] }, finish_reason: 'tool_calls' }] }), { status: 200 });
 
 test('equivalent set/change wording recognizes exact local position targets', () => {
     const expected = [{ target: 'helloworld/Canvas/AgentAcceptanceSprite', field: 'node.position.x', equals: -149 }];
@@ -205,7 +205,9 @@ test('memory intent stays distinct from Creator content writes while carrying re
 function fixture() {
     const names = ['cocos_2x_instances_list', 'cocos_2x_capabilities_list', 'cocos_2x_scene_snapshot', 'cocos_2x_script_read',
         'cocos_2x_scene_node_inspect', 'cocos_2x_operation_get', 'cocos_2x_command_execute'];
-    const definitions = names.map((name) => ({ name, description: name, inputSchema: { type: 'object' },
+    const definitions = names.map((name) => ({ name, description: name, inputSchema: name === 'cocos_2x_command_execute'
+        ? { type: 'object', oneOf: [{ type: 'object', properties: { command: { const: 'scene.node.patch' }, input: { type: 'object' } } }] }
+        : { type: 'object' },
         annotations: { readOnlyHint: name !== 'cocos_2x_command_execute' } }));
     const calls = [], approvals = [], events = [];
     const change = { success: true, outcome: 'completed', command: 'scene.node.patch', operationId: 'operation-1',
@@ -277,9 +279,10 @@ test('mixed requests cannot discard the requested inspection or downgrade the mo
     assert.throws(() => creatorTaskCriteria(task, undefined, proposal(task, 'read')), /DOWNGRADED/);
     const f = fixture();
     await withModel(proposal(task, 'mixed', { targets: [target] }), (round) => round === 1
+        ? call('load-mixed', 'cocos_2x_tools_load', { groups: ['scene'] }) : round === 2
         ? call('apply-mixed', 'cocos_2x_command_execute', { command: 'scene.node.patch', input: { operationId: 'operation-1' } })
-        : round === 2 ? call('ledger-mixed', 'cocos_2x_operation_get', { operationId: 'operation-1' })
-            : round === 3 ? call('inspect-mixed', 'cocos_2x_scene_node_inspect', {}) : answer('完成'), async () => {
+        : round === 3 ? call('ledger-mixed', 'cocos_2x_operation_get', { operationId: 'operation-1' })
+            : round === 4 ? call('inspect-mixed', 'cocos_2x_scene_node_inspect', {}) : answer('完成'), async () => {
         const result = await runCreatorAgent({ ...f.options, task });
         assert.equal(result.status, 'stopped');
         assert.ok(result.goalEvaluation.outstanding.some((item) => item.id === 'requested-scene-snapshot'));
@@ -288,7 +291,7 @@ test('mixed requests cannot discard the requested inspection or downgrade the mo
 
 test('pending exact recovery stays accessible without a task-interpretation request', async () => {
     const f = fixture();
-    const recoveryStore = { state: { revision: 0, pending: { field: 'operationId', value: 'operation-1', toolName: 'cocos_2x_command_execute' } },
+    const recoveryStore = { state: { revision: 0, pending: { field: 'operationId', value: 'operation-1', toolName: 'cocos_2x_command_execute', command: 'scene.node.patch' } },
         async load() { return structuredClone(this.state); }, async save(pending, revision) {
             assert.equal(revision, this.state.revision); this.state = { revision: revision + 1, pending };
         } };
@@ -348,17 +351,18 @@ test('equivalent native modification requests share acceptance; internally consi
         for (const actual of [20, 200]) {
             const f = fixture(); f.state.x = actual;
             await withModel(proposal(task, 'write', { targets: [target] }), (round) => round === 1
+                ? call('load-scene', 'cocos_2x_tools_load', { groups: ['scene'] }) : round === 2
                 ? call('apply', 'cocos_2x_command_execute', { command: 'scene.node.patch', input: {
                     targetNodeUuid: 'node-1', targetNodePath: 'Canvas/Foo', action: 'apply', operationId: 'operation-1',
                     expectedDiff: [{ path: 'node.position.x', before: 0, after: 200 }],
                 } })
-                : round === 2 ? call('ledger', 'cocos_2x_operation_get', { operationId: 'operation-1' })
-                    : round === 3 ? call('inspect', 'cocos_2x_scene_node_inspect', { input: { nodeUuid: 'node-1' } })
+                : round === 3 ? call('ledger', 'cocos_2x_operation_get', { operationId: 'operation-1' })
+                    : round === 4 ? call('inspect', 'cocos_2x_scene_node_inspect', { input: { nodeUuid: 'node-1' } })
                         : answer('完成'), async () => {
                 const result = await runCreatorAgent({ ...f.options, task });
                 assert.equal(result.status, actual === 200 ? 'completed' : 'stopped', result.reason);
                 assert.equal(result.goalEvaluation.satisfied, actual === 200);
-                assert.equal(f.approvals.length, 1);
+                assert.equal(f.approvals.length, 1, result.reason);
                 assert.equal(f.calls.filter((item) => item.name === 'cocos_2x_command_execute').length, 1);
                 if (actual === 20) assert.ok(result.goalEvaluation.outstanding.some((item) => item.id === 'requested-target-1'));
             });
@@ -380,11 +384,12 @@ test('reading a named script to explain changes stays read-only and requires tha
 
 test('denying a write approval still prevents dispatch after structured task interpretation', async () => {
     const f = fixture(), task = '将 Canvas/Foo 的 x 设置为 200';
-    await withModel(proposal(task, 'write', { targets: [target] }), () => call('apply-denied', 'cocos_2x_command_execute', {
+    await withModel(proposal(task, 'write', { targets: [target] }), (round) => round === 1
+        ? call('load-denied', 'cocos_2x_tools_load', { groups: ['scene'] }) : call('apply-denied', 'cocos_2x_command_execute', {
         command: 'scene.node.patch', input: { targetNodeUuid: 'node-1', targetNodePath: 'Canvas/Foo', action: 'apply',
             operationId: 'operation-1', expectedDiff: [{ path: 'node.position.x', before: 0, after: 200 }] } }), async () => {
         const result = await runCreatorAgent({ ...f.options, task, approveWrite: async () => false });
-        assert.equal(result.status, 'awaiting-approval');
+        assert.equal(result.status, 'awaiting-approval', result.reason);
         assert.equal(f.calls.filter((item) => item.name === 'cocos_2x_command_execute').length, 0);
     });
 });

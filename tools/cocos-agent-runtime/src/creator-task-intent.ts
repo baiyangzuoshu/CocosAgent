@@ -78,7 +78,7 @@ export function parseCreatorTaskIntent(value: unknown, task: string): CreatorTas
 export async function requestCreatorTaskIntent(provider: ModelProvider, task: string, mode: AgentMode,
     signal?: AbortSignal): Promise<CreatorTaskIntent> {
     if (signal?.aborted) throw new Error('USER_CANCELLED');
-    const response = await provider.complete({ mode, tools: [], ...(signal ? { signal } : {}), messages: [
+    const response = await provider.complete({ mode, purpose: 'task-understanding', tools: [], ...(signal ? { signal } : {}), messages: [
         { role: 'system', content: [
             'COCOS_TASK_INTENT_V1: Interpret the current user request before any task actions. Return JSON only; you have no tools and cannot approve, execute, or complete work.',
             'Schema (exact keys): {"version":1,"task":"exact original task","kind":"explain|read|write|mixed|restore|memory|clarify","sourceQuotes":["exact task substring"],"reads":[],"targets":[],"verification":"none|compile|runtime|interaction","question":""}.',

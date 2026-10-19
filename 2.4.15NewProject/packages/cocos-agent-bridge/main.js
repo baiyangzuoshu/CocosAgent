@@ -74,6 +74,16 @@ function commandCatalog(context) {
         { id: 'script.read', contractVersion: '0.2', access: 'read',
             preconditions: ['existingProjectScript', 'assetDbReady'],
             status: assetDbReady ? 'available' : 'unavailable', reason: assetDbReady ? null : 'ASSETDB_UNAVAILABLE' },
+        { id: 'script.create', contractVersion: '0.2', access: 'write',
+            preconditions: ['destinationFree', 'assetDbReady', 'creatorImporter'],
+            status: assetDbReady && Editor.assetdb && typeof Editor.assetdb.create === 'function'
+                && typeof Editor.assetdb.delete === 'function'
+                && Editor.Utils && Editor.Utils.UuidUtils && typeof Editor.Utils.UuidUtils.compressUuid === 'function'
+                ? 'available' : 'unavailable',
+            reason: assetDbReady && Editor.assetdb && typeof Editor.assetdb.create === 'function'
+                && typeof Editor.assetdb.delete === 'function'
+                && Editor.Utils && Editor.Utils.UuidUtils && typeof Editor.Utils.UuidUtils.compressUuid === 'function'
+                ? null : 'SCRIPT_ASSET_IMPORTER_UNAVAILABLE' },
         { id: 'script.patch.plan', contractVersion: '0.2', access: 'read',
             preconditions: ['existingProjectScript', 'assetDbReady'],
             status: assetDbReady ? 'available' : 'unavailable', reason: assetDbReady ? null : 'ASSETDB_UNAVAILABLE' },
@@ -360,6 +370,17 @@ function runNodeCreate(message) {
         || (params.prefabMode || null) !== (operation.prefabMode || null)
         || (params.prefabUuid || null) !== (operation.prefabUuid || null)) {
         send({ type: 'response', id: message.id, ok: false, error: { code: 'INVALID_NODE_SESSION' } }); return;
+    }
+    for (const component of operation.components || []) {
+        if (component.classId !== 'cocosScript') continue;
+        const url = `db://assets/${component.scriptPath}`;
+        const uuidUtils = Editor.Utils && Editor.Utils.UuidUtils;
+        if (!Editor.assetdb || typeof Editor.assetdb.urlToUuid !== 'function'
+            || Editor.assetdb.urlToUuid(url) !== component.scriptUuid
+            || !uuidUtils || typeof uuidUtils.compressUuid !== 'function'
+            || uuidUtils.compressUuid(component.scriptUuid) !== component.scriptClassId) {
+            send({ type: 'response', id: message.id, ok: false, error: { code: 'SCRIPT_COMPONENT_IDENTITY_MISMATCH' } }); return;
+        }
     }
     const preflight = message.method.endsWith('.preflight');
     const fail = (code, error) => send({ type: 'response', id: message.id, ok: false,

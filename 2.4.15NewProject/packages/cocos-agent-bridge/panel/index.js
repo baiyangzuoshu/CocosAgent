@@ -9,6 +9,19 @@ function clearChildren(element) {
     while (element && element.firstChild) element.removeChild(element.firstChild);
 }
 
+function usagePurposeLabel(request) {
+    if (request.purpose === 'summary') return request.summaryKind === 'conversation' ? '会话摘要' : '上下文摘要';
+    return request.purpose === 'task-understanding' ? '任务理解' : '主循环';
+}
+
+function usageMetric(group, key) {
+    const count = group && group.totals && group.totals[key];
+    if (!Number.isSafeInteger(count) || count < 0) return '未知';
+    const coverage = group.coverage && group.coverage[key];
+    return count.toLocaleString() + (Number.isSafeInteger(coverage) && coverage < group.requestCount
+        ? `（${coverage}/${group.requestCount} 次有数据）` : '');
+}
+
 function safeSupportText(value) {
     return String(value || '')
         .replace(/\bsk-[A-Za-z0-9_-]{12,}\b/g, '[REDACTED]')
@@ -692,6 +705,7 @@ Editor.Panel.extend({
         this._planCards.clear();
         this._plans.clear();
         this._runCards.clear();
+        if (this._usageCards) this._usageCards.clear();
         clearChildren(this.$messages);
         this.$messages.appendChild(this.$empty);
         this.$empty.textContent = '当前聊天已清空。计划、运行记录和操作账本仍保留。';
@@ -942,6 +956,10 @@ Editor.Panel.extend({
         if (message.requestId && message.requestId !== this._requestId) return;
         if (message.type === 'run.started') { this.addActivity(`${message.mode} · 已开始`); return; }
         if (message.type === 'task.intent') { this.addActivity(describeTaskIntent(message)); return; }
+        if (message.type === 'model.usage') {
+            this.renderModelUsage(message.modelUsage, [message.request], message.requestId || message.runId, true);
+            return;
+        }
         if (message.type === 'todo.updated') {
             this.renderExecutionChecklist(message.items, message.requestId || message.runId, true);
             return;
@@ -1050,12 +1068,15 @@ Editor.Panel.extend({
         if (message.type === 'approval.required') { this.showApproval(message); return; }
         if (message.type === 'run.rejected') { this.finishRun(message.reason); return; }
         if (message.type === 'run.failed') {
+            this.renderModelUsage(message.modelUsage, message.modelUsageRequests, message.requestId);
             this.addMessage('assistant', message.message || '请求失败');
             if (message.planProgress) this.renderPlan(message.planProgress);
             this.finishRun(message.message, 'failed');
             return;
         }
         if (message.type === 'run.result') {
+            this.renderModelUsage(message.result && message.result.modelUsage,
+                message.result && message.result.modelUsageRequests, message.requestId);
             this.addMessage('assistant', message.result?.finalText || '任务已结束。');
             this.renderExecutionChecklist(message.result?.executionChecklist, message.requestId, true);
             if (message.result?.goalEvaluation) this.renderGoalEvaluation({
@@ -1372,6 +1393,62 @@ Editor.Panel.extend({
         if (live) this.$messages.scrollTop = this.$messages.scrollHeight;
     },
 
+    renderModelUsage(summary, requests, id, live = false, parent = null) {
+        if (!summary || !Number.isSafeInteger(summary.requestCount)) return;
+        if (!this._usageCards) this._usageCards = new Map();
+        const key = String(id || 'unknown');
+        let entry = this._usageCards.get(key);
+        if (!entry || !entry.card.parentNode) {
+            entry = { card: document.createElement('section'), requests: new Map() };
+            entry.card.className = 'run-card model-usage';
+            this._usageCards.set(key, entry);
+        }
+        for (const request of (Array.isArray(requests) ? requests : [])) {
+            if (request && typeof request.requestId === 'string') entry.requests.set(request.requestId, request);
+        }
+        const card = entry.card;
+        clearChildren(card);
+        const title = document.createElement('h4');
+        title.textContent = `Token 用量 · ${summary.requestCount} 次模型请求`;
+        card.appendChild(title);
+        const append = (text) => {
+            const row = document.createElement('div');
+            row.className = 'run-meta';
+            row.textContent = text;
+            card.appendChild(row);
+        };
+        append(`输入 ${usageMetric(summary, 'inputTokens')} · 输出 ${usageMetric(summary, 'outputTokens')} · 合计 ${usageMetric(summary, 'totalTokens')}`);
+        append(`输入缓存命中 ${usageMetric(summary, 'cacheHitTokens')} · 未命中 ${usageMetric(summary, 'cacheMissTokens')}`);
+        for (const purpose of ['task-understanding', 'main-loop', 'summary']) {
+            const group = summary.byPurpose && summary.byPurpose[purpose];
+            if (!group || !group.requestCount) continue;
+            const label = purpose === 'summary' ? '摘要' : usagePurposeLabel({ purpose });
+            append(`${label} · ${group.requestCount} 次 · 输入 ${usageMetric(group, 'inputTokens')} · 输出 ${usageMetric(group, 'outputTokens')} · 合计 ${usageMetric(group, 'totalTokens')}`);
+        }
+        append('接口实报；未知字段未估算。缓存用量包含在输入内，不重复相加。');
+        if (entry.requests.size) {
+            const detail = document.createElement('details');
+            const heading = document.createElement('summary');
+            heading.textContent = '查看每次请求';
+            detail.appendChild(heading);
+            for (const request of entry.requests.values()) {
+                const row = document.createElement('div');
+                row.className = 'run-meta';
+                const single = { totals: request.usage || {} };
+                row.textContent = `${usagePurposeLabel(request)} · ${request.model || '模型'} · ${request.status === 'failed' ? '失败' : '已返回'}${request.errorCode ? ` · ${request.errorCode}` : ''}`
+                    + `\n输入 ${usageMetric(single, 'inputTokens')} · 输出 ${usageMetric(single, 'outputTokens')} · 合计 ${usageMetric(single, 'totalTokens')}`
+                    + `\n缓存命中 ${usageMetric(single, 'cacheHitTokens')} · 未命中 ${usageMetric(single, 'cacheMissTokens')}`
+                    + `\n${request.startedAt || ''} · ${request.durationMs || 0} ms · request ${request.requestId}`;
+                detail.appendChild(row);
+            }
+            card.appendChild(detail);
+        }
+        this.addCopyButton(card);
+        const target = parent || this.$messages;
+        if (card.parentNode !== target) target.appendChild(card);
+        if (live) this.$messages.scrollTop = this.$messages.scrollHeight;
+    },
+
     renderRecentRun(run) {
         if (!run || typeof run.id !== 'string') return;
         const card = document.createElement('section');
@@ -1390,6 +1467,7 @@ Editor.Panel.extend({
         meta.className = 'run-meta';
         meta.textContent = `${run.mode || 'Agent'} · ${run.updatedAt || run.startedAt || ''}${run.reason ? ` · ${run.reason}` : ''}`;
         card.appendChild(meta);
+        this.renderModelUsage(run.modelUsage, run.modelUsageRequests, run.id, false, card);
         if (run.goalEvaluation) {
             const goal = document.createElement('div');
             goal.className = 'run-meta';

@@ -59,6 +59,28 @@ test('a mismatched successful write receipt retains the original identity; pre-d
     assert.equal(clean.state.pending, null);
 });
 
+test('the fixed script-create recovery tool clears only the exact completed operation', async () => {
+    const operationId = 'script-create-1';
+    const store = storage();
+    store.state.pending = { field: 'operationId', value: operationId, toolName: 'cocos_2x_command_execute' };
+    const recovery = tool('cocos_2x_script_create_reconcile', 'write', 'recovery');
+    const calls = [];
+    const inner = { listTools: async () => [recovery], callTool: async (input) => {
+        calls.push(input);
+        return { structuredContent: { success: true, outcome: 'needs-runtime', operationId,
+            record: { state: 'completed', scriptUuid: 'uuid-1', metaSha256: 'meta-1', afterSha256: 'source-1' },
+            current: { scriptUuid: 'uuid-1', metaSha256: 'meta-1', sourceSha256: 'source-1' } } };
+    } };
+    const registry = await CreatorRecoveryRegistry.open(inner, store);
+    const wrong = await registry.callTool({ name: recovery.name, arguments: { operationId: 'other-operation' } });
+    assert.equal(wrong.structuredContent.error.code, 'PROJECT_RECOVERY_REQUIRED');
+    assert.equal(calls.length, 0);
+    const result = await registry.callTool({ name: recovery.name, arguments: { operationId } });
+    assert.equal(result.structuredContent.outcome, 'needs-runtime');
+    assert.equal(store.state.pending, null);
+    assert.equal(calls.length, 1);
+});
+
 const receipt = (name, payload, access = 'read') => ({ name, toolName: name, callId: globalThis.crypto.randomUUID(), access, role: name.includes('operation_get') ? 'recovery' : 'task', result: { structuredContent: payload } });
 const write = (x, id = 'op-1', action = 'apply') => receipt('cocos_2x_command_execute', {
     success: true, command: 'scene.node.patch', outcome: 'completed', operationId: id,

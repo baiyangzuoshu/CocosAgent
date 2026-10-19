@@ -120,13 +120,16 @@ function validObjectComponents(value) {
     if (!Array.isArray(value) || value.length > 1) return false;
     const seen = new Set();
     return value.every((item) => {
-        if (!item || typeof item !== 'object' || Array.isArray(item) || !['cc.Sprite', 'cc.Label'].includes(item.classId)
+        if (!item || typeof item !== 'object' || Array.isArray(item) || !['cc.Sprite', 'cc.Label', 'cocosScript'].includes(item.classId)
             || seen.has(item.classId)) return false;
         seen.add(item.classId);
         if (item.classId === 'cc.Sprite') return Object.keys(item).every((key) => ['classId', 'spriteFrameUuid'].includes(key))
             && uuidPattern.test(item.spriteFrameUuid || '');
-        return Object.keys(item).every((key) => ['classId', 'text'].includes(key))
+        if (item.classId === 'cc.Label') return Object.keys(item).every((key) => ['classId', 'text'].includes(key))
             && typeof item.text === 'string' && item.text.length <= 256;
+        return Object.keys(item).every((key) => ['classId', 'scriptPath', 'scriptUuid', 'scriptClassId'].includes(key))
+            && typeof item.scriptPath === 'string' && /^[A-Za-z0-9_ -]+(?:\/[A-Za-z0-9_. -]+)*\.(?:js|ts)$/.test(item.scriptPath)
+            && uuidPattern.test(item.scriptUuid || '') && /^[A-Za-z0-9_+/=-]{20,24}$/.test(item.scriptClassId || '');
     });
 }
 function validTransform(value) {
@@ -144,7 +147,8 @@ function serializedObjectMatches(objects, node, manifest) {
     for (let i = 0; manifest.prefabMode !== 'instantiate' && i < expected.length; i++) {
         const ref = refs[i];
         const component = ref && Number.isInteger(ref.__id__) ? objects[ref.__id__] : null;
-        if (!component || component.__type__ !== expected[i].classId) return false;
+        const expectedClassId = expected[i].classId === 'cocosScript' ? expected[i].scriptClassId : expected[i].classId;
+        if (!component || component.__type__ !== expectedClassId) return false;
         if (expected[i].classId === 'cc.Sprite' && (!component._spriteFrame || component._spriteFrame.__uuid__ !== expected[i].spriteFrameUuid)) return false;
         if (expected[i].classId === 'cc.Label' && component._string !== expected[i].text) return false;
     }
@@ -342,7 +346,8 @@ async function run() {
         const previewComponents = prefabMode === 'instantiate'
             ? (after.targetNode.componentDetails || []).map((item) => item.classId === 'cc.Sprite'
                 ? { classId: item.classId, spriteFrameUuid: item.spriteFrameUuid }
-                : item.classId === 'cc.Label' ? { classId: item.classId, text: item.text } : { classId: item.classId })
+                : item.classId === 'cc.Label' ? { classId: item.classId, text: item.text }
+                    : item.classId === 'cocosScript' ? { classId: item.classId, scriptClassId: item.scriptClassId } : { classId: item.classId })
             : components;
         record.previewComponents = previewComponents;
         store.write(projectRoot, record);
@@ -380,6 +385,7 @@ function runtimeObjectMatches(observed, expected) {
         if (actual[i].classId !== components[i].classId) return false;
         if (components[i].classId === 'cc.Sprite' && actual[i].spriteFrameUuid !== components[i].spriteFrameUuid) return false;
         if (components[i].classId === 'cc.Label' && actual[i].text !== components[i].text) return false;
+        if (components[i].classId === 'cocosScript' && actual[i].scriptClassId !== components[i].scriptClassId) return false;
     }
     const transform = expected.transform || {};
     if (transform.position && (!observed.transform || Math.abs(observed.transform.position.x - transform.position.x) > 1e-5

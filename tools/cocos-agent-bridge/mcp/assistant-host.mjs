@@ -10,7 +10,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { DEFAULT_BASE_URL, DEFAULT_MODEL, writeEvent } from './deepseek-agent.mjs';
 import { parseStructuredPlan } from './structured-plan.mjs';
 import { beginPlanStep, createPlan, finishPlanStep, hasPlanSetupReceipts, planView, planAcceptanceContext } from './assistant-plan-service.mjs';
-import { AssistantStateStore } from './assistant-state-store.mjs';
+import { AssistantStateStore, isUsageCount } from './assistant-state-store.mjs';
 import { AssistantMemoryFileStore } from './assistant-memory-store.mjs';
 import { AssistantToolResultArchive } from './assistant-tool-result-archive.mjs';
 import { AssistantTaskStore } from './assistant-task-store.mjs';
@@ -27,7 +27,8 @@ const MCP_SERVER = path.join(SCRIPT_DIR, 'mcp-server.mjs');
 const AGENT_SKILL = path.join(REPOSITORY_ROOT, 'plugins/cocos-agent-2x/skills/cocos-agent/SKILL.md');
 const MODE_NAMES = new Set(['Ask', 'Plan', 'Agent']);
 const MAX_MESSAGE_LENGTH = 8000;
-const MAX_HISTORY = 24;
+const MAX_HISTORY = 8;
+const MAX_HISTORY_BYTES = 12_000;
 const APPROVAL_TIMEOUT_MS = 120_000;
 const require = createRequire(import.meta.url);
 const { Server: WebSocketServer } = require('../vendor/ws');
@@ -127,7 +128,8 @@ function supportSafeValue(value, depth = 0) {
     if (typeof value !== 'object') return null;
     const output = {};
     for (const [key, item] of Object.entries(value).slice(0, 256)) {
-        if (/(?:api.?key|authorization|secret|password|credential|token|imageDataUrl|dataBase64|screenshot)/i.test(key)) continue;
+        if (/(?:api.?key|authorization|secret|password|credential|token|imageDataUrl|dataBase64|screenshot)/i.test(key)
+            && !isUsageCount(key, item)) continue;
         output[key.slice(0, 120)] = supportSafeValue(item, depth + 1);
     }
     return output;
@@ -199,7 +201,7 @@ function compactResult(result) {
         if (image) compact.imageDataUrl = `data:${image.mimeType};base64,${image.data}`;
         if (Array.isArray(structured.data?.skills)) {
             compact.skills = structured.data.skills.map((skill) => ({ name: skill.name, sha256: skill.sha256,
-                referenceIds: (skill.references || []).map((reference) => reference.id) }));
+                referenceIds: Array.isArray(skill.references) ? skill.references.map((reference) => reference.id) : null }));
             compact.skillsIndexSha256 = structured.data.skillsIndexSha256;
             compact.packageVersion = structured.data.packageVersion;
             compact.packageFingerprint = structured.data.packageFingerprint;
@@ -273,7 +275,7 @@ async function readRecoveryReceipt(client, projectRoot, toolName, operationId, m
         throw new Error('RECOVERY_CAPABILITY_NOT_AVAILABLE');
     }
     const args = toolName === 'cocos_2x_script_operation_get'
-        ? { operationId } : { projectRoot, operationId };
+        ? { projectRoot, input: { operationId } } : { projectRoot, operationId };
     return compactResult(await client.callTool({ name: toolName, arguments: args }));
 }
 
@@ -321,6 +323,7 @@ async function start(options) {
     const apiKey = process.env.DEEPSEEK_API_KEY;
     if (typeof apiKey !== 'string' || apiKey.trim().length < 8) throw new Error('Set DEEPSEEK_API_KEY in the assistant process environment.');
 
+    const usageRuntime = await import(pathToFileURL(path.join(REPOSITORY_ROOT, 'tools/cocos-agent-runtime/dist/index.js')).href);
     const stateStore = new AssistantStateStore(options.project);
     const memoryStore = new AssistantMemoryFileStore(options.project);
     const taskStore = new AssistantTaskStore(options.project);
@@ -542,26 +545,55 @@ async function start(options) {
             const active = { requestId: message.requestId, socket, controller: new AbortController(),
                 cancelRequested: false, activeTool: null, runRecord: null };
             activeRunState = active;
+            const runTracePath = traceFile(options.project);
+            const runRecord = { id: message.requestId, conversationId: message.conversationId,
+                planId: activePlan?.id, task: taskText.slice(0, MAX_MESSAGE_LENGTH), mode: message.mode,
+                status: 'running', reason: null, startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+                activeTool: null, receipts: [], executionChecklist: [], tracePath: runTracePath,
+                modelUsageRequests: [], modelUsage: usageRuntime.summarizeModelUsage([]) };
+            active.runRecord = runRecord;
+            const recordUsage = (request, runId = message.requestId) => {
+                if (runRecord.modelUsageRequests.some((item) => item.requestId === request.requestId)) return;
+                runRecord.modelUsageRequests.push(request);
+                runRecord.modelUsage = usageRuntime.summarizeModelUsage(runRecord.modelUsageRequests);
+                runRecord.updatedAt = new Date().toISOString();
+                try { appendRun(runRecord); }
+                catch (_) {
+                    active.persistenceError = true;
+                    active.controller.abort();
+                    send(socket, { type: 'run.persistence-error', requestId: message.requestId });
+                }
+                send(socket, { type: 'model.usage', requestId: message.requestId, runId,
+                    request, modelUsage: runRecord.modelUsage });
+            };
             const previousConversation = conversations.get(message.conversationId) || [];
             const previousSummary = conversationSummaries.get(message.conversationId) || null;
             let preparedConversation;
             try {
+                appendRun(runRecord);
                 preparedConversation = await prepareConversationForTurn({
                     messages: previousConversation,
                     summary: previousSummary,
                     task: taskText,
                     signal: active.controller.signal,
                     maxMessages: MAX_HISTORY,
+                    maxHistoryBytes: MAX_HISTORY_BYTES,
                     summarize: async ({ task, dialogue, signal }) => {
-                        const runtimeUrl = pathToFileURL(path.join(REPOSITORY_ROOT, 'tools/cocos-agent-runtime/dist/index.js')).href;
-                        const runtime = await import(runtimeUrl);
-                        const provider = new runtime.DeepSeekProvider({ apiKey, model: options.model });
-                        return provider.summarizeContext({ task, dialogue, signal });
+                        const provider = new usageRuntime.DeepSeekProvider({ apiKey, model: options.model, onUsage: (request) => {
+                            recordUsage(request);
+                            writeEvent(runTracePath, { event: 'model.usage', runId: message.requestId, request }, apiKey);
+                        } });
+                        return provider.summarizeContext({ task, dialogue, signal, summaryKind: 'conversation' });
                     },
                 });
             } catch (error) {
+                runRecord.status = 'failed';
+                runRecord.reason = 'conversation-preparation-error';
+                runRecord.updatedAt = new Date().toISOString();
+                try { appendRun(runRecord); } catch (_) {}
                 if (activeRunState === active) activeRunState = null;
                 send(socket, { type: 'run.failed', requestId: message.requestId,
+                    modelUsage: runRecord.modelUsage, modelUsageRequests: runRecord.modelUsageRequests,
                     message: `无法准备持久会话摘要，任务未发送：${String(error?.message || error).slice(0, 300)}` });
                 return;
             }
@@ -569,13 +601,20 @@ async function start(options) {
             conversations.set(message.conversationId, conversation);
             if (preparedConversation.summary) conversationSummaries.set(message.conversationId, preparedConversation.summary);
             const history = preparedConversation.history;
-            const summaryMessage = persistentSummaryMessage(preparedConversation.summary);
+            const summaryMessage = persistentSummaryMessage(preparedConversation.summary, { task: taskText });
             const modelHistory = [...(summaryMessage ? [summaryMessage] : []), ...history];
-            const runRecord = { id: message.requestId, conversationId: message.conversationId,
-                planId: activePlan?.id, task: taskText.slice(0, MAX_MESSAGE_LENGTH), mode: message.mode,
-                status: 'running', reason: null, startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-                activeTool: null, receipts: [], executionChecklist: [] };
-            active.runRecord = runRecord;
+            try { writeEvent(runTracePath, { event: 'conversation.context', runId: message.requestId,
+                inputMessages: previousConversation.length,
+                inputBytes: Buffer.byteLength(JSON.stringify(previousConversation), 'utf8'),
+                archivedMessages: preparedConversation.archivedCount,
+                archivedBytes: preparedConversation.archivedBytes,
+                retainedMessages: history.length,
+                retainedBytes: preparedConversation.historyBytes,
+                summaryChars: preparedConversation.summary?.content?.length || 0,
+                preservedUserMessageCount: preparedConversation.summary?.preservedUserMessages?.length || 0,
+                preservedUserMessageBytes: Buffer.byteLength(JSON.stringify(preparedConversation.summary?.preservedUserMessages || []), 'utf8'),
+                exactRecallLoaded: modelHistory.some((item) => item.content.includes('Source-preserved prior user-message excerpts')),
+            }, apiKey); } catch { /* Context diagnostics must not block a task. */ }
             try { appendRun(runRecord); }
             catch (error) {
                 if (previousConversation.length) conversations.set(message.conversationId, previousConversation);
@@ -603,10 +642,11 @@ async function start(options) {
                     toolName: tool.name, arguments: args, timeoutMs: APPROVAL_TIMEOUT_MS });
             });
 
-            const runTracePath = traceFile(options.project);
-            runRecord.tracePath = runTracePath;
-            try { appendRun(runRecord); } catch (_) { delete runRecord.tracePath; }
             const onAgentEvent = (event) => {
+                    if (event.type === 'model.usage') {
+                        recordUsage(event.request, event.runId);
+                        return;
+                    }
                     if (event.type === 'task.intent') {
                         // Persist the validated interpretation as a display-only proposal, never as approval or task evidence.
                         runRecord.taskIntent = {
@@ -766,6 +806,7 @@ async function start(options) {
                 runRecord.executionChecklist = Array.isArray(result.executionChecklist) ? result.executionChecklist : runRecord.executionChecklist;
                 runRecord.updatedAt = new Date().toISOString();
                 runRecord.activeTool = null;
+                for (const request of result.modelUsageRequests || []) recordUsage(request, result.runId);
                 // Preserve full result receipts in the compact recovery ledger, merging in case
                 // an event was missed during a panel reconnect.
                 for (const receipt of result.receipts || []) {
@@ -791,6 +832,7 @@ async function start(options) {
                 send(socket, { type: 'run.result', requestId: message.requestId, mode: message.mode,
                     result: { status: result.status, reason: result.reason, finalText: assistantText,
                         toolCalls: result.toolCalls, tracePath: result.tracePath,
+                        modelUsage: runRecord.modelUsage, modelUsageRequests: runRecord.modelUsageRequests,
                         receipts: (result.receipts || []).map(compactReceipt),
                         contextCompactions: result.contextCompactions || [],
                         executionChecklist: runRecord.executionChecklist,
@@ -808,6 +850,7 @@ async function start(options) {
                 runRecord.updatedAt = new Date().toISOString();
                 try { appendRun(runRecord); } catch (_) {}
                 send(socket, { type: 'run.failed', requestId: message.requestId, message: detail,
+                    modelUsage: runRecord.modelUsage, modelUsageRequests: runRecord.modelUsageRequests,
                     planProgress: activePlan ? planView(activePlan) : undefined });
             }).finally(() => {
                 if (activeRunState === active) activeRunState = null;
