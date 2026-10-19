@@ -2,13 +2,13 @@
 
 ## 2026-10-18 第三方 Host Skill 包
 
-Creator 2.4.x 的 51 项通用路由/专项 Skills 已归入独立的 Codex / Claude Code 插件包 `plugins/cocos-creator-agent/`；广告、内购、联网和语音等 5 项可选 SDK Skills 位于 `plugins/cocos-creator-agent-sdk/`。两者均与 Creator 原生 `plugins/cocos-agent-2x/`、内部 MCP 和原生扩展打包链隔离。当前交付仅包含 Skill 内容与 Host 插件元数据，第三方 CLI、MCP 服务及 Creator 侧工具桥接仍待设计和实现；Skill 文件存在不代表对应工具或实机能力已通过验收。详见[第三方 Skill 系统设计](cocos-agent-skill-system-creator-2x.md)。
+Creator 2.4.x 的 51 项通用路由/专项 Skills 已归入独立 Codex / Claude Code 插件 `plugins/cocos-creator-agent/`；5 项可选 SDK Skills 位于独立包 `plugins/cocos-creator-agent-sdk/`。第三方插件现有独立 MCP、CLI、本机桥接服务和 Creator 2.4.15 扩展；Codex 当前会话完成 MCP 工具目录重载、8 工具发现、CLI 状态调用、tank 实例确认及 5 条 Creator 只读命令验收。Claude Code Host 尚未验收；写入审批、预览控制、编译/Console、运行交互与业务断言尚未实现。详见[第三方 Skill 系统设计](cocos-agent-skill-system-creator-2x.md)和[第三方接入实现](cocos-creator-third-party-integration-mvp-0.1.md)。
 
 ## 2026-10-17 开发方向调整（当前优先级）
 
 主线调整为 **Creator 真实游戏功能开发助手**：保留原生面板、TS 内核、Host/内部 MCP 和既有操作账本，优先补可组合的项目搜索与 JS/TS 开发、节点/组件/引用及事件绑定、编译和运行反馈、项目技能与工具扩展，以及整项任务的审阅与恢复。以 LinkUpClient 的实际功能完成率、人工介入、耗时和恢复结果衡量进展。
 
-完整决策、Unity 对照、M1–M5 交付门槛和功能样本要求见[开发方向调整](cocos-agent-unity-alignment-development-direction-20261017.md)。产品方向明确为双线：Creator 原生 CocosAgent 自有 Host/模型接入继续独立工作；第三方 Host 产品已建立 51 项 Creator 通用 Skills 和 5 项独立 SDK Skills 插件包，由 Codex/Claude 等第三方 Host/模型负责对话。第三方 CLI/MCP、Creator 工具桥接、合同与 Host 安装验收尚未完成；第三方产品不调用 CocosAgent 自有模型服务，也不作为原生 Agent 依赖。Creator 2.4.15、项目边界与不确定写入恢复规则继续有效。
+完整决策、Unity 对照、M1–M5 交付门槛和功能样本要求见[开发方向调整](cocos-agent-unity-alignment-development-direction-20261017.md)。产品方向明确为双线：Creator 原生 CocosAgent 自有 Host/模型接入继续独立工作；第三方 Host 产品由 Codex/Claude 等第三方 Host/模型负责对话。Codex 的只读接入验收已通过，Claude、写入权限和运行反馈仍待验收；范围与缺口见[第三方接入实现](cocos-creator-third-party-integration-mvp-0.1.md)。第三方产品不调用 CocosAgent 自有模型服务，也不作为原生 Agent 依赖。Creator 2.4.15、项目边界与不确定写入恢复规则继续有效。
 
 下方保留既有实现与验收证据；旧日期的阶段顺序不再决定当前优先级。先修授权和数据完整性缺陷，其他历史验收结合真实功能需要安排；不要求完成全部历史研究分支后才开始通用开发能力。
 
@@ -175,11 +175,11 @@ Unity 官方产品线须区分：自有 Editor Assistant、第三方 Host 的 sk
 
 **完成标准：** 同一真实项目多轮修改可延续上下文，面板清楚展示实际差异、验证结果和恢复状态。持久操作账本与 JSONL 轨迹本身不等于会话/计划持久化。
 
-### 7：第三方 Host 插件产品线（Skills 包已建立，CLI/MCP 设计与实现待完成）
+### 7：第三方 Host 插件产品线（只读接入源码已建立，真实验收与写入闭环待完成）
 
-面向 Codex、Claude 等第三方 Host 的 Creator 2.4.x 通用 Skills 已独立放入 `plugins/cocos-creator-agent/`，5 项广告、内购、联网、语音 Skills 放在可选的 `plugins/cocos-creator-agent-sdk/`。这些包只包含 Skills 和 Host 元数据，不加载到 Creator 原生 Assistant/MCP。第三方 Host/模型负责对话及模型调用；第三方产品不代理到 CocosAgent 自有 Provider/Host，也不要求 Creator 原生 Agent 依赖第三方进程。第三方 CLI、第一方 MCP 服务和 Creator 侧工具接入仍需单独设计与实现。
+面向 Codex、Claude 等第三方 Host 的 Creator 通用 Skills 与可选 SDK Skills 独立打包；同一插件现有 MCP、CLI、本机桥接服务和 Creator 2.4.15 扩展源码，当前只提供只读工程/资源查询、脚本读取及场景快照。Codex 插件和 Creator 实例握手、工具目录发现及只读命令已有实机证据，见[验收轨迹](traces/cocos-creator-mcp-codex-acceptance-20261019.md)；Claude Host 尚未验收。它们不加载到 Creator 原生 Assistant/MCP。第三方 Host/模型负责对话及模型调用，第三方产品不代理到原生 Provider/Host，也不要求 Creator 原生 Agent 依赖第三方进程。
 
-后续设计需确定：支持的 Host 与 Creator 版本；插件安装/卸载和配置更新；CLI 如何发现并绑定 Dashboard/Creator 实例；MCP 工具目录、能力变化通知与合同版本；Skills 的权威源和分发/刷新；读写权限与逐次批准如何由 Creator 端强制；工具结果、操作账本、取消、断连和恢复回执；模型凭据隔离及诊断日志边界。复用共享 Creator 命令 schema、目标身份、操作账本和安全检查；Host-specific 配置与外部 MCP 生命周期不可复用原生 Assistant 生命周期假设。
+后续需完善 Codex/Claude 插件实际导入与升级验收、CLI 工程管理范围、实例上下线与能力变化通知、Creator 端逐次写入审批和操作账本、编译/Console/预览及同会话运行反馈、取消/断连与恢复回执。当前命令合同固定为只读，不能把 Host 确认提示视作 Creator 侧授权。第三方 Host 配置与 MCP 生命周期独立于原生 Assistant 生命周期。
 
 **完成标准：** 至少一个受支持的第三方 Host 能安装并识别目标 Creator 实例、动态发现当前工具、读取并使用匹配版本的 skill；真实只读调用成功；一次获批写入在 Creator 中执行并读回，回执进入同一 operation 账本；工具变更通知、Host/Creator 断连、取消、卸载及原生 Agent 独立运行均有可重复验收。没有这些证据前，标为“方向已确认/设计中/实现中”，不能标成已支持。
 
@@ -217,7 +217,7 @@ Unity 官方产品线须区分：自有 Editor Assistant、第三方 Host 的 sk
 | 4：脚本开发闭环 | 原生面板完成既有 JS 的读取、精确差异、审批、写入和 Creator 编译；本次实际点击显示 `Clicked: 1/2`，原操作补偿后刷新预览再点不变。脚本源 SHA、UUID/meta 与按钮位置已读回恢复；记录见 AGENTS.md 的 2026-10-12 复验 | 补原生新 ID 重放、真实错误修复及独立游戏工程脚本任务；Plan 结构输出和多次提示调度缺口仍在 |
 | 5：运行结果观察 | **实现与模拟编排测试完成；原生初始观察已有实机证据，错误修复闭环待做。** 新增 2.4.15 Web 预览日志、帧/暂停状态、可选节点状态和画布截图观察；Agent 可按同一场景 UUID 读回，再走现有脚本读取、差异计划、批准补丁和二次观察。研究工程当前扩展 0.3.4 / MCP 0.3.3 合同匹配；原生已批准启动预览并观察同场景 UUID、帧、Label、日志和截图。每次观察为独立新页面，不能读取已点击页面状态 | 在隔离的 2.4.15 工程安装新运行时，注入已知可逆脚本错误，验证面板观察、窄补丁、Creator 编译和同场景二次观察；再恢复基线。另需解决共享预览端口 7456 的实例归属认证 |
 | 6：连续任务体验 | **实现与自动测试完成，Creator 实机验收待做。** 会话/计划、最近任务、副作用、停止、差异与只读账本核对入口已接入；2026-10-16 runtime 定向测试 42/42、Host 定向测试 6/6 通过，覆盖摘要/压缩控制流、取消等待写入回执、项目约定陈旧哈希拒绝及精确恢复前置条件 | 在真实 2.4.15 面板跨 Host 重启验证会话与恢复状态；面板发起真实取消并确认当前命令回执、后续调度停止且无自动回滚。自动测试不算 Creator 实机证据 |
-| 7：第三方 Host 插件 | 51 项核心 Skills 与 5 项 SDK Skills 已独立打包；Codex/Claude 导入未验收，CLI/MCP/Creator 工具桥接待设计实现 | 形成独立于原生 Host 的 CLI/MCP + Creator 接入合同；再做 Host 安装、动态工具发现、只读调用与获批写入验收，不阻塞 M1–M5 |
+| 7：第三方 Host 插件 | 51 项核心 Skills、5 项可选 SDK Skills、独立 MCP/CLI/本机桥与 Creator 2.4.15 只读扩展；Codex 工具目录重载、tank 实例与 5 条只读命令实机验收通过 | 验收 Claude Host；再实现 Creator 侧逐次审批写入、运行反馈与恢复闭环，不阻塞原生 M1–M5 |
 | 8：持续验证与 3.x | 2.4 持续推进；3.x 暂停新增 | 以真实工程可重复验收作为后续 3.x 规划门槛 |
 | 9：LinkUpClient 持续使用 | **自动测试已验证，磁盘身份/AGENTS 指纹已只读核对；原生面板未验证。** 2026-10-17 完整 runtime 126/126、MCP/扩展 99/99；只读确认 `AGENTS.md` 8,140 字节、SHA-256 为 `ae984519b3f1a808dad20546311c11701a031b1ce749f741f2a117a6aefa6f14`。Dashboard 显示 LinkUpClient“已打开”，但可读 Creator 前台仍为隔离工程，切换/打开尝试后编辑器超时；未取得 LinkUpClient 面板证据。详见[前台验收尝试记录](traces/cocos-agent-linkup-front-window-attempt-20261017.md) | 在 LinkUpClient 面板验证上下文/扩展指纹/场景快照、AGENTS 按需读取及陈旧哈希零分发拒绝、非空选择、多轮跟进、面板取消和精确账本恢复；之后从 LinkUpClient 实时快照选取目标并经批准复跑任务，不复用隔离工程 UUID |
 | 10：工程隔离长期记忆 | TS/Host 本地持久化、来源核验、候选提取、纠正/删除、准确恢复与任务召回已实现；TS runtime 58/58、MCP/扩展 84/84 | Creator 面板验收候选审阅、创建批准、来源查看、纠正后保留旧版本来源、删除后检索为空及 Host 重启后仍按当前工程隔离 |

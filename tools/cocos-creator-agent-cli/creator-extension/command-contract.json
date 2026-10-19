@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "creatorVersion": "2.4.15",
+  "commands": [
+    {
+      "id": "creator.project.info",
+      "access": "read",
+      "description": "Read the active Creator project identity and editor context.",
+      "input": { "type": "object", "properties": {}, "additionalProperties": false }
+    },
+    {
+      "id": "creator.project.search",
+      "access": "read",
+      "description": "Search project asset paths and bounded JavaScript/TypeScript source text.",
+      "input": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+          "query": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "scope": { "type": "string", "enum": ["all", "code", "assets"] },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.asset.search",
+      "access": "read",
+      "description": "Search Creator AssetDB records and return bounded asset identity metadata.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "maxLength": 160 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.script.read",
+      "access": "read",
+      "description": "Read a project JavaScript or TypeScript source file and its Creator metadata identity.",
+      "input": {
+        "type": "object",
+        "required": ["scriptPath"],
+        "properties": {
+          "scriptPath": { "type": "string", "minLength": 1, "maxLength": 240, "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?($|/))(?!.*(?:^|/)\\.)[^\\\\]+\\.(?:js|ts)$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.snapshot",
+      "access": "read",
+      "description": "Read a bounded hierarchy snapshot of the current Creator scene.",
+      "input": { "type": "object", "properties": {}, "additionalProperties": false }
+    }
+  ]
+}

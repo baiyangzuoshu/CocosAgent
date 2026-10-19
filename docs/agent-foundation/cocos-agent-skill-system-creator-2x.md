@@ -1,6 +1,6 @@
 # Cocos Creator 2.4.x 第三方 Agent Skill 系统
 
-日期：2026-10-18。状态：**Codex / Claude Code 第三方插件的 Skill 目录与双 Host 元数据已建立；Host 实际导入、自动触发效果、CLI/MCP、Creator 工具桥接和端到端验收仍待完成。** 本文描述第三方产品线，不描述 Creator 原生 CocosAgent 的内置 Skill 包。
+日期：2026-10-18（2026-10-19 更新）。状态：**51 项 Skills 与 SDK 包已建立；Codex 插件、独立 CLI、MCP/Creator 2.4.15 只读桥接已完成实机验收：Codex 当前会话发现并调用 8 个工具，Creator 实例身份和 5 条只读命令通过。Claude Code Host 尚未验收；写入、预览和运行反馈尚未实现。** 本文描述第三方产品线，不描述 Creator 原生 CocosAgent 的内置 Skill 包。
 
 ## 产品边界
 
@@ -8,7 +8,7 @@
 - `plugins/cocos-creator-agent-sdk/`：独立可选的 SDK Skills 插件，包含广告、内购、联网和语音集成工作流。SDK 插件未安装时，核心插件不加载这些内容。
 - `plugins/cocos-agent-2x/`、Creator 原生扩展及其内部 MCP：继续服务 Creator 原生 CocosAgent，自行维护该产品线的 Skills 和 Host 生命周期。
 - 第三方 Skills 不加入原生 MCP 索引，不随 Creator 原生扩展复制或加载；第三方 Host 不调用 Creator 自有模型/Provider。
-- 本次交付只有 Skills、参考资料和插件元数据。第三方 CLI、MCP 服务、Creator 侧工具接入仍是计划项；Skill 文本不表示对应工具已经存在。
+- 第三方本机集成源码位于 `plugins/cocos-creator-agent/mcp/` 与独立包 `tools/cocos-creator-agent-cli/`；当前命令严格限于只读工程信息、搜索、AssetDB 搜索、脚本读取和场景快照。详细合同、通信、安装与未验收项见[第三方接入实现](cocos-creator-third-party-integration-mvp-0.1.md)。
 
 插件按 Host 提供入口元数据：Codex 使用根目录 portable `plugin.json`，并附 `.codex-plugin/plugin.json` 兼容清单；Claude Code 插件元数据位于 `.claude-plugin/plugin.json`，Skills 统一放在插件根目录 `skills/`。Creator 引擎参考资料放在 `references/2x/`，按当前任务按需读取；其中源码和运行证据主要针对 2.4.15，不能外推到全部 2.4.x。Codex 的插件打包参考 [OpenAI 插件打包文档](https://developers.openai.com/plugins/build/plugins)；Claude Code 的插件目录结构参考 [Anthropic 官方插件结构](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/plugin-dev/skills/plugin-structure)。
 
@@ -53,7 +53,7 @@
 
 `cocos2-extension-workflows`、`cocos2-creator-extension-development`、`cocos2-jsb-native-plugins`、`cocos2-project-extensions`、`cocos2-mcp-tools`、`cocos2-task-review-recovery`。
 
-`cocos2-mcp-tools` 只在第三方 CLI/MCP 集成可用时指导实例发现、合同读取和回执核对；它不宣称当前仓库已经交付该集成。项目级 `AGENTS.md`、`CLAUDE.md` 和自定义 Skills 属于目标项目的约定，不能覆盖 Host 安全策略或实时工具合同。
+`cocos2-mcp-tools` 指导实例发现、合同读取和回执核对。MCP/CLI 源码已存在，但没有 Creator 原生写入审批、预览控制或运行反馈工具；项目级 `AGENTS.md`、`CLAUDE.md` 和自定义 Skills 属于目标项目的约定，不能覆盖 Host 安全策略或实时工具合同。
 
 ## 可选 SDK Skills
 
@@ -69,7 +69,7 @@
 
 ## 当前状态与后续
 
-1. 已建立 51 项通用核心 Skills、Creator 2.x 参考目录、Codex/Claude 插件清单，以及独立 5 项 SDK Skills 插件。
-2. 尚未在 Codex 或 Claude Code 中实际安装和触发验收；当前只完成目录与元数据静态实现。
-3. 下一步单独设计第三方 CLI/MCP 与 Creator 扩展工具桥，明确工程/实例配对、能力发现、审批、操作账本、断连与恢复，不复用原生 Assistant 生命周期。
-4. Host 插件可用后，先用只读工程搜索/TS 读取验证安装、目标配对和技能路由，再完成获批的最小 Creator 写入/读回；不能以 Skill 数量或 manifest 存在代替真实验收。
+1. 已建立 51 项通用核心 Skills、Creator 2.x 参考目录、Codex/Claude 插件元数据和独立 5 项 SDK Skills 插件。
+2. 已新增独立第三方 MCP、CLI、本机 HTTP 桥接服务和 Creator 2.4.15 项目扩展；全部命令为只读，未复用原生 Agent 运行时。
+3. Codex 插件在当前桌面 Host 完成安装/重载；8 项工具发现、CLI 状态调用、tank 实例识别及 5 条 Creator 只读命令已实机验收。Claude Code Host 尚未验收。
+4. 下一步验收 Claude Code Host；再定义 Creator 端逐次写入审批、操作账本、预览/编译/Console/输入与业务断言合同。

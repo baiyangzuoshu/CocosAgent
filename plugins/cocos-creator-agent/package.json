@@ -1,0 +1,8 @@
+{
+  "name": "cocos-creator-agent-plugin",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Cocos Creator 2.4.15 third-party Host Skills and MCP adapter.",
+  "engines": { "node": ">=20" }
+}

@@ -1,12 +1,12 @@
 # CocosAgent 对照 Unity Agent 的开发方向调整
 
-日期：2026-10-17。状态：**开发方向已确认；M1 只读搜索和 TypeScript 读取已由 Creator 原生面板验收，M1 写入闭环仍未通过；其余通用编辑器操作仍待实现/验收。另已确认采用 Unity 式双产品线：原生 CocosAgent 保留；第三方 Host 的 51 项核心 Skill 与 5 项可选 SDK Skill 已独立打包，Codex/Claude 实机安装未验收，CLI/MCP/Creator 工具桥接未实现。** 原生实现与近期验收版本范围为 Cocos Creator 2.4.15。
+日期：2026-10-17。状态：**开发方向已确认；M1 原生只读搜索和 TS 读取已验收，M1 写入闭环仍未通过。第三方 Host 已有 51 项核心 Skill、5 项可选 SDK Skill、独立 MCP/CLI/本机桥及 Creator 2.4.15 只读扩展；Codex 工具目录、tank 实例握手和 5 条只读命令已实机验收，Claude Host 尚未验收。** 原生实现与近期验收版本范围为 Cocos Creator 2.4.15。
 
 **当前状态补记（2026-10-17）：** 后续 LinkUpClient Creator 2.4.15 原生复验已通过 M1 只读工具发现、`.ts` 搜索与 `script.read` 身份/哈希交叉核对；详细回执及边界见[只读验收摘要](traces/cocos-agent-m1-linkup-readonly-acceptance-20261017.md)。这覆盖旧状态中“Creator 原生只读链路未验收”的判断，但不代表 JS/TS 写入或 M1 整体通过；M5 有效功能样本仍为 0。
 
 本记录承接用户本轮确认的 Unity Agent 对比与开发建议，调整[原生 Agent 开发计划](cocos-agent-real-project-development-plan.md)的执行优先级。此前的源码、合同、测试与实机证据按各自版本保留；本记录不改变历史验收结果。与旧文档中的“近期顺序”冲突时，以本记录和主计划的 2026-10-17 方向调整为准。
 
-**第三方 Skill 包更新（2026-10-18）：** Creator 2.4.x 的 51 项通用路由/专项 Skills 已放入独立 Codex / Claude Code 插件包，5 项广告、内购、联网、语音 SDK Skills 独立成可选插件。它们不接入 Creator 原生 CocosAgent 的 MCP 索引或扩展打包链。当前只有插件 Skills 和元数据；第三方 CLI、MCP 与 Creator 工具桥接仍待实现。目录与边界见[第三方 Skill 系统设计](cocos-agent-skill-system-creator-2x.md)。
+**第三方 Host 接入更新（2026-10-19）：** 已为 Codex/Claude 插件增加 MCP stdio 入口、独立 CLI、127.0.0.1 本机桥及 Creator 2.4.15 项目扩展。Codex 当前会话已重载并发现 8 个工具，CLI 状态调用成功；tank 实例身份、能力目录和 5 条只读命令有实际回执。该源码与 Creator 原生 MCP/Host 分离。Claude Host 尚未验收；写入审批、编译/Console、预览和运行交互尚未实现。范围及回执见[第三方 Skill 系统设计](cocos-agent-skill-system-creator-2x.md)、[第三方接入实现](cocos-creator-third-party-integration-mvp-0.1.md)和[Codex MCP 实机轨迹](traces/cocos-creator-mcp-codex-acceptance-20261019.md)。
 
 ## 1. 产品目标与架构决定
 
@@ -27,13 +27,13 @@
 
 | 维度 | Unity 官方公开能力 | CocosAgent 当前依据 | 本轮调整 |
 | --- | --- | --- | --- |
-| 产品入口 | 自有 Editor Assistant；面向第三方 Host 的 skills/CLI/MCP；Gateway 是另一接入方式 | 原生三模式已有接线和部分实机证据；第三方 51 项核心/5 项 SDK Skills 已有独立包，Host 导入与工具桥仍未验收 | 继续完善原生任务能力，并独立设计第三方接入 |
+| 产品入口 | 自有 Editor Assistant；面向第三方 Host 的 skills/CLI/MCP；Gateway 是另一接入方式 | 原生三模式已有接线和部分实机证据；第三方 Codex + Creator 2.4.15 只读链路已验收，Claude Host 待验收 | 继续完善原生任务能力，并独立验收第三方写入与运行闭环 |
 | 项目理解 | 项目文件、场景对象与组件查询；截图及代码操作 | 场景快照、选择上下文、现有脚本读取和 PNG 查询 | 补项目代码/资源搜索、引用关系与组件属性发现 |
 | 代码与编辑器开发 | 编辑/运行 C#，内置动作及自定义工具组合 | 现有 JS 精确替换、有限字段及专属资源流程 | 补 JS/TS 新建、多文件修改、组件和事件绑定；不直接照搬 C# 执行机制 |
 | 权限 | 操作级 Allow / Ask Permission / Deny，可配置 Autorun | 写入逐次审批及程序门槛 | 设计用户明确选择的任务权限范围，保留审批与拒绝模式 |
 | 恢复 | 可启用逐提示 Git checkpoint，使用项目外本地存储 | 精确 operation 对账、补偿和重放 | 增加任务差异与 checkpoint 方案，复用账本核对副作用 |
 | 技能与工具扩展 | 项目/用户/包内 skill，按需加载；自动发现自定义工具 | 产品包内 skill/reference 读取与哈希校验 | 增加项目级 skill 和项目工具注册合同 |
-| 产品划分 | 自有 Editor Assistant；第三方 Host 插件提供 skills/CLI/MCP；Gateway 另属一种接入 | 原生自有 TS Host/Provider 已接线；第三方 Skills 已独立打包，CLI/MCP/Creator 接入合同和 Host 验收尚无 | 保留独立原生 Agent，同时实现第三方 Host 工具链；Gateway 分开评估 |
+| 产品划分 | 自有 Editor Assistant；第三方 Host 插件提供 skills/CLI/MCP；Gateway 另属一种接入 | 原生自有 TS Host/Provider 已接线；第三方 Codex/Creator 只读链路已验收，写入与运行反馈未实现 | 保留独立原生 Agent，同时验收 Claude Host 并扩展审批写入；Gateway 分开评估 |
 
 本项目当前证据以[主计划最新状态](cocos-agent-real-project-development-plan.md)及其链接轨迹为准。现有脚本合同限定已有 JS 的读取和精确替换；原生交互断言入口仍缺失。部分观察和记忆能力已在隔离 Creator 工程实测，不能据此宣称真实项目通用开发闭环已经完成。
 

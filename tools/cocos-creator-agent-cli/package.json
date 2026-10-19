@@ -1,0 +1,15 @@
+{
+  "name": "cocos-creator-agent-cli",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Standalone Cocos Creator 2.4.15 CLI, bridge, and project extension installer.",
+  "engines": { "node": ">=20" },
+  "bin": {
+    "cocos-creator-agent": "./cli.mjs"
+  },
+  "files": [
+    "cli.mjs",
+    "bridge/",
+    "creator-extension/"
+  ]
+}

@@ -8,7 +8,7 @@
 | --- | --- |
 | CocosAgent 产品方向、原生 Agent 里程碑、第三方 Host 插件边界 | [开发方向](docs/agent-foundation/cocos-agent-unity-alignment-development-direction-20261017.md)、[原生 Agent 计划](docs/agent-foundation/cocos-agent-real-project-development-plan.md) |
 | 调用 Creator 原生 CocosAgent 工具 | 读 `plugins/cocos-agent-2x/skills/cocos-agent/SKILL.md`，再从 `plugins/cocos-agent-2x/skills/cocos2-*/SKILL.md` 选择与当前操作匹配的一项；只读该 Skill 声明且当前确实需要的合同/引用 |
-| Codex / Claude Code 的 Creator 第三方插件 Skills | 读 `plugins/cocos-creator-agent/README.md` 和[第三方 Skill 设计](docs/agent-foundation/cocos-agent-skill-system-creator-2x.md)；SDK 任务才额外读 `plugins/cocos-creator-agent-sdk/README.md`。这套 Skills 不属于 Creator 原生 CocosAgent |
+| Codex / Claude Code 的 Creator 第三方插件、MCP/CLI/桥接 | 读 `plugins/cocos-creator-agent/README.md`、[第三方 Skill 设计](docs/agent-foundation/cocos-agent-skill-system-creator-2x.md)和[第三方接入实现](docs/agent-foundation/cocos-creator-third-party-integration-mvp-0.1.md)；SDK 任务才额外读 `plugins/cocos-creator-agent-sdk/README.md`。这套产品不属于 Creator 原生 CocosAgent |
 | Creator 2.4/3.8 工程或引擎源码修改 | 先确认版本，再读 `docs/2.x/` 或 `docs/3.x/` 对应专题；只加载当前任务匹配的 Skill。跨版本结论再读 `docs/comparisons/` 同编号专题 |
 | Cocos2d-x 4.x 开发、构建或诊断 | 读 `docs/cocos2d-x-creator2x-source-study-plan.md` 中的版本/证据边界，并从 `plugins/cocos2d-x-4/skills/` 加载对应专题 Skill |
 | Cocos2d-x 与 Creator 对照或移植 | 只读 `docs/comparisons/cocos2d-x-4-vs-creator-2.4/` 中相关专题 MD；通用架构入口为 `docs/comparisons/cocos2d-x-4-vs-creator-2.4.md`。比较 MD 是按需资料，不存在通用比较 Skill |
