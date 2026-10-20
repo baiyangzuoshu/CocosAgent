@@ -8,6 +8,7 @@ const MAX_TOTAL_BYTES = 32 * 1024 * 1024;
 const DEFAULT_INTERVAL_MS = 750;
 const MIN_INTERVAL_MS = 250;
 const MAX_INTERVAL_MS = 10000;
+const IGNORED_DIRECTORIES = new Set(['.git', '.codex', '.agents', '.claude', 'node_modules', 'library', 'temp', 'local', 'build']);
 
 function coded(code) { return Object.assign(new Error(code), { code }); }
 
@@ -79,6 +80,40 @@ function readAll(files, previousStates = new Map()) {
   return states;
 }
 
+function collectFiles(selections, recursive) {
+  const result = new Map();
+  let visited = 0;
+  const visit = (file, depth) => {
+    if (++visited > 4096 || depth > 16) throw coded('WATCH_TREE_TOO_LARGE');
+    let stat;
+    try { stat = fs.lstatSync(file.absolutePath); }
+    catch (error) {
+      if (error.code === 'ENOENT') { result.set(file.absolutePath, file); return; }
+      throw error;
+    }
+    if (stat.isSymbolicLink() || fs.realpathSync(file.absolutePath) !== file.absolutePath) throw coded('WATCH_PATH_UNSAFE');
+    if (stat.isDirectory() && recursive) {
+      if (IGNORED_DIRECTORIES.has(path.basename(file.absolutePath))) throw coded('WATCH_CACHE_DIRECTORY_REJECTED');
+      for (const entry of fs.readdirSync(file.absolutePath, { withFileTypes: true })) {
+        if (entry.isDirectory() && IGNORED_DIRECTORIES.has(entry.name)) continue;
+        visit({ absolutePath: path.join(file.absolutePath, entry.name), projectPath: `${file.projectPath}/${entry.name}` }, depth + 1);
+      }
+    } else {
+      if (!stat.isFile()) throw coded('WATCH_PATH_UNSAFE');
+      result.set(file.absolutePath, file);
+    }
+    if (result.size > (recursive ? 512 : MAX_FILES)) throw coded('WATCH_TREE_TOO_LARGE');
+  };
+  selections.forEach((file) => visit(file, 0));
+  return [...result.values()];
+}
+
+function changedFiles(root, before, after) {
+  return [...new Set([...before.keys(), ...after.keys()])]
+    .filter((file) => stateChanged(before.get(file), after.get(file)))
+    .map((file) => path.relative(root, file).split(path.sep).join('/'));
+}
+
 function stateChanged(before, after) {
   if (before?.exists !== after?.exists) return true;
   if (!before?.exists) return false;
@@ -97,7 +132,7 @@ function wait(ms, signal) {
 }
 
 export function startProjectFileWatch({ projectRoot, paths, intervalMs = DEFAULT_INTERVAL_MS, debounceMs = 300,
-  onChange, onError = () => {}, signal } = {}) {
+  onChange, onError = () => {}, signal, recursive = false } = {}) {
   if (typeof onChange !== 'function') throw coded('WATCH_CALLBACK_REQUIRED');
   if (!Number.isInteger(intervalMs) || intervalMs < MIN_INTERVAL_MS || intervalMs > MAX_INTERVAL_MS)
     throw coded('WATCH_INTERVAL_INVALID');
@@ -111,7 +146,8 @@ export function startProjectFileWatch({ projectRoot, paths, intervalMs = DEFAULT
     else signal.addEventListener('abort', stop, { once: true });
   }
   let initial;
-  try { initial = readAll(files); }
+  const snapshot = (previous) => readAll(collectFiles(files, recursive), previous);
+  try { initial = snapshot(); }
   catch (error) { throw error; }
 
   const done = (async () => {
@@ -119,20 +155,20 @@ export function startProjectFileWatch({ projectRoot, paths, intervalMs = DEFAULT
     let callbackError = null;
     while (await wait(intervalMs, controller.signal)) {
       let current;
-      try { current = readAll(files, previous); }
+      try { current = snapshot(previous); }
       catch (error) { callbackError = error; break; }
-      const changed = files.filter((file) => stateChanged(previous.get(file.absolutePath), current.get(file.absolutePath)));
+      const changed = changedFiles(root, previous, current);
       if (!changed.length) { previous = current; continue; }
 
-      const changedPaths = new Set(changed.map((file) => file.projectPath));
+      const changedPaths = new Set(changed);
       let stable = current;
       while (await wait(debounceMs, controller.signal)) {
         let next;
-        try { next = readAll(files, stable); }
+        try { next = snapshot(stable); }
         catch (error) { callbackError = error; break; }
-        const more = files.filter((file) => stateChanged(stable.get(file.absolutePath), next.get(file.absolutePath)));
+        const more = changedFiles(root, stable, next);
         if (!more.length) break;
-        more.forEach((file) => changedPaths.add(file.projectPath));
+        more.forEach((file) => changedPaths.add(file));
         stable = next;
       }
       if (callbackError || controller.signal.aborted) break;

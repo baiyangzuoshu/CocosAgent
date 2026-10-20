@@ -85,6 +85,17 @@ test('tasks wait returns the next durable progress event and terminal result', a
   const contract = JSON.parse(contractBytes.toString('utf8'));
   const extensionPackage = JSON.parse(fs.readFileSync(extensionPackagePath, 'utf8'));
   const instanceId = crypto.randomUUID();
+  await assert.rejects(request(state, 'POST', '/v1/creator/register', {
+    instanceId, projectRoot, creatorVersion: contract.creatorVersion, extensionVersion: '0.0.1',
+    contractFingerprint: '0'.repeat(64), capabilities: [],
+  }), /CREATOR_REGISTRATION_INVALID/);
+  const rejected = await request(state, 'GET', '/v1/instances');
+  assert.equal(rejected.instances.length, 0);
+  assert.equal(rejected.rejectedInstances[0].reportedProjectRoot, projectRoot);
+  assert.deepEqual(rejected.rejectedInstances[0].reasons, ['EXTENSION_VERSION_MISMATCH', 'COMMAND_CONTRACT_MISMATCH']);
+  await assert.rejects(request(state, 'POST', `/v1/instances/${instanceId}/tasks`, {
+    command: 'creator.project.info', input: {},
+  }), /INSTANCE_NOT_FOUND/);
   const registration = await request(state, 'POST', '/v1/creator/register', {
     instanceId, projectRoot, creatorVersion: contract.creatorVersion,
     extensionVersion: extensionPackage.version,
@@ -92,6 +103,7 @@ test('tasks wait returns the next durable progress event and terminal result', a
     activeScene: 'Untitled',
     capabilities: contract.commands.map((command) => ({ id: command.id, status: 'available' })),
   });
+  assert.equal((await request(state, 'GET', '/v1/instances')).rejectedInstances.length, 0);
   const started = await request(state, 'POST', `/v1/instances/${instanceId}/tasks`, {
     command: 'creator.project.info', input: {},
   });

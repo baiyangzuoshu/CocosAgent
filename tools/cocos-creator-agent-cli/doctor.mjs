@@ -101,6 +101,10 @@ export async function runDoctor({ packageInfo, projectRoot: requestedProjectRoot
           contractFingerprint: bridge.contractFingerprint || null, expectedContractFingerprint: fingerprint?.sha256 || null }));
       const result = await listInstances({ start: false });
       instances = result.instances || [];
+      for (const rejected of result.rejectedInstances || []) {
+        checks.push(check(`rejected-instance:${rejected.instanceId}`, 'error',
+          'A Creator extension attempted to connect with an incompatible version or command contract; no command session was granted.', rejected));
+      }
       checks.push(check('creator-instances', 'pass', `${instances.length} connected Creator instance(s) found.`,
         instances.map((instance) => ({ instanceId: instance.instanceId, projectRoot: instance.projectRoot,
           creatorVersion: instance.creatorVersion, extensionVersion: instance.extensionVersion, activeScene: instance.activeScene }))));

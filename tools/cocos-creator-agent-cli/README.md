@@ -4,6 +4,8 @@ Standalone local CLI for Cocos Creator 2.4.15 projects. It can run without Codex
 
 ## Requirements
 
+Development source is now 0.10.0, adding project Node/Creator/preview test adapters, JSON/JUnit reports, directory/affected-suite watch and rejected-handshake diagnostics. The 0.9.0 tag exists remotely; online Release assets and self-update acceptance are still unverified. A locally installed package is not evidence of a public release.
+
 - Node.js 20 or newer.
 - Cocos Creator 2.4.15 for editor-connected commands.
 
@@ -67,6 +69,8 @@ cocos-creator-agent tasks resume --instance <instance-id> --id <task-id>
 
 `doctor` is read-only and does not start the bridge. It checks the Node.js and bundled contract versions, bridge health, connected Creator instances, and—when `--project-root` is supplied—the project extension and path identity.
 
+`instances list` also reports recent authenticated but incompatible extension handshakes under `rejectedInstances`, including the extension-reported project path and mismatch reasons. These diagnostic records have no command session or capabilities. `doctor` flags them as errors instead of reporting only zero instances.
+
 ## MCP and Agent Skills
 
 The CLI starts its own stdio MCP server with `cocos-creator-agent mcp serve`. Use `mcp configure codex` or `mcp configure claude-code` to register that server through the corresponding client CLI; `--dry-run` previews the change and the command writes only the `cocos-creator-agent` entry. Codex MCP configuration is user-scoped. Claude Code uses user scope by default and `--local` for the current project. Existing same-name configurations are checked first; a different configuration is preserved and reported unless `--force` is provided. Use `mcp status <client>` and `mcp remove <client>` to inspect or remove the managed entry. Restart the Host after setup.
@@ -121,6 +125,10 @@ cocos-creator-agent call --instance <instance-id> --command creator.scene.node.s
 `catalog --format json` and `call --instance <id> --command <id> --input <json> --format json` are the machine-readable interface used by the CLI-owned MCP server.
 
 Project-local extensions can publish declarative Creator command providers. The CLI discovers them from the live editor, validates the provider fingerprint and input schema, and exposes them as project-scoped MCP tools. See [`references/2x/13-agent-command-providers.md`](references/2x/13-agent-command-providers.md) for the contract. Providers run as Creator main-process extension code and are not sandboxed; write/control commands require a native Creator approval.
+
+## Project test plans
+
+Project test plans are documented in [`references/2x/14-project-test-runner.md`](references/2x/14-project-test-runner.md). Use `creator test --project-root <absolute-path> --list` to inspect the plan; running it writes separate JSON/JUnit reports. `creator watch --project-root <path> --paths '["tests","assets/Scripts"]' --affected` watches files/directories and reruns affected suites. Node suites use actual Node test subprocesses; editor suites invoke an approved project Creator Provider; preview suites use the exact supplied preview session. Editor execution interrupted after dispatch stops watch for manual review.
 
 ## Project tool registrations
 

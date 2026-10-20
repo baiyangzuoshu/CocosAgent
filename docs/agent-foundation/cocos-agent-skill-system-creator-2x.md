@@ -1,6 +1,6 @@
 # Cocos Creator 2.4.x 第三方 Agent Skill 系统
 
-日期：2026-10-18（2026-10-20 更新）。状态：**Creator 原生 CocosAgent 已停止并从仓库移除；原生 Agent 计划与验收文档仅作历史记录。CLI 0.9.0 持有 51 项 Creator 工作流 Skills、1 项 CLI Skill、参考资料、MCP stdio 服务和 Codex/Claude 原生配置/Skill 安装命令；32 项测试、90 项 tarball 文件、SHA-256、隔离安装及 0.6.0→0.9.0 本地升级通过，0.9.0 标签已推送但 Actions/Release 资产状态尚未核实。旧式第三方插件收缩为 CLI 引导 Skill。桌面 Host 重载、Creator 写入/预览/运行仍待实机验证。另有 5 项可选 SDK Skills。** 本文描述当前维护的第三方产品线。
+日期：2026-10-18（2026-10-20 更新）。当前 Creator Skills 由独立 CLI 0.10.0 持有；真实 Codex/Claude 已安装 52 项 Skills 与参考资料并配置 CLI-owned MCP。CLI 0.10.0 的 41 项测试、94 文件本地包、项目测试报告及 watch 已验收；Creator 实机重载/审批/写入/运行、桌面 Host 新工具目录和线上 Release 更新/回滚仍待完成。Creator 原生 CocosAgent 已移除，旧插件仅作 CLI 引导。另有 5 项可选 SDK Skills。
 
 ## 产品边界
 
@@ -72,5 +72,5 @@
 
 1. 51 项 Creator 工作流 Skills、1 项 CLI Skill 与 Creator 2.x 参考资料已迁入 CLI 包；CLI `skill install` 负责选择性分发与漂移检测。CLI `mcp configure` / `mcp serve` 接管 Host 配置与工具协议。
 2. 旧式 `plugins/cocos-creator-agent/` 仅保留一个兼容引导 Skill；它的 Codex/Claude 元数据不再注册 MCP，也不分发工作流内容。
-3. CLI 0.9.0 本地 tarball、隔离安装与升级、完整 32 项测试已验收；真实 Codex 当前仍配置旧插件 MCP，Claude 没有 MCP server。隔离 CLI 配置回执不代表桌面 Host 已重载。
-4. 下一步核对已推送标签触发的 GitHub Release 并验收在线更新，然后由 CLI 配置当前 Codex/Claude Host、重载并核对 MCP 工具目录；Creator 写入审批、预览/编译/Console/输入与业务断言按锁定工程身份另外验收。详见[CLI 0.9.0 验收记录](traces/cocos-creator-cli-0.9.0-package-acceptance-20261020.md)与[CLI 0.8.0 MCP 与 Skills 验收记录](traces/cocos-creator-cli-0.8.0-mcp-skills-acceptance-20261020.md)。
+3. CLI 0.10.0 本地包和 41 项测试通过；真实 Codex/Claude 配置均指向全局 CLI，52 项 Skills 与参考资料已安装。配置和 CLI 状态回执不代表桌面 Host 新工具目录已重载。
+4. 下一步核实 GitHub Release 的线上资产/更新/回滚，重载桌面 Host 与 Creator 扩展，继续 Provider/审批/写入/运行验收。项目测试计划与 JSON/JUnit/watch 已接入 CLI Skill；见[最新验收](traces/cocos-cli-0.10.0-goal-20261020.md)。

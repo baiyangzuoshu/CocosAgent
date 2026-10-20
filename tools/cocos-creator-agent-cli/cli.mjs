@@ -10,6 +10,7 @@ import { updateCli } from './release.mjs';
 import { runDoctor } from './doctor.mjs';
 import { runCreatorWorkflow } from './creator-workflows.mjs';
 import { startProjectFileWatch } from './creator-watch.mjs';
+import { loadTestPlan, runTestPlan, watchTestPlan } from './creator-tests.mjs';
 import { configureMcp, mcpStatus, supportedMcpClients } from './mcp/configure.mjs';
 import { availableSkills, installSkills, listSkillStatus, showSkill } from './skills.mjs';
 
@@ -87,7 +88,9 @@ async function main() {
       '  creator build --project-root <path> --creator <Creator-2.4.15.app> --platform web-mobile|web-desktop|android|ios|mac|win32 [--build-path <new-path>] [--debug] [--auto-compile] [--timeout-ms N]',
       '  creator compile --project-root <path> --creator <Creator-2.4.15.app> --platform android|ios|mac|win32 --build-path <existing-native-build-path> [--debug] [--timeout-ms N]',
       '  creator test --instance <instance-id> --session <preview-session-id> --input <actions-and-assertions-json>',
+      '  creator test --project-root <path> [--list] [--suite <id>] [--instance <id>] [--session <id>] [--report-dir <new-path>]',
       '  creator watch --instance <instance-id> --session <preview-session-id> --paths <project-relative-paths-json> --input <actions-and-assertions-json> [--interval-ms N]',
+      '  creator watch --project-root <path> --paths <files-or-directories-json> [--affected] [--suite <id>] [--instance <id>] [--session <id>] [--report-dir <path>]',
       '  diagnostics read --instance <instance-id> [--after-sequence N] [--limit N]',
       '  preview start --instance <instance-id> [--port 7456]',
       '  preview observe|screenshot|refresh|stop --instance <instance-id> --session <preview-session-id>',
@@ -250,6 +253,32 @@ async function main() {
   }
   if (group === 'scene' && action === 'snapshot') { print(await callCommand(instanceId, 'creator.scene.snapshot', {})); return; }
   if (group === 'creator') {
+    if ((action === 'test' || action === 'watch') && value('--project-root') !== undefined) {
+      const projectRoot = value('--project-root');
+      if (action === 'test' && args.includes('--list')) { print(loadTestPlan(projectRoot)); return; }
+      const suiteIds = args.flatMap((item, index) => item === '--suite' ? [args[index + 1]] : []);
+      const controller = new AbortController();
+      const stop = () => controller.abort();
+      process.once('SIGINT', stop); process.once('SIGTERM', stop);
+      try {
+        const options = { projectRoot, suiteIds, instanceId, previewSessionId: value('--session'),
+          reportDir: value('--report-dir'), signal: controller.signal };
+        if (action === 'test') {
+          const result = await runTestPlan(options);
+          print(result);
+          if (!result.passed) process.exitCode = 1;
+        } else {
+          let paths;
+          try { paths = JSON.parse(value('--paths', '')); } catch (_) { throw new Error('--paths must be a JSON array of project-relative files or directories'); }
+          if (!Array.isArray(paths) || !paths.length) throw new Error('WATCH_PATHS_INVALID');
+          const result = await watchTestPlan({ ...options, paths, affected: args.includes('--affected'),
+            intervalMs: value('--interval-ms') === undefined ? undefined : Number(value('--interval-ms')) },
+          { signal: controller.signal, onEvent: (event) => process.stdout.write(JSON.stringify(event) + '\n') });
+          if (!result.lastTestPassed) process.exitCode = 1;
+        }
+      } finally { process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop); }
+      return;
+    }
     if (action === 'test') {
       const testInput = parseInput();
       if (Object.hasOwn(testInput, 'previewSessionId')) throw new Error('PREVIEW_SESSION_ID_MUST_USE_SESSION_OPTION');

@@ -23,6 +23,7 @@ const EXTENSION_VERSION = JSON.parse(fs.readFileSync(path.join(PLUGIN_ROOT, 'cre
 const CONTRACT_FINGERPRINT = createHash('sha256')
   .update(fs.readFileSync(path.join(PLUGIN_ROOT, 'creator-extension/command-contract.json'))).digest('hex');
 const instances = new Map();
+const rejectedInstances = new Map();
 const activeTaskByInstance = new Map();
 const taskWaiters = new Map();
 const TASK_WAIT_MAX_MS = 30000;
@@ -256,6 +257,26 @@ function canonicalProjectRoot(value) {
 }
 
 function makeInstance(body) {
+  // Keep bounded diagnostic identities from authenticated old extensions.
+  // These records never get a session, capabilities, or command dispatch.
+  if (body && /^[0-9a-f-]{36}$/i.test(body.instanceId || '')
+    && typeof body.projectRoot === 'string' && body.projectRoot.length <= 4096 && path.isAbsolute(body.projectRoot)
+    && typeof body.creatorVersion === 'string' && body.creatorVersion.length <= 32
+    && typeof body.extensionVersion === 'string' && body.extensionVersion.length <= 32) {
+    const reasons = [];
+    if (body.creatorVersion !== CREATOR_VERSION) reasons.push('CREATOR_VERSION_MISMATCH');
+    if (body.extensionVersion !== EXTENSION_VERSION) reasons.push('EXTENSION_VERSION_MISMATCH');
+    if (body.contractFingerprint !== CONTRACT_FINGERPRINT) reasons.push('COMMAND_CONTRACT_MISMATCH');
+    if (!validCapabilities(body.capabilities)) reasons.push('CAPABILITIES_INVALID');
+    if (reasons.length) {
+      rejectedInstances.delete(body.instanceId);
+      rejectedInstances.set(body.instanceId, { instanceId: body.instanceId, reportedProjectRoot: body.projectRoot,
+        creatorVersion: body.creatorVersion, extensionVersion: body.extensionVersion, connected: false,
+        reasons, expectedExtensionVersion: EXTENSION_VERSION, expectedCreatorVersion: CREATOR_VERSION,
+        receivedAt: new Date().toISOString(), seen: Date.now() });
+      if (rejectedInstances.size > 16) rejectedInstances.delete(rejectedInstances.keys().next().value);
+    }
+  }
   if (!body || !/^[0-9a-f-]{36}$/i.test(body.instanceId || '') || body.creatorVersion !== CREATOR_VERSION
     || body.extensionVersion !== EXTENSION_VERSION || body.contractFingerprint !== CONTRACT_FINGERPRINT
     || !validCapabilities(body.capabilities)) throw Object.assign(new Error('CREATOR_REGISTRATION_INVALID'), { status: 400 });
@@ -263,6 +284,7 @@ function makeInstance(body) {
   try { projectRoot = canonicalProjectRoot(body.projectRoot); }
   catch (_) { throw Object.assign(new Error('PROJECT_ROOT_INVALID'), { status: 400 }); }
   const prior = instances.get(body.instanceId);
+  rejectedInstances.delete(body.instanceId);
   if (prior) void stopInstancePreviews(prior.instanceId, prior.sessionId);
   if (prior?.pollWaiter) { clearTimeout(prior.pollWaiter.timeout); sendEmpty(prior.pollWaiter.response); }
   if (prior?.inFlight) settle(prior, prior.inFlight.requestId, { error: { code: 'CREATOR_SESSION_REPLACED' } });
@@ -529,7 +551,9 @@ async function route(request, response) {
   }
   if (routeKey === 'GET /v1/instances') {
     expireInstances();
-    sendJson(response, 200, { instances: [...instances.values()].map(publicInstance) }); return;
+    for (const [id, record] of rejectedInstances) if (Date.now() - record.seen > INSTANCE_TTL_MS) rejectedInstances.delete(id);
+    sendJson(response, 200, { instances: [...instances.values()].map(publicInstance),
+      rejectedInstances: [...rejectedInstances.values()].map(({ seen, ...record }) => record) }); return;
   }
   const projectToolsMatch = url.pathname.match(/^\/v1\/instances\/([0-9a-f-]{36})\/project-tools$/i);
   if (request.method === 'GET' && projectToolsMatch) {

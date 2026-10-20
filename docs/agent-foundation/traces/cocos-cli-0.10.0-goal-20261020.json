@@ -1,0 +1,681 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-20",
+  "evidenceBoundaries": {
+    "node": "real installed CLI and Node test subprocesses in a temporary fixture",
+    "creator": "identity and rejected handshake only; editor reload/approval/runtime pending due locked Mac",
+    "release": "remote tag verified over SSH; repository/Actions/Release HTTP API 404"
+  },
+  "package": {
+    "version": "0.10.0",
+    "entries": 94,
+    "size": 170667,
+    "unpackedSize": 717765,
+    "sha256": "8bb6dab07ceb0a21e8de6bbfa0143ceb64e75c684e9b01986ea6cfcd2225af3d"
+  },
+  "tests": {
+    "passed": 41,
+    "failed": 0,
+    "nodeVersion": "22.22.2"
+  },
+  "receipts": {
+    "test-runner-e2e.json": {
+      "sha256": "d06e393eb86d093e35147cb62448e6caafb4f6168034140b8ff69ec124bec0a5",
+      "result": {
+        "passing": {
+          "exitCode": 0,
+          "passed": true,
+          "counts": {
+            "total": 2,
+            "passed": 2,
+            "failed": 0,
+            "skipped": 0
+          },
+          "artifacts": {
+            "json": "/private/tmp/cocos-cli-host-WIJwm5/e2e-passing/results.json",
+            "junit": "/private/tmp/cocos-cli-host-WIJwm5/e2e-passing/results.xml",
+            "junitSha256": "975f7626e1117ed017553fc4aac0a4753b88135d8918f1ac8db21232038f1a59"
+          }
+        },
+        "failing": {
+          "exitCode": 1,
+          "passed": false,
+          "counts": {
+            "total": 2,
+            "passed": 1,
+            "failed": 1,
+            "skipped": 0
+          },
+          "artifacts": {
+            "json": "/private/tmp/cocos-cli-host-WIJwm5/e2e-failing/results.json",
+            "junit": "/private/tmp/cocos-cli-host-WIJwm5/e2e-failing/results.xml",
+            "junitSha256": "34fa088531783fabb3171c15609be1bfbc06797f46dc5b8ba63edee53e915a58"
+          }
+        },
+        "watch": {
+          "exitCode": 0,
+          "passes": [
+            true,
+            false,
+            true
+          ],
+          "runs": 3,
+          "events": "/tmp/cocos-cli-host-WIJwm5/e2e-watch-events.jsonl"
+        },
+        "projectRoot": "/tmp/cocos-cli-host-WIJwm5/runner-project",
+        "evidence": "temporary Node test project; not Creator editor acceptance"
+      }
+    },
+    "doctor-tank-after-update.json": {
+      "sha256": "89f657981323fe5036797feecb1a7bf4c4cbb0a5941714f8bf5197a5372e6c88",
+      "result": {
+        "ok": false,
+        "cliVersion": "0.10.0",
+        "checks": [
+          {
+            "id": "node-version",
+            "status": "pass",
+            "message": "Node.js 22.22.2 meets the CLI requirement.",
+            "details": {
+              "required": ">=20",
+              "actual": "22.22.2"
+            }
+          },
+          {
+            "id": "cli-package",
+            "status": "pass",
+            "message": "CLI 0.10.0 is loaded.",
+            "details": {
+              "name": "cocos-creator-agent-cli",
+              "version": "0.10.0",
+              "entry": "/opt/homebrew/bin/cocos-creator-agent"
+            }
+          },
+          {
+            "id": "npm",
+            "status": "pass",
+            "message": "npm 10.9.7 is available for global CLI updates.",
+            "details": {
+              "version": "10.9.7"
+            }
+          },
+          {
+            "id": "bundled-extension",
+            "status": "pass",
+            "message": "Bundled extension 0.6.0 targets Creator 2.4.15.",
+            "details": {
+              "version": "0.6.0",
+              "creatorVersion": "2.4.15",
+              "commandCount": 30,
+              "contractSha256": "137d3b92a05b9b0851da2028f9d385925131f22d22d6399668f794773943731b"
+            }
+          },
+          {
+            "id": "project-extension",
+            "status": "pass",
+            "message": "Project extension 0.6.0 is present and its tracked files match the recorded baseline.",
+            "details": {
+              "projectName": "tank",
+              "projectRoot": "/Users/youjunmao/WORK/Cocos_Engine/tank",
+              "extensionPath": "/Users/youjunmao/WORK/Cocos_Engine/tank/packages/cocos-creator-agent-extension",
+              "extensionVersion": "0.6.0",
+              "bundledVersion": "0.6.0",
+              "managed": true,
+              "changedFiles": []
+            }
+          },
+          {
+            "id": "bridge",
+            "status": "pass",
+            "message": "The authenticated loopback bridge matches the bundled Creator and command contract.",
+            "details": {
+              "bridgeId": "c238ffe3-cc8a-449a-b72a-1f24715d4303",
+              "protocolVersion": "0.1",
+              "host": "127.0.0.1",
+              "creatorVersion": "2.4.15",
+              "extensionVersion": "0.6.0",
+              "expectedProtocolVersion": "0.1",
+              "contractFingerprint": "137d3b92a05b9b0851da2028f9d385925131f22d22d6399668f794773943731b",
+              "expectedContractFingerprint": "137d3b92a05b9b0851da2028f9d385925131f22d22d6399668f794773943731b"
+            }
+          },
+          {
+            "id": "rejected-instance:f2265354-88ab-4226-bd78-bdd8b9ad6e15",
+            "status": "error",
+            "message": "A Creator extension attempted to connect with an incompatible version or command contract; no command session was granted.",
+            "details": {
+              "instanceId": "f2265354-88ab-4226-bd78-bdd8b9ad6e15",
+              "reportedProjectRoot": "/Users/youjunmao/WORK/Cocos_Engine/tank",
+              "creatorVersion": "2.4.15",
+              "extensionVersion": "0.4.0",
+              "connected": false,
+              "reasons": [
+                "EXTENSION_VERSION_MISMATCH",
+                "COMMAND_CONTRACT_MISMATCH"
+              ],
+              "expectedExtensionVersion": "0.6.0",
+              "expectedCreatorVersion": "2.4.15",
+              "receivedAt": "2026-10-20T13:03:06.971Z"
+            }
+          },
+          {
+            "id": "creator-instances",
+            "status": "pass",
+            "message": "0 connected Creator instance(s) found.",
+            "details": []
+          },
+          {
+            "id": "project-instance",
+            "status": "warning",
+            "message": "No connected Creator instance currently reports this project path.",
+            "details": {
+              "projectRoot": "/Users/youjunmao/WORK/Cocos_Engine/tank"
+            }
+          }
+        ],
+        "summary": {
+          "passed": 7,
+          "warnings": 1,
+          "errors": 1
+        }
+      }
+    },
+    "tank-after-diff.json": {
+      "sha256": "bc1663e24fe71ad2be365fb5252da9681b4e39b77b9b3d14d06e5371aa110b39",
+      "result": {
+        "changed": [
+          "packages/cocos-creator-agent-extension/.cocos-creator-agent-install.json",
+          "packages/cocos-creator-agent-extension/command-contract.json",
+          "packages/cocos-creator-agent-extension/main.js",
+          "packages/cocos-creator-agent-extension/package.json",
+          "packages/cocos-creator-agent-extension/scene.js",
+          "packages/cocos-creator-agent-extension/provider-contract.cjs"
+        ],
+        "onlyExtensionFiles": true
+      }
+    },
+    "tank-extension-before.json": {
+      "sha256": "d8856da1d38f20ac89ea2f8d75807b8cced12953c721bb8d945bd3bd3e511582",
+      "result": {
+        "installed": true,
+        "projectRoot": "/Users/youjunmao/WORK/Cocos_Engine/tank",
+        "extensionPath": "/Users/youjunmao/WORK/Cocos_Engine/tank/packages/cocos-creator-agent-extension",
+        "extensionVersion": "0.4.0",
+        "bundledVersion": "0.6.0",
+        "creatorVersion": "2.4.15",
+        "managed": true,
+        "markerError": null,
+        "matchesBundle": false,
+        "bundleDifferences": [
+          "command-contract.json",
+          "main.js",
+          "package.json",
+          "provider-contract.cjs",
+          "scene.js"
+        ],
+        "changedFiles": [],
+        "bundleContentChanged": true,
+        "updateAvailable": true,
+        "safeToReplace": true,
+        "reloadRequired": false
+      }
+    },
+    "codex-skills-0.10.0.json": {
+      "sha256": "59fcea3e5b7e7d82bc4adc95c7b8016e1ba6c3779e65c6a3cab96ba3c039de2a",
+      "result": {
+        "client": "codex",
+        "scope": "user",
+        "packageVersion": "0.10.0",
+        "success": true,
+        "installedCount": 53
+      }
+    },
+    "claude-skills-0.10.0.json": {
+      "sha256": "fe0642e50265bf9f63c040f7dee4e27f138fc14ab9f731d6ebffb5880c521132",
+      "result": {
+        "client": "claude-code",
+        "scope": "user",
+        "packageVersion": "0.10.0",
+        "success": true,
+        "installedCount": 53
+      }
+    },
+    "installed-mcp-protocol.json": {
+      "sha256": "83534cc690e680d507385a30ed6222bf9252eb6e85610e4717c258a00ce339eb",
+      "result": {
+        "serverInfo": {
+          "name": "cocos-creator-agent",
+          "version": "0.10.0"
+        },
+        "toolCount": 36,
+        "names": [
+          "cocos_cli_status",
+          "cocos_instances_list",
+          "cocos_capabilities_list",
+          "cocos_project_tools_list",
+          "cocos_project_tool_call",
+          "cocos_tasks_start",
+          "cocos_tasks_list",
+          "cocos_tasks_status",
+          "cocos_tasks_wait",
+          "cocos_tasks_cancel",
+          "cocos_tasks_resume",
+          "cocos_project_info",
+          "cocos_project_search",
+          "cocos_asset_search",
+          "cocos_script_read",
+          "cocos_scene_snapshot",
+          "cocos_scene_node_read",
+          "cocos_scene_node_set_active_plan",
+          "cocos_scene_node_set_active_commit",
+          "cocos_scene_node_set_active_reconcile",
+          "cocos_scene_node_add_component_plan",
+          "cocos_scene_node_add_component_commit",
+          "cocos_scene_node_add_component_reconcile",
+          "cocos_scene_node_set_component_property_plan",
+          "cocos_scene_node_set_component_property_commit",
+          "cocos_scene_node_set_component_property_reconcile",
+          "cocos_script_create_plan",
+          "cocos_script_create_commit",
+          "cocos_script_create_reconcile",
+          "cocos_diagnostics_read",
+          "cocos_preview_start",
+          "cocos_preview_observe",
+          "cocos_preview_screenshot",
+          "cocos_preview_interact",
+          "cocos_preview_refresh",
+          "cocos_preview_stop"
+        ],
+        "cliStatus": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"available\": true,\n  \"command\": \"/opt/homebrew/Cellar/node@22/22.22.2_2/bin/node\",\n  \"name\": \"cocos-creator-agent-cli\",\n  \"version\": \"0.10.0\",\n  \"creatorVersion\": \"2.4.15\"\n}"
+            }
+          ],
+          "isError": false
+        }
+      }
+    },
+    "online-update-check.json": {
+      "sha256": "36775b02b0405fc683d20ed90c0d1b58e66c8a6108e07132b989043039a3394a",
+      "result": {
+        "command": [
+          "cocos-creator-agent",
+          "self-update",
+          "--check",
+          "--version",
+          "0.9.0"
+        ],
+        "exitCode": 2,
+        "stdout": "",
+        "stderr": "CLI_RELEASE_HTTP_404\n"
+      }
+    },
+    "final-installed-test.json": {
+      "sha256": "88052592f380a96816726b2329a5cd9c4346578f2d8b0a819d90f2aa7a7a700d",
+      "result": {
+        "schemaVersion": 1,
+        "runId": "9507abda-181a-4179-91cf-b0762bc0a37a",
+        "projectRoot": "/private/tmp/cocos-cli-host-WIJwm5/runner-project",
+        "projectName": "CliRunnerAcceptance",
+        "creatorVersion": "2.4.15",
+        "manifestHash": "6e12f132899c92ebc60ce00fd2845d1b3dc510e2928d43d5011aa4d559174c49",
+        "selectedSuiteIds": [
+          "collision"
+        ],
+        "startedAt": "2026-10-20T13:11:54.283Z",
+        "suites": [
+          {
+            "id": "collision",
+            "adapter": "node",
+            "tests": [
+              {
+                "id": "1",
+                "name": "collision <target>",
+                "status": "passed",
+                "durationMs": 0.669542,
+                "message": "",
+                "file": "/private/tmp/cocos-cli-host-WIJwm5/runner-project/tests/collision.test.cjs",
+                "line": 1
+              },
+              {
+                "id": "2",
+                "name": "miss target",
+                "status": "passed",
+                "durationMs": 0.056833,
+                "message": "",
+                "file": "/private/tmp/cocos-cli-host-WIJwm5/runner-project/tests/collision.test.cjs",
+                "line": 1
+              }
+            ],
+            "sourceHashes": {
+              "tests/collision.test.cjs": "91e535289f4eb37ecd769c23201ae1b53bb1f92ea0b5b2cd6ec11c916632853a"
+            },
+            "exitCode": 0,
+            "signal": null,
+            "logs": "",
+            "durationMs": 154,
+            "counts": {
+              "total": 2,
+              "passed": 2,
+              "failed": 0,
+              "skipped": 0
+            }
+          }
+        ],
+        "cancelled": false,
+        "notRunSuiteIds": [],
+        "counts": {
+          "total": 2,
+          "passed": 2,
+          "failed": 0,
+          "skipped": 0
+        },
+        "requiresManualReview": false,
+        "passed": true,
+        "durationMs": 155,
+        "completedAt": "2026-10-20T13:11:54.438Z",
+        "artifacts": {
+          "json": "/private/tmp/cocos-cli-host-WIJwm5/e2e-final/results.json",
+          "junit": "/private/tmp/cocos-cli-host-WIJwm5/e2e-final/results.xml",
+          "junitSha256": "c94b8604bf3e0a48d058315abcdb43ddc1e303216b672dfa7d5f9d92d1bcc4e6"
+        }
+      }
+    }
+  },
+  "watchEvents": [
+    {
+      "type": "test-watch-started",
+      "projectRoot": "/private/tmp/cocos-cli-host-WIJwm5/runner-project",
+      "paths": [
+        ".cocos-agent/tests.json",
+        "src",
+        "tests"
+      ],
+      "affected": true
+    },
+    {
+      "type": "test-suite-started",
+      "runId": "0168e2de-f737-4a27-8283-b778d4aaebb4",
+      "suiteId": "collision",
+      "adapter": "node"
+    },
+    {
+      "type": "test-suite-finished",
+      "runId": "0168e2de-f737-4a27-8283-b778d4aaebb4",
+      "suiteId": "collision",
+      "counts": {
+        "total": 2,
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "type": "test-run-finished",
+      "trigger": "initial",
+      "report": {
+        "schemaVersion": 1,
+        "runId": "0168e2de-f737-4a27-8283-b778d4aaebb4",
+        "projectRoot": "/private/tmp/cocos-cli-host-WIJwm5/runner-project",
+        "projectName": "CliRunnerAcceptance",
+        "creatorVersion": "2.4.15",
+        "manifestHash": "6e12f132899c92ebc60ce00fd2845d1b3dc510e2928d43d5011aa4d559174c49",
+        "startedAt": "2026-10-20T13:04:00.606Z",
+        "suites": [
+          {
+            "id": "collision",
+            "adapter": "node",
+            "tests": [
+              {
+                "id": "1",
+                "name": "collision <target>",
+                "status": "passed",
+                "durationMs": 0.617292,
+                "message": "",
+                "file": "/private/tmp/cocos-cli-host-WIJwm5/runner-project/tests/collision.test.cjs",
+                "line": 1
+              },
+              {
+                "id": "2",
+                "name": "miss target",
+                "status": "passed",
+                "durationMs": 0.056542,
+                "message": "",
+                "file": "/private/tmp/cocos-cli-host-WIJwm5/runner-project/tests/collision.test.cjs",
+                "line": 1
+              }
+            ],
+            "sourceHashes": {
+              "tests/collision.test.cjs": "91e535289f4eb37ecd769c23201ae1b53bb1f92ea0b5b2cd6ec11c916632853a"
+            },
+            "exitCode": 0,
+            "signal": null,
+            "logs": "",
+            "durationMs": 132,
+            "counts": {
+              "total": 2,
+              "passed": 2,
+              "failed": 0,
+              "skipped": 0
+            }
+          }
+        ],
+        "counts": {
+          "total": 2,
+          "passed": 2,
+          "failed": 0,
+          "skipped": 0
+        },
+        "cancelled": false,
+        "requiresManualReview": false,
+        "passed": true,
+        "durationMs": 133,
+        "completedAt": "2026-10-20T13:04:00.739Z",
+        "artifacts": {
+          "json": "/private/tmp/cocos-cli-host-WIJwm5/e2e-watch/8daf2c77-e475-4157-9ade-7205785ac697/results.json",
+          "junit": "/private/tmp/cocos-cli-host-WIJwm5/e2e-watch/8daf2c77-e475-4157-9ade-7205785ac697/results.xml",
+          "junitSha256": "1cad267e84867e7c87f4c3a846645c0b90e16dc72964bce052eb8c95e9660c38"
+        }
+      }
+    },
+    {
+      "type": "test-suite-started",
+      "runId": "f52720ad-8e0a-4c6f-90b5-25dbcc0c803f",
+      "suiteId": "collision",
+      "adapter": "node"
+    },
+    {
+      "type": "test-suite-finished",
+      "runId": "f52720ad-8e0a-4c6f-90b5-25dbcc0c803f",
+      "suiteId": "collision",
+      "counts": {
+        "total": 2,
+        "passed": 1,
+        "failed": 1,
+        "skipped": 0
+      }
+    },
+    {
+      "type": "test-run-finished",
+      "trigger": "file-change",
+      "changedPaths": [
+        "src/collision.cjs"
+      ],
+      "report": {
+        "schemaVersion": 1,
+        "runId": "f52720ad-8e0a-4c6f-90b5-25dbcc0c803f",
+        "projectRoot": "/private/tmp/cocos-cli-host-WIJwm5/runner-project",
+        "projectName": "CliRunnerAcceptance",
+        "creatorVersion": "2.4.15",
+        "manifestHash": "6e12f132899c92ebc60ce00fd2845d1b3dc510e2928d43d5011aa4d559174c49",
+        "startedAt": "2026-10-20T13:04:01.164Z",
+        "suites": [
+          {
+            "id": "collision",
+            "adapter": "node",
+            "tests": [
+              {
+                "id": "1",
+                "name": "collision <target>",
+                "status": "failed",
+                "durationMs": 1.037833,
+                "message": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\nfalse !== true\n\n    at TestContext.<anonymous> (/private/tmp/cocos-cli-host-WIJwm5/runner-project/tests/collision.test.cjs:1:146)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1047:25)\n    at Test.start (node:internal/test_runner/test:944:17)\n    at startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)",
+                "file": "/private/tmp/cocos-cli-host-WIJwm5/runner-project/tests/collision.test.cjs",
+                "line": 1
+              },
+              {
+                "id": "2",
+                "name": "miss target",
+                "status": "passed",
+                "durationMs": 0.116917,
+                "message": "",
+                "file": "/private/tmp/cocos-cli-host-WIJwm5/runner-project/tests/collision.test.cjs",
+                "line": 1
+              }
+            ],
+            "sourceHashes": {
+              "tests/collision.test.cjs": "91e535289f4eb37ecd769c23201ae1b53bb1f92ea0b5b2cd6ec11c916632853a"
+            },
+            "exitCode": 1,
+            "signal": null,
+            "logs": "",
+            "durationMs": 162,
+            "counts": {
+              "total": 2,
+              "passed": 1,
+              "failed": 1,
+              "skipped": 0
+            }
+          }
+        ],
+        "counts": {
+          "total": 2,
+          "passed": 1,
+          "failed": 1,
+          "skipped": 0
+        },
+        "cancelled": false,
+        "requiresManualReview": false,
+        "passed": false,
+        "durationMs": 163,
+        "completedAt": "2026-10-20T13:04:01.327Z",
+        "artifacts": {
+          "json": "/private/tmp/cocos-cli-host-WIJwm5/e2e-watch/fac9aed9-da49-48d4-b6e2-0e97f3bcbd60/results.json",
+          "junit": "/private/tmp/cocos-cli-host-WIJwm5/e2e-watch/fac9aed9-da49-48d4-b6e2-0e97f3bcbd60/results.xml",
+          "junitSha256": "c70fa269d685786248296f6f961820341bb503a8fa6a3d8cacfbcd96b837954c"
+        }
+      }
+    },
+    {
+      "type": "test-suite-started",
+      "runId": "7c992c6b-8c24-4730-821b-09c72638f439",
+      "suiteId": "collision",
+      "adapter": "node"
+    },
+    {
+      "type": "test-suite-finished",
+      "runId": "7c992c6b-8c24-4730-821b-09c72638f439",
+      "suiteId": "collision",
+      "counts": {
+        "total": 2,
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "type": "test-run-finished",
+      "trigger": "file-change",
+      "changedPaths": [
+        "src/collision.cjs"
+      ],
+      "report": {
+        "schemaVersion": 1,
+        "runId": "7c992c6b-8c24-4730-821b-09c72638f439",
+        "projectRoot": "/private/tmp/cocos-cli-host-WIJwm5/runner-project",
+        "projectName": "CliRunnerAcceptance",
+        "creatorVersion": "2.4.15",
+        "manifestHash": "6e12f132899c92ebc60ce00fd2845d1b3dc510e2928d43d5011aa4d559174c49",
+        "startedAt": "2026-10-20T13:04:01.886Z",
+        "suites": [
+          {
+            "id": "collision",
+            "adapter": "node",
+            "tests": [
+              {
+                "id": "1",
+                "name": "collision <target>",
+                "status": "passed",
+                "durationMs": 0.611333,
+                "message": "",
+                "file": "/private/tmp/cocos-cli-host-WIJwm5/runner-project/tests/collision.test.cjs",
+                "line": 1
+              },
+              {
+                "id": "2",
+                "name": "miss target",
+                "status": "passed",
+                "durationMs": 0.054542,
+                "message": "",
+                "file": "/private/tmp/cocos-cli-host-WIJwm5/runner-project/tests/collision.test.cjs",
+                "line": 1
+              }
+            ],
+            "sourceHashes": {
+              "tests/collision.test.cjs": "91e535289f4eb37ecd769c23201ae1b53bb1f92ea0b5b2cd6ec11c916632853a"
+            },
+            "exitCode": 0,
+            "signal": null,
+            "logs": "",
+            "durationMs": 164,
+            "counts": {
+              "total": 2,
+              "passed": 2,
+              "failed": 0,
+              "skipped": 0
+            }
+          }
+        ],
+        "counts": {
+          "total": 2,
+          "passed": 2,
+          "failed": 0,
+          "skipped": 0
+        },
+        "cancelled": false,
+        "requiresManualReview": false,
+        "passed": true,
+        "durationMs": 165,
+        "completedAt": "2026-10-20T13:04:02.051Z",
+        "artifacts": {
+          "json": "/private/tmp/cocos-cli-host-WIJwm5/e2e-watch/c106167b-96cc-4309-a650-42184e2137b8/results.json",
+          "junit": "/private/tmp/cocos-cli-host-WIJwm5/e2e-watch/c106167b-96cc-4309-a650-42184e2137b8/results.xml",
+          "junitSha256": "d9ba50764a1e875363fc12d66b5a3e983cb4633bbaec70d1d286c3bca1158b71"
+        }
+      }
+    },
+    {
+      "type": "test-watch-stopped",
+      "runs": 3,
+      "lastTestPassed": true,
+      "requiresManualReview": false,
+      "cancelled": true
+    }
+  ],
+  "junit": {
+    "e2e-passing": {
+      "sha256": "975f7626e1117ed017553fc4aac0a4753b88135d8918f1ac8db21232038f1a59",
+      "xml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<testsuites tests=\"2\" failures=\"0\" skipped=\"0\"><testsuite name=\"collision\" tests=\"2\" failures=\"0\" skipped=\"0\" time=\"0.137\"><testcase classname=\"collision\" name=\"collision &lt;target&gt;\" time=\"0.000611917\"></testcase><testcase classname=\"collision\" name=\"miss target\" time=\"0.000054499999999999997\"></testcase></testsuite></testsuites>\n"
+    },
+    "e2e-failing": {
+      "sha256": "34fa088531783fabb3171c15609be1bfbc06797f46dc5b8ba63edee53e915a58",
+      "xml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<testsuites tests=\"2\" failures=\"1\" skipped=\"0\"><testsuite name=\"collision\" tests=\"2\" failures=\"1\" skipped=\"0\" time=\"0.132\"><testcase classname=\"collision\" name=\"collision &lt;target&gt;\" time=\"0.001031959\"><failure message=\"AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\nfalse !== true\n\n    at TestContext.&lt;anonymous&gt; (/private/tmp/cocos-cli-host-WIJwm5/runner-project/tests/collision.test.cjs:1:146)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1047:25)\n    at Test.start (node:internal/test_runner/test:944:17)\n    at startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)\">AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\nfalse !== true\n\n    at TestContext.&lt;anonymous&gt; (/private/tmp/cocos-cli-host-WIJwm5/runner-project/tests/collision.test.cjs:1:146)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1047:25)\n    at Test.start (node:internal/test_runner/test:944:17)\n    at startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)</failure></testcase><testcase classname=\"collision\" name=\"miss target\" time=\"0.00011620800000000001\"></testcase></testsuite></testsuites>\n"
+    }
+  },
+  "installedFileVerification": {
+    "verifiedFiles": 94,
+    "mismatches": []
+  }
+}

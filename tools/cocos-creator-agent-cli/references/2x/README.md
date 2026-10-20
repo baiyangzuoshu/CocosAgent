@@ -17,6 +17,7 @@ These notes are bundled from the repository's `docs/2.x/` research. They primari
 | `11-auxiliary-capabilities.md` | Auxiliary capabilities |
 | `12-editor-extension-and-diagnostics.md` | Editor extensions and project diagnostics |
 | `13-agent-command-providers.md` | Project extension command provider contract for CLI/MCP discovery |
+| `14-project-test-runner.md` | Project test adapters, JSON/JUnit reports and affected-suite watch |
 
 Read only the note relevant to the current task, then verify the exact Creator patch and target platform in the project/editor. These notes are research references rather than a substitute for installed-version documentation or a live tool contract.
 

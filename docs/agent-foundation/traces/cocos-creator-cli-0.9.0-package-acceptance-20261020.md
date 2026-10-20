@@ -2,6 +2,8 @@
 
 日期：2026-10-20。范围：CLI 0.9.0 源码测试、本地包、隔离安装/升级、当前 Host 配置和 Creator 工程身份。未把本机包结果描述为 GitHub Release、桌面 Host 重载或 Creator 实机验收。
 
+后续更正：本文件以下保留当时记录；Dashboard 父目录显示被误判为工程路径不一致。后续已用 Dashboard 完整注册路径、Creator 窗口与扩展握手确认同一 tank 工程；真实 Codex/Claude 配置也已迁移至全局 CLI。最新状态见[0.10.0 验收](cocos-cli-0.10.0-goal-20261020.md)。
+
 ## 测试与包
 
 - 运行环境：Node.js `v22.22.2`。在 `tools/cocos-creator-agent-cli/` 执行 `npm test`：**32/32 通过**。3 项 loopback 集成测试在受限沙箱内因 `listen EPERM 127.0.0.1` 失败；在允许本机回环端口的环境重跑后全部通过。
