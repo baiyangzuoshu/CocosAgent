@@ -19,9 +19,9 @@
 
 ## Release 状态
 
-- 本地仅存在 `cocos-creator-agent-cli-v0.6.0` 标签；0.9.0 Release 尚未创建。
+- 提交 `3f5baf3712638e0a0ff6d44373c6842d5c81267e` 已推送到远端 `main`；标注标签 `cocos-creator-agent-cli-v0.9.0` 已推送并指向该提交。
 - 仓库现有 GitHub Actions Release workflow 监听 `cocos-creator-agent-cli-v*` 标签，校验标签与 package 版本一致，打包 tarball 并上传归档和 SHA-256。workflow 现增加发布前 `npm test`；另增 CLI 路径范围 CI workflow，运行测试与 npm 包清单检查。
-- 本地环境没有 `gh` CLI，因此 Release 由推送匹配标签后 GitHub Actions 发布。Release 资产、`self-update --check`、在线安装和指定版本回滚仍待远端 workflow 完成后验收。
+- GitHub API 连接器对此仓库的 workflow、tag 和 Release 查询均返回 404，浏览器会话也未能读取 workflow 页面；因此本轮无法确认 Actions 是否成功，也不声称 Release 资产已创建。Release tarball/SHA-256 资产、`self-update --check`、在线安装和指定版本回滚仍待远端 workflow 状态可见后验收。
 
 ## Creator 实机边界
 
