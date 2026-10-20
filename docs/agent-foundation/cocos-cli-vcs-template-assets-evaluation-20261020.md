@@ -1,6 +1,6 @@
 # Cocos CLI：VCS、模板与资源包能力评估
 
-日期：2026-10-20。范围：Creator 2.4.15。CLI 源码包 0.10.6 含只读 `vcs doctor`，临时 Git 工程验收通过；全局安装仍为 0.10.4，发布包和 Creator 实机尚未验收这一功能。
+日期：2026-10-20。范围：Creator 2.4.15。CLI 源码包与全局安装均为 0.10.6；只读 `vcs doctor` 的临时 Git 工程验收通过，当前 CLI 测试为 59/59。GitHub Release 在线分发、自更新/回滚，以及 `vcs doctor` 对真实 Creator AssetDB 的实机验收仍未完成。
 
 ## 结论与顺序
 
