@@ -73,3 +73,11 @@ SSH `git ls-remote` 确认远端 main 已含 `bff2faa71677023b2e54eae037b0d6faa4
 - 新增私有 Release 检查、0.9.0 降级安装、校验和错误拒绝、GitHub CLI 令牌回退及 npm 子进程令牌隔离测试。完整 CLI 测试 **59/59 通过**。
 - 0.10.6 tarball 为 98 个文件、176,068 字节，SHA-256 `79777beb755b69fbb66cc1fc648640e39b29a915765468507138c9da6261db75`。在隔离 prefix 安装后，版本命令返回 `0.10.6`，帮助列出 `self-update` 与 `vcs doctor`。这是本地发布包验收，不是 GitHub Release 或线上更新验收。
 - **线上 0.9.0 Release、资产下载、自更新与回滚仍未验证。** 当前可证明的是目标仓库为私有且当前环境无可用 CLI 凭据/网络；此前未认证 HTTP 404 不能作为 Release 不存在的证据。需从有仓库访问权且网络可用的 Host 执行实际线上验收。
+
+## 2026-10-20 全局 CLI 与 Host MCP 续验
+
+- 将本机全局 CLI 从 0.10.4 更新到本地验收包 0.10.6；`cocos-creator-agent version --format json` 与 Codex Cocos CLI 状态工具均返回 0.10.6 / Creator 2.4.15。0.10.4 回滚包仍保留在 `/private/tmp/cocos-cli-acceptance-20261020/cocos-creator-agent-cli-0.10.4.tgz`。
+- 对全局安装的 `cocos-creator-agent mcp serve` 执行真实 stdio JSON-RPC `initialize` 和 `tools/list`：serverInfo 为 `cocos-creator-agent` 0.10.6，协议 `2024-11-05`，返回 36 个工具。此验证的是 CLI 子进程自身的工具目录。
+- `mcp status codex` 和 `mcp status claude-code` 均为 `configured`；两个 Host 的 Skill 清单分别为 52/52 `installed`。这只证明配置文件与 Skill 安装状态，桌面 Host 尚未重启确认加载后的会话目录。
+- Creator Agent MCP 与 CLI 的实例列表均为空（`instances: []`，`rejectedInstances: []`）。本机桥接 `doctor` 上次已显示健康、合同匹配，但 Creator 当前未连接；Provider 重载、审批写入、恢复和最终版预览同会话断言仍未完成。系统锁屏阻止本轮在 Creator UI 中加载临时 Provider。
+- 全局 CLI 0.10.6 与 CLI-owned MCP 已验收；私有 GitHub Release 线上下载/自更新/回滚仍受仓库凭据与网络限制。以上两项不替代 Creator 实机验收，也不改变整体目标未完成状态。
