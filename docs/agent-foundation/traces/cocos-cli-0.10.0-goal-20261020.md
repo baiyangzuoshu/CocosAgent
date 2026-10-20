@@ -34,3 +34,18 @@ SSH `git ls-remote` 确认远端 main 已含 `bff2faa71677023b2e54eae037b0d6faa4
 公网 API 对仓库元数据、Actions 和 0.9.0 Release 均返回 HTTP 404；当前 Git 凭据助手不可用，GitHub 连接器无可用读取结果，浏览器连接超时。SSH 可读 Git refs，不能证明 Release 资产存在。未更改仓库可见性、令牌或 SSH 主机验证。实际执行 `self-update --check --version 0.9.0` 退出 2，错误 `CLI_RELEASE_HTTP_404`。线上 tarball/SHA-256、自更新和回滚仍未验收；0.10.0 仅为本机安装包，未创建发布标签。
 
 恢复实机工作后仍需：重载已更新的 Creator 扩展，核对版本/合同指纹和工具能力；安装临时项目 Provider 样本并验证发现/审批/写入/恢复；验收 Creator 编译、Console 与同会话运行；重载真实 Host 新工具目录。发布状态可读取后，再执行线上安装、自更新和指定版本回滚。整个目标仍未完成。
+
+## 2026-10-20 实机验收续记：Provider、预览和 CLI 0.10.4
+
+- Dashboard 再次确认 `tank`（父目录 `/Users/youjunmao/WORK/Cocos_Engine`，项目根 `/Users/youjunmao/WORK/Cocos_Engine/tank`）、Creator 2.4.15、状态“已打开”。精确绑定 2.4.15 应用后，Creator 窗口为 `Cocos Creator - tank - db://assets/CocosCliAcceptance20261020.fire`；扩展 0.6.2，命令合同 SHA-256 `e4efd9a1ad472fa74b233159ba6fc811626d35f8268a7a193d326910e76cfa47`。
+- 临时项目 Provider 在加载后由 CLI 与 MCP 发现；Provider 只读命令回读成功，审批写入成功并回读新值，取消审批的写入被拒绝且状态未改变。此处保留运行时操作回执；临时 Provider 与样本资产尚待基线恢复。
+- CLI 0.10.3 首次启动预览成功：Creator 原生批准，实例 `d6c3577e-a25c-41be-a2c9-ba2d3ca83236`、场景 `CocosCliAcceptance20261020`、UUID `33114787-cbbd-44e4-b9be-1d8c470bf4fa`；预览地址 `127.0.0.1:7456`。CLI 读回场景身份与运行页一致，初始截图显示 `Ready: 0`，截图 SHA-256 `8aba361fd05fbd97150ed92d31e4dfc7503cdd45d4e69ab1923e55fd19ebb0a5`。
+- 首次运行输入/断言发现两个真实缺口：Creator 2.4 的 `Node.getComponents()` 不支持无参调用，组件断言因此产生 Console 错误；键盘动作在后台 Agent 浏览器页没有送达。已修复组件字段读取为 2.4 兼容的 `_components` 检查，并在交互前通过 CDP `Page.bringToFront` 激活预览页，增加两个组件读取单测。
+- 用 Creator 默认预览页人工点画布并发送空格，画面显示 `Count: 1`，证明临时脚本和输入业务逻辑正常；这不是 CLI 同会话输入验收。
+- 本地 CLI 0.10.4 包含预览组件断言和输入置前修复，`npm test` **52/52 通过**；tarball 97 文件、172,057 字节，SHA-256 `92ef4320726385f989ae100c70b0688494681329a8583b48f22e40bbf066f898`。安装后的全局 CLI 报告 `0.10.4`，桥接 ID `8b8cbfe4-0359-44e8-8609-84e477286bd1`，合同指纹与 Creator 2.4.15 扩展匹配。
+- CLI 0.10.4 MCP stdio 的 `initialize` / `tools/list` 返回成功，协议 `2024-11-05`，server 版本 `0.10.4`，静态目录 36 项。因最终复验时 Creator 实例已失联，此次没有 Provider 动态工具；上一版 CLI 0.10.2 的 Provider MCP 读/审批写曾实机成功，最终版 Provider 调用待 Creator 恢复后复验。
+- CLI 0.10.4 检查真实用户级 Host 配置：Codex、Claude Code 均为 `configured`；`skill list` 两端各 52 项且状态全为 `installed`。这证明配置指向已升级的独立 CLI/Skills，不代表桌面 Host 本轮重载了新的 MCP 工具目录。
+- 独立临时 Creator 项目生命周期：CLI 安装 `0.6.2` 后 `status` 显示 managed、无 drift；把受管理样本版本设为 `0.6.1` 后正常更新到 `0.6.2`；在 `main.js` 注入 drift 后，默认更新以 `EXTENSION_LOCAL_CHANGES:main.js` 拒绝；`--force` 更新成功并生成备份 `/Users/youjunmao/.cocos-creator-agent/extension-backups/96f4b12e9a496267/1792508215992-0.6.2-59059d51`，已读回确认备份保留 drift 原文；随后卸载成功、status 报 `installed:false`，临时项目已清理。这个生命周期项目未在 Creator UI 加载，不能替代实机重载验收。
+- 用 CLI 0.10.4 再次执行 `self-update --check --version 0.9.0`，仍退出 2，返回 `CLI_RELEASE_HTTP_404`；线上 Release tarball、SHA-256、自更新与回滚仍不能验收。
+- **待继续的实机检查：** 最终 CLI 0.10.4 的预览批准窗口出现时 Mac 已锁定；按 Ctrl-C 取消等待中的启动，没有绕过锁屏。锁屏前的 0.10.3 输入断言为 `counter=0`（未通过），0.10.4 修复尚未运行到实时断言；锁屏后 `doctor` 观察到 0 个连接的 Creator 实例。解锁后重新核对 Dashboard/Creator/扩展身份，再启动预览，用同一 session 验证 `counter=1` 与无新 Console 错误，并恢复临时 Provider 与场景/脚本基线。
+- GitHub 0.9.0 Release 资产、自更新与回滚仍因远端 API 404/凭据不可用而未验收；本地 tarball 不代表公开发布。未提交 Git。

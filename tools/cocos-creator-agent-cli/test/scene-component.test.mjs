@@ -46,6 +46,7 @@ function fixture() {
   };
   const cc = {
     Component,
+    Object: { Flags: { DontSave: 1 << 3, HideInHierarchy: 1 << 10 } },
     director: { getScene: () => root },
     js: {
       getClassByName(name) { return ({ 'cc.Component': Component, 'cc.Sprite': Sprite,
@@ -65,6 +66,26 @@ function invoke(api, method, input) {
   api[method]({ reply: (nextError, nextResult) => { error = nextError; result = nextResult; } }, input);
   return { error, result };
 }
+
+test('scene queries and writes exclude editor-managed nodes and all descendants', () => {
+  const { api, root } = fixture();
+  const user = { name: 'Canvas', uuid: 'user-node', active: true, children: [], getComponents: () => [] };
+  const hiddenChild = { name: 'gizmoRoot', uuid: 'gizmo-child', active: true, children: [] };
+  const helper = { name: 'Editor Scene Foreground', uuid: 'editor-helper', active: true,
+    _objFlags: 1 << 3, children: [hiddenChild] };
+  const hidden = { name: 'hidden-helper', uuid: 'hidden', active: true, _objFlags: 1 << 10, children: [] };
+  root.children = [user, helper, hidden];
+  const snapshot = invoke(api, 'snapshot', {}).result;
+  assert.deepEqual(Array.from(snapshot.nodes, (node) => node.name), ['Scene', 'Canvas']);
+  assert.equal(snapshot.nodes[0].children, 1);
+  for (const id of ['editor-helper', 'gizmo-child', 'hidden']) {
+    assert.equal(invoke(api, 'nodeState', { sceneUuid: root.uuid, nodeUuid: id }).result.reason, 'SCENE_NODE_NOT_FOUND');
+    assert.equal(invoke(api, 'setNodeActive', { sceneUuid: root.uuid, nodeUuid: id,
+      nodePath: 'Scene/Editor Scene Foreground', expectedActive: true, active: false }).result.available, false);
+  }
+  assert.equal(helper.active, true);
+  assert.equal(hiddenChild.active, true);
+});
 
 test('component state resolves exact registered component class and scene node', () => {
   const { api } = fixture();

@@ -40,7 +40,7 @@ function validateSchema(schema, depth = 0, state = { nodes: 0 }) {
         }
         if (schema.required !== undefined && (!Array.isArray(schema.required) || schema.required.length > 32
             || new Set(schema.required).size !== schema.required.length
-            || schema.required.some((key) => typeof key !== 'string' || !Object.hasOwn(schema.properties, key))))
+            || schema.required.some((key) => typeof key !== 'string' || !Object.prototype.hasOwnProperty.call(schema.properties, key))))
             throw coded('EXTENSION_COMMAND_SCHEMA_INVALID');
         return;
     }
@@ -87,7 +87,7 @@ function normalizeProvider(packageName, metadata) {
             || typeof command.title !== 'string' || !command.title.trim() || command.title.length > 80
             || typeof command.description !== 'string' || !command.description.trim() || command.description.length > 500
             || !ACCESS.has(command.access) || !command.input || command.input.type !== 'object'
-            || Object.hasOwn(command.input.properties || {}, 'instanceId')
+            || Object.prototype.hasOwnProperty.call(command.input.properties || {}, 'instanceId')
             || ((command.access === 'write' || command.access === 'control') && command.approval !== true)
             || ((command.access === 'read' || command.access === 'plan') && command.approval === true))
             throw coded('EXTENSION_COMMAND_DECLARATION_INVALID');
@@ -111,9 +111,9 @@ function validateArguments(schema, input) {
         if (shape.type === 'object') {
             if (!value || typeof value !== 'object' || Array.isArray(value)) throw coded('EXTENSION_COMMAND_INPUT_INVALID');
             const props = shape.properties || {};
-            if (Object.keys(value).some((key) => FORBIDDEN_KEYS.has(key) || !Object.hasOwn(props, key)))
+            if (Object.keys(value).some((key) => FORBIDDEN_KEYS.has(key) || !Object.prototype.hasOwnProperty.call(props, key)))
                 throw coded('EXTENSION_COMMAND_INPUT_UNKNOWN_FIELD');
-            for (const key of shape.required || []) if (!Object.hasOwn(value, key)) throw coded('EXTENSION_COMMAND_INPUT_REQUIRED');
+            for (const key of shape.required || []) if (!Object.prototype.hasOwnProperty.call(value, key)) throw coded('EXTENSION_COMMAND_INPUT_REQUIRED');
             for (const key of Object.keys(value)) visit(props[key], value[key], `${field}.${key}`, depth + 1);
             return;
         }

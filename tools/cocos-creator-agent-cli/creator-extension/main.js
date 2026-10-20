@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const extensionPackage = require('./package.json');
+const confirmDialog = require('./approval.cjs');
 const contract = require('./command-contract.json');
 const { normalizeProvider, validateArguments, canonical, PROVIDER_ID, COMMAND_ID } = require('./provider-contract.cjs');
 
@@ -220,26 +221,10 @@ function readDiagnostics(input) {
 
 function confirmPreviewStart() {
     if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
-    return new Promise((resolve, reject) => {
-        let settled = false;
-        const finish = (result) => {
-            if (settled) return;
-            settled = true;
-            const response = Number.isInteger(result) ? result : result && Number.isInteger(result.response) ? result.response : -1;
-            resolve(response === 1);
-        };
-        try {
-            const result = Editor.Dialog.messageBox({ type: 'warning', title: 'Start Cocos Creator Web preview',
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Start Cocos Creator Web preview',
                 message: 'Run the active scene in an Agent-managed local browser session?',
                 detail: `Project: ${projectRoot()}\nCreator: ${editorVersion()}\nScene: ${lastSceneName || '(querying)'}\n\nPreview executes project scripts. It may trigger behavior implemented by the project.`,
-                buttons: ['Cancel', 'Start preview'], defaultId: 0, cancelId: 0, noLink: true }, finish);
-            if (result && typeof result.then === 'function') result.then(finish, (error) => {
-                if (settled) return;
-                settled = true;
-                reject(coded('CREATOR_APPROVAL_DIALOG_FAILED', String(error && error.message || error)));
-            });
-        } catch (error) { reject(coded('CREATOR_APPROVAL_DIALOG_FAILED', String(error.message || error))); }
-    });
+                buttons: ['Cancel', 'Start preview'], defaultId: 0, cancelId: 0, noLink: true });
 }
 
 async function startPreview(input, context) {
@@ -678,25 +663,9 @@ function confirmSceneNodeActive(operation) {
         '',
         'This changes one existing node active property and requests save of the current scene. Scene Script readback confirms in-memory state; Creator does not document a save completion acknowledgement here.',
     ].join('\n');
-    return new Promise((resolve, reject) => {
-        let settled = false;
-        const finish = (result) => {
-            if (settled) return;
-            settled = true;
-            const response = Number.isInteger(result) ? result : result && Number.isInteger(result.response) ? result.response : -1;
-            resolve(response === 1);
-        };
-        try {
-            const result = Editor.Dialog.messageBox({ type: 'warning', title: 'Approve Cocos Creator scene change',
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator scene change',
                 message: `Set ${plan.nodePath}.active to ${plan.expectedAfter.active}?`, detail,
-                buttons: ['Cancel', 'Apply scene change'], defaultId: 0, cancelId: 0, noLink: true }, finish);
-            if (result && typeof result.then === 'function') result.then(finish, (error) => {
-                if (settled) return;
-                settled = true;
-                reject(coded('CREATOR_APPROVAL_DIALOG_FAILED', String(error && error.message || error)));
-            });
-        } catch (error) { reject(coded('CREATOR_APPROVAL_DIALOG_FAILED', String(error.message || error))); }
-    });
+                buttons: ['Cancel', 'Apply scene change'], defaultId: 0, cancelId: 0, noLink: true });
 }
 
 function sceneNodeActiveReceipt(operation, state) {
@@ -837,25 +806,9 @@ function confirmSceneComponentAdd(operation) {
         '',
         'This adds one registered component class to the current scene node and requests a scene save. Component constructors and lifecycle hooks are project code; approve only if this component is expected for the task. The receipt confirms in-memory readback, not disk persistence.',
     ].join('\n');
-    return new Promise((resolve, reject) => {
-        let settled = false;
-        const finish = (result) => {
-            if (settled) return;
-            settled = true;
-            const response = Number.isInteger(result) ? result : result && Number.isInteger(result.response) ? result.response : -1;
-            resolve(response === 1);
-        };
-        try {
-            const result = Editor.Dialog.messageBox({ type: 'warning', title: 'Approve Cocos Creator component addition',
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator component addition',
                 message: `Add ${plan.componentClassName} to ${plan.nodePath}?`, detail,
-                buttons: ['Cancel', 'Add component'], defaultId: 0, cancelId: 0, noLink: true }, finish);
-            if (result && typeof result.then === 'function') result.then(finish, (error) => {
-                if (settled) return;
-                settled = true;
-                reject(coded('CREATOR_APPROVAL_DIALOG_FAILED', String(error && error.message || error)));
-            });
-        } catch (error) { reject(coded('CREATOR_APPROVAL_DIALOG_FAILED', String(error.message || error))); }
-    });
+                buttons: ['Cancel', 'Add component'], defaultId: 0, cancelId: 0, noLink: true });
 }
 
 function sceneComponentAddReceipt(operation, state) {
@@ -1019,25 +972,9 @@ function confirmSceneComponentProperty(operation) {
         '',
         'This changes one declared public scalar property on the exact component instance and requests a scene save. Property setters are project/engine code and may have side effects. The receipt confirms in-memory readback, not disk persistence.',
     ].join('\n');
-    return new Promise((resolve, reject) => {
-        let settled = false;
-        const finish = (result) => {
-            if (settled) return;
-            settled = true;
-            const response = Number.isInteger(result) ? result : result && Number.isInteger(result.response) ? result.response : -1;
-            resolve(response === 1);
-        };
-        try {
-            const result = Editor.Dialog.messageBox({ type: 'warning', title: 'Approve Cocos Creator component property change',
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator component property change',
                 message: `Set ${plan.componentClassName}.${plan.property}?`, detail,
-                buttons: ['Cancel', 'Apply property change'], defaultId: 0, cancelId: 0, noLink: true }, finish);
-            if (result && typeof result.then === 'function') result.then(finish, (error) => {
-                if (settled) return;
-                settled = true;
-                reject(coded('CREATOR_APPROVAL_DIALOG_FAILED', String(error && error.message || error)));
-            });
-        } catch (error) { reject(coded('CREATOR_APPROVAL_DIALOG_FAILED', String(error.message || error))); }
-    });
+                buttons: ['Cancel', 'Apply property change'], defaultId: 0, cancelId: 0, noLink: true });
 }
 
 function sceneComponentPropertyReceipt(operation, state) {
@@ -1047,7 +984,7 @@ function sceneComponentPropertyReceipt(operation, state) {
         sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
         componentClassName: plan.componentClassName, componentInstanceId: plan.componentInstanceId,
         property: plan.property, beforeValue: plan.expectedBefore.value,
-        value: Object.hasOwn(state, 'value') ? state.value : null,
+        value: Object.prototype.hasOwnProperty.call(state, 'value') ? state.value : null,
         sceneSaveRequestSent: !!operation.sceneSaveRequestSent, sceneSaveCompletionConfirmed: false,
         plannedByInstanceId: operation.plannedByInstanceId, appliedByInstanceId: operation.appliedByInstanceId || null,
         completedByInstanceId: operation.completedByInstanceId || null,
@@ -1206,25 +1143,9 @@ function confirmScriptCreate(operation) {
         '',
         'This approval creates one new script asset through Creator AssetDB. Existing assets and scenes are not modified.',
     ].join('\n');
-    return new Promise((resolve, reject) => {
-        let settled = false;
-        const finish = (result) => {
-            if (settled) return;
-            settled = true;
-            const response = Number.isInteger(result) ? result : result && Number.isInteger(result.response) ? result.response : -1;
-            resolve(response === 1);
-        };
-        try {
-            const result = Editor.Dialog.messageBox({ type: 'warning', title: 'Approve Cocos Creator script creation',
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator script creation',
                 message: `Create ${operation.scriptPath}?`, detail, buttons: ['Cancel', 'Create script asset'],
-                defaultId: 0, cancelId: 0, noLink: true }, finish);
-            if (result && typeof result.then === 'function') result.then(finish, (error) => {
-                if (settled) return;
-                settled = true;
-                reject(coded('CREATOR_APPROVAL_DIALOG_FAILED', String(error && error.message || error)));
-            });
-        } catch (error) { reject(coded('CREATOR_APPROVAL_DIALOG_FAILED', String(error.message || error))); }
-    });
+                defaultId: 0, cancelId: 0, noLink: true });
 }
 
 function createAssetThroughAssetDb(url, source) {
@@ -1470,7 +1391,8 @@ function projectInfo() {
     return callScene('snapshot', { maxNodes: 1 }).catch(() => ({ sceneName: null, sceneUuid: null }))
         .then((scene) => { lastSceneName = scene.sceneName || null; return ({ projectRoot: root, projectName: typeof metadata.name === 'string' ? metadata.name : path.basename(root),
             creatorVersion: currentVersion, extensionVersion: extensionPackage.version,
-            activeScene: scene.sceneName || null, activeSceneUuid: scene.sceneUuid || null }); });
+            activeScene: scene.sceneName || null, activeSceneUuid: scene.sceneUuid || null,
+            editorRuntime: { node: process.versions.node, electron: process.versions.electron || null } }); });
 }
 
 function searchProject(input) {
@@ -1763,25 +1685,9 @@ function confirmExtensionCommand(provider, command, args) {
         '',
         'This invokes code from a project-installed Creator extension. Review and trust that extension before approving.',
     ].join('\n');
-    return new Promise((resolve, reject) => {
-        let settled = false;
-        const finish = (result) => {
-            if (settled) return;
-            settled = true;
-            const response = Number.isInteger(result) ? result : result && Number.isInteger(result.response) ? result.response : -1;
-            resolve(response === 1);
-        };
-        try {
-            const result = Editor.Dialog.messageBox({ type: 'warning', title: 'Approve project extension command',
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve project extension command',
                 message: `Run ${provider.providerId}:${command.id}?`, detail,
-                buttons: ['Cancel', 'Run extension command'], defaultId: 0, cancelId: 0, noLink: true }, finish);
-            if (result && typeof result.then === 'function') result.then(finish, (error) => {
-                if (settled) return;
-                settled = true;
-                reject(coded('CREATOR_APPROVAL_DIALOG_FAILED', String(error && error.message || error)));
-            });
-        } catch (error) { reject(coded('CREATOR_APPROVAL_DIALOG_FAILED', String(error.message || error))); }
-    });
+                buttons: ['Cancel', 'Run extension command'], defaultId: 0, cancelId: 0, noLink: true });
 }
 
 async function invokeExtensionCommand(input, context, requiredAccess) {
@@ -1818,7 +1724,7 @@ async function invokeExtensionCommand(input, context, requiredAccess) {
         providerFingerprint: provider.providerFingerprint, commandId: command.id, access: command.access,
         approvalSource: command.approval ? 'creator-native-dialog' : null,
         recovery: command.approval ? { automaticRetry: false, requiresManualReviewOnInterruption: true } : null,
-        result: returned && typeof returned === 'object' && Object.hasOwn(returned, 'result') ? returned.result : returned };
+        result: returned && typeof returned === 'object' && Object.prototype.hasOwnProperty.call(returned, 'result') ? returned.result : returned };
 }
 
 function execute(command, input, context) {

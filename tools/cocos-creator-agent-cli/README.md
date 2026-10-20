@@ -4,7 +4,7 @@ Standalone local CLI for Cocos Creator 2.4.15 projects. It can run without Codex
 
 ## Requirements
 
-Development source is now 0.10.0, adding project Node/Creator/preview test adapters, JSON/JUnit reports, directory/affected-suite watch and rejected-handshake diagnostics. The 0.9.0 tag exists remotely; online Release assets and self-update acceptance are still unverified. A locally installed package is not evidence of a public release.
+Development source is now 0.10.4, adding project Node/Creator/preview test adapters, JSON/JUnit reports, directory/affected-suite watch, rejected-handshake diagnostics, Creator 2.4.15 preview scene-asset identity matching, runtime component-property assertions compatible with Creator 2.4, and foregrounding of the Agent-managed preview before input. Creator extension 0.6.2 includes the approval and Creator 2.4.15 runtime compatibility fixes. The 0.9.0 tag exists remotely; online Release assets and self-update acceptance are still unverified. A locally installed package is not evidence of a public release.
 
 - Node.js 20 or newer.
 - Cocos Creator 2.4.15 for editor-connected commands.

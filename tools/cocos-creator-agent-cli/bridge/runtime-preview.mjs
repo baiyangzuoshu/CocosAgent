@@ -5,6 +5,8 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { findSerializedSceneIdentity } from './preview-scene-identity.mjs';
+import { readPreviewComponentProperty } from './preview-components.mjs';
 
 const DATA_ROOT = path.join(os.homedir(), '.cocos-creator-agent');
 const SESSION_ROOT = path.join(DATA_ROOT, 'preview-sessions');
@@ -309,18 +311,6 @@ function attachConsole(session) {
   });
 }
 
-function findSerializedScene(value, sceneUuid, sceneName, depth = 0, budget = { nodes: 0 }) {
-  if (!value || typeof value !== 'object' || depth > 24 || budget.nodes++ > 50000) return null;
-  if (value._id === sceneUuid && value._name === sceneName) return { uuid: value._id, name: value._name, type: value.__type__ || null };
-  const children = Array.isArray(value) ? value : Object.values(value);
-  for (const child of children) {
-    const match = findSerializedScene(child, sceneUuid, sceneName, depth + 1, budget);
-    if (match) return match;
-    if (budget.nodes > 50000) break;
-  }
-  return null;
-}
-
 function waitForServedSceneAsset(session, timeoutMs = 25000) {
   const expectedUrl = new URL('preview-scene.json', session.previewUrl).href;
   return new Promise((resolve, reject) => {
@@ -347,7 +337,7 @@ function waitForServedSceneAsset(session, timeoutMs = 25000) {
           if (Buffer.byteLength(text, 'utf8') > 12 * 1024 * 1024) throw failure('PREVIEW_SCENE_ASSET_TOO_LARGE');
           let serialized;
           try { serialized = JSON.parse(text); } catch (_) { throw failure('PREVIEW_SCENE_ASSET_INVALID_JSON'); }
-          const identity = findSerializedScene(serialized, session.sceneUuid, session.sceneName);
+          const identity = findSerializedSceneIdentity(serialized, session.sceneUuid, session.sceneName);
           if (!identity) throw failure('PREVIEW_SCENE_ASSET_IDENTITY_MISMATCH');
           finish(null, identity);
         }).catch((error) => finish(error.code ? error : failure('PREVIEW_SCENE_ASSET_READBACK_FAILED', error.message)));
@@ -555,11 +545,9 @@ function assertionExpression(assertion) {
       const pass = typeof a.expected === 'number' ? typeof actual === 'number' && Math.abs(actual - a.expected) <= a.tolerance : actual === a.expected;
       return { actual, pass }; }
     if (a.type === 'component-property') { const node = find(a.path);
-      const component = node && (node.getComponents ? node.getComponents().find((item) => item && item.constructor && item.constructor.name === a.componentType) : null);
-      const descriptor = component && Object.getOwnPropertyDescriptor(component, a.componentProperty);
-      const actual = descriptor && Object.prototype.hasOwnProperty.call(descriptor, 'value') ? descriptor.value : null;
-      const primitive = actual === null || ['string', 'number', 'boolean'].includes(typeof actual);
-      return { actual: primitive ? actual : '[non-primitive-or-accessor]', pass: primitive && actual === a.expected }; }
+      const readComponentProperty = ${readPreviewComponentProperty.toString()};
+      const result = readComponentProperty(node, a.componentType, a.componentProperty);
+      return { actual: result.actual, pass: result.found && result.actual === a.expected }; }
     return { pass: false, actual: null }; })()`;
 }
 
@@ -588,6 +576,7 @@ export async function interactPreview(instance, input) {
   const assertions = validateAssertions(input.assertions || []);
   const sequenceBefore = session.consoleSequence;
   const actionResults = [];
+  await session.cdp.command('Page.bringToFront', {});
   for (const action of actions) {
     if (input.cancelled?.()) throw failure('PREVIEW_ACTION_CANCELLED');
     await performAction(session, action);

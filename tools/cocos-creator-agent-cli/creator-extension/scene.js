@@ -7,9 +7,21 @@ const MAX_MUTATION_SCAN_NODES = 10000;
 const MAX_MUTATION_SCAN_DEPTH = 64;
 const MAX_COMPONENT_INSTANCES = 32;
 
+function editorManaged(object) {
+    const flags = cc && cc.Object && cc.Object.Flags;
+    if (!flags || typeof flags.DontSave !== 'number' || typeof flags.HideInHierarchy !== 'number')
+        throw new Error('SCENE_AUTHORING_FLAGS_UNAVAILABLE');
+    return !!(object && (object._objFlags & (flags.DontSave | flags.HideInHierarchy)));
+}
+
+function authoringChildren(node) {
+    return (Array.isArray(node.children) ? node.children : []).filter((child) => child && !editorManaged(child));
+}
+
 function snapshot(maxNodes) {
     const scene = cc && cc.director && cc.director.getScene && cc.director.getScene();
     if (!scene) return { available: false, reason: 'NO_ACTIVE_SCENE', sceneName: null, sceneUuid: null, nodes: [] };
+    if (editorManaged(scene)) return { available: false, reason: 'NO_AUTHORING_SCENE', sceneName: null, sceneUuid: null, nodes: [] };
     const limit = Number.isInteger(maxNodes) && maxNodes > 0 ? Math.min(maxNodes, MAX_NODES) : MAX_NODES;
     const nodes = [];
     let truncated = false;
@@ -18,18 +30,18 @@ function snapshot(maxNodes) {
         const name = String(node.name || '').slice(0, MAX_NAME);
         const nodePath = parentPath ? `${parentPath}/${name}` : name;
         const components = typeof node.getComponents === 'function' && cc.Component ? node.getComponents(cc.Component) : [];
+        const children = authoringChildren(node);
         nodes.push({ name, path: nodePath, uuid: typeof node.uuid === 'string' ? node.uuid : null,
-            active: node.active !== false, children: Array.isArray(node.children) ? node.children.length : 0,
-            components: Array.isArray(components) ? components.map((item) => item && item.constructor && item.constructor.name)
+            active: node.active !== false, children: children.length,
+            components: Array.isArray(components) ? components.filter((item) => !editorManaged(item)).map((item) => item && item.constructor && item.constructor.name)
                 .filter((item) => typeof item === 'string').slice(0, 16) : [] });
-        const children = Array.isArray(node.children) ? node.children : [];
         for (const child of children) {
             if (nodes.length >= limit) { truncated = true; break; }
             visit(child, nodePath, depth + 1);
         }
     }
     visit(scene, '', 0);
-    return { available: true, sceneName: String(scene.name || '').slice(0, MAX_NAME),
+    return { available: true, scope: 'authoring', editorHelpersExcluded: true, sceneName: String(scene.name || '').slice(0, MAX_NAME),
         sceneUuid: typeof scene.uuid === 'string' ? scene.uuid : null,
         nodeCount: nodes.length, truncated, nodes };
 }
@@ -37,6 +49,7 @@ function snapshot(maxNodes) {
 function locateNode(sceneUuid, nodeUuid) {
     const scene = cc && cc.director && cc.director.getScene && cc.director.getScene();
     if (!scene) return { state: { available: false, reason: 'NO_ACTIVE_SCENE' }, node: null };
+    if (editorManaged(scene)) return { state: { available: false, reason: 'NO_AUTHORING_SCENE' }, node: null };
     if (typeof scene.uuid !== 'string' || scene.uuid !== sceneUuid)
         return { state: { available: false, reason: 'SCENE_IDENTITY_MISMATCH', sceneUuid: scene.uuid || null }, node: null };
     const stack = [{ node: scene, parentPath: '', depth: 0 }];
@@ -53,7 +66,7 @@ function locateNode(sceneUuid, nodeUuid) {
         const name = String(item.node.name || '').slice(0, MAX_NAME);
         const nodePath = item.parentPath ? `${item.parentPath}/${name}` : name;
         if (item.node.uuid === nodeUuid) matches.push({ node: item.node, path: nodePath });
-        const children = Array.isArray(item.node.children) ? item.node.children : [];
+        const children = authoringChildren(item.node);
         for (let index = children.length - 1; index >= 0; index -= 1) {
             if (item.depth >= MAX_MUTATION_SCAN_DEPTH || visited + stack.length >= MAX_MUTATION_SCAN_NODES) {
                 truncated = true;
@@ -72,7 +85,7 @@ function locateNode(sceneUuid, nodeUuid) {
         return { state: { available: false, reason: 'SCENE_NODE_ACTIVE_STATE_INVALID', sceneUuid: scene.uuid, visited }, node: null };
     const componentsAvailable = typeof match.node.getComponents === 'function' && !!cc.Component;
     const allComponents = componentsAvailable ? match.node.getComponents(cc.Component) : [];
-    const components = Array.isArray(allComponents) ? allComponents : [];
+    const components = Array.isArray(allComponents) ? allComponents.filter((item) => !editorManaged(item)) : [];
     const componentRows = components.slice(0, 32).map((component) => {
         const constructor = component && component.constructor;
         const className = constructor && cc.js && typeof cc.js.getClassName === 'function'
@@ -139,7 +152,9 @@ function exactComponentInstances(node, constructor) {
     if (!Array.isArray(candidates)) return { available: false, reason: 'SCENE_COMPONENT_QUERY_INVALID' };
     if (candidates.length > MAX_COMPONENT_INSTANCES)
         return { available: false, reason: 'SCENE_COMPONENT_LIMIT', componentCount: candidates.length };
-    return { available: true, components: candidates.filter((component) => component && component.constructor === constructor) };
+    const components = candidates.filter((component) => component && component.constructor === constructor);
+    if (components.some(editorManaged)) return { available: false, reason: 'SCENE_EDITOR_COMPONENT_PROTECTED' };
+    return { available: true, components };
 }
 
 function componentState(params) {

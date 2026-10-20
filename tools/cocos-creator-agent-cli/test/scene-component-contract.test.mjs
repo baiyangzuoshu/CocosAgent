@@ -5,6 +5,14 @@ import { COMMANDS, validateCommand } from '../bridge/contracts.mjs';
 const sceneUuid = '11111111-1111-4111-8111-111111111111';
 const nodeUuid = '22222222-2222-4222-8222-222222222222';
 
+test('scene contracts accept real Creator compact object UUIDs without accepting arbitrary IDs', () => {
+  const input = { sceneUuid: 'a0XObHorNAbIr2hxhGwXCb', nodeUuid: 'fajmfI4k5PkbS2JhUsJP0d', active: false };
+  assert.equal(validateCommand('creator.scene.node.set-active.plan', input).ok, true);
+  assert.equal(validateCommand('creator.scene.node.set-active.plan', { ...input, nodeUuid: '../arbitrary-path' }).ok, false);
+  assert.equal(validateCommand('creator.scene.node.read', { sceneUuid, nodeUuid }).ok, true);
+  assert.equal(validateCommand('creator.scene.node.set-active.commit', { operationId: input.nodeUuid, planHash: 'a'.repeat(64) }).ok, false);
+});
+
 test('component-add command contract is plan/approved-write/reconcile and rejects unsafe input', () => {
   const plan = COMMANDS.get('creator.scene.node.add-component.plan');
   const commit = COMMANDS.get('creator.scene.node.add-component.commit');
