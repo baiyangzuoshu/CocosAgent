@@ -1,1 +1,1 @@
-Canonical product skill: [plugins/cocos-creator-agent/skills/cocos2-runtime-observation/SKILL.md](../../../../plugins/cocos-creator-agent/skills/cocos2-runtime-observation/SKILL.md)
+Canonical product skill: [tools/cocos-creator-agent-cli/skills/cocos2-runtime-observation/SKILL.md](../../../tools/cocos-creator-agent-cli/skills/cocos2-runtime-observation/SKILL.md)

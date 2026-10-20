@@ -16,6 +16,7 @@ These notes are bundled from the repository's `docs/2.x/` research. They primari
 | `10-publishing-and-native.md` | Publishing and native targets |
 | `11-auxiliary-capabilities.md` | Auxiliary capabilities |
 | `12-editor-extension-and-diagnostics.md` | Editor extensions and project diagnostics |
+| `13-agent-command-providers.md` | Project extension command provider contract for CLI/MCP discovery |
 
 Read only the note relevant to the current task, then verify the exact Creator patch and target platform in the project/editor. These notes are research references rather than a substitute for installed-version documentation or a live tool contract.
 
@@ -37,5 +38,6 @@ These mappings identify where to look for version-specific engine evidence. They
 | builds, native publishing, JSB/native plugins and native memory questions | `10-publishing-and-native.md` |
 | localization, networking, storage and hot update | `11-auxiliary-capabilities.md` |
 | Creator editor extensions, AssetDB integration, project package and importer diagnosis | `12-editor-extension-and-diagnostics.md` |
+| CLI/MCP discovery of project-local Creator extension commands | `13-agent-command-providers.md` |
 
 The general router and the `cocos2-*-workflows` routers should load the specialist's mapped note only when a task needs Creator API, serialized-data, or engine-runtime detail. `cocos2-mcp-tools`, `cocos2-project-extensions`, `cocos2-project-search`, and `cocos2-task-review-recovery` describe Host/project workflows rather than Creator engine APIs; inspect live Host tools and repository instructions instead of inferring an engine capability from those Skills.

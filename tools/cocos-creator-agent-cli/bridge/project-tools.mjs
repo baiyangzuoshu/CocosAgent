@@ -50,12 +50,16 @@ export function readProjectTools(projectRoot) {
       || typeof item.commandId !== 'string') throw coded('PROJECT_TOOL_DECLARATION_INVALID');
     seen.add(item.id);
     const command = COMMANDS.get(item.commandId);
-    // Project registries can alias existing read-only Creator operations. They
-    // cannot add executable callbacks, widen a schema, or register writes.
-    if (!command || command.access !== 'read' || command.execution === 'bridge')
+    // Project registries can alias canonical read/plan operations and explicitly
+    // approved writes or controls. They cannot add callbacks, widen schemas, or
+    // expose an unapproved side effect.
+    const safeAccess = command && (command.access === 'read' || command.access === 'plan'
+      || (['write', 'control'].includes(command.access) && command.approval === true));
+    if (!safeAccess || command.execution === 'bridge')
       throw coded('PROJECT_TOOL_COMMAND_NOT_ALLOWED');
     return { id: item.id, title: item.title.trim(), description: item.description.trim(),
-      commandId: command.id, access: 'read', input: command.input };
+      commandId: command.id, access: command.access, approval: command.approval === true,
+      commandDescription: command.description, input: command.input };
   });
   return { schemaVersion: 1, status: 'ready', registryHash, registryPath: filename, tools };
 }

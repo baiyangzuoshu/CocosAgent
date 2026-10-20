@@ -2,22 +2,28 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { bridgeStatus, stopBridge, ensureBridge, listInstances, getCapabilities, callCommand, getProjectTools,
-  callProjectTool, startTask, listTasks, getTask, waitTask, cancelTask, resumeTask, pluginRoot } from './bridge/client.mjs';
+  getExtensionCommands, callExtensionCommand, callProjectTool, startTask, listTasks, getTask, waitTask,
+  cancelTask, resumeTask, pluginRoot } from './bridge/client.mjs';
 import { COMMANDS, CREATOR_VERSION } from './bridge/contracts.mjs';
 import { installExtension, extensionStatus, updateExtension, uninstallExtension } from './extension-lifecycle.mjs';
 import { updateCli } from './release.mjs';
 import { runDoctor } from './doctor.mjs';
 import { runCreatorWorkflow } from './creator-workflows.mjs';
+import { startProjectFileWatch } from './creator-watch.mjs';
+import { configureMcp, mcpStatus, supportedMcpClients } from './mcp/configure.mjs';
+import { availableSkills, installSkills, listSkillStatus, showSkill } from './skills.mjs';
 
 const args = process.argv.slice(2);
 const root = pluginRoot();
 const packageInfo = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 let globalOptionError = null;
+let jsonOutput = false;
 
 for (let index = args.length - 1; index >= 0; index -= 1) {
-  if (args[index] === '--json') args.splice(index, 1);
+  if (args[index] === '--json') { jsonOutput = true; args.splice(index, 1); }
   else if (args[index] === '--format') {
     if (args[index + 1] !== 'json') globalOptionError = 'Only --format json is supported.';
+    else jsonOutput = true;
     args.splice(index, 2);
   }
 }
@@ -53,12 +59,16 @@ async function main() {
       '  --version | version',
       '  catalog [--format json]',
       '  self-update [--check] [--version <version>]',
+      '  mcp configure <codex|claude-code> [--local] [--force] [--dry-run] | list | status <client> | remove <client> | serve',
+      '  skill list [<codex|claude-code>] [--local] | show [<skill-name>|--list] (default: cocos2-cli) | install <client> [--local] [--skill <name>] [--force] | refresh <client> [--local] [--force]',
       '  doctor [--project-root <absolute-path>] [--instance <instance-id>]',
       '  bridge start | status | stop',
       '  extension install --project-root <absolute-path>',
       '  extension status --project-root <absolute-path>',
       '  extension update --project-root <absolute-path> [--force]',
       '  extension uninstall --project-root <absolute-path> [--force]',
+      '  extension commands list --instance <instance-id>',
+      '  extension command call --instance <instance-id> --provider <provider-id> --command <command-id> --input <json-object>',
       '  instances list',
       '  capabilities --instance <instance-id>',
       '  project info --instance <instance-id>',
@@ -68,9 +78,16 @@ async function main() {
       '  asset search --instance <instance-id> [--query <text>] [--limit N]',
       '  script read --instance <instance-id> --path <assets-relative.js-or.ts>',
       '  scene snapshot --instance <instance-id>',
+      '  call --instance <instance-id> --command creator.scene.node.add-component.plan --input <json-object>',
+      '  call --instance <instance-id> --command creator.scene.node.add-component.commit --input <json-object>',
+      '  call --instance <instance-id> --command creator.scene.node.add-component.reconcile --input <json-object>',
+      '  call --instance <instance-id> --command creator.scene.node.set-component-property.plan --input <json-object>',
+      '  call --instance <instance-id> --command creator.scene.node.set-component-property.commit --input <json-object>',
+      '  call --instance <instance-id> --command creator.scene.node.set-component-property.reconcile --input <json-object>',
       '  creator build --project-root <path> --creator <Creator-2.4.15.app> --platform web-mobile|web-desktop|android|ios|mac|win32 [--build-path <new-path>] [--debug] [--auto-compile] [--timeout-ms N]',
       '  creator compile --project-root <path> --creator <Creator-2.4.15.app> --platform android|ios|mac|win32 --build-path <existing-native-build-path> [--debug] [--timeout-ms N]',
       '  creator test --instance <instance-id> --session <preview-session-id> --input <actions-and-assertions-json>',
+      '  creator watch --instance <instance-id> --session <preview-session-id> --paths <project-relative-paths-json> --input <actions-and-assertions-json> [--interval-ms N]',
       '  diagnostics read --instance <instance-id> [--after-sequence N] [--limit N]',
       '  preview start --instance <instance-id> [--port 7456]',
       '  preview observe|screenshot|refresh|stop --instance <instance-id> --session <preview-session-id>',
@@ -92,6 +109,77 @@ async function main() {
   if (group === 'self-update') {
     print(await updateCli(packageInfo, { checkOnly: args.includes('--check'), version: value('--version') }));
     return;
+  }
+  if (group === 'mcp') {
+    if (action === 'serve') { await import('./mcp/server.mjs'); return; }
+    if (action === 'list' || action === '--list') {
+      print({ clients: supportedMcpClients().map((client) => ({ ...client,
+        status: mcpStatus(client.id).status })) });
+      return;
+    }
+    if (action === 'status') {
+      const client = rest[0];
+      print(mcpStatus(client));
+      return;
+    }
+    if (action === 'configure') {
+      const client = rest[0];
+      print(configureMcp(client, { force: args.includes('--force'), local: args.includes('--local'), dryRun: args.includes('--dry-run') }));
+      return;
+    }
+    if (action === 'remove') {
+      const client = rest[0];
+      const current = mcpStatus(client);
+      if (current.status === 'not-configured' || current.status === 'client-not-installed') {
+        print({ client, server: 'cocos-creator-agent', status: current.status });
+        return;
+      }
+      if (current.status !== 'configured') throw new Error(`MCP_SERVER_CONFLICT: ${client} has a different ${current.server} configuration; remove it through the client after reviewing it.`);
+      const command = client === 'codex' ? 'codex' : client === 'claude-code' ? 'claude' : null;
+      if (!command) throw new Error('CLIENT_UNSUPPORTED: choose codex or claude-code');
+      const { spawnSync } = await import('node:child_process');
+      const removeArgs = client === 'codex' ? ['mcp', 'remove', 'cocos-creator-agent']
+        : ['mcp', 'remove', '--scope', args.includes('--local') ? 'local' : 'user', 'cocos-creator-agent'];
+      const result = spawnSync(command, removeArgs, { encoding: 'utf8', timeout: 30000, windowsHide: true });
+      if (result.status !== 0) throw new Error(`MCP_REMOVE_FAILED: ${(result.stderr || result.stdout || result.error?.message || '').trim()}`);
+      print({ client, server: 'cocos-creator-agent', status: 'removed' });
+      return;
+    }
+    throw new Error('Unknown MCP action. Use mcp --help.');
+  }
+  if (group === 'skill') {
+    if (action === 'show') {
+      if (args.includes('--list')) { print(showSkill(undefined, { list: true })); return; }
+      const name = rest.find((item) => !item.startsWith('--')) || 'cocos2-cli';
+      const content = showSkill(name);
+      if (jsonOutput) print({ name, content });
+      else process.stdout.write(content);
+      return;
+    }
+    if (action === 'list') {
+      const client = rest.find((item) => !item.startsWith('--'));
+      if (client) print({ client, skills: listSkillStatus(client, { local: args.includes('--local') }) });
+      else print({ skills: availableSkills().map((name) => ({ name, path: `skills/${name}/SKILL.md` })) });
+      return;
+    }
+    if (action === 'install' || action === 'refresh') {
+      const client = rest[0];
+      const selected = args.flatMap((item, index) => item === '--skill' && args[index + 1] ? [args[index + 1]] : []);
+      const managed = action === 'refresh' && selected.length === 0
+        ? listSkillStatus(client, { local: args.includes('--local') }).filter((item) => ['installed', 'modified'].includes(item.status)).map((item) => item.name)
+        : selected;
+      if (!['codex', 'claude-code'].includes(client)) throw new Error('SKILL_CLIENT_REQUIRED: choose codex or claude-code');
+      if (action === 'refresh' && selected.length === 0 && managed.length === 0) {
+        print({ client, scope: args.includes('--local') ? 'project' : 'user', results: [], success: true, installedCount: 0 });
+        return;
+      }
+      const result = installSkills(client, { local: args.includes('--local'), force: args.includes('--force'),
+        dryRun: args.includes('--dry-run'), selected: managed, packageVersion: packageInfo.version });
+      print(result);
+      if (!result.success) process.exitCode = 1;
+      return;
+    }
+    throw new Error('Unknown skill action. Use skill --help.');
   }
   if (group === 'doctor') {
     const report = await runDoctor({ packageInfo, projectRoot: value('--project-root'), instanceId: value('--instance') });
@@ -115,6 +203,13 @@ async function main() {
   }
   if (group === 'extension' && action === 'uninstall') {
     print(uninstallExtension(value('--project-root'), extensionSource, { force: args.includes('--force') })); return;
+  }
+  if (group === 'extension' && action === 'commands' && rest[0] === 'list') {
+    print(await getExtensionCommands(value('--instance'))); return;
+  }
+  if (group === 'extension' && action === 'command' && rest[0] === 'call') {
+    print(await callExtensionCommand(value('--instance'), value('--provider'), value('--command'), parseInput(),
+      { expectedFingerprint: value('--fingerprint') })); return;
   }
 
   const instanceId = value('--instance');
@@ -164,6 +259,68 @@ async function main() {
       const passed = receipt.result?.passed === true;
       print({ ...receipt, test: { passed, assertionCount: receipt.result?.assertions?.length || 0 } });
       if (!passed) process.exitCode = 1;
+      return;
+    }
+    if (action === 'watch') {
+      const previewSessionId = value('--session');
+      if (typeof previewSessionId !== 'string' || !previewSessionId) throw new Error('PREVIEW_SESSION_REQUIRED');
+      let watchPaths;
+      try { watchPaths = JSON.parse(value('--paths', '')); } catch (_) { throw new Error('--paths must be a JSON array of project-relative file paths'); }
+      if (!Array.isArray(watchPaths)) throw new Error('--paths must be a JSON array of project-relative file paths');
+      const testInput = parseInput();
+      if (Object.hasOwn(testInput, 'previewSessionId')) throw new Error('PREVIEW_SESSION_ID_MUST_USE_SESSION_OPTION');
+      const live = await listInstances({ start: false });
+      const instance = (live.instances || []).find((item) => item.instanceId === instanceId);
+      if (!instance) throw new Error('CREATOR_INSTANCE_NOT_FOUND');
+      await callCommand(instanceId, 'creator.preview.observe', { previewSessionId });
+
+      const signal = new AbortController();
+      const emit = (event) => process.stdout.write(`${JSON.stringify(event)}\n`);
+      let sequence = 0;
+      let lastPassed = true;
+      let runQueue = Promise.resolve();
+      const runCheck = (trigger, changedPaths = []) => {
+        runQueue = runQueue.then(async () => {
+          sequence += 1;
+          try {
+            if (trigger === 'file-change') {
+              await callCommand(instanceId, 'creator.preview.refresh', { previewSessionId });
+            }
+            const receipt = await callCommand(instanceId, 'creator.preview.interact', {
+              ...testInput, previewSessionId,
+            });
+            const passed = receipt.result?.passed === true;
+            lastPassed = passed;
+            emit({ type: 'preview-test', sequence, trigger, changedPaths,
+              test: { passed, assertionCount: receipt.result?.assertions?.length || 0 }, receipt });
+          } catch (error) {
+            lastPassed = false;
+            emit({ type: 'preview-test-error', sequence, trigger, changedPaths, error: error.message || String(error) });
+          }
+        });
+        return runQueue;
+      };
+      const stop = () => signal.abort();
+      process.once('SIGINT', stop);
+      process.once('SIGTERM', stop);
+      let watcher;
+      try {
+        watcher = startProjectFileWatch({ projectRoot: instance.projectRoot, paths: watchPaths,
+          intervalMs: value('--interval-ms') === undefined ? undefined : Number(value('--interval-ms')),
+          signal: signal.signal, onChange: (changedPaths) => runCheck('file-change', changedPaths),
+          onError: (error) => emit({ type: 'watch-error', error: error.code || error.message || String(error) }) });
+        emit({ type: 'watch-started', instanceId, projectRoot: watcher.projectRoot, paths: watcher.paths,
+          previewSessionId, creatorVersion: instance.creatorVersion, extensionVersion: instance.extensionVersion });
+        await runCheck('initial');
+        await watcher.done;
+        await runQueue;
+      } finally {
+        stop();
+        process.removeListener('SIGINT', stop);
+        process.removeListener('SIGTERM', stop);
+      }
+      if (!lastPassed) process.exitCode = 1;
+      emit({ type: 'watch-stopped', runs: sequence, lastTestPassed: lastPassed });
       return;
     }
     if (action === 'build' || action === 'compile') {

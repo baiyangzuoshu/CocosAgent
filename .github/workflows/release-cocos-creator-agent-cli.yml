@@ -16,6 +16,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Run CLI test suite
+        working-directory: tools/cocos-creator-agent-cli
+        run: npm test
       - name: Pack and verify the tagged CLI version
         env:
           RELEASE_TAG: ${{ github.ref_name }}

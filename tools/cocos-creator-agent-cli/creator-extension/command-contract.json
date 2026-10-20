@@ -58,7 +58,7 @@
     {
       "id": "creator.scene.node.read",
       "access": "read",
-      "description": "Read one exact node in the active scene by scene UUID and node UUID, including its full bounded path and active state.",
+      "description": "Read one exact node in the active scene by scene UUID and node UUID, including its full bounded path, active state, component classes, and current-session component instance IDs.",
       "input": {
         "type": "object",
         "required": ["sceneUuid", "nodeUuid"],
@@ -113,6 +113,95 @@
       }
     },
     {
+      "id": "creator.scene.node.add-component.plan",
+      "access": "plan",
+      "description": "Plan adding one registered Cocos component class to one exact scene node. Rejects missing classes, existing instances, and components with implicit required components; no scene change is made.",
+      "input": {
+        "type": "object",
+        "required": ["sceneUuid", "nodeUuid", "componentClassName"],
+        "properties": {
+          "sceneUuid": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "nodeUuid": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "componentClassName": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[A-Za-z_$][A-Za-z0-9_$.]*$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.node.add-component.commit",
+      "access": "write",
+      "approval": true,
+      "description": "Add the exact planned component class after Creator approval and fresh scene/node/component precondition checks, then request scene save and read the component count back in the same Creator scene session.",
+      "input": {
+        "type": "object",
+        "required": ["operationId", "planHash"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.node.add-component.reconcile",
+      "access": "plan",
+      "description": "Observe and reconcile one planned component-add operation after interruption. Never retries the mutation; an observed component without a persisted instance identity requires manual review.",
+      "input": {
+        "type": "object",
+        "required": ["operationId"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.node.set-component-property.plan",
+      "access": "plan",
+      "description": "Plan changing one declared public scalar component property (string, number, or boolean) on one exact component instance. Object, array, asset-reference, lifecycle, and internal fields are rejected.",
+      "input": {
+        "type": "object",
+        "required": ["sceneUuid", "nodeUuid", "componentClassName", "componentInstanceId", "property", "value"],
+        "properties": {
+          "sceneUuid": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "nodeUuid": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "componentClassName": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[A-Za-z_$][A-Za-z0-9_$.]*$" },
+          "componentInstanceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "property": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z][A-Za-z0-9_]*$" },
+          "value": { "type": ["string", "number", "boolean"], "maxLength": 1024, "minimum": -1000000000, "maximum": 1000000000 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.node.set-component-property.commit",
+      "access": "write",
+      "approval": true,
+      "description": "Apply the exact planned scalar component-property change after Creator approval and fresh component-instance/property precondition checks, then request scene save and read back in memory.",
+      "input": {
+        "type": "object",
+        "required": ["operationId", "planHash"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.node.set-component-property.reconcile",
+      "access": "plan",
+      "description": "Observe and reconcile one scalar component-property operation after interruption. Never reapplies the value; if the original component instance cannot be identified, manual review is required.",
+      "input": {
+        "type": "object",
+        "required": ["operationId"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
       "id": "creator.script.create.plan",
       "access": "plan",
       "description": "Prepare a Creator AssetDB script-creation plan in an existing assets folder, with an absent-target precondition, source hash, operation ID, and recovery conditions. Does not modify project assets or create folders.",
@@ -129,6 +218,7 @@
     {
       "id": "creator.script.create.commit",
       "access": "write",
+      "approval": true,
       "description": "Create the exact script asset described by a pending plan after an explicit Creator confirmation dialog and a fresh absent-target precondition check; returns AssetDB identity, readback hashes, and recovery conditions.",
       "input": {
         "type": "object",
@@ -277,6 +367,79 @@
       "input": {
         "type": "object", "required": ["previewSessionId"],
         "properties": { "previewSessionId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" } },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.extension.commands.list",
+      "access": "read",
+      "execution": "creator",
+      "description": "Discover live, project-local Creator extensions that implement the Cocos Agent command provider contract.",
+      "input": { "type": "object", "properties": {}, "additionalProperties": false }
+    },
+    {
+      "id": "creator.extension.command.invoke.read",
+      "access": "read",
+      "execution": "creator",
+      "description": "Invoke a live project extension command declared read-only in its Creator command provider contract.",
+      "input": {
+        "type": "object", "required": ["providerId", "commandId", "providerFingerprint", "argumentsJson"],
+        "properties": {
+          "providerId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z0-9-]{0,63}$" },
+          "commandId": { "type": "string", "minLength": 1, "maxLength": 48, "pattern": "^[a-z][a-z0-9-]{0,47}$" },
+          "providerFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" },
+          "argumentsJson": { "type": "string", "maxLength": 16384 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.extension.command.invoke.plan",
+      "access": "plan",
+      "execution": "creator",
+      "description": "Invoke a live project extension command declared as a non-mutating plan in its Creator command provider contract.",
+      "input": {
+        "type": "object", "required": ["providerId", "commandId", "providerFingerprint", "argumentsJson"],
+        "properties": {
+          "providerId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z0-9-]{0,63}$" },
+          "commandId": { "type": "string", "minLength": 1, "maxLength": 48, "pattern": "^[a-z][a-z0-9-]{0,47}$" },
+          "providerFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" },
+          "argumentsJson": { "type": "string", "maxLength": 16384 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.extension.command.invoke.write",
+      "access": "write",
+      "approval": true,
+      "execution": "creator",
+      "description": "Invoke a project extension command declared as a write only after an explicit native Creator approval dialog.",
+      "input": {
+        "type": "object", "required": ["providerId", "commandId", "providerFingerprint", "argumentsJson"],
+        "properties": {
+          "providerId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z0-9-]{0,63}$" },
+          "commandId": { "type": "string", "minLength": 1, "maxLength": 48, "pattern": "^[a-z][a-z0-9-]{0,47}$" },
+          "providerFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" },
+          "argumentsJson": { "type": "string", "maxLength": 16384 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.extension.command.invoke.control",
+      "access": "control",
+      "approval": true,
+      "execution": "creator",
+      "description": "Invoke a project extension command declared as a control action only after an explicit native Creator approval dialog.",
+      "input": {
+        "type": "object", "required": ["providerId", "commandId", "providerFingerprint", "argumentsJson"],
+        "properties": {
+          "providerId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z0-9-]{0,63}$" },
+          "commandId": { "type": "string", "minLength": 1, "maxLength": 48, "pattern": "^[a-z][a-z0-9-]{0,47}$" },
+          "providerFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" },
+          "argumentsJson": { "type": "string", "maxLength": 16384 }
+        },
         "additionalProperties": false
       }
     }

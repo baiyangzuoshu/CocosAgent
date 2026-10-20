@@ -419,7 +419,8 @@ async function executeTask(task, instance, { command = task.command, input = tas
     task.error = { code: String(code).slice(0, 100), message: errorMessage(error) };
     const access = COMMANDS.get(task.command)?.access;
     const approvedActionDeclined = ['TASK_CANCELLED_BEFORE_DELIVERY', 'WRITE_REQUEST_NOT_ACTIVE', 'WRITE_REQUEST_NO_LONGER_ACTIVE',
-      'PREVIEW_REQUEST_NO_LONGER_ACTIVE', 'PREVIEW_NOT_APPROVED', 'OPERATION_NOT_APPROVED'].includes(String(code));
+      'PREVIEW_REQUEST_NO_LONGER_ACTIVE', 'PREVIEW_NOT_APPROVED', 'OPERATION_NOT_APPROVED',
+      'EXTENSION_COMMAND_NOT_APPROVED', 'EXTENSION_COMMAND_REQUEST_NO_LONGER_ACTIVE'].includes(String(code));
     if (recovery) {
       task.status = 'needs-reconciliation';
       task.interruption = 'reconcile-failed';
@@ -488,6 +489,14 @@ function resumeTask(task, instance) {
       command = 'creator.scene.node.set-active.reconcile';
       input = { operationId: task.input.operationId };
       recovery = true;
+    } else if (task.command === 'creator.scene.node.add-component.commit' && typeof task.input?.operationId === 'string') {
+      command = 'creator.scene.node.add-component.reconcile';
+      input = { operationId: task.input.operationId };
+      recovery = true;
+    } else if (task.command === 'creator.scene.node.set-component-property.commit' && typeof task.input?.operationId === 'string') {
+      command = 'creator.scene.node.set-component-property.reconcile';
+      input = { operationId: task.input.operationId };
+      recovery = true;
     } else {
       throw coded('TASK_MANUAL_RECONCILIATION_REQUIRED');
     }
@@ -533,6 +542,16 @@ async function route(request, response) {
         reason: capability?.status === 'available' ? null : (capability?.reason || 'COMMAND_NOT_ADVERTISED') };
     });
     sendJson(response, 200, { instance: publicInstance(instance), ...registry, tools }); return;
+  }
+  const extensionCommandsMatch = url.pathname.match(/^\/v1\/instances\/([0-9a-f-]{36})\/extension-commands$/i);
+  if (request.method === 'GET' && extensionCommandsMatch) {
+    const instance = resolveInstance(extensionCommandsMatch[1], response);
+    if (!instance) return;
+    const outcome = await dispatch(instance, { requestId: randomUUID(), command: 'creator.extension.commands.list', input: {} });
+    if (outcome.error) { sendFailure(response, 409, outcome.error.code || 'EXTENSION_COMMAND_DISCOVERY_FAILED'); return; }
+    const catalog = outcome.result;
+    const catalogHash = createHash('sha256').update(JSON.stringify(catalog.commands || [])).digest('hex');
+    sendJson(response, 200, { instance: publicInstance(instance), ...catalog, catalogHash }); return;
   }
   if (routeKey === 'POST /v1/creator/register') {
     const body = await readBody(request);

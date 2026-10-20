@@ -1,23 +1,23 @@
 ---
-name: cocos2-scene-node-operations
-description: Inspect or modify supported Cocos Creator 2.4.x scene nodes, component properties, and Prefab instances.
+name: cocos2-ui-component-properties
+description: Inspect or set supported Cocos Creator 2.4.x UI component properties.
 ---
 
-# Scene node operations
+# UI component properties
 
 ## Scope
 
-Inspect or modify supported Cocos Creator 2.4.x scene nodes, component properties, and Prefab instances.
+Inspect or set supported Cocos Creator 2.4.x UI component properties.
 
 ## Workflow
 
 1. Identify the exact project root from the Host workspace and verify the Creator patch from project metadata or an editor integration. Determine the active scene/target only through tools that report it; never infer it from a neighboring project.
 2. Inspect the relevant source, asset, scene or runtime evidence and record exact identities/current state before proposing a change.
-3. Confirm active scene, exact full node path/UUID, component type, and current values from a fresh snapshot.
-4. Check the live command schema for the requested property; refuse unknown fields and ambiguous duplicate node names. The initial write capability supports only `Node.active` on one existing node identified by scene UUID and node UUID.
-5. For `Node.active`, use `creator.scene.node.set-active.plan` to capture the exact current value, inspect the diff, then call `creator.scene.node.set-active.commit` only after the plan is approved. Creator shows a native confirmation and rechecks the before-state before writing.
-6. The command requests save through Creator's documented `scene:stash-and-save` IPC and reads the value back through Scene Script. The receipt does not prove disk persistence because that IPC exposes no documented completion acknowledgement.
-7. For uncertainty, call `creator.scene.node.set-active.reconcile` with the original operation ID; it only observes and never repeats the mutation. If it reports `save-required`, inspect and save manually in Creator.
+3. Read the exact node and component identity and current property values.
+4. Use live schema-discovered fields and valid enum/range constraints; do not invent property names.
+5. Apply only the authorized fields and read them back from Creator.
+6. The CLI currently supports adding one registered component class and setting one declared public scalar field (`string`, `number`, or `boolean`) on one exact component instance through separate plan/commit/reconcile operations. Treat component attachment as a separate approved operation; it does not set properties.
+7. Arrays, objects, asset references, internal/inherited fields, and UI event lists are outside this write contract. If a requested field is not exposed by the current command catalog, report that tool gap without serialized-file fallback.
 
 ## Capability and safety gate
 

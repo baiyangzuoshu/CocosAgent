@@ -28,7 +28,7 @@ This plugin provides general Creator skills for third-party coding agents. It is
 - Preview, runtime behavior, memory/performance → `cocos2-runtime-workflows`.
 - Build, delivery, Web/mobile optimization → `cocos2-build-delivery-workflows`.
 - Creator extension, JSB/native plugins → `cocos2-extension-workflows`.
-- Cocos plugin CLI/MCP tool discovery and contracts → `cocos2-mcp-tools` when the third-party integration is installed.
+- Cocos CLI MCP setup, tool discovery, and contracts → `cocos2-mcp-tools`; configure the Host with `cocos-creator-agent mcp configure <client>` when needed.
 - Vendor SDK integration → use the separate optional `cocos-creator-agent-sdk` plugin only after identifying provider, product, version, and platform.
 - Review, interruption, or recovery → `cocos2-task-review-recovery`. A checkpoint workflow is available only if the current Host or project integration explicitly exposes one.
 

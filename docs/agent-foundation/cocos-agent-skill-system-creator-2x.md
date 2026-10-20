@@ -1,16 +1,17 @@
 # Cocos Creator 2.4.x 第三方 Agent Skill 系统
 
-日期：2026-10-18（2026-10-19 更新）。状态：**Creator 原生 CocosAgent 已停止并从仓库移除；原生 Agent 计划与验收文档仅作历史记录。第三方主插件已建立 51 项 Creator 工作流 Skills 和 1 项 CLI Skill，共 52 项；另有 5 项可选 SDK Skills。Codex 插件、独立 CLI、MCP/Creator 2.4.15 只读桥接已完成实机验收：Codex 当前会话发现并调用 8 个工具，Creator 实例身份和 5 条只读命令通过。Claude Code Host 尚未验收；写入、预览和运行反馈尚未实现。** 本文描述当前维护的第三方产品线。
+日期：2026-10-18（2026-10-20 更新）。状态：**Creator 原生 CocosAgent 已停止并从仓库移除；原生 Agent 计划与验收文档仅作历史记录。CLI 0.9.0 持有 51 项 Creator 工作流 Skills、1 项 CLI Skill、参考资料、MCP stdio 服务和 Codex/Claude 原生配置/Skill 安装命令；32 项测试、90 项 tarball 文件、SHA-256、隔离安装及 0.6.0→0.9.0 本地升级通过，GitHub Release 尚未发布。旧式第三方插件收缩为 CLI 引导 Skill。桌面 Host 重载、Creator 写入/预览/运行仍待实机验证。另有 5 项可选 SDK Skills。** 本文描述当前维护的第三方产品线。
 
 ## 产品边界
 
-- `plugins/cocos-creator-agent/`：面向 Codex、Claude Code 的 Creator 2.4.x 通用工作流插件，包含 51 个核心 Skills 和本地 Creator 2.4.15 参考资料。
+- `tools/cocos-creator-agent-cli/skills/`：Creator 2.4.x 通用技能唯一维护源。独立 CLI 将其与 `references/2x/` 一起打包，并用 `skill install` 分发到 Codex/Claude 原生 Skill 目录。
+- `plugins/cocos-creator-agent/`：旧式 Codex/Claude 插件安装方式的兼容入口，只含 `cocos2-cli` 引导 Skill，不含 MCP server、领域 Skills 或 Creator 参考资料。
 - `plugins/cocos-creator-agent-sdk/`：独立可选的 SDK Skills 插件，包含广告、内购、联网和语音集成工作流。SDK 插件未安装时，核心插件不加载这些内容。
 - Creator 原生 CocosAgent 的源码与扩展已从仓库移除；相关研究文档和验收轨迹保留为历史材料，不是可用产品或当前实施计划。
-- 原生 CocosAgent 已停用并移除；当前第三方 Skills 只由 Codex / Claude 插件发现和加载，第三方 Host 不调用原生模型/Provider。
-- 第三方本机集成源码位于 `plugins/cocos-creator-agent/mcp/` 与独立包 `tools/cocos-creator-agent-cli/`；当前命令严格限于只读工程信息、搜索、AssetDB 搜索、脚本读取和场景快照。详细合同、通信、安装与未验收项见[第三方接入实现](cocos-creator-third-party-integration-mvp-0.1.md)。
+- 原生 CocosAgent 已停用并移除；当前第三方 Skills 通过 CLI 安装到 Codex/Claude 原生 Skill 目录，第三方 Host 不调用原生模型/Provider。
+- MCP server、客户端配置、CLI 与 Creator 桥接统一位于独立包 `tools/cocos-creator-agent-cli/`；合同、写入/运行能力与验收状态见[第三方接入实现](cocos-creator-third-party-integration-mvp-0.1.md)。
 
-插件按 Host 提供入口元数据：Codex 使用根目录 portable `plugin.json`，并附 `.codex-plugin/plugin.json` 兼容清单；Claude Code 插件元数据位于 `.claude-plugin/plugin.json`，Skills 统一放在插件根目录 `skills/`。Creator 引擎参考资料放在 `references/2x/`，按当前任务按需读取；其中源码和运行证据主要针对 2.4.15，不能外推到全部 2.4.x。Codex 的插件打包参考 [OpenAI 插件打包文档](https://developers.openai.com/plugins/build/plugins)；Claude Code 的插件目录结构参考 [Anthropic 官方插件结构](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/plugin-dev/skills/plugin-structure)。
+独立 CLI 提供 `mcp configure codex|claude-code`、`mcp serve` 与 `skill install/show/list/refresh`；Codex 和 Claude 的本机配置由各自原生命令修改。Creator 引擎参考资料与 Skills 同属 CLI 发布包，按当前任务按需读取；其中源码和运行证据主要针对 2.4.15，不能外推到全部 2.4.x。旧式 bootstrap 插件保留 Host 元数据，仅为已有插件用户提供迁移入口。Codex 的插件打包参考 [OpenAI 插件打包文档](https://developers.openai.com/plugins/build/plugins)；Claude Code 插件结构参考 [Anthropic 官方插件结构](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/plugin-dev/skills/plugin-structure)。
 
 ## 路由 Skill
 
@@ -53,7 +54,7 @@
 
 `cocos2-extension-workflows`、`cocos2-creator-extension-development`、`cocos2-jsb-native-plugins`、`cocos2-project-extensions`、`cocos2-mcp-tools`、`cocos2-task-review-recovery`。
 
-`cocos2-mcp-tools` 指导实例发现、合同读取和回执核对。MCP/CLI 源码已存在，但没有 Creator 原生写入审批、预览控制或运行反馈工具；项目级 `AGENTS.md`、`CLAUDE.md` 和自定义 Skills 属于目标项目的约定，不能覆盖 Host 安全策略或实时工具合同。
+`cocos2-mcp-tools` 指导实例发现、合同读取和回执核对。CLI 是 Skills 的交付方式，不意味着 Skill 获得工具授权；项目级 `AGENTS.md`、`CLAUDE.md` 和自定义 Skills 属于目标项目约定，不能覆盖 Host 安全策略或实时工具合同。
 
 ## 可选 SDK Skills
 
@@ -69,7 +70,7 @@
 
 ## 当前状态与后续
 
-1. 已建立 51 项通用 Creator 核心 Skills、1 项 CLI 操作 Skill（主插件共 52 项），Creator 2.x 参考目录、Codex/Claude 插件元数据和独立 5 项 SDK Skills 插件。
-2. 已新增独立第三方 MCP、CLI、本机 HTTP 桥接服务和 Creator 2.4.15 项目扩展；全部命令为只读，未复用原生 Agent 运行时。
-3. Codex 插件在当前桌面 Host 完成安装/重载；8 项工具发现、CLI 状态调用、tank 实例识别及 5 条 Creator 只读命令已实机验收。Claude Code Host 尚未验收。
-4. 下一步验收 Claude Code Host；再定义 Creator 端逐次写入审批、操作账本、预览/编译/Console/输入与业务断言合同。
+1. 51 项 Creator 工作流 Skills、1 项 CLI Skill 与 Creator 2.x 参考资料已迁入 CLI 包；CLI `skill install` 负责选择性分发与漂移检测。CLI `mcp configure` / `mcp serve` 接管 Host 配置与工具协议。
+2. 旧式 `plugins/cocos-creator-agent/` 仅保留一个兼容引导 Skill；它的 Codex/Claude 元数据不再注册 MCP，也不分发工作流内容。
+3. CLI 0.9.0 本地 tarball、隔离安装与升级、完整 32 项测试已验收；真实 Codex 当前仍配置旧插件 MCP，Claude 没有 MCP server。隔离 CLI 配置回执不代表桌面 Host 已重载。
+4. 下一步发布 GitHub Release 并验收在线更新，然后由 CLI 配置当前 Codex/Claude Host、重载并核对 MCP 工具目录；Creator 写入审批、预览/编译/Console/输入与业务断言按锁定工程身份另外验收。详见[CLI 0.9.0 验收记录](traces/cocos-creator-cli-0.9.0-package-acceptance-20261020.md)与[CLI 0.8.0 MCP 与 Skills 验收记录](traces/cocos-creator-cli-0.8.0-mcp-skills-acceptance-20261020.md)。

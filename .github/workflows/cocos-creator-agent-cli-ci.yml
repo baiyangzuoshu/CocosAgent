@@ -1,0 +1,29 @@
+name: Cocos Creator Agent CLI
+
+on:
+  push:
+    paths:
+      - '.github/workflows/cocos-creator-agent-cli-ci.yml'
+      - 'tools/cocos-creator-agent-cli/**'
+  pull_request:
+    paths:
+      - '.github/workflows/cocos-creator-agent-cli-ci.yml'
+      - 'tools/cocos-creator-agent-cli/**'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run CLI test suite
+        working-directory: tools/cocos-creator-agent-cli
+        run: npm test
+      - name: Verify npm package contents
+        working-directory: tools/cocos-creator-agent-cli
+        run: npm pack --dry-run --json

@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomUUID } from 'node:crypto';
 import { CREATOR_VERSION, PROTOCOL_VERSION, validateCommand } from './contracts.mjs';
+import { validateArguments, PROVIDER_ID, COMMAND_ID } from '../creator-extension/provider-contract.cjs';
 
 const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CLI_PACKAGE = JSON.parse(fs.readFileSync(path.join(PLUGIN_ROOT, 'package.json'), 'utf8'));
@@ -142,6 +143,28 @@ export async function getProjectTools(instanceId) {
   if (typeof instanceId !== 'string' || !instanceId) throw new Error('INSTANCE_ID_REQUIRED');
   await ensureBridge();
   return bridgeRequest('GET', `/v1/instances/${encodeURIComponent(instanceId)}/project-tools`);
+}
+
+export async function getExtensionCommands(instanceId) {
+  if (typeof instanceId !== 'string' || !instanceId) throw new Error('INSTANCE_ID_REQUIRED');
+  await ensureBridge();
+  return bridgeRequest('GET', `/v1/instances/${encodeURIComponent(instanceId)}/extension-commands`);
+}
+
+export async function callExtensionCommand(instanceId, providerId, commandId, input = {}, { expectedFingerprint } = {}) {
+  if (typeof providerId !== 'string' || !PROVIDER_ID.test(providerId)) throw new Error('EXTENSION_PROVIDER_ID_INVALID');
+  if (typeof commandId !== 'string' || !COMMAND_ID.test(commandId)) throw new Error('EXTENSION_COMMAND_ID_INVALID');
+  const catalog = await getExtensionCommands(instanceId);
+  const command = catalog.commands?.find((item) => item.providerId === providerId && item.id === commandId);
+  if (!command || command.status !== 'available') throw new Error('EXTENSION_COMMAND_NOT_AVAILABLE');
+  if (expectedFingerprint && command.providerFingerprint !== expectedFingerprint) throw new Error('EXTENSION_COMMAND_CATALOG_CHANGED');
+  validateArguments(command.input, input);
+  const commandIdInContract = `creator.extension.command.invoke.${command.access}`;
+  const wrappedInput = { providerId, commandId, providerFingerprint: command.providerFingerprint,
+    argumentsJson: JSON.stringify(input) };
+  const receipt = await callCommand(instanceId, commandIdInContract, wrappedInput);
+  return { ...receipt, extensionCommand: { providerId, commandId, access: command.access,
+    providerFingerprint: command.providerFingerprint, catalogHash: catalog.catalogHash } };
 }
 
 export async function callProjectTool(instanceId, toolId, input = {}, { expectedRegistryHash } = {}) {

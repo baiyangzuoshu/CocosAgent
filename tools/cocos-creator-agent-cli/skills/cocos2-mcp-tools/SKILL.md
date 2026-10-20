@@ -7,7 +7,7 @@ description: Discover and call Cocos Creator tools exposed through a third-party
 
 ## Scope
 
-Use this skill when Codex, Claude Code, or another supported Host is configured with the Cocos Creator third-party MCP server. It does not refer to the separate Creator-native CocosAgent MCP child process. For terminal or CI use of the standalone CLI, load `cocos2-cli`.
+Use this skill when Codex, Claude Code, or another supported Host is configured with the MCP server owned and started by the standalone Cocos Creator CLI. It does not refer to the retired Creator-native CocosAgent MCP child process. The server is registered with `cocos-creator-agent mcp configure <client>` and runs `cocos-creator-agent mcp serve`. For terminal or CI use of the same contract and commands, load `cocos2-cli`.
 
 ## Workflow
 

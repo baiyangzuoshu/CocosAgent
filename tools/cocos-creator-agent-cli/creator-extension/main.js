@@ -7,6 +7,7 @@ const path = require('path');
 const crypto = require('crypto');
 const extensionPackage = require('./package.json');
 const contract = require('./command-contract.json');
+const { normalizeProvider, validateArguments, canonical, PROVIDER_ID, COMMAND_ID } = require('./provider-contract.cjs');
 
 const EXPECTED_CREATOR_VERSION = contract.creatorVersion;
 const PROTOCOL_VERSION = '0.1';
@@ -19,6 +20,9 @@ const MAX_SCRIPT_BYTES = 128 * 1024;
 const MAX_WRITE_SOURCE_BYTES = 16 * 1024;
 const OPERATION_FILE_MAX_BYTES = 64 * 1024;
 const OPERATION_TTL_MS = 15 * 60 * 1000;
+const MAX_PROVIDER_PACKAGES = 16;
+const MAX_PROVIDER_COMMANDS = 128;
+const PROVIDER_IPC_TIMEOUT_MS = 800;
 function uuid() {
     if (crypto.randomUUID) return crypto.randomUUID();
     const bytes = crypto.randomBytes(16);
@@ -362,6 +366,62 @@ function readSceneOperation(operationId) {
     return operation;
 }
 
+function readSceneComponentOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    if (!operation || typeof operation !== 'object' || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.scene.node.add-component' || !plan || typeof plan !== 'object'
+        || plan.operationId !== operationId || plan.operation !== operation.operation
+        || typeof operation.planHash !== 'string' || typeof plan.projectRoot !== 'string'
+        || typeof plan.creatorVersion !== 'string' || typeof plan.extensionVersion !== 'string'
+        || typeof plan.contractFingerprint !== 'string' || typeof plan.sceneUuid !== 'string'
+        || typeof plan.sceneName !== 'string' || typeof plan.nodeUuid !== 'string' || typeof plan.nodePath !== 'string'
+        || typeof plan.componentClassName !== 'string' || !plan.expectedBefore || !plan.expectedAfter
+        || !Number.isInteger(plan.expectedBefore.componentCount) || plan.expectedBefore.componentCount !== 0
+        || !Number.isInteger(plan.expectedAfter.componentCount) || plan.expectedAfter.componentCount !== 1
+        || typeof plan.expiresAt !== 'string'
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
+            'save-requested', 'completed', 'not-applied', 'save-required', 'needs-reconciliation', 'conflict'].includes(operation.status))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    return operation;
+}
+
+function readSceneComponentPropertyOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    const scalar = (value) => typeof value === 'string' || typeof value === 'boolean'
+        || (typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 1000000000);
+    if (!operation || typeof operation !== 'object' || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.scene.node.set-component-property' || !plan || typeof plan !== 'object'
+        || plan.operationId !== operationId || plan.operation !== operation.operation
+        || typeof operation.planHash !== 'string' || typeof plan.projectRoot !== 'string'
+        || typeof plan.creatorVersion !== 'string' || typeof plan.extensionVersion !== 'string'
+        || typeof plan.contractFingerprint !== 'string' || typeof plan.creatorInstanceId !== 'string'
+        || typeof plan.sceneUuid !== 'string' || typeof plan.sceneName !== 'string'
+        || typeof plan.nodeUuid !== 'string' || typeof plan.nodePath !== 'string'
+        || typeof plan.componentClassName !== 'string' || typeof plan.componentInstanceId !== 'string'
+        || typeof plan.property !== 'string' || !plan.expectedBefore || !plan.expectedAfter
+        || !scalar(plan.expectedBefore.value) || !scalar(plan.expectedAfter.value)
+        || typeof plan.expectedBefore.value !== typeof plan.expectedAfter.value
+        || Object.is(plan.expectedBefore.value, plan.expectedAfter.value) || typeof plan.expiresAt !== 'string'
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
+            'save-requested', 'completed', 'not-applied', 'save-required', 'needs-reconciliation', 'conflict'].includes(operation.status))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    return operation;
+}
+
 function planFingerprint(plan) { return fileHash(Buffer.from(JSON.stringify(plan))); }
 
 function safeNewScriptTarget(relative) {
@@ -476,6 +536,115 @@ async function createSceneNodeActivePlan(input) {
         recovery: { operationId: operation.operationId, automaticRetry: false,
             reconcileCommand: 'creator.scene.node.set-active.reconcile',
             sceneSaveAcknowledgement: 'Creator 2.4 scene:stash-and-save has no documented completion acknowledgement; receipt distinguishes save-requested from disk persistence.' } };
+}
+
+async function createSceneComponentAddPlan(input) {
+    if (!Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function') throw coded('SCENE_API_UNAVAILABLE');
+    const currentRoot = projectRoot();
+    const currentVersion = editorVersion();
+    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    const node = await callScene('nodeState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);
+    if (!node || node.available !== true) throw coded(node && node.reason || 'SCENE_NODE_STATE_UNAVAILABLE');
+    if (node.sceneUuid !== input.sceneUuid || node.nodeUuid !== input.nodeUuid || typeof node.nodePath !== 'string')
+        throw coded('SCENE_NODE_STATE_INVALID');
+    const current = await callScene('componentState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid,
+        nodePath: node.nodePath, componentClassName: input.componentClassName }, 20000);
+    if (!current || current.available !== true) throw coded(current && current.reason || 'SCENE_COMPONENT_STATE_UNAVAILABLE');
+    if (current.sceneUuid !== input.sceneUuid || current.nodeUuid !== input.nodeUuid || current.nodePath !== node.nodePath
+        || current.componentClassName !== input.componentClassName || !Number.isInteger(current.componentCount))
+        throw coded('SCENE_COMPONENT_STATE_INVALID');
+    if (current.componentCount !== 0) throw coded('SCENE_COMPONENT_ALREADY_PRESENT');
+    if (current.requiresComponent || current.canAdd !== true) throw coded('SCENE_COMPONENT_HAS_UNAPPROVED_REQUIREMENT');
+    if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
+    const operationId = uuid();
+    const plan = {
+        operationId,
+        operation: 'creator.scene.node.add-component',
+        projectRoot: currentRoot,
+        creatorVersion: currentVersion,
+        extensionVersion: extensionPackage.version,
+        contractFingerprint: CONTRACT_FINGERPRINT,
+        sceneUuid: current.sceneUuid,
+        sceneName: current.sceneName,
+        nodeUuid: current.nodeUuid,
+        nodePath: current.nodePath,
+        componentClassName: current.componentClassName,
+        expectedBefore: { componentCount: current.componentCount },
+        expectedAfter: { componentCount: current.componentCount + 1 },
+        expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString(),
+    };
+    const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
+        planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
+        projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, sceneName: plan.sceneName,
+        sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
+        componentClassName: plan.componentClassName, expectedBefore: plan.expectedBefore,
+        expectedAfter: plan.expectedAfter, expiresAt: plan.expiresAt,
+        diff: { action: 'add-component', scene: plan.sceneName, node: plan.nodePath,
+            componentClassName: plan.componentClassName, before: 'absent', after: 'one component instance' },
+        recovery: { operationId, automaticRetry: false,
+            reconcileCommand: 'creator.scene.node.add-component.reconcile',
+            sceneSaveAcknowledgement: 'Creator 2.4 scene:stash-and-save has no documented completion acknowledgement; reconcile requires a same-session component instance identity.' } };
+}
+
+async function createSceneComponentPropertyPlan(input) {
+    if (!Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function') throw coded('SCENE_API_UNAVAILABLE');
+    const currentRoot = projectRoot();
+    const currentVersion = editorVersion();
+    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    const node = await callScene('nodeState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);
+    if (!node || node.available !== true) throw coded(node && node.reason || 'SCENE_NODE_STATE_UNAVAILABLE');
+    if (node.sceneUuid !== input.sceneUuid || node.nodeUuid !== input.nodeUuid || typeof node.nodePath !== 'string')
+        throw coded('SCENE_NODE_STATE_INVALID');
+    const state = await callScene('componentPropertyState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid,
+        nodePath: node.nodePath, componentClassName: input.componentClassName,
+        componentInstanceId: input.componentInstanceId, property: input.property }, 20000);
+    if (!state || state.available !== true) throw coded(state && state.reason || 'SCENE_COMPONENT_PROPERTY_STATE_UNAVAILABLE');
+    if (state.sceneUuid !== input.sceneUuid || state.nodeUuid !== input.nodeUuid || state.nodePath !== node.nodePath
+        || state.componentClassName !== input.componentClassName || state.componentInstanceId !== input.componentInstanceId
+        || state.property !== input.property || !['string', 'number', 'boolean'].includes(state.valueType))
+        throw coded('SCENE_COMPONENT_PROPERTY_STATE_INVALID');
+    if (typeof state.value !== typeof input.value) throw coded('SCENE_COMPONENT_PROPERTY_TYPE_MISMATCH');
+    if (typeof state.value === 'string' && Buffer.byteLength(input.value, 'utf8') > 1024) throw coded('SCENE_COMPONENT_PROPERTY_VALUE_TOO_LARGE');
+    if (Object.is(state.value, input.value)) throw coded('SCENE_COMPONENT_PROPERTY_NO_CHANGE');
+    if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
+    const operationId = uuid();
+    const plan = {
+        operationId,
+        operation: 'creator.scene.node.set-component-property',
+        projectRoot: currentRoot,
+        creatorVersion: currentVersion,
+        extensionVersion: extensionPackage.version,
+        contractFingerprint: CONTRACT_FINGERPRINT,
+        creatorInstanceId: INSTANCE_ID,
+        sceneUuid: state.sceneUuid,
+        sceneName: state.sceneName,
+        nodeUuid: state.nodeUuid,
+        nodePath: state.nodePath,
+        componentClassName: state.componentClassName,
+        componentInstanceId: state.componentInstanceId,
+        property: state.property,
+        expectedBefore: { value: state.value },
+        expectedAfter: { value: input.value },
+        expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString(),
+    };
+    const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
+        planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
+        projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
+        componentClassName: plan.componentClassName, componentInstanceId: plan.componentInstanceId,
+        property: plan.property, expectedBefore: plan.expectedBefore, expectedAfter: plan.expectedAfter,
+        valueType: typeof plan.expectedBefore.value, expiresAt: plan.expiresAt,
+        diff: { action: 'set-component-property', scene: plan.sceneName, node: plan.nodePath,
+            componentClassName: plan.componentClassName, componentInstanceId: plan.componentInstanceId,
+            property: plan.property, before: plan.expectedBefore.value, after: plan.expectedAfter.value },
+        recovery: { operationId, automaticRetry: false,
+            reconcileCommand: 'creator.scene.node.set-component-property.reconcile',
+            sameCreatorSessionRequired: true,
+            sceneSaveAcknowledgement: 'Creator 2.4 scene:stash-and-save has no documented completion acknowledgement; readback is in-memory only.' } };
 }
 
 function verifySceneOperationIdentity(operation, { requireCurrentContract = true } = {}) {
@@ -643,6 +812,362 @@ async function reconcileSceneNodeActive(input) {
     return { ...sceneNodeActiveReceipt(operation, observed), observed: { active: observed.active,
         sceneUuid: observed.sceneUuid, nodeUuid: observed.nodeUuid, nodePath: observed.nodePath },
         retry: 'Never retry this operation. If the scene remains unchanged, create a new plan; if save-required, save the scene in Creator and inspect the result.' };
+}
+
+async function readPlannedSceneComponent(plan) {
+    const state = await callScene('componentState', { sceneUuid: plan.sceneUuid, nodeUuid: plan.nodeUuid,
+        nodePath: plan.nodePath, componentClassName: plan.componentClassName }, 20000);
+    if (!state || state.available !== true) throw coded(state && state.reason || 'SCENE_COMPONENT_STATE_UNAVAILABLE');
+    if (state.sceneUuid !== plan.sceneUuid || state.nodeUuid !== plan.nodeUuid || state.nodePath !== plan.nodePath
+        || state.componentClassName !== plan.componentClassName) throw coded('OPERATION_TARGET_MISMATCH');
+    return state;
+}
+
+function confirmSceneComponentAdd(operation) {
+    if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
+    const plan = operation.plan;
+    const detail = [
+        `Project: ${plan.projectRoot}`,
+        `Creator: ${plan.creatorVersion}`,
+        `Scene: ${plan.sceneName} (${plan.sceneUuid})`,
+        `Node: ${plan.nodePath} (${plan.nodeUuid})`,
+        `Component: ${plan.componentClassName}`,
+        `Existing instances: ${plan.expectedBefore.componentCount}`,
+        `Operation: ${operation.operationId}`,
+        '',
+        'This adds one registered component class to the current scene node and requests a scene save. Component constructors and lifecycle hooks are project code; approve only if this component is expected for the task. The receipt confirms in-memory readback, not disk persistence.',
+    ].join('\n');
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            const response = Number.isInteger(result) ? result : result && Number.isInteger(result.response) ? result.response : -1;
+            resolve(response === 1);
+        };
+        try {
+            const result = Editor.Dialog.messageBox({ type: 'warning', title: 'Approve Cocos Creator component addition',
+                message: `Add ${plan.componentClassName} to ${plan.nodePath}?`, detail,
+                buttons: ['Cancel', 'Add component'], defaultId: 0, cancelId: 0, noLink: true }, finish);
+            if (result && typeof result.then === 'function') result.then(finish, (error) => {
+                if (settled) return;
+                settled = true;
+                reject(coded('CREATOR_APPROVAL_DIALOG_FAILED', String(error && error.message || error)));
+            });
+        } catch (error) { reject(coded('CREATOR_APPROVAL_DIALOG_FAILED', String(error.message || error))); }
+    });
+}
+
+function sceneComponentAddReceipt(operation, state) {
+    const plan = operation.plan;
+    return { operationId: operation.operationId, status: operation.status, projectRoot: plan.projectRoot,
+        creatorVersion: plan.creatorVersion, sceneName: plan.sceneName, sceneUuid: plan.sceneUuid,
+        nodePath: plan.nodePath, nodeUuid: plan.nodeUuid, componentClassName: plan.componentClassName,
+        beforeComponentCount: plan.expectedBefore.componentCount,
+        componentCount: Number.isInteger(state.componentCount) ? state.componentCount : null,
+        componentInstanceId: operation.componentInstanceId || null,
+        sceneSaveRequestSent: !!operation.sceneSaveRequestSent, sceneSaveCompletionConfirmed: false,
+        plannedByInstanceId: operation.plannedByInstanceId, appliedByInstanceId: operation.appliedByInstanceId || null,
+        completedByInstanceId: operation.completedByInstanceId || null,
+        approvedAt: operation.approvedAt || null, completedAt: operation.completedAt || null,
+        reconciledAt: operation.reconciledAt || null,
+        recovery: { automaticRetry: false, reconcileCommand: 'creator.scene.node.add-component.reconcile',
+            manualSaveMayBeRequired: operation.status === 'save-required',
+            note: 'Creator 2.4 does not document a scene save completion acknowledgement. If reconciliation lacks the original component instance identity, inspect the scene manually; this operation will not be replayed.' } };
+}
+
+async function commitSceneComponentAdd(input, context) {
+    const operation = readSceneComponentOperation(input.operationId);
+    verifySceneOperationIdentity(operation);
+    if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (operation.status !== 'planned') throw coded(operation.status === 'applying' || operation.status === 'awaiting-approval'
+        || operation.status === 'mutation-applied' || operation.status === 'save-requested'
+        || operation.status === 'needs-reconciliation' ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    let before = await readPlannedSceneComponent(operation.plan);
+    if (before.componentCount !== operation.plan.expectedBefore.componentCount || !before.canAdd)
+        throw coded('OPERATION_PRECONDITION_FAILED');
+    operation.status = 'awaiting-approval';
+    operation.approvalRequestedAt = new Date().toISOString();
+    writeOperation(operation);
+    const approved = await confirmSceneComponentAdd(operation);
+    if (!approved) {
+        operation.status = 'cancelled';
+        operation.cancelledAt = new Date().toISOString();
+        writeOperation(operation);
+        throw coded('OPERATION_NOT_APPROVED');
+    }
+    try { await authorizeWriteRequest(context && context.requestId); }
+    catch (error) {
+        operation.status = 'abandoned';
+        operation.abandonedAt = new Date().toISOString();
+        writeOperation(operation);
+        throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error));
+    }
+    verifySceneOperationIdentity(operation);
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    try {
+        before = await readPlannedSceneComponent(operation.plan);
+        if (before.componentCount !== operation.plan.expectedBefore.componentCount || !before.canAdd)
+            throw coded('OPERATION_PRECONDITION_FAILED');
+    } catch (error) {
+        operation.status = 'conflict';
+        operation.conflictAt = new Date().toISOString();
+        writeOperation(operation);
+        throw error;
+    }
+    operation.status = 'applying';
+    operation.approvedAt = new Date().toISOString();
+    operation.approvalSource = 'creator-native-dialog';
+    operation.appliedByInstanceId = INSTANCE_ID;
+    writeOperation(operation);
+    let mutation;
+    try {
+        mutation = await callScene('addNodeComponent', { sceneUuid: operation.plan.sceneUuid,
+            nodeUuid: operation.plan.nodeUuid, nodePath: operation.plan.nodePath,
+            componentClassName: operation.plan.componentClassName,
+            expectedComponentCount: operation.plan.expectedBefore.componentCount }, 20000);
+    } catch (error) {
+        operation.status = 'needs-reconciliation';
+        operation.reconcileReason = error.code || 'SCENE_COMPONENT_WRITE_UNCERTAIN';
+        writeOperation(operation);
+        throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
+    }
+    if (!mutation || mutation.available !== true
+        || mutation.componentCount !== operation.plan.expectedAfter.componentCount) {
+        operation.status = 'needs-reconciliation';
+        operation.reconcileReason = mutation && mutation.reason || 'SCENE_COMPONENT_WRITE_READBACK_FAILED';
+        writeOperation(operation);
+        throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
+    }
+    operation.componentInstanceId = mutation.componentInstanceId || null;
+    operation.status = 'mutation-applied';
+    operation.mutationAppliedAt = new Date().toISOString();
+    writeOperation(operation);
+    if (!Editor.Ipc || typeof Editor.Ipc.sendToPanel !== 'function') throw coded('CREATOR_SCENE_SAVE_IPC_UNAVAILABLE');
+    try { Editor.Ipc.sendToPanel('scene', 'scene:stash-and-save'); }
+    catch (error) { throw coded('CREATOR_SCENE_SAVE_REQUEST_FAILED', String(error.message || error)); }
+    operation.status = 'save-requested';
+    operation.sceneSaveRequestSent = true;
+    operation.sceneSaveRequestedAt = new Date().toISOString();
+    writeOperation(operation);
+    const readback = await readPlannedSceneComponent(operation.plan);
+    if (readback.componentCount !== operation.plan.expectedAfter.componentCount
+        || (operation.componentInstanceId && !readback.componentInstanceIds.includes(operation.componentInstanceId)))
+        throw coded('OPERATION_READBACK_STATE_MISMATCH');
+    operation.status = 'completed';
+    operation.completedAt = new Date().toISOString();
+    operation.completedByInstanceId = INSTANCE_ID;
+    writeOperation(operation);
+    return sceneComponentAddReceipt(operation, readback);
+}
+
+async function reconcileSceneComponentAdd(input) {
+    const operation = readSceneComponentOperation(input.operationId);
+    verifySceneOperationIdentity(operation, { requireCurrentContract: false });
+    let observed;
+    try { observed = await readPlannedSceneComponent(operation.plan); }
+    catch (error) {
+        operation.status = 'conflict';
+        operation.reconciledAt = new Date().toISOString();
+        operation.reconcileReason = error.code || 'SCENE_COMPONENT_STATE_UNAVAILABLE';
+        writeOperation(operation);
+        return { ...sceneComponentAddReceipt(operation, { componentCount: null }),
+            observed: null, reason: operation.reconcileReason };
+    }
+    if (observed.componentCount === operation.plan.expectedBefore.componentCount) {
+        if (['planned', 'awaiting-approval', 'applying', 'needs-reconciliation'].includes(operation.status)) operation.status = 'not-applied';
+        else if (['mutation-applied', 'save-requested', 'completed'].includes(operation.status)) operation.status = 'conflict';
+    } else if (observed.componentCount === operation.plan.expectedAfter.componentCount) {
+        const identityMatches = operation.componentInstanceId
+            && observed.componentInstanceIds.includes(operation.componentInstanceId);
+        if (identityMatches && ['save-requested', 'completed'].includes(operation.status)) operation.status = 'completed';
+        else if (identityMatches && operation.status === 'mutation-applied') operation.status = 'save-required';
+        else operation.status = 'needs-reconciliation';
+    } else operation.status = 'conflict';
+    operation.reconciledAt = new Date().toISOString();
+    writeOperation(operation);
+    return { ...sceneComponentAddReceipt(operation, observed),
+        observed: { componentClassName: observed.componentClassName, componentCount: observed.componentCount,
+            componentInstanceIds: observed.componentInstanceIds },
+        retry: 'Never retry this operation. If no component exists, create a new plan. If component identity is unavailable, inspect the node and save manually in Creator.' };
+}
+
+async function readPlannedSceneComponentProperty(plan) {
+    const state = await callScene('componentPropertyState', { sceneUuid: plan.sceneUuid, nodeUuid: plan.nodeUuid,
+        nodePath: plan.nodePath, componentClassName: plan.componentClassName,
+        componentInstanceId: plan.componentInstanceId, property: plan.property }, 20000);
+    if (!state || state.available !== true) throw coded(state && state.reason || 'SCENE_COMPONENT_PROPERTY_STATE_UNAVAILABLE');
+    if (state.sceneUuid !== plan.sceneUuid || state.nodeUuid !== plan.nodeUuid || state.nodePath !== plan.nodePath
+        || state.componentClassName !== plan.componentClassName || state.componentInstanceId !== plan.componentInstanceId
+        || state.property !== plan.property) throw coded('OPERATION_TARGET_MISMATCH');
+    return state;
+}
+
+function confirmSceneComponentProperty(operation) {
+    if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
+    const plan = operation.plan;
+    const detail = [
+        `Project: ${plan.projectRoot}`,
+        `Creator: ${plan.creatorVersion}`,
+        `Scene: ${plan.sceneName} (${plan.sceneUuid})`,
+        `Node: ${plan.nodePath} (${plan.nodeUuid})`,
+        `Component: ${plan.componentClassName} (${plan.componentInstanceId})`,
+        `Property: ${plan.property}`,
+        `Value: ${JSON.stringify(plan.expectedBefore.value)} → ${JSON.stringify(plan.expectedAfter.value)}`,
+        `Operation: ${operation.operationId}`,
+        '',
+        'This changes one declared public scalar property on the exact component instance and requests a scene save. Property setters are project/engine code and may have side effects. The receipt confirms in-memory readback, not disk persistence.',
+    ].join('\n');
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            const response = Number.isInteger(result) ? result : result && Number.isInteger(result.response) ? result.response : -1;
+            resolve(response === 1);
+        };
+        try {
+            const result = Editor.Dialog.messageBox({ type: 'warning', title: 'Approve Cocos Creator component property change',
+                message: `Set ${plan.componentClassName}.${plan.property}?`, detail,
+                buttons: ['Cancel', 'Apply property change'], defaultId: 0, cancelId: 0, noLink: true }, finish);
+            if (result && typeof result.then === 'function') result.then(finish, (error) => {
+                if (settled) return;
+                settled = true;
+                reject(coded('CREATOR_APPROVAL_DIALOG_FAILED', String(error && error.message || error)));
+            });
+        } catch (error) { reject(coded('CREATOR_APPROVAL_DIALOG_FAILED', String(error.message || error))); }
+    });
+}
+
+function sceneComponentPropertyReceipt(operation, state) {
+    const plan = operation.plan;
+    return { operationId: operation.operationId, status: operation.status, projectRoot: plan.projectRoot,
+        creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
+        componentClassName: plan.componentClassName, componentInstanceId: plan.componentInstanceId,
+        property: plan.property, beforeValue: plan.expectedBefore.value,
+        value: Object.hasOwn(state, 'value') ? state.value : null,
+        sceneSaveRequestSent: !!operation.sceneSaveRequestSent, sceneSaveCompletionConfirmed: false,
+        plannedByInstanceId: operation.plannedByInstanceId, appliedByInstanceId: operation.appliedByInstanceId || null,
+        completedByInstanceId: operation.completedByInstanceId || null,
+        approvedAt: operation.approvedAt || null, completedAt: operation.completedAt || null,
+        reconciledAt: operation.reconciledAt || null,
+        recovery: { automaticRetry: false, reconcileCommand: 'creator.scene.node.set-component-property.reconcile',
+            sameCreatorSessionRequired: true, manualSaveMayBeRequired: operation.status === 'save-required',
+            note: 'Creator 2.4 has no documented scene save completion acknowledgement. Property readback is in-memory only; if the component instance ID changed, inspect the scene manually.' } };
+}
+
+async function commitSceneComponentProperty(input, context) {
+    const operation = readSceneComponentPropertyOperation(input.operationId);
+    verifySceneOperationIdentity(operation);
+    if (operation.plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
+    if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (operation.status !== 'planned') throw coded(operation.status === 'applying' || operation.status === 'awaiting-approval'
+        || operation.status === 'mutation-applied' || operation.status === 'save-requested'
+        || operation.status === 'needs-reconciliation' ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    let before = await readPlannedSceneComponentProperty(operation.plan);
+    if (!Object.is(before.value, operation.plan.expectedBefore.value)) throw coded('OPERATION_PRECONDITION_FAILED');
+    operation.status = 'awaiting-approval';
+    operation.approvalRequestedAt = new Date().toISOString();
+    writeOperation(operation);
+    const approved = await confirmSceneComponentProperty(operation);
+    if (!approved) {
+        operation.status = 'cancelled';
+        operation.cancelledAt = new Date().toISOString();
+        writeOperation(operation);
+        throw coded('OPERATION_NOT_APPROVED');
+    }
+    try { await authorizeWriteRequest(context && context.requestId); }
+    catch (error) {
+        operation.status = 'abandoned';
+        operation.abandonedAt = new Date().toISOString();
+        writeOperation(operation);
+        throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error));
+    }
+    verifySceneOperationIdentity(operation);
+    if (operation.plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    try {
+        before = await readPlannedSceneComponentProperty(operation.plan);
+        if (!Object.is(before.value, operation.plan.expectedBefore.value)) throw coded('OPERATION_PRECONDITION_FAILED');
+    } catch (error) {
+        operation.status = 'conflict';
+        operation.conflictAt = new Date().toISOString();
+        writeOperation(operation);
+        throw error;
+    }
+    operation.status = 'applying';
+    operation.approvedAt = new Date().toISOString();
+    operation.approvalSource = 'creator-native-dialog';
+    operation.appliedByInstanceId = INSTANCE_ID;
+    writeOperation(operation);
+    let mutation;
+    try {
+        mutation = await callScene('setComponentProperty', { sceneUuid: operation.plan.sceneUuid,
+            nodeUuid: operation.plan.nodeUuid, nodePath: operation.plan.nodePath,
+            componentClassName: operation.plan.componentClassName,
+            componentInstanceId: operation.plan.componentInstanceId, property: operation.plan.property,
+            expectedValue: operation.plan.expectedBefore.value, value: operation.plan.expectedAfter.value }, 20000);
+    } catch (error) {
+        operation.status = 'needs-reconciliation';
+        operation.reconcileReason = error.code || 'SCENE_COMPONENT_PROPERTY_WRITE_UNCERTAIN';
+        writeOperation(operation);
+        throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
+    }
+    if (!mutation || mutation.available !== true || !Object.is(mutation.value, operation.plan.expectedAfter.value)) {
+        operation.status = 'needs-reconciliation';
+        operation.reconcileReason = mutation && mutation.reason || 'SCENE_COMPONENT_PROPERTY_READBACK_FAILED';
+        writeOperation(operation);
+        throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
+    }
+    operation.status = 'mutation-applied';
+    operation.mutationAppliedAt = new Date().toISOString();
+    writeOperation(operation);
+    if (!Editor.Ipc || typeof Editor.Ipc.sendToPanel !== 'function') throw coded('CREATOR_SCENE_SAVE_IPC_UNAVAILABLE');
+    try { Editor.Ipc.sendToPanel('scene', 'scene:stash-and-save'); }
+    catch (error) { throw coded('CREATOR_SCENE_SAVE_REQUEST_FAILED', String(error.message || error)); }
+    operation.status = 'save-requested';
+    operation.sceneSaveRequestSent = true;
+    operation.sceneSaveRequestedAt = new Date().toISOString();
+    writeOperation(operation);
+    const readback = await readPlannedSceneComponentProperty(operation.plan);
+    if (!Object.is(readback.value, operation.plan.expectedAfter.value)) throw coded('OPERATION_READBACK_STATE_MISMATCH');
+    operation.status = 'completed';
+    operation.completedAt = new Date().toISOString();
+    operation.completedByInstanceId = INSTANCE_ID;
+    writeOperation(operation);
+    return sceneComponentPropertyReceipt(operation, readback);
+}
+
+async function reconcileSceneComponentProperty(input) {
+    const operation = readSceneComponentPropertyOperation(input.operationId);
+    verifySceneOperationIdentity(operation, { requireCurrentContract: false });
+    let observed;
+    try { observed = await readPlannedSceneComponentProperty(operation.plan); }
+    catch (error) {
+        operation.status = 'conflict';
+        operation.reconciledAt = new Date().toISOString();
+        operation.reconcileReason = error.code || 'SCENE_COMPONENT_PROPERTY_STATE_UNAVAILABLE';
+        writeOperation(operation);
+        return { ...sceneComponentPropertyReceipt(operation, {}), observed: null, reason: operation.reconcileReason };
+    }
+    if (Object.is(observed.value, operation.plan.expectedBefore.value)) {
+        if (['planned', 'awaiting-approval', 'applying', 'needs-reconciliation'].includes(operation.status)) operation.status = 'not-applied';
+        else if (['mutation-applied', 'save-requested', 'completed'].includes(operation.status)) operation.status = 'conflict';
+    } else if (Object.is(observed.value, operation.plan.expectedAfter.value)) {
+        if (operation.plan.creatorInstanceId !== INSTANCE_ID) operation.status = 'needs-reconciliation';
+        else if (['save-requested', 'completed'].includes(operation.status)) operation.status = 'completed';
+        else if (operation.status === 'mutation-applied') operation.status = 'save-required';
+        else operation.status = 'needs-reconciliation';
+    } else operation.status = 'conflict';
+    operation.reconciledAt = new Date().toISOString();
+    writeOperation(operation);
+    return { ...sceneComponentPropertyReceipt(operation, observed),
+        observed: { componentClassName: observed.componentClassName, componentInstanceId: observed.componentInstanceId,
+            property: observed.property, value: observed.value },
+        retry: 'Never replay this operation. If the component instance changed after Creator restart, inspect the property manually and create a new plan.' };
 }
 
 function verifyPlanIdentity(operation, { requireCurrentContract = true } = {}) {
@@ -882,6 +1407,18 @@ function callScene(method, params, timeoutMs) {
 
 function capabilityList() {
     const ready = {
+        'creator.extension.commands.list': !!(Editor && Editor.Project && Editor.Project.path
+            && Editor.Ipc && typeof Editor.Ipc.sendToMain === 'function'),
+        'creator.extension.command.invoke.read': !!(Editor && Editor.Project && Editor.Project.path
+            && Editor.Ipc && typeof Editor.Ipc.sendToMain === 'function'),
+        'creator.extension.command.invoke.plan': !!(Editor && Editor.Project && Editor.Project.path
+            && Editor.Ipc && typeof Editor.Ipc.sendToMain === 'function'),
+        'creator.extension.command.invoke.write': !!(Editor && Editor.Project && Editor.Project.path
+            && Editor.Ipc && typeof Editor.Ipc.sendToMain === 'function'
+            && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.extension.command.invoke.control': !!(Editor && Editor.Project && Editor.Project.path
+            && Editor.Ipc && typeof Editor.Ipc.sendToMain === 'function'
+            && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
         'creator.project.info': !!(Editor && Editor.Project && Editor.Project.path),
         'creator.project.search': !!(Editor && Editor.Project && Editor.Project.path),
         'creator.asset.search': !!(Editor && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
@@ -893,6 +1430,16 @@ function capabilityList() {
             && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'
             && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
         'creator.scene.node.set-active.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.node.add-component.plan': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.node.add-component.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'
+            && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.scene.node.add-component.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.node.set-component-property.plan': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.node.set-component-property.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'
+            && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.scene.node.set-component-property.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
         'creator.script.create.plan': !!(Editor && Editor.assetdb && typeof Editor.assetdb.exists === 'function'
             && typeof Editor.assetdb.create === 'function'),
         'creator.script.create.commit': !!(Editor && Editor.assetdb && typeof Editor.assetdb.exists === 'function'
@@ -1069,7 +1616,217 @@ function readScript(input) {
         sourceSha256: fileHash(sourceBytes), metaSha256: fileHash(metaBytes), source };
 }
 
+function safeExtensionEntry(packageDirectory, relativePath) {
+    if (typeof relativePath !== 'string' || !relativePath || relativePath.includes('\\') || path.isAbsolute(relativePath))
+        throw coded('EXTENSION_PROVIDER_ENTRY_INVALID');
+    const segments = relativePath.split('/');
+    if (segments.some((item) => !item || item === '.' || item === '..')) throw coded('EXTENSION_PROVIDER_ENTRY_INVALID');
+    let cursor = packageDirectory;
+    for (const segment of segments) {
+        cursor = path.join(cursor, segment);
+        const stat = fs.lstatSync(cursor);
+        if (stat.isSymbolicLink()) throw coded('EXTENSION_PROVIDER_ENTRY_UNSAFE');
+    }
+    const real = fs.realpathSync(cursor);
+    if (!real.startsWith(`${packageDirectory}${path.sep}`) || !fs.statSync(real).isFile())
+        throw coded('EXTENSION_PROVIDER_ENTRY_UNSAFE');
+    return real;
+}
+
+function providerCandidates() {
+    const root = projectRoot();
+    const candidates = [];
+    const skipped = [];
+    for (const baseName of ['packages', 'extensions']) {
+        const base = path.join(root, baseName);
+        let baseStat;
+        try { baseStat = fs.lstatSync(base); }
+        catch (error) { if (error.code === 'ENOENT') continue; throw error; }
+        if (!baseStat.isDirectory() || baseStat.isSymbolicLink()) throw coded('EXTENSION_PROVIDER_DIRECTORY_UNSAFE');
+        const names = fs.readdirSync(base).sort();
+        if (names.length > 512) throw coded('EXTENSION_PROVIDER_DIRECTORY_TOO_LARGE');
+        for (const name of names) {
+            if (candidates.length >= MAX_PROVIDER_PACKAGES) break;
+            const directory = path.join(base, name);
+            let directoryStat;
+            try { directoryStat = fs.lstatSync(directory); } catch (_) { continue; }
+            if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) continue;
+            const manifestPath = path.join(directory, 'package.json');
+            let manifestStat;
+            try { manifestStat = fs.lstatSync(manifestPath); }
+            catch (error) { if (error.code === 'ENOENT') continue; skipped.push({ package: name, code: 'EXTENSION_PROVIDER_MANIFEST_UNREADABLE' }); continue; }
+            if (!manifestStat.isFile() || manifestStat.isSymbolicLink() || manifestStat.size > 64 * 1024) {
+                skipped.push({ package: name, code: 'EXTENSION_PROVIDER_MANIFEST_UNSAFE' });
+                continue;
+            }
+            let manifest;
+            try { manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')); }
+            catch (_) { skipped.push({ package: name, code: 'EXTENSION_PROVIDER_MANIFEST_INVALID' }); continue; }
+            const metadata = manifest && manifest['cocos-creator-agent'];
+            if (!metadata || !Array.isArray(metadata.commands)) continue;
+            let entry;
+            try { entry = safeExtensionEntry(directory, manifest.main || 'main.js'); }
+            catch (error) { skipped.push({ package: name, code: error.code || 'EXTENSION_PROVIDER_ENTRY_INVALID' }); continue; }
+            try {
+                const provider = normalizeProvider(manifest.name, metadata);
+                candidates.push({ ...provider, directory, manifestPath, entry, metadata });
+            } catch (error) { skipped.push({ package: name, code: error.code || 'EXTENSION_PROVIDER_METADATA_INVALID' }); }
+        }
+    }
+    return { candidates, skipped };
+}
+
+function extensionIpcRequest(message, payload, timeoutMs = PROVIDER_IPC_TIMEOUT_MS) {
+    if (!Editor.Ipc || typeof Editor.Ipc.sendToMain !== 'function') return Promise.reject(coded('CREATOR_IPC_UNAVAILABLE'));
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const finish = (error, result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            if (error) reject(coded('EXTENSION_PROVIDER_IPC_FAILED', String(error.code || error.message || error)));
+            else resolve(result);
+        };
+        const timer = setTimeout(() => finish(coded('EXTENSION_PROVIDER_IPC_TIMEOUT')), timeoutMs + 100);
+        try {
+            Editor.Ipc.sendToMain(message, payload, (...args) => {
+                if (args.length > 1) finish(args[0], args[1]);
+                else if (args[0] instanceof Error || args[0] && typeof args[0].code === 'string') finish(args[0]);
+                else finish(null, args[0]);
+            }, timeoutMs);
+        } catch (error) { finish(error); }
+    });
+}
+
+function providerDescriptorMatches(first, second) {
+    return canonical(first) === canonical(second);
+}
+
+async function discoverExtensionCommands() {
+    const { candidates, skipped } = providerCandidates();
+    const byId = new Map();
+    for (const candidate of candidates) {
+        if (byId.has(candidate.providerId)) { byId.set(candidate.providerId, null); skipped.push({ package: candidate.providerId, code: 'EXTENSION_PROVIDER_ID_AMBIGUOUS' }); }
+        else byId.set(candidate.providerId, candidate);
+    }
+    const providers = [];
+    const commands = [];
+    for (const candidate of byId.values()) {
+        if (!candidate) continue;
+        const challenge = uuid();
+        try {
+            const response = await extensionIpcRequest(`${candidate.providerId}:cocosAgentDescribe`, {
+                protocolVersion: '1', challenge,
+            });
+            if (!response || response.providerId !== candidate.providerId || response.protocolVersion !== '1'
+                || response.challenge !== challenge || !Array.isArray(response.commands))
+                throw coded('EXTENSION_PROVIDER_HANDSHAKE_MISMATCH');
+            const live = normalizeProvider(candidate.providerId, {
+                creatorVersion: '2.4.15', protocolVersion: '1', commands: response.commands,
+            });
+            if (!providerDescriptorMatches(live.commands, candidate.commands)) throw coded('EXTENSION_PROVIDER_CONTRACT_MISMATCH');
+            const provider = { providerId: candidate.providerId, providerFingerprint: candidate.providerFingerprint,
+                title: candidate.providerId, commands: live.commands.map((command) => ({ ...command,
+                    providerId: candidate.providerId, providerFingerprint: candidate.providerFingerprint, status: 'available' })) };
+            providers.push(provider);
+            commands.push(...provider.commands);
+        } catch (error) {
+            skipped.push({ package: candidate.providerId, code: error.code || 'EXTENSION_PROVIDER_UNAVAILABLE' });
+        }
+    }
+    if (commands.length > MAX_PROVIDER_COMMANDS) throw coded('EXTENSION_PROVIDER_COMMAND_LIMIT_EXCEEDED');
+    return { projectRoot: projectRoot(), creatorVersion: editorVersion(), providers, commands,
+        skipped: skipped.slice(0, MAX_PROVIDER_PACKAGES) };
+}
+
+function redactProviderArguments(value) {
+    const safe = {};
+    for (const [key, child] of Object.entries(value)) {
+        safe[key] = /token|secret|password|authorization|credential|api.?key/i.test(key)
+            ? '[redacted]' : child;
+    }
+    return JSON.stringify(safe, null, 2).slice(0, 6000);
+}
+
+function confirmExtensionCommand(provider, command, args) {
+    if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
+    const detail = [
+        `Project: ${projectRoot()}`,
+        `Provider extension: ${provider.providerId}`,
+        `Command: ${command.id}`,
+        `Declared access: ${command.access}`,
+        `Provider fingerprint: ${provider.providerFingerprint}`,
+        '',
+        command.description,
+        '',
+        redactProviderArguments(args),
+        '',
+        'This invokes code from a project-installed Creator extension. Review and trust that extension before approving.',
+    ].join('\n');
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            const response = Number.isInteger(result) ? result : result && Number.isInteger(result.response) ? result.response : -1;
+            resolve(response === 1);
+        };
+        try {
+            const result = Editor.Dialog.messageBox({ type: 'warning', title: 'Approve project extension command',
+                message: `Run ${provider.providerId}:${command.id}?`, detail,
+                buttons: ['Cancel', 'Run extension command'], defaultId: 0, cancelId: 0, noLink: true }, finish);
+            if (result && typeof result.then === 'function') result.then(finish, (error) => {
+                if (settled) return;
+                settled = true;
+                reject(coded('CREATOR_APPROVAL_DIALOG_FAILED', String(error && error.message || error)));
+            });
+        } catch (error) { reject(coded('CREATOR_APPROVAL_DIALOG_FAILED', String(error.message || error))); }
+    });
+}
+
+async function invokeExtensionCommand(input, context, requiredAccess) {
+    if (input.providerFingerprint !== input.providerFingerprint.toLowerCase()) throw coded('EXTENSION_PROVIDER_FINGERPRINT_INVALID');
+    let args;
+    try { args = JSON.parse(input.argumentsJson); } catch (_) { throw coded('EXTENSION_COMMAND_INPUT_INVALID'); }
+    const liveCatalog = await discoverExtensionCommands();
+    const provider = liveCatalog.providers.find((item) => item.providerId === input.providerId);
+    const command = provider && provider.commands.find((item) => item.id === input.commandId);
+    if (!provider || !command || provider.providerFingerprint !== input.providerFingerprint) throw coded('EXTENSION_PROVIDER_CHANGED');
+    if (command.access !== requiredAccess) throw coded('EXTENSION_COMMAND_ACCESS_MISMATCH');
+    validateArguments(command.input, args);
+    if (command.approval) {
+        const approved = await confirmExtensionCommand(provider, command, args);
+        if (!approved) throw coded('EXTENSION_COMMAND_NOT_APPROVED');
+        try { await authorizeWriteRequest(context && context.requestId); }
+        catch (error) { throw coded('EXTENSION_COMMAND_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error)); }
+    }
+    const freshCatalog = await discoverExtensionCommands();
+    const freshProvider = freshCatalog.providers.find((item) => item.providerId === input.providerId);
+    const freshCommand = freshProvider && freshProvider.commands.find((item) => item.id === input.commandId);
+    if (!freshProvider || freshProvider.providerFingerprint !== provider.providerFingerprint
+        || !freshCommand || !providerDescriptorMatches(freshCommand, command)) throw coded('EXTENSION_PROVIDER_CHANGED');
+    validateArguments(freshCommand.input, args);
+    const returned = await extensionIpcRequest(`${input.providerId}:cocosAgentInvoke`, {
+        protocolVersion: '1', providerFingerprint: input.providerFingerprint, commandId: input.commandId, arguments: args,
+    }, 30000);
+    let resultBytes;
+    try { resultBytes = Buffer.from(JSON.stringify(returned)); } catch (_) { throw coded('EXTENSION_COMMAND_RESULT_INVALID'); }
+    if (!resultBytes || resultBytes.length > 256 * 1024) throw coded('EXTENSION_COMMAND_RESULT_TOO_LARGE');
+    if (returned && typeof returned === 'object' && returned.commandId !== input.commandId)
+        throw coded('EXTENSION_COMMAND_RESULT_ID_MISMATCH');
+    return { projectRoot: projectRoot(), creatorVersion: editorVersion(), providerId: provider.providerId,
+        providerFingerprint: provider.providerFingerprint, commandId: command.id, access: command.access,
+        approvalSource: command.approval ? 'creator-native-dialog' : null,
+        recovery: command.approval ? { automaticRetry: false, requiresManualReviewOnInterruption: true } : null,
+        result: returned && typeof returned === 'object' && Object.hasOwn(returned, 'result') ? returned.result : returned };
+}
+
 function execute(command, input, context) {
+    if (command === 'creator.extension.commands.list') return discoverExtensionCommands();
+    if (command === 'creator.extension.command.invoke.read') return invokeExtensionCommand(input, context, 'read');
+    if (command === 'creator.extension.command.invoke.plan') return invokeExtensionCommand(input, context, 'plan');
+    if (command === 'creator.extension.command.invoke.write') return invokeExtensionCommand(input, context, 'write');
+    if (command === 'creator.extension.command.invoke.control') return invokeExtensionCommand(input, context, 'control');
     if (command === 'creator.project.info') return projectInfo();
     if (command === 'creator.project.search') return Promise.resolve(searchProject(input));
     if (command === 'creator.asset.search') return searchAssets(input);
@@ -1079,6 +1836,12 @@ function execute(command, input, context) {
     if (command === 'creator.scene.node.set-active.plan') return createSceneNodeActivePlan(input);
     if (command === 'creator.scene.node.set-active.commit') return commitSceneNodeActive(input, context);
     if (command === 'creator.scene.node.set-active.reconcile') return reconcileSceneNodeActive(input);
+    if (command === 'creator.scene.node.add-component.plan') return createSceneComponentAddPlan(input);
+    if (command === 'creator.scene.node.add-component.commit') return commitSceneComponentAdd(input, context);
+    if (command === 'creator.scene.node.add-component.reconcile') return reconcileSceneComponentAdd(input);
+    if (command === 'creator.scene.node.set-component-property.plan') return createSceneComponentPropertyPlan(input);
+    if (command === 'creator.scene.node.set-component-property.commit') return commitSceneComponentProperty(input, context);
+    if (command === 'creator.scene.node.set-component-property.reconcile') return reconcileSceneComponentProperty(input);
     if (command === 'creator.script.create.plan') return Promise.resolve(createScriptPlan(input));
     if (command === 'creator.script.create.commit') return commitScriptCreate(input, context);
     if (command === 'creator.script.create.reconcile') return Promise.resolve(reconcileScriptCreate(input));

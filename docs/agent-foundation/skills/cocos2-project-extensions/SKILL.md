@@ -2,4 +2,4 @@
 
 本目录仅用于定位已发布的 canonical Skill，避免复制维护第二份工作流正文。
 
-权威正文：[plugins/cocos-creator-agent/skills/cocos2-project-extensions/SKILL.md](../../../../plugins/cocos-creator-agent/skills/cocos2-project-extensions/SKILL.md)
+权威正文：[tools/cocos-creator-agent-cli/skills/cocos2-project-extensions/SKILL.md](../../../tools/cocos-creator-agent-cli/skills/cocos2-project-extensions/SKILL.md)
