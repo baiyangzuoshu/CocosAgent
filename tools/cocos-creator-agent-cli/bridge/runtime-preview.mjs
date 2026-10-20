@@ -459,6 +459,15 @@ export async function screenshotPreview(instance, input) {
 const KEY_NAMES = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter', 'Escape', 'Tab', 'KeyW', 'KeyA', 'KeyS', 'KeyD',
   ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((letter) => `Key${letter}`), ...'0123456789'.split('').map((digit) => `Digit${digit}`)]);
 
+function windowsVirtualKeyCode(key) {
+  const namedCodes = { ArrowUp: 0x26, ArrowDown: 0x28, ArrowLeft: 0x25, ArrowRight: 0x27,
+    Space: 0x20, Enter: 0x0d, Escape: 0x1b, Tab: 0x09 };
+  if (Object.hasOwn(namedCodes, key)) return namedCodes[key];
+  if (/^Key[A-Z]$/.test(key)) return key.charCodeAt(3);
+  if (/^Digit[0-9]$/.test(key)) return key.charCodeAt(5);
+  throw failure('PREVIEW_KEY_NOT_ALLOWED');
+}
+
 function validateActions(actions) {
   if (!Array.isArray(actions) || actions.length < 1 || actions.length > MAX_ACTIONS) throw failure('PREVIEW_ACTIONS_INVALID');
   return actions.map((action) => {
@@ -555,9 +564,10 @@ async function performAction(session, action) {
   if (action.type === 'key') {
     const key = action.key === 'Space' ? ' ' : action.key.startsWith('Key') ? action.key.slice(3).toLowerCase() : action.key;
     const code = action.key;
-    await session.cdp.command('Input.dispatchKeyEvent', { type: 'keyDown', key, code });
+    const windowsCode = windowsVirtualKeyCode(action.key);
+    await session.cdp.command('Input.dispatchKeyEvent', { type: 'keyDown', key, code, windowsVirtualKeyCode: windowsCode });
     try { await new Promise((resolve) => setTimeout(resolve, action.durationMs)); }
-    finally { await session.cdp.command('Input.dispatchKeyEvent', { type: 'keyUp', key, code }); }
+    finally { await session.cdp.command('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: windowsCode }); }
   } else {
     const canvas = await evaluate(session, `(() => { const c = document.querySelector('canvas'); if (!c) return null; const r = c.getBoundingClientRect();
       return { x: r.left, y: r.top, width: r.width, height: r.height }; })()`);

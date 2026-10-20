@@ -87,3 +87,34 @@ SSH `git ls-remote` 确认远端 main 已含 `bff2faa71677023b2e54eae037b0d6faa4
 - 在当前源码 0.10.6 上重新运行 `npm test`：默认沙箱 56/59；3 项本机回环桥接集成测试因 `listen EPERM` 失败。按测试范围提升权限重跑后 **59/59 通过**。覆盖项目 Node 测试子进程、JSON/JUnit、Creator Provider/预览适配、目录/受影响套件 watch、取消/恢复、构建合同与 VCS 只读检查。这些是 CLI 实现测试，不是 Creator 实机运行。
 - 再次读取私有仓库 Release API `/repos/baiyangzuoshu/CocosAgent/releases/tags/cocos-creator-agent-cli-v0.9.0` 返回 404；SSH `git ls-remote` 仍因 `Could not resolve host: github.com` 失败。私有仓库的未授权 404 不能证明 Release 不存在，线上资产、SHA-256、自更新和回滚继续未验收。
 - 系统仍锁屏，Creator Agent MCP/CLI 实例列表为空；本轮无法从 Creator 加载 Provider 或做审批写入与预览运行。整体目标继续保持未完成。
+
+## 2026-10-21 续验：桥接、CLI 测试与当前实机入口
+
+- 按用户要求运行 `/usr/bin/caffeinate -dimsu -t 28800`。`pmset -g assertions` 确认 PID `15714` 同时持有 `PreventUserIdleDisplaySleep`、`PreventUserIdleSystemSleep`、`PreventSystemSleep`，超时为 28,800 秒；这是本机临时状态，不代表项目验收。
+- 全局 CLI 状态为 `0.10.6`，Creator 目标版本 `2.4.15`；捆绑扩展 `0.6.2`，30 条 Creator 命令，合同 SHA-256 `e4efd9a1ad472fa74b233159ba6fc811626d35f8268a7a193d326910e76cfa47`。
+- 普通沙箱内 `doctor` 的 loopback 请求返回 `fetch failed`；通过允许本机 loopback 的调用复核，桥接 ID `485a7d1b-7b6b-4f1b-b30a-009f3c524534` 健康，Creator/协议/扩展版本与合同指纹匹配。提升权限 `doctor` 为 6 项通过、0 警告、0 错误，但发现 `0` 个连接的 Creator 实例。普通沙箱的错误是回环网络访问限制，不是桥接故障。
+- 在 `tools/cocos-creator-agent-cli/` 运行完整 `npm test`，结果 **59/59 通过**。这是 CLI 自动测试，不替代 Creator 实机结果。
+- 当前 Cocos Dashboard 2.2.2 截图显示“安装”页及 Creator `3.8.7`、`2.4.15` 安装路径，没有显示项目列表。Dashboard 无障碍树只暴露窗口标题栏；项目页点击操作两次返回 `noWindowsAvailable`。因此本轮不能核实项目名、项目绝对路径、版本与打开状态；未调用实例发现或任何项目工具，也未触碰 `tank` 工程。
+- 私有仓库 Release 复核仍未能取得权威结果：GitHub 连接器的已安装仓库检索返回空列表，Release API 返回 404；本机 `git ls-remote` 报 `could not read Username for 'https://github.com'`。这些结果不能证明 Release 不存在，也没有新增线上资产、自更新或回滚证据。
+- 本轮没有提交代码；测试与只读诊断没有更改既有工作区。当前工作区已有的 `.DS_Store`、`tank` 扩展安装差异、临时验收 Provider 和资产仍保留，需在目标 Creator 会话恢复后按 AssetDB/基线流程处理。
+- 下一步先恢复可操作的 Cocos Dashboard 项目列表与 Creator 2.4.15 实例连接，再核对 `tank` 完整工程身份；然后按既有 Provider/同会话预览验收记录完成读/审批写/取消/输入断言和基线恢复。私有 Release 自更新还需一个可访问该仓库的认证 Host。
+
+## 2026-10-21 续验：Provider 写入与运行时输入闭环
+
+- 再次核对 Cocos Dashboard 注册项与 Creator 窗口：项目 `tank`，项目根 `/Users/youjunmao/WORK/Cocos_Engine/tank`，Creator 2.4.15，扩展 0.6.2；当前场景 `CocosCliAcceptance20261020`，UUID `33114787-cbbd-44e4-b9be-1d8c470bf4fa`。CLI 与 Creator 实例 ID `d6c3577e-a25c-41be-a2c9-ba2d3ca83236` 报告路径、版本和场景一致。
+- 临时 Provider CLI 读命令返回基线值 0。经 Creator 原生审批，CLI 写入 37 并读回；取消将值改为 99 的审批后返回 `EXTENSION_COMMAND_NOT_APPROVED`，读回仍为 37。经 CLI-owned MCP stdio `tools/list` 动态发现 Provider 工具并 `tools/call` 写入 64，回执包含 `approvalSource: creator-native-dialog`、前值 37 和新值 64；CLI 与真实 MCP stdio 的只读回执一致。随后经原生审批写回 0，CLI 读回确认恢复。Provider 指纹 `8c8209b9f01a24339bd9724b7a587270066139ef987d2154992308ca432c6356`，目录哈希 `a167a41a13a636186f490492feeaed8dcdefdd631a1c2bb0d7ad9655bdd15f8f`。
+- CLI 0.10.6 原有预览键盘实现只发送 `key` / `code`，真实 Creator 2.4.15 同会话输入 Space 未触发 `counter`（断言为 0，截图显示 `Ready: 0`）。按 Chrome DevTools Protocol，`windowsVirtualKeyCode` 默认值为 0；此行为与 Creator 依赖键码的系统键盘事件不匹配。[CDP `Input.dispatchKeyEvent` 参考](https://chromedevtools.github.io/devtools-protocol/tot/Input/)。
+- 修改 `tools/cocos-creator-agent-cli/bridge/runtime-preview.mjs`，为允许的方向键、Space/Enter/Escape/Tab、字母和数字补上 Windows 虚拟键码；用工作区 CLI 源码重启本机桥接（ID `0537d63e-ba83-4a4e-91d3-8ab70b060f06`，`127.0.0.1:51873`），未更改 tank 资产。新预览会话 `a8878930-ede4-4f85-8536-20f50bf755a6` 在同一实例/场景中执行画布点击与一次 Space 输入，MCP 回执断言 `counter === 1`、`no-errors` 均通过；截图 `/Users/youjunmao/.cocos-creator-agent/captures/a8878930-ede4-4f85-8536-20f50bf755a6/capture-1792538111908-586ada.png`，SHA-256 `b67576b394e13f659906ed1dab80a97633c86341693611c982ff86877b16d02e`，画面可见 `Count: 1`。预览已关闭；Creator 预览服务器仍由 Creator 管理。
+- 本轮首次构造断言时，命令合同暴露的通用 `name` 字段被 `no-errors` / `component-property` 运行时校验拒绝 (`PREVIEW_ASSERTION_FIELD_INVALID`)。删除该可选字段后真实断言通过；合同中按断言类型收敛字段的工作仍待处理。一次通过 Creator Agent MCP 包装调用的重启请求还短暂返回 `BRIDGE_ROUTE_NOT_FOUND`；独立 CLI 启动和后续源代码桥接下的 MCP 交互均成功，此瞬时路由问题尚未定位。
+- `tools/cocos-creator-agent-cli/` 完整 `npm test`：默认沙箱 56/59，3 项只绑定 `127.0.0.1` 的桥接集成用例因 `listen EPERM` 失败；在允许本地回环监听的测试环境重跑后 **59/59 通过**。这是 CLI 自动测试加上一条真实 Creator/MCP 运行证据，不代表发行安装包已包含本轮源码补丁。
+- 临时 Provider 包及 `CocosCliAcceptance20261020` 样例场景/脚本仍在 tank；本轮 Provider 内存值已恢复 0，预览会话已停止，没有删除或改写资产。恢复整个项目基线尚未完成。当前工作区未提交。
+- 用户再次要求屏幕 8 小时不熄；启动新的 `caffeinate -dimsu -t 28800`。`pmset -g assertions` 记录 PID `19452` 的 `PreventUserIdleDisplaySleep`、`PreventUserIdleSystemSleep` 和 `PreventSystemSleep` 断言剩余约 28,796 秒；旧断言未终止。
+- GitHub 私有 Release 在线资产与更新仍无认证可读证据；0.10.6 Release、自更新和回滚仍未验收，整体目标继续未完成。
+
+## 2026-10-21 发布候选核查
+
+- `pmset -g assertions` 于 07:19 显示 PID `19452` 仍持有 `PreventUserIdleDisplaySleep`、`PreventUserIdleSystemSleep` 和 `PreventSystemSleep`，距 8 小时超时约 27,950 秒；没有终止旧 `caffeinate` 断言。
+- 使用已登录 GitHub 浏览器检查私有仓库：主分支最新提交 `31369215b5582e26f3a941897389f80a617ce47e` 与本地 `origin/main` 一致。仓库 Releases 列表显示无已发布 Release；标签列表只有 `cocos-creator-agent-cli-v0.9.0`，其页面提供“Create release from tag”，并仅有 GitHub 自动生成的 Source code zip/tar.gz，没有 CLI 包和校验和资产。因此线上分发、自更新和回滚仍未验收；旧 API 404 不能代表标签或 Release 状态。
+- 在隔离 npm 缓存与 prefix 下执行 `npm pack`、安装打包文件并调用 CLI：候选包版本 `0.10.6`，Creator 目标 `2.4.15`，tarball 98 个文件、176,237 字节，SHA-256 `034ffe4d373837555362ac1d0e2c7e6bdc23b7267506b5711f4380995777d34c`；隔离安装后版本命令返回 `0.10.6`，包内 `bridge/runtime-preview.mjs` 含 `windowsVirtualKeyCode` 修复。该本地产物不是 GitHub Release。
+- 默认 npm 缓存因 root-owned 文件报 `EPERM`；通过 `/private/tmp/cocos-cli-npm-cache` 完成打包和隔离安装，没有改动用户全局 npm 缓存权限。终端 `git ls-remote` 因当前网络 DNS 无法解析 `github.com` 失败；浏览器只读确认可用，但尚未进行远端写入。
+- 发布前仍需把 CLI 键盘输入修复和本验收记录提交到仓库，按现有 Release workflow 推送 `cocos-creator-agent-cli-v0.10.6` 标签，等待 CI 创建 tarball/SHA-256 资产后再用已安装 CLI 实际验证自更新和回滚。工作区其他 `.DS_Store` 与 `tank` 验收文件不应纳入该提交。
