@@ -118,3 +118,11 @@ SSH `git ls-remote` 确认远端 main 已含 `bff2faa71677023b2e54eae037b0d6faa4
 - 在隔离 npm 缓存与 prefix 下执行 `npm pack`、安装打包文件并调用 CLI：候选包版本 `0.10.6`，Creator 目标 `2.4.15`，tarball 98 个文件、176,237 字节，SHA-256 `034ffe4d373837555362ac1d0e2c7e6bdc23b7267506b5711f4380995777d34c`；隔离安装后版本命令返回 `0.10.6`，包内 `bridge/runtime-preview.mjs` 含 `windowsVirtualKeyCode` 修复。该本地产物不是 GitHub Release。
 - 默认 npm 缓存因 root-owned 文件报 `EPERM`；通过 `/private/tmp/cocos-cli-npm-cache` 完成打包和隔离安装，没有改动用户全局 npm 缓存权限。终端 `git ls-remote` 因当前网络 DNS 无法解析 `github.com` 失败；浏览器只读确认可用，但尚未进行远端写入。
 - 发布前仍需把 CLI 键盘输入修复和本验收记录提交到仓库，按现有 Release workflow 推送 `cocos-creator-agent-cli-v0.10.6` 标签，等待 CI 创建 tarball/SHA-256 资产后再用已安装 CLI 实际验证自更新和回滚。工作区其他 `.DS_Store` 与 `tank` 验收文件不应纳入该提交。
+
+## 2026-10-21 0.10.6 发布尝试
+
+- 以中文提交 `3d4872c16f8c2cab39ba807e14534eb49de47e0d` 推送 CLI 键盘输入修复及前述实机验收记录；随后推送标签 `cocos-creator-agent-cli-v0.10.6`。该提交只含 CLI 运行时文件和此记录，`tank` 的未提交验收改动未纳入。
+- 已登录 GitHub Actions 页面显示“workflows can't be executed”，原因是账户 billing locked；发布工作流显示 0 次运行。标签已存在，但此状态下 CI 不会生成 Release。
+- 在隔离 npm prefix 中安装 `0.10.6` 候选包成功，CLI 版本输出为 `0.10.6`，包内包含键盘虚拟键码修复。已准备本地资产 `cocos-creator-agent-cli-v0.10.6.tgz` 与 `.tgz.sha256`；tarball SHA-256 为 `034ffe4d373837555362ac1d0e2c7e6bdc23b7267506b5711f4380995777d34c`。
+- 尝试在已登录 GitHub Release 表单手工附加资产；Chrome 文件选择器 10 秒内未产生选择事件，未上传文件，也没有提交 Release 表单。按浏览器上传排障要求，需要在 ChatGPT Chrome 扩展详情中启用 `Allow access to file URLs`；这是扩展访问本机文件的权限，当前未擅自变更。Release、自更新与回滚仍未验收。
+- 若继续人工发布，需先处理 GitHub billing lock 以恢复 Actions；若采用手动发布，再启用上述 Chrome 文件 URL 权限后，把本地 `.tgz` 和校验和文件附加至现有 0.10.6 标签的 Release，核对线上资产及哈希，再测试安装、更新与回滚。
