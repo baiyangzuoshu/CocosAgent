@@ -4,7 +4,7 @@ Standalone local CLI for Cocos Creator 2.4.15 projects. It can run without Codex
 
 ## Requirements
 
-Development source is now 0.10.5, adding read-only `vcs doctor` checks for Creator asset metadata integrity, duplicate UUIDs, tracked cache/output paths, and Git conflict markers. Creator test adapters, JSON/JUnit reports, directory/affected-suite watch, rejected-handshake diagnostics, and Creator 2.4.15 preview feedback are also included. Creator extension 0.6.2 includes the approval and Creator 2.4.15 runtime compatibility fixes. The 0.9.0 tag exists remotely; online Release assets and self-update acceptance are still unverified. A locally installed package is not evidence of a public release.
+Development source is now 0.10.6, adding authenticated access to private GitHub Releases for CLI update, rollback, and the read-only `vcs doctor` checks for Creator asset integrity. Creator test adapters, JSON/JUnit reports, directory/affected-suite watch, rejected-handshake diagnostics, and Creator 2.4.15 preview feedback are also included. Creator extension 0.6.2 includes the approval and Creator 2.4.15 runtime compatibility fixes. The 0.9.0 Release assets and live update acceptance remain unverified. A locally installed package is not evidence of a GitHub Release.
 
 - Node.js 20 or newer.
 - Cocos Creator 2.4.15 for editor-connected commands.
@@ -26,6 +26,8 @@ cocos-creator-agent self-update
 ```
 
 Pin or roll back to a specific release with `cocos-creator-agent self-update --version <VERSION>`. Updates download the release archive and its SHA-256 asset, verify the checksum, then ask npm to replace the global package. Verify the installed package with `cocos-creator-agent version --format json`.
+
+For a private GitHub repository, the updater reads `GH_TOKEN` or `GITHUB_TOKEN`, then falls back to `gh auth token --hostname github.com`. The token is sent only to `api.github.com`; authenticated asset downloads use GitHub's release-asset API and follow its signed download redirect. Never put the token on the command line.
 
 Repository maintainers publish a CLI release by updating `package.json`, committing the change, and pushing a matching `cocos-creator-agent-cli-v<VERSION>` tag. The GitHub Actions workflow checks the tag against the package version, creates an npm tarball, and attaches the archive and SHA-256 file to the GitHub Release. Bump `creator-extension/package.json` whenever its installed behavior or contract changes; extension updates use the template bundled in the installed CLI.
 

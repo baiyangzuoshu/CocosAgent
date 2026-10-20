@@ -1,14 +1,14 @@
 # Cocos CLI：VCS、模板与资源包能力评估
 
-日期：2026-10-20。范围：Creator 2.4.15。CLI 源码包 0.10.5 已加入只读 `vcs doctor`，临时 Git 工程验收通过；全局安装仍为 0.10.4，发布包和 Creator 实机尚未验收这一功能。
+日期：2026-10-20。范围：Creator 2.4.15。CLI 源码包 0.10.6 含只读 `vcs doctor`，临时 Git 工程验收通过；全局安装仍为 0.10.4，发布包和 Creator 实机尚未验收这一功能。
 
 ## 结论与顺序
 
-当前应先完成分发和真实 Host/Creator 验收，并验证 0.10.5 发布包。只读资源完整性诊断 `vcs doctor` 已实现；后续再做场景/Prefab 语义差异，项目模板与资源包应经独立合同接入。暂不实现自动场景冲突合并，也不把 Editor/模块安装从 Dashboard 搬入 CLI。
+当前应先完成分发和真实 Host/Creator 验收，并验证 0.10.6 发布包。只读资源完整性诊断 `vcs doctor` 已实现；后续再做场景/Prefab 语义差异，项目模板与资源包应经独立合同接入。暂不实现自动场景冲突合并，也不把 Editor/模块安装从 Dashboard 搬入 CLI。
 
 | 候选能力 | 现有证据与缺口 | 后续范围 | 验收条件 |
 | --- | --- | --- | --- |
-| `vcs doctor/status` | 源码包 0.10.5 已有显式 Git root 与 Creator project root 的只读 `vcs doctor`；报告跟踪缓存、资源/目录缺失或孤立 `.meta`、重复主/子资源 UUID、配对冲突标记。`vcs status` 尚未实现 | 将只读完整性扫描作为 doctor；后续再设计 status 的变更视图，确保 Git root 和嵌套项目映射明确 | 临时 Git 工程分别制造上述问题；结果含路径、证据、严重级别与扫描限制；前后核对工作区、Git index 与样本哈希一致。Creator AssetDB 实机验收仍待执行 |
+| `vcs doctor/status` | 源码包 0.10.6 已有显式 Git root 与 Creator project root 的只读 `vcs doctor`；报告跟踪缓存、资源/目录缺失或孤立 `.meta`、重复主/子资源 UUID、配对冲突标记。`vcs status` 尚未实现 | 将只读完整性扫描作为 doctor；后续再设计 status 的变更视图，确保 Git root 和嵌套项目映射明确 | 临时 Git 工程分别制造上述问题；结果含路径、证据、严重级别与扫描限制；前后核对工作区、Git index 与样本哈希一致。Creator AssetDB 实机验收仍待执行 |
 | `vcs diff/affected` | 场景/Prefab 是 Creator 序列化对象图；文本行差异不能完整表达节点与组件变化 | 对比指定 Git blob 中的 `__type__`、`__id__`、`__uuid__`，按节点/组件给出增加、移除、属性与资源引用差异；未知类型保留原始差异 | 覆盖数组重排、UUID 保留、子资源、移除组件和不完整文件；无法推导的依赖标记为未知，不声称完整影响集合 |
 | 冲突恢复 | 当前写操作有审批、前态校验和 reconcile，但不是 Git 场景合并器 | 先做冲突分类与恢复计划；涉及 UUID/对象图冲突时用 Creator 实机核对 | 恢复前后验证源/meta 哈希与场景引用；冲突未解决时不写“成功”，不自动选择整侧覆盖 |
 | 项目模板 | Dashboard 已承担工程创建、版本选择与打开；CLI 没有模板清单/校验命令 | 第一阶段只读验证模板版本、文件清单、UUID 和来源；是否增加实例化合同另行评估 | 模板在 Creator 2.4.15 中生成并打开；重复实例化不覆盖旧工程；不可携带缓存、用户凭据或绝对本机配置 |

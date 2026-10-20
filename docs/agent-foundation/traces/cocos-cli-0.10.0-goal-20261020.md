@@ -65,3 +65,11 @@ SSH `git ls-remote` 确认远端 main 已含 `bff2faa71677023b2e54eae037b0d6faa4
 - 临时 Git 仓库覆盖干净结果、缺失/孤立 `.meta`、重复 UUID、跟踪缓存、冲突标记、Git/project root 校验；测试前后核对 Git index 哈希、`git status` 和所有样本哈希，均未变化。新增 CLI JSON 路由测试。
 - `npm test` 默认沙箱下 52 项通过、3 项本机回环集成测试因 `listen EPERM` 失败；按审批提升权限重跑后 **55/55 通过**。最终 0.10.5 tarball 为 98 个文件、175,292 字节，SHA-256 `7213acaca6fee9d017a2d101a1010aa5f56c8435e2bb11f1888597c93e382263`，确认包含 `vcs-integrity.mjs`；隔离安装后的 0.10.5 在临时干净 Git/Creator 工程上返回 `ok: true`、0 findings。这是源码/临时夹具证据，不是 Creator AssetDB 验收。全局 CLI 仍为 0.10.4，未发布或升级全局安装。
 - VCS/模板/资源包评估文档已更新：场景/Prefab 语义差异、模板、资源包仍在计划中；无自动场景合并。
+
+## 2026-10-20 私有 Release 鉴权与 0.10.6
+
+- 当前 GitHub 连接列出的 `baiyangzuoshu/CocosAgent` 为私有仓库（仓库 ID `1316650401`）。连接器的通用读取 API 对仓库、release tag 和 commit 返回 404；该接口仅支持公开仓库，不能据此断言 0.9.0 Release 不存在。SSH 远端查询当前失败于 DNS（`Could not resolve host: github.com`）；机器无 `gh` 命令，`GH_TOKEN` 与 `GITHUB_TOKEN` 环境变量均未设置，因此本机暂时没有可用的私有仓库读取凭据。
+- 发现 updater 原先只访问未认证 GitHub API/公开下载 URL，私有 Release 即使存在也无法由独立 CLI 下载。源码版本升至 0.10.6：更新器优先读取 `GH_TOKEN`/`GITHUB_TOKEN`，否则尝试 `gh auth token --hostname github.com`；令牌只随 API 请求发往 `api.github.com`，优先用 Release Asset API 获取私有文件，交给 npm 安装前从子进程环境剔除两种令牌。校验和不匹配继续拒绝安装。
+- 新增私有 Release 检查、0.9.0 降级安装、校验和错误拒绝、GitHub CLI 令牌回退及 npm 子进程令牌隔离测试。完整 CLI 测试 **59/59 通过**。
+- 0.10.6 tarball 为 98 个文件、176,068 字节，SHA-256 `79777beb755b69fbb66cc1fc648640e39b29a915765468507138c9da6261db75`。在隔离 prefix 安装后，版本命令返回 `0.10.6`，帮助列出 `self-update` 与 `vcs doctor`。这是本地发布包验收，不是 GitHub Release 或线上更新验收。
+- **线上 0.9.0 Release、资产下载、自更新与回滚仍未验证。** 当前可证明的是目标仓库为私有且当前环境无可用 CLI 凭据/网络；此前未认证 HTTP 404 不能作为 Release 不存在的证据。需从有仓库访问权且网络可用的 Host 执行实际线上验收。

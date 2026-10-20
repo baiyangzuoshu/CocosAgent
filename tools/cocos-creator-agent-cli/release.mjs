@@ -42,25 +42,47 @@ function compareVersions(left, right) {
   return 0;
 }
 
-async function fetchResponse(url, headers = {}) {
-  const response = await fetch(url, { headers: { 'user-agent': 'cocos-creator-agent-cli', ...headers },
+async function fetchResponse(url, { githubToken, fetchImpl = fetch, ...headers } = {}) {
+  const requestHeaders = { 'user-agent': 'cocos-creator-agent-cli', ...headers };
+  if (githubToken && new URL(url).hostname === 'api.github.com') requestHeaders.authorization = `Bearer ${githubToken}`;
+  const response = await fetchImpl(url, { headers: requestHeaders,
     redirect: 'follow', signal: AbortSignal.timeout(30_000) });
   if (!response.ok) throw new Error(`CLI_RELEASE_HTTP_${response.status}`);
   return response;
 }
 
-async function getRelease(packageInfo, requestedVersion) {
+function getGitHubToken(env, spawnImpl) {
+  for (const name of ['GH_TOKEN', 'GITHUB_TOKEN']) {
+    const token = typeof env?.[name] === 'string' ? env[name].trim() : '';
+    if (token && token.length <= 8192 && !/[\r\n\0]/.test(token)) return token;
+  }
+  const result = spawnImpl(process.platform === 'win32' ? 'gh.exe' : 'gh', ['auth', 'token', '--hostname', 'github.com'], {
+    encoding: 'utf8', timeout: 5000, maxBuffer: 16 * 1024, windowsHide: true,
+    env: { ...env, GH_PROMPT: 'disabled' },
+  });
+  const token = result.status === 0 && typeof result.stdout === 'string' ? result.stdout.trim() : '';
+  return token && token.length <= 8192 && !/[\r\n\0]/.test(token) ? token : null;
+}
+
+function withoutGitHubTokens(env) {
+  const sanitized = { ...env };
+  delete sanitized.GH_TOKEN;
+  delete sanitized.GITHUB_TOKEN;
+  return sanitized;
+}
+
+async function getRelease(packageInfo, requestedVersion, dependencies) {
   const repository = githubRepository(packageInfo);
   if (requestedVersion) {
     const version = requestedVersion.replace(/^v/, '');
     parseVersion(version);
     const response = await fetchResponse(`${API_ROOT}/repos/${repository}/releases/tags/${encodeURIComponent(`${TAG_PREFIX}${version}`)}`, {
-      accept: 'application/vnd.github+json',
+      accept: 'application/vnd.github+json', githubToken: dependencies.githubToken, fetchImpl: dependencies.fetchImpl,
     });
     return response.json();
   }
   const response = await fetchResponse(`${API_ROOT}/repos/${repository}/releases?per_page=100`, {
-    accept: 'application/vnd.github+json',
+    accept: 'application/vnd.github+json', githubToken: dependencies.githubToken, fetchImpl: dependencies.fetchImpl,
   });
   const releases = await response.json();
   const candidates = releases.filter((release) => !release.draft && !release.prerelease && release.tag_name?.startsWith(TAG_PREFIX));
@@ -76,11 +98,24 @@ function trustedReleaseAsset(url) {
   }
 }
 
-async function downloadAsset(asset, destination) {
+function trustedReleaseApiAsset(url) {
+  const parsed = new URL(url);
+  if (parsed.protocol !== 'https:' || parsed.hostname !== 'api.github.com'
+    || !/^\/repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/releases\/assets\/[0-9]+$/.test(parsed.pathname)) {
+    throw new Error('CLI_RELEASE_ASSET_HOST_REJECTED');
+  }
+}
+
+async function downloadAsset(asset, destination, dependencies) {
   if (!asset || typeof asset.browser_download_url !== 'string') throw new Error('CLI_RELEASE_ASSET_MISSING');
   trustedReleaseAsset(asset.browser_download_url);
-  const response = await fetchResponse(asset.browser_download_url, { accept: 'application/octet-stream' });
-  trustedReleaseAsset(response.url);
+  const downloadUrl = dependencies.githubToken && typeof asset.url === 'string' ? asset.url : asset.browser_download_url;
+  if (downloadUrl === asset.url) trustedReleaseApiAsset(downloadUrl);
+  const response = await fetchResponse(downloadUrl, { accept: 'application/octet-stream',
+    githubToken: dependencies.githubToken, fetchImpl: dependencies.fetchImpl });
+  const resolvedUrl = response.url || downloadUrl;
+  if (new URL(resolvedUrl).hostname === 'api.github.com') trustedReleaseApiAsset(resolvedUrl);
+  else trustedReleaseAsset(resolvedUrl);
   const declaredLength = Number(response.headers.get('content-length'));
   if (Number.isFinite(declaredLength) && declaredLength > 100 * 1024 * 1024) throw new Error('CLI_RELEASE_ASSET_SIZE_INVALID');
   const chunks = [];
@@ -96,9 +131,13 @@ async function downloadAsset(asset, destination) {
   return bytes;
 }
 
-export async function updateCli(packageInfo, { checkOnly = false, version: requestedVersion } = {}) {
+export async function updateCli(packageInfo, { checkOnly = false, version: requestedVersion } = {}, {
+  fetchImpl = fetch, spawnImpl = spawnSync, env = process.env,
+} = {}) {
   const currentVersion = packageInfo.version;
-  const release = await getRelease(packageInfo, requestedVersion);
+  const githubToken = getGitHubToken(env, spawnImpl);
+  const dependencies = { fetchImpl, githubToken, spawnImpl };
+  const release = await getRelease(packageInfo, requestedVersion, dependencies);
   const version = release.tag_name?.startsWith(TAG_PREFIX) ? release.tag_name.slice(TAG_PREFIX.length) : '';
   parseVersion(version);
   const comparison = compareVersions(version, currentVersion);
@@ -117,15 +156,15 @@ export async function updateCli(packageInfo, { checkOnly = false, version: reque
   const archivePath = path.join(tempRoot, assetName);
   const checksumPath = path.join(tempRoot, checksumName);
   try {
-    const archive = await downloadAsset(archiveAsset, archivePath);
-    const checksumBytes = await downloadAsset(checksumAsset, checksumPath);
+    const archive = await downloadAsset(archiveAsset, archivePath, dependencies);
+    const checksumBytes = await downloadAsset(checksumAsset, checksumPath, dependencies);
     const expectedChecksum = checksumBytes.toString('utf8').trim().split(/\s+/)[0].toLowerCase();
     const actualChecksum = createHash('sha256').update(archive).digest('hex');
     if (!/^[a-f0-9]{64}$/.test(expectedChecksum) || actualChecksum !== expectedChecksum) throw new Error('CLI_RELEASE_CHECKSUM_MISMATCH');
 
-    const result = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm',
+    const result = spawnImpl(process.platform === 'win32' ? 'npm.cmd' : 'npm',
       ['install', '--global', '--ignore-scripts', '--no-audit', '--no-fund', archivePath], {
-      encoding: 'utf8', maxBuffer: 4 * 1024 * 1024, shell: process.platform === 'win32',
+      encoding: 'utf8', maxBuffer: 4 * 1024 * 1024, shell: process.platform === 'win32', env: withoutGitHubTokens(env),
     });
     if (result.stdout) process.stderr.write(result.stdout);
     if (result.stderr) process.stderr.write(result.stderr);
