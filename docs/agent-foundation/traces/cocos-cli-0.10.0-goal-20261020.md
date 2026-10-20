@@ -81,3 +81,9 @@ SSH `git ls-remote` 确认远端 main 已含 `bff2faa71677023b2e54eae037b0d6faa4
 - `mcp status codex` 和 `mcp status claude-code` 均为 `configured`；两个 Host 的 Skill 清单分别为 52/52 `installed`。这只证明配置文件与 Skill 安装状态，桌面 Host 尚未重启确认加载后的会话目录。
 - Creator Agent MCP 与 CLI 的实例列表均为空（`instances: []`，`rejectedInstances: []`）。本机桥接 `doctor` 上次已显示健康、合同匹配，但 Creator 当前未连接；Provider 重载、审批写入、恢复和最终版预览同会话断言仍未完成。系统锁屏阻止本轮在 Creator UI 中加载临时 Provider。
 - 全局 CLI 0.10.6 与 CLI-owned MCP 已验收；私有 GitHub Release 线上下载/自更新/回滚仍受仓库凭据与网络限制。以上两项不替代 Creator 实机验收，也不改变整体目标未完成状态。
+
+## 2026-10-20 CLI 测试与在线 Release 复核
+
+- 在当前源码 0.10.6 上重新运行 `npm test`：默认沙箱 56/59；3 项本机回环桥接集成测试因 `listen EPERM` 失败。按测试范围提升权限重跑后 **59/59 通过**。覆盖项目 Node 测试子进程、JSON/JUnit、Creator Provider/预览适配、目录/受影响套件 watch、取消/恢复、构建合同与 VCS 只读检查。这些是 CLI 实现测试，不是 Creator 实机运行。
+- 再次读取私有仓库 Release API `/repos/baiyangzuoshu/CocosAgent/releases/tags/cocos-creator-agent-cli-v0.9.0` 返回 404；SSH `git ls-remote` 仍因 `Could not resolve host: github.com` 失败。私有仓库的未授权 404 不能证明 Release 不存在，线上资产、SHA-256、自更新和回滚继续未验收。
+- 系统仍锁屏，Creator Agent MCP/CLI 实例列表为空；本轮无法从 Creator 加载 Provider 或做审批写入与预览运行。整体目标继续保持未完成。
