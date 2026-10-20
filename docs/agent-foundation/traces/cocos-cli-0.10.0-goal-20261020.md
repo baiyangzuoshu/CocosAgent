@@ -126,3 +126,15 @@ SSH `git ls-remote` 确认远端 main 已含 `bff2faa71677023b2e54eae037b0d6faa4
 - 在隔离 npm prefix 中安装 `0.10.6` 候选包成功，CLI 版本输出为 `0.10.6`，包内包含键盘虚拟键码修复。已准备本地资产 `cocos-creator-agent-cli-v0.10.6.tgz` 与 `.tgz.sha256`；tarball SHA-256 为 `034ffe4d373837555362ac1d0e2c7e6bdc23b7267506b5711f4380995777d34c`。
 - 尝试在已登录 GitHub Release 表单手工附加资产；Chrome 文件选择器 10 秒内未产生选择事件，未上传文件，也没有提交 Release 表单。按浏览器上传排障要求，需要在 ChatGPT Chrome 扩展详情中启用 `Allow access to file URLs`；这是扩展访问本机文件的权限，当前未擅自变更。Release、自更新与回滚仍未验收。
 - 若继续人工发布，需先处理 GitHub billing lock 以恢复 Actions；若采用手动发布，再启用上述 Chrome 文件 URL 权限后，把本地 `.tgz` 和校验和文件附加至现有 0.10.6 标签的 Release，核对线上资产及哈希，再测试安装、更新与回滚。
+
+## 2026-10-21 续验：0.10.6 候选包与 Creator 同会话运行
+
+- Cocos Dashboard、Creator 2.4.15 窗口与扩展/CLI 回执一致：项目 `tank`，工程根 `/Users/youjunmao/WORK/Cocos_Engine/tank`，实例 `d6c3577e-a25c-41be-a2c9-ba2d3ca83236`，扩展 `0.6.2`，活动场景 `CocosCliAcceptance20261020`（UUID `33114787-cbbd-44e4-b9be-1d8c470bf4fa`）。
+- CLI 0.10.6 `doctor` 9/9 通过、0 警告、0 错误；Creator 命令合同指纹 `e4efd9a1ad472fa74b233159ba6fc811626d35f8268a7a193d326910e76cfa47`，捆绑与项目扩展均为 0.6.2，30/30 Creator 固定命令可用。
+- 在隔离 prefix 安装候选 tarball 后，通过候选 CLI 对 Creator 实例启动真实预览；Creator 原生审批通过，预览 session `1b2e9c2e-678a-4314-9b1d-9c63c027b476`。Creator AssetDB 搜索和 `script read` 由扩展回执读取 `CocosCliAcceptance20261020.ts`，源码 SHA-256 `229b708ba5aff1dae7d0e52b3bf40ba3c347d67d36b19007674d757464a50f6e`，`.meta` SHA-256 `b2baa9854cff897d29f48592b15f2e6dd957add8f5401363d33aae17bb1ad3ab`。
+- 仅发送 Space 时计数仍为 0，确认预览画布尚未聚焦；在同一 session 先点击画布，再发送 Space，CLI 声明式断言 `counter === 1` 与 `no-errors` 均通过。截图 `/Users/youjunmao/.cocos-creator-agent/captures/1b2e9c2e-678a-4314-9b1d-9c63c027b476/capture-1792539661897-a2f529.png`，SHA-256 `6d63ec6bd9219f4ff87247835a4b0d10d958eebde8b046d8635081126b7e4658`，可见 `Count: 1`。测试后停止 Agent 预览 session；Creator 自身预览服务仍由 Creator 管理。
+- 同一候选 CLI 作为 MCP stdio server 的 `initialize` 成功，协议 `2024-11-05`，server `0.10.6`；`tools/list` 返回 38 项（包含在线 Provider 工具），`cocos_project_info` 实际调用返回同一 `tank` 工程、Creator 版本、扩展版本和场景身份。全局安装的 CLI 仍报告 0.10.6；Codex 与 Claude Code `mcp status` 均为 `configured`，Skill 清单均已安装。Host 配置回执不等于桌面会话已重载工具目录。
+- 候选 tarball `/private/tmp/cocos-cli-release-candidate/cocos-creator-agent-cli-v0.10.6.tgz` 为 98 文件、176,237 字节；SHA-256 `034ffe4d373837555362ac1d0e2c7e6bdc23b7267506b5711f4380995777d34c`，配套 `.sha256` 文件与该值一致。候选包安装、MCP 调用和 Creator 同会话预览通过；这些结果仍不证明线上 Release 或 `self-update` 已通过。
+- CLI 测试此前已按本机回环权限范围重跑，59/59 通过。全局 MCP 当前固定目录为 36 项；候选 CLI 在线 Creator/Provider 实例存在时返回 38 项，目录数不同来自动态 Provider 工具，不视为合同漂移。
+- 线上发布仍阻塞：GitHub Actions 因账户 billing locked 未执行；当前环境 `gh` 命令不存在。Chrome 浏览器安全策略拒绝导航到 `chrome://extensions`，明确禁止通过其他界面、命令、CDP 或浏览器表面绕过。用户已明确授权启用文件 URL 权限，但工具策略不允许执行这项被拒绝的权限操作；未上传 tarball、未创建 Release、未尝试改变权限。GitHub Release 上传、SHA-256 远端核对、线上自更新和回滚继续未验收。
+- 本轮未修改 tank 源码/场景，预览已停止；此前创建的 Provider 包和验收场景/脚本仍是工作区未提交内容，尚未恢复整个 tank 基线。需单独按 Creator AssetDB/UI 流程恢复，不能直接删除磁盘样本替代编辑器回执。

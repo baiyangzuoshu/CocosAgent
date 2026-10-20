@@ -1,6 +1,6 @@
 # Cocos Creator 第三方 Host 接入实现 0.1
 
-日期：2026-10-18（2026-10-20 更新）。范围：Codex / Claude Code → 独立 CLI（MCP 配置与 Skills 安装）→ 本机桥接 → Creator 2.4.15 项目扩展。当前 CLI 0.10.0 本机包与 41 项测试通过，支持项目 Node/Creator Provider/预览测试适配、JSON/JUnit 报告及目录/受影响测试 watch。真实 Codex/Claude 用户配置已由 CLI 迁移，52 项 Skills 和参考资料已安装；桌面 Host 新工具目录尚待重载。Dashboard 登记、Creator 窗口及旧扩展握手已确认 tank 的同一工程身份；旧扩展 0.4.0 因合同/版本不匹配被拒绝，磁盘已升级 0.6.0，Mac 锁定使 Package Manager 重载、审批及写入/运行验收尚未完成。0.9.0 远端标签已核对，Release/Actions API 对仓库本身也返回 404，线上更新/回滚仍未验收。详见[本轮验收](traces/cocos-cli-0.10.0-goal-20261020.md)、[测试合同](../../tools/cocos-creator-agent-cli/references/2x/14-project-test-runner.md)与[后续能力评估](cocos-cli-vcs-template-assets-evaluation-20261020.md)。
+日期：2026-10-18（2026-10-21 更新）。范围：Codex / Claude Code → 独立 CLI（MCP 配置与 Skills 安装）→ 本机桥接 → Creator 2.4.15 项目扩展。当前 CLI 0.10.6 本地 tarball/隔离安装、59 项 CLI 测试、Creator Provider 审批写入/取消/恢复及同一预览会话的键盘输入断言已有验收证据。Dashboard、Creator、扩展与 CLI 已核对到同一 `tank` 工程；`doctor` 9/9 通过。Codex/Claude 的 CLI 配置及 52 项 Skills 已安装，但桌面 Host 工具目录重载仍待核验。GitHub Actions 因 billing locked 未执行；0.10.6 Release 资产、线上自更新/回滚未验收。详见[本轮验收](traces/cocos-cli-0.10.0-goal-20261020.md)、[测试合同](../../tools/cocos-creator-agent-cli/references/2x/14-project-test-runner.md)与[后续能力评估](cocos-cli-vcs-template-assets-evaluation-20261020.md)。
 
 ## 目标链路
 
@@ -151,43 +151,46 @@ MCP 当前源码定义 36 个固定工具（3 个基础、25 个 Creator 命令�
 ### 当前基线
 
 - 产品边界：`tools/cocos-creator-agent-cli/` 是独立本机产品，拥有 MCP server、Codex/Claude 原生配置命令、Creator Skills 安装器、Creator 扩展与桥接；`plugins/cocos-creator-agent/` 只保留旧式插件安装的 CLI 引导 Skill。Creator 原生 CocosAgent 已停用并移除，不属于运行依赖。
-- 仓库源码版本：CLI `0.9.0`（Provider 命令发现源码）、bootstrap 插件 `0.8.0`、Creator 项目扩展 `0.6.0`。0.9.0 已在本机打包并安装到隔离 prefix，也从 0.6.0 本地 tarball 升级成功；完整回执及 SHA-256 见[0.9.0 CLI 验收轨迹](traces/cocos-creator-cli-0.9.0-package-acceptance-20261020.md)。公开 Release/在线自更新、桌面 Host 重载、Creator Provider 实机尚未完成。Creator 固定命令合同仍只支持 `2.4.15`，CLI 需要 Node.js 20+；预览证据需要本机 Chromium。
+- 仓库源码版本：CLI `0.10.6`，bootstrap 插件 `0.8.0`，Creator 项目扩展 `0.6.2`。0.10.6 候选 tarball 为 98 文件、176,237 字节，SHA-256 `034ffe4d373837555362ac1d0e2c7e6bdc23b7267506b5711f4380995777d34c`；已隔离安装并通过候选 CLI/MCP/Creator 同会话预览验收。GitHub Actions 因账户 billing locked 未运行；GitHub Release、线上自更新与回滚仍未完成。Creator 固定命令合同仍只支持 `2.4.15`，CLI 需要 Node.js 20+；预览证据需要本机 Chromium。
 - Skills：51 项 Creator 工作流 Skills 与 1 项 CLI Skill（共 52 项）及 Creator 2.4.x 参考资料已移入 CLI 包作为唯一维护源；CLI `skill install` 安装到 Codex/Claude 原生目录。5 项厂商 SDK Skills 仍在可选包 `plugins/cocos-creator-agent-sdk/`，后续需决定是否让 CLI 安装器也管理可选 SDK 包。
-- MCP：CLI `mcp serve` 内置 stdio server，`mcp configure/list/status/remove` 负责 Host 注册与检查；固定工具数仍是 36；在线项目别名与 Creator Provider 命令共用总工具数 128 上限。CLI 0.8.0 stdio 与 Codex/Claude CLI 隔离配置有历史验收；0.9.0 的 Provider 动态目录和当前桌面 Host 工具目录仍未验收。
+- MCP：CLI `mcp serve` 内置 stdio server，`mcp configure/list/status/remove` 负责 Host 注册与检查；无 Provider 时固定目录为 36 项，在线项目别名与 Creator Provider 命令共用总工具数 128 上限。0.10.6 候选包 `initialize`、38 项动态 `tools/list` 和同实例 `cocos_project_info` 实际调用已通过；Codex/Claude 配置均为 `configured`，桌面 Host 会话重载仍待验收。
 - Creator 命令：5 条只读命令有历史真实回执；当前源码再提供精确节点读取、脚本创建和节点 active 修改的计划/提交/恢复、单节点组件挂载和公开标量属性设置计划/提交/恢复、Creator 编译与 Console 诊断、批准启动 Web 预览及浏览器截图/观察/同会话输入断言。组件挂载拒绝隐式 `requireComponent`；标量写入绑定 Creator 同一扩展会话和具体组件对象 ID；组件构造函数与属性 setter 可能运行项目/引擎代码，Creator 审批框会显示提醒。UI 事件、组件资源引用与对象/数组字段仍无写工具。项目工具别名可暴露合同中的 read/plan 命令及需 Creator 审批的 write/control 命令，但不能注册自定义 Editor 执行代码。异步任务持久化并支持取消与显式恢复，组件写入中断后改走 reconcile、不重放。以上新增能力目前只有源码接线与测试，不能称为实机通过。
-- 已验收：历史 0.8.x/0.9.0 本地包与隔离安装；当前 CLI 0.10.0 的 41 项测试、94 文件 tarball、真实全局安装与 Codex/Claude 用户配置及 Skills 刷新。安装后真实 Node 子进程的通过/失败/修复、JSON/JUnit 和 watch 已验收。真实 Creator 旧扩展握手确认工程身份，升级后尚未重载；不能把 Node/接口测试描述为 Creator 实机通过。详见[本轮完整记录](traces/cocos-cli-0.10.0-goal-20261020.md)。
+- 已验收：历史 0.8.x/0.9.0 本地包与隔离安装；CLI 0.10.6 的 59 项测试、98 文件候选 tarball、隔离安装和真实全局安装；Codex/Claude 配置及 Skills 状态；Creator 2.4.15 扩展 `0.6.2` 与合同匹配；Provider 动态 MCP 工具、审批写入、取消拒绝和恢复读回；候选 CLI 同一预览会话中的画布聚焦、Space 输入、`counter === 1` 与无错误断言。GitHub Release/自更新、桌面 Host 新会话目录和完整 tank 基线恢复仍未完成。详见[本轮完整记录](traces/cocos-cli-0.10.0-goal-20261020.md)。
 
 ### 阶段计划
 
 **P1：验收 CLI 自带的 MCP 与 Skill 分发**
 
 - **已通过：** CLI MCP 与 Skill 生命周期自动化测试，共 26/26；Codex/Claude 真实 CLI 在隔离用户目录中的 `mcp configure/status/remove`；Codex dry-run；0.8.0 tarball 隔离安装、52 个 Skills 与 13 份参考资料安装和相对链接检查。详细输入/回执见[0.8.0 验收轨迹](traces/cocos-creator-cli-0.8.0-mcp-skills-acceptance-20261020.md)。
-- **待完成：** 在真实 Codex、Claude 桌面 Host 重载后检查新工具目录、Creator 实例配对和只读命令。隔离原生命令配置成功不能代表 Host 会话已加载该配置。
-- **待完成：** `cocos-creator-agent-cli-v0.9.0` 标签已推送；验收 GitHub Actions 结果、Release tarball 与 SHA-256 资产、CLI 自更新检查/安装和回滚到指定版本。当前连接器无法读取该仓库的 workflow/Release 状态，不能据此确认线上发布。
-- **仍需补全：** 在隔离 Creator 项目验收扩展安装清单、状态、无漂移更新/卸载、用户修改拒绝、`--force` 备份，以及 `doctor --project-root/--instance` 的工程身份和能力目录诊断。通用 `doctor` 的 CLI/扩展/合同/bridge 健康检查已通过（6/6；当前 0 Creator 实例）。锁定 CLI、插件、Creator 扩展和合同指纹的兼容规则。
+- **已通过本机包/实机部分：** CLI 0.10.6 候选包隔离安装；Codex/Claude `mcp status` 为 configured，52 项 Skills 已安装；当前 Creator 实例 `doctor` 9/9 通过，候选 MCP 返回 38 项动态工具并能调用同一工程。
+- **待完成：** GitHub Actions 因 billing locked 未运行。候选 tarball 与 SHA-256 已本地产生，但没有上传到 Release；线上校验、自更新和指定版本回滚均未验收。浏览器安全策略阻止打开 `chrome://extensions`，并禁止用其他 UI/命令绕过文件 URL 权限限制；没有上传文件或提交 Release。
+- **仍需补全：** 已在隔离 Creator 项目完成扩展安装、更新、漂移拒绝、强制备份与卸载；`doctor` 本次对真实 Creator 实例 9/9 通过。还需检查实际损坏/陈旧实例与桌面 Host 重载，并锁定 CLI、Creator 扩展和合同指纹的发布兼容规则。
 - 验收条件：Codex 与 Claude 都由 CLI 配置启动同一 MCP server，工具/schema 与 catalog 一致；重复配置安全；Skill 内容/参考链接和 hash 一致；CLI 缺失、版本不兼容、Creator 断连时可诊断且不猜测目标工程。
 
-**P2：Creator 写入最小闭环（源码实现资源创建、节点 active、组件挂载与标量属性设置；实机验收受工程身份阻塞）**
+**P2：Creator 写入最小闭环（写入命令有源码实现；Provider 审批流程已实机验收，固定脚本/场景写入仍未完整验收）**
 
 - 已实现源码切片：脚本资源创建；活动场景中一个既有节点的 `active` 属性修改。两者都先生成 operation ID/hash 和前态，Creator 原生确认后重核目标；节点修改经 Scene Script 应用，调用 `scene:stash-and-save` 并回读内存状态，项目外日志支持 reconcile。场景保存 IPC 无文档化的完成回执，故当前实现不声称磁盘持久化验证。
 - 已新增源码切片：组件挂载计划/提交/恢复；公开标量属性计划/提交/恢复。挂载只接受 Creator 已加载类注册表中的组件类，拒绝隐式依赖且要求目标类型当前不存在；属性写入只允许精确组件实例上 Creator 声明的公开 string/number/boolean 字段，绑定同一扩展会话。二者均经 Creator 原生对话框确认后经 Scene Script 应用并请求保存；中断后只 reconcile，不重放。组件实例不明或 Creator session 改变时必须人工核对。
-- 尚未完成：当前 Dashboard 对项目名 `tank` 报告路径 `/Users/youjunmao/WORK/Cocos_Engine`、Creator 2.4.15、状态“已打开”；与锁定路径 `/Users/youjunmao/WORK/Cocos_Engine/tank` 不一致，故本轮没有进入 Creator、调用项目工具或读写工程。待身份一致后再验收真实 Creator 2.4.15 重载与 MCP 目录、四类写入的审批取消/目标漂移/桥接与 Creator 重启恢复、场景保存确认和磁盘回读。UI 事件绑定、资源引用/对象数组字段修改和自动补偿命令仍未实现。
+- **已通过 Provider 写入流程：** 对 `tank` 临时 Provider 基线值 0，经 Creator 原生审批写入 37；取消写入 99 后工具返回拒绝且值保持 37；经候选 MCP 写入 64 后再经 Creator 审批恢复为 0。该结果证明 Provider 的审批/取消/回读路径，不等价于下列固定场景/脚本写入命令的全面验收。
+- 尚未完成：Creator 实机验收固定命令的脚本资源创建、节点 `active`、组件挂载与公开标量属性修改，包含目标漂移、Creator 重启恢复、场景保存确认与磁盘回读。UI 事件绑定、资源引用/对象数组字段修改和自动补偿命令仍未实现。Provider 样本和验收场景/脚本仍留在 `tank`，整体基线尚未恢复。
 - 验收条件：未点 Creator 确认不产生项目差异；点确认后身份回执与读回哈希一致；已有目标或合同不符时拒绝；取消不写入；中断后仅通过原 operation ID reconcile，不重放不确定写入。不得把源代码检查说成实机通过。
 
-**P3：运行反馈与同会话复验（源码接线完成，Creator 实机验收受工程身份阻塞）**
+**P3：运行反馈与同会话复验（同会话基本输入/断言已通过；诊断、构建与故障注入仍需验收）**
 
 - Creator 扩展通过 Builder 与 Editor Console/AssetDB 事件维护有界诊断序列。诊断回执包含来源、时间、序列游标；编译结束事件不代表成功，需查看具体失败日志/导入失败。
 - 经 Creator 原生确认后，`scene:play-on-device` 请求预览；桥接启动单独隔离的 Chromium，并校验运行场景名与 UUID 后返回 `previewSessionId`。本地浏览器需要 Chromium，可配置 `COCOS_CREATOR_AGENT_BROWSER`。
 - 同会话支持 Console/运行状态读取、PNG 截图、refresh、有限键盘和 canvas 点击，以及 scene/node/Console 声明式断言。刷新不创建新 session ID；失去 Creator session 或场景 UUID 对不上时拒绝。
 - CLI `creator watch` 接受最多 32 个工程内文件，稳定改动后刷新原预览会话并重跑同一组 smoke-test 断言，输出 NDJSON 事件。它是运行时持续回归，不是 Creator 单元测试 runner。源码与路径边界测试已通过；0.9.0 本地 tarball 已包含该能力，但公开 Release 状态未核实，也未在 Creator 实机运行。
-- **待实机验收：** Creator default preview 窗口与独立 Chromium 的打开行为、编译错误/Console 事件形状、渲染和截图质量、同会话输入效果、项目网络副作用边界、浏览器退出/Creator 重启/桥接重启后的清理。`preview.stop` 只停 Agent 浏览器，Creator 预览服务不会被扩展关闭。
+- **已通过：** Creator 2.4.15 上候选 CLI 启动 Agent 管理的 Chromium 预览，经 Creator 审批后在同一 session 点击画布、发送 Space；回执断言 `counter === 1` 与 `no-errors` 均通过，截图显示 `Count: 1`。
+- **待验收：** 编译失败与 Console 事件的诊断回读、构建/测试机器结果、真实渲染边界与项目网络副作用、浏览器退出/Creator 重启/桥接重启后的清理。`preview.stop` 只停 Agent 浏览器，Creator 预览服务不会被扩展关闭。
 - 验收条件：日志/截图/断言都绑定同一 Creator 实例、场景和浏览器会话；没有浏览器回执时不报告功能通过。
 
-**P4：项目级 Skills 与 Editor 命令扩展（声明式 Provider 已接源码，Creator 实机待验收）**
+**P4：项目级 Skills 与 Editor 命令扩展（Provider 发现、MCP 暴露及审批调用已实机通过）**
 
 - 已实现源码：`.cocos-agent/tools.json` 可注册合同命令别名；CLI/MCP 发现时返回注册哈希并继承命令 schema、访问级别和审批要求。允许 read/plan 与 Creator 原生审批的 write/control；拒绝自定义 schema、回调代码和未审批副作用。MCP 忽略项目标题/描述，避免把不可信项目文案写入动态工具定义。
 - 已实现源码：Creator 2.4.15 项目扩展可在 `package.json` 声明有限 schema 命令，通过主进程 `cocosAgentDescribe` / `cocosAgentInvoke` IPC 被实时发现和调用；CLI 提供 `extension commands list` / `extension command call`；MCP 为在线项目命令生成动态工具。读/计划/写/控制按 access 分级，写/控制必须在 Creator 原生确认；命令合同、schema、工程路径、provider 指纹在调用前后重核，输入双侧校验，写/控制中断后不重放。
-- 待验收：在隔离 Creator 2.4.15 项目安装一个最小 Provider 扩展，确认加载握手、动态 MCP 工具、read/plan 回执、拒绝输入和 write/control 审批/取消；再验证扩展重载、注册变化、provider 冲突/缺失、桥接/Creator 中断。Provider 代码运行在 Creator 主进程，不受 schema sandbox；只能安装并调用可信扩展。项目 Skill 的可信来源与版本/哈希、Codex/Claude 按需加载仍待完善。
+- **已通过实机切片：** `tank` 中临时 Provider 经 Creator 扩展加载后由 CLI/MCP 发现；CLI read、Creator 原生审批 write、取消拒绝、MCP 动态工具调用与恢复读回均通过。Provider 指纹、命令目录哈希和每次回执记录在本轮 trace。
+- 待验收：扩展重载、注册变化、provider 冲突/缺失、桥接/Creator 中断。Provider 代码运行在 Creator 主进程，不受 schema sandbox；只能安装并调用可信扩展。项目 Skill 的可信来源与版本/哈希、Codex/Claude 按需加载仍待完善。
 - 验收条件：项目工具和扩展命令能被当前 Creator 实例发现；陈旧指纹、未知工具、未声明输入和未批准副作用拒绝；项目 Skill 与 Provider 声明不能扩大 Host/Creator 权限。
 
 **P5：任务审阅、checkpoint 与恢复（异步任务骨架已接源码）**
@@ -203,6 +206,6 @@ MCP 当前源码定义 36 个固定工具（3 个基础、25 个 Creator 命令�
 
 ### 已完成的 2026-10-19 验收
 
-CLI 独立包从本地目录与 tarball 安装到隔离 prefix，在同一 prefix 验证升级；MCP 从 CLI 获取唯一命令目录/schema 并委托调用。Codex 与 tank Creator 2.4.15 的只读实机链路已通过，Creator 临时脚本样本已删除并恢复资源基线。完整回执见上方三份轨迹。此阶段未运行写入、预览控制或游戏行为验收。
+CLI 独立包从本地目录与 tarball 安装到隔离 prefix，在同一 prefix 验证升级；MCP 从 CLI 获取唯一命令目录/schema 并委托调用。Codex 与 tank Creator 2.4.15 的只读实机链路已通过。2026-10-21 又完成 Provider 审批/取消/恢复、候选 MCP 动态工具调用及同会话输入断言；候选 tarball 尚未发布，tank 临时 Provider 与验收场景/脚本尚待恢复。完整回执见[本轮轨迹](traces/cocos-cli-0.10.0-goal-20261020.md)。
 
-CLI 0.10.0 增加项目测试计划、Node/Creator Provider/预览适配、JSON/JUnit、目录新增/重命名/删除观察与受影响套件重跑；详见[测试运行器合同](../../tools/cocos-creator-agent-cli/references/2x/14-project-test-runner.md)。Creator Provider 与预览适配当前只有接口测试，尚待实机验收。
+CLI 0.10.0 起增加项目测试计划、Node/Creator Provider/预览适配、JSON/JUnit、目录新增/重命名/删除观察与受影响套件重跑；详见[测试运行器合同](../../tools/cocos-creator-agent-cli/references/2x/14-project-test-runner.md)。CLI 测试 59/59 通过；Creator 项目测试计划未在 `tank` 配置，Creator 构建/测试结果和故障诊断闭环仍需实机验收。
