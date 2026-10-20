@@ -4,7 +4,7 @@ Standalone local CLI for Cocos Creator 2.4.15 projects. It can run without Codex
 
 ## Requirements
 
-Development source is now 0.10.4, adding project Node/Creator/preview test adapters, JSON/JUnit reports, directory/affected-suite watch, rejected-handshake diagnostics, Creator 2.4.15 preview scene-asset identity matching, runtime component-property assertions compatible with Creator 2.4, and foregrounding of the Agent-managed preview before input. Creator extension 0.6.2 includes the approval and Creator 2.4.15 runtime compatibility fixes. The 0.9.0 tag exists remotely; online Release assets and self-update acceptance are still unverified. A locally installed package is not evidence of a public release.
+Development source is now 0.10.5, adding read-only `vcs doctor` checks for Creator asset metadata integrity, duplicate UUIDs, tracked cache/output paths, and Git conflict markers. Creator test adapters, JSON/JUnit reports, directory/affected-suite watch, rejected-handshake diagnostics, and Creator 2.4.15 preview feedback are also included. Creator extension 0.6.2 includes the approval and Creator 2.4.15 runtime compatibility fixes. The 0.9.0 tag exists remotely; online Release assets and self-update acceptance are still unverified. A locally installed package is not evidence of a public release.
 
 - Node.js 20 or newer.
 - Cocos Creator 2.4.15 for editor-connected commands.
@@ -47,6 +47,7 @@ cocos-creator-agent skill refresh codex
 cocos-creator-agent catalog --format json
 cocos-creator-agent doctor
 cocos-creator-agent doctor --project-root /absolute/path/to/project
+cocos-creator-agent vcs doctor --git-root /absolute/path/to/repository --project-root /absolute/path/to/project
 cocos-creator-agent instances list
 cocos-creator-agent extension install --project-root /absolute/path/to/project
 cocos-creator-agent extension status --project-root /absolute/path/to/project
@@ -68,6 +69,8 @@ cocos-creator-agent tasks resume --instance <instance-id> --id <task-id>
 ```
 
 `doctor` is read-only and does not start the bridge. It checks the Node.js and bundled contract versions, bridge health, connected Creator instances, and—when `--project-root` is supplied—the project extension and path identity.
+
+`vcs doctor` is a separate read-only Git/filesystem diagnostic. It requires the exact Git repository root and a Creator project root inside it; it does not stage, rewrite, or restore files. It reports tracked `library/`, `temp/`, `local/`, or `build/` paths, missing or orphaned asset `.meta` sidecars, duplicate main/subasset UUIDs parsed from JSON metadata, and paired Git conflict markers in bounded text files. Findings are diagnostic evidence, not an AssetDB import receipt; symlinks are not followed and scan limits are included in the JSON result.
 
 `instances list` also reports recent authenticated but incompatible extension handshakes under `rejectedInstances`, including the extension-reported project path and mismatch reasons. These diagnostic records have no command session or capabilities. `doctor` flags them as errors instead of reporting only zero instances.
 

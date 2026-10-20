@@ -30,6 +30,7 @@ Use the standalone `cocos-creator-agent` command for MCP setup, Creator Skill in
 - Use `instances list` before selecting an editor. Pass the exact returned `instanceId` for `capabilities` or `call`; never infer the target from a project name or foreground window.
 - Use `bridge status`, `bridge start`, and `bridge stop` for local bridge operations.
 - Use `doctor [--project-root <absolute-path>] [--instance <instance-id>]` for read-only CLI, bridge, extension, and Creator identity diagnostics. It does not start a stopped bridge.
+- Use `vcs doctor --git-root <absolute-path> --project-root <absolute-path>` for read-only Git/Creator asset integrity checks. Supply the exact Git repository root and a project nested within it; the report does not change the Git index or project files and is not a live AssetDB import receipt.
 - Use `extension install --project-root <absolute-path>` only for an explicit project installation request. Verify the exact project path before installing and let Creator reload the package before checking the live instance.
 - Use `extension status` before update or uninstall. Both operations refuse local changes by default. `--force` preserves a backup under `~/.cocos-creator-agent/extension-backups/`; report the backup path and ask the user before deleting it.
 - Reload the exact Creator project after extension install, update, or uninstall; then confirm the live instance reports the expected version and project path.

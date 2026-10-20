@@ -48,4 +48,20 @@ SSH `git ls-remote` 确认远端 main 已含 `bff2faa71677023b2e54eae037b0d6faa4
 - 独立临时 Creator 项目生命周期：CLI 安装 `0.6.2` 后 `status` 显示 managed、无 drift；把受管理样本版本设为 `0.6.1` 后正常更新到 `0.6.2`；在 `main.js` 注入 drift 后，默认更新以 `EXTENSION_LOCAL_CHANGES:main.js` 拒绝；`--force` 更新成功并生成备份 `/Users/youjunmao/.cocos-creator-agent/extension-backups/96f4b12e9a496267/1792508215992-0.6.2-59059d51`，已读回确认备份保留 drift 原文；随后卸载成功、status 报 `installed:false`，临时项目已清理。这个生命周期项目未在 Creator UI 加载，不能替代实机重载验收。
 - 用 CLI 0.10.4 再次执行 `self-update --check --version 0.9.0`，仍退出 2，返回 `CLI_RELEASE_HTTP_404`；线上 Release tarball、SHA-256、自更新与回滚仍不能验收。
 - **待继续的实机检查：** 最终 CLI 0.10.4 的预览批准窗口出现时 Mac 已锁定；按 Ctrl-C 取消等待中的启动，没有绕过锁屏。锁屏前的 0.10.3 输入断言为 `counter=0`（未通过），0.10.4 修复尚未运行到实时断言；锁屏后 `doctor` 观察到 0 个连接的 Creator 实例。解锁后重新核对 Dashboard/Creator/扩展身份，再启动预览，用同一 session 验证 `counter=1` 与无新 Console 错误，并恢复临时 Provider 与场景/脚本基线。
-- GitHub 0.9.0 Release 资产、自更新与回滚仍因远端 API 404/凭据不可用而未验收；本地 tarball 不代表公开发布。未提交 Git。
+- GitHub 0.9.0 Release 资产、自更新与回滚仍因远端 API 404/凭据不可用而未验收；本地 tarball 不代表公开发布。本记录已随 `e9191c8` 提交；后续新增的 Creator 临时验收文件和 `.DS_Store` 变更未提交。
+
+## 2026-10-20 后续续验：桥接恢复与 Provider 阻塞
+
+- 再次确认系统锁屏状态；原生应用清单不可用。Creator Agent MCP 与 CLI 的实例列表均返回 `instances: []`、`rejectedInstances: []`。不能在当前状态重载临时 Provider、批准预览或恢复场景。
+- 用户授权继续后，通过提升权限的 CLI 恢复本机桥接：bridge ID `8b8cbfe4-0359-44e8-8609-84e477286bd1`，loopback `127.0.0.1`；提升权限的 `doctor --project-root .../tank` 显示合同/协议匹配，CLI 0.10.4、扩展 0.6.2、指纹 `e4efd9a1ad472fa74b233159ba6fc811626d35f8268a7a193d326910e76cfa47`，7 项通过、1 项项目实例警告、0 项错误。Creator 实例仍为 0。
+- 默认沙箱下对用户级桥接目录的访问返回 `EPERM`；提升权限调用只用于恢复桥接及读取诊断/实例状态。桥接健康不等于 Creator 已连接，也不等于 Provider 已加载。
+- `creator test --project-root .../tank --list` 返回 `ENOENT`，因为该工程没有 `.cocos-agent` 测试计划；不创建测试配置来掩盖本轮 Provider 实机验收的缺口。
+- 运行时验收样本仍在磁盘：`assets/CocosCliAcceptance20261020.ts/.meta`、`assets/CocosCliAcceptance20261020.fire/.meta` 及 `packages/cocos-cli-acceptance-provider/`。本轮未改写这些样本；Creator 连接恢复后应先完成最终版 0.10.4 同 session 预览输入/断言，再通过 Creator AssetDB/UI 恢复基线并核对只剩预期扩展安装文件。
+- 本次在线 GitHub Release 页面读取也返回 cache-miss；没有新增线上发布或更新证据。发布资产、自更新/回滚和 Creator 实机验收继续标为未完成。
+
+## 2026-10-20 离线推进：VCS 完整性诊断
+
+- CLI 源码版本升至 0.10.5，新增只读 `vcs doctor --git-root <绝对路径> --project-root <绝对路径>`。显式校验 Git 仓库根与其内 Creator 工程路径，扫描 Git 跟踪的 Creator 缓存/构建目录、`assets/` 文件和目录的 `.meta` 配对、JSON metadata 主/子资源 UUID 重复，以及有成对起止符的文本冲突标记。扫描不跟随符号链接，报告文件/总大小上限和跳过情况，不运行 `git add` 或写工程文件。
+- 临时 Git 仓库覆盖干净结果、缺失/孤立 `.meta`、重复 UUID、跟踪缓存、冲突标记、Git/project root 校验；测试前后核对 Git index 哈希、`git status` 和所有样本哈希，均未变化。新增 CLI JSON 路由测试。
+- `npm test` 默认沙箱下 52 项通过、3 项本机回环集成测试因 `listen EPERM` 失败；按审批提升权限重跑后 **55/55 通过**。最终 0.10.5 tarball 为 98 个文件、175,292 字节，SHA-256 `7213acaca6fee9d017a2d101a1010aa5f56c8435e2bb11f1888597c93e382263`，确认包含 `vcs-integrity.mjs`；隔离安装后的 0.10.5 在临时干净 Git/Creator 工程上返回 `ok: true`、0 findings。这是源码/临时夹具证据，不是 Creator AssetDB 验收。全局 CLI 仍为 0.10.4，未发布或升级全局安装。
+- VCS/模板/资源包评估文档已更新：场景/Prefab 语义差异、模板、资源包仍在计划中；无自动场景合并。

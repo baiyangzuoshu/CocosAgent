@@ -11,6 +11,7 @@ import { runDoctor } from './doctor.mjs';
 import { runCreatorWorkflow } from './creator-workflows.mjs';
 import { startProjectFileWatch } from './creator-watch.mjs';
 import { loadTestPlan, runTestPlan, watchTestPlan } from './creator-tests.mjs';
+import { runVcsDoctor } from './vcs-integrity.mjs';
 import { configureMcp, mcpStatus, supportedMcpClients } from './mcp/configure.mjs';
 import { availableSkills, installSkills, listSkillStatus, showSkill } from './skills.mjs';
 
@@ -63,6 +64,7 @@ async function main() {
       '  mcp configure <codex|claude-code> [--local] [--force] [--dry-run] | list | status <client> | remove <client> | serve',
       '  skill list [<codex|claude-code>] [--local] | show [<skill-name>|--list] (default: cocos2-cli) | install <client> [--local] [--skill <name>] [--force] | refresh <client> [--local] [--force]',
       '  doctor [--project-root <absolute-path>] [--instance <instance-id>]',
+      '  vcs doctor --git-root <absolute-path> --project-root <absolute-path>',
       '  bridge start | status | stop',
       '  extension install --project-root <absolute-path>',
       '  extension status --project-root <absolute-path>',
@@ -186,6 +188,12 @@ async function main() {
   }
   if (group === 'doctor') {
     const report = await runDoctor({ packageInfo, projectRoot: value('--project-root'), instanceId: value('--instance') });
+    print(report);
+    if (!report.ok) process.exitCode = 1;
+    return;
+  }
+  if (group === 'vcs' && action === 'doctor') {
+    const report = runVcsDoctor({ gitRoot: value('--git-root'), projectRoot: value('--project-root') });
     print(report);
     if (!report.ok) process.exitCode = 1;
     return;
