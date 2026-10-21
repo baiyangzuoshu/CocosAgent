@@ -73,6 +73,7 @@ function inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid, sceneAssetR
         return fail('SCENE_COMPOSITION_NODE_SET_MISMATCH');
     let verifiedComponentCount = 0;
     let verifiedButtonEventCount = 0;
+    let verifiedPrefabInstanceCount = 0;
     const serializedComponents = new Map();
 
     for (const [nodeId, expected] of expectedNodes) {
@@ -81,6 +82,18 @@ function inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid, sceneAssetR
         const found = nodeRows.get(expected.uuid);
         if (!observed || !found || observed.uuid !== expected.uuid || observed.name !== expected.name
             || found.record._name !== expected.name) return fail('SCENE_COMPOSITION_NODE_MISMATCH', { nodeId });
+        const expectedPrefabUuid = expected.prefabUuid || null;
+        if ((observed.prefabUuid || null) !== expectedPrefabUuid) return fail('SCENE_COMPOSITION_PREFAB_READBACK_MISMATCH', { nodeId });
+        if (expectedPrefabUuid) {
+            const prefabInfo = resolveRef(found.record._prefab, records);
+            const prefabAsset = prefabInfo && prefabInfo.asset;
+            const prefabRoot = prefabInfo && resolveRef(prefabInfo.root, records);
+            if (!prefabInfo || prefabInfo.__type__ !== 'cc.PrefabInfo' || !prefabAsset
+                || prefabAsset.__uuid__ !== expectedPrefabUuid || prefabRoot !== found.record)
+                return fail('SCENE_COMPOSITION_PREFAB_LINK_MISMATCH', { nodeId, expectedPrefabUuid });
+            verifiedPrefabInstanceCount += 1;
+        } else if (own(found.record, '_prefab') && found.record._prefab != null)
+            return fail('SCENE_COMPOSITION_UNEXPECTED_PREFAB_LINK', { nodeId });
         const parentRecord = resolveRef(found.record._parent, records);
         const parentUuid = parentRecord && parentRecord._id;
         const expectedParentUuid = expected.parentRef.startsWith('new:')
@@ -88,7 +101,8 @@ function inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid, sceneAssetR
             : expected.parentRef.slice('uuid:'.length);
         if (!parentRecord || parentUuid !== expectedParentUuid || observed.parentUuid !== expectedParentUuid)
             return fail('SCENE_COMPOSITION_PARENT_MISMATCH', { nodeId });
-        if (found.record._active !== true) return fail('SCENE_COMPOSITION_ACTIVE_STATE_MISMATCH', { nodeId });
+        if (!expectedPrefabUuid && found.record._active !== true)
+            return fail('SCENE_COMPOSITION_ACTIVE_STATE_MISMATCH', { nodeId });
 
         const transform = expectedState && expectedState.transform;
         const trs = found.record._trs && found.record._trs.array;
@@ -110,7 +124,7 @@ function inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid, sceneAssetR
 
         const expectedComponents = plan.request.components.filter((component) => component.nodeRef === `new:${nodeId}`);
         const componentRefs = found.record._components;
-        if (!Array.isArray(componentRefs) || componentRefs.length !== expectedComponents.length)
+        if (!Array.isArray(componentRefs) || (!expectedPrefabUuid && componentRefs.length !== expectedComponents.length))
             return fail('SCENE_COMPOSITION_COMPONENT_COUNT_MISMATCH', { nodeId });
         const rawComponents = componentRefs.map((reference) => resolveRef(reference, records));
         if (rawComponents.some((component) => !component))
@@ -182,7 +196,7 @@ function inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid, sceneAssetR
         return fail('SCENE_BUTTON_EVENT_COUNT_MISMATCH');
     return { verified: true, sceneUuid, sceneUrl: sceneAssetRow.url,
         nodeCount: expectedNodes.size, componentCount: verifiedComponentCount,
-        buttonEventCount: verifiedButtonEventCount };
+        buttonEventCount: verifiedButtonEventCount, prefabInstanceCount: verifiedPrefabInstanceCount };
 }
 
 module.exports = { inspectSceneComposition };

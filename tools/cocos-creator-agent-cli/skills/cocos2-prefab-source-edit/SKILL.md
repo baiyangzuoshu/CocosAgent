@@ -7,13 +7,13 @@ description: Inspect a Cocos Creator 2.4.x Prefab and use a Creator-aware edit o
 
 ## Scope
 
-Inspect a Cocos Creator 2.4.x Prefab. This package does not provide a Creator Prefab editing command; do not directly patch serialized Prefab files unless a live Creator-aware contract explicitly supports the exact fields and readback.
+Inspect a Cocos Creator 2.4.x Prefab and use a Creator-aware edit only when the live tool contract explicitly supports it. The CLI's `creator.prefab.source.inspect` reads the saved `.prefab` and `.meta` bound to an exact AssetDB UUID; it does not observe unsaved Prefab edit-mode state. This package still has no Prefab source edit command; do not directly patch serialized Prefab files.
 
 ## Workflow
 
 1. Identify the exact project root from the Host workspace and verify the Creator patch from project metadata or an editor integration. Determine the active scene/target only through tools that report it; never infer it from a neighboring project.
 2. Inspect the relevant source, asset, scene or runtime evidence and record exact identities/current state before proposing a change.
-3. Use AssetDB to find the Prefab only if the current Creator integration exposes that query; otherwise locate it through the project files and treat the result as discovery, not Creator readback.
+3. Use `creator.prefab.source.inspect` to bind the saved Prefab by exact AssetDB UUID and review its source/meta hashes, node identities, hierarchy, and supported component summary. Pass `nodeUuid` when focusing the response on one node in a large Prefab.
 4. If no live Creator-aware edit contract exists for the requested field, stop before writing and provide the exact manual Creator steps. Do not hand-edit serialized Prefab data as a fallback.
 5. When a supported edit contract exists, record the Prefab identity and current state, apply only its allowed fields, and read the same Prefab back through Creator.
 6. On a contract conflict or changed source identity, stop and reconcile before any retry.

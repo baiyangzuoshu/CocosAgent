@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const extensionPackage = require('./package.json');
 const confirmDialog = require('./approval.cjs');
 const { inspectSceneComposition } = require('./scene-persistence.cjs');
+const { inspectPrefabSource: inspectPrefabSourceData } = require('./prefab-source.cjs');
 const { scanAssetReferences } = require('./asset-references.cjs');
 const contract = require('./command-contract.json');
 const { normalizeProvider, validateArguments, canonical, PROVIDER_ID, COMMAND_ID } = require('./provider-contract.cjs');
@@ -26,6 +27,8 @@ const MAX_ASSET_TRACKED_BYTES = 128 * 1024 * 1024;
 const MAX_TEXTURE_META_BYTES = 16 * 1024;
 const MAX_SCENE_SERIALIZATION_BYTES = 16 * 1024 * 1024;
 const MAX_SCENE_META_BYTES = 16 * 1024;
+const MAX_PREFAB_SERIALIZATION_BYTES = 8 * 1024 * 1024;
+const MAX_PREFAB_META_BYTES = 16 * 1024;
 const SCENE_SAVE_READBACK_TIMEOUT_MS = 15000;
 const OPERATION_FILE_MAX_BYTES = 512 * 1024;
 const OPERATION_TTL_MS = 15 * 60 * 1000;
@@ -1949,6 +1952,46 @@ async function createPrefabPlan(input) {
             editorAuthored: true, note: 'Creation uses the Creator Scene panel IPC; no serialized Prefab source is fabricated or patched.' } };
 }
 
+async function inspectPrefabSourceCommand(input) {
+    if (!Editor.Project || !Editor.Project.path || !Editor.assetdb
+        || typeof Editor.assetdb.queryAssets !== 'function') throw coded('PREFAB_SOURCE_INSPECT_UNAVAILABLE');
+    if (editorVersion() !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (typeof input.prefabUuid !== 'string'
+        || !/^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$/.test(input.prefabUuid))
+        throw coded('PREFAB_UUID_INVALID');
+    const currentRoot = projectRoot();
+    const row = await queryAssetByUuid(input.prefabUuid);
+    if (!row || !row.url.startsWith('db://assets/') || !/\.prefab$/i.test(row.url)
+        || (row.importer && row.importer !== 'prefab')) throw coded('PREFAB_ASSET_IDENTITY_MISMATCH');
+    const prefabPath = row.url.slice('db://assets/'.length);
+    const prefabFile = safeProjectFile(prefabPath, /\.prefab$/i);
+    const metaFile = safeProjectFile(`${prefabPath}.meta`);
+    const prefabBytes = readStableProjectFile(prefabFile, MAX_PREFAB_SERIALIZATION_BYTES, 'PREFAB_SERIALIZATION_FILE_UNSAFE');
+    const metaBytes = readStableProjectFile(metaFile, MAX_PREFAB_META_BYTES, 'PREFAB_META_FILE_UNSAFE');
+    const state = inspectPrefabSourceData({ prefabBytes, metaBytes, prefabUuid: input.prefabUuid });
+    if (!state.available) throw coded(state.reason || 'PREFAB_SOURCE_INSPECT_FAILED');
+    let nodes = state.nodes;
+    let truncated = nodes.length > 100;
+    if (input.nodeUuid !== undefined) {
+        if (typeof input.nodeUuid !== 'string') throw coded('PREFAB_NODE_UUID_INVALID');
+        nodes = nodes.filter((node) => node.nodeUuid === input.nodeUuid);
+        if (nodes.length !== 1) throw coded('PREFAB_NODE_NOT_FOUND');
+        truncated = false;
+    } else nodes = nodes.slice(0, 100);
+    const freshRow = await queryAssetByUuid(input.prefabUuid);
+    if (!freshRow || freshRow.url !== row.url || freshRow.uuid !== row.uuid
+        || projectRoot() !== currentRoot || editorVersion() !== EXPECTED_CREATOR_VERSION)
+        throw coded('PREFAB_ASSET_IDENTITY_CHANGED');
+    const freshPrefabBytes = readStableProjectFile(prefabFile, MAX_PREFAB_SERIALIZATION_BYTES, 'PREFAB_SERIALIZATION_FILE_UNSAFE');
+    const freshMetaBytes = readStableProjectFile(metaFile, MAX_PREFAB_META_BYTES, 'PREFAB_META_FILE_UNSAFE');
+    if (fileHash(freshPrefabBytes) !== fileHash(prefabBytes) || fileHash(freshMetaBytes) !== fileHash(metaBytes))
+        throw coded('PREFAB_SOURCE_CHANGED_DURING_INSPECT');
+    return { ...state, nodes, truncated, projectRoot: currentRoot, creatorVersion: editorVersion(), prefabPath,
+        targetUrl: row.url, importer: typeof row.importer === 'string' ? row.importer : null,
+        assetType: typeof row.type === 'string' ? row.type : null,
+        sourceSha256: fileHash(prefabBytes), metaSha256: fileHash(metaBytes), sourceScope: 'saved-disk-only' };
+}
+
 function confirmPrefabCreate(operation) {
     if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
     const plan = operation.plan;
@@ -2994,6 +3037,11 @@ async function createSceneComponentAddPlan(input) {
 
 async function composeAssetIdentities(request) {
     const refs = new Map();
+    for (const node of request.nodes) if (node.prefabUuid) {
+        const previous = refs.get(node.prefabUuid);
+        if (previous && previous.assetClass !== 'Prefab') throw coded('SCENE_COMPOSE_ASSET_CLASS_CONFLICT');
+        refs.set(node.prefabUuid, { assetUuid: node.prefabUuid, assetClass: 'Prefab' });
+    }
     for (const component of request.components) for (const property of component.properties) {
         const value = property.value;
         if (value && typeof value === 'object' && typeof value.assetUuid === 'string') {
@@ -3007,8 +3055,29 @@ async function composeAssetIdentities(request) {
         const row = await queryAssetByUuid(ref.assetUuid);
         if (!row || typeof row.url !== 'string' || typeof row.uuid !== 'string' || row.uuid !== ref.assetUuid)
             throw coded('SCENE_COMPOSE_ASSET_NOT_FOUND');
-        output.push({ ...ref, url: row.url, type: typeof row.type === 'string' ? row.type : null,
-            importer: typeof row.importer === 'string' ? row.importer : null });
+        const identity = { ...ref, url: row.url, type: typeof row.type === 'string' ? row.type : null,
+            importer: typeof row.importer === 'string' ? row.importer : null };
+        if (ref.assetClass === 'Prefab') {
+            if (!row.url.startsWith('db://assets/') || !/\.prefab$/i.test(row.url))
+                throw coded('SCENE_COMPOSE_PREFAB_ASSET_TYPE_MISMATCH');
+            const relative = row.url.slice('db://assets/'.length);
+            const prefabFile = safeProjectFile(relative, /\.prefab$/i);
+            const metaFile = safeProjectFile(`${relative}.meta`);
+            const prefabBytes = readStableProjectFile(prefabFile, MAX_PREFAB_SERIALIZATION_BYTES, 'SCENE_COMPOSE_PREFAB_FILE_UNSAFE');
+            const metaBytes = readStableProjectFile(metaFile, MAX_PREFAB_META_BYTES, 'SCENE_COMPOSE_PREFAB_META_UNSAFE');
+            let meta;
+            try { meta = JSON.parse(metaBytes.toString('utf8')); JSON.parse(prefabBytes.toString('utf8')); }
+            catch (_) { throw coded('SCENE_COMPOSE_PREFAB_SERIALIZATION_INVALID'); }
+            if (!meta || meta.uuid !== ref.assetUuid || meta.importer !== 'prefab')
+                throw coded('SCENE_COMPOSE_PREFAB_META_IDENTITY_MISMATCH');
+            const state = await callScene('prefabAssetState', { prefabUuid: ref.assetUuid }, 30000);
+            if (!state || state.available !== true || state.prefabUuid !== ref.assetUuid
+                || state.assetClassName !== 'cc.Prefab') throw coded(state && state.reason || 'SCENE_COMPOSE_PREFAB_LOAD_FAILED');
+            identity.prefabSha256 = fileHash(prefabBytes);
+            identity.prefabMetaSha256 = fileHash(metaBytes);
+            identity.prefabRootName = state.rootName;
+        }
+        output.push(identity);
     }
     output.sort((left, right) => left.assetUuid.localeCompare(right.assetUuid));
     return output;
@@ -3046,7 +3115,8 @@ async function createSceneComposePlan(input) {
                     assetClass: property.value.assetClass } : property.value })) })),
         buttonEvents: request.buttonEvents, assetIdentities, expiresAt: plan.expiresAt,
         diff: { action: 'compose-scene', scene: plan.sceneName,
-            create: expectedState.createdNodes.map((item) => ({ uuid: item.uuid, name: item.name, parentUuid: item.parentUuid, transform: item.transform })),
+            create: expectedState.createdNodes.map((item) => ({ uuid: item.uuid, name: item.name, parentUuid: item.parentUuid,
+                transform: item.transform, ...(item.prefabUuid ? { prefabUuid: item.prefabUuid } : {}) })),
             addComponents: request.components.map((item) => ({ nodeRef: item.nodeRef, className: item.className })),
             bindButtonEvents: request.buttonEvents.map((item) => ({ buttonRef: item.buttonRef,
                 handlerRef: item.handlerRef, component: item.handlerComponentClassName, handler: item.handler })),
@@ -4344,7 +4414,8 @@ function confirmSceneCompose(operation) {
         `Scene: ${plan.sceneName} (${plan.sceneUuid})`,
         `Operation: ${operation.operationId}`,
         '',
-        `Create nodes:\n${plan.request.nodes.map((node) => `- ${node.name} (${node.uuid}) under ${node.parentRef}; transform ${JSON.stringify(node.transform || {})}`).join('\n')}`,
+        `Create nodes:\n${plan.request.nodes.map((node) => `- ${node.name} (${node.uuid}) under ${node.parentRef}`
+            + `${node.prefabUuid ? `; instantiate Prefab ${node.prefabUuid}` : ''}; transform ${JSON.stringify(node.transform || {})}`).join('\n')}`,
         `\nAdd components:\n${plan.request.components.map((item) => `- ${item.className} on ${item.nodeRef} with ${item.properties.length} properties`).join('\n') || '- none'}`,
         `\nButton handlers:\n${plan.request.buttonEvents.map((item) => `- ${item.buttonRef} → ${item.handlerComponentClassName}.${item.handler} on ${item.handlerRef}`).join('\n') || '- none'}`,
         `\nAsset references:\n${plan.assetIdentities.map((item) => `- ${item.assetClass} ${item.assetUuid} (${item.url})`).join('\n') || '- none'}`,
@@ -4362,6 +4433,7 @@ function sceneComposeReceipt(operation, readback) {
         creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
         sceneName: plan.sceneName, sceneUuid: plan.sceneUuid,
         createdNodes: readback && readback.nodes || [], componentCount: plan.request.components.length,
+        prefabInstanceCount: plan.request.nodes.filter((item) => !!item.prefabUuid).length,
         buttonEventCount: plan.request.buttonEvents.length, assetIdentities: plan.assetIdentities,
         sceneSaveRequestSent: !!operation.sceneSaveRequestSent, sceneSaveCompletionConfirmed: false,
         scenePersistenceConfirmed: !!(operation.scenePersistenceReadback && operation.scenePersistenceReadback.verified),
@@ -4385,6 +4457,7 @@ function sceneComposeReadbackMatches(operation, readback) {
         const node = nodesById.get(expectedNode.id);
         if (!node || node.uuid !== expectedNode.uuid || node.name !== expectedNode.name
             || node.parentUuid !== expectedNode.parentUuid || typeof node.nodePath !== 'string') return false;
+        if ((node.prefabUuid || null) !== (expectedNode.prefabUuid || null)) return false;
         for (const key of ['x', 'y', 'z', 'scaleX', 'scaleY', 'angle', 'width', 'height']) {
             if (!Number.isFinite(node.transform && node.transform[key])
                 || Math.abs(node.transform[key] - expectedNode.transform[key]) > 0.001) return false;
@@ -4462,7 +4535,8 @@ async function inspectSceneComposePersistence(operation) {
     return { verified: true, sceneUuid: plan.sceneUuid, sceneUrl: identity.url,
         scenePath: relative, sceneSha256: fileHash(sceneBytes), metaSha256: fileHash(metaBytes),
         nodeCount: inspection.nodeCount, componentCount: inspection.componentCount,
-        buttonEventCount: inspection.buttonEventCount, verifiedAt: new Date().toISOString() };
+        buttonEventCount: inspection.buttonEventCount, prefabInstanceCount: inspection.prefabInstanceCount,
+        verifiedAt: new Date().toISOString() };
 }
 
 async function waitForSceneComposePersistence(operation, timeoutMs = SCENE_SAVE_READBACK_TIMEOUT_MS) {
@@ -4908,6 +4982,8 @@ function capabilityList() {
             && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
         'creator.prefab.create.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
             && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.prefab.source.inspect': !!(Editor && Editor.Project && Editor.Project.path && Editor.assetdb
+            && typeof Editor.assetdb.queryAssets === 'function'),
         'creator.script.read': !!(Editor && Editor.Project && Editor.Project.path),
         'creator.scene.snapshot': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
         'creator.scene.node.read': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
@@ -5414,6 +5490,7 @@ function execute(command, input, context) {
     if (command === 'creator.prefab.create.plan') return createPrefabPlan(input);
     if (command === 'creator.prefab.create.commit') return commitPrefabCreate(input, context);
     if (command === 'creator.prefab.create.reconcile') return reconcilePrefabCreate(input);
+    if (command === 'creator.prefab.source.inspect') return inspectPrefabSourceCommand(input);
     if (command === 'creator.script.read') return Promise.resolve(readScript(input));
     if (command === 'creator.scene.snapshot') return callScene('snapshot', { maxNodes: 100 });
     if (command === 'creator.scene.node.read') return callScene('nodeState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);

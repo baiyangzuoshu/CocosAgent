@@ -1038,6 +1038,28 @@ function validUuid(value) {
         || /^[A-Za-z0-9+/]{22,23}$/.test(value));
 }
 
+function prefabAssetState(params, callback) {
+    if (!params || !validUuid(params.prefabUuid) || !cc || !cc.assetManager
+        || typeof cc.assetManager.loadAny !== 'function' || typeof cc.Prefab !== 'function') {
+        callback(null, { available: false, reason: 'SCENE_PREFAB_ASSET_INPUT_INVALID' });
+        return;
+    }
+    cc.assetManager.loadAny(params.prefabUuid, (error, asset) => {
+        if (error || !asset) {
+            callback(null, { available: false, reason: 'SCENE_PREFAB_ASSET_LOAD_FAILED' });
+            return;
+        }
+        const assetUuid = asset._uuid || asset.uuid;
+        if (!(asset instanceof cc.Prefab) || assetUuid !== params.prefabUuid
+            || !asset.data || !(asset.data instanceof cc.Node)) {
+            callback(null, { available: false, reason: 'SCENE_PREFAB_ASSET_IDENTITY_MISMATCH' });
+            return;
+        }
+        callback(null, { available: true, prefabUuid: assetUuid, assetClassName: 'cc.Prefab',
+            rootName: String(asset.data.name || '').slice(0, MAX_NAME) });
+    });
+}
+
 function transformState(node) {
     const position = typeof node.getPosition === 'function' ? node.getPosition() : { x: node.x, y: node.y, z: 0 };
     return { x: Number(position.x) || 0, y: Number(position.y) || 0, z: Number(position.z) || 0,
@@ -1094,6 +1116,12 @@ function compositionState(params) {
             || created.has(item.id) || typeof item.name !== 'string' || !item.name.trim() || item.name.length > MAX_NAME
             || !validUuid(item.uuid) || item.uuid === scene.uuid || plannedUuids.has(item.uuid))
             return { available: false, reason: 'SCENE_COMPOSE_NODE_INVALID' };
+        const prefabUuid = item.prefabUuid === undefined ? null : item.prefabUuid;
+        if (prefabUuid !== null && !validUuid(prefabUuid))
+            return { available: false, reason: 'SCENE_COMPOSE_PREFAB_UUID_INVALID' };
+        if (prefabUuid && (!item.transform || !['x', 'y', 'z', 'scaleX', 'scaleY', 'angle', 'width', 'height']
+            .every((field) => Object.prototype.hasOwnProperty.call(item.transform, field))))
+            return { available: false, reason: 'SCENE_COMPOSE_PREFAB_TRANSFORM_REQUIRED' };
         const transform = normalizeTransform(item.transform);
         if (!transform.available) return transform;
         if (created.has(`uuid:${item.uuid}`)) return { available: false, reason: 'SCENE_COMPOSE_NODE_UUID_DUPLICATE' };
@@ -1108,7 +1136,7 @@ function compositionState(params) {
         parentNames.add(item.name);
         reservedNames.set(item.parentRef, parentNames);
         const row = { id: item.id, uuid: item.uuid, name: item.name, parentRef: item.parentRef,
-            parentUuid, transform: transform.value };
+            parentUuid, transform: transform.value, prefabUuid };
         plannedUuids.add(item.uuid);
         created.set(item.id, row);
         created.set(`uuid:${item.uuid}`, row);
@@ -1124,6 +1152,7 @@ function compositionState(params) {
         const node = resolveRef(item.nodeRef, true);
         if (!node.available) return node;
         if (!node.created) return { available: false, reason: 'SCENE_COMPOSE_COMPONENT_TARGET_MUST_BE_CREATED' };
+        if (node.row.prefabUuid) return { available: false, reason: 'SCENE_COMPOSE_PREFAB_COMPONENTS_ARE_READ_ONLY' };
         const resolved = componentClass(item.className);
         if (!resolved.available) return resolved;
         if (resolved.requiresComponent) return { available: false, reason: 'SCENE_COMPOSE_COMPONENT_HAS_UNAPPROVED_REQUIREMENT' };
@@ -1177,6 +1206,10 @@ function compositionState(params) {
         const targetNode = resolveRef(event.handlerRef, true);
         if (!buttonNode.available) return buttonNode;
         if (!targetNode.available) return targetNode;
+        if (buttonNode.created && buttonNode.row.prefabUuid)
+            return { available: false, reason: 'SCENE_COMPOSE_PREFAB_BUTTON_MUTATION_UNSUPPORTED' };
+        if (targetNode.created && targetNode.row.prefabUuid)
+            return { available: false, reason: 'SCENE_COMPOSE_PREFAB_HANDLER_TARGET_UNSUPPORTED' };
         if (!buttonNode.created || !classByNode.get(event.buttonRef)?.has('cc.Button'))
             return { available: false, reason: 'SCENE_COMPOSE_BUTTON_COMPONENT_REQUIRED' };
         const handler = componentClass(event.handlerComponentClassName);
@@ -1199,7 +1232,8 @@ function compositionState(params) {
     existingNodes.sort((left, right) => left.nodeUuid.localeCompare(right.nodeUuid));
     return { available: true, sceneUuid: scene.uuid, sceneName: String(scene.name || '').slice(0, MAX_NAME),
         existingNodes, createdNodes: params.nodes.map((item) => ({ id: item.id, uuid: item.uuid,
-            parentUuid: created.get(item.id).parentUuid, name: item.name, transform: created.get(item.id).transform })),
+            parentUuid: created.get(item.id).parentUuid, name: item.name, transform: created.get(item.id).transform,
+            ...(created.get(item.id).prefabUuid ? { prefabUuid: created.get(item.id).prefabUuid } : {}) })),
         componentCount: params.components.length, buttonEventCount: params.buttonEvents.length };
 }
 
@@ -1238,7 +1272,8 @@ function compositionReadback(params) {
         });
         nodes.push({ id: item.id, uuid: located.state.nodeUuid, name: located.state.nodeName,
             nodePath: located.state.nodePath, parentUuid: parent && parent.uuid || null,
-            transform: transformState(located.node), components });
+            transform: transformState(located.node), prefabUuid: located.node._prefab && located.node._prefab.asset
+                ? located.node._prefab.asset._uuid || located.node._prefab.asset.uuid || null : null, components });
     }
     return { available: true, sceneUuid: params.sceneUuid, nodes };
 }
@@ -1250,9 +1285,17 @@ function compose(params, callback) {
         return callback(null, { available: false, reason: 'SCENE_COMPOSE_PRECONDITION_FAILED', preflight: state, mutationStarted: false });
     const assets = new Map();
     const refs = new Map();
+    const addAssetRef = (assetUuid, assetClass) => {
+        const old = refs.get(assetUuid);
+        if (old && old.assetClass !== assetClass)
+            throw new Error('SCENE_COMPOSE_ASSET_CLASS_CONFLICT');
+        refs.set(assetUuid, { assetUuid, assetClass });
+    };
+    for (const node of params.nodes) if (node.prefabUuid) addAssetRef(node.prefabUuid, 'Prefab');
     for (const component of params.components) for (const property of component.properties) {
         const value = property.value;
-        if (value && typeof value === 'object' && typeof value.assetUuid === 'string') refs.set(value.assetUuid, value);
+        if (value && typeof value === 'object' && typeof value.assetUuid === 'string')
+            addAssetRef(value.assetUuid, value.assetClass);
     }
     const loadAsset = (ref) => new Promise((resolve, reject) => {
         if (!cc.assetManager || typeof cc.assetManager.loadAny !== 'function') { reject(new Error('SCENE_ASSET_MANAGER_UNAVAILABLE')); return; }
@@ -1279,9 +1322,12 @@ function compose(params, callback) {
         let mutationStarted = false;
         try {
             for (const item of params.nodes) {
-                const node = new cc.Node(item.name);
+                const prefab = item.prefabUuid ? assets.get(item.prefabUuid) : null;
+                if (prefab && (!cc || typeof cc.instantiate !== 'function')) throw new Error('SCENE_PREFAB_INSTANTIATE_UNAVAILABLE');
+                const node = prefab ? cc.instantiate(prefab) : new cc.Node(item.name);
                 if (!node || typeof node.addChild !== 'function') throw new Error('SCENE_NODE_CREATE_UNAVAILABLE');
                 node._id = item.uuid;
+                node.name = item.name;
                 const t = normalizeTransform(item.transform).value;
                 node.setPosition(t.x, t.y, t.z);
                 node.scaleX = t.scaleX;
@@ -1454,6 +1500,10 @@ module.exports = {
     compositionState(event, params) {
         try { event.reply(null, compositionState(params || {})); }
         catch (error) { event.reply({ code: 'SCENE_COMPOSE_PREFLIGHT_FAILED', message: String(error && error.message || error) }); }
+    },
+    prefabAssetState(event, params) {
+        try { prefabAssetState(params || {}, (error, result) => event.reply(error || null, result)); }
+        catch (error) { event.reply({ code: 'SCENE_PREFAB_ASSET_STATE_FAILED', message: String(error && error.message || error) }); }
     },
     compositionReadback(event, params) {
         try { event.reply(null, compositionReadback(params || {})); }
