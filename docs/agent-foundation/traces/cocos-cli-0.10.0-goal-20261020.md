@@ -138,3 +138,66 @@ SSH `git ls-remote` 确认远端 main 已含 `bff2faa71677023b2e54eae037b0d6faa4
 - CLI 测试此前已按本机回环权限范围重跑，59/59 通过。全局 MCP 当前固定目录为 36 项；候选 CLI 在线 Creator/Provider 实例存在时返回 38 项，目录数不同来自动态 Provider 工具，不视为合同漂移。
 - 线上发布仍阻塞：GitHub Actions 因账户 billing locked 未执行；当前环境 `gh` 命令不存在。Chrome 浏览器安全策略拒绝导航到 `chrome://extensions`，明确禁止通过其他界面、命令、CDP 或浏览器表面绕过。用户已明确授权启用文件 URL 权限，但工具策略不允许执行这项被拒绝的权限操作；未上传 tarball、未创建 Release、未尝试改变权限。GitHub Release 上传、SHA-256 远端核对、线上自更新和回滚继续未验收。
 - 本轮未修改 tank 源码/场景，预览已停止；此前创建的 Provider 包和验收场景/脚本仍是工作区未提交内容，尚未恢复整个 tank 基线。需单独按 Creator AssetDB/UI 流程恢复，不能直接删除磁盘样本替代编辑器回执。
+
+## 2026-10-21 续验：脚本创建/编译与场景节点写入
+
+- 仍在已核对的 Creator 2.4.15 `tank` 实例（`d6c3577e-a25c-41be-a2c9-ba2d3ca83236`）上操作。通过 `creator.script.create.plan/commit` 创建临时脚本 `db://assets/CodexAcceptanceTemp20261021.ts`；Creator AssetDB UUID `2bab3a89-37d9-4335-a583-09f4169ed3e6`，源码 SHA-256 `b5010d54398cda96970e3fc4a3ec289070a2c61a3e377ea6a7d0e268346d48b4`，`.meta` SHA-256 `8592bf4571fe9a2cb389b470742ae3ef22e2e3b917cb0579285b34ec55dc5f5b`。`creator.script.read` 从同一 Creator AssetDB 回读源码和 UUID/哈希一致。
+- 对 Creator 2.4.15 执行 Web-Mobile debug build，输出在工程外 `/private/tmp/cocos-cli-script-create-build-20261021`。Creator Builder 日志到达 `build-finished`，CLI 最终退出码 0、`success: true`、未超时；输出 13 个文件，生成 JS 中能找到新脚本模块与装饰器注册。进程 stderr 另有弃用提示与 `Load profile failed: local://settings.json`，因此只记录构建命令成功和产物代码证据，不声称无警告。构建产物未放入 tank。
+- 场景写入测试目标为 `CocosCliAcceptance20261020/Canvas`（场景 UUID `33114787-cbbd-44e4-b9be-1d8c470bf4fa`，节点 UUID `fajmfI4k5PkbS2JhUsJP0d`）：操作 `19dcbbd8-5500-4b00-bf15-299e49ef29c9` 经 Creator 原生批准，把 active 从 true 改为 false；随后操作 `1c3c5fc8-8fb0-4bb6-91ac-b87a00e9f069` 经批准改回 true。两次写入均从同一 Creator 场景会话回读成功并请求保存，但 Creator 2.4 的保存 IPC 不返回完成确认，不能当作磁盘持久化证明。
+- 前态冲突验证：在 Canvas=false 时生成的过期计划 `52701015-9ea1-47d5-a439-797efc19cc34`，待另一计划已将 Canvas 恢复 true 后提交，命令返回 `OPERATION_PRECONDITION_FAILED`；reconcile 将其标记 `conflict`，无保存请求，观察状态 true。审批取消验证：计划 `938f2b30-505b-42b2-aa81-a41e27ea8aaf` 由 Agent 发起后在 Creator 原生框点 `Cancel`，工具返回 `OPERATION_NOT_APPROVED`，reconcile 标记 `cancelled`；最终 `creator.scene.snapshot` 回读 Canvas active=true。场景的内存状态回到本轮操作前值。
+- 按用户对指定临时脚本的操作时确认，在 Creator 资源管理器中删除 `db://assets/CodexAcceptanceTemp20261021.ts`；Creator AssetDB 搜索和 `creator.project.search` 随后均返回 0 条匹配。该条目的原 UUID 与源码/`.meta` SHA-256 已于删除前从 Creator 工具回执复核。
+- 按用户对明确列出的两个临时资源给出的授权，在 Creator 资源管理器中删除 `CocosCliAcceptance20261020.fire` 与 `CocosCliAcceptance20261020.ts`。删除过程中 Creator Console 曾显示 `[db-task][delete] Failed to load meta .../assets/CocosCliAcceptance20261020.fire.meta ... ENOENT`；这是编辑器 UI 中观察到的删除警告。随后 Creator AssetDB 和 `creator.project.search` 均对 `CocosCliAcceptance20261020`、`CodexAcceptanceTemp20261021` 返回 0 条。关闭并从 Dashboard 重新打开 `tank` 后，Creator 实例 `b1ac0426-e142-4449-9189-f4e8287620bd` 报告工程根 `/Users/youjunmao/WORK/Cocos_Engine/tank`、版本 2.4.15、扩展 0.6.2，活动场景为干净的 `New Node`（UUID `cfo6q9UJNL45fn3+Fw6SM9`）；场景快照只有默认根节点、Canvas 与 Main Camera，没有旧场景或 `cc_MissingScript`。重启后的 diagnostics 序列为 0、事件为空；因此只能记录编辑器 UI 曾出现删除警告，不能把它归为当前残留错误。
+- 临时 Provider 目录从 `tank/packages/cocos-cli-acceptance-provider/` 移至可恢复备份 `/private/tmp/cocos-cli-acceptance-provider-20261021`，没有删除备份。重启后 `creator.project.tools.list` 返回 `status: not-configured`、空工具目录，证明该 Provider 未被重新发现。构建后 diagnostics 在删除确认框等待期间曾超时，未取得该时点的 Console 回执。
+- GitHub Release 上传/线上自更新与回滚状态未变；GitHub Actions 仍受 billing lock 阻塞，Chrome 不允许通过其他入口绕过文件 URL 权限限制。本轮修改仅为本追踪文档；tank 内尚有此前验收改动，不纳入仓库暂存区。
+
+## 2026-10-21 续验：CLI 0.11.0 脚本修改闭环与扩展生命周期
+
+- 按仓库工作路由重新核对 Cocos Dashboard 与 Creator：Dashboard 的 `tank` 条目显示项目目录 `/Users/youjunmao/WORK/Cocos_Engine`，项目名 `tank`；Creator 扩展实时回报完整根路径 `/Users/youjunmao/WORK/Cocos_Engine/tank`，Creator 2.4.15，扩展 0.6.2，活动场景 `New Node`（UUID `cfo6q9UJNL45fn3+Fw6SM9`）。项目身份一致。Creator AssetDB 空查询返回 `total: 0`；本轮没有在 `tank` 创建或修改资产。
+- 通用 Editor 扩展命令发现/调用已存在于共享合同：`creator.extension.commands.list` 与 read/plan/write/control invoke 命令已实现，Provider 写入还需 Creator 原生批准。当前后续工作是补重载、漂移和断连恢复验收，不应再把“没有通用 Editor 命令执行”列为实现缺口。
+- 当前工作树将 CLI 版本设为 `0.11.0`、Creator 扩展设为 `0.7.0`。新增 `creator.script.modify.plan/commit/reconcile`：计划绑定目标路径、现有 AssetDB UUID/importer、当前源码 SHA-256、`.meta` SHA-256 和完整替换源码；提交通过 Creator 原生审批和第二次前态校验后调用 `Editor.assetdb.saveExists`，回读源码及 AssetDB 身份；旧源码保存在项目外，恢复需要新计划，不自动重试。`.meta` 不写入。诊断回执只报告编译游标后的 Creator 事件，事件未命名目标脚本时不归因给它；`compile-finished` 单独不证明编译成功。
+- 新增自动化测试覆盖完整 AssetDB 替换/读回/reconcile、`.meta` 保持、过期源码哈希、审批取消、计划后冲突、原生审批弹窗等待期间的并发源文件变化；扩展生命周期测试覆盖安装、0.6.2→0.7.0 更新、默认漂移拒绝、隔离 home 中的强制备份和卸载。完整 CLI 测试 **65/65 通过**；`node --check`、合同 JSON 解析和 `git diff --check` 通过。这些属于 CLI/模拟 AssetDB 证据，不是 Creator 实机修改。
+- 使用旧标签 `cocos-creator-agent-cli-v0.10.6` 的 CLI 在 `/private/tmp/cocos-cli-0.11.0-lifecycle/project` 安装受管理扩展 0.6.2；当前源码 CLI `extension status` 确认无本地漂移，`extension update` 将其更新至 0.7.0。手动制造的 `main.js` 漂移令 `changedFiles` 精确报告 `main.js`，默认 update 返回 `EXTENSION_LOCAL_CHANGES:main.js`。恢复该临时夹具后，当前 CLI 执行 uninstall 并由 status 确认未安装。此为临时项目 CLI 生命周期验收，没有启动 Creator 编辑器。
+- 候选包位于 `/private/tmp/cocos-cli-release-0.11.0/cocos-creator-agent-cli-0.11.0.tgz`：98 个条目、179,024 字节，SHA-256 `c55f0596946e02c501e971b0ba21ee9e0d867b8f91d56ce9959fcfd41229e1d9`，sidecar 与该值一致。隔离 prefix 安装返回 CLI `0.11.0`、目标 Creator `2.4.15`；`catalog --format json` 返回 33 条固定命令并包含三条 `creator.script.modify.*`。这是本地候选包验收，未发布。
+- Creator 实机写入仍未验收：`tank` 目前 AssetDB 没有现成 JS/TS 样本可供修改；为守住干净基线，本轮没有再创建新资源或更换项目内扩展。新命令的 Creator `saveExists`、Creator 2.4.15 编译事件关联和运行效果仍需在有明确临时脚本样本的编辑器会话中验证。
+- 线上发布仍阻塞：Chrome 中 0.10.6 Release 表单保留 `cocos-creator-agent-cli-v0.10.6` 标签与待附加资产，页面显示 billing 警告，按钮停在禁用的 `Publishing…`；没有可核实的 Release 成功页或线上资产。没有改动 Chrome 扩展权限，也没有尝试绕过策略。GitHub Actions 与 0.10.6 线上自更新/回滚继续未验收，0.11.0 不发布。
+- 本轮 npm 默认缓存 `/Users/youjunmao/.npm` 返回 root-owned 文件 `EPERM`，因此使用 `/private/tmp/cocos-cli-pack-cache` 和隔离安装 prefix；未递归修改系统 npm 缓存权限。仓库中 `.DS_Store` 与 `tank/packages/cocos-creator-agent-extension/` 的脏文件属于既有工作区状态，本轮未暂存、未提交、未覆盖。
+
+## 2026-10-21 续验：CLI/MCP 0.11.0 Creator 脚本修改实机闭环
+
+- 通过 Cocos Dashboard 项目列表核对 `tank`：项目名 `tank`，Dashboard 登记父目录 `/Users/youjunmao/WORK/Cocos_Engine`，Creator 2.4.15；Creator 与 MCP 随后报告完整工程根 `/Users/youjunmao/WORK/Cocos_Engine/tank`。退出旧 Creator 后从 Dashboard 打开该条目，避免把同目录下的 `tankwar`/`LinkUpClient` 当目标。
+- 用已验证的本地 tarball 将用户级全局 CLI 从 `0.10.6` 更新至 `0.11.0`，现有 Codex MCP 配置仍指向同一 CLI 路径。重启本机桥接后，健康回执为 CLI `0.11.0`、Creator `2.4.15`、扩展 `0.7.0`，合同 SHA-256 `fe71e1802c40965d9104d2c988637dfeced38313129fd0758d167271291c83df`。Creator 实例 `b88c2983-3caa-440f-874e-b70207afc1ef` 报告 `tank` 完整根路径；`doctor` 最终 9/9 通过、0 警告、0 错误；CLI 与 MCP 能力目录均见 33 条可用命令，包含三条 `creator.script.modify.*`。MCP 通过通用持久任务工具运行新修改命令。
+- Creator AssetDB 起始搜索为空。经 Creator 原生确认创建临时脚本 `db://assets/CodexScriptModifyAcceptance20261021.ts`：UUID `1cd69ee8-b073-49c4-9a26-307107494600`，TypeScript importer，初始源码 SHA-256 `3dbb38d38418fe5c9d1082118c282d7584e36e47a8bcbdacd8e4e41b525c4718`，`.meta` SHA-256 `4778426121dd5a28b4eaa5fdb710062dc17ebfa46b43128154c7e397d1e5cb26`。CLI 与 MCP 的 `script.read` 返回相同源码、UUID 和哈希。
+- CLI 生成修改计划 `93a6808d-daf4-4bf1-9017-8b7aad591544`，把公开数值从 `1` 改为 `2`，绑定前态源哈希、AssetDB UUID/importer 与 `.meta` 哈希；经 MCP `tasks.start` 提交后，在 Creator 原生对话框批准，任务 `a8fcf834-994b-4b09-ab51-dbd954f35b98` 完成。Creator AssetDB 回读哈希为 `07bb76a3b90492e5e9b2ba0183fd5132ce5aa8983699eb07828cc089f9e9156b`，UUID、importer、`.meta` 哈希均未变化。MCP reconcile 回读该操作为 completed。
+- 用 MCP 任务生成反向恢复计划 `4dd5636d-da06-483f-b575-1751acbcc367`，再由 CLI 提交，并经第二次 Creator 原生批准将源码恢复为初始字节。CLI 与 MCP 读回源哈希恢复为 `3dbb38d38418fe5c9d1082118c282d7584e36e47a8bcbdacd8e4e41b525c4718`，UUID/importer/`.meta` 哈希一致；MCP reconcile 观察到原始源码与元数据状态。
+- 前态防护负向检查：以 64 个零作为错误的 `expectedSourceSha256` 请求计划，CLI 拒绝并返回 `SCRIPT_SOURCE_PRECONDITION_FAILED`，没有生成写入操作。恢复写入回执仍标注 `compile.status: pending`；在 Creator 开发者菜单手动触发“编译脚本”后，诊断读取仍为 sequence 0、无 `compile-finished`/错误事件。Creator Console 截图只显示 `cloud-function unloaded`，因此源码修改/恢复已通过实机回读，编译结果仍不能判为通过。
+- 截至本记录更新时，临时脚本源码已恢复，但该唯一验收脚本仍在 `tank/assets/`。Creator 资源删除不可撤销；为恢复空工程，下一步需要在删除动作发生前再次确认，并从 Creator AssetDB/资源管理器删除后回读 0 项。未用磁盘直接删除伪装 Creator 回执。
+- 本地 0.11.0 tarball SHA-256 `c55f0596946e02c501e971b0ba21ee9e0d867b8f91d56ce9959fcfd41229e1d9` 已安装到全局 CLI；这是本机更新验收，不是线上发布。GitHub Release 页面仍显示 billing locked/发布按钮禁用，本机 GitHub MCP 能力目录没有创建 Release/上传资产接口；未发布 0.11.0，线上自更新/回滚仍未验收。
+
+## 2026-10-21 续验：验收资源清理与桥接复核
+
+- Creator UI 中选中 `db://assets/CodexScriptModifyAcceptance20261021.ts` 并显示永久删除警告；按用户对本次验收清理的授权确认后，通过 Creator 资源管理器删除。资源树已不再显示该脚本；随后 Creator AssetDB 全量搜索 `total: 0`，项目搜索该脚本名 `total: 0`，`script.read` 返回 `ENOENT`。删除只通过 Creator UI 执行，没有用磁盘操作伪造 Creator 回执。
+- 用户同时授权清理 `CocosCliAcceptance20261020.ts` 与 `CocosCliAcceptance20261020.fire`。Creator AssetDB 对两个完整名称分别搜索均返回 `total: 0`，项目搜索共同前缀亦为 `total: 0`；它们在本次清理前已不存在，因此没有重复删除。
+- 清理后 Creator MCP 仍报告实例 `b88c2983-3caa-440f-874e-b70207afc1ef`、工程根 `/Users/youjunmao/WORK/Cocos_Engine/tank`、Creator 2.4.15、扩展 0.7.0。活动场景 `New Node`（UUID `1apMQWcGJEA5Hek6MHPJtY`）快照仍为 3 个节点：根节点、Canvas、Main Camera。诊断 sequence 0、`latestCompile: null`、events 为空；编译结果仍未确认。
+- CLI 0.11.0 `bridge status` 报 bridge ID `d7523603-a0fa-473e-bb37-c0e41343df4a` 正在运行，扩展版本/协议/命令指纹匹配。受限终端沙箱首次执行 `doctor` 时无法访问 loopback；在允许访问已运行本机桥接的检查上下文中，`doctor --project-root .../tank --instance b88c2983-3caa-440f-874e-b70207afc1ef` 共 9 项通过、0 警告、0 错误，33/33 Creator 命令可用。
+- tank 源资源和场景恢复为默认空样本；项目级扩展源代码仍有本任务的 0.7.0 变更，另有未提交工作区内容。本次没有提交 Git，也没有触碰 `.DS_Store` 或其他未相关文件。
+
+## 2026-10-21 续验：Creator CLI Web-Mobile 构建负向验收
+
+- 使用已安装 CLI `0.11.0` 对已核实的 `tank`（Creator 2.4.15）执行 `creator build --platform web-mobile --debug`，指定新的外部输出目录 `/private/tmp/cocos-cli-web-mobile-acceptance-20261021`。原受限 shell 的首次启动在 AppKit 注册阶段触发 Creator `SIGABRT`，没有工程/输出变化；随后在允许本机 Creator 应用启动的上下文重试，Builder 初始化成功并通过桥接连接 tank。
+- Creator Builder 日志明确返回 `Build Failed: Failed to find start scene in scene list.`。CLI JSON 回执：`exitCode: 0`、`outputExists: false`、`timedOut: false`、`success: false`；stdout 含 Builder 初始化日志，stderr 含失败原因和 Creator 自身弃用/profile 警告。目标输出目录不存在。结论为：失败识别有效，但空 tank 没有可用于发布的已登记启动场景，本轮没有成功构建证据。
+- CLI 构建子进程短暂注册 Creator 实例 `6509cf8e-c51d-42a9-b6c4-16a8c5036788`，同为 tank、Creator 2.4.15/扩展 0.7.0，`activeScene: null`。该子进程结束后等待 45 秒实例 TTL；后续 MCP 实例列表和显式 CLI `doctor` 均只保留原交互实例 `b88c2983-3caa-440f-874e-b70207afc1ef`，doctor 9/9 通过、无警告/错误。
+- 构建后 Creator AssetDB 仍为空、活动场景仍为默认 `New Node`，tank 的 assets/settings/build 目录没有 Git 差异；没有为通过构建而改变用户工程基线。成功构建需要后续在 Creator 中创建并登记一个启动场景，再在指定外部输出目录重试。
+
+## 2026-10-21 续验：Builder 失败结构化回执
+
+- 对实际 Creator Builder 返回的失败记录：虽然 Creator 子进程退出码为 0，但 stderr 含 `Error: Build Failed: Failed to find start scene in scene list.`，且输出目录不存在；CLI 原回执 `success: false`。这验证了失败被识别，但原因此前只能从 stderr 中读取。
+- 更新 `creator-workflows.mjs`：解析 `Build Failed:` 日志，回传 `failureCode: CREATOR_BUILD_REPORTED_FAILURE` 与具体 `failureReason`；对有部分输出目录的情况仍以 Builder 显式失败为准。新增自动化回归用例模拟“退出码 0、输出目录存在、stderr 有 Builder 失败”，并断言不报告成功。
+- CLI 测试先在受限沙箱跑出 63/66；3 个集成测试因本机测试桥接 bind `127.0.0.1` 被 `EPERM`。随后在允许测试绑定本机回环的执行上下文运行完整 `npm test`，**66/66 通过**。
+- 重新打包并全局安装本地 CLI `0.11.0` 候选：`/private/tmp/cocos-cli-release-0.11.0-r1/cocos-creator-agent-cli-0.11.0.tgz`，98 个条目、179,198 字节，SHA-256 `496321bfb89a2ef2b62344cab2994b335307e4f030706050e71c4bec8c705407`；旁置 `.sha256` 文件。安装后全局版本仍为 0.11.0，已安装 `creator-workflows.mjs` 含新失败码；CLI `doctor --project-root .../tank --instance b88c2983-3caa-440f-874e-b70207afc1ef` 为 9/9 通过，33/33 命令可用。
+- 此次只对模拟 Builder 回执和 Creator 实际捕获的失败日志完成验证；没有为了成功构建而更改空 tank。成功构建仍需在 Creator 中登记 start scene，再重跑机器构建并核对产物。
+- 为把新回执规则随 CLI/Agent Skill 一起交付，同版本最终候选包在补充 README 与 `cocos2-cli` Skill 后重新打包：`/private/tmp/cocos-cli-release-0.11.0-r2/cocos-creator-agent-cli-0.11.0.tgz`，98 个条目、179,439 字节，SHA-256 `b3d7ba49a7c27442908ef2d1cae303d624e21f2efad872230ee4633b3368cf82`，旁置 SHA-256 文件。已全局重新安装；确认全局 `creator-workflows.mjs`、README 和 `cocos2-cli/SKILL.md` 均包含失败字段约定，CLI `doctor` 再次 9/9 通过、桥接只发现原 tank 实例。版本仍为 0.11.0；因为尚未公开发布，局部候选包可在保持该版本下刷新。
+- 实机 r2 回执还显示 Creator Builder 写出明确的“没有启动场景”错误后，Creator 进程继续运行到 CLI 的 360 秒超时。CLI 同时返回 `timedOut: true` 与 `failureReason`，但先前优先显示通用 `CREATOR_WORKFLOW_TIMEOUT`。修正优先级为：明确 Builder 失败先作为 `failureCode: CREATOR_BUILD_REPORTED_FAILURE`，同时保留 `timedOut: true`；新增超时与 Builder 错误并存的自动化用例。
+- 最终本地候选包 r3：`/private/tmp/cocos-cli-release-0.11.0-r3/cocos-creator-agent-cli-0.11.0.tgz`，98 个条目、179,445 字节，SHA-256 `3dddb3a8abde25b2d1d19d99898c8294260d796802d90cb05c0ff77f7ea004c3`，`.sha256` sidecar 一致。已覆盖式全局安装；版本 `0.11.0`。全量 CLI 测试 **67/67 通过**；最终本机 `doctor` 为 **8/8 通过**，0 警告、0 错误。此修正由针对真实 Builder 失败文本和超时状态的自动化回归验证，未再次启动 Creator 构建。
+- 2026-10-21 再验：工作树重新 `npm test`，沙箱模式下 3 个需要绑定 `127.0.0.1` 的桥接测试被 EPERM 拒绝；在允许本机回环绑定的执行上下文重跑后 **67/67 通过**。从当前工作树重打包得到 r4，仍是 98 个条目、179,445 字节，SHA-256 与 r3 完全相同：`3dddb3a8abde25b2d1d19d99898c8294260d796802d90cb05c0ff77f7ea004c3`。
+- 当前 Creator 2.4.15 实例仍报告工程 `/Users/youjunmao/WORK/Cocos_Engine/tank`、扩展 0.7.0、活动场景 `New Node`；MCP `creator.extension.commands.list` 异步任务完成，回执 `providers: []`，因此本轮只确认了发现命令正常返回，未验证第三方 Provider IPC 执行。临时验收脚本的 AssetDB 查询为 0，场景快照仍为默认三节点。
+- 最新 CLI `doctor --json` 返回 **8/8**、0 警告、0 错误，合同指纹 `fe71e1802c40965d9104d2c988637dfeced38313129fd0758d167271291c83df` 与实例一致。当前 GitHub Release 页面仍以 0.10.6 为 latest，并显示账号 billing 问题；本机 `gh` CLI 未安装，`cocos-creator-agent self-update --check` 返回 `fetch failed`，`git ls-remote` 返回 GitHub empty reply。故 0.11.0 仍是本地候选，尚无线上下载、安装、更新或回滚证据。

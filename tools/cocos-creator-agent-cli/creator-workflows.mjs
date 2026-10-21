@@ -160,11 +160,19 @@ export async function runCreatorWorkflow({ operation, projectRoot, creatorPath, 
       if (error) { reject(coded('CREATOR_PROCESS_START_FAILED', error.message || String(error))); return; }
       let outputExists = false;
       try { outputExists = fs.statSync(outputPath).isDirectory(); } catch (_) {}
+      const builderFailure = operation === 'build'
+        ? `${stderr}\n${stdout}`.match(/\bBuild Failed:\s*([^\r\n]+)/i)?.[1]?.trim().slice(0, 1000) || null
+        : null;
+      const failureCode = builderFailure ? 'CREATOR_BUILD_REPORTED_FAILURE'
+        : timedOut ? 'CREATOR_WORKFLOW_TIMEOUT'
+          : signal ? `CREATOR_PROCESS_${signal}`
+            : exitCode !== 0 ? `CREATOR_PROCESS_EXIT_${exitCode ?? 'UNKNOWN'}`
+              : !outputExists ? `CREATOR_${operation.toUpperCase()}_OUTPUT_MISSING` : null;
       const completedAt = new Date().toISOString();
       resolve({ operation, projectName: project.project.name || path.basename(project.root), projectRoot: project.root,
         creatorVersion: creator.creatorVersion, platform, outputPath, outputExists, toolchain,
         command: [creator.executable, ...args], exitCode, signal: signal || null, timedOut,
-        success: !timedOut && exitCode === 0 && outputExists,
+        success: failureCode === null, failureCode, failureReason: builderFailure,
         startedAt, completedAt, durationMs: Date.now() - startTime, stdout, stderr });
     };
     child.once('error', (error) => finish(error));

@@ -1,6 +1,6 @@
 # Cocos Creator 2.4.x 第三方 Agent Skill 系统
 
-日期：2026-10-18（2026-10-21 更新）。当前 Creator Skills 由独立 CLI 0.10.6 持有；真实 Codex/Claude 已安装 52 项 Skills 与参考资料并配置 CLI-owned MCP。CLI 59 项测试、98 文件本地候选包、Creator Provider 审批/取消/恢复和预览同会话输入断言已验收；GitHub Release、线上更新/回滚、桌面 Host 新工具目录重载和固定 Creator 写入闭环仍待完成。Creator 原生 CocosAgent 已移除，旧插件仅作 CLI 引导。另有 5 项可选 SDK Skills。
+日期：2026-10-18（2026-10-21 更新）。CLI 0.11.0 与 Creator 项目扩展 0.7.0 含 52 项 Skills；CLI 自动测试 67/67 通过。Creator 2.4.15 实机已验收脚本创建、批准式修改、恢复和哈希回读；当前空 `tank` 的 Web-Mobile 构建因未登记 start scene 而失败。CLI 已增加结构化 Builder 失败码，遇到 Builder 明确失败并且进程后续超时时保留两种信号；候选包已重新打包、全局安装，没有成功构建证据。GitHub Release、线上更新/回滚、桌面 Host 新工具目录重载仍待完成。Creator 原生 CocosAgent 已移除，旧插件仅作 CLI 引导。另有 5 项可选 SDK Skills。
 
 ## 产品边界
 
@@ -72,5 +72,5 @@
 
 1. 51 项 Creator 工作流 Skills、1 项 CLI Skill 与 Creator 2.x 参考资料已迁入 CLI 包；CLI `skill install` 负责选择性分发与漂移检测。CLI `mcp configure` / `mcp serve` 接管 Host 配置与工具协议。
 2. 旧式 `plugins/cocos-creator-agent/` 仅保留一个兼容引导 Skill；它的 Codex/Claude 元数据不再注册 MCP，也不分发工作流内容。
-3. CLI 0.10.6 的 59 项测试通过；候选 tarball 已隔离安装。真实 Codex/Claude 配置均指向全局 CLI，52 项 Skills 与参考资料已安装。候选 MCP 返回 38 项动态工具并可读取同一 Creator 实例；配置回执不代表桌面 Host 新工具目录已重载。
-4. Creator 2.4.15 上 Provider 审批写入、取消拒绝、恢复读回与候选 CLI 同会话键盘输入断言已通过；脚本/场景固定写入及编译/测试诊断仍待验收。GitHub Actions 因 billing locked 未运行，候选包与 SHA-256 尚未发布；Chrome 安全策略拒绝打开扩展权限页且不允许绕过，故线上 Release、自更新和回滚仍未通过。tank 的 Provider 与验收场景/脚本还未恢复基线。详见[最新验收](traces/cocos-cli-0.10.0-goal-20261020.md)。
+3. CLI 0.10.6 的 59 项测试通过；CLI 0.11.0 本地 tarball 已全局安装，隔离包含三条 `creator.script.modify.*` 命令；CLI 测试 67/67 通过。Creator 2.4.15 / 扩展 0.7.0 上已有脚本批准式修改/恢复、CLI 与 MCP 哈希回读及错误前态拒绝的实机证据。Creator 编译没有事件回执；空 `tank` Web-Mobile build 因无 start scene 失败，CLI 已用机器可读失败码覆盖 Builder 退出码为 0 的情形。Codex/Claude 配置均指向全局 CLI，52 项 Skills 与参考资料已安装。MCP 目录可读取同一 Creator 实例；配置回执不代表桌面 Host 新工具目录已重载。
+4. Creator 2.4.15 上 Provider 审批写入、取消拒绝、恢复读回与同会话输入断言已通过；脚本源文件修改/恢复切片也已实机验收。场景固定写入、编译成功、有效项目构建和测试诊断仍待验收。GitHub Actions 因 billing locked 未运行，候选包与 SHA-256 尚未发布；线上 Release、自更新和回滚仍未通过。tank 的验收脚本已通过 Creator 清理，AssetDB 为空，场景恢复默认 `New Node`；扩展 0.7.0 源码保留在工作区。详见[最新验收](traces/cocos-cli-0.10.0-goal-20261020.md)。

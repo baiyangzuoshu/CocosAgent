@@ -19,7 +19,7 @@ const MAX_FILES = 12000;
 const MAX_CODE_SCAN_BYTES = 32 * 1024 * 1024;
 const MAX_SCRIPT_BYTES = 128 * 1024;
 const MAX_WRITE_SOURCE_BYTES = 16 * 1024;
-const OPERATION_FILE_MAX_BYTES = 64 * 1024;
+const OPERATION_FILE_MAX_BYTES = 512 * 1024;
 const OPERATION_TTL_MS = 15 * 60 * 1000;
 const MAX_PROVIDER_PACKAGES = 16;
 const MAX_PROVIDER_COMMANDS = 128;
@@ -326,6 +326,39 @@ function readOperation(operationId) {
     return operation;
 }
 
+function readScriptModifyOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    if (!operation || typeof operation !== 'object' || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.script.modify' || !plan || typeof plan !== 'object'
+        || plan.operationId !== operationId || plan.operation !== operation.operation || typeof operation.planHash !== 'string'
+        || typeof plan.projectRoot !== 'string' || typeof plan.creatorVersion !== 'string'
+        || typeof plan.extensionVersion !== 'string' || typeof plan.contractFingerprint !== 'string'
+        || typeof plan.creatorInstanceId !== 'string' || typeof plan.scriptPath !== 'string'
+        || typeof plan.targetUrl !== 'string' || typeof plan.scriptUuid !== 'string' || typeof plan.importer !== 'string'
+        || typeof plan.metaSha256 !== 'string' || !plan.expectedBefore || typeof plan.expectedBefore !== 'object'
+        || typeof plan.expectedBefore.sourceSha256 !== 'string' || typeof plan.expectedBefore.metaSha256 !== 'string'
+        || plan.expectedBefore.metaSha256 !== plan.metaSha256
+        || typeof plan.expectedAfter !== 'object' || !plan.expectedAfter
+        || typeof plan.expectedAfter.sourceSha256 !== 'string' || !Number.isInteger(plan.expectedAfter.sourceBytes)
+        || !Number.isInteger(plan.compileCursor) || typeof plan.expiresAt !== 'string'
+        || typeof operation.source !== 'string' || typeof operation.beforeSource !== 'string'
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'completed',
+            'not-applied', 'needs-reconciliation', 'conflict'].includes(operation.status))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (fileHash(Buffer.from(operation.source, 'utf8')) !== plan.expectedAfter.sourceSha256
+        || Buffer.byteLength(operation.source, 'utf8') !== plan.expectedAfter.sourceBytes
+        || fileHash(Buffer.from(operation.beforeSource, 'utf8')) !== plan.expectedBefore.sourceSha256)
+        throw coded('OPERATION_SOURCE_HASH_MISMATCH');
+    return operation;
+}
+
 function readSceneOperation(operationId) {
     const filename = operationPath(operationId);
     let stat;
@@ -478,6 +511,264 @@ function createScriptPlan(input) {
         recovery: { operationId, sourceStoredOutsideProject: true, compensationAvailable: false,
             willRecord: ['Creator AssetDB UUID', 'importer', 'source SHA-256', '.meta SHA-256'],
             compensationCondition: 'AssetDB deletion is safe only while URL, UUID, source SHA-256, and .meta SHA-256 still match this operation receipt.' } };
+}
+
+async function currentScriptAsset(scriptPath) {
+    const readback = readScript({ scriptPath });
+    const targetUrl = `db://assets/${scriptPath}`;
+    const asset = await queryAssetByUrl(targetUrl);
+    if (!asset || typeof asset.uuid !== 'string' || asset.uuid !== readback.scriptUuid)
+        throw coded('SCRIPT_ASSETDB_IDENTITY_MISMATCH');
+    if (asset.importer && asset.importer !== readback.scriptType) throw coded('SCRIPT_ASSETDB_IMPORTER_MISMATCH');
+    return { ...readback, targetUrl, importer: asset.importer || readback.scriptType,
+        assetType: typeof asset.type === 'string' ? asset.type : null };
+}
+
+async function createScriptModifyPlan(input) {
+    if (!Editor.assetdb || typeof Editor.assetdb.saveExists !== 'function') throw coded('ASSETDB_SAVE_EXISTS_UNAVAILABLE');
+    const sourceBytes = Buffer.from(input.source, 'utf8');
+    if (sourceBytes.length > MAX_WRITE_SOURCE_BYTES || sourceBytes.toString('utf8') !== input.source || input.source.includes('\0'))
+        throw coded('SCRIPT_SOURCE_INVALID');
+    const current = await currentScriptAsset(input.scriptPath);
+    if (current.sourceSha256 !== input.expectedSourceSha256) throw coded('SCRIPT_SOURCE_PRECONDITION_FAILED');
+    if (current.source === input.source) throw coded('SCRIPT_SOURCE_NO_CHANGE');
+    const createdAt = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + OPERATION_TTL_MS).toISOString();
+    const operationId = uuid();
+    const plan = {
+        operationId,
+        operation: 'creator.script.modify',
+        projectRoot: projectRoot(),
+        creatorVersion: editorVersion(),
+        extensionVersion: extensionPackage.version,
+        contractFingerprint: CONTRACT_FINGERPRINT,
+        creatorInstanceId: INSTANCE_ID,
+        scriptPath: input.scriptPath,
+        targetUrl: current.targetUrl,
+        scriptUuid: current.scriptUuid,
+        importer: current.importer,
+        assetType: current.assetType,
+        metaSha256: current.metaSha256,
+        expectedBefore: { sourceSha256: current.sourceSha256, metaSha256: current.metaSha256 },
+        expectedAfter: { sourceSha256: fileHash(sourceBytes), sourceBytes: sourceBytes.length },
+        compileCursor: diagnosticSequence,
+        expiresAt,
+    };
+    const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
+        status: 'planned', createdAt, planHash: planFingerprint(plan), source: input.source,
+        beforeSource: current.source, plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
+        projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        scriptPath: plan.scriptPath, targetUrl: plan.targetUrl, scriptUuid: plan.scriptUuid,
+        importer: plan.importer, expectedBefore: plan.expectedBefore, expectedAfter: plan.expectedAfter,
+        compileCursor: plan.compileCursor, expiresAt,
+        diff: { action: 'replace-script-source', targetUrl: plan.targetUrl,
+            beforeSha256: plan.expectedBefore.sourceSha256, afterSha256: plan.expectedAfter.sourceSha256,
+            metaPreserved: true },
+        sourcePreview: input.source,
+        recovery: { operationId, priorSourceStoredOutsideProject: true, automaticRetry: false,
+            compensationAvailable: false,
+            compensationCondition: 'Restore the recorded prior source only through a new approved plan after reading the current source hash.' } };
+}
+
+function verifyScriptModifyIdentity(operation) {
+    const plan = operation.plan;
+    if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
+    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+        throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
+    if (plan.extensionVersion !== extensionPackage.version || plan.contractFingerprint !== CONTRACT_FINGERPRINT)
+        throw coded('OPERATION_CONTRACT_MISMATCH');
+    if (plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (fileHash(Buffer.from(operation.source, 'utf8')) !== plan.expectedAfter.sourceSha256
+        || fileHash(Buffer.from(operation.beforeSource, 'utf8')) !== plan.expectedBefore.sourceSha256)
+        throw coded('OPERATION_SOURCE_HASH_MISMATCH');
+}
+
+async function verifyScriptModifyPrecondition(operation) {
+    const plan = operation.plan;
+    const current = await currentScriptAsset(plan.scriptPath);
+    if (current.targetUrl !== plan.targetUrl || current.scriptUuid !== plan.scriptUuid
+        || current.importer !== plan.importer || current.metaSha256 !== plan.metaSha256
+        || current.metaSha256 !== plan.expectedBefore.metaSha256
+        || current.sourceSha256 !== plan.expectedBefore.sourceSha256)
+        throw coded('SCRIPT_MODIFY_PRECONDITION_FAILED');
+    return current;
+}
+
+function confirmScriptModify(operation) {
+    if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
+    const plan = operation.plan;
+    const detail = [
+        `Project: ${plan.projectRoot}`,
+        `Creator: ${plan.creatorVersion}`,
+        `Asset: ${plan.targetUrl}`,
+        `UUID: ${plan.scriptUuid}`,
+        `Current SHA-256: ${plan.expectedBefore.sourceSha256}`,
+        `Replacement SHA-256: ${plan.expectedAfter.sourceSha256}`,
+        `Meta SHA-256 (must remain unchanged): ${plan.metaSha256}`,
+        `Operation: ${operation.operationId}`,
+        '',
+        operation.source,
+        '',
+        'This approval replaces the source through Creator AssetDB. It does not change the asset .meta file, scene, or Prefab.',
+    ].join('\n');
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator script modification',
+        message: `Replace source for ${plan.scriptPath}?`, detail,
+        buttons: ['Cancel', 'Replace script source'], defaultId: 0, cancelId: 0, noLink: true });
+}
+
+function saveExistingAssetThroughAssetDb(url, source) {
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const timeout = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            reject(coded('ASSETDB_SAVE_EXISTS_TIMEOUT'));
+        }, 60000);
+        try {
+            Editor.assetdb.saveExists(url, source, (error, result) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                if (error) { reject(coded('ASSETDB_SAVE_EXISTS_FAILED', String(error.message || error))); return; }
+                resolve(result || null);
+            });
+        } catch (error) {
+            clearTimeout(timeout);
+            reject(coded('ASSETDB_SAVE_EXISTS_FAILED', String(error.message || error)));
+        }
+    });
+}
+
+function scriptCompileEvidence(afterSequence) {
+    const events = diagnosticEvents.filter((item) => item.sequence > afterSequence);
+    const finished = events.filter((item) => item.source === 'creator-builder' && item.text.includes('compile-finished'));
+    const errors = events.filter((item) => item.level === 'error');
+    return { afterSequence, currentSequence: diagnosticSequence,
+        status: errors.length ? 'error-observed' : finished.length ? 'compile-finished-observed' : 'pending',
+        attribution: 'All observed diagnostics after the cursor; events are not attributed to this script unless the event payload names it.',
+        compileFinished: finished, errors };
+}
+
+function scriptModifyReceipt(operation, current) {
+    const plan = operation.plan;
+    return { operationId: operation.operationId, status: operation.status, projectRoot: plan.projectRoot,
+        creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        scriptPath: plan.scriptPath, targetUrl: plan.targetUrl, scriptUuid: current.scriptUuid,
+        importer: current.importer, sourceSha256: current.sourceSha256, metaSha256: current.metaSha256,
+        expectedBefore: plan.expectedBefore, expectedAfter: plan.expectedAfter,
+        approvedAt: operation.approvedAt || null, approvalSource: operation.approvalSource || null,
+        completedAt: operation.completedAt || null,
+        compile: scriptCompileEvidence(plan.compileCursor),
+        recovery: { operationId: operation.operationId, priorSourceStoredOutsideProject: true,
+            automaticRetry: false, metaPreserved: current.metaSha256 === plan.metaSha256,
+            restoreRequiresNewApprovedPlan: true } };
+}
+
+async function commitScriptModify(input, context) {
+    const operation = readScriptModifyOperation(input.operationId);
+    verifyScriptModifyIdentity(operation);
+    if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (operation.status !== 'planned') throw coded(operation.status === 'applying' || operation.status === 'awaiting-approval'
+        || operation.status === 'needs-reconciliation' ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    try { await verifyScriptModifyPrecondition(operation); }
+    catch (error) {
+        operation.status = 'conflict';
+        operation.conflictAt = new Date().toISOString();
+        writeOperation(operation);
+        throw error;
+    }
+    operation.status = 'awaiting-approval';
+    operation.approvalRequestedAt = new Date().toISOString();
+    writeOperation(operation);
+    const approved = await confirmScriptModify(operation);
+    if (!approved) {
+        operation.status = 'cancelled';
+        operation.cancelledAt = new Date().toISOString();
+        writeOperation(operation);
+        throw coded('OPERATION_NOT_APPROVED');
+    }
+    try { await authorizeWriteRequest(context && context.requestId); }
+    catch (error) {
+        operation.status = 'abandoned';
+        operation.abandonedAt = new Date().toISOString();
+        writeOperation(operation);
+        throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error));
+    }
+    verifyScriptModifyIdentity(operation);
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    try { await verifyScriptModifyPrecondition(operation); }
+    catch (error) {
+        operation.status = 'conflict';
+        operation.conflictAt = new Date().toISOString();
+        writeOperation(operation);
+        throw error;
+    }
+    operation.status = 'applying';
+    operation.approvedAt = new Date().toISOString();
+    operation.approvalSource = 'creator-native-dialog';
+    operation.appliedByInstanceId = INSTANCE_ID;
+    writeOperation(operation);
+    try {
+        await saveExistingAssetThroughAssetDb(operation.plan.targetUrl, operation.source);
+        const current = await currentScriptAsset(operation.plan.scriptPath);
+        if (current.scriptUuid !== operation.plan.scriptUuid || current.importer !== operation.plan.importer
+            || current.sourceSha256 !== operation.plan.expectedAfter.sourceSha256
+            || current.metaSha256 !== operation.plan.metaSha256)
+            throw coded('SCRIPT_MODIFY_READBACK_MISMATCH');
+        operation.status = 'completed';
+        operation.completedAt = new Date().toISOString();
+        operation.completedByInstanceId = INSTANCE_ID;
+        operation.result = { scriptUuid: current.scriptUuid, importer: current.importer,
+            sourceSha256: current.sourceSha256, metaSha256: current.metaSha256 };
+        writeOperation(operation);
+        return scriptModifyReceipt(operation, current);
+    } catch (error) {
+        operation.status = 'needs-reconciliation';
+        operation.failedAt = new Date().toISOString();
+        operation.lastErrorCode = error.code || 'SCRIPT_MODIFY_FAILED';
+        writeOperation(operation);
+        throw error;
+    }
+}
+
+async function reconcileScriptModify(input) {
+    const operation = readScriptModifyOperation(input.operationId);
+    const plan = operation.plan;
+    if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
+    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+        throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
+    let current;
+    try { current = await currentScriptAsset(plan.scriptPath); }
+    catch (error) {
+        operation.status = 'conflict';
+        operation.reconciledAt = new Date().toISOString();
+        operation.lastErrorCode = error.code || 'SCRIPT_READBACK_FAILED';
+        writeOperation(operation);
+        throw coded('SCRIPT_MODIFY_READBACK_CONFLICT', operation.lastErrorCode);
+    }
+    if (current.targetUrl !== plan.targetUrl || current.scriptUuid !== plan.scriptUuid
+        || current.importer !== plan.importer || current.metaSha256 !== plan.metaSha256) {
+        operation.status = 'conflict';
+    } else if (current.sourceSha256 === plan.expectedAfter.sourceSha256) {
+        operation.status = 'completed';
+        operation.result = { scriptUuid: current.scriptUuid, importer: current.importer,
+            sourceSha256: current.sourceSha256, metaSha256: current.metaSha256 };
+        operation.completedAt = operation.completedAt || new Date().toISOString();
+        operation.completedByInstanceId = operation.completedByInstanceId || operation.appliedByInstanceId || INSTANCE_ID;
+    } else if (current.sourceSha256 === plan.expectedBefore.sourceSha256) {
+        operation.status = operation.status === 'planned' ? 'planned' : 'not-applied';
+    } else {
+        operation.status = 'conflict';
+    }
+    operation.reconciledAt = new Date().toISOString();
+    writeOperation(operation);
+    return { ...scriptModifyReceipt(operation, current), observed: { sourceSha256: current.sourceSha256,
+        metaSha256: current.metaSha256, scriptUuid: current.scriptUuid, importer: current.importer },
+        retry: 'Never replay this operation. If the source is unchanged, create a new plan; if it differs, review and read it before planning.' };
 }
 
 async function createSceneNodeActivePlan(input) {
@@ -1368,6 +1659,12 @@ function capabilityList() {
             && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
         'creator.script.create.reconcile': !!(Editor && Editor.assetdb && typeof Editor.assetdb.exists === 'function'
             && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.script.modify.plan': !!(Editor && Editor.assetdb && typeof Editor.assetdb.saveExists === 'function'
+            && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.script.modify.commit': !!(Editor && Editor.assetdb && typeof Editor.assetdb.saveExists === 'function'
+            && typeof Editor.assetdb.queryAssets === 'function' && Editor.Dialog
+            && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.script.modify.reconcile': !!(Editor && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
         'creator.diagnostics.read': !!(Editor && ((Editor.Builder && typeof Editor.Builder.on === 'function')
             || (Editor.Ipc && typeof Editor.Ipc.on === 'function'))),
         'creator.preview.start': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
@@ -1751,6 +2048,9 @@ function execute(command, input, context) {
     if (command === 'creator.script.create.plan') return Promise.resolve(createScriptPlan(input));
     if (command === 'creator.script.create.commit') return commitScriptCreate(input, context);
     if (command === 'creator.script.create.reconcile') return Promise.resolve(reconcileScriptCreate(input));
+    if (command === 'creator.script.modify.plan') return createScriptModifyPlan(input);
+    if (command === 'creator.script.modify.commit') return commitScriptModify(input, context);
+    if (command === 'creator.script.modify.reconcile') return reconcileScriptModify(input);
     if (command === 'creator.diagnostics.read') return Promise.resolve(readDiagnostics(input));
     if (command === 'creator.preview.start') return startPreview(input, context);
     if (command.startsWith('creator.preview.')) throw coded('BRIDGE_OWNED_COMMAND');

@@ -54,6 +54,437 @@
       "access": "read",
       "description": "Read a bounded hierarchy snapshot of the current Creator scene.",
       "input": { "type": "object", "properties": {}, "additionalProperties": false }
+    },
+    {
+      "id": "creator.scene.node.read",
+      "access": "read",
+      "description": "Read one exact node in the active scene by scene UUID and node UUID, including its full bounded path, active state, component classes, and current-session component instance IDs.",
+      "input": {
+        "type": "object",
+        "required": ["sceneUuid", "nodeUuid"],
+        "properties": {
+          "sceneUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+          "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.node.set-active.plan",
+      "access": "plan",
+      "description": "Plan a single active-state change for one existing node in the active scene, bound to scene/node UUIDs and the observed before-state. Does not modify or save the scene.",
+      "input": {
+        "type": "object",
+        "required": ["sceneUuid", "nodeUuid", "active"],
+        "properties": {
+          "sceneUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+          "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+          "active": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.node.set-active.commit",
+      "access": "write",
+      "approval": true,
+      "description": "Apply one planned active-state change after a native Creator confirmation, live scene/node identity and before-state checks, then request scene save and read the node state back from the same Creator scene session.",
+      "input": {
+        "type": "object",
+        "required": ["operationId", "planHash"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.node.set-active.reconcile",
+      "access": "plan",
+      "description": "Read and reconcile one planned scene-node active-state operation after interruption; never retries the mutation or claims disk-save completion without a Creator save acknowledgement.",
+      "input": {
+        "type": "object",
+        "required": ["operationId"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.node.add-component.plan",
+      "access": "plan",
+      "description": "Plan adding one registered Cocos component class to one exact scene node. Rejects missing classes, existing instances, and components with implicit required components; no scene change is made.",
+      "input": {
+        "type": "object",
+        "required": ["sceneUuid", "nodeUuid", "componentClassName"],
+        "properties": {
+          "sceneUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+          "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+          "componentClassName": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[A-Za-z_$][A-Za-z0-9_$.]*$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.node.add-component.commit",
+      "access": "write",
+      "approval": true,
+      "description": "Add the exact planned component class after Creator approval and fresh scene/node/component precondition checks, then request scene save and read the component count back in the same Creator scene session.",
+      "input": {
+        "type": "object",
+        "required": ["operationId", "planHash"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.node.add-component.reconcile",
+      "access": "plan",
+      "description": "Observe and reconcile one planned component-add operation after interruption. Never retries the mutation; an observed component without a persisted instance identity requires manual review.",
+      "input": {
+        "type": "object",
+        "required": ["operationId"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.node.set-component-property.plan",
+      "access": "plan",
+      "description": "Plan changing one declared public scalar component property (string, number, or boolean) on one exact component instance. Object, array, asset-reference, lifecycle, and internal fields are rejected.",
+      "input": {
+        "type": "object",
+        "required": ["sceneUuid", "nodeUuid", "componentClassName", "componentInstanceId", "property", "value"],
+        "properties": {
+          "sceneUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+          "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+          "componentClassName": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[A-Za-z_$][A-Za-z0-9_$.]*$" },
+          "componentInstanceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "property": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z][A-Za-z0-9_]*$" },
+          "value": { "type": ["string", "number", "boolean"], "maxLength": 1024, "minimum": -1000000000, "maximum": 1000000000 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.node.set-component-property.commit",
+      "access": "write",
+      "approval": true,
+      "description": "Apply the exact planned scalar component-property change after Creator approval and fresh component-instance/property precondition checks, then request scene save and read back in memory.",
+      "input": {
+        "type": "object",
+        "required": ["operationId", "planHash"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.node.set-component-property.reconcile",
+      "access": "plan",
+      "description": "Observe and reconcile one scalar component-property operation after interruption. Never reapplies the value; if the original component instance cannot be identified, manual review is required.",
+      "input": {
+        "type": "object",
+        "required": ["operationId"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.script.create.plan",
+      "access": "plan",
+      "description": "Prepare a Creator AssetDB script-creation plan in an existing assets folder, with an absent-target precondition, source hash, operation ID, and recovery conditions. Does not modify project assets or create folders.",
+      "input": {
+        "type": "object",
+        "required": ["scriptPath", "source"],
+        "properties": {
+          "scriptPath": { "type": "string", "minLength": 1, "maxLength": 240, "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?($|/))(?!.*(?:^|/)\\.)[^\\\\]+\\.(?:js|ts)$" },
+          "source": { "type": "string", "minLength": 1, "maxLength": 16384 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.script.create.commit",
+      "access": "write",
+      "approval": true,
+      "description": "Create the exact script asset described by a pending plan after an explicit Creator confirmation dialog and a fresh absent-target precondition check; returns AssetDB identity, readback hashes, and recovery conditions.",
+      "input": {
+        "type": "object",
+        "required": ["operationId", "planHash"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.script.create.reconcile",
+      "access": "plan",
+      "description": "Reconcile a planned or uncertain script-creation operation by reading the same Creator AssetDB target and matching source/.meta identities; never retries or writes the asset.",
+      "input": {
+        "type": "object",
+        "required": ["operationId"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.script.modify.plan",
+      "access": "plan",
+      "description": "Plan replacing the source of one existing JS/TS asset after matching its expected source SHA-256, AssetDB UUID/importer, and .meta hash. Stores the prior source outside the project and does not write.",
+      "input": {
+        "type": "object",
+        "required": ["scriptPath", "expectedSourceSha256", "source"],
+        "properties": {
+          "scriptPath": { "type": "string", "minLength": 1, "maxLength": 240, "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?($|/))(?!.*(?:^|/)\\.)[^\\\\]+\\.(?:js|ts)$" },
+          "expectedSourceSha256": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" },
+          "source": { "type": "string", "minLength": 1, "maxLength": 16384 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.script.modify.commit",
+      "access": "write",
+      "approval": true,
+      "description": "Replace the exact planned script source through Creator AssetDB after native approval and fresh source/UUID/importer/.meta precondition checks. Returns Creator readback and compile-event evidence without claiming compilation succeeded unless observed.",
+      "input": {
+        "type": "object",
+        "required": ["operationId", "planHash"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.script.modify.reconcile",
+      "access": "plan",
+      "description": "Read and reconcile one planned or uncertain script-source modification by source hash, AssetDB identity, importer, and unchanged .meta hash. Never replays the write; compile diagnostics remain separate evidence.",
+      "input": {
+        "type": "object",
+        "required": ["operationId"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.diagnostics.read",
+      "access": "read",
+      "execution": "creator",
+      "description": "Read bounded Creator compile events, script import failures, and editor Console messages since a sequence cursor.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "afterSequence": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.preview.start",
+      "access": "control",
+      "execution": "creator",
+      "approval": true,
+      "description": "After a native Creator approval, request the active scene Web preview and attach a dedicated local browser session bound to this Creator instance and scene.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "port": { "type": "integer", "minimum": 1024, "maximum": 65535 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.preview.observe",
+      "access": "read",
+      "execution": "bridge",
+      "description": "Read runtime Console entries, active page, canvas, and scene from the exact attached preview session.",
+      "input": {
+        "type": "object",
+        "required": ["previewSessionId"],
+        "properties": {
+          "previewSessionId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "afterSequence": { "type": "integer", "minimum": 0, "maximum": 2147483647 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.preview.screenshot",
+      "access": "read",
+      "execution": "bridge",
+      "description": "Capture a PNG from the same attached preview session and return its local path, SHA-256, and scene identity.",
+      "input": {
+        "type": "object",
+        "required": ["previewSessionId"],
+        "properties": {
+          "previewSessionId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.preview.interact",
+      "access": "control",
+      "execution": "bridge",
+      "description": "Apply bounded keyboard or normalized canvas clicks in the same preview session and evaluate declarative runtime assertions.",
+      "input": {
+        "type": "object",
+        "required": ["previewSessionId", "actions"],
+        "properties": {
+          "previewSessionId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "actions": {
+            "type": "array", "minItems": 1, "maxItems": 12,
+            "items": {
+              "type": "object", "required": ["type"],
+              "properties": {
+                "type": { "type": "string", "enum": ["key", "click"] },
+                "key": { "type": "string", "maxLength": 20 },
+                "durationMs": { "type": "integer", "minimum": 1, "maximum": 2000 },
+                "x": { "type": "number", "minimum": 0, "maximum": 1 },
+                "y": { "type": "number", "minimum": 0, "maximum": 1 }
+              },
+              "additionalProperties": false
+            }
+          },
+          "assertions": {
+            "type": "array", "minItems": 1, "maxItems": 12,
+            "items": {
+              "type": "object", "required": ["type"],
+              "properties": {
+                "type": { "type": "string", "enum": ["no-errors", "console-contains", "scene", "node-exists", "node-property", "component-property"] },
+                "text": { "type": "string", "maxLength": 240 },
+                "name": { "type": "string", "maxLength": 120 },
+                "uuid": { "type": "string", "maxLength": 80 },
+                "path": { "type": "string", "maxLength": 240 },
+                "property": { "type": "string", "enum": ["active", "x", "y"] },
+                "componentType": { "type": "string", "maxLength": 100 },
+                "componentProperty": { "type": "string", "maxLength": 64, "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$" },
+                "expected": { "type": ["string", "number", "boolean"] },
+                "tolerance": { "type": "number", "minimum": 0, "maximum": 100 }
+              },
+              "additionalProperties": false
+            }
+          },
+          "settleMs": { "type": "integer", "minimum": 100, "maximum": 3000 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.preview.refresh",
+      "access": "control",
+      "execution": "bridge",
+      "description": "Reload the attached preview browser page and re-check the expected scene inside the same preview session.",
+      "input": {
+        "type": "object", "required": ["previewSessionId"],
+        "properties": { "previewSessionId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" } },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.preview.stop",
+      "access": "control",
+      "execution": "bridge",
+      "description": "Close the Agent-owned preview browser session; the Creator preview server remains under Creator control.",
+      "input": {
+        "type": "object", "required": ["previewSessionId"],
+        "properties": { "previewSessionId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" } },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.extension.commands.list",
+      "access": "read",
+      "execution": "creator",
+      "description": "Discover live, project-local Creator extensions that implement the Cocos Agent command provider contract.",
+      "input": { "type": "object", "properties": {}, "additionalProperties": false }
+    },
+    {
+      "id": "creator.extension.command.invoke.read",
+      "access": "read",
+      "execution": "creator",
+      "description": "Invoke a live project extension command declared read-only in its Creator command provider contract.",
+      "input": {
+        "type": "object", "required": ["providerId", "commandId", "providerFingerprint", "argumentsJson"],
+        "properties": {
+          "providerId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z0-9-]{0,63}$" },
+          "commandId": { "type": "string", "minLength": 1, "maxLength": 48, "pattern": "^[a-z][a-z0-9-]{0,47}$" },
+          "providerFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" },
+          "argumentsJson": { "type": "string", "maxLength": 16384 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.extension.command.invoke.plan",
+      "access": "plan",
+      "execution": "creator",
+      "description": "Invoke a live project extension command declared as a non-mutating plan in its Creator command provider contract.",
+      "input": {
+        "type": "object", "required": ["providerId", "commandId", "providerFingerprint", "argumentsJson"],
+        "properties": {
+          "providerId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z0-9-]{0,63}$" },
+          "commandId": { "type": "string", "minLength": 1, "maxLength": 48, "pattern": "^[a-z][a-z0-9-]{0,47}$" },
+          "providerFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" },
+          "argumentsJson": { "type": "string", "maxLength": 16384 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.extension.command.invoke.write",
+      "access": "write",
+      "approval": true,
+      "execution": "creator",
+      "description": "Invoke a project extension command declared as a write only after an explicit native Creator approval dialog.",
+      "input": {
+        "type": "object", "required": ["providerId", "commandId", "providerFingerprint", "argumentsJson"],
+        "properties": {
+          "providerId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z0-9-]{0,63}$" },
+          "commandId": { "type": "string", "minLength": 1, "maxLength": 48, "pattern": "^[a-z][a-z0-9-]{0,47}$" },
+          "providerFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" },
+          "argumentsJson": { "type": "string", "maxLength": 16384 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.extension.command.invoke.control",
+      "access": "control",
+      "approval": true,
+      "execution": "creator",
+      "description": "Invoke a project extension command declared as a control action only after an explicit native Creator approval dialog.",
+      "input": {
+        "type": "object", "required": ["providerId", "commandId", "providerFingerprint", "argumentsJson"],
+        "properties": {
+          "providerId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z0-9-]{0,63}$" },
+          "commandId": { "type": "string", "minLength": 1, "maxLength": 48, "pattern": "^[a-z][a-z0-9-]{0,47}$" },
+          "providerFingerprint": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" },
+          "argumentsJson": { "type": "string", "maxLength": 16384 }
+        },
+        "additionalProperties": false
+      }
     }
   ]
 }

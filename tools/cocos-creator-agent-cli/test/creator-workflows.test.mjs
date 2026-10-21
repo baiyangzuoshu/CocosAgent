@@ -58,6 +58,8 @@ test('Creator build workflow verifies project and editor versions, then returns 
   });
   assert.equal(result.success, true);
   assert.equal(result.outputExists, true);
+  assert.equal(result.failureCode, null);
+  assert.equal(result.failureReason, null);
   assert.equal(result.creatorVersion, '2.4.15');
   assert.equal(result.platform, 'web-mobile');
   assert.ok(observedArgs.includes('--build'));
@@ -66,6 +68,55 @@ test('Creator build workflow verifies project and editor versions, then returns 
   await assert.rejects(runCreatorWorkflow({ operation: 'build', projectRoot: state.projectRoot,
     creatorPath: state.appRoot, platform: 'web-mobile', buildPath: path.join(state.projectRoot, 'build') }),
   (error) => error.code === 'BUILD_PATH_MUST_BE_OUTSIDE_PROJECT');
+});
+
+test('Creator Builder reported failure overrides zero exit and partial output', async (t) => {
+  const state = fixture();
+  t.after(() => fs.rmSync(state.root, { recursive: true, force: true }));
+  const outputPath = path.join(state.root, 'partial-build-output');
+  const result = await runCreatorWorkflow({ operation: 'build', projectRoot: state.projectRoot,
+    creatorPath: state.appRoot, platform: 'web-mobile', buildPath: outputPath }, {
+    spawnImpl() {
+      const child = new FakeChild();
+      queueMicrotask(() => {
+        fs.mkdirSync(outputPath, { recursive: true });
+        child.stdout.end('Start to build platform [web-mobile]');
+        child.stderr.end('Error: Build Failed: Failed to find start scene in scene list.');
+        child.emit('close', 0, null);
+      });
+      return child;
+    },
+  });
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.outputExists, true);
+  assert.equal(result.success, false);
+  assert.equal(result.failureCode, 'CREATOR_BUILD_REPORTED_FAILURE');
+  assert.equal(result.failureReason, 'Failed to find start scene in scene list.');
+});
+
+test('Creator Builder reason stays primary when the process later times out', async (t) => {
+  const state = fixture();
+  t.after(() => fs.rmSync(state.root, { recursive: true, force: true }));
+  const keepAlive = setInterval(() => {}, 1000);
+  t.after(() => clearInterval(keepAlive));
+  const result = await runCreatorWorkflow({ operation: 'build', projectRoot: state.projectRoot,
+    creatorPath: state.appRoot, platform: 'web-mobile', buildPath: path.join(state.root, 'timed-out-output'),
+    timeoutMs: 1000 }, {
+    spawnImpl() {
+      const child = new FakeChild();
+      child.kill = (signal) => {
+        child.killed = true;
+        queueMicrotask(() => child.emit('close', null, signal));
+        return true;
+      };
+      queueMicrotask(() => child.stderr.write('Error: Build Failed: Failed to find start scene in scene list.'));
+      return child;
+    },
+  });
+  assert.equal(result.timedOut, true);
+  assert.equal(result.success, false);
+  assert.equal(result.failureCode, 'CREATOR_BUILD_REPORTED_FAILURE');
+  assert.equal(result.failureReason, 'Failed to find start scene in scene list.');
 });
 
 test('Creator workflow refuses a Creator bundle with the wrong patch version', async (t) => {

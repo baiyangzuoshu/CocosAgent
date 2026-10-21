@@ -244,6 +244,49 @@
       }
     },
     {
+      "id": "creator.script.modify.plan",
+      "access": "plan",
+      "description": "Plan replacing the source of one existing JS/TS asset after matching its expected source SHA-256, AssetDB UUID/importer, and .meta hash. Stores the prior source outside the project and does not write.",
+      "input": {
+        "type": "object",
+        "required": ["scriptPath", "expectedSourceSha256", "source"],
+        "properties": {
+          "scriptPath": { "type": "string", "minLength": 1, "maxLength": 240, "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?($|/))(?!.*(?:^|/)\\.)[^\\\\]+\\.(?:js|ts)$" },
+          "expectedSourceSha256": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" },
+          "source": { "type": "string", "minLength": 1, "maxLength": 16384 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.script.modify.commit",
+      "access": "write",
+      "approval": true,
+      "description": "Replace the exact planned script source through Creator AssetDB after native approval and fresh source/UUID/importer/.meta precondition checks. Returns Creator readback and compile-event evidence without claiming compilation succeeded unless observed.",
+      "input": {
+        "type": "object",
+        "required": ["operationId", "planHash"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.script.modify.reconcile",
+      "access": "plan",
+      "description": "Read and reconcile one planned or uncertain script-source modification by source hash, AssetDB identity, importer, and unchanged .meta hash. Never replays the write; compile diagnostics remain separate evidence.",
+      "input": {
+        "type": "object",
+        "required": ["operationId"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
       "id": "creator.diagnostics.read",
       "access": "read",
       "execution": "creator",

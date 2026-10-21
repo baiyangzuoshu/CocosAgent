@@ -1,6 +1,6 @@
 # Cocos Creator 第三方 Host 接入实现 0.1
 
-日期：2026-10-18（2026-10-21 更新）。范围：Codex / Claude Code → 独立 CLI（MCP 配置与 Skills 安装）→ 本机桥接 → Creator 2.4.15 项目扩展。当前 CLI 0.10.6 本地 tarball/隔离安装、59 项 CLI 测试、Creator Provider 审批写入/取消/恢复及同一预览会话的键盘输入断言已有验收证据。Dashboard、Creator、扩展与 CLI 已核对到同一 `tank` 工程；`doctor` 9/9 通过。Codex/Claude 的 CLI 配置及 52 项 Skills 已安装，但桌面 Host 工具目录重载仍待核验。GitHub Actions 因 billing locked 未执行；0.10.6 Release 资产、线上自更新/回滚未验收。详见[本轮验收](traces/cocos-cli-0.10.0-goal-20261020.md)、[测试合同](../../tools/cocos-creator-agent-cli/references/2x/14-project-test-runner.md)与[后续能力评估](cocos-cli-vcs-template-assets-evaluation-20261020.md)。
+日期：2026-10-18（2026-10-21 更新）。范围：Codex / Claude Code → 独立 CLI（MCP 配置与 Skills 安装）→ 本机桥接 → Creator 2.4.15 项目扩展。CLI 0.11.0 / Creator 扩展 0.7.0 已在 `tank` 完成真实 Creator 脚本创建、批准式修改、恢复、哈希回读与错误前态拒绝；CLI/MCP 命令共用同一实例。临时验收脚本已通过 Creator 删除，工程 AssetDB 查询为空，活动场景恢复为默认 `New Node`。Creator 编译回执仍为 pending，不能判通过。CLI 全局安装和本地桥接 `doctor` 最新为 8/8 通过、33 条命令可用；0.11.0 本地 tarball 已生成并安装。GitHub Release 页面仍以 0.10.6 为 latest，显示账户 billing 问题；线上 Release、自更新和回滚仍未验收。详见[本轮验收](traces/cocos-cli-0.10.0-goal-20261020.md)、[测试合同](../../tools/cocos-creator-agent-cli/references/2x/14-project-test-runner.md)与[后续能力评估](cocos-cli-vcs-template-assets-evaluation-20261020.md)。
 
 ## 目标链路
 
@@ -151,28 +151,28 @@ MCP 当前源码定义 36 个固定工具（3 个基础、25 个 Creator 命令�
 ### 当前基线
 
 - 产品边界：`tools/cocos-creator-agent-cli/` 是独立本机产品，拥有 MCP server、Codex/Claude 原生配置命令、Creator Skills 安装器、Creator 扩展与桥接；`plugins/cocos-creator-agent/` 只保留旧式插件安装的 CLI 引导 Skill。Creator 原生 CocosAgent 已停用并移除，不属于运行依赖。
-- 仓库源码版本：CLI `0.10.6`，bootstrap 插件 `0.8.0`，Creator 项目扩展 `0.6.2`。0.10.6 候选 tarball 为 98 文件、176,237 字节，SHA-256 `034ffe4d373837555362ac1d0e2c7e6bdc23b7267506b5711f4380995777d34c`；已隔离安装并通过候选 CLI/MCP/Creator 同会话预览验收。GitHub Actions 因账户 billing locked 未运行；GitHub Release、线上自更新与回滚仍未完成。Creator 固定命令合同仍只支持 `2.4.15`，CLI 需要 Node.js 20+；预览证据需要本机 Chromium。
+- 版本基线：历史候选 CLI `0.10.6` / Creator 扩展 `0.6.2` 已有本地包与预览证据；CLI `0.11.0` / Creator 扩展 `0.7.0` 已打成本地 tarball 并安装到全局 CLI。当前候选包为 98 个条目、179,445 字节，SHA-256 `3dddb3a8abde25b2d1d19d99898c8294260d796802d90cb05c0ff77f7ea004c3`。真实 Creator 已完成 `script.modify` 修改及恢复回读，编译仍未确认。空 tank 的 Creator Builder 明确报告没有启动场景；CLI 现返回结构化 Builder 失败码/原因，并保留后续进程超时状态。GitHub Actions 因账户 billing locked 未运行；公开 Release、线上自更新与回滚仍未完成。Creator 固定命令合同只支持 `2.4.15`，CLI 需要 Node.js 20+；预览证据需要本机 Chromium。
 - Skills：51 项 Creator 工作流 Skills 与 1 项 CLI Skill（共 52 项）及 Creator 2.4.x 参考资料已移入 CLI 包作为唯一维护源；CLI `skill install` 安装到 Codex/Claude 原生目录。5 项厂商 SDK Skills 仍在可选包 `plugins/cocos-creator-agent-sdk/`，后续需决定是否让 CLI 安装器也管理可选 SDK 包。
 - MCP：CLI `mcp serve` 内置 stdio server，`mcp configure/list/status/remove` 负责 Host 注册与检查；无 Provider 时固定目录为 36 项，在线项目别名与 Creator Provider 命令共用总工具数 128 上限。0.10.6 候选包 `initialize`、38 项动态 `tools/list` 和同实例 `cocos_project_info` 实际调用已通过；Codex/Claude 配置均为 `configured`，桌面 Host 会话重载仍待验收。
-- Creator 命令：5 条只读命令有历史真实回执；当前源码再提供精确节点读取、脚本创建和节点 active 修改的计划/提交/恢复、单节点组件挂载和公开标量属性设置计划/提交/恢复、Creator 编译与 Console 诊断、批准启动 Web 预览及浏览器截图/观察/同会话输入断言。组件挂载拒绝隐式 `requireComponent`；标量写入绑定 Creator 同一扩展会话和具体组件对象 ID；组件构造函数与属性 setter 可能运行项目/引擎代码，Creator 审批框会显示提醒。UI 事件、组件资源引用与对象/数组字段仍无写工具。项目工具别名可暴露合同中的 read/plan 命令及需 Creator 审批的 write/control 命令，但不能注册自定义 Editor 执行代码。异步任务持久化并支持取消与显式恢复，组件写入中断后改走 reconcile、不重放。以上新增能力目前只有源码接线与测试，不能称为实机通过。
-- 已验收：历史 0.8.x/0.9.0 本地包与隔离安装；CLI 0.10.6 的 59 项测试、98 文件候选 tarball、隔离安装和真实全局安装；Codex/Claude 配置及 Skills 状态；Creator 2.4.15 扩展 `0.6.2` 与合同匹配；Provider 动态 MCP 工具、审批写入、取消拒绝和恢复读回；候选 CLI 同一预览会话中的画布聚焦、Space 输入、`counter === 1` 与无错误断言。GitHub Release/自更新、桌面 Host 新会话目录和完整 tank 基线恢复仍未完成。详见[本轮完整记录](traces/cocos-cli-0.10.0-goal-20261020.md)。
+- Creator 命令：通用 Creator 扩展命令发现与调用已实现，项目扩展可按共享合同声明有限命令并由 CLI/MCP 薄适配；合同漂移、Provider 重载和中断行为仍需持续验收。5 条只读命令有历史真实回执；源码还提供精确节点读取、脚本创建/修改和节点 active 修改的计划/提交/恢复、单节点组件挂载和公开标量属性设置计划/提交/恢复、Creator 编译与 Console 诊断、批准启动 Web 预览及浏览器截图/观察/同会话输入断言。`script.modify` 现已在 Creator 2.4.15 实机批准修改并恢复：CLI/MCP 读回源哈希、UUID/importer 和 `.meta` 哈希一致，错误源哈希被拒绝；临时脚本经 Creator 资源管理器删除，AssetDB 查询为 0。编译事件游标仅标识之后观察到的 Creator 事件，不自动归因目标脚本；本轮没有编译回执，编译仍未通过验收。组件挂载拒绝隐式 `requireComponent`；标量写入绑定 Creator 同一扩展会话和具体组件对象 ID；组件构造函数与属性 setter 可能运行项目/引擎代码，Creator 审批框会显示提醒。UI 事件、组件资源引用与对象/数组字段仍无写工具。异步任务持久化并支持取消与显式恢复，写入中断后改走 reconcile、不重放。除本轮 `script.modify` 外，新增固定写入、构建及运行控制命令仍需逐项实机验收。
+- 已验收：历史 0.8.x/0.9.0 本地包与隔离安装；CLI 0.10.6 的 59 项测试与候选 tarball；CLI 0.11.0 本地 tarball/全局安装、Creator 扩展 `0.7.0` 和合同匹配；Creator 2.4.15 `doctor` 9/9 通过、33 条命令可用；CLI/MCP 同一 Creator 实例上的脚本创建、修改、恢复、哈希回读与错误前态拒绝；Provider 动态 MCP 工具、审批取消拒绝和恢复读回；候选 CLI 同一预览会话中的画布聚焦、Space 输入、`counter === 1` 与无错误断言。公开 Release/线上自更新、桌面 Host 新会话工具目录重载、Creator 编译确认和更多固定写入命令仍未完成。详见[本轮完整记录](traces/cocos-cli-0.10.0-goal-20261020.md)。
 
 ### 阶段计划
 
 **P1：验收 CLI 自带的 MCP 与 Skill 分发**
 
 - **已通过：** CLI MCP 与 Skill 生命周期自动化测试，共 26/26；Codex/Claude 真实 CLI 在隔离用户目录中的 `mcp configure/status/remove`；Codex dry-run；0.8.0 tarball 隔离安装、52 个 Skills 与 13 份参考资料安装和相对链接检查。详细输入/回执见[0.8.0 验收轨迹](traces/cocos-creator-cli-0.8.0-mcp-skills-acceptance-20261020.md)。
-- **已通过本机包/实机部分：** CLI 0.10.6 候选包隔离安装；Codex/Claude `mcp status` 为 configured，52 项 Skills 已安装；当前 Creator 实例 `doctor` 9/9 通过，候选 MCP 返回 38 项动态工具并能调用同一工程。
+- **已通过本机包/实机部分：** CLI 0.10.6 历史候选包隔离安装；CLI 0.11.0 本地候选 tarball 已全局安装；Codex/Claude `mcp status` 为 configured，52 项 Skills 已安装；Creator 实例在可访问本机桥接的 CLI 环境中 `doctor` 9/9 通过，CLI/MCP 能查看同一工程的 33 条命令并执行实机脚本读写。
 - **待完成：** GitHub Actions 因 billing locked 未运行。候选 tarball 与 SHA-256 已本地产生，但没有上传到 Release；线上校验、自更新和指定版本回滚均未验收。浏览器安全策略阻止打开 `chrome://extensions`，并禁止用其他 UI/命令绕过文件 URL 权限限制；没有上传文件或提交 Release。
 - **仍需补全：** 已在隔离 Creator 项目完成扩展安装、更新、漂移拒绝、强制备份与卸载；`doctor` 本次对真实 Creator 实例 9/9 通过。还需检查实际损坏/陈旧实例与桌面 Host 重载，并锁定 CLI、Creator 扩展和合同指纹的发布兼容规则。
 - 验收条件：Codex 与 Claude 都由 CLI 配置启动同一 MCP server，工具/schema 与 catalog 一致；重复配置安全；Skill 内容/参考链接和 hash 一致；CLI 缺失、版本不兼容、Creator 断连时可诊断且不猜测目标工程。
 
-**P2：Creator 写入最小闭环（写入命令有源码实现；Provider 审批流程已实机验收，固定脚本/场景写入仍未完整验收）**
+**P2：Creator 写入最小闭环（脚本 AssetDB 修改切片已实机验收；场景写入与编译仍未完整验收）**
 
-- 已实现源码切片：脚本资源创建；活动场景中一个既有节点的 `active` 属性修改。两者都先生成 operation ID/hash 和前态，Creator 原生确认后重核目标；节点修改经 Scene Script 应用，调用 `scene:stash-and-save` 并回读内存状态，项目外日志支持 reconcile。场景保存 IPC 无文档化的完成回执，故当前实现不声称磁盘持久化验证。
+- 已实现源码切片：脚本资源创建；已有 JS/TS 脚本完整源码替换；活动场景中一个既有节点的 `active` 属性修改。脚本替换绑定当前源文件 SHA-256、Creator AssetDB UUID/importer 与 `.meta` 哈希，Creator 原生确认前后重查前态，通过 `AssetDB.saveExists` 写入，并在项目外保留旧源码以便重新审批恢复；命令不自动重试，回执仅提供编译事件游标。脚本修改有 Creator 2.4.15 / 扩展 0.7.0 实机创建、修改、恢复及错误前态拒绝证据，修改后手动触发编译没有诊断事件，不能判编译通过。场景命令先生成 operation ID/hash 和前态，Creator 原生确认后重核目标；节点修改经 Scene Script 应用，调用 `scene:stash-and-save` 并回读内存状态，项目外日志支持 reconcile。场景保存 IPC 无文档化的完成回执，故当前实现不声称磁盘持久化验证。
 - 已新增源码切片：组件挂载计划/提交/恢复；公开标量属性计划/提交/恢复。挂载只接受 Creator 已加载类注册表中的组件类，拒绝隐式依赖且要求目标类型当前不存在；属性写入只允许精确组件实例上 Creator 声明的公开 string/number/boolean 字段，绑定同一扩展会话。二者均经 Creator 原生对话框确认后经 Scene Script 应用并请求保存；中断后只 reconcile，不重放。组件实例不明或 Creator session 改变时必须人工核对。
 - **已通过 Provider 写入流程：** 对 `tank` 临时 Provider 基线值 0，经 Creator 原生审批写入 37；取消写入 99 后工具返回拒绝且值保持 37；经候选 MCP 写入 64 后再经 Creator 审批恢复为 0。该结果证明 Provider 的审批/取消/回读路径，不等价于下列固定场景/脚本写入命令的全面验收。
-- 尚未完成：Creator 实机验收固定命令的脚本资源创建、节点 `active`、组件挂载与公开标量属性修改，包含目标漂移、Creator 重启恢复、场景保存确认与磁盘回读。UI 事件绑定、资源引用/对象数组字段修改和自动补偿命令仍未实现。Provider 样本和验收场景/脚本仍留在 `tank`，整体基线尚未恢复。
+- 已在真实 Creator 2.4.15 / 扩展 0.7.0 上批准创建临时 TypeScript 资源，分别经 CLI 与 MCP 读取；通过批准式修改将值从 1 改为 2，再经第二次批准恢复原始字节；Creator AssetDB 回读源哈希、UUID、importer 与 `.meta` 哈希一致。错误源哈希返回 `SCRIPT_SOURCE_PRECONDITION_FAILED` 且未生成写计划。临时资源随后在 Creator 资源管理器中删除，Creator AssetDB 与项目搜索均为 0，默认 `New Node` 场景快照保持 3 个预期节点。手动触发 Creator 编译后没有产生诊断事件，故编译仍未通过验收。尚未完成：节点 `active`、组件挂载与公开标量属性修改、Creator 重启恢复、场景保存确认与磁盘回读。UI 事件绑定、资源引用/对象数组字段修改和自动补偿命令仍未实现。
 - 验收条件：未点 Creator 确认不产生项目差异；点确认后身份回执与读回哈希一致；已有目标或合同不符时拒绝；取消不写入；中断后仅通过原 operation ID reconcile，不重放不确定写入。不得把源代码检查说成实机通过。
 
 **P3：运行反馈与同会话复验（同会话基本输入/断言已通过；诊断、构建与故障注入仍需验收）**
@@ -183,6 +183,8 @@ MCP 当前源码定义 36 个固定工具（3 个基础、25 个 Creator 命令�
 - CLI `creator watch` 接受最多 32 个工程内文件，稳定改动后刷新原预览会话并重跑同一组 smoke-test 断言，输出 NDJSON 事件。它是运行时持续回归，不是 Creator 单元测试 runner。源码与路径边界测试已通过；0.9.0 本地 tarball 已包含该能力，但公开 Release 状态未核实，也未在 Creator 实机运行。
 - **已通过：** Creator 2.4.15 上候选 CLI 启动 Agent 管理的 Chromium 预览，经 Creator 审批后在同一 session 点击画布、发送 Space；回执断言 `counter === 1` 与 `no-errors` 均通过，截图显示 `Count: 1`。
 - **待验收：** 编译失败与 Console 事件的诊断回读、构建/测试机器结果、真实渲染边界与项目网络副作用、浏览器退出/Creator 重启/桥接重启后的清理。`preview.stop` 只停 Agent 浏览器，Creator 预览服务不会被扩展关闭。
+- **本轮构建负向回执：** 对空 `tank` 执行 Creator 2.4.15 Web-Mobile debug build，输出指定在 `/private/tmp`。Builder 返回 `Failed to find start scene in scene list`；CLI `exitCode: 0` 但 `outputExists: false`、`success: false`，没有生成构建目录。因此只确认失败可被识别，不计为构建通过；需要先在 Creator 中创建并登记启动场景，再进行成功构建验收。
+- **机器可读失败原因补齐：** Builder 可在退出码 0 时通过日志报告失败，因此 CLI 现扫描 `Build Failed:` 并返回 `failureCode: CREATOR_BUILD_REPORTED_FAILURE` 与 `failureReason`；即使有部分输出目录也不能报成功。新增回归用例覆盖该情况。当前 0.11.0 本地候选包已刷新、全局重装；Creator 实机的失败日志尚未用新版本再次重跑，成功构建仍待有效启动场景。
 - 验收条件：日志/截图/断言都绑定同一 Creator 实例、场景和浏览器会话；没有浏览器回执时不报告功能通过。
 
 **P4：项目级 Skills 与 Editor 命令扩展（Provider 发现、MCP 暴露及审批调用已实机通过）**
@@ -204,8 +206,8 @@ MCP 当前源码定义 36 个固定工具（3 个基础、25 个 Creator 命令�
 - 从当前空 tank 工程完成首个可玩切片：简化战场、玩家坦克移动与发射、击中固定目标显示结果、重开；不依赖美术或厂商 SDK。
 - 记录每一步是否由 Agent 独立完成、工具/Skill 缺口、人工介入次数、耗时、编译/运行证据及中断恢复结果。该实测才用于判断是否扩展到完整小游戏。
 
-### 已完成的 2026-10-19 验收
+### 阶段验收记录
 
-CLI 独立包从本地目录与 tarball 安装到隔离 prefix，在同一 prefix 验证升级；MCP 从 CLI 获取唯一命令目录/schema 并委托调用。Codex 与 tank Creator 2.4.15 的只读实机链路已通过。2026-10-21 又完成 Provider 审批/取消/恢复、候选 MCP 动态工具调用及同会话输入断言；候选 tarball 尚未发布，tank 临时 Provider 与验收场景/脚本尚待恢复。完整回执见[本轮轨迹](traces/cocos-cli-0.10.0-goal-20261020.md)。
+CLI 独立包从本地目录与 tarball 安装到隔离 prefix，在同一 prefix 验证升级；MCP 从 CLI 获取唯一命令目录/schema 并委托调用。Codex 与 tank Creator 2.4.15 的只读实机链路已通过。2026-10-21 又完成 Provider 审批/取消/恢复、候选 MCP 动态工具调用、同会话输入断言和脚本源文件修改/恢复。tank 临时脚本及场景样本已由 Creator 清理，AssetDB 查询为空；Creator 项目扩展源文件仍保留本任务的 0.7.0 变更。0.11.0 候选 tarball 尚未公开发布。完整回执见[本轮轨迹](traces/cocos-cli-0.10.0-goal-20261020.md)。
 
-CLI 0.10.0 起增加项目测试计划、Node/Creator Provider/预览适配、JSON/JUnit、目录新增/重命名/删除观察与受影响套件重跑；详见[测试运行器合同](../../tools/cocos-creator-agent-cli/references/2x/14-project-test-runner.md)。CLI 测试 59/59 通过；Creator 项目测试计划未在 `tank` 配置，Creator 构建/测试结果和故障诊断闭环仍需实机验收。
+CLI 0.10.0 起增加项目测试计划、Node/Creator Provider/预览适配、JSON/JUnit、目录新增/重命名/删除观察与受影响套件重跑；详见[测试运行器合同](../../tools/cocos-creator-agent-cli/references/2x/14-project-test-runner.md)。历史 CLI 0.10.6 测试 59/59 通过；当前 CLI 0.11.0 工作树测试 67/67 通过。Creator 项目测试计划未在 `tank` 配置，Creator 编译成功、有效项目构建/测试结果仍需实机验收。

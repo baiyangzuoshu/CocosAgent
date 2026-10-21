@@ -24,7 +24,9 @@ test('component-add command contract is plan/approved-write/reconcile and reject
   assert.equal(commit.access, 'write');
   assert.equal(commit.approval, true);
   assert.equal(reconcile.access, 'plan');
-  assert.equal(COMMANDS.size, 30);
+  assert.ok(COMMANDS.has('creator.script.modify.plan'));
+  assert.ok(COMMANDS.has('creator.script.modify.commit'));
+  assert.ok(COMMANDS.has('creator.script.modify.reconcile'));
 
   assert.equal(validateCommand(plan.id, { sceneUuid, nodeUuid, componentClassName: 'cc.Sprite' }).ok, true);
   assert.equal(validateCommand(plan.id, { sceneUuid, nodeUuid, componentClassName: '../Sprite' }).code, 'INVALID_INPUT_FIELD');
