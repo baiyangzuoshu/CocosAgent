@@ -4,7 +4,7 @@ Standalone local CLI for Cocos Creator 2.4.15 projects. It can run without Codex
 
 ## Requirements
 
-Development source is now 0.11.0. It adds approved, precondition-checked replacement of an existing JS/TS asset through Creator AssetDB, with prior-source recovery and compile-diagnostic cursors. Creator extension 0.7.0 adds the matching command contract and implementation. The earlier 0.10.6 CLI candidate is locally verified, but its GitHub Release assets and live update acceptance remain unverified. A locally installed package is not evidence of a GitHub Release.
+The current release is 0.11.1. It includes approved, precondition-checked script replacement through Creator AssetDB and a build workflow that recognizes Creator 2.4.15's `build-finished` event, so the spawned Editor can exit after the result is captured. The bundled Creator extension is 0.7.0.
 
 - Node.js 20 or newer.
 - Cocos Creator 2.4.15 for editor-connected commands.
@@ -14,7 +14,7 @@ Development source is now 0.11.0. It adds approved, precondition-checked replace
 The CLI distribution channel is a versioned GitHub Release tarball, not the public npm registry. The first matching Release must be published before these commands work. Install an exact release globally with:
 
 ```sh
-VERSION=0.9.0
+VERSION=0.11.1
 npm install --global "https://github.com/baiyangzuoshu/CocosAgent/releases/download/cocos-creator-agent-cli-v${VERSION}/cocos-creator-agent-cli-v${VERSION}.tgz"
 ```
 

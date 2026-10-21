@@ -70,6 +70,60 @@ test('Creator build workflow verifies project and editor versions, then returns 
   (error) => error.code === 'BUILD_PATH_MUST_BE_OUTSIDE_PROJECT');
 });
 
+test('Creator build-finished marker closes the spawned editor and returns success', async (t) => {
+  const state = fixture();
+  t.after(() => fs.rmSync(state.root, { recursive: true, force: true }));
+  const outputPath = path.join(state.root, 'build-finished-output');
+  let child;
+  const result = await runCreatorWorkflow({ operation: 'build', projectRoot: state.projectRoot,
+    creatorPath: state.appRoot, platform: 'web-mobile', buildPath: outputPath, timeoutMs: 1000 }, {
+    spawnImpl() {
+      child = new FakeChild();
+      child.kill = (signal) => {
+        child.killed = true;
+        queueMicrotask(() => child.emit('close', null, signal));
+        return true;
+      };
+      queueMicrotask(() => {
+        fs.mkdirSync(outputPath, { recursive: true });
+        child.stdout.write('Builder: do custom process [build-');
+        child.stdout.write('finished]\n');
+      });
+      return child;
+    },
+  });
+  assert.equal(child.killed, true);
+  assert.equal(result.builderFinished, true);
+  assert.equal(result.timedOut, false);
+  assert.equal(result.signal, 'SIGTERM');
+  assert.equal(result.outputExists, true);
+  assert.equal(result.success, true);
+  assert.equal(result.failureCode, null);
+});
+
+test('Creator build failure survives bounded output truncation and takes precedence over finish', async (t) => {
+  const state = fixture();
+  t.after(() => fs.rmSync(state.root, { recursive: true, force: true }));
+  const outputPath = path.join(state.root, 'failed-finished-output');
+  const result = await runCreatorWorkflow({ operation: 'build', projectRoot: state.projectRoot,
+    creatorPath: state.appRoot, platform: 'web-mobile', buildPath: outputPath }, {
+    spawnImpl() {
+      const child = new FakeChild();
+      queueMicrotask(() => {
+        fs.mkdirSync(outputPath, { recursive: true });
+        child.stderr.write(`Error: Build Failed: asset import failed\n${'x'.repeat(140 * 1024)}`);
+        child.stdout.write('Builder: do custom process [build-finished]\n');
+        child.emit('close', 0, null);
+      });
+      return child;
+    },
+  });
+  assert.equal(result.builderFinished, false);
+  assert.equal(result.success, false);
+  assert.equal(result.failureCode, 'CREATOR_BUILD_REPORTED_FAILURE');
+  assert.equal(result.failureReason, 'asset import failed');
+});
+
 test('Creator Builder reported failure overrides zero exit and partial output', async (t) => {
   const state = fixture();
   t.after(() => fs.rmSync(state.root, { recursive: true, force: true }));

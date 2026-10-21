@@ -139,7 +139,45 @@ export async function runCreatorWorkflow({ operation, projectRoot, creatorPath, 
   let stdout = '';
   let stderr = '';
   let timedOut = false;
+  let builderFinished = false;
+  let sawBuilderFinished = false;
+  let builderFailureReason = null;
+  let scanTail = '';
+  let shutdownTimer = null;
   let killTimer = null;
+  const recordOutput = (stream, chunk) => {
+    const text = chunk.toString('utf8');
+    if (stream === 'stdout') stdout = appendTail(stdout, chunk);
+    else stderr = appendTail(stderr, chunk);
+    if (operation !== 'build') return;
+    const combined = scanTail + text;
+    if (!builderFailureReason) {
+      const failure = combined.match(/\bBuild Failed:\s*([^\r\n]+)/i)?.[1]?.trim();
+      if (failure) builderFailureReason = failure.slice(0, 1000);
+    }
+    if (!sawBuilderFinished && /Builder: do custom process \[build-finished\]/i.test(combined))
+      sawBuilderFinished = true;
+    scanTail = combined.slice(-2048);
+  };
+  const hasBuilderFailure = () => builderFailureReason !== null;
+  const outputExistsNow = () => {
+    try { return fs.statSync(outputPath).isDirectory(); } catch (_) { return false; }
+  };
+  const maybeStopAfterBuild = () => {
+    if (operation !== 'build' || builderFinished || shutdownTimer || hasBuilderFailure()
+      || !sawBuilderFinished || !outputExistsNow()) return;
+    // Creator 2.4 leaves the Editor process alive after the Builder's documented
+    // build-finished event. Give both output streams a short drain window, then
+    // stop only the process this workflow launched and report the completed build.
+    shutdownTimer = setTimeout(() => {
+      shutdownTimer = null;
+      if (hasBuilderFailure() || !outputExistsNow()) return;
+      builderFinished = true;
+      try { child.kill('SIGTERM'); } catch (_) {}
+      killTimer = setTimeout(() => { try { child.kill('SIGKILL'); } catch (_) {} }, 5000);
+      killTimer.unref?.();
+    }, 250);
+  };
   const timeout = setTimeout(() => {
     timedOut = true;
     try { child.kill('SIGTERM'); } catch (_) {}
@@ -147,8 +185,8 @@ export async function runCreatorWorkflow({ operation, projectRoot, creatorPath, 
     killTimer.unref?.();
   }, timeoutMs);
   timeout.unref?.();
-  child.stdout?.on('data', (chunk) => { stdout = appendTail(stdout, chunk); });
-  child.stderr?.on('data', (chunk) => { stderr = appendTail(stderr, chunk); });
+  child.stdout?.on('data', (chunk) => { recordOutput('stdout', chunk); maybeStopAfterBuild(); });
+  child.stderr?.on('data', (chunk) => { recordOutput('stderr', chunk); maybeStopAfterBuild(); });
 
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -156,22 +194,21 @@ export async function runCreatorWorkflow({ operation, projectRoot, creatorPath, 
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      if (shutdownTimer) clearTimeout(shutdownTimer);
       if (killTimer) clearTimeout(killTimer);
       if (error) { reject(coded('CREATOR_PROCESS_START_FAILED', error.message || String(error))); return; }
-      let outputExists = false;
-      try { outputExists = fs.statSync(outputPath).isDirectory(); } catch (_) {}
-      const builderFailure = operation === 'build'
-        ? `${stderr}\n${stdout}`.match(/\bBuild Failed:\s*([^\r\n]+)/i)?.[1]?.trim().slice(0, 1000) || null
-        : null;
+      const outputExists = outputExistsNow();
+      const builderFailure = operation === 'build' ? builderFailureReason : null;
       const failureCode = builderFailure ? 'CREATOR_BUILD_REPORTED_FAILURE'
-        : timedOut ? 'CREATOR_WORKFLOW_TIMEOUT'
-          : signal ? `CREATOR_PROCESS_${signal}`
-            : exitCode !== 0 ? `CREATOR_PROCESS_EXIT_${exitCode ?? 'UNKNOWN'}`
-              : !outputExists ? `CREATOR_${operation.toUpperCase()}_OUTPUT_MISSING` : null;
+        : builderFinished ? (!outputExists ? `CREATOR_${operation.toUpperCase()}_OUTPUT_MISSING` : null)
+          : timedOut ? 'CREATOR_WORKFLOW_TIMEOUT'
+            : signal ? `CREATOR_PROCESS_${signal}`
+              : exitCode !== 0 ? `CREATOR_PROCESS_EXIT_${exitCode ?? 'UNKNOWN'}`
+                : !outputExists ? `CREATOR_${operation.toUpperCase()}_OUTPUT_MISSING` : null;
       const completedAt = new Date().toISOString();
       resolve({ operation, projectName: project.project.name || path.basename(project.root), projectRoot: project.root,
         creatorVersion: creator.creatorVersion, platform, outputPath, outputExists, toolchain,
-        command: [creator.executable, ...args], exitCode, signal: signal || null, timedOut,
+        command: [creator.executable, ...args], exitCode, signal: signal || null, timedOut, builderFinished,
         success: failureCode === null, failureCode, failureReason: builderFailure,
         startedAt, completedAt, durationMs: Date.now() - startTime, stdout, stderr });
     };
