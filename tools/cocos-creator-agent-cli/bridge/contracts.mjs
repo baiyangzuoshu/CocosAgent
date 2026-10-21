@@ -45,6 +45,10 @@ function validateValue(schema, value, fieldPath) {
   }
   if (types.includes('object') && value && typeof value === 'object' && !Array.isArray(value)) {
     const properties = schema.properties || {};
+    const propertyCount = Object.keys(value).length;
+    if ((schema.minProperties !== undefined && propertyCount < schema.minProperties)
+      || (schema.maxProperties !== undefined && propertyCount > schema.maxProperties))
+      return { ok: false, code: 'INVALID_INPUT_FIELD', field: fieldPath };
     for (const key of schema.required || []) if (value[key] === undefined)
       return { ok: false, code: 'REQUIRED_INPUT_MISSING', field: `${fieldPath}.${key}` };
     if (schema.additionalProperties === false && Object.keys(value).some((key) => !Object.hasOwn(properties, key)))

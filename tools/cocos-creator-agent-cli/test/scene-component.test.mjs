@@ -16,7 +16,8 @@ function fixture() {
     constructor(name) {
       this.name = name || 'New Node'; this._id = `new-node-${++nodeSequence}`; this.active = true;
       this.children = []; this._components = []; this.parent = null; this._objFlags = 0;
-      this.x = 0; this.y = 0; this.scaleX = 1; this.scaleY = 1; this.angle = 0; this.width = 0; this.height = 0;
+      this.x = 0; this.y = 0; this.z = 0; this.scaleX = 1; this.scaleY = 1; this.angle = 0;
+      this.width = 0; this.height = 0; this.anchorX = 0.5; this.anchorY = 0.5;
     }
     get uuid() { return this._id; }
     getComponents(type) { return this._components.filter((component) => component instanceof type); }
@@ -36,6 +37,8 @@ function fixture() {
   BaseSprite.__props__ = ['enabled', 'inheritedValue'];
   class Vec2 { constructor(x = 0, y = 0) { this.x = x; this.y = y; } }
   class Vec3 { constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; } }
+  class Vec4 { constructor(x = 0, y = 0, z = 0, w = 0) { this.x = x; this.y = y; this.z = z; this.w = w; } }
+  class Rect { constructor(x = 0, y = 0, width = 0, height = 0) { this.x = x; this.y = y; this.width = width; this.height = height; } }
   class Size { constructor(width = 0, height = 0) { this.width = width; this.height = height; } }
   class Color { constructor(r = 0, g = 0, b = 0, a = 255) { this.r = r; this.g = g; this.b = b; this.a = a; } }
   class Sprite extends BaseSprite {
@@ -67,6 +70,12 @@ function fixture() {
   class Controller extends Component { onClick() {} }
   Controller.prototype.__classname__ = 'sample.Controller';
   Controller.__props__ = [];
+  class ReferenceHolder extends Component {
+    constructor() { super(); this.targetNode = null; this.targetComponent = null; this.nodeList = [];
+      this.vectorList = []; this.vector4 = new Vec4(); this.rect = new Rect(); }
+  }
+  ReferenceHolder.prototype.__classname__ = 'sample.ReferenceHolder';
+  ReferenceHolder.__props__ = ['targetNode', 'targetComponent', 'nodeList', 'vectorList', 'vector4', 'rect'];
   class NeedsOther extends Component {}
   NeedsOther.prototype.__classname__ = 'sample.NeedsOther';
   NeedsOther._requireComponent = Component;
@@ -87,7 +96,7 @@ function fixture() {
     },
   };
   const cc = {
-    Component, Node: FakeNode, SpriteFrame, Button, Vec2, Vec3, Size, Color,
+    Component, Node: FakeNode, SpriteFrame, Button, Vec2, Vec3, Vec4, Rect, Size, Color,
     Class: { attr(type, property, key) {
       if (key !== 'type') return null;
       if (type === Sprite && property === 'spriteFrame') return SpriteFrame;
@@ -96,6 +105,12 @@ function fixture() {
       if (type === Sprite && property === 'size') return Size;
       if (type === Sprite && property === 'tint') return Color;
       if (type === Sprite && property === 'thresholds') return Array;
+      if (type === ReferenceHolder && property === 'targetNode') return FakeNode;
+      if (type === ReferenceHolder && property === 'targetComponent') return Controller;
+      if (type === ReferenceHolder && property === 'nodeList') return FakeNode;
+      if (type === ReferenceHolder && property === 'vectorList') return Vec2;
+      if (type === ReferenceHolder && property === 'vector4') return Vec4;
+      if (type === ReferenceHolder && property === 'rect') return Rect;
       return null;
     } },
     assetManager: { loadAny(uuid, callback) { callback(null, new SpriteFrame(uuid)); } },
@@ -104,7 +119,8 @@ function fixture() {
     director: { getScene: () => root },
     js: {
       getClassByName(name) { return ({ 'cc.Component': Component, 'cc.Sprite': Sprite, 'cc.Button': Button,
-        'sample.Controller': Controller, 'sample.NeedsOther': NeedsOther, 'sample.NotAComponent': NotAComponent })[name]; },
+        'sample.Controller': Controller, 'sample.ReferenceHolder': ReferenceHolder,
+        'sample.NeedsOther': NeedsOther, 'sample.NotAComponent': NotAComponent })[name]; },
       getClassName(type) { return type.prototype.__classname__ || ''; },
       isChildClassOf(type, base) { return type === base || type.prototype instanceof base; },
     },
@@ -112,7 +128,8 @@ function fixture() {
   cc.Component.EventHandler = class EventHandler { constructor() { this.target = null; this.component = ''; this.handler = ''; this.customEventData = ''; } };
   const module = { exports: {} };
   vm.runInNewContext(sceneSource, { module, exports: module.exports, cc, Array }, { filename: 'scene.js' });
-  return { api: module.exports, root, Sprite, Vec2, Vec3, Size, Color, SpriteFrame, cc, FakeNode };
+  return { api: module.exports, root, Sprite, Button, Controller, ReferenceHolder, Vec2, Vec3, Vec4, Rect,
+    Size, Color, SpriteFrame, cc, FakeNode };
 }
 
 function invoke(api, method, input) {
@@ -158,6 +175,82 @@ test('component state resolves exact registered component class and scene node',
   assert.equal(result.result.componentCount, 0);
   assert.equal(result.result.canAdd, true);
   assert.equal(result.result.componentClassName, 'cc.Sprite');
+});
+
+test('existing node transform updates are bounded, preconditioned and read back field by field', () => {
+  const { api, root, FakeNode } = fixture();
+  const node = new FakeNode('Target');
+  root.addChild(node);
+  const before = invoke(api, 'nodeTransformState', { sceneUuid: root.uuid, nodeUuid: node.uuid }).result;
+  assert.equal(before.available, true);
+  assert.equal(before.transform.x, 0);
+  assert.equal(before.transform.anchorX, 0.5);
+
+  const changed = invoke(api, 'setNodeTransform', { sceneUuid: root.uuid, nodeUuid: node.uuid, nodePath: 'Scene/Target',
+    expectedBefore: { x: 0, y: 0, angle: 0, width: 0, anchorX: 0.5 },
+    values: { x: 120, y: -40, angle: 90, width: 300, anchorX: 0 } });
+  assert.equal(changed.error, null);
+  assert.equal(changed.result.available, true);
+  assert.deepEqual({ ...changed.result.before }, { x: 0, y: 0, angle: 0, width: 0, anchorX: 0.5 });
+  assert.deepEqual({ ...changed.result.after }, { x: 120, y: -40, angle: 90, width: 300, anchorX: 0 });
+  assert.equal(node.x, 120);
+  assert.equal(node.y, -40);
+  assert.equal(node.angle, 90);
+  assert.equal(node.width, 300);
+
+  const stale = invoke(api, 'setNodeTransform', { sceneUuid: root.uuid, nodeUuid: node.uuid, nodePath: 'Scene/Target',
+    expectedBefore: { x: 0 }, values: { x: 999 } }).result;
+  assert.equal(stale.available, false);
+  assert.equal(stale.reason, 'SCENE_NODE_TRANSFORM_PRECONDITION_FAILED');
+  assert.equal(node.x, 120);
+  const invalid = invoke(api, 'setNodeTransform', { sceneUuid: root.uuid, nodeUuid: node.uuid, nodePath: 'Scene/Target',
+    expectedBefore: { arbitrary: 0 }, values: { arbitrary: 1 } }).result;
+  assert.equal(invalid.available, false);
+  assert.equal(node.x, 120);
+  const noChange = invoke(api, 'setNodeTransform', { sceneUuid: root.uuid, nodeUuid: node.uuid, nodePath: 'Scene/Target',
+    expectedBefore: { x: 120 }, values: { x: 120 } }).result;
+  assert.equal(noChange.available, false);
+  assert.equal(noChange.reason, 'SCENE_NODE_TRANSFORM_NO_CHANGE');
+});
+
+test('existing Button click events replace only the exact component after validating targets and handlers', () => {
+  const { api, root, FakeNode, Button, Controller } = fixture();
+  const buttonNode = new FakeNode('Button');
+  const targetNode = new FakeNode('Controller');
+  buttonNode._id = '11111111-1111-4111-8111-111111111111';
+  targetNode._id = '22222222-2222-4222-8222-222222222222';
+  root.addChild(buttonNode);
+  root.addChild(targetNode);
+  const button = buttonNode.addComponent(Button);
+  const controller = targetNode.addComponent(Controller);
+  const requested = [{ targetUuid: targetNode.uuid, component: 'sample.Controller', handler: 'onClick', customEventData: 'tap' }];
+  const before = invoke(api, 'buttonEventsState', { sceneUuid: root.uuid, nodeUuid: buttonNode.uuid,
+    nodePath: 'Scene/Button', componentInstanceId: button._id, events: requested }).result;
+  assert.equal(before.available, true);
+  assert.deepEqual(Array.from(before.events), []);
+  assert.equal(before.changed, true);
+  const changed = invoke(api, 'setButtonEvents', { sceneUuid: root.uuid, nodeUuid: buttonNode.uuid,
+    nodePath: 'Scene/Button', componentInstanceId: button._id, expectedBefore: [], events: requested });
+  assert.equal(changed.error, null);
+  assert.equal(changed.result.available, true);
+  assert.equal(button.clickEvents[0].target, targetNode);
+  assert.equal(button.clickEvents[0].component, 'sample.Controller');
+  assert.equal(button.clickEvents[0].handler, 'onClick');
+  assert.equal(button.clickEvents[0].customEventData, 'tap');
+  assert.equal(controller.node, targetNode);
+
+  const stale = invoke(api, 'setButtonEvents', { sceneUuid: root.uuid, nodeUuid: buttonNode.uuid,
+    nodePath: 'Scene/Button', componentInstanceId: button._id, expectedBefore: [], events: [] }).result;
+  assert.equal(stale.available, false);
+  assert.equal(stale.reason, 'SCENE_BUTTON_EVENTS_PRECONDITION_FAILED');
+  assert.equal(button.clickEvents.length, 1);
+
+  const invalidHandler = invoke(api, 'buttonEventsState', { sceneUuid: root.uuid, nodeUuid: buttonNode.uuid,
+    nodePath: 'Scene/Button', componentInstanceId: button._id,
+    events: [{ ...requested[0], handler: 'missingMethod' }] }).result;
+  assert.equal(invalidHandler.available, false);
+  assert.equal(invalidHandler.reason, 'SCENE_COMPOSE_HANDLER_NOT_FOUND');
+  assert.equal(button.clickEvents.length, 1);
 });
 
 test('component addition requires exact before count and refuses implicit dependencies', () => {
@@ -304,6 +397,70 @@ test('component property writes round-trip typed vectors, size, color, and bound
     expectedValue: { kind: 'vec2', y: 9, x: 8 }, value: { kind: 'vec2', x: 8, y: 9 } }).result;
   assert.equal(positionState.available, true);
   assert.equal(noChange.reason, 'SCENE_COMPONENT_PROPERTY_NO_CHANGE');
+});
+
+test('component properties round-trip exact scene node/component references and typed object arrays', () => {
+  const { api, root, FakeNode, ReferenceHolder, Controller, Vec2, Vec4, Rect } = fixture();
+  const holderNode = new FakeNode('Holder');
+  holderNode._id = '33333333-3333-4333-8333-333333333333';
+  const targetNode = new FakeNode('Target');
+  targetNode._id = '44444444-4444-4444-8444-444444444444';
+  root.addChild(holderNode);
+  root.addChild(targetNode);
+  const holder = holderNode.addComponent(ReferenceHolder);
+  const targetComponent = targetNode.addComponent(Controller);
+  const base = { sceneUuid: root.uuid, nodeUuid: holderNode.uuid, nodePath: 'Scene/Holder',
+    componentClassName: 'sample.ReferenceHolder', componentInstanceId: holder._id };
+
+  const nodeBefore = invoke(api, 'componentPropertyState', { ...base, property: 'targetNode' }).result;
+  assert.equal(nodeBefore.available, true);
+  assert.deepEqual({ ...nodeBefore.value }, { kind: 'node-ref' });
+  const nodeWrite = invoke(api, 'setComponentProperty', { ...base, property: 'targetNode',
+    expectedValue: nodeBefore.value, value: { kind: 'node-ref', nodeUuid: targetNode.uuid } }).result;
+  assert.equal(nodeWrite.available, true);
+  assert.equal(holder.targetNode, targetNode);
+  assert.deepEqual({ ...nodeWrite.value }, { kind: 'node-ref', nodeUuid: targetNode.uuid });
+
+  const componentBefore = invoke(api, 'componentPropertyState', { ...base, property: 'targetComponent' }).result;
+  assert.equal(componentBefore.available, true);
+  assert.deepEqual({ ...componentBefore.value }, { kind: 'component-ref', componentClassName: 'sample.Controller' });
+  const componentWrite = invoke(api, 'setComponentProperty', { ...base, property: 'targetComponent',
+    expectedValue: componentBefore.value, value: { kind: 'component-ref', nodeUuid: targetNode.uuid,
+      componentClassName: 'sample.Controller', componentInstanceId: targetComponent._id } }).result;
+  assert.equal(componentWrite.available, true);
+  assert.equal(holder.targetComponent, targetComponent);
+
+  const nodeListWrite = invoke(api, 'setComponentProperty', { ...base, property: 'nodeList',
+    expectedValue: { kind: 'array', items: [] }, value: { kind: 'array', items: [
+      { kind: 'node-ref', nodeUuid: targetNode.uuid }, { kind: 'node-ref' },
+    ] } }).result;
+  assert.equal(nodeListWrite.available, true);
+  assert.equal(holder.nodeList.length, 2);
+  assert.equal(holder.nodeList[0], targetNode);
+  assert.equal(holder.nodeList[1], null);
+
+  const vectorListWrite = invoke(api, 'setComponentProperty', { ...base, property: 'vectorList',
+    expectedValue: { kind: 'array', items: [] }, value: { kind: 'array', items: [
+      { kind: 'vec2', x: 4, y: 8 }, { kind: 'vec2', x: -2, y: 7 },
+    ] } }).result;
+  assert.equal(vectorListWrite.available, true);
+  assert.ok(holder.vectorList.every((value) => value instanceof Vec2));
+  assert.deepEqual(Array.from(holder.vectorList, ({ x, y }) => [x, y]), [[4, 8], [-2, 7]]);
+
+  const vector4Write = invoke(api, 'setComponentProperty', { ...base, property: 'vector4',
+    expectedValue: { kind: 'vec4', x: 0, y: 0, z: 0, w: 0 }, value: { kind: 'vec4', x: 1, y: 2, z: 3, w: 4 } }).result;
+  assert.equal(vector4Write.available, true);
+  assert.ok(holder.vector4 instanceof Vec4);
+  const rectWrite = invoke(api, 'setComponentProperty', { ...base, property: 'rect',
+    expectedValue: { kind: 'rect', x: 0, y: 0, width: 0, height: 0 },
+    value: { kind: 'rect', x: 5, y: 6, width: 30, height: 40 } }).result;
+  assert.equal(rectWrite.available, true);
+  assert.ok(holder.rect instanceof Rect);
+
+  const invalidTarget = invoke(api, 'componentPropertyState', { ...base, property: 'targetNode',
+    requestedValue: { kind: 'node-ref', nodeUuid: '55555555-5555-4555-8555-555555555555' } }).result;
+  assert.equal(invalidTarget.available, false);
+  assert.equal(invalidTarget.reason, 'SCENE_COMPONENT_PROPERTY_NODE_REFERENCE_UNAVAILABLE');
 });
 
 test('component asset properties load exact resources and represent an empty reference without a UUID', () => {

@@ -107,6 +107,173 @@ function transformSummary(node) {
     return result;
 }
 
+const TRANSFORM_FIELDS = new Set(['x', 'y', 'z', 'scaleX', 'scaleY', 'angle', 'width', 'height', 'anchorX', 'anchorY']);
+
+function validTransformValue(field, value) {
+    return Number.isFinite(value) && Math.abs(value) <= 1000000
+        && (!['width', 'height'].includes(field) || value >= 0);
+}
+
+function nodeTransformState(params) {
+    if (!params || typeof params.sceneUuid !== 'string' || typeof params.nodeUuid !== 'string')
+        return { available: false, reason: 'SCENE_NODE_TRANSFORM_INPUT_INVALID' };
+    const located = locateNode(params.sceneUuid, params.nodeUuid);
+    if (!located.state.available) return located.state;
+    const transform = transformSummary(located.node);
+    if (!Object.keys(transform).length) return { ...located.state, available: false, reason: 'SCENE_NODE_TRANSFORM_UNAVAILABLE' };
+    if (params.values !== undefined) {
+        if (!params.values || typeof params.values !== 'object' || Array.isArray(params.values)
+            || Object.keys(params.values).length < 1 || Object.keys(params.values).length > TRANSFORM_FIELDS.size
+            || Object.keys(params.values).some((key) => !TRANSFORM_FIELDS.has(key)))
+            return { ...located.state, available: false, reason: 'SCENE_NODE_TRANSFORM_FIELDS_INVALID', transform };
+        for (const [field, value] of Object.entries(params.values)) {
+            if (!Object.prototype.hasOwnProperty.call(transform, field) || !validTransformValue(field, value))
+                return { ...located.state, available: false, reason: 'SCENE_NODE_TRANSFORM_VALUE_INVALID', field, transform };
+        }
+    }
+    return { ...located.state, transform,
+        ...(params.values === undefined ? {} : { requested: { ...params.values },
+            changed: Object.keys(params.values).some((field) => transform[field] !== params.values[field]) }) };
+}
+
+function setNodeTransform(params) {
+    if (!params || typeof params.sceneUuid !== 'string' || typeof params.nodeUuid !== 'string'
+        || typeof params.nodePath !== 'string' || !params.expectedBefore || !params.values
+        || typeof params.expectedBefore !== 'object' || typeof params.values !== 'object'
+        || Array.isArray(params.expectedBefore) || Array.isArray(params.values))
+        return { available: false, reason: 'SCENE_NODE_TRANSFORM_INPUT_INVALID' };
+    const before = nodeTransformState({ sceneUuid: params.sceneUuid, nodeUuid: params.nodeUuid });
+    if (!before.available) return before;
+    if (before.nodePath !== params.nodePath) return { ...before, available: false, reason: 'SCENE_NODE_PATH_MISMATCH' };
+    const fields = Object.keys(params.values).sort();
+    if (!fields.length || fields.length !== Object.keys(params.expectedBefore).length
+        || fields.some((field, index) => field !== Object.keys(params.expectedBefore).sort()[index]
+            || !TRANSFORM_FIELDS.has(field) || !validTransformValue(field, params.values[field])
+            || !Number.isFinite(params.expectedBefore[field]) || Math.abs(params.expectedBefore[field]) > 1000000))
+        return { ...before, available: false, reason: 'SCENE_NODE_TRANSFORM_FIELDS_INVALID' };
+    for (const field of fields) {
+        if (!Object.prototype.hasOwnProperty.call(before.transform, field) || before.transform[field] !== params.expectedBefore[field])
+            return { ...before, available: false, reason: 'SCENE_NODE_TRANSFORM_PRECONDITION_FAILED', field };
+        if (before.transform[field] === params.values[field])
+            return { ...before, available: false, reason: 'SCENE_NODE_TRANSFORM_NO_CHANGE', field };
+    }
+    const located = locateNode(params.sceneUuid, params.nodeUuid);
+    if (!located.node) return { ...before, available: false, reason: 'SCENE_NODE_NOT_FOUND' };
+    let mutationStarted = false;
+    try {
+        for (const field of fields) {
+            mutationStarted = true;
+            located.node[field] = params.values[field];
+        }
+    } catch (error) {
+        return { ...before, available: false, reason: 'SCENE_NODE_TRANSFORM_SETTER_FAILED',
+            mutationStarted, error: String(error && error.message || error), transform: transformSummary(located.node) };
+    }
+    const after = nodeTransformState({ sceneUuid: params.sceneUuid, nodeUuid: params.nodeUuid });
+    if (!after.available || fields.some((field) => after.transform[field] !== params.values[field]))
+        return { ...after, available: false, reason: 'SCENE_NODE_TRANSFORM_READBACK_FAILED', mutationStarted: true };
+    return { available: true, sceneUuid: params.sceneUuid, nodeUuid: params.nodeUuid, nodePath: params.nodePath,
+        before: Object.fromEntries(fields.map((field) => [field, before.transform[field]])),
+        after: Object.fromEntries(fields.map((field) => [field, after.transform[field]])), transform: after.transform };
+}
+
+function normalizedButtonEvents(button) {
+    if (!button || !Array.isArray(button.clickEvents) || button.clickEvents.length > 12)
+        return { available: false, reason: 'SCENE_BUTTON_EVENT_LIMIT' };
+    return { available: true, events: button.clickEvents.map((event) => ({
+        targetUuid: event && event.target && typeof event.target.uuid === 'string' ? event.target.uuid : null,
+        component: event && typeof event.component === 'string' ? event.component : '',
+        handler: event && typeof event.handler === 'string' ? event.handler : '',
+        customEventData: event && typeof event.customEventData === 'string' ? event.customEventData : '',
+    })) };
+}
+
+function buttonEventsState(params) {
+    if (!params || typeof params.sceneUuid !== 'string' || typeof params.nodeUuid !== 'string'
+        || typeof params.nodePath !== 'string' || typeof params.componentInstanceId !== 'string')
+        return { available: false, reason: 'SCENE_BUTTON_EVENTS_INPUT_INVALID' };
+    const located = locateNode(params.sceneUuid, params.nodeUuid);
+    if (!located.state.available) return located.state;
+    if (located.state.nodePath !== params.nodePath) return { ...located.state, available: false, reason: 'SCENE_NODE_PATH_MISMATCH' };
+    const buttonClass = componentClass('cc.Button');
+    if (!buttonClass.available) return buttonClass;
+    const query = exactComponentInstances(located.node, buttonClass.constructor);
+    if (!query.available) return query;
+    const button = query.components.find((item) => item && item._id != null
+        && String(item._id) === params.componentInstanceId && cc.isValid(item, true));
+    if (!button) return { ...located.state, available: false, reason: 'SCENE_BUTTON_INSTANCE_NOT_FOUND' };
+    const current = normalizedButtonEvents(button);
+    if (!current.available) return { ...located.state, ...current };
+    if (params.events === undefined) return { ...located.state, componentClassName: 'cc.Button',
+        componentInstanceId: params.componentInstanceId, events: current.events };
+    if (!Array.isArray(params.events) || params.events.length > 12)
+        return { ...located.state, available: false, reason: 'SCENE_BUTTON_EVENT_INPUT_INVALID' };
+    for (const event of params.events) {
+        if (!event || typeof event !== 'object' || Array.isArray(event)
+            || Object.keys(event).sort().join(',') !== 'component,customEventData,handler,targetUuid'
+            || !validUuid(event.targetUuid) || typeof event.component !== 'string' || event.component.length > MAX_NAME
+            || !/^[A-Za-z_$][A-Za-z0-9_$]{0,63}$/.test(event.handler)
+            || typeof event.customEventData !== 'string' || event.customEventData.length > 512)
+            return { ...located.state, available: false, reason: 'SCENE_BUTTON_EVENT_INVALID' };
+        const target = locateNode(params.sceneUuid, event.targetUuid);
+        if (!target.state.available) return { ...located.state, available: false, reason: 'SCENE_BUTTON_EVENT_TARGET_UNAVAILABLE', targetReason: target.state.reason };
+        const handlerClass = componentClass(event.component);
+        if (!handlerClass.available) return { ...located.state, available: false, reason: handlerClass.reason };
+        const handlerComponents = exactComponentInstances(target.node, handlerClass.constructor);
+        if (!handlerComponents.available || handlerComponents.components.length !== 1)
+            return { ...located.state, available: false, reason: handlerComponents.reason || 'SCENE_BUTTON_HANDLER_COMPONENT_AMBIGUOUS' };
+        if (!hasSafeComponentHandler(handlerClass.constructor, event.handler))
+            return { ...located.state, available: false, reason: 'SCENE_COMPOSE_HANDLER_NOT_FOUND', handler: event.handler };
+    }
+    return { ...located.state, componentClassName: 'cc.Button', componentInstanceId: params.componentInstanceId,
+        events: current.events, requestedEvents: params.events,
+        changed: !sameValue(current.events, params.events) };
+}
+
+function setButtonEvents(params) {
+    if (!params || !Array.isArray(params.expectedBefore) || !Array.isArray(params.events))
+        return { available: false, reason: 'SCENE_BUTTON_EVENTS_INPUT_INVALID' };
+    const before = buttonEventsState({ sceneUuid: params.sceneUuid, nodeUuid: params.nodeUuid,
+        nodePath: params.nodePath, componentInstanceId: params.componentInstanceId });
+    if (!before.available) return before;
+    if (!sameValue(before.events, params.expectedBefore))
+        return { ...before, available: false, reason: 'SCENE_BUTTON_EVENTS_PRECONDITION_FAILED' };
+    if (sameValue(before.events, params.events))
+        return { ...before, available: false, reason: 'SCENE_BUTTON_EVENTS_NO_CHANGE' };
+    const validated = buttonEventsState({ sceneUuid: params.sceneUuid, nodeUuid: params.nodeUuid,
+        nodePath: params.nodePath, componentInstanceId: params.componentInstanceId, events: params.events });
+    if (!validated.available) return validated;
+    if (typeof cc.Component.EventHandler !== 'function')
+        return { ...before, available: false, reason: 'SCENE_BUTTON_EVENT_HANDLER_UNAVAILABLE' };
+    const located = locateNode(params.sceneUuid, params.nodeUuid);
+    const buttonClass = componentClass('cc.Button');
+    const button = exactComponentInstances(located.node, buttonClass.constructor).components
+        .find((item) => String(item._id) === params.componentInstanceId);
+    const eventHandlers = params.events.map((event) => {
+        const target = locateNode(params.sceneUuid, event.targetUuid).node;
+        const handler = new cc.Component.EventHandler();
+        handler.target = target;
+        handler.component = event.component;
+        handler.handler = event.handler;
+        handler.customEventData = event.customEventData;
+        return handler;
+    });
+    let mutationStarted = false;
+    try {
+        mutationStarted = true;
+        button.clickEvents = eventHandlers;
+    } catch (error) {
+        return { ...before, available: false, reason: 'SCENE_BUTTON_EVENTS_WRITE_FAILED', mutationStarted,
+            error: String(error && error.message || error) };
+    }
+    const after = normalizedButtonEvents(button);
+    if (!after.available || !sameValue(after.events, params.events))
+        return { ...before, available: false, reason: 'SCENE_BUTTON_EVENTS_READBACK_FAILED', mutationStarted: true,
+            observedEvents: after.events || null };
+    return { available: true, sceneUuid: params.sceneUuid, nodeUuid: params.nodeUuid, nodePath: params.nodePath,
+        componentInstanceId: params.componentInstanceId, before: before.events, events: after.events };
+}
+
 function snapshot(maxNodes) {
     const scene = cc && cc.director && cc.director.getScene && cc.director.getScene();
     if (!scene) return { available: false, reason: 'NO_ACTIVE_SCENE', sceneName: null, sceneUuid: null, nodes: [] };
@@ -199,7 +366,9 @@ function findNode(sceneUuid, nodeUuid) {
 }
 
 function nodeState(params) {
-    return findNode(params && params.sceneUuid, params && params.nodeUuid);
+    const located = locateNode(params && params.sceneUuid, params && params.nodeUuid);
+    if (!located.state.available) return located.state;
+    return { ...located.state, transform: transformSummary(located.node) };
 }
 
 function nodeNameState(params) {
@@ -426,6 +595,19 @@ function exactComponentInstances(node, constructor) {
     return { available: true, components };
 }
 
+function hasSafeComponentHandler(constructor, handler) {
+    if (!constructor || !constructor.prototype || ['constructor', '__defineGetter__', '__defineSetter__',
+        '__lookupGetter__', '__lookupSetter__', 'hasOwnProperty', 'isPrototypeOf', 'propertyIsEnumerable',
+        'toLocaleString', 'toString', 'valueOf'].includes(handler)) return false;
+    let prototype = constructor.prototype;
+    while (prototype && prototype !== cc.Component.prototype) {
+        const descriptor = Object.getOwnPropertyDescriptor(prototype, handler);
+        if (descriptor) return Object.prototype.hasOwnProperty.call(descriptor, 'value') && typeof descriptor.value === 'function';
+        prototype = Object.getPrototypeOf(prototype);
+    }
+    return false;
+}
+
 function componentRemoveState(params) {
     if (!params || typeof params.sceneUuid !== 'string' || typeof params.nodeUuid !== 'string'
         || typeof params.nodePath !== 'string' || typeof params.componentClassName !== 'string'
@@ -527,17 +709,56 @@ function sameValue(left, right) {
     catch (_) { return false; }
 }
 
+function isComponentConstructor(constructor) {
+    return typeof constructor === 'function' && !!cc && !!cc.Component && constructor !== cc.Component
+        && !!cc.js && typeof cc.js.isChildClassOf === 'function' && cc.js.isChildClassOf(constructor, cc.Component);
+}
+
+function componentClassName(constructor) {
+    const name = cc && cc.js && typeof cc.js.getClassName === 'function' ? cc.js.getClassName(constructor) : '';
+    return typeof name === 'string' && name.length <= 120 ? name : null;
+}
+
+function typedReferenceValue(value, attrType) {
+    if (Array.isArray(value)) return null;
+    if (cc && cc.Node && attrType === cc.Node) {
+        if (value == null) return { available: true, value: { kind: 'node-ref' }, kind: 'node-ref' };
+        if (!(value instanceof cc.Node) || !validUuid(value.uuid))
+            return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_NODE_REFERENCE_INVALID' };
+        return { available: true, value: { kind: 'node-ref', nodeUuid: value.uuid }, kind: 'node-ref' };
+    }
+    if (isComponentConstructor(attrType)) {
+        const declaredClassName = componentClassName(attrType);
+        if (!declaredClassName) return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_COMPONENT_TYPE_UNAVAILABLE' };
+        if (value == null) return { available: true,
+            value: { kind: 'component-ref', componentClassName: declaredClassName }, kind: 'component-ref' };
+        const actualClassName = componentClassName(value.constructor);
+        if (!(value instanceof attrType) || !value.node || !validUuid(value.node.uuid)
+            || value._id == null || !actualClassName)
+            return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_COMPONENT_REFERENCE_INVALID' };
+        return { available: true, value: { kind: 'component-ref', nodeUuid: value.node.uuid,
+            componentClassName: actualClassName, componentInstanceId: String(value._id) }, kind: 'component-ref' };
+    }
+    return null;
+}
+
 function componentValueKind(value, attrType) {
     if (isScalar(value)) {
         if ((attrType === String && typeof value !== 'string') || (attrType === Number && typeof value !== 'number')
-            || (attrType === Boolean && typeof value !== 'boolean'))
+            || (attrType === Boolean && typeof value !== 'boolean')
+            || (attrType === 'String' && typeof value !== 'string')
+            || (['Number', 'Integer', 'Float'].includes(attrType) && typeof value !== 'number')
+            || (attrType === 'Boolean' && typeof value !== 'boolean')
+            || (typeof attrType === 'function' && ![String, Number, Boolean].includes(attrType)))
             return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_TYPE_MISMATCH' };
         return { available: true, value, kind: typeof value };
     }
     const typed = [
         ['vec2', cc && cc.Vec2, ['x', 'y']],
         ['vec3', cc && cc.Vec3, ['x', 'y', 'z']],
+        ['vec4', cc && cc.Vec4, ['x', 'y', 'z', 'w']],
         ['size', cc && cc.Size, ['width', 'height']],
+        ['rect', cc && cc.Rect, ['x', 'y', 'width', 'height']],
         ['color', cc && cc.Color, ['r', 'g', 'b', 'a']],
     ];
     for (const [kind, constructor, fields] of typed) {
@@ -552,10 +773,32 @@ function componentValueKind(value, attrType) {
             return { available: true, value: result, kind };
         }
     }
-    if (Array.isArray(value) && (attrType === Array || attrType == null)) {
-        if (value.length > 32 || value.some((item) => !isScalar(item)))
+    const typedReference = typedReferenceValue(value, attrType);
+    if (typedReference) return typedReference;
+    if (Array.isArray(value) && (attrType === Array || attrType == null || typeof attrType === 'function'
+        || ['String', 'Number', 'Boolean', 'Integer', 'Float'].includes(attrType))) {
+        if (value.length > 32 || value.some((item) => Array.isArray(item)))
             return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_TYPE_UNSUPPORTED' };
-        return { available: true, value: { kind: 'array', items: value.slice() }, kind: 'array' };
+        const elementType = attrType === Array ? null : attrType;
+        const items = [];
+        for (const item of value) {
+            if (isScalar(item)) {
+                const stringType = elementType === String || elementType === 'String';
+                const numberType = elementType === Number || ['Number', 'Integer', 'Float'].includes(elementType);
+                const booleanType = elementType === Boolean || elementType === 'Boolean';
+                if ((stringType && typeof item !== 'string') || (numberType && typeof item !== 'number')
+                    || (booleanType && typeof item !== 'boolean')
+                    || (typeof elementType === 'function' && ![String, Number, Boolean].includes(elementType)))
+                    return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_TYPE_MISMATCH' };
+                items.push(item);
+            } else {
+                const encoded = componentValueKind(item, elementType);
+                if (!encoded.available || encoded.kind === 'asset' || encoded.kind === 'array')
+                    return { available: false, reason: encoded.reason || 'SCENE_COMPONENT_PROPERTY_TYPE_UNSUPPORTED' };
+                items.push(encoded.value);
+            }
+        }
+        return { available: true, value: { kind: 'array', items }, kind: 'array' };
     }
     for (const assetClass of ASSET_CLASS_NAMES) {
         const constructor = cc && cc[assetClass];
@@ -570,40 +813,103 @@ function componentValueKind(value, attrType) {
     return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_TYPE_UNSUPPORTED' };
 }
 
-function validComponentValue(value) {
+function validComponentValue(value, depth = 0) {
+    if (depth > 1) return false;
     if (isScalar(value)) return true;
     if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
     if (value.kind === 'vec2') return Object.keys(value).length === 3
         && ['x', 'y'].every((field) => Number.isFinite(value[field]) && Math.abs(value[field]) <= 1000000);
-    if (value.kind === 'vec3') return Object.keys(value).length === 4
+    if (value.kind === 'vec3') return Object.keys(value).sort().join(',') === 'kind,x,y,z'
         && ['x', 'y', 'z'].every((field) => Number.isFinite(value[field]) && Math.abs(value[field]) <= 1000000);
-    if (value.kind === 'size') return Object.keys(value).length === 3
+    if (value.kind === 'vec4') return Object.keys(value).sort().join(',') === 'kind,w,x,y,z'
+        && ['x', 'y', 'z', 'w'].every((field) => Number.isFinite(value[field]) && Math.abs(value[field]) <= 1000000);
+    if (value.kind === 'rect') return Object.keys(value).sort().join(',') === 'height,kind,width,x,y'
+        && ['x', 'y', 'width', 'height'].every((field) => Number.isFinite(value[field]) && Math.abs(value[field]) <= 1000000);
+    if (value.kind === 'size') return Object.keys(value).sort().join(',') === 'height,kind,width'
         && ['width', 'height'].every((field) => Number.isFinite(value[field]) && Math.abs(value[field]) <= 1000000);
-    if (value.kind === 'color') return Object.keys(value).length === 5
+    if (value.kind === 'color') return Object.keys(value).sort().join(',') === 'a,b,g,kind,r'
         && ['r', 'g', 'b', 'a'].every((field) => Number.isInteger(value[field]) && value[field] >= 0 && value[field] <= 255);
-    if (value.kind === 'array') return Object.keys(value).length === 2 && Array.isArray(value.items)
-        && value.items.length <= 32 && value.items.every(isScalar);
+    if (value.kind === 'array') return Object.keys(value).sort().join(',') === 'items,kind' && Array.isArray(value.items)
+        && value.items.length <= 32 && value.items.every((item) => isScalar(item) || validComponentValue(item, depth + 1)
+            && item.kind !== 'array' && item.kind !== 'asset');
     if (value.kind === 'asset') return (Object.keys(value).length === 2 || Object.keys(value).length === 3)
         && ASSET_CLASS_NAMES.includes(value.assetClass)
         && (value.assetUuid === undefined || (typeof value.assetUuid === 'string'
             && (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value.assetUuid)
                 || /^[A-Za-z0-9+/]{22,23}$/.test(value.assetUuid))));
+    if (value.kind === 'node-ref') return (Object.keys(value).sort().join(',') === 'kind'
+        || Object.keys(value).sort().join(',') === 'kind,nodeUuid')
+        && (value.nodeUuid === undefined || validUuid(value.nodeUuid));
+    if (value.kind === 'component-ref') return (Object.keys(value).sort().join(',') === 'componentClassName,kind'
+        || Object.keys(value).sort().join(',') === 'componentClassName,componentInstanceId,kind,nodeUuid')
+        && typeof value.componentClassName === 'string' && /^[A-Za-z_$][A-Za-z0-9_$.]{0,119}$/.test(value.componentClassName)
+        && (value.nodeUuid === undefined || validUuid(value.nodeUuid))
+        && (value.componentInstanceId === undefined || (typeof value.componentInstanceId === 'string'
+            && value.componentInstanceId.length > 0 && value.componentInstanceId.length <= 128));
     return false;
 }
 
-function decodeComponentValue(value, attrType, loadedAsset) {
+function decodeComponentValue(value, attrType, loadedAsset, sceneUuid) {
     if (isScalar(value)) {
         if ((attrType === String && typeof value !== 'string') || (attrType === Number && typeof value !== 'number')
-            || (attrType === Boolean && typeof value !== 'boolean'))
+            || (attrType === Boolean && typeof value !== 'boolean')
+            || (attrType === 'String' && typeof value !== 'string')
+            || (['Number', 'Integer', 'Float'].includes(attrType) && typeof value !== 'number')
+            || (attrType === 'Boolean' && typeof value !== 'boolean')
+            || (typeof attrType === 'function' && ![String, Number, Boolean].includes(attrType)))
             return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_TYPE_MISMATCH' };
         return { available: true, value };
     }
     if (!validComponentValue(value)) return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_VALUE_INVALID' };
     if (value.kind === 'vec2' && attrType === cc.Vec2) return { available: true, value: new cc.Vec2(value.x, value.y) };
     if (value.kind === 'vec3' && attrType === cc.Vec3) return { available: true, value: new cc.Vec3(value.x, value.y, value.z) };
+    if (value.kind === 'vec4' && attrType === cc.Vec4) return { available: true, value: new cc.Vec4(value.x, value.y, value.z, value.w) };
     if (value.kind === 'size' && attrType === cc.Size) return { available: true, value: new cc.Size(value.width, value.height) };
+    if (value.kind === 'rect' && attrType === cc.Rect) return { available: true, value: new cc.Rect(value.x, value.y, value.width, value.height) };
     if (value.kind === 'color' && attrType === cc.Color) return { available: true, value: new cc.Color(value.r, value.g, value.b, value.a) };
-    if (value.kind === 'array' && (attrType === Array || attrType == null)) return { available: true, value: value.items.slice() };
+    if (value.kind === 'node-ref' && attrType === cc.Node) {
+        if (value.nodeUuid === undefined) return { available: true, value: null };
+        const located = locateNode(sceneUuid, value.nodeUuid);
+        if (!located.state.available || !(located.node instanceof cc.Node) || typeof cc.isValid !== 'function'
+            || !cc.isValid(located.node, true))
+            return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_NODE_REFERENCE_UNAVAILABLE' };
+        return { available: true, value: located.node };
+    }
+    if (value.kind === 'component-ref' && isComponentConstructor(attrType)) {
+        const declaredName = componentClassName(attrType);
+        if (value.nodeUuid === undefined) return value.componentClassName === declaredName
+            ? { available: true, value: null }
+            : { available: false, reason: 'SCENE_COMPONENT_PROPERTY_COMPONENT_TYPE_MISMATCH' };
+        const resolved = componentClass(value.componentClassName);
+        if (!resolved.available || !cc.js.isChildClassOf(resolved.constructor, attrType))
+            return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_COMPONENT_TYPE_MISMATCH' };
+        const located = locateNode(sceneUuid, value.nodeUuid);
+        if (!located.state.available) return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_COMPONENT_REFERENCE_UNAVAILABLE' };
+        const query = exactComponentInstances(located.node, resolved.constructor);
+        if (!query.available) return { available: false, reason: query.reason };
+        const component = query.components.find((item) => item && item._id != null
+            && String(item._id) === value.componentInstanceId && cc.isValid(item, true));
+        if (!component) return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_COMPONENT_REFERENCE_UNAVAILABLE' };
+        return { available: true, value: component };
+    }
+    if (value.kind === 'array' && (attrType === Array || attrType == null || typeof attrType === 'function'
+        || ['String', 'Number', 'Boolean', 'Integer', 'Float'].includes(attrType))) {
+        const elementType = attrType === Array ? null : attrType;
+        const decoded = [];
+        for (const item of value.items) {
+            if (isScalar(item)) {
+                const result = decodeComponentValue(item, elementType, null, sceneUuid);
+                if (!result.available) return result;
+                decoded.push(result.value);
+            } else {
+                if (item.kind === 'asset') return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_TYPE_UNSUPPORTED' };
+                const result = decodeComponentValue(item, elementType, null, sceneUuid);
+                if (!result.available) return result;
+                decoded.push(result.value);
+            }
+        }
+        return { available: true, value: decoded };
+    }
     if (value.kind === 'asset' && attrType === cc[value.assetClass]) {
         if (value.assetUuid == null) return { available: true, value: null };
         if (!loadedAsset || !(loadedAsset instanceof attrType)
@@ -647,6 +953,15 @@ function componentPropertyState(params) {
     catch (_) { return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_READ_FAILED' }; }
     const serialized = componentValueKind(value, attrType);
     if (!serialized.available) return { available: false, reason: serialized.reason };
+    if (['node-ref', 'component-ref', 'array'].includes(serialized.kind)) {
+        const currentReference = decodeComponentValue(serialized.value, attrType, null, params.sceneUuid);
+        if (!currentReference.available) return { available: false, reason: currentReference.reason };
+    }
+    if (Object.prototype.hasOwnProperty.call(params, 'requestedValue')
+        && !(params.requestedValue && params.requestedValue.kind === 'asset')) {
+        const requested = decodeComponentValue(params.requestedValue, attrType, null, params.sceneUuid);
+        if (!requested.available) return { available: false, reason: requested.reason };
+    }
     return { available: true, sceneName: located.state.sceneName, sceneUuid: located.state.sceneUuid,
         nodePath: located.state.nodePath, nodeUuid: located.state.nodeUuid,
         componentClassName: resolved.componentClassName, componentInstanceId: params.componentInstanceId,
@@ -674,7 +989,7 @@ function setComponentProperty(params, loadedAsset) {
     if (!component) return { ...before, available: false, reason: 'SCENE_COMPONENT_INSTANCE_NOT_FOUND' };
     const attrType = cc.Class && typeof cc.Class.attr === 'function'
         ? cc.Class.attr(resolved.constructor, params.property, 'type') : null;
-    const decoded = decodeComponentValue(params.value, attrType, loadedAsset);
+    const decoded = decodeComponentValue(params.value, attrType, loadedAsset, params.sceneUuid);
     if (!decoded.available) return { ...before, available: false, reason: decoded.reason };
     try { component[params.property] = decoded.value; }
     catch (_) { return { ...before, available: false, reason: 'SCENE_COMPONENT_PROPERTY_WRITE_FAILED' }; }
@@ -874,8 +1189,7 @@ function compositionState(params) {
             const matches = targetNode.state.components.filter((component) => component.componentClassName === event.handlerComponentClassName);
             if (matches.length !== 1) return { available: false, reason: 'SCENE_COMPOSE_HANDLER_COMPONENT_AMBIGUOUS' };
         }
-        const prototype = handler.constructor.prototype;
-        if (!prototype || typeof prototype[event.handler] !== 'function')
+        if (!hasSafeComponentHandler(handler.constructor, event.handler))
             return { available: false, reason: 'SCENE_COMPOSE_HANDLER_NOT_FOUND', handler: event.handler };
     }
 
@@ -1043,6 +1357,22 @@ module.exports = {
     nodeState(event, params) {
         try { event.reply(null, nodeState(params || {})); }
         catch (error) { event.reply({ code: 'SCENE_NODE_STATE_FAILED', message: String(error && error.message || error) }); }
+    },
+    nodeTransformState(event, params) {
+        try { event.reply(null, nodeTransformState(params || {})); }
+        catch (error) { event.reply({ code: 'SCENE_NODE_TRANSFORM_STATE_FAILED', message: String(error && error.message || error) }); }
+    },
+    setNodeTransform(event, params) {
+        try { event.reply(null, setNodeTransform(params || {})); }
+        catch (error) { event.reply({ code: 'SCENE_NODE_TRANSFORM_WRITE_FAILED', message: String(error && error.message || error) }); }
+    },
+    buttonEventsState(event, params) {
+        try { event.reply(null, buttonEventsState(params || {})); }
+        catch (error) { event.reply({ code: 'SCENE_BUTTON_EVENTS_STATE_FAILED', message: String(error && error.message || error) }); }
+    },
+    setButtonEvents(event, params) {
+        try { event.reply(null, setButtonEvents(params || {})); }
+        catch (error) { event.reply({ code: 'SCENE_BUTTON_EVENTS_WRITE_FAILED', message: String(error && error.message || error) }); }
     },
     nodeNameState(event, params) {
         try { event.reply(null, nodeNameState(params || {})); }

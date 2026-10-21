@@ -565,6 +565,73 @@ function readSceneOperation(operationId) {
     return operation;
 }
 
+function readSceneNodeTransformOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    const before = plan && plan.expectedBefore;
+    const after = plan && plan.expectedAfter;
+    const fields = before && typeof before === 'object' && !Array.isArray(before) ? Object.keys(before).sort() : [];
+    if (!operation || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.scene.node.set-transform' || !plan || plan.operation !== operation.operation
+        || plan.operationId !== operationId || typeof operation.planHash !== 'string'
+        || typeof plan.projectRoot !== 'string' || typeof plan.creatorVersion !== 'string'
+        || typeof plan.extensionVersion !== 'string' || typeof plan.contractFingerprint !== 'string'
+        || typeof plan.creatorInstanceId !== 'string' || typeof plan.sceneUuid !== 'string'
+        || typeof plan.sceneName !== 'string' || typeof plan.nodeUuid !== 'string' || typeof plan.nodePath !== 'string'
+        || !before || !after || fields.length < 1 || fields.length > 10
+        || fields.some((field) => !['x', 'y', 'z', 'scaleX', 'scaleY', 'angle', 'width', 'height', 'anchorX', 'anchorY'].includes(field)
+            || !Number.isFinite(before[field]) || Math.abs(before[field]) > 1000000
+            || !Number.isFinite(after[field]) || Math.abs(after[field]) > 1000000
+            || (['width', 'height'].includes(field) && after[field] < 0) || before[field] === after[field])
+        || Object.keys(after).sort().join(',') !== fields.join(',') || typeof plan.expiresAt !== 'string'
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
+            'save-requested', 'completed', 'not-applied', 'save-required', 'conflict'].includes(operation.status))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    return operation;
+}
+
+function validButtonEventList(events, { allowUnbound = false } = {}) {
+    return Array.isArray(events) && events.length <= 12 && events.every((event) => event && typeof event === 'object'
+        && !Array.isArray(event) && Object.keys(event).sort().join(',') === 'component,customEventData,handler,targetUuid'
+        && (event.targetUuid === null && allowUnbound || typeof event.targetUuid === 'string'
+            && (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(event.targetUuid)
+                || /^[A-Za-z0-9+/]{22,23}$/.test(event.targetUuid)))
+        && typeof event.component === 'string' && event.component.length <= 120
+        && typeof event.handler === 'string' && event.handler.length <= 64
+        && typeof event.customEventData === 'string' && event.customEventData.length <= 512);
+}
+
+function readSceneButtonEventsOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    if (!operation || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.scene.button-events.set' || !plan || plan.operation !== operation.operation
+        || plan.operationId !== operationId || typeof operation.planHash !== 'string'
+        || typeof plan.projectRoot !== 'string' || typeof plan.creatorVersion !== 'string'
+        || typeof plan.extensionVersion !== 'string' || typeof plan.contractFingerprint !== 'string'
+        || typeof plan.creatorInstanceId !== 'string' || typeof plan.sceneUuid !== 'string'
+        || typeof plan.sceneName !== 'string' || typeof plan.nodeUuid !== 'string' || typeof plan.nodePath !== 'string'
+        || typeof plan.componentInstanceId !== 'string' || !validButtonEventList(plan.expectedBefore, { allowUnbound: true })
+        || !validButtonEventList(plan.expectedAfter) || sceneComponentValuesEqual(plan.expectedBefore, plan.expectedAfter)
+        || typeof plan.expiresAt !== 'string'
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
+            'save-requested', 'completed', 'not-applied', 'save-required', 'conflict'].includes(operation.status))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    return operation;
+}
+
 function readSceneNodeDeleteOperation(operationId) {
     const filename = operationPath(operationId);
     let stat;
@@ -707,7 +774,8 @@ function readSceneComponentOperation(operationId) {
     return operation;
 }
 
-function validSceneComponentValue(value) {
+function validSceneComponentValue(value, depth = 0) {
+    if (depth > 1) return false;
     if (typeof value === 'string') return Buffer.byteLength(value, 'utf8') <= 1024;
     if (typeof value === 'boolean') return true;
     if (typeof value === 'number') return Number.isFinite(value) && Math.abs(value) <= 1000000000;
@@ -717,6 +785,10 @@ function validSceneComponentValue(value) {
         && ['x', 'y'].every((field) => Number.isFinite(value[field]) && Math.abs(value[field]) <= 1000000);
     if (value.kind === 'vec3') return keys === 'kind,x,y,z'
         && ['x', 'y', 'z'].every((field) => Number.isFinite(value[field]) && Math.abs(value[field]) <= 1000000);
+    if (value.kind === 'vec4') return keys === 'kind,w,x,y,z'
+        && ['x', 'y', 'z', 'w'].every((field) => Number.isFinite(value[field]) && Math.abs(value[field]) <= 1000000);
+    if (value.kind === 'rect') return keys === 'height,kind,width,x,y'
+        && ['x', 'y', 'width', 'height'].every((field) => Number.isFinite(value[field]) && Math.abs(value[field]) <= 1000000);
     if (value.kind === 'size') return keys === 'height,kind,width'
         && ['width', 'height'].every((field) => Number.isFinite(value[field]) && Math.abs(value[field]) <= 1000000);
     if (value.kind === 'color') return keys === 'a,b,g,kind,r'
@@ -724,12 +796,25 @@ function validSceneComponentValue(value) {
     if (value.kind === 'array') return keys === 'items,kind' && Array.isArray(value.items)
         && value.items.length <= 32 && value.items.every((item) => typeof item === 'string'
             ? Buffer.byteLength(item, 'utf8') <= 1024 : typeof item === 'boolean'
-              || (typeof item === 'number' && Number.isFinite(item) && Math.abs(item) <= 1000000000));
+              || (typeof item === 'number' && Number.isFinite(item) && Math.abs(item) <= 1000000000)
+              || (validSceneComponentValue(item, depth + 1) && !['array', 'asset'].includes(item.kind)));
     if (value.kind === 'asset') return (keys === 'assetClass,kind' || keys === 'assetClass,assetUuid,kind')
         && ['SpriteFrame', 'Texture2D', 'AudioClip', 'Prefab', 'BitmapFont', 'TTFFont'].includes(value.assetClass)
         && (value.assetUuid === undefined || (typeof value.assetUuid === 'string'
             && (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value.assetUuid)
                 || /^[A-Za-z0-9+/]{22,23}$/.test(value.assetUuid))));
+    if (value.kind === 'node-ref') return (keys === 'kind' || keys === 'kind,nodeUuid')
+        && (value.nodeUuid === undefined || typeof value.nodeUuid === 'string'
+            && (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value.nodeUuid)
+                || /^[A-Za-z0-9+/]{22,23}$/.test(value.nodeUuid)));
+    if (value.kind === 'component-ref') return (keys === 'componentClassName,kind'
+        || keys === 'componentClassName,componentInstanceId,kind,nodeUuid')
+        && typeof value.componentClassName === 'string' && /^[A-Za-z_$][A-Za-z0-9_$.]{0,119}$/.test(value.componentClassName)
+        && (value.nodeUuid === undefined || typeof value.nodeUuid === 'string'
+            && (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value.nodeUuid)
+                || /^[A-Za-z0-9+/]{22,23}$/.test(value.nodeUuid)))
+        && (value.componentInstanceId === undefined || typeof value.componentInstanceId === 'string'
+            && value.componentInstanceId.length > 0 && value.componentInstanceId.length <= 128);
     return false;
 }
 
@@ -2598,6 +2683,90 @@ async function createSceneNodeActivePlan(input) {
             sceneSaveAcknowledgement: 'Creator 2.4 scene:stash-and-save has no documented completion acknowledgement; receipt distinguishes save-requested from disk persistence.' } };
 }
 
+async function createSceneNodeTransformPlan(input) {
+    if (!Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function') throw coded('SCENE_API_UNAVAILABLE');
+    if (!input.values || typeof input.values !== 'object' || Array.isArray(input.values)) throw coded('SCENE_NODE_TRANSFORM_FIELDS_INVALID');
+    const currentRoot = projectRoot();
+    const currentVersion = editorVersion();
+    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    const current = await callScene('nodeTransformState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid,
+        values: input.values }, 20000);
+    if (!current || current.available !== true) throw coded(current && current.reason || 'SCENE_NODE_TRANSFORM_STATE_UNAVAILABLE');
+    if (current.sceneUuid !== input.sceneUuid || current.nodeUuid !== input.nodeUuid
+        || typeof current.nodePath !== 'string' || !current.transform || typeof current.transform !== 'object')
+        throw coded('SCENE_NODE_TRANSFORM_STATE_INVALID');
+    const fields = Object.keys(input.values).sort();
+    if (!fields.length || !current.changed) throw coded('SCENE_NODE_TRANSFORM_NO_CHANGE');
+    const expectedBefore = {};
+    const expectedAfter = {};
+    for (const field of fields) {
+        if (!Object.prototype.hasOwnProperty.call(current.transform, field)) throw coded('SCENE_NODE_TRANSFORM_FIELD_UNAVAILABLE', field);
+        expectedBefore[field] = current.transform[field];
+        expectedAfter[field] = input.values[field];
+    }
+    if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
+    const operationId = uuid();
+    const plan = { operationId, operation: 'creator.scene.node.set-transform', projectRoot: currentRoot,
+        creatorVersion: currentVersion, extensionVersion: extensionPackage.version,
+        contractFingerprint: CONTRACT_FINGERPRINT, creatorInstanceId: INSTANCE_ID,
+        sceneUuid: current.sceneUuid, sceneName: current.sceneName, nodeUuid: current.nodeUuid,
+        nodePath: current.nodePath, expectedBefore, expectedAfter,
+        expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString() };
+    const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
+        planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
+        projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
+        expectedBefore, expectedAfter, expiresAt: plan.expiresAt,
+        diff: { action: 'set-node-transform', scene: plan.sceneName, node: plan.nodePath,
+            changes: fields.map((field) => ({ field, before: expectedBefore[field], after: expectedAfter[field] })) },
+        recovery: { operationId, automaticRetry: false, reconcileCommand: 'creator.scene.node.set-transform.reconcile',
+            sameCreatorSessionRequired: true,
+            note: 'Creator 2.4 scene save IPC has no documented completion acknowledgement; reconcile reads current in-memory values only.' } };
+}
+
+async function createSceneButtonEventsPlan(input) {
+    if (!Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function') throw coded('SCENE_API_UNAVAILABLE');
+    const currentRoot = projectRoot();
+    const currentVersion = editorVersion();
+    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    const node = await callScene('nodeState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);
+    if (!node || node.available !== true) throw coded(node && node.reason || 'SCENE_NODE_STATE_UNAVAILABLE');
+    if (node.sceneUuid !== input.sceneUuid || node.nodeUuid !== input.nodeUuid || typeof node.nodePath !== 'string'
+        || !node.components.some((item) => item.componentClassName === 'cc.Button'
+            && item.componentInstanceId === input.componentInstanceId)) throw coded('SCENE_BUTTON_INSTANCE_NOT_FOUND');
+    const current = await callScene('buttonEventsState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid,
+        nodePath: node.nodePath, componentInstanceId: input.componentInstanceId, events: input.events }, 30000);
+    if (!current || current.available !== true) throw coded(current && current.reason || 'SCENE_BUTTON_EVENTS_STATE_UNAVAILABLE');
+    if (current.sceneUuid !== input.sceneUuid || current.nodeUuid !== input.nodeUuid
+        || current.nodePath !== node.nodePath || current.componentInstanceId !== input.componentInstanceId
+        || !Array.isArray(current.events) || !Array.isArray(current.requestedEvents)) throw coded('SCENE_BUTTON_EVENTS_STATE_INVALID');
+    if (!current.changed) throw coded('SCENE_BUTTON_EVENTS_NO_CHANGE');
+    if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
+    const operationId = uuid();
+    const plan = { operationId, operation: 'creator.scene.button-events.set', projectRoot: currentRoot,
+        creatorVersion: currentVersion, extensionVersion: extensionPackage.version,
+        contractFingerprint: CONTRACT_FINGERPRINT, creatorInstanceId: INSTANCE_ID,
+        sceneUuid: current.sceneUuid, sceneName: current.sceneName, nodeUuid: current.nodeUuid,
+        nodePath: current.nodePath, componentInstanceId: current.componentInstanceId,
+        expectedBefore: current.events, expectedAfter: current.requestedEvents,
+        expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString() };
+    const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
+        planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
+        projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
+        componentInstanceId: plan.componentInstanceId, expectedBefore: plan.expectedBefore,
+        expectedAfter: plan.expectedAfter, expiresAt: plan.expiresAt,
+        diff: { action: 'set-button-click-events', scene: plan.sceneName, node: plan.nodePath,
+            componentInstanceId: plan.componentInstanceId, before: plan.expectedBefore, after: plan.expectedAfter },
+        recovery: { operationId, automaticRetry: false, reconcileCommand: 'creator.scene.button-events.set.reconcile',
+            sameCreatorSessionRequired: true,
+            note: 'Creator 2.4 scene save IPC has no documented completion acknowledgement; reconcile reads the current in-memory event list.' } };
+}
+
 async function createSceneNodeRenamePlan(input) {
     if (!Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function') throw coded('SCENE_API_UNAVAILABLE');
     const currentRoot = projectRoot();
@@ -2898,7 +3067,7 @@ async function createSceneComponentPropertyPlan(input) {
         throw coded('SCENE_NODE_STATE_INVALID');
     const state = await callScene('componentPropertyState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid,
         nodePath: node.nodePath, componentClassName: input.componentClassName,
-        componentInstanceId: input.componentInstanceId, property: input.property }, 20000);
+        componentInstanceId: input.componentInstanceId, property: input.property, requestedValue: input.value }, 20000);
     if (!state || state.available !== true) throw coded(state && state.reason || 'SCENE_COMPONENT_PROPERTY_STATE_UNAVAILABLE');
     if (state.sceneUuid !== input.sceneUuid || state.nodeUuid !== input.nodeUuid || state.nodePath !== node.nodePath
         || state.componentClassName !== input.componentClassName || state.componentInstanceId !== input.componentInstanceId
@@ -3129,6 +3298,244 @@ async function reconcileSceneNodeActive(input) {
     return { ...sceneNodeActiveReceipt(operation, observed), observed: { active: observed.active,
         sceneUuid: observed.sceneUuid, nodeUuid: observed.nodeUuid, nodePath: observed.nodePath },
         retry: 'Never retry this operation. If the scene remains unchanged, create a new plan; if save-required, save the scene in Creator and inspect the result.' };
+}
+
+function transformMapMatches(transform, expected) {
+    return !!transform && Object.keys(expected).every((field) => transform[field] === expected[field]);
+}
+
+function confirmSceneNodeTransform(operation) {
+    if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
+    const plan = operation.plan;
+    const changes = Object.keys(plan.expectedAfter).map((field) =>
+        `${field}: ${plan.expectedBefore[field]} → ${plan.expectedAfter[field]}`).join('\n');
+    const detail = [`Project: ${plan.projectRoot}`, `Creator: ${plan.creatorVersion}`,
+        `Scene: ${plan.sceneName} (${plan.sceneUuid})`, `Node: ${plan.nodePath} (${plan.nodeUuid})`,
+        changes, `Operation: ${operation.operationId}`, '',
+        'This changes the selected existing node transform fields and requests save of the current scene. Readback confirms in-memory values; Creator does not document a save completion acknowledgement here.'].join('\n');
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator scene change',
+        message: `Change transform on ${plan.nodePath}?`, detail,
+        buttons: ['Cancel', 'Apply transform'], defaultId: 0, cancelId: 0, noLink: true });
+}
+
+function sceneNodeTransformReceipt(operation, state) {
+    const plan = operation.plan;
+    const fields = Object.keys(plan.expectedAfter);
+    return { operationId: operation.operationId, status: operation.status,
+        projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
+        before: plan.expectedBefore, after: state && state.transform
+            ? Object.fromEntries(fields.map((field) => [field, state.transform[field]])) : null,
+        transform: state && state.transform || null, sceneSaveRequestSent: !!operation.sceneSaveRequestSent,
+        sceneSaveCompletionConfirmed: false, plannedByInstanceId: operation.plannedByInstanceId,
+        appliedByInstanceId: operation.appliedByInstanceId || null,
+        completedByInstanceId: operation.completedByInstanceId || null,
+        approvedAt: operation.approvedAt || null, completedAt: operation.completedAt || null,
+        reconciledAt: operation.reconciledAt || null,
+        recovery: { automaticRetry: false, reconcileCommand: 'creator.scene.node.set-transform.reconcile',
+            manualSaveMayBeRequired: operation.status === 'save-required',
+            note: 'Creator 2.4 scene save IPC has no documented completion acknowledgement; this receipt separates in-memory readback from the save request.' } };
+}
+
+async function commitSceneNodeTransform(input, context) {
+    const operation = readSceneNodeTransformOperation(input.operationId);
+    verifySceneOperationIdentity(operation);
+    if (operation.plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
+    if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (operation.status !== 'planned') throw coded(operation.status === 'applying' || operation.status === 'awaiting-approval'
+        || operation.status === 'mutation-applied' || operation.status === 'save-requested'
+        ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    let before = await readPlannedSceneNode(operation.plan);
+    if (!transformMapMatches(before.transform, operation.plan.expectedBefore)) throw coded('OPERATION_PRECONDITION_FAILED');
+    operation.status = 'awaiting-approval';
+    operation.approvalRequestedAt = new Date().toISOString();
+    writeOperation(operation);
+    if (!await confirmSceneNodeTransform(operation)) {
+        operation.status = 'cancelled'; operation.cancelledAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('OPERATION_NOT_APPROVED');
+    }
+    try { await authorizeWriteRequest(context && context.requestId); }
+    catch (error) {
+        operation.status = 'abandoned'; operation.abandonedAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error));
+    }
+    try {
+        verifySceneOperationIdentity(operation);
+        if (operation.plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
+        before = await readPlannedSceneNode(operation.plan);
+        if (!transformMapMatches(before.transform, operation.plan.expectedBefore)) throw coded('OPERATION_PRECONDITION_FAILED');
+    } catch (error) {
+        operation.status = 'conflict'; operation.conflictAt = new Date().toISOString(); writeOperation(operation); throw error;
+    }
+    operation.status = 'applying'; operation.approvedAt = new Date().toISOString();
+    operation.approvalSource = 'creator-native-dialog'; operation.appliedByInstanceId = INSTANCE_ID; writeOperation(operation);
+    const mutation = await callScene('setNodeTransform', { sceneUuid: operation.plan.sceneUuid,
+        nodeUuid: operation.plan.nodeUuid, nodePath: operation.plan.nodePath,
+        expectedBefore: operation.plan.expectedBefore, values: operation.plan.expectedAfter }, 20000);
+    if (!mutation || mutation.available !== true || !transformMapMatches(mutation.after, operation.plan.expectedAfter)) {
+        operation.status = mutation && mutation.mutationStarted ? 'mutation-applied' : 'conflict';
+        operation.lastErrorCode = mutation && mutation.reason || 'SCENE_NODE_TRANSFORM_WRITE_READBACK_FAILED';
+        writeOperation(operation);
+        throw coded(operation.lastErrorCode);
+    }
+    operation.status = 'mutation-applied'; operation.mutationAppliedAt = new Date().toISOString(); writeOperation(operation);
+    if (!Editor.Ipc || typeof Editor.Ipc.sendToPanel !== 'function') throw coded('CREATOR_SCENE_SAVE_IPC_UNAVAILABLE');
+    try { Editor.Ipc.sendToPanel('scene', 'scene:stash-and-save'); }
+    catch (error) { throw coded('CREATOR_SCENE_SAVE_REQUEST_FAILED', String(error.message || error)); }
+    operation.status = 'save-requested'; operation.sceneSaveRequestSent = true;
+    operation.sceneSaveRequestedAt = new Date().toISOString(); writeOperation(operation);
+    const readback = await readPlannedSceneNode(operation.plan);
+    if (!transformMapMatches(readback.transform, operation.plan.expectedAfter)) throw coded('OPERATION_READBACK_STATE_MISMATCH');
+    operation.status = 'completed'; operation.completedAt = new Date().toISOString();
+    operation.completedByInstanceId = INSTANCE_ID; writeOperation(operation);
+    return sceneNodeTransformReceipt(operation, readback);
+}
+
+async function reconcileSceneNodeTransform(input) {
+    const operation = readSceneNodeTransformOperation(input.operationId);
+    verifySceneOperationIdentity(operation, { requireCurrentContract: false });
+    let observed;
+    try { observed = await readPlannedSceneNode(operation.plan); }
+    catch (error) {
+        operation.status = 'conflict'; operation.reconciledAt = new Date().toISOString();
+        operation.reconcileReason = error.code || 'SCENE_NODE_STATE_UNAVAILABLE'; writeOperation(operation);
+        return { ...sceneNodeTransformReceipt(operation, null), observed: null, reason: operation.reconcileReason };
+    }
+    if (transformMapMatches(observed.transform, operation.plan.expectedBefore)) {
+        if (['applying', 'awaiting-approval'].includes(operation.status)) operation.status = 'not-applied';
+        else if (['mutation-applied', 'save-requested', 'completed'].includes(operation.status)) operation.status = 'conflict';
+    } else if (transformMapMatches(observed.transform, operation.plan.expectedAfter)) {
+        if (operation.status === 'save-requested' || operation.status === 'completed') operation.status = 'completed';
+        else if (['mutation-applied', 'applying'].includes(operation.status)) operation.status = 'save-required';
+        else operation.status = 'conflict';
+    } else operation.status = 'conflict';
+    operation.reconciledAt = new Date().toISOString(); writeOperation(operation);
+    return { ...sceneNodeTransformReceipt(operation, observed), observed: {
+        transform: Object.fromEntries(Object.keys(operation.plan.expectedAfter).map((field) => [field, observed.transform[field]])),
+        sceneUuid: observed.sceneUuid, nodeUuid: observed.nodeUuid, nodePath: observed.nodePath },
+        retry: 'Never retry this operation. If unchanged, create a new plan; if save-required, save manually in Creator and review before continuing.' };
+}
+
+async function readPlannedSceneButtonEvents(plan) {
+    const state = await callScene('buttonEventsState', { sceneUuid: plan.sceneUuid, nodeUuid: plan.nodeUuid,
+        nodePath: plan.nodePath, componentInstanceId: plan.componentInstanceId }, 20000);
+    if (!state || state.available !== true || state.sceneUuid !== plan.sceneUuid || state.nodeUuid !== plan.nodeUuid
+        || state.nodePath !== plan.nodePath || state.componentInstanceId !== plan.componentInstanceId
+        || !Array.isArray(state.events)) throw coded(state && state.reason || 'SCENE_BUTTON_EVENTS_STATE_UNAVAILABLE');
+    return state;
+}
+
+function buttonEventListMatches(actual, expected) {
+    return Array.isArray(actual) && Array.isArray(expected) && sceneComponentValuesEqual(actual, expected);
+}
+
+function confirmSceneButtonEvents(operation) {
+    if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
+    const plan = operation.plan;
+    const format = (events) => events.map((event, index) => `${index + 1}. ${event.targetUuid || '(missing target)'} → ${event.component}.${event.handler} (${JSON.stringify(event.customEventData)})`).join('\n') || '(none)';
+    const detail = [`Project: ${plan.projectRoot}`, `Creator: ${plan.creatorVersion}`,
+        `Scene: ${plan.sceneName} (${plan.sceneUuid})`, `Button: ${plan.nodePath} (${plan.nodeUuid})`,
+        `Button component instance: ${plan.componentInstanceId}`, `Operation: ${operation.operationId}`,
+        '', `Before:\n${format(plan.expectedBefore)}`, '', `After:\n${format(plan.expectedAfter)}`, '',
+        'This replaces the complete click-event list on the exact existing cc.Button instance. Creator will recheck the exact before-list after approval, then request scene save. The receipt confirms same-session readback; the 2.4 save IPC has no documented completion acknowledgement.'].join('\n');
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator Button events',
+        message: `Replace ${plan.expectedBefore.length} click event(s) with ${plan.expectedAfter.length}?`, detail,
+        buttons: ['Cancel', 'Apply Button events'], defaultId: 0, cancelId: 0, noLink: true });
+}
+
+function sceneButtonEventsReceipt(operation, state) {
+    const plan = operation.plan;
+    return { operationId: operation.operationId, status: operation.status, projectRoot: plan.projectRoot,
+        creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
+        componentInstanceId: plan.componentInstanceId, before: plan.expectedBefore,
+        events: state && state.events || null, sceneSaveRequestSent: !!operation.sceneSaveRequestSent,
+        sceneSaveCompletionConfirmed: false, plannedByInstanceId: operation.plannedByInstanceId,
+        appliedByInstanceId: operation.appliedByInstanceId || null,
+        completedByInstanceId: operation.completedByInstanceId || null,
+        approvedAt: operation.approvedAt || null, completedAt: operation.completedAt || null,
+        reconciledAt: operation.reconciledAt || null,
+        recovery: { automaticRetry: false, reconcileCommand: 'creator.scene.button-events.set.reconcile',
+            manualSaveMayBeRequired: operation.status === 'save-required',
+            note: 'Creator 2.4 scene save IPC has no documented completion acknowledgement; this receipt separates event-list readback from the save request.' } };
+}
+
+async function commitSceneButtonEvents(input, context) {
+    const operation = readSceneButtonEventsOperation(input.operationId);
+    verifySceneOperationIdentity(operation);
+    if (operation.plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
+    if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (operation.status !== 'planned') throw coded(operation.status === 'applying' || operation.status === 'awaiting-approval'
+        || operation.status === 'mutation-applied' || operation.status === 'save-requested'
+        ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    let before = await readPlannedSceneButtonEvents(operation.plan);
+    if (!buttonEventListMatches(before.events, operation.plan.expectedBefore)) throw coded('OPERATION_PRECONDITION_FAILED');
+    operation.status = 'awaiting-approval'; operation.approvalRequestedAt = new Date().toISOString(); writeOperation(operation);
+    if (!await confirmSceneButtonEvents(operation)) {
+        operation.status = 'cancelled'; operation.cancelledAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('OPERATION_NOT_APPROVED');
+    }
+    try { await authorizeWriteRequest(context && context.requestId); }
+    catch (error) {
+        operation.status = 'abandoned'; operation.abandonedAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error));
+    }
+    try {
+        verifySceneOperationIdentity(operation);
+        if (operation.plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
+        before = await readPlannedSceneButtonEvents(operation.plan);
+        if (!buttonEventListMatches(before.events, operation.plan.expectedBefore)) throw coded('OPERATION_PRECONDITION_FAILED');
+    } catch (error) {
+        operation.status = 'conflict'; operation.conflictAt = new Date().toISOString(); writeOperation(operation); throw error;
+    }
+    operation.status = 'applying'; operation.approvedAt = new Date().toISOString();
+    operation.approvalSource = 'creator-native-dialog'; operation.appliedByInstanceId = INSTANCE_ID; writeOperation(operation);
+    const mutation = await callScene('setButtonEvents', { sceneUuid: operation.plan.sceneUuid,
+        nodeUuid: operation.plan.nodeUuid, nodePath: operation.plan.nodePath,
+        componentInstanceId: operation.plan.componentInstanceId, expectedBefore: operation.plan.expectedBefore,
+        events: operation.plan.expectedAfter }, 30000);
+    if (!mutation || mutation.available !== true || !buttonEventListMatches(mutation.events, operation.plan.expectedAfter)) {
+        operation.status = mutation && mutation.mutationStarted ? 'mutation-applied' : 'conflict';
+        operation.lastErrorCode = mutation && mutation.reason || 'SCENE_BUTTON_EVENTS_WRITE_READBACK_FAILED';
+        writeOperation(operation); throw coded(operation.lastErrorCode);
+    }
+    operation.status = 'mutation-applied'; operation.mutationAppliedAt = new Date().toISOString(); writeOperation(operation);
+    if (!Editor.Ipc || typeof Editor.Ipc.sendToPanel !== 'function') throw coded('CREATOR_SCENE_SAVE_IPC_UNAVAILABLE');
+    try { Editor.Ipc.sendToPanel('scene', 'scene:stash-and-save'); }
+    catch (error) { throw coded('CREATOR_SCENE_SAVE_REQUEST_FAILED', String(error.message || error)); }
+    operation.status = 'save-requested'; operation.sceneSaveRequestSent = true;
+    operation.sceneSaveRequestedAt = new Date().toISOString(); writeOperation(operation);
+    const readback = await readPlannedSceneButtonEvents(operation.plan);
+    if (!buttonEventListMatches(readback.events, operation.plan.expectedAfter)) throw coded('OPERATION_READBACK_STATE_MISMATCH');
+    operation.status = 'completed'; operation.completedAt = new Date().toISOString();
+    operation.completedByInstanceId = INSTANCE_ID; writeOperation(operation);
+    return sceneButtonEventsReceipt(operation, readback);
+}
+
+async function reconcileSceneButtonEvents(input) {
+    const operation = readSceneButtonEventsOperation(input.operationId);
+    verifySceneOperationIdentity(operation, { requireCurrentContract: false });
+    let observed;
+    try { observed = await readPlannedSceneButtonEvents(operation.plan); }
+    catch (error) {
+        operation.status = 'conflict'; operation.reconciledAt = new Date().toISOString();
+        operation.reconcileReason = error.code || 'SCENE_BUTTON_EVENTS_STATE_UNAVAILABLE'; writeOperation(operation);
+        return { ...sceneButtonEventsReceipt(operation, null), observed: null, reason: operation.reconcileReason };
+    }
+    if (buttonEventListMatches(observed.events, operation.plan.expectedBefore)) {
+        if (['applying', 'awaiting-approval'].includes(operation.status)) operation.status = 'not-applied';
+        else if (['mutation-applied', 'save-requested', 'completed'].includes(operation.status)) operation.status = 'conflict';
+    } else if (buttonEventListMatches(observed.events, operation.plan.expectedAfter)) {
+        if (operation.status === 'save-requested' || operation.status === 'completed') operation.status = 'completed';
+        else if (['mutation-applied', 'applying'].includes(operation.status)) operation.status = 'save-required';
+        else operation.status = 'conflict';
+    } else operation.status = 'conflict';
+    operation.reconciledAt = new Date().toISOString(); writeOperation(operation);
+    return { ...sceneButtonEventsReceipt(operation, observed), observed: { events: observed.events,
+        sceneUuid: observed.sceneUuid, nodeUuid: observed.nodeUuid, nodePath: observed.nodePath },
+        retry: 'Never replay this operation. If unchanged, create a new plan; if save-required, save manually in Creator and review before continuing.' };
 }
 
 function confirmSceneNodeRename(operation) {
@@ -3768,7 +4175,7 @@ function confirmSceneComponentProperty(operation) {
         `Value: ${JSON.stringify(plan.expectedBefore.value)} → ${JSON.stringify(plan.expectedAfter.value)}`,
         `Operation: ${operation.operationId}`,
         '',
-        'This changes one declared public property on the exact component instance and requests a scene save. Supported values are scalars, Vec2/Vec3/Size/Color, bounded scalar arrays, and exact AssetDB resources. Property setters are project/engine code and may have side effects. The receipt confirms in-memory readback, not disk persistence.',
+        'This changes one declared public property on the exact component instance and requests a scene save. Supported values include scalars, Vec2/Vec3/Vec4/Size/Rect/Color, bounded arrays of supported primitives and typed references, exact active-scene Node and Component references, and supported AssetDB resources. Arbitrary project objects and asset-reference arrays are refused. Property setters are project/engine code and may have side effects. The receipt confirms in-memory readback, not disk persistence.',
     ].join('\n');
     return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator component property change',
                 message: `Set ${plan.componentClassName}.${plan.property}?`, detail,
@@ -4533,6 +4940,16 @@ function capabilityList() {
             && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'
             && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
         'creator.scene.node.set-active.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.node.set-transform.plan': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.node.set-transform.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'
+            && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.scene.node.set-transform.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.button-events.set.plan': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.button-events.set.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'
+            && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.scene.button-events.set.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
         'creator.scene.node.add-component.plan': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
         'creator.scene.node.add-component.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
             && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'
@@ -5018,6 +5435,12 @@ function execute(command, input, context) {
     if (command === 'creator.scene.node.set-active.plan') return createSceneNodeActivePlan(input);
     if (command === 'creator.scene.node.set-active.commit') return commitSceneNodeActive(input, context);
     if (command === 'creator.scene.node.set-active.reconcile') return reconcileSceneNodeActive(input);
+    if (command === 'creator.scene.node.set-transform.plan') return createSceneNodeTransformPlan(input);
+    if (command === 'creator.scene.node.set-transform.commit') return commitSceneNodeTransform(input, context);
+    if (command === 'creator.scene.node.set-transform.reconcile') return reconcileSceneNodeTransform(input);
+    if (command === 'creator.scene.button-events.set.plan') return createSceneButtonEventsPlan(input);
+    if (command === 'creator.scene.button-events.set.commit') return commitSceneButtonEvents(input, context);
+    if (command === 'creator.scene.button-events.set.reconcile') return reconcileSceneButtonEvents(input);
     if (command === 'creator.scene.node.add-component.plan') return createSceneComponentAddPlan(input);
     if (command === 'creator.scene.node.add-component.commit') return commitSceneComponentAdd(input, context);
     if (command === 'creator.scene.node.add-component.reconcile') return reconcileSceneComponentAdd(input);

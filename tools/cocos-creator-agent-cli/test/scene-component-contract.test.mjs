@@ -13,6 +13,48 @@ test('scene contracts accept real Creator compact object UUIDs without accepting
   assert.equal(validateCommand('creator.scene.node.set-active.commit', { operationId: input.nodeUuid, planHash: 'a'.repeat(64) }).ok, false);
 });
 
+test('existing node transform commands use a bounded field schema and approved reconcile lifecycle', () => {
+  const plan = COMMANDS.get('creator.scene.node.set-transform.plan');
+  const commit = COMMANDS.get('creator.scene.node.set-transform.commit');
+  const reconcile = COMMANDS.get('creator.scene.node.set-transform.reconcile');
+  assert.ok(plan);
+  assert.ok(commit);
+  assert.ok(reconcile);
+  assert.equal(plan.access, 'plan');
+  assert.equal(commit.access, 'write');
+  assert.equal(commit.approval, true);
+  assert.equal(reconcile.access, 'plan');
+  assert.equal(validateCommand(plan.id, { sceneUuid, nodeUuid, values: { x: 12, y: -4, angle: 90, width: 300 } }).ok, true);
+  assert.equal(validateCommand(plan.id, { sceneUuid, nodeUuid, values: {} }).ok, false);
+  assert.equal(validateCommand(plan.id, { sceneUuid, nodeUuid, values: { pivot: 0 } }).code, 'UNKNOWN_INPUT_FIELD');
+  assert.equal(validateCommand(plan.id, { sceneUuid, nodeUuid, values: { x: 1000001 } }).ok, false);
+  assert.equal(validateCommand(plan.id, { sceneUuid, nodeUuid, values: { width: -1 } }).ok, false);
+  assert.equal(validateCommand(commit.id, { operationId: nodeUuid, planHash: 'a'.repeat(64) }).ok, true);
+  assert.equal(validateCommand(reconcile.id, { operationId: nodeUuid }).ok, true);
+});
+
+test('existing Button event commands use a bounded event list and approved reconcile lifecycle', () => {
+  const plan = COMMANDS.get('creator.scene.button-events.set.plan');
+  const commit = COMMANDS.get('creator.scene.button-events.set.commit');
+  const reconcile = COMMANDS.get('creator.scene.button-events.set.reconcile');
+  const input = { sceneUuid, nodeUuid, componentInstanceId: 'button-component', events: [
+    { targetUuid: nodeUuid, component: 'game.Controller', handler: 'onClick', customEventData: 'select' },
+  ] };
+  assert.ok(plan);
+  assert.ok(commit);
+  assert.ok(reconcile);
+  assert.equal(plan.access, 'plan');
+  assert.equal(commit.access, 'write');
+  assert.equal(commit.approval, true);
+  assert.equal(reconcile.access, 'plan');
+  assert.equal(validateCommand(plan.id, input).ok, true);
+  assert.equal(validateCommand(plan.id, { ...input, events: Array(13).fill(input.events[0]) }).ok, false);
+  assert.equal(validateCommand(plan.id, { ...input, events: [{ ...input.events[0], targetUuid: '../outside' }] }).ok, false);
+  assert.equal(validateCommand(plan.id, { ...input, events: [{ ...input.events[0], handler: 'bad()' }] }).ok, false);
+  assert.equal(validateCommand(commit.id, { operationId: nodeUuid, planHash: 'a'.repeat(64) }).ok, true);
+  assert.equal(validateCommand(reconcile.id, { operationId: nodeUuid }).ok, true);
+});
+
 test('component-add command contract is plan/approved-write/reconcile and rejects unsafe input', () => {
   const plan = COMMANDS.get('creator.scene.node.add-component.plan');
   const commit = COMMANDS.get('creator.scene.node.add-component.commit');
@@ -55,9 +97,18 @@ test('component-property contract accepts bounded scalars and typed Creator prop
   for (const value of [
     { kind: 'vec2', x: 1, y: 2 },
     { kind: 'vec3', x: 1, y: 2, z: 3 },
+    { kind: 'vec4', x: 1, y: 2, z: 3, w: 4 },
     { kind: 'size', width: 64, height: 32 },
+    { kind: 'rect', x: 1, y: 2, width: 64, height: 32 },
     { kind: 'color', r: 1, g: 2, b: 3, a: 255 },
     { kind: 'array', items: [1, 'two', false] },
+    { kind: 'array', items: [{ kind: 'vec2', x: 1, y: 2 }, { kind: 'vec2', x: 3, y: 4 }] },
+    { kind: 'array', items: [{ kind: 'node-ref', nodeUuid }, { kind: 'node-ref' }] },
+    { kind: 'node-ref', nodeUuid },
+    { kind: 'node-ref' },
+    { kind: 'component-ref', componentClassName: 'game.Controller' },
+    { kind: 'component-ref', componentClassName: 'game.Controller', nodeUuid,
+      componentInstanceId: 'component-1' },
     { kind: 'asset', assetClass: 'SpriteFrame' },
     { kind: 'asset', assetClass: 'SpriteFrame', assetUuid: '44444444-4444-4444-8444-444444444444' },
   ]) assert.equal(validateCommand(plan.id, { ...input, value }).ok, true, JSON.stringify(value));
@@ -65,6 +116,11 @@ test('component-property contract accepts bounded scalars and typed Creator prop
   assert.equal(validateCommand(plan.id, { ...input, value: { kind: 'vec2', x: 1 } }).ok, false);
   assert.equal(validateCommand(plan.id, { ...input, value: { kind: 'vec2', x: 1, y: 2, z: 3 } }).ok, false);
   assert.equal(validateCommand(plan.id, { ...input, value: { kind: 'array', items: Array(33).fill(0) } }).ok, false);
+  assert.equal(validateCommand(plan.id, { ...input, value: { kind: 'array', items: [{ kind: 'node-ref', nodeUuid: '../outside' }] } }).ok, false);
+  assert.equal(validateCommand(plan.id, { ...input, value: { kind: 'array', items: [
+    { kind: 'component-ref', componentClassName: 'game.Controller', nodeUuid },
+  ] } }).ok, false);
+  assert.equal(validateCommand(plan.id, { ...input, value: { kind: 'component-ref', componentClassName: '../Component' } }).ok, false);
   assert.equal(validateCommand(plan.id, { ...input, value: { kind: 'asset', assetClass: 'SpriteFrame',
     assetUuid: 'not-a-uuid' } }).ok, false);
   assert.equal(validateCommand(plan.id, { ...input, property: '_name' }).code, 'INVALID_INPUT_FIELD');

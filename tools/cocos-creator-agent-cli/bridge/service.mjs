@@ -517,6 +517,14 @@ function resumeTask(task, instance) {
       command = 'creator.scene.node.set-active.reconcile';
       input = { operationId: task.input.operationId };
       recovery = true;
+    } else if (task.command === 'creator.scene.node.set-transform.commit' && typeof task.input?.operationId === 'string') {
+      command = 'creator.scene.node.set-transform.reconcile';
+      input = { operationId: task.input.operationId };
+      recovery = true;
+    } else if (task.command === 'creator.scene.button-events.set.commit' && typeof task.input?.operationId === 'string') {
+      command = 'creator.scene.button-events.set.reconcile';
+      input = { operationId: task.input.operationId };
+      recovery = true;
     } else if (task.command === 'creator.scene.node.rename.commit' && typeof task.input?.operationId === 'string') {
       command = 'creator.scene.node.rename.reconcile';
       input = { operationId: task.input.operationId };

@@ -102,6 +102,7 @@ function serializeSceneComposition(params, sceneUuid) {
 function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults, refreshFailure = null,
   ipcMode = 'electron', assetCreateMode = 'complete', sceneCompose = false, sceneReparent = false,
   sceneNodeDelete = false, sceneComponentRemove = false,
+  sceneTransform = false, sceneButtonEvents = false,
   sceneProperty = null,
   assetMove = false, assetDelete = false, assetDeleteHasSubAssets = false,
   assetTexture = false, assetTextureSaveMode = 'complete', sceneSaveMode = 'write' } = {}) {
@@ -141,6 +142,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
   let reparentApplied = false;
   let sceneNodeDeleted = false;
   let sceneComponentRemoved = false;
+  let buttonEvents = [];
   const sceneFile = path.join(projectRoot, 'assets', 'Scenes', 'Main.fire');
   const sceneMetaFile = `${sceneFile}.meta`;
   if (sceneCompose) {
@@ -205,13 +207,15 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
   let textureMetaSaveCount = 0;
   let sceneSaveCount = 0;
   let currentSceneComposition = null;
+  const currentTransform = { x: 1, y: 2, z: 0, scaleX: 1, scaleY: 1, angle: 0,
+    width: 50, height: 20, anchorX: 0.5, anchorY: 0.5 };
   const editorIpc = new EventEmitter();
   const electronIpc = new EventEmitter();
   const editorBuilder = new EventEmitter();
   editorIpc.sendToPanel = (panel, message, sourceNodeUuid, targetUrl) => {
     assert.equal(panel, 'scene');
     if (message === 'scene:stash-and-save') {
-      assert.ok(sceneCompose || sceneReparent || sceneNodeDelete || sceneComponentRemove);
+      assert.ok(sceneCompose || sceneReparent || sceneNodeDelete || sceneComponentRemove || sceneTransform || sceneButtonEvents);
       sceneSaveCount += 1;
       if (sceneSaveMode === 'write' && currentSceneComposition) {
         fs.writeFileSync(sceneFile, JSON.stringify(serializeSceneComposition(currentSceneComposition, sceneUuid)));
@@ -238,7 +242,54 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
         assert.equal(params.nodeUuid, nodeUuid);
         callback(null, { available: true, sceneName: 'Scene', sceneUuid, nodeName: 'Button', nodeUuid,
           nodePath: 'Scene/Button', active: true, children: 0, componentsAvailable: true,
-          componentCount: 0, components: [], componentsTruncated: false, visited: 2 });
+          componentCount: sceneButtonEvents ? 2 : 0,
+          components: sceneButtonEvents ? [{ componentClassName: 'cc.Button', componentInstanceId: 'button-instance' },
+            { componentClassName: 'game.ButtonState', componentInstanceId: 'handler-instance' }] : [],
+          componentsTruncated: false, visited: 2,
+          ...(sceneTransform ? { transform: { ...currentTransform } } : {}) });
+        return;
+      }
+      if (method === 'buttonEventsState' && sceneButtonEvents) {
+        assert.equal(params.sceneUuid, sceneUuid);
+        assert.equal(params.nodeUuid, nodeUuid);
+        assert.equal(params.nodePath, 'Scene/Button');
+        assert.equal(params.componentInstanceId, 'button-instance');
+        callback(null, { available: true, sceneName: 'Scene', sceneUuid, nodeUuid,
+          nodePath: 'Scene/Button', componentClassName: 'cc.Button', componentInstanceId: 'button-instance',
+          events: [...buttonEvents], ...(params.events ? { requestedEvents: params.events,
+            changed: JSON.stringify(buttonEvents) !== JSON.stringify(params.events) } : {}) });
+        return;
+      }
+      if (method === 'setButtonEvents' && sceneButtonEvents) {
+        if (JSON.stringify(buttonEvents) !== JSON.stringify(params.expectedBefore)) {
+          callback(null, { available: false, reason: 'SCENE_BUTTON_EVENTS_PRECONDITION_FAILED' });
+          return;
+        }
+        buttonEvents = [...params.events];
+        callback(null, { available: true, sceneUuid, nodeUuid, nodePath: 'Scene/Button',
+          componentInstanceId: 'button-instance', before: params.expectedBefore, events: [...buttonEvents] });
+        return;
+      }
+      if (method === 'nodeTransformState' && sceneTransform) {
+        assert.equal(params.sceneUuid, sceneUuid);
+        assert.equal(params.nodeUuid, nodeUuid);
+        callback(null, { available: true, sceneName: 'Scene', sceneUuid, nodeUuid, nodePath: 'Scene/Button',
+          transform: { ...currentTransform }, ...(params.values ? { requested: params.values,
+            changed: Object.keys(params.values).some((field) => currentTransform[field] !== params.values[field]) } : {}) });
+        return;
+      }
+      if (method === 'setNodeTransform' && sceneTransform) {
+        assert.equal(params.sceneUuid, sceneUuid);
+        assert.equal(params.nodeUuid, nodeUuid);
+        const before = Object.fromEntries(Object.keys(params.values).map((field) => [field, currentTransform[field]]));
+        if (Object.keys(before).some((field) => before[field] !== params.expectedBefore[field])) {
+          callback(null, { available: false, reason: 'SCENE_NODE_TRANSFORM_PRECONDITION_FAILED', transform: { ...currentTransform } });
+          return;
+        }
+        Object.assign(currentTransform, params.values);
+        callback(null, { available: true, sceneUuid, nodeUuid, nodePath: 'Scene/Button', before,
+          after: Object.fromEntries(Object.keys(params.values).map((field) => [field, currentTransform[field]])),
+          transform: { ...currentTransform } });
         return;
       }
       if (method === 'componentPropertyState' && sceneProperty) {
@@ -399,6 +450,8 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
     createAssetImportPlan, commitAssetImport, reconcileAssetImport,
     createPrefabPlan, commitPrefabCreate, reconcilePrefabCreate,
     createSceneComposePlan, commitSceneCompose, reconcileSceneCompose,
+    createSceneNodeTransformPlan, commitSceneNodeTransform, reconcileSceneNodeTransform,
+    createSceneButtonEventsPlan, commitSceneButtonEvents, reconcileSceneButtonEvents,
     createSceneNodeReparentPlan, commitSceneNodeReparent, reconcileSceneNodeReparent,
     createSceneNodeDeletePlan, createSceneComponentRemovePlan, createSceneComponentPropertyPlan,
     commitSceneNodeDelete(input, context) { return commitSceneDestructiveOperation(readSceneNodeDeleteOperation(input.operationId), input, context); },
@@ -423,6 +476,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
   api.setBridgeSession({ bridgeId: 'bridge-fixture', sessionId: 'session-fixture', projectRoot });
   return { api, scriptFile, metaFile, beforeSource, projectRoot, scriptPath, meta, editorIpc, electronIpc,
     importedAssetUuid, prefabAssetUuid, sceneUuid, nodeUuid,
+    currentTransform, getButtonEvents: () => [...buttonEvents],
     oldParentUuid, targetParentUuid, isReparentApplied: () => reparentApplied,
     setReparentApplied(value) { reparentApplied = value; },
     movableAssetUuid, movableAssetPath, movableAssetFile,
@@ -568,6 +622,76 @@ test('scene-node reparent stops if the hierarchy changes during approval and doe
   (error) => error.code === 'OPERATION_NOT_APPROVED');
   assert.equal(cancelled.isReparentApplied(), false);
   assert.equal(cancelled.getSceneSaveCount(), 0);
+});
+
+test('existing node transform plan, approval, mutation, save request and reconcile use exact before-state', async (t) => {
+  const harness = makeHarness(t, { sceneTransform: true, ipcMode: 'editor' });
+  const plan = await harness.api.createSceneNodeTransformPlan({ sceneUuid: harness.sceneUuid,
+    nodeUuid: harness.nodeUuid, values: { x: 128, y: -32, angle: 45, width: 320, anchorX: 0 } });
+  assert.equal(plan.status, 'planned');
+  assert.deepEqual({ ...plan.expectedBefore }, { x: 1, y: 2, angle: 0, width: 50, anchorX: 0.5 });
+  assert.deepEqual({ ...plan.expectedAfter }, { x: 128, y: -32, angle: 45, width: 320, anchorX: 0 });
+  assert.equal(harness.currentTransform.x, 1);
+
+  const receipt = await harness.api.commitSceneNodeTransform({ operationId: plan.operationId, planHash: plan.planHash },
+    { requestId: 'request-fixture' });
+  assert.equal(receipt.status, 'completed');
+  assert.deepEqual({ ...receipt.after }, { x: 128, y: -32, angle: 45, width: 320, anchorX: 0 });
+  assert.equal(receipt.sceneSaveRequestSent, true);
+  assert.equal(receipt.sceneSaveCompletionConfirmed, false);
+  assert.equal(harness.currentTransform.y, -32);
+  assert.equal(harness.getSceneSaveCount(), 1);
+
+  const reconciled = await harness.api.reconcileSceneNodeTransform({ operationId: plan.operationId });
+  assert.equal(reconciled.status, 'completed');
+  assert.deepEqual({ ...reconciled.observed.transform }, { x: 128, y: -32, angle: 45, width: 320, anchorX: 0 });
+});
+
+test('existing node transform stops on stale approval state and on user cancellation', async (t) => {
+  let stale;
+  stale = makeHarness(t, { sceneTransform: true, ipcMode: 'editor', onApproval() {
+    stale.currentTransform.x = 99;
+  } });
+  const stalePlan = await stale.api.createSceneNodeTransformPlan({ sceneUuid: stale.sceneUuid,
+    nodeUuid: stale.nodeUuid, values: { x: 128 } });
+  await assert.rejects(stale.api.commitSceneNodeTransform({ operationId: stalePlan.operationId,
+    planHash: stalePlan.planHash }, { requestId: 'request-fixture' }),
+  (error) => error.code === 'OPERATION_PRECONDITION_FAILED');
+  assert.equal(stale.getSceneSaveCount(), 0);
+  assert.equal(stale.currentTransform.x, 99);
+
+  const cancelled = makeHarness(t, { sceneTransform: true, ipcMode: 'editor', approved: false });
+  const cancelledPlan = await cancelled.api.createSceneNodeTransformPlan({ sceneUuid: cancelled.sceneUuid,
+    nodeUuid: cancelled.nodeUuid, values: { angle: 90 } });
+  await assert.rejects(cancelled.api.commitSceneNodeTransform({ operationId: cancelledPlan.operationId,
+    planHash: cancelledPlan.planHash }, { requestId: 'request-fixture' }),
+  (error) => error.code === 'OPERATION_NOT_APPROVED');
+  assert.equal(cancelled.currentTransform.angle, 0);
+  assert.equal(cancelled.getSceneSaveCount(), 0);
+});
+
+test('existing Button events require an exact plan, native approval, one save request and non-replaying reconcile', async (t) => {
+  const harness = makeHarness(t, { sceneButtonEvents: true, ipcMode: 'editor' });
+  const events = [{ targetUuid: harness.nodeUuid, component: 'game.ButtonState', handler: 'onClick', customEventData: 'open' }];
+  const plan = await harness.api.createSceneButtonEventsPlan({ sceneUuid: harness.sceneUuid,
+    nodeUuid: harness.nodeUuid, componentInstanceId: 'button-instance', events });
+  assert.equal(plan.status, 'planned');
+  assert.deepEqual(Array.from(plan.expectedBefore), []);
+  assert.deepEqual(Array.from(plan.expectedAfter, (event) => ({ ...event })), events);
+  assert.deepEqual(harness.getButtonEvents(), []);
+
+  const receipt = await harness.api.commitSceneButtonEvents({ operationId: plan.operationId, planHash: plan.planHash },
+    { requestId: 'request-fixture' });
+  assert.equal(receipt.status, 'completed');
+  assert.deepEqual(Array.from(receipt.events, (event) => ({ ...event })), events);
+  assert.equal(receipt.sceneSaveRequestSent, true);
+  assert.equal(receipt.sceneSaveCompletionConfirmed, false);
+  assert.equal(harness.getSceneSaveCount(), 1);
+
+  const reconciled = await harness.api.reconcileSceneButtonEvents({ operationId: plan.operationId });
+  assert.equal(reconciled.status, 'completed');
+  assert.deepEqual(Array.from(reconciled.observed.events, (event) => ({ ...event })), events);
+  assert.equal(harness.getSceneSaveCount(), 1);
 });
 
 test('asset move uses AssetDB and preserves file, meta, importer and UUID across rename', async (t) => {
