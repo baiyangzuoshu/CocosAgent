@@ -19,6 +19,11 @@ export function validateCommand(commandId, input) {
 }
 
 function validateValue(schema, value, fieldPath) {
+  if (Array.isArray(schema.oneOf)) {
+    const matches = schema.oneOf.reduce((count, alternative) => count + (validateValue(alternative, value, fieldPath).ok ? 1 : 0), 0);
+    if (matches !== 1) return { ok: false, code: 'INVALID_INPUT_FIELD', field: fieldPath };
+    return { ok: true };
+  }
   const types = Array.isArray(schema.type) ? schema.type : [schema.type];
   const matches = (type) => type === 'object' ? !!value && typeof value === 'object' && !Array.isArray(value)
     : type === 'array' ? Array.isArray(value)
@@ -38,7 +43,7 @@ function validateValue(schema, value, fieldPath) {
     if ((schema.minimum !== undefined && value < schema.minimum) || (schema.maximum !== undefined && value > schema.maximum)
       || (schema.enum && !schema.enum.includes(value))) return { ok: false, code: 'INVALID_INPUT_FIELD', field: fieldPath };
   }
-  if (schema.type === 'object' && value && typeof value === 'object' && !Array.isArray(value)) {
+  if (types.includes('object') && value && typeof value === 'object' && !Array.isArray(value)) {
     const properties = schema.properties || {};
     for (const key of schema.required || []) if (value[key] === undefined)
       return { ok: false, code: 'REQUIRED_INPUT_MISSING', field: `${fieldPath}.${key}` };
@@ -50,7 +55,7 @@ function validateValue(schema, value, fieldPath) {
       if (!result.ok) return result;
     }
   }
-  if (schema.type === 'array' && Array.isArray(value)) {
+  if (types.includes('array') && Array.isArray(value)) {
     if ((schema.minItems !== undefined && value.length < schema.minItems) || (schema.maxItems !== undefined && value.length > schema.maxItems))
       return { ok: false, code: 'INVALID_INPUT_FIELD', field: fieldPath };
     if (schema.items) for (let index = 0; index < value.length; index += 1) {

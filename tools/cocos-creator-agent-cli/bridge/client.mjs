@@ -129,14 +129,15 @@ export async function getCapabilities(instanceId, { start = true } = {}) {
   return bridgeRequest('GET', `/v1/instances/${encodeURIComponent(instanceId)}/capabilities`);
 }
 
-export async function callCommand(instanceId, command, input = {}) {
+export async function callCommand(instanceId, command, input = {}, { timeoutMs } = {}) {
   if (typeof instanceId !== 'string' || !instanceId) throw new Error('INSTANCE_ID_REQUIRED');
   const checked = validateCommand(command, input);
   if (!checked.ok) throw new Error(checked.code);
   await ensureBridge();
+  const defaultTimeout = ['write', 'control'].includes(checked.command.access) ? 190000 : 35000;
   return bridgeRequest('POST', `/v1/instances/${encodeURIComponent(instanceId)}/call`, {
     requestId: randomUUID(), command, input,
-  }, { timeoutMs: ['write', 'control'].includes(checked.command.access) ? 190000 : 35000 });
+  }, { timeoutMs: timeoutMs === undefined ? defaultTimeout : timeoutMs });
 }
 
 export async function getProjectTools(instanceId) {

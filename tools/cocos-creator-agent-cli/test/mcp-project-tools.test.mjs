@@ -172,7 +172,7 @@ test('MCP discovers a project alias and routes it through CLI to the selected Cr
     result: { projectRoot: canonicalRoot, creatorVersion: '2.4.15', providers: [], commands: [providerCommand], skipped: [] },
   });
   const listing = await listingPromise;
-  assert.equal(listing.tools.length, 39, 'Expected 36 fixed tools, two project aliases, and one live extension command.');
+  assert.equal(listing.tools.length, 77, 'Expected 74 fixed tools, two project aliases, and one live extension command.');
   assert.equal(listing.tools.find((item) => item.name === 'cocos_project_tool_call').annotations.destructiveHint, true,
     'The generic project-alias call can invoke approved writes and must be marked destructive.');
   const componentPlanTool = listing.tools.find((item) => item.name === 'cocos_scene_node_add_component_plan');
@@ -184,6 +184,34 @@ test('MCP discovers a project alias and routes it through CLI to the selected Cr
   assert.deepEqual(componentPlanTool.inputSchema.required, ['instanceId', 'sceneUuid', 'nodeUuid', 'componentClassName']);
   assert.equal(componentCommitTool.annotations.destructiveHint, true);
   assert.deepEqual(componentReconcileTool.inputSchema.required, ['instanceId', 'operationId']);
+  const reparentPlanTool = listing.tools.find((item) => item.name === 'cocos_scene_node_reparent_plan');
+  const reparentCommitTool = listing.tools.find((item) => item.name === 'cocos_scene_node_reparent_commit');
+  const reparentReconcileTool = listing.tools.find((item) => item.name === 'cocos_scene_node_reparent_reconcile');
+  assert.ok(reparentPlanTool, 'Reparent plan tool was not discovered from the shared CLI catalog.');
+  assert.ok(reparentCommitTool, 'Reparent commit tool was not discovered from the shared CLI catalog.');
+  assert.ok(reparentReconcileTool, 'Reparent reconcile tool was not discovered from the shared CLI catalog.');
+  assert.deepEqual(reparentPlanTool.inputSchema.required, ['instanceId', 'sceneUuid', 'nodeUuid', 'targetParentUuid']);
+  assert.equal(reparentCommitTool.annotations.destructiveHint, true);
+  assert.deepEqual(reparentReconcileTool.inputSchema.required, ['instanceId', 'operationId']);
+  const deletePlanTool = listing.tools.find((item) => item.name === 'cocos_scene_node_delete_plan');
+  const deleteCommitTool = listing.tools.find((item) => item.name === 'cocos_scene_node_delete_commit');
+  const deleteReconcileTool = listing.tools.find((item) => item.name === 'cocos_scene_node_delete_reconcile');
+  assert.ok(deletePlanTool, 'Node deletion plan tool was not discovered from the shared CLI catalog.');
+  assert.ok(deleteCommitTool, 'Node deletion commit tool was not discovered from the shared CLI catalog.');
+  assert.ok(deleteReconcileTool, 'Node deletion reconcile tool was not discovered from the shared CLI catalog.');
+  assert.deepEqual(deletePlanTool.inputSchema.required, ['instanceId', 'sceneUuid', 'nodeUuid']);
+  assert.equal(deleteCommitTool.annotations.destructiveHint, true);
+  assert.deepEqual(deleteReconcileTool.inputSchema.required, ['instanceId', 'operationId']);
+  const removeComponentPlanTool = listing.tools.find((item) => item.name === 'cocos_scene_node_remove_component_plan');
+  const removeComponentCommitTool = listing.tools.find((item) => item.name === 'cocos_scene_node_remove_component_commit');
+  const removeComponentReconcileTool = listing.tools.find((item) => item.name === 'cocos_scene_node_remove_component_reconcile');
+  assert.ok(removeComponentPlanTool, 'Component removal plan tool was not discovered from the shared CLI catalog.');
+  assert.ok(removeComponentCommitTool, 'Component removal commit tool was not discovered from the shared CLI catalog.');
+  assert.ok(removeComponentReconcileTool, 'Component removal reconcile tool was not discovered from the shared CLI catalog.');
+  assert.deepEqual(removeComponentPlanTool.inputSchema.required,
+    ['instanceId', 'sceneUuid', 'nodeUuid', 'componentClassName', 'componentInstanceId']);
+  assert.equal(removeComponentCommitTool.annotations.destructiveHint, true);
+  assert.deepEqual(removeComponentReconcileTool.inputSchema.required, ['instanceId', 'operationId']);
   const propertyPlanTool = listing.tools.find((item) => item.name === 'cocos_scene_node_set_component_property_plan');
   const propertyCommitTool = listing.tools.find((item) => item.name === 'cocos_scene_node_set_component_property_commit');
   const propertyReconcileTool = listing.tools.find((item) => item.name === 'cocos_scene_node_set_component_property_reconcile');
@@ -194,6 +222,46 @@ test('MCP discovers a project alias and routes it through CLI to the selected Cr
     ['instanceId', 'sceneUuid', 'nodeUuid', 'componentClassName', 'componentInstanceId', 'property', 'value']);
   assert.equal(propertyCommitTool.annotations.destructiveHint, true);
   assert.deepEqual(propertyReconcileTool.inputSchema.required, ['instanceId', 'operationId']);
+  const composePlanTool = listing.tools.find((item) => item.name === 'cocos_scene_compose_plan');
+  const composeCommitTool = listing.tools.find((item) => item.name === 'cocos_scene_compose_commit');
+  const composeReconcileTool = listing.tools.find((item) => item.name === 'cocos_scene_compose_reconcile');
+  assert.ok(composePlanTool, 'Scene-composition plan tool was not discovered from the shared CLI catalog.');
+  assert.ok(composeCommitTool, 'Scene-composition commit tool was not discovered from the shared CLI catalog.');
+  assert.ok(composeReconcileTool, 'Scene-composition reconcile tool was not discovered from the shared CLI catalog.');
+  assert.deepEqual(composePlanTool.inputSchema.required,
+    ['instanceId', 'sceneUuid', 'nodes', 'components', 'buttonEvents']);
+  assert.equal(composeCommitTool.annotations.destructiveHint, true);
+  assert.deepEqual(composeReconcileTool.inputSchema.required, ['instanceId', 'operationId']);
+  const recompilePlanTool = listing.tools.find((item) => item.name === 'cocos_script_recompile_plan');
+  const recompileCommitTool = listing.tools.find((item) => item.name === 'cocos_script_recompile_commit');
+  assert.ok(recompilePlanTool, 'Script recompile plan tool was not discovered from the shared CLI catalog.');
+  assert.ok(recompileCommitTool, 'Script recompile commit tool was not discovered from the shared CLI catalog.');
+  assert.equal(recompileCommitTool.annotations.destructiveHint, false);
+  assert.deepEqual(recompilePlanTool.inputSchema.required, ['instanceId', 'scriptPath', 'expectedSourceSha256']);
+  for (const name of ['cocos_asset_import_plan', 'cocos_asset_import_commit', 'cocos_asset_import_reconcile',
+    'cocos_asset_references', 'cocos_asset_delete_plan', 'cocos_asset_delete_commit', 'cocos_asset_delete_reconcile',
+    'cocos_asset_import_settings_plan', 'cocos_asset_import_settings_commit', 'cocos_asset_import_settings_reconcile',
+    'cocos_prefab_create_plan', 'cocos_prefab_create_commit', 'cocos_prefab_create_reconcile',
+    'cocos_script_modify_plan', 'cocos_script_modify_commit', 'cocos_script_modify_reconcile']) {
+    assert.ok(listing.tools.some((item) => item.name === name), `MCP tool ${name} was not discovered.`);
+  }
+  const assetReferencesTool = listing.tools.find((item) => item.name === 'cocos_asset_references');
+  assert.deepEqual(assetReferencesTool.inputSchema.required, ['instanceId', 'assetUuid']);
+  assert.equal(assetReferencesTool.annotations.readOnlyHint, true);
+  const assetDeleteTool = listing.tools.find((item) => item.name === 'cocos_asset_delete_commit');
+  assert.equal(assetDeleteTool.annotations.destructiveHint, true);
+  const textureSettingsTool = listing.tools.find((item) => item.name === 'cocos_asset_import_settings_plan');
+  assert.deepEqual(textureSettingsTool.inputSchema.required, ['instanceId', 'assetUuid', 'settings']);
+  const sceneDiffTool = listing.tools.find((item) => item.name === 'cocos_scene_diff');
+  assert.ok(sceneDiffTool, 'Semantic snapshot diff was not exposed as an MCP tool.');
+  assert.equal(sceneDiffTool.annotations.readOnlyHint, true);
+  const diffResult = await mcp.request('tools/call', { name: 'cocos_scene_diff', arguments: {
+    beforeSnapshot: { available: true, sceneUuid: 'scene-1', nodes: [] },
+    afterSnapshot: { available: true, sceneUuid: 'scene-1', nodes: [{ uuid: 'node-1', name: 'Button' }] },
+  } });
+  const semanticDiff = JSON.parse(diffResult.content[0].text);
+  assert.equal(semanticDiff.counts.added, 1);
+  assert.equal(semanticDiff.added[0].name, 'Button');
   const expectedName = `cocos_project_${crypto.createHash('sha256').update(canonicalRoot).digest('hex').slice(0, 10)}_player_script`;
   const alias = listing.tools.find((item) => item.name === expectedName);
   assert.ok(alias, `Project alias was not discovered. Got ${listing.tools.length} tools.`);
@@ -228,6 +296,28 @@ test('MCP discovers a project alias and routes it through CLI to the selected Cr
   const toolResult = await callPromise;
   assert.equal(toolResult.isError, false);
   assert.match(toolResult.content?.[0]?.text || '', /Player\.ts/);
+
+  const composeSceneUuid = crypto.randomUUID();
+  const parentUuid = crypto.randomUUID();
+  const composePollPromise = bridgeRequest(bridgeState, 'POST', '/v1/creator/poll', {
+    instanceId, sessionId: registration.sessionId, activeScene: 'Untitled',
+  });
+  const composeCallPromise = mcp.request('tools/call', { name: composePlanTool.name, arguments: {
+    instanceId, sceneUuid: composeSceneUuid,
+    nodes: [{ id: 'start', name: 'StartButton', parentRef: `uuid:${parentUuid}` }],
+    components: [], buttonEvents: [],
+  } });
+  const composePoll = await composePollPromise;
+  assert.equal(composePoll.command, 'creator.scene.compose.plan');
+  assert.deepEqual(composePoll.input, { sceneUuid: composeSceneUuid,
+    nodes: [{ id: 'start', name: 'StartButton', parentRef: `uuid:${parentUuid}` }], components: [], buttonEvents: [] });
+  await bridgeRequest(bridgeState, 'POST', '/v1/creator/respond', {
+    instanceId, sessionId: registration.sessionId, requestId: composePoll.requestId, ok: true,
+    result: { status: 'planned', operationId: crypto.randomUUID(), planHash: 'a'.repeat(64), createdNodes: [] },
+  });
+  const composeResult = await composeCallPromise;
+  assert.equal(composeResult.isError, false);
+  assert.match(composeResult.content?.[0]?.text || '', /planned/);
 
   const providerRediscoveryPollPromise = bridgeRequest(bridgeState, 'POST', '/v1/creator/poll', {
     instanceId, sessionId: registration.sessionId, activeScene: 'Untitled',

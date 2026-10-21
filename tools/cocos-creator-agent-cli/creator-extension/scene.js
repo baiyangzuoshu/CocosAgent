@@ -6,6 +6,7 @@ const MAX_NAME = 120;
 const MAX_MUTATION_SCAN_NODES = 10000;
 const MAX_MUTATION_SCAN_DEPTH = 64;
 const MAX_COMPONENT_INSTANCES = 32;
+const MAX_DELETE_SUBTREE_NODES = 256;
 
 function editorManaged(object) {
     const flags = cc && cc.Object && cc.Object.Flags;
@@ -18,6 +19,94 @@ function authoringChildren(node) {
     return (Array.isArray(node.children) ? node.children : []).filter((child) => child && !editorManaged(child));
 }
 
+function classNameOf(value) {
+    const constructor = value && value.constructor;
+    const name = constructor && cc && cc.js && typeof cc.js.getClassName === 'function'
+        ? cc.js.getClassName(constructor) : constructor && constructor.name;
+    return typeof name === 'string' && name ? name.slice(0, MAX_NAME) : null;
+}
+
+function ownDataValue(object, key) {
+    if (!object || (typeof object !== 'object' && typeof object !== 'function')) return undefined;
+    const descriptor = Object.getOwnPropertyDescriptor(object, key);
+    return descriptor && Object.prototype.hasOwnProperty.call(descriptor, 'value') ? descriptor.value : undefined;
+}
+
+function semanticPropertyValue(value, depth = 0) {
+    if (value === null || typeof value === 'string' || typeof value === 'boolean')
+        return typeof value === 'string' ? value.slice(0, 512) : value;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    if (!value || typeof value !== 'object' || depth > 2) return null;
+    const className = classNameOf(value);
+    const assetUuid = typeof value._uuid === 'string' ? value._uuid : null;
+    if (assetUuid) return { assetUuid, assetClass: className };
+    if (Array.isArray(value)) {
+        const result = [];
+        const count = Math.min(value.length, 16);
+        for (let index = 0; index < count; index += 1) {
+            const item = ownDataValue(value, String(index));
+            result.push(semanticPropertyValue(item, depth + 1));
+        }
+        return result;
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return { objectClass: className };
+    const result = {};
+    for (const key of Object.keys(value).sort().slice(0, 12)) {
+        if (!/^[$A-Za-z][A-Za-z0-9_$]{0,63}$/.test(key)) continue;
+        const descriptor = Object.getOwnPropertyDescriptor(value, key);
+        if (!descriptor || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) continue;
+        const next = semanticPropertyValue(descriptor.value, depth + 1);
+        if (next !== null) result[key] = next;
+    }
+    return result;
+}
+
+function componentSemanticDetail(component, index) {
+    const className = classNameOf(component);
+    const properties = {};
+    const names = component && component.constructor && Array.isArray(component.constructor.__props__)
+        ? component.constructor.__props__ : [];
+    for (const property of names.slice(0, 48)) {
+        if (typeof property !== 'string' || property.startsWith('_')
+            || !/^[$A-Za-z][A-Za-z0-9_$]{0,63}$/.test(property)) continue;
+        const descriptor = Object.getOwnPropertyDescriptor(component, property);
+        if (!descriptor || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) continue;
+        properties[property] = semanticPropertyValue(descriptor.value);
+    }
+    const detail = { index, className, properties };
+    const clickEvents = ownDataValue(component, 'clickEvents');
+    if (Array.isArray(clickEvents)) {
+        detail.clickEvents = [];
+        const count = Math.min(clickEvents.length, 32);
+        for (let eventIndex = 0; eventIndex < count; eventIndex += 1) {
+            const event = ownDataValue(clickEvents, String(eventIndex));
+            const target = ownDataValue(event, 'target');
+            const targetUuid = ownDataValue(target, 'uuid');
+            const eventComponent = ownDataValue(event, 'component');
+            const handler = ownDataValue(event, 'handler');
+            const customEventData = ownDataValue(event, 'customEventData');
+            detail.clickEvents.push({
+                targetUuid: typeof targetUuid === 'string' ? targetUuid : null,
+                component: typeof eventComponent === 'string' ? eventComponent.slice(0, MAX_NAME) : '',
+                handler: typeof handler === 'string' ? handler.slice(0, MAX_NAME) : '',
+                customEventData: typeof customEventData === 'string' ? customEventData.slice(0, 512) : '',
+            });
+        }
+    }
+    return detail;
+}
+
+function transformSummary(node) {
+    const fields = ['x', 'y', 'z', 'scaleX', 'scaleY', 'angle', 'width', 'height', 'anchorX', 'anchorY'];
+    const result = {};
+    for (const field of fields) {
+        const value = node && node[field];
+        if (typeof value === 'number' && Number.isFinite(value)) result[field] = value;
+    }
+    return result;
+}
+
 function snapshot(maxNodes) {
     const scene = cc && cc.director && cc.director.getScene && cc.director.getScene();
     if (!scene) return { available: false, reason: 'NO_ACTIVE_SCENE', sceneName: null, sceneUuid: null, nodes: [] };
@@ -25,22 +114,25 @@ function snapshot(maxNodes) {
     const limit = Number.isInteger(maxNodes) && maxNodes > 0 ? Math.min(maxNodes, MAX_NODES) : MAX_NODES;
     const nodes = [];
     let truncated = false;
-    function visit(node, parentPath, depth) {
+    function visit(node, parentPath, parentUuid, depth) {
         if (!node || nodes.length >= limit || depth > MAX_DEPTH) { truncated = true; return; }
         const name = String(node.name || '').slice(0, MAX_NAME);
         const nodePath = parentPath ? `${parentPath}/${name}` : name;
         const components = typeof node.getComponents === 'function' && cc.Component ? node.getComponents(cc.Component) : [];
         const children = authoringChildren(node);
+        const componentRows = Array.isArray(components) ? components.filter((item) => !editorManaged(item)) : [];
         nodes.push({ name, path: nodePath, uuid: typeof node.uuid === 'string' ? node.uuid : null,
+            parentUuid: typeof parentUuid === 'string' ? parentUuid : null,
             active: node.active !== false, children: children.length,
-            components: Array.isArray(components) ? components.filter((item) => !editorManaged(item)).map((item) => item && item.constructor && item.constructor.name)
-                .filter((item) => typeof item === 'string').slice(0, 16) : [] });
+            transform: transformSummary(node),
+            components: componentRows.map((item) => classNameOf(item)).filter((item) => typeof item === 'string').slice(0, 16),
+            componentDetails: componentRows.slice(0, 16).map((item, index) => componentSemanticDetail(item, index)) });
         for (const child of children) {
             if (nodes.length >= limit) { truncated = true; break; }
-            visit(child, nodePath, depth + 1);
+            visit(child, nodePath, node.uuid, depth + 1);
         }
     }
-    visit(scene, '', 0);
+    visit(scene, '', null, 0);
     return { available: true, scope: 'authoring', editorHelpersExcluded: true, sceneName: String(scene.name || '').slice(0, MAX_NAME),
         sceneUuid: typeof scene.uuid === 'string' ? scene.uuid : null,
         nodeCount: nodes.length, truncated, nodes };
@@ -86,6 +178,7 @@ function locateNode(sceneUuid, nodeUuid) {
     const componentsAvailable = typeof match.node.getComponents === 'function' && !!cc.Component;
     const allComponents = componentsAvailable ? match.node.getComponents(cc.Component) : [];
     const components = Array.isArray(allComponents) ? allComponents.filter((item) => !editorManaged(item)) : [];
+    const children = authoringChildren(match.node);
     const componentRows = components.slice(0, 32).map((component) => {
         const constructor = component && component.constructor;
         const className = constructor && cc.js && typeof cc.js.getClassName === 'function'
@@ -95,7 +188,9 @@ function locateNode(sceneUuid, nodeUuid) {
     });
     return { node: match.node, state: { available: true, sceneName: String(scene.name || '').slice(0, MAX_NAME), sceneUuid: scene.uuid,
         nodeName: String(match.node.name || '').slice(0, MAX_NAME), nodeUuid: match.node.uuid,
-        nodePath: match.path, active: match.node.active, componentsAvailable: componentsAvailable && Array.isArray(allComponents),
+        parentUuid: match.node.parent && typeof match.node.parent.uuid === 'string' ? match.node.parent.uuid : null,
+        nodePath: match.path, active: match.node.active, children: children.length,
+        componentsAvailable: componentsAvailable && Array.isArray(allComponents),
         componentCount: components.length, components: componentRows, componentsTruncated: components.length > componentRows.length, visited } };
 }
 
@@ -105,6 +200,180 @@ function findNode(sceneUuid, nodeUuid) {
 
 function nodeState(params) {
     return findNode(params && params.sceneUuid, params && params.nodeUuid);
+}
+
+function nodeNameState(params) {
+    if (!params || typeof params.sceneUuid !== 'string' || typeof params.nodeUuid !== 'string')
+        return { available: false, reason: 'SCENE_NODE_NAME_INPUT_INVALID' };
+    const located = locateNode(params.sceneUuid, params.nodeUuid);
+    if (!located.state.available) return located.state;
+    if (typeof cc.isValid !== 'function' || !cc.isValid(located.node, true))
+        return { ...located.state, available: false, reason: 'SCENE_NODE_PENDING_DESTROY' };
+    const parent = located.node.parent;
+    if (!parent || typeof parent.uuid !== 'string')
+        return { ...located.state, available: false, reason: 'SCENE_NODE_ROOT_RENAME_UNSUPPORTED' };
+    const requestedName = params.newName;
+    if (requestedName !== undefined) {
+        if (typeof requestedName !== 'string' || !requestedName.trim() || requestedName.length > MAX_NAME
+            || requestedName.includes('/') || requestedName.includes('\\') || requestedName.includes('\0'))
+            return { ...located.state, available: false, reason: 'SCENE_NODE_NAME_INVALID' };
+        if (requestedName === located.node.name)
+            return { ...located.state, available: false, reason: 'SCENE_NODE_NAME_NO_CHANGE' };
+        const collision = authoringChildren(parent).some((sibling) => sibling !== located.node && sibling.name === requestedName);
+        if (collision) return { ...located.state, available: false, reason: 'SCENE_NODE_SIBLING_NAME_EXISTS',
+            requestedName, nameAvailable: false };
+    }
+    return { ...located.state, parentUuid: parent.uuid,
+        ...(requestedName === undefined ? {} : { requestedName, nameAvailable: true }) };
+}
+
+function renameNode(params) {
+    if (!params || typeof params.sceneUuid !== 'string' || typeof params.nodeUuid !== 'string'
+        || typeof params.nodePath !== 'string' || typeof params.expectedName !== 'string'
+        || typeof params.expectedParentUuid !== 'string' || typeof params.newName !== 'string')
+        return { available: false, reason: 'SCENE_NODE_NAME_INPUT_INVALID' };
+    const before = nodeNameState({ sceneUuid: params.sceneUuid, nodeUuid: params.nodeUuid, newName: params.newName });
+    if (!before.available) return before;
+    if (before.nodePath !== params.nodePath || before.nodeName !== params.expectedName
+        || before.parentUuid !== params.expectedParentUuid)
+        return { ...before, available: false, reason: 'SCENE_NODE_NAME_PRECONDITION_FAILED' };
+    const located = locateNode(params.sceneUuid, params.nodeUuid);
+    if (!located.node) return { ...before, available: false, reason: 'SCENE_NODE_NOT_FOUND' };
+    located.node.name = params.newName;
+    if (located.node.name !== params.newName)
+        return { ...before, available: false, reason: 'SCENE_NODE_NAME_WRITE_READBACK_FAILED' };
+    const after = nodeNameState({ sceneUuid: params.sceneUuid, nodeUuid: params.nodeUuid });
+    if (!after.available || after.nodeName !== params.newName || after.parentUuid !== params.expectedParentUuid)
+        return { ...(after || before), available: false, reason: 'SCENE_NODE_NAME_WRITE_READBACK_FAILED' };
+    return { ...after, beforeName: params.expectedName, requestedName: params.newName };
+}
+
+function nodeDeleteState(params) {
+    if (!params || typeof params.sceneUuid !== 'string' || typeof params.nodeUuid !== 'string')
+        return { available: false, reason: 'SCENE_NODE_DELETE_INPUT_INVALID' };
+    const located = locateNode(params.sceneUuid, params.nodeUuid);
+    if (!located.state.available) return located.state;
+    const parent = located.node.parent;
+    if (!parent || typeof parent.uuid !== 'string')
+        return { ...located.state, available: false, reason: 'SCENE_NODE_ROOT_DELETE_UNSUPPORTED' };
+    if (!Array.isArray(parent.children) || !parent.children.includes(located.node)
+        || typeof parent.removeChild !== 'function' || typeof located.node.destroy !== 'function')
+        return { ...located.state, available: false, reason: 'SCENE_NODE_DELETE_API_UNAVAILABLE' };
+    const subtree = [];
+    const stack = [{ node: located.node, parentUuid: parent.uuid, siblingIndex: authoringChildren(parent).indexOf(located.node), depth: 0 }];
+    while (stack.length) {
+        const item = stack.pop();
+        if (subtree.length >= MAX_DELETE_SUBTREE_NODES || item.depth > MAX_MUTATION_SCAN_DEPTH)
+            return { ...located.state, available: false, reason: 'SCENE_NODE_DELETE_SUBTREE_LIMIT' };
+        const uuid = item.node && item.node.uuid;
+        const name = item.node && item.node.name;
+        if (typeof uuid !== 'string' || typeof name !== 'string' || name.length > MAX_NAME)
+            return { ...located.state, available: false, reason: 'SCENE_NODE_DELETE_SUBTREE_IDENTITY_INVALID' };
+        const children = authoringChildren(item.node);
+        subtree.push({ nodeUuid: uuid, nodeName: name, parentUuid: item.parentUuid,
+            siblingIndex: item.siblingIndex, childCount: children.length });
+        if (subtree.length + stack.length + children.length > MAX_DELETE_SUBTREE_NODES)
+            return { ...located.state, available: false, reason: 'SCENE_NODE_DELETE_SUBTREE_LIMIT' };
+        for (let index = children.length - 1; index >= 0; index -= 1)
+            stack.push({ node: children[index], parentUuid: uuid, siblingIndex: index, depth: item.depth + 1 });
+    }
+    return { available: true, sceneName: located.state.sceneName, sceneUuid: located.state.sceneUuid,
+        nodeName: located.state.nodeName, nodeUuid: located.state.nodeUuid, nodePath: located.state.nodePath,
+        parentUuid: parent.uuid, childCount: located.state.children, subtree };
+}
+
+function deleteNode(params) {
+    if (!params || typeof params.sceneUuid !== 'string' || typeof params.nodeUuid !== 'string'
+        || typeof params.nodePath !== 'string' || typeof params.expectedName !== 'string'
+        || typeof params.expectedParentUuid !== 'string' || !Number.isInteger(params.expectedChildCount)
+        || params.expectedChildCount < 0 || !Array.isArray(params.expectedSubtree))
+        return { available: false, reason: 'SCENE_NODE_DELETE_INPUT_INVALID' };
+    const before = nodeDeleteState(params);
+    if (!before.available) return before;
+    if (before.nodePath !== params.nodePath || before.nodeName !== params.expectedName
+        || before.parentUuid !== params.expectedParentUuid || before.childCount !== params.expectedChildCount
+        || JSON.stringify(before.subtree) !== JSON.stringify(params.expectedSubtree))
+        return { ...before, available: false, reason: 'SCENE_NODE_DELETE_PRECONDITION_FAILED' };
+    const located = locateNode(params.sceneUuid, params.nodeUuid);
+    if (!located.node || !located.node.parent) return { ...before, available: false, reason: 'SCENE_NODE_NOT_FOUND' };
+    try {
+        located.node.parent.removeChild(located.node);
+        located.node.destroy();
+    } catch (_) {
+        return { ...before, available: false, reason: 'SCENE_NODE_DELETE_FAILED', mutationStarted: true };
+    }
+    const after = locateNode(params.sceneUuid, params.nodeUuid).state;
+    if (after.available || after.reason !== 'SCENE_NODE_NOT_FOUND')
+        return { ...before, available: false, reason: 'SCENE_NODE_DELETE_READBACK_FAILED', mutationStarted: true };
+    return { available: true, sceneUuid: params.sceneUuid, nodeUuid: params.nodeUuid,
+        nodePath: params.nodePath, deleted: true, childCount: params.expectedChildCount };
+}
+
+function nodeReparentState(params) {
+    if (!params || typeof params.sceneUuid !== 'string' || typeof params.nodeUuid !== 'string'
+        || typeof params.targetParentUuid !== 'string')
+        return { available: false, reason: 'SCENE_NODE_REPARENT_INPUT_INVALID' };
+    const child = locateNode(params.sceneUuid, params.nodeUuid);
+    if (!child.state.available) return child.state;
+    const target = locateNode(params.sceneUuid, params.targetParentUuid);
+    if (!target.state.available) return { ...target.state, reason: `TARGET_${target.state.reason || 'SCENE_NODE_NOT_FOUND'}` };
+    if (!child.node.parent || typeof child.node.parent.uuid !== 'string')
+        return { ...child.state, available: false, reason: 'SCENE_NODE_ROOT_REPARENT_UNSUPPORTED' };
+    if (target.node === child.node) return { ...child.state, available: false, reason: 'SCENE_NODE_REPARENT_SELF' };
+    let ancestor = target.node;
+    let ancestorCount = 0;
+    while (ancestor && ancestor !== child.node && ancestorCount < MAX_MUTATION_SCAN_DEPTH + 1) {
+        ancestor = ancestor.parent;
+        ancestorCount += 1;
+    }
+    if (ancestor === child.node) return { ...child.state, available: false, reason: 'SCENE_NODE_REPARENT_CYCLE' };
+    if (ancestorCount > MAX_MUTATION_SCAN_DEPTH) return { ...child.state, available: false, reason: 'SCENE_NODE_REPARENT_DEPTH_LIMIT' };
+    const oldParent = child.node.parent;
+    const oldParentState = locateNode(params.sceneUuid, oldParent.uuid).state;
+    if (!oldParentState.available) return { ...child.state, available: false, reason: 'SCENE_NODE_OLD_PARENT_STATE_UNAVAILABLE' };
+    if (oldParent === target.node && params.allowCurrentTarget !== true)
+        return { ...child.state, available: false, reason: 'SCENE_NODE_REPARENT_NO_CHANGE' };
+    const nodeName = String(child.node.name || '');
+    if (!nodeName || nodeName.length > MAX_NAME || nodeName.includes('/'))
+        return { ...child.state, available: false, reason: 'SCENE_NODE_REPARENT_NAME_INVALID' };
+    const collision = authoringChildren(target.node).some((sibling) => sibling !== child.node && sibling.name === child.node.name);
+    if (collision) return { ...child.state, available: false, reason: 'SCENE_NODE_REPARENT_NAME_COLLISION',
+        targetParentUuid: target.state.nodeUuid, targetParentPath: target.state.nodePath };
+    const afterNodePath = `${target.state.nodePath}/${nodeName}`;
+    if (afterNodePath.length > 2048) return { ...child.state, available: false, reason: 'SCENE_NODE_PATH_TOO_LONG' };
+    return { available: true, sceneName: child.state.sceneName, sceneUuid: child.state.sceneUuid,
+        nodeUuid: child.state.nodeUuid, nodeName: child.state.nodeName, nodePath: child.state.nodePath,
+        parentUuid: oldParent.uuid, parentPath: oldParentState.nodePath,
+        targetParentUuid: target.state.nodeUuid, targetParentPath: target.state.nodePath,
+        afterNodePath, childIndex: authoringChildren(target.node).length,
+        localTransformPreserved: true, worldTransformPreserved: false };
+}
+
+function reparentNode(params) {
+    if (!params || typeof params.sceneUuid !== 'string' || typeof params.nodeUuid !== 'string'
+        || typeof params.nodePath !== 'string' || typeof params.expectedName !== 'string'
+        || typeof params.expectedParentUuid !== 'string' || typeof params.expectedParentPath !== 'string'
+        || typeof params.targetParentUuid !== 'string' || typeof params.targetParentPath !== 'string'
+        || typeof params.afterNodePath !== 'string')
+        return { available: false, reason: 'SCENE_NODE_REPARENT_INPUT_INVALID' };
+    const before = nodeReparentState({ sceneUuid: params.sceneUuid, nodeUuid: params.nodeUuid,
+        targetParentUuid: params.targetParentUuid });
+    if (!before.available) return before;
+    if (before.nodePath !== params.nodePath || before.nodeName !== params.expectedName
+        || before.parentUuid !== params.expectedParentUuid || before.parentPath !== params.expectedParentPath
+        || before.targetParentPath !== params.targetParentPath || before.afterNodePath !== params.afterNodePath)
+        return { ...before, available: false, reason: 'SCENE_NODE_REPARENT_PRECONDITION_FAILED' };
+    const child = locateNode(params.sceneUuid, params.nodeUuid);
+    const target = locateNode(params.sceneUuid, params.targetParentUuid);
+    if (!child.node || !target.node) return { ...before, available: false, reason: 'SCENE_NODE_NOT_FOUND' };
+    child.node.parent = target.node;
+    const after = nodeReparentState({ sceneUuid: params.sceneUuid, nodeUuid: params.nodeUuid,
+        targetParentUuid: params.targetParentUuid, allowCurrentTarget: true });
+    if (!after.available || after.parentUuid !== params.targetParentUuid
+        || after.nodePath !== params.afterNodePath || after.afterNodePath !== params.afterNodePath)
+        return { ...(after || before), available: false, reason: 'SCENE_NODE_REPARENT_READBACK_FAILED', mutationStarted: true };
+    return { ...after, beforeParentUuid: params.expectedParentUuid,
+        beforeParentPath: params.expectedParentPath, afterParentUuid: params.targetParentUuid };
 }
 
 function setNodeActive(params) {
@@ -157,6 +426,65 @@ function exactComponentInstances(node, constructor) {
     return { available: true, components };
 }
 
+function componentRemoveState(params) {
+    if (!params || typeof params.sceneUuid !== 'string' || typeof params.nodeUuid !== 'string'
+        || typeof params.nodePath !== 'string' || typeof params.componentClassName !== 'string'
+        || typeof params.componentInstanceId !== 'string')
+        return { available: false, reason: 'SCENE_COMPONENT_REMOVE_INPUT_INVALID' };
+    const located = locateNode(params.sceneUuid, params.nodeUuid);
+    if (!located.state.available) return located.state;
+    if (located.state.nodePath !== params.nodePath)
+        return { available: false, reason: 'SCENE_NODE_PATH_MISMATCH', ...located.state };
+    if (typeof cc.isValid !== 'function' || !cc.isValid(located.node, true))
+        return { ...located.state, available: false, reason: 'SCENE_NODE_PENDING_DESTROY' };
+    const resolved = componentClass(params.componentClassName);
+    if (!resolved.available) return { ...resolved, sceneUuid: params.sceneUuid, nodeUuid: params.nodeUuid,
+        nodePath: params.nodePath, componentClassName: params.componentClassName };
+    const query = exactComponentInstances(located.node, resolved.constructor);
+    if (!query.available) return query;
+    const component = query.components.find((item) => item && item._id != null
+        && String(item._id) === params.componentInstanceId && cc.isValid(item, true));
+    if (!component) return { available: true, sceneName: located.state.sceneName,
+        sceneUuid: located.state.sceneUuid, nodePath: located.state.nodePath, nodeUuid: located.state.nodeUuid,
+        componentClassName: resolved.componentClassName, componentInstanceId: params.componentInstanceId,
+        present: false, dependentComponents: [] };
+    const all = located.node.getComponents(cc.Component);
+    if (!Array.isArray(all) || all.length > MAX_COMPONENT_INSTANCES)
+        return { available: false, reason: 'SCENE_COMPONENT_LIMIT' };
+    if (all.some(editorManaged)) return { available: false, reason: 'SCENE_EDITOR_COMPONENT_PROTECTED' };
+    const dependents = all.filter((candidate) => candidate !== component && candidate && candidate.constructor
+        && typeof candidate.constructor._requireComponent === 'function'
+        && component instanceof candidate.constructor._requireComponent);
+    return { available: true, sceneName: located.state.sceneName, sceneUuid: located.state.sceneUuid,
+        nodePath: located.state.nodePath, nodeUuid: located.state.nodeUuid,
+        componentClassName: resolved.componentClassName, componentInstanceId: params.componentInstanceId,
+        present: true, dependentComponents: dependents.map((candidate) => classNameOf(candidate)) };
+}
+
+function removeNodeComponent(params) {
+    const before = componentRemoveState(params);
+    if (!before.available) return before;
+    if (!before.present) return { ...before, available: false, reason: 'SCENE_COMPONENT_INSTANCE_NOT_FOUND' };
+    if (before.dependentComponents.length)
+        return { ...before, available: false, reason: 'SCENE_COMPONENT_REQUIRED_BY_OTHER_COMPONENT' };
+    if (params.expectedPresent !== true || before.present !== params.expectedPresent)
+        return { ...before, available: false, reason: 'SCENE_COMPONENT_REMOVE_PRECONDITION_FAILED' };
+    const located = locateNode(params.sceneUuid, params.nodeUuid);
+    const resolved = componentClass(params.componentClassName);
+    if (!located.node || !resolved.available) return { ...before, available: false, reason: 'SCENE_COMPONENT_INSTANCE_NOT_FOUND' };
+    const query = exactComponentInstances(located.node, resolved.constructor);
+    const component = query.available && query.components.find((item) => item && item._id != null
+        && String(item._id) === params.componentInstanceId);
+    if (!component || typeof component.destroy !== 'function')
+        return { ...before, available: false, reason: 'SCENE_COMPONENT_DESTROY_UNAVAILABLE' };
+    try { component.destroy(); }
+    catch (_) { return { ...before, available: false, reason: 'SCENE_COMPONENT_REMOVE_FAILED', mutationStarted: true }; }
+    const after = componentRemoveState(params);
+    if (!after.available || after.present)
+        return { ...before, available: false, reason: 'SCENE_COMPONENT_REMOVE_READBACK_FAILED', mutationStarted: true };
+    return { ...after, beforePresent: true, present: false };
+}
+
 function componentState(params) {
     if (!params || typeof params.sceneUuid !== 'string' || typeof params.nodeUuid !== 'string'
         || typeof params.nodePath !== 'string' || typeof params.componentClassName !== 'string')
@@ -182,6 +510,108 @@ function componentState(params) {
 function isScalar(value) {
     return typeof value === 'string' || typeof value === 'boolean'
         || (typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 1000000000);
+}
+
+const ASSET_CLASS_NAMES = ['SpriteFrame', 'Texture2D', 'AudioClip', 'Prefab', 'BitmapFont', 'TTFFont'];
+
+function sameValue(left, right) {
+    if (isScalar(left) || isScalar(right) || left === null || right === null) return Object.is(left, right);
+    function normalize(value) {
+        if (Array.isArray(value)) return value.map(normalize);
+        if (!value || typeof value !== 'object') return value;
+        const result = {};
+        for (const key of Object.keys(value).sort()) result[key] = normalize(value[key]);
+        return result;
+    }
+    try { return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right)); }
+    catch (_) { return false; }
+}
+
+function componentValueKind(value, attrType) {
+    if (isScalar(value)) {
+        if ((attrType === String && typeof value !== 'string') || (attrType === Number && typeof value !== 'number')
+            || (attrType === Boolean && typeof value !== 'boolean'))
+            return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_TYPE_MISMATCH' };
+        return { available: true, value, kind: typeof value };
+    }
+    const typed = [
+        ['vec2', cc && cc.Vec2, ['x', 'y']],
+        ['vec3', cc && cc.Vec3, ['x', 'y', 'z']],
+        ['size', cc && cc.Size, ['width', 'height']],
+        ['color', cc && cc.Color, ['r', 'g', 'b', 'a']],
+    ];
+    for (const [kind, constructor, fields] of typed) {
+        if (typeof constructor === 'function' && attrType === constructor && value instanceof constructor) {
+            const result = { kind };
+            for (const field of fields) {
+                const number = value[field];
+                if (typeof number !== 'number' || !Number.isFinite(number))
+                    return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_VALUE_UNSUPPORTED' };
+                result[field] = number;
+            }
+            return { available: true, value: result, kind };
+        }
+    }
+    if (Array.isArray(value) && (attrType === Array || attrType == null)) {
+        if (value.length > 32 || value.some((item) => !isScalar(item)))
+            return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_TYPE_UNSUPPORTED' };
+        return { available: true, value: { kind: 'array', items: value.slice() }, kind: 'array' };
+    }
+    for (const assetClass of ASSET_CLASS_NAMES) {
+        const constructor = cc && cc[assetClass];
+        if (typeof constructor === 'function' && attrType === constructor) {
+            if (value == null) return { available: true, value: { kind: 'asset', assetClass }, kind: 'asset' };
+            const assetUuid = value && (value._uuid || value.uuid);
+            if (!(value instanceof constructor) || typeof assetUuid !== 'string')
+                return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_ASSET_TYPE_MISMATCH' };
+            return { available: true, value: { kind: 'asset', assetUuid, assetClass }, kind: 'asset' };
+        }
+    }
+    return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_TYPE_UNSUPPORTED' };
+}
+
+function validComponentValue(value) {
+    if (isScalar(value)) return true;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    if (value.kind === 'vec2') return Object.keys(value).length === 3
+        && ['x', 'y'].every((field) => Number.isFinite(value[field]) && Math.abs(value[field]) <= 1000000);
+    if (value.kind === 'vec3') return Object.keys(value).length === 4
+        && ['x', 'y', 'z'].every((field) => Number.isFinite(value[field]) && Math.abs(value[field]) <= 1000000);
+    if (value.kind === 'size') return Object.keys(value).length === 3
+        && ['width', 'height'].every((field) => Number.isFinite(value[field]) && Math.abs(value[field]) <= 1000000);
+    if (value.kind === 'color') return Object.keys(value).length === 5
+        && ['r', 'g', 'b', 'a'].every((field) => Number.isInteger(value[field]) && value[field] >= 0 && value[field] <= 255);
+    if (value.kind === 'array') return Object.keys(value).length === 2 && Array.isArray(value.items)
+        && value.items.length <= 32 && value.items.every(isScalar);
+    if (value.kind === 'asset') return (Object.keys(value).length === 2 || Object.keys(value).length === 3)
+        && ASSET_CLASS_NAMES.includes(value.assetClass)
+        && (value.assetUuid === undefined || (typeof value.assetUuid === 'string'
+            && (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value.assetUuid)
+                || /^[A-Za-z0-9+/]{22,23}$/.test(value.assetUuid))));
+    return false;
+}
+
+function decodeComponentValue(value, attrType, loadedAsset) {
+    if (isScalar(value)) {
+        if ((attrType === String && typeof value !== 'string') || (attrType === Number && typeof value !== 'number')
+            || (attrType === Boolean && typeof value !== 'boolean'))
+            return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_TYPE_MISMATCH' };
+        return { available: true, value };
+    }
+    if (!validComponentValue(value)) return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_VALUE_INVALID' };
+    if (value.kind === 'vec2' && attrType === cc.Vec2) return { available: true, value: new cc.Vec2(value.x, value.y) };
+    if (value.kind === 'vec3' && attrType === cc.Vec3) return { available: true, value: new cc.Vec3(value.x, value.y, value.z) };
+    if (value.kind === 'size' && attrType === cc.Size) return { available: true, value: new cc.Size(value.width, value.height) };
+    if (value.kind === 'color' && attrType === cc.Color) return { available: true, value: new cc.Color(value.r, value.g, value.b, value.a) };
+    if (value.kind === 'array' && (attrType === Array || attrType == null)) return { available: true, value: value.items.slice() };
+    if (value.kind === 'asset' && attrType === cc[value.assetClass]) {
+        if (value.assetUuid == null) return { available: true, value: null };
+        if (!loadedAsset || !(loadedAsset instanceof attrType)
+            || (loadedAsset._uuid || loadedAsset.uuid) !== value.assetUuid)
+            return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_ASSET_NOT_LOADED' };
+        return { available: true, value: loadedAsset };
+    }
+    return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_TYPE_MISMATCH' };
 }
 
 function componentPropertyState(params) {
@@ -210,27 +640,30 @@ function componentPropertyState(params) {
     if (!declared.includes(params.property) || inherited.includes(params.property)
         || baseProperties.includes(params.property) || params.property.startsWith('_'))
         return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_NOT_SERIALIZABLE' };
+    const attrType = cc.Class && typeof cc.Class.attr === 'function'
+        ? cc.Class.attr(resolved.constructor, params.property, 'type') : null;
     let value;
     try { value = component[params.property]; }
     catch (_) { return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_READ_FAILED' }; }
-    if (!isScalar(value)) return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_TYPE_UNSUPPORTED' };
+    const serialized = componentValueKind(value, attrType);
+    if (!serialized.available) return { available: false, reason: serialized.reason };
     return { available: true, sceneName: located.state.sceneName, sceneUuid: located.state.sceneUuid,
         nodePath: located.state.nodePath, nodeUuid: located.state.nodeUuid,
         componentClassName: resolved.componentClassName, componentInstanceId: params.componentInstanceId,
-        property: params.property, value, valueType: typeof value };
+        property: params.property, propertyKind: serialized.kind, value: serialized.value };
 }
 
-function setComponentProperty(params) {
+function setComponentProperty(params, loadedAsset) {
     if (!params || typeof params.sceneUuid !== 'string' || typeof params.nodeUuid !== 'string'
         || typeof params.nodePath !== 'string' || typeof params.componentClassName !== 'string'
         || typeof params.componentInstanceId !== 'string' || typeof params.property !== 'string'
-        || !isScalar(params.expectedValue) || !isScalar(params.value) || typeof params.expectedValue !== typeof params.value)
+        || !validComponentValue(params.expectedValue) || !validComponentValue(params.value))
         return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_INPUT_INVALID' };
     const before = componentPropertyState(params);
     if (!before.available) return before;
-    if (!Object.is(before.value, params.expectedValue))
+    if (!sameValue(before.value, params.expectedValue))
         return { ...before, available: false, reason: 'SCENE_COMPONENT_PROPERTY_PRECONDITION_FAILED' };
-    if (Object.is(before.value, params.value))
+    if (sameValue(before.value, params.value))
         return { ...before, available: false, reason: 'SCENE_COMPONENT_PROPERTY_NO_CHANGE' };
     const located = locateNode(params.sceneUuid, params.nodeUuid);
     const resolved = componentClass(params.componentClassName);
@@ -239,16 +672,22 @@ function setComponentProperty(params) {
     if (!query.available) return { ...before, available: false, reason: query.reason };
     const component = query.components.find((item) => item._id != null && String(item._id) === params.componentInstanceId);
     if (!component) return { ...before, available: false, reason: 'SCENE_COMPONENT_INSTANCE_NOT_FOUND' };
-    try { component[params.property] = params.value; }
+    const attrType = cc.Class && typeof cc.Class.attr === 'function'
+        ? cc.Class.attr(resolved.constructor, params.property, 'type') : null;
+    const decoded = decodeComponentValue(params.value, attrType, loadedAsset);
+    if (!decoded.available) return { ...before, available: false, reason: decoded.reason };
+    try { component[params.property] = decoded.value; }
     catch (_) { return { ...before, available: false, reason: 'SCENE_COMPONENT_PROPERTY_WRITE_FAILED' }; }
     let value;
     try { value = component[params.property]; }
     catch (_) { return { ...before, available: false, reason: 'SCENE_COMPONENT_PROPERTY_READBACK_FAILED' }; }
-    if (!Object.is(value, params.value))
-        return { ...before, available: false, reason: 'SCENE_COMPONENT_PROPERTY_READBACK_FAILED', observedValue: isScalar(value) ? value : null };
+    const serialized = componentValueKind(value, attrType);
+    if (!serialized.available || !sameValue(serialized.value, params.value))
+        return { ...before, available: false, reason: 'SCENE_COMPONENT_PROPERTY_READBACK_FAILED',
+            observedValue: serialized.available ? serialized.value : null };
     return { available: true, sceneUuid: params.sceneUuid, nodeUuid: params.nodeUuid, nodePath: params.nodePath,
         componentClassName: params.componentClassName, componentInstanceId: params.componentInstanceId,
-        property: params.property, beforeValue: before.value, value };
+        property: params.property, propertyKind: serialized.kind, beforeValue: before.value, value: serialized.value };
 }
 
 function addNodeComponent(params) {
@@ -279,6 +718,323 @@ function addNodeComponent(params) {
         componentInstanceId: component._id != null ? String(component._id) : null };
 }
 
+function validUuid(value) {
+    return typeof value === 'string' && (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value)
+        || /^[A-Za-z0-9+/]{22,23}$/.test(value));
+}
+
+function transformState(node) {
+    const position = typeof node.getPosition === 'function' ? node.getPosition() : { x: node.x, y: node.y, z: 0 };
+    return { x: Number(position.x) || 0, y: Number(position.y) || 0, z: Number(position.z) || 0,
+        scaleX: Number(node.scaleX) || 0, scaleY: Number(node.scaleY) || 0,
+        angle: Number(node.angle) || 0, width: Number(node.width) || 0, height: Number(node.height) || 0 };
+}
+
+function normalizeTransform(value) {
+    const input = value || {};
+    const keys = ['x', 'y', 'z', 'scaleX', 'scaleY', 'angle', 'width', 'height'];
+    const output = { x: 0, y: 0, z: 0, scaleX: 1, scaleY: 1, angle: 0, width: 0, height: 0 };
+    for (const key of keys) {
+        if (input[key] === undefined) continue;
+        if (typeof input[key] !== 'number' || !Number.isFinite(input[key]) || Math.abs(input[key]) > 1000000
+            || (['width', 'height'].includes(key) && input[key] < 0))
+            return { available: false, reason: 'SCENE_COMPOSE_TRANSFORM_INVALID', field: key };
+        output[key] = input[key];
+    }
+    return { available: true, value: output };
+}
+
+function compositionState(params) {
+    if (!params || typeof params.sceneUuid !== 'string' || !Array.isArray(params.nodes)
+        || params.nodes.length < 1 || params.nodes.length > 12 || !Array.isArray(params.components)
+        || params.components.length > 24 || !Array.isArray(params.buttonEvents) || params.buttonEvents.length > 12)
+        return { available: false, reason: 'SCENE_COMPOSE_INPUT_INVALID' };
+    const scene = cc && cc.director && cc.director.getScene && cc.director.getScene();
+    if (!scene) return { available: false, reason: 'NO_ACTIVE_SCENE' };
+    if (editorManaged(scene)) return { available: false, reason: 'NO_AUTHORING_SCENE' };
+    if (scene.uuid !== params.sceneUuid) return { available: false, reason: 'SCENE_IDENTITY_MISMATCH', sceneUuid: scene.uuid || null };
+
+    const created = new Map();
+    const existing = new Map();
+    const reservedNames = new Map();
+    const plannedUuids = new Set();
+    function resolveRef(ref, allowNew) {
+        if (typeof ref !== 'string' || ref.length > 100) return { available: false, reason: 'SCENE_COMPOSE_REFERENCE_INVALID' };
+        if (ref.startsWith('new:')) {
+            if (!allowNew) return { available: false, reason: 'SCENE_COMPOSE_REFERENCE_ORDER_INVALID' };
+            const row = created.get(ref.slice(4));
+            return row ? { available: true, created: true, row } : { available: false, reason: 'SCENE_COMPOSE_REFERENCE_NOT_FOUND' };
+        }
+        if (!ref.startsWith('uuid:') || !validUuid(ref.slice(5)))
+            return { available: false, reason: 'SCENE_COMPOSE_REFERENCE_INVALID' };
+        const nodeUuid = ref.slice(5);
+        const located = locateNode(params.sceneUuid, nodeUuid);
+        if (!located.state.available) return { available: false, reason: located.state.reason || 'SCENE_COMPOSE_REFERENCE_NOT_FOUND' };
+        existing.set(nodeUuid, located);
+        return { available: true, created: false, nodeUuid, node: located.node, state: located.state };
+    }
+
+    for (const item of params.nodes) {
+        if (!item || typeof item.id !== 'string' || !/^[a-z][a-z0-9_-]{0,31}$/.test(item.id)
+            || created.has(item.id) || typeof item.name !== 'string' || !item.name.trim() || item.name.length > MAX_NAME
+            || !validUuid(item.uuid) || item.uuid === scene.uuid || plannedUuids.has(item.uuid))
+            return { available: false, reason: 'SCENE_COMPOSE_NODE_INVALID' };
+        const transform = normalizeTransform(item.transform);
+        if (!transform.available) return transform;
+        if (created.has(`uuid:${item.uuid}`)) return { available: false, reason: 'SCENE_COMPOSE_NODE_UUID_DUPLICATE' };
+        const collision = locateNode(params.sceneUuid, item.uuid);
+        if (collision.state.available) return { available: false, reason: 'SCENE_COMPOSE_NODE_UUID_EXISTS' };
+        const parent = resolveRef(item.parentRef, true);
+        if (!parent.available) return parent;
+        const parentUuid = parent.created ? parent.row.uuid : parent.nodeUuid;
+        const parentNames = reservedNames.get(item.parentRef) || new Set();
+        if (parentNames.has(item.name) || (!parent.created && parent.node.children.some((child) => child && child.name === item.name && !editorManaged(child))))
+            return { available: false, reason: 'SCENE_COMPOSE_NODE_NAME_EXISTS', name: item.name };
+        parentNames.add(item.name);
+        reservedNames.set(item.parentRef, parentNames);
+        const row = { id: item.id, uuid: item.uuid, name: item.name, parentRef: item.parentRef,
+            parentUuid, transform: transform.value };
+        plannedUuids.add(item.uuid);
+        created.set(item.id, row);
+        created.set(`uuid:${item.uuid}`, row);
+    }
+
+    const componentById = new Map();
+    const classByNode = new Map();
+    for (const item of params.components) {
+        if (!item || typeof item.id !== 'string' || !/^[a-z][a-z0-9_-]{0,31}$/.test(item.id)
+            || componentById.has(item.id) || typeof item.className !== 'string' || !Array.isArray(item.properties)
+            || item.properties.length > 16)
+            return { available: false, reason: 'SCENE_COMPOSE_COMPONENT_INVALID' };
+        const node = resolveRef(item.nodeRef, true);
+        if (!node.available) return node;
+        if (!node.created) return { available: false, reason: 'SCENE_COMPOSE_COMPONENT_TARGET_MUST_BE_CREATED' };
+        const resolved = componentClass(item.className);
+        if (!resolved.available) return resolved;
+        if (resolved.requiresComponent) return { available: false, reason: 'SCENE_COMPOSE_COMPONENT_HAS_UNAPPROVED_REQUIREMENT' };
+        const classes = classByNode.get(item.nodeRef) || new Set();
+        if (classes.has(item.className)) return { available: false, reason: 'SCENE_COMPOSE_COMPONENT_DUPLICATE' };
+        classes.add(item.className);
+        classByNode.set(item.nodeRef, classes);
+        const propertyNames = new Set();
+        for (const property of item.properties) {
+            if (!property || typeof property.name !== 'string' || !/^[A-Za-z][A-Za-z0-9_]*$/.test(property.name)
+                || propertyNames.has(property.name)) return { available: false, reason: 'SCENE_COMPOSE_PROPERTY_INVALID' };
+            propertyNames.add(property.name);
+            const declared = Array.isArray(resolved.constructor.__props__) ? resolved.constructor.__props__ : [];
+            const inherited = Array.isArray(resolved.constructor.$super && resolved.constructor.$super.__props__)
+                ? resolved.constructor.$super.__props__ : [];
+            const baseProperties = Array.isArray(cc.Component.__props__) ? cc.Component.__props__ : [];
+            if (!declared.includes(property.name) || inherited.includes(property.name) || baseProperties.includes(property.name)
+                || property.name.startsWith('_')) return { available: false, reason: 'SCENE_COMPOSE_PROPERTY_NOT_SERIALIZABLE', property: property.name };
+            const value = property.value;
+            const assetRef = value && typeof value === 'object' && !Array.isArray(value)
+                && typeof value.assetUuid === 'string' && typeof value.assetClass === 'string'
+                && Object.keys(value).length === 2;
+            if (!assetRef && !isScalar(value)) return { available: false, reason: 'SCENE_COMPOSE_PROPERTY_VALUE_INVALID', property: property.name };
+            const attrType = cc.Class && typeof cc.Class.attr === 'function'
+                ? cc.Class.attr(resolved.constructor, property.name, 'type') : null;
+            if (assetRef) {
+                const assetClass = cc[value.assetClass];
+                if (!validUuid(value.assetUuid) || typeof assetClass !== 'function' || attrType !== assetClass)
+                    return { available: false, reason: 'SCENE_COMPOSE_ASSET_PROPERTY_TYPE_MISMATCH', property: property.name };
+            } else if (attrType === String && typeof value !== 'string') {
+                return { available: false, reason: 'SCENE_COMPOSE_PROPERTY_TYPE_MISMATCH', property: property.name };
+            } else if (attrType === Number && typeof value !== 'number') {
+                return { available: false, reason: 'SCENE_COMPOSE_PROPERTY_TYPE_MISMATCH', property: property.name };
+            } else if (attrType === Boolean && typeof value !== 'boolean') {
+                return { available: false, reason: 'SCENE_COMPOSE_PROPERTY_TYPE_MISMATCH', property: property.name };
+            } else if (attrType && attrType !== String && attrType !== Number && attrType !== Boolean && !assetRef) {
+                return { available: false, reason: 'SCENE_COMPOSE_PROPERTY_TYPE_UNSUPPORTED', property: property.name };
+            }
+        }
+        componentById.set(item.id, { ...item, className: resolved.componentClassName, nodeUuid: node.row.uuid });
+    }
+
+    const buttonClass = componentClass('cc.Button');
+    if (params.buttonEvents.length && !buttonClass.available) return { available: false, reason: buttonClass.reason };
+    for (const event of params.buttonEvents) {
+        if (!event || typeof event.buttonRef !== 'string' || typeof event.handlerRef !== 'string'
+            || typeof event.handlerComponentClassName !== 'string' || typeof event.handler !== 'string'
+            || !/^[A-Za-z_$][A-Za-z0-9_$]{0,63}$/.test(event.handler))
+            return { available: false, reason: 'SCENE_COMPOSE_BUTTON_EVENT_INVALID' };
+        const buttonNode = resolveRef(event.buttonRef, true);
+        const targetNode = resolveRef(event.handlerRef, true);
+        if (!buttonNode.available) return buttonNode;
+        if (!targetNode.available) return targetNode;
+        if (!buttonNode.created || !classByNode.get(event.buttonRef)?.has('cc.Button'))
+            return { available: false, reason: 'SCENE_COMPOSE_BUTTON_COMPONENT_REQUIRED' };
+        const handler = componentClass(event.handlerComponentClassName);
+        if (!handler.available) return handler;
+        const planned = params.components.filter((component) => component.nodeRef === event.handlerRef
+            && component.className === event.handlerComponentClassName);
+        if (targetNode.created && planned.length !== 1)
+            return { available: false, reason: 'SCENE_COMPOSE_HANDLER_COMPONENT_REQUIRED' };
+        if (!targetNode.created) {
+            const matches = targetNode.state.components.filter((component) => component.componentClassName === event.handlerComponentClassName);
+            if (matches.length !== 1) return { available: false, reason: 'SCENE_COMPOSE_HANDLER_COMPONENT_AMBIGUOUS' };
+        }
+        const prototype = handler.constructor.prototype;
+        if (!prototype || typeof prototype[event.handler] !== 'function')
+            return { available: false, reason: 'SCENE_COMPOSE_HANDLER_NOT_FOUND', handler: event.handler };
+    }
+
+    const existingNodes = Array.from(existing.values()).map((entry) => ({ sceneUuid: entry.state.sceneUuid,
+        nodeUuid: entry.state.nodeUuid, nodePath: entry.state.nodePath, active: entry.state.active,
+        children: entry.state.children, components: entry.state.components }));
+    existingNodes.sort((left, right) => left.nodeUuid.localeCompare(right.nodeUuid));
+    return { available: true, sceneUuid: scene.uuid, sceneName: String(scene.name || '').slice(0, MAX_NAME),
+        existingNodes, createdNodes: params.nodes.map((item) => ({ id: item.id, uuid: item.uuid,
+            parentUuid: created.get(item.id).parentUuid, name: item.name, transform: created.get(item.id).transform })),
+        componentCount: params.components.length, buttonEventCount: params.buttonEvents.length };
+}
+
+function compositionReadback(params) {
+    if (!params || typeof params.sceneUuid !== 'string' || !Array.isArray(params.nodes))
+        return { available: false, reason: 'SCENE_COMPOSE_INPUT_INVALID' };
+    const nodes = [];
+    for (const item of params.nodes) {
+        const located = locateNode(params.sceneUuid, item.uuid);
+        if (!located.state.available) return { available: false, reason: located.state.reason || 'SCENE_COMPOSE_NODE_NOT_FOUND', nodeId: item.id };
+        const parent = located.node.parent;
+        const components = params.components.filter((component) => component.nodeRef === `new:${item.id}`).map((component) => {
+            const resolved = componentClass(component.className);
+            if (!resolved.available) return { id: component.id, available: false, reason: resolved.reason };
+            const query = exactComponentInstances(located.node, resolved.constructor);
+            if (!query.available || query.components.length !== 1) return { id: component.id, available: false,
+                reason: query.reason || 'SCENE_COMPOSE_COMPONENT_READBACK_FAILED' };
+            const instance = query.components[0];
+            const serializedClassId = cc && cc.js && typeof cc.js._getClassId === 'function'
+                ? cc.js._getClassId(resolved.constructor, false) : null;
+            const propertyValues = {};
+            for (const property of component.properties) {
+                const value = instance[property.name];
+                if (property.value && typeof property.value === 'object' && typeof property.value.assetUuid === 'string')
+                    propertyValues[property.name] = value && (value._uuid || value.uuid) || null;
+                else propertyValues[property.name] = isScalar(value) ? value : null;
+            }
+            const clickEvents = component.className === 'cc.Button' && Array.isArray(instance.clickEvents)
+                ? instance.clickEvents.map((entry) => ({ targetUuid: entry && entry.target && entry.target.uuid || null,
+                    component: entry && entry.component || null, handler: entry && entry.handler || null,
+                    customEventData: entry && entry.customEventData || '' })) : null;
+            return { id: component.id, componentClassName: resolved.componentClassName,
+                serializedClassId: typeof serializedClassId === 'string' ? serializedClassId : null,
+                componentInstanceId: instance._id != null ? String(instance._id) : null, propertyValues,
+                clickEventCount: Array.isArray(clickEvents) ? clickEvents.length : null, clickEvents };
+        });
+        nodes.push({ id: item.id, uuid: located.state.nodeUuid, name: located.state.nodeName,
+            nodePath: located.state.nodePath, parentUuid: parent && parent.uuid || null,
+            transform: transformState(located.node), components });
+    }
+    return { available: true, sceneUuid: params.sceneUuid, nodes };
+}
+
+function compose(params, callback) {
+    const state = compositionState(params);
+    if (!state.available) return callback(null, state);
+    if (!params.expectedState || JSON.stringify(state) !== JSON.stringify(params.expectedState))
+        return callback(null, { available: false, reason: 'SCENE_COMPOSE_PRECONDITION_FAILED', preflight: state, mutationStarted: false });
+    const assets = new Map();
+    const refs = new Map();
+    for (const component of params.components) for (const property of component.properties) {
+        const value = property.value;
+        if (value && typeof value === 'object' && typeof value.assetUuid === 'string') refs.set(value.assetUuid, value);
+    }
+    const loadAsset = (ref) => new Promise((resolve, reject) => {
+        if (!cc.assetManager || typeof cc.assetManager.loadAny !== 'function') { reject(new Error('SCENE_ASSET_MANAGER_UNAVAILABLE')); return; }
+        const expectedClass = cc[ref.assetClass];
+        cc.assetManager.loadAny(ref.assetUuid, (error, asset) => {
+            if (error || !asset) { reject(new Error('SCENE_ASSET_LOAD_FAILED')); return; }
+            if (typeof expectedClass !== 'function' || !(asset instanceof expectedClass)) {
+                reject(new Error('SCENE_ASSET_TYPE_MISMATCH')); return;
+            }
+            assets.set(ref.assetUuid, asset);
+            resolve();
+        });
+    });
+    Promise.all(Array.from(refs.values(), loadAsset)).then(() => {
+        const fresh = compositionState(params);
+        if (!fresh.available || JSON.stringify(fresh) !== JSON.stringify(params.expectedState)) {
+            callback(null, { available: false, reason: 'SCENE_COMPOSE_PRECONDITION_FAILED', preflight: fresh });
+            return;
+        }
+        const created = new Map();
+        const addedComponents = new Map();
+        const rows = [];
+        const buttonClass = componentClass('cc.Button');
+        let mutationStarted = false;
+        try {
+            for (const item of params.nodes) {
+                const node = new cc.Node(item.name);
+                if (!node || typeof node.addChild !== 'function') throw new Error('SCENE_NODE_CREATE_UNAVAILABLE');
+                node._id = item.uuid;
+                const t = normalizeTransform(item.transform).value;
+                node.setPosition(t.x, t.y, t.z);
+                node.scaleX = t.scaleX;
+                node.scaleY = t.scaleY;
+                node.angle = t.angle;
+                node.setContentSize(t.width, t.height);
+                created.set(item.id, node);
+                rows.push({ id: item.id, node, parentRef: item.parentRef });
+            }
+            for (const spec of params.components) {
+                const node = created.get(spec.nodeRef.slice(4));
+                const resolved = componentClass(spec.className);
+                if (!node || !resolved.available || typeof node.addComponent !== 'function') throw new Error('SCENE_COMPOSE_COMPONENT_ADD_UNAVAILABLE');
+                const component = node.addComponent(resolved.constructor);
+                if (!component) throw new Error('SCENE_COMPOSE_COMPONENT_ADD_REJECTED');
+                addedComponents.set(spec.id, component);
+                for (const property of spec.properties) {
+                    const value = property.value && typeof property.value === 'object' && typeof property.value.assetUuid === 'string'
+                        ? assets.get(property.value.assetUuid) : property.value;
+                    if (property.value && typeof property.value === 'object' && typeof property.value.assetUuid === 'string' && !value)
+                        throw new Error('SCENE_ASSET_READBACK_MISSING');
+                    component[property.name] = value;
+                    const observed = component[property.name];
+                    if (value && typeof value === 'object') {
+                        if (!(observed === value || (observed && (observed._uuid || observed.uuid) === property.value.assetUuid)))
+                            throw new Error('SCENE_COMPOSE_PROPERTY_READBACK_FAILED');
+                    } else if (!Object.is(observed, value)) throw new Error('SCENE_COMPOSE_PROPERTY_READBACK_FAILED');
+                }
+            }
+            for (const event of params.buttonEvents) {
+                const button = created.get(event.buttonRef.slice(4));
+                const target = event.handlerRef.startsWith('new:') ? created.get(event.handlerRef.slice(4))
+                    : locateNode(params.sceneUuid, event.handlerRef.slice(5)).node;
+                const buttonComponent = button && button.getComponent(buttonClass.constructor);
+                if (!buttonComponent || !target || !cc.Component || typeof cc.Component.EventHandler !== 'function')
+                    throw new Error('SCENE_COMPOSE_BUTTON_BIND_UNAVAILABLE');
+                const eventHandler = new cc.Component.EventHandler();
+                eventHandler.target = target;
+                eventHandler.component = event.handlerComponentClassName;
+                eventHandler.handler = event.handler;
+                eventHandler.customEventData = typeof event.customEventData === 'string' ? event.customEventData : '';
+                buttonComponent.clickEvents = Array.isArray(buttonComponent.clickEvents) ? buttonComponent.clickEvents.concat([eventHandler]) : [eventHandler];
+                const last = buttonComponent.clickEvents[buttonComponent.clickEvents.length - 1];
+                if (!last || last.target !== target || last.component !== event.handlerComponentClassName || last.handler !== event.handler)
+                    throw new Error('SCENE_COMPOSE_BUTTON_BIND_READBACK_FAILED');
+            }
+            for (const row of rows) {
+                const parent = row.parentRef.startsWith('new:') ? created.get(row.parentRef.slice(4))
+                    : locateNode(params.sceneUuid, row.parentRef.slice(5)).node;
+                if (!parent || typeof parent.addChild !== 'function') throw new Error('SCENE_COMPOSE_PARENT_UNAVAILABLE');
+                mutationStarted = true;
+                parent.addChild(row.node);
+            }
+        } catch (error) {
+            if (!mutationStarted) for (const node of created.values()) {
+                try { if (node && typeof node.destroy === 'function') node.destroy(); } catch (_) {}
+            }
+            callback(null, { available: false, reason: error && error.message || 'SCENE_COMPOSE_FAILED',
+                mutationStarted, created: rows.filter((row) => row.node && row.node.parent).map((row) => ({ id: row.id, uuid: row.node.uuid })) });
+            return;
+        }
+        const readback = compositionReadback(params);
+        if (!readback.available) { callback(null, { ...readback, mutationStarted: true }); return; }
+        callback(null, { available: true, mutationStarted: true, state, readback });
+    }).catch((error) => callback(null, { available: false, reason: error && error.message || 'SCENE_ASSET_LOAD_FAILED', mutationStarted: false }));
+}
+
 module.exports = {
     snapshot(event, params) {
         try { event.reply(null, snapshot(params && params.maxNodes)); }
@@ -288,6 +1044,30 @@ module.exports = {
         try { event.reply(null, nodeState(params || {})); }
         catch (error) { event.reply({ code: 'SCENE_NODE_STATE_FAILED', message: String(error && error.message || error) }); }
     },
+    nodeNameState(event, params) {
+        try { event.reply(null, nodeNameState(params || {})); }
+        catch (error) { event.reply({ code: 'SCENE_NODE_NAME_STATE_FAILED', message: String(error && error.message || error) }); }
+    },
+    renameNode(event, params) {
+        try { event.reply(null, renameNode(params || {})); }
+        catch (error) { event.reply({ code: 'SCENE_NODE_RENAME_FAILED', message: String(error && error.message || error) }); }
+    },
+    nodeDeleteState(event, params) {
+        try { event.reply(null, nodeDeleteState(params || {})); }
+        catch (error) { event.reply({ code: 'SCENE_NODE_DELETE_STATE_FAILED', message: String(error && error.message || error) }); }
+    },
+    deleteNode(event, params) {
+        try { event.reply(null, deleteNode(params || {})); }
+        catch (error) { event.reply({ code: 'SCENE_NODE_DELETE_FAILED', message: String(error && error.message || error) }); }
+    },
+    nodeReparentState(event, params) {
+        try { event.reply(null, nodeReparentState(params || {})); }
+        catch (error) { event.reply({ code: 'SCENE_NODE_REPARENT_STATE_FAILED', message: String(error && error.message || error) }); }
+    },
+    reparentNode(event, params) {
+        try { event.reply(null, reparentNode(params || {})); }
+        catch (error) { event.reply({ code: 'SCENE_NODE_REPARENT_FAILED', message: String(error && error.message || error) }); }
+    },
     setNodeActive(event, params) {
         try { event.reply(null, setNodeActive(params || {})); }
         catch (error) { event.reply({ code: 'SCENE_NODE_WRITE_FAILED', message: String(error && error.message || error) }); }
@@ -295,6 +1075,14 @@ module.exports = {
     componentState(event, params) {
         try { event.reply(null, componentState(params || {})); }
         catch (error) { event.reply({ code: 'SCENE_COMPONENT_STATE_FAILED', message: String(error && error.message || error) }); }
+    },
+    componentRemoveState(event, params) {
+        try { event.reply(null, componentRemoveState(params || {})); }
+        catch (error) { event.reply({ code: 'SCENE_COMPONENT_REMOVE_STATE_FAILED', message: String(error && error.message || error) }); }
+    },
+    removeNodeComponent(event, params) {
+        try { event.reply(null, removeNodeComponent(params || {})); }
+        catch (error) { event.reply({ code: 'SCENE_COMPONENT_REMOVE_FAILED', message: String(error && error.message || error) }); }
     },
     addNodeComponent(event, params) {
         try { event.reply(null, addNodeComponent(params || {})); }
@@ -305,7 +1093,44 @@ module.exports = {
         catch (error) { event.reply({ code: 'SCENE_COMPONENT_PROPERTY_STATE_FAILED', message: String(error && error.message || error) }); }
     },
     setComponentProperty(event, params) {
-        try { event.reply(null, setComponentProperty(params || {})); }
+        try {
+            const input = params || {};
+            const value = input.value;
+            if (value && value.kind === 'asset' && typeof value.assetUuid === 'string') {
+                const constructor = cc && cc[value.assetClass];
+                if (typeof constructor !== 'function' || !cc.assetManager
+                    || typeof cc.assetManager.loadAny !== 'function') {
+                    event.reply(null, { available: false, reason: 'SCENE_ASSET_MANAGER_UNAVAILABLE' });
+                    return;
+                }
+                cc.assetManager.loadAny(value.assetUuid, (error, asset) => {
+                    if (error || !asset) {
+                        event.reply(null, { available: false, reason: 'SCENE_COMPONENT_PROPERTY_ASSET_LOAD_FAILED' });
+                        return;
+                    }
+                    if (!(asset instanceof constructor) || (asset._uuid || asset.uuid) !== value.assetUuid) {
+                        event.reply(null, { available: false, reason: 'SCENE_COMPONENT_PROPERTY_ASSET_TYPE_MISMATCH' });
+                        return;
+                    }
+                    try { event.reply(null, setComponentProperty(input, asset)); }
+                    catch (writeError) { event.reply({ code: 'SCENE_COMPONENT_PROPERTY_WRITE_FAILED', message: String(writeError && writeError.message || writeError) }); }
+                });
+                return;
+            }
+            event.reply(null, setComponentProperty(input));
+        }
         catch (error) { event.reply({ code: 'SCENE_COMPONENT_PROPERTY_WRITE_FAILED', message: String(error && error.message || error) }); }
+    },
+    compositionState(event, params) {
+        try { event.reply(null, compositionState(params || {})); }
+        catch (error) { event.reply({ code: 'SCENE_COMPOSE_PREFLIGHT_FAILED', message: String(error && error.message || error) }); }
+    },
+    compositionReadback(event, params) {
+        try { event.reply(null, compositionReadback(params || {})); }
+        catch (error) { event.reply({ code: 'SCENE_COMPOSE_READBACK_FAILED', message: String(error && error.message || error) }); }
+    },
+    compose(event, params) {
+        try { compose(params || {}, (error, result) => event.reply(error || null, result)); }
+        catch (error) { event.reply({ code: 'SCENE_COMPOSE_FAILED', message: String(error && error.message || error) }); }
     },
 };

@@ -8,18 +8,135 @@ import { COMMANDS, CREATOR_VERSION } from './bridge/contracts.mjs';
 import { installExtension, extensionStatus, updateExtension, uninstallExtension } from './extension-lifecycle.mjs';
 import { updateCli } from './release.mjs';
 import { runDoctor } from './doctor.mjs';
-import { runCreatorWorkflow } from './creator-workflows.mjs';
+import { discoverCreatorInstallations, openCreatorProject, runCreatorWorkflow } from './creator-workflows.mjs';
 import { startProjectFileWatch } from './creator-watch.mjs';
-import { loadTestPlan, runTestPlan, watchTestPlan } from './creator-tests.mjs';
+import { loadTestPlan, loadFailedSuiteIds, parseTestShard, runTestPlan, watchTestPlan } from './creator-tests.mjs';
 import { runVcsDoctor } from './vcs-integrity.mjs';
 import { configureMcp, mcpStatus, supportedMcpClients } from './mcp/configure.mjs';
 import { availableSkills, installSkills, listSkillStatus, showSkill } from './skills.mjs';
+import { diffSceneSnapshotFiles } from './semantic-diff.mjs';
 
 const args = process.argv.slice(2);
 const root = pluginRoot();
 const packageInfo = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 let globalOptionError = null;
 let jsonOutput = false;
+
+const HELP_LINES = [
+  'Cocos Creator Agent CLI (Creator 2.4.15; Creator writes require a Creator-side approval dialog)',
+  '  --version | version',
+  '  help [<command> [<subcommand>]] | help search <query>',
+  '  catalog [--format json]',
+  '  self-update [--check] [--version <version>]',
+  '  mcp configure <codex|claude-code> [--local] [--force] [--dry-run] | list | status <client> | remove <client> | serve',
+  '  skill list [<codex|claude-code>] [--local] | show [<skill-name>|--list] (default: cocos2-cli) | install <client> [--local] [--skill <name>] [--force] | refresh <client> [--local] [--force]',
+  '  doctor [--project-root <absolute-path>] [--instance <instance-id>]',
+  '  vcs doctor --git-root <absolute-path> --project-root <absolute-path>',
+  '  bridge start | status | stop',
+  '  extension install --project-root <absolute-path>',
+  '  extension status --project-root <absolute-path>',
+  '  extension update --project-root <absolute-path> [--force]',
+  '  extension uninstall --project-root <absolute-path> [--force]',
+  '  extension commands list --instance <instance-id>',
+  '  extension command call --instance <instance-id> --provider <provider-id> --command <command-id> --input <json-object>',
+  '  instances list',
+  '  capabilities --instance <instance-id>',
+  '  creator installations [--search-root <absolute-path>]',
+  '  project open --project-root <absolute-path> [--creator <Creator-2.4.15.app>] [--timeout-ms N (default 120000)] [--no-wait-ready]',
+  '  project info --instance <instance-id>',
+  '  project-tools list --instance <instance-id>',
+  '  project-tools call --instance <instance-id> --tool <tool-id> --input <json-object>',
+  '  project search --instance <instance-id> --query <text> [--scope all|code|assets] [--limit N]',
+  '  asset search --instance <instance-id> [--query <text>] [--limit N]',
+  '  asset references --instance <instance-id> --uuid <asset-uuid>',
+  '  call --instance <instance-id> --command creator.asset.move.plan --input <sourceAssetPath,destinationAssetPath>',
+  '  call --instance <instance-id> --command creator.asset.move.commit --input <operationId,planHash>',
+  '  call --instance <instance-id> --command creator.asset.move.reconcile --input <operationId>',
+  '  call --instance <instance-id> --command creator.asset.delete.plan --input <assetUuid>',
+  '  call --instance <instance-id> --command creator.asset.delete.commit --input <operationId,planHash>',
+  '  call --instance <instance-id> --command creator.asset.delete.reconcile --input <operationId>',
+  '  call --instance <instance-id> --command creator.asset.import-settings.plan --input <assetUuid,settings-json>',
+  '  call --instance <instance-id> --command creator.asset.import-settings.commit --input <operationId,planHash>',
+  '  call --instance <instance-id> --command creator.asset.import-settings.reconcile --input <operationId>',
+  '  script read --instance <instance-id> --path <assets-relative.js-or.ts>',
+  '  scene snapshot --instance <instance-id>',
+  '  scene diff --before <snapshot.json> --after <snapshot.json>',
+  '  call --instance <instance-id> --command creator.scene.node.rename.plan --input <sceneUuid,nodeUuid,newName>',
+  '  call --instance <instance-id> --command creator.scene.node.rename.commit --input <operationId,planHash>',
+  '  call --instance <instance-id> --command creator.scene.node.rename.reconcile --input <operationId>',
+  '  call --instance <instance-id> --command creator.scene.node.delete.plan --input <sceneUuid,nodeUuid>',
+  '  call --instance <instance-id> --command creator.scene.node.delete.commit --input <operationId,planHash>',
+  '  call --instance <instance-id> --command creator.scene.node.delete.reconcile --input <operationId>',
+  '  call --instance <instance-id> --command creator.scene.node.reparent.plan --input <sceneUuid,nodeUuid,targetParentUuid>',
+  '  call --instance <instance-id> --command creator.scene.node.reparent.commit --input <operationId,planHash>',
+  '  call --instance <instance-id> --command creator.scene.node.reparent.reconcile --input <operationId>',
+  '  call --instance <instance-id> --command creator.scene.node.add-component.plan --input <json-object>',
+  '  call --instance <instance-id> --command creator.scene.node.add-component.commit --input <json-object>',
+  '  call --instance <instance-id> --command creator.scene.node.add-component.reconcile --input <json-object>',
+  '  call --instance <instance-id> --command creator.scene.node.remove-component.plan --input <sceneUuid,nodeUuid,componentClassName,componentInstanceId>',
+  '  call --instance <instance-id> --command creator.scene.node.remove-component.commit --input <operationId,planHash>',
+  '  call --instance <instance-id> --command creator.scene.node.remove-component.reconcile --input <operationId>',
+  '  call --instance <instance-id> --command creator.scene.node.set-component-property.plan --input <json-object>',
+  '  call --instance <instance-id> --command creator.scene.node.set-component-property.commit --input <json-object>',
+  '  call --instance <instance-id> --command creator.scene.node.set-component-property.reconcile --input <json-object>',
+  '  creator build --project-root <path> --creator <Creator-2.4.15.app> --platform web-mobile|web-desktop|android|ios|mac|win32 [--build-path <new-path>] [--debug] [--auto-compile] [--timeout-ms N]',
+  '  creator compile --project-root <path> --creator <Creator-2.4.15.app> --platform android|ios|mac|win32 --build-path <existing-native-build-path> [--debug] [--timeout-ms N]',
+  '  creator test --instance <instance-id> --session <preview-session-id> --input <actions-and-assertions-json>',
+  '  creator test --project-root <path> [--list] [--suite <id>] [--rerun-failed <results.json>] [--shard <index>/<total>] [--coverage] [--instance <id>] [--session <id>] [--report-dir <new-path>]',
+  '  creator watch --instance <instance-id> --session <preview-session-id> --paths <project-relative-paths-json> --input <actions-and-assertions-json> [--interval-ms N]',
+  '  creator watch --project-root <path> --paths <files-or-directories-json> [--affected] [--suite <id>] [--instance <id>] [--session <id>] [--report-dir <path>]',
+  '  diagnostics read --instance <instance-id> [--after-sequence N] [--limit N]',
+  '  preview start --instance <instance-id> [--port 7456]',
+  '  preview observe|screenshot|refresh|stop --instance <instance-id> --session <preview-session-id>',
+  '  preview interact --instance <instance-id> --session <preview-session-id> --input <actions-and-assertions-json>',
+  '  tasks start --instance <instance-id> --command <command-id> --input <json-object>',
+  '  tasks status --id <task-id> | wait --id <task-id> [--after-sequence N] [--wait-ms N]',
+  '  tasks list [--instance <instance-id>] | cancel --id <task-id>',
+  '  tasks resume --instance <instance-id> --id <task-id>',
+  '  call --instance <instance-id> --command <command-id> --input <json-object>',
+  'Global: --format json | --json (errors are JSON on stdout)',
+];
+
+function helpText(parts = []) {
+  const catalogLines = [...COMMANDS.values()].map((command) => `  call --command ${command.id} (${command.access}): ${command.description}`);
+  const lines = [...HELP_LINES, ...catalogLines];
+  if (!parts.length) return HELP_LINES.join('\n');
+  if (parts[0] === 'search') {
+    const terms = parts.slice(1).join(' ').trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!terms.length) return 'Usage: cocos-creator-agent help search <query>';
+    const matches = lines.filter((line) => terms.every((term) => line.toLowerCase().includes(term)));
+    return matches.length ? matches.join('\n') : `No help matches: ${parts.slice(1).join(' ')}`;
+  }
+  const prefix = parts.join(' ').toLowerCase();
+  const matches = HELP_LINES.filter((line) => line.trim().toLowerCase().startsWith(prefix));
+  return matches.length ? matches.join('\n') : `No help matches: ${parts.join(' ')}`;
+}
+
+function normalizedErrorCode(error) {
+  if (typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]+$/.test(error.code)) return error.code;
+  const message = error?.message || String(error);
+  if (/Unknown (command|MCP action|skill action|Creator workflow)/i.test(message)) return 'CLI_UNKNOWN_COMMAND';
+  if (/Only --format json is supported/i.test(message)) return 'CLI_USAGE_ERROR';
+  return message.match(/^([A-Z][A-Z0-9_]{2,})(?=[:\s]|$)/)?.[1] || 'CLI_ERROR';
+}
+
+function failureExitCode(code, message) {
+  if (code.startsWith('UNKNOWN_') || code.startsWith('INVALID_') || code.startsWith('REQUIRED_')
+    || code.endsWith('_REQUIRED') || code.endsWith('_UNSUPPORTED') || code.startsWith('UNSUPPORTED_')
+    || code.includes('_EXCLUSIVE') || code === 'CLI_UNKNOWN_COMMAND'
+    || /Unknown (command|MCP action|skill action|Creator workflow)/i.test(message)
+    || code === 'CLI_USAGE_ERROR') return 2;
+  if (code.startsWith('OPERATION_') || code.includes('PRECONDITION') || code.includes('APPROVAL')
+    || code.includes('CONFLICT') || code.includes('RECONCILIATION')) return 5;
+  if (code.startsWith('BRIDGE_') || code.startsWith('MCP_') || code.startsWith('CREATOR_INSTANCE_')) return 3;
+  if (code.startsWith('CREATOR_') || code.startsWith('PROJECT_') || code.startsWith('BUILD_')
+    || code.startsWith('NATIVE_')) return 4;
+  return 1;
+}
+
+function setFailureExitCode(code) {
+  process.exitCode = Math.max(process.exitCode || 0, code);
+}
 
 for (let index = args.length - 1; index >= 0; index -= 1) {
   if (args[index] === '--json') { jsonOutput = true; args.splice(index, 1); }
@@ -30,9 +147,18 @@ for (let index = args.length - 1; index >= 0; index -= 1) {
   }
 }
 
-function fail(message, code = 2) {
-  process.stderr.write(`${message}\n`);
-  process.exitCode = code;
+function fail(error, code = 2) {
+  const message = error?.message || String(error);
+  const errorCode = normalizedErrorCode(error);
+  const exitCode = error?.exitCode || (code !== 2 ? code : failureExitCode(errorCode, message));
+  if (jsonOutput) {
+    process.stdout.write(`${JSON.stringify({ schemaVersion: 1, success: false, exitCode,
+      error: {
+      code: errorCode, kind: exitCode === 2 ? 'usage' : exitCode === 3 ? 'bridge' : exitCode === 4 ? 'creator' : exitCode === 5 ? 'conflict' : 'runtime', message,
+      ...(error?.detail === undefined ? {} : { detail: error.detail }),
+    } })}\n`);
+  } else process.stderr.write(`${message}\n`);
+  process.exitCode = exitCode;
 }
 
 function value(flag, fallback) {
@@ -45,64 +171,25 @@ function print(value) { process.stdout.write(`${JSON.stringify(value, null, 2)}\
 function parseInput() {
   const raw = value('--input', '{}');
   let result;
-  try { result = JSON.parse(raw); } catch (_) { throw new Error('--input must be valid JSON'); }
-  if (!result || typeof result !== 'object' || Array.isArray(result)) throw new Error('--input must be a JSON object');
+  try { result = JSON.parse(raw); }
+  catch (_) { throw Object.assign(new Error('--input must be valid JSON'), { code: 'INPUT_JSON_INVALID' }); }
+  if (!result || typeof result !== 'object' || Array.isArray(result))
+    throw Object.assign(new Error('--input must be a JSON object'), { code: 'INPUT_OBJECT_REQUIRED' });
   return result;
 }
 
 const extensionSource = path.join(root, 'creator-extension');
 
 async function main() {
-  if (globalOptionError) throw new Error(globalOptionError);
+  if (globalOptionError) throw Object.assign(new Error(globalOptionError), { code: 'CLI_USAGE_ERROR' });
   const [group, action, ...rest] = args;
-  if (group === '--help' || group === '-h' || !group) {
-    process.stdout.write([
-      'Cocos Creator Agent CLI (Creator 2.4.15; Creator writes require a Creator-side approval dialog)',
-      '  --version | version',
-      '  catalog [--format json]',
-      '  self-update [--check] [--version <version>]',
-      '  mcp configure <codex|claude-code> [--local] [--force] [--dry-run] | list | status <client> | remove <client> | serve',
-      '  skill list [<codex|claude-code>] [--local] | show [<skill-name>|--list] (default: cocos2-cli) | install <client> [--local] [--skill <name>] [--force] | refresh <client> [--local] [--force]',
-      '  doctor [--project-root <absolute-path>] [--instance <instance-id>]',
-      '  vcs doctor --git-root <absolute-path> --project-root <absolute-path>',
-      '  bridge start | status | stop',
-      '  extension install --project-root <absolute-path>',
-      '  extension status --project-root <absolute-path>',
-      '  extension update --project-root <absolute-path> [--force]',
-      '  extension uninstall --project-root <absolute-path> [--force]',
-      '  extension commands list --instance <instance-id>',
-      '  extension command call --instance <instance-id> --provider <provider-id> --command <command-id> --input <json-object>',
-      '  instances list',
-      '  capabilities --instance <instance-id>',
-      '  project info --instance <instance-id>',
-      '  project-tools list --instance <instance-id>',
-      '  project-tools call --instance <instance-id> --tool <tool-id> --input <json-object>',
-      '  project search --instance <instance-id> --query <text> [--scope all|code|assets] [--limit N]',
-      '  asset search --instance <instance-id> [--query <text>] [--limit N]',
-      '  script read --instance <instance-id> --path <assets-relative.js-or.ts>',
-      '  scene snapshot --instance <instance-id>',
-      '  call --instance <instance-id> --command creator.scene.node.add-component.plan --input <json-object>',
-      '  call --instance <instance-id> --command creator.scene.node.add-component.commit --input <json-object>',
-      '  call --instance <instance-id> --command creator.scene.node.add-component.reconcile --input <json-object>',
-      '  call --instance <instance-id> --command creator.scene.node.set-component-property.plan --input <json-object>',
-      '  call --instance <instance-id> --command creator.scene.node.set-component-property.commit --input <json-object>',
-      '  call --instance <instance-id> --command creator.scene.node.set-component-property.reconcile --input <json-object>',
-      '  creator build --project-root <path> --creator <Creator-2.4.15.app> --platform web-mobile|web-desktop|android|ios|mac|win32 [--build-path <new-path>] [--debug] [--auto-compile] [--timeout-ms N]',
-      '  creator compile --project-root <path> --creator <Creator-2.4.15.app> --platform android|ios|mac|win32 --build-path <existing-native-build-path> [--debug] [--timeout-ms N]',
-      '  creator test --instance <instance-id> --session <preview-session-id> --input <actions-and-assertions-json>',
-      '  creator test --project-root <path> [--list] [--suite <id>] [--instance <id>] [--session <id>] [--report-dir <new-path>]',
-      '  creator watch --instance <instance-id> --session <preview-session-id> --paths <project-relative-paths-json> --input <actions-and-assertions-json> [--interval-ms N]',
-      '  creator watch --project-root <path> --paths <files-or-directories-json> [--affected] [--suite <id>] [--instance <id>] [--session <id>] [--report-dir <path>]',
-      '  diagnostics read --instance <instance-id> [--after-sequence N] [--limit N]',
-      '  preview start --instance <instance-id> [--port 7456]',
-      '  preview observe|screenshot|refresh|stop --instance <instance-id> --session <preview-session-id>',
-      '  preview interact --instance <instance-id> --session <preview-session-id> --input <actions-and-assertions-json>',
-      '  tasks start --instance <instance-id> --command <command-id> --input <json-object>',
-      '  tasks status --id <task-id> | wait --id <task-id> [--after-sequence N] [--wait-ms N]',
-      '  tasks list [--instance <instance-id>] | cancel --id <task-id>',
-      '  tasks resume --instance <instance-id> --id <task-id>',
-      '  call --instance <instance-id> --command <command-id> --input <json-object>',
-    ].join('\n') + '\n');
+  if (group === 'help') {
+    process.stdout.write(`${helpText(args.slice(1))}\n`);
+    return;
+  }
+  if (!group || group === '--help' || group === '-h' || args.some((item) => item === '--help' || item === '-h')) {
+    const helpArgs = !group || group === '--help' || group === '-h' ? [] : args.filter((item) => item !== '--help' && item !== '-h');
+    process.stdout.write(`${helpText(helpArgs)}\n`);
     return;
   }
   if (group === '--version' || group === '-v') { process.stdout.write(`${packageInfo.version}\n`); return; }
@@ -245,6 +332,14 @@ async function main() {
     throw new Error('Unknown tasks action.');
   }
   if (group === 'call') { print(await callCommand(instanceId, value('--command'), parseInput())); return; }
+  if (group === 'project' && action === 'open') {
+    const result = await openCreatorProject({ projectRoot: value('--project-root'), creatorPath: value('--creator'),
+      waitReady: !args.includes('--no-wait-ready'),
+      timeoutMs: value('--timeout-ms') === undefined ? 120000 : Number(value('--timeout-ms')) });
+    print(result);
+    if (!result.success) setFailureExitCode(4);
+    return;
+  }
   if (group === 'project' && action === 'info') { print(await callCommand(instanceId, 'creator.project.info', {})); return; }
   if (group === 'project' && action === 'search') {
     const input = { query: value('--query'), ...(value('--scope') ? { scope: value('--scope') } : {}),
@@ -256,25 +351,52 @@ async function main() {
       ...(value('--limit') ? { limit: Number(value('--limit')) } : {}) };
     print(await callCommand(instanceId, 'creator.asset.search', input)); return;
   }
+  if (group === 'asset' && action === 'references') {
+    print(await callCommand(instanceId, 'creator.asset.references', { assetUuid: value('--uuid') })); return;
+  }
   if (group === 'script' && action === 'read') {
     print(await callCommand(instanceId, 'creator.script.read', { scriptPath: value('--path') })); return;
   }
   if (group === 'scene' && action === 'snapshot') { print(await callCommand(instanceId, 'creator.scene.snapshot', {})); return; }
+  if (group === 'scene' && action === 'diff') {
+    const before = value('--before');
+    const after = value('--after');
+    if (!before || !after) throw new Error('scene diff requires --before and --after snapshot files');
+    print(diffSceneSnapshotFiles(before, after)); return;
+  }
   if (group === 'creator') {
+    if (action === 'installations') {
+      const searchRoot = value('--search-root');
+      print(discoverCreatorInstallations(searchRoot ? { searchRoots: [searchRoot] } : {}));
+      return;
+    }
     if ((action === 'test' || action === 'watch') && value('--project-root') !== undefined) {
       const projectRoot = value('--project-root');
+      if (value('--rerun-failed') !== undefined && action !== 'test')
+        throw Object.assign(new Error('--rerun-failed is supported only by creator test'), { code: 'TEST_RERUN_FAILED_UNSUPPORTED' });
+      if ((value('--shard') !== undefined || args.includes('--coverage')) && action !== 'test')
+        throw Object.assign(new Error('--shard and --coverage are supported only by creator test'), { code: 'TEST_NODE_OPTIONS_UNSUPPORTED' });
+      if (value('--rerun-failed') !== undefined && args.includes('--list'))
+        throw Object.assign(new Error('--rerun-failed cannot be combined with --list'), { code: 'TEST_RERUN_FAILED_EXCLUSIVE' });
+      if ((value('--shard') !== undefined || args.includes('--coverage')) && args.includes('--list'))
+        throw Object.assign(new Error('--shard and --coverage require a test run, not --list'), { code: 'TEST_NODE_OPTIONS_UNSUPPORTED' });
       if (action === 'test' && args.includes('--list')) { print(loadTestPlan(projectRoot)); return; }
       const suiteIds = args.flatMap((item, index) => item === '--suite' ? [args[index + 1]] : []);
+      if (action === 'test' && value('--rerun-failed') !== undefined) {
+        if (suiteIds.length) throw Object.assign(new Error('--rerun-failed cannot be combined with --suite'), { code: 'TEST_RERUN_FAILED_EXCLUSIVE' });
+        suiteIds.push(...loadFailedSuiteIds(projectRoot, value('--rerun-failed')));
+      }
       const controller = new AbortController();
       const stop = () => controller.abort();
       process.once('SIGINT', stop); process.once('SIGTERM', stop);
       try {
         const options = { projectRoot, suiteIds, instanceId, previewSessionId: value('--session'),
-          reportDir: value('--report-dir'), signal: controller.signal };
+          reportDir: value('--report-dir'), signal: controller.signal,
+          ...(action === 'test' ? { shard: parseTestShard(value('--shard')), coverage: args.includes('--coverage') } : {}) };
         if (action === 'test') {
           const result = await runTestPlan(options);
           print(result);
-          if (!result.passed) process.exitCode = 1;
+          if (!result.passed) setFailureExitCode(10);
         } else {
           let paths;
           try { paths = JSON.parse(value('--paths', '')); } catch (_) { throw new Error('--paths must be a JSON array of project-relative files or directories'); }
@@ -282,7 +404,7 @@ async function main() {
           const result = await watchTestPlan({ ...options, paths, affected: args.includes('--affected'),
             intervalMs: value('--interval-ms') === undefined ? undefined : Number(value('--interval-ms')) },
           { signal: controller.signal, onEvent: (event) => process.stdout.write(JSON.stringify(event) + '\n') });
-          if (!result.lastTestPassed) process.exitCode = 1;
+          if (!result.lastTestPassed) setFailureExitCode(10);
         }
       } finally { process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop); }
       return;
@@ -295,7 +417,7 @@ async function main() {
       });
       const passed = receipt.result?.passed === true;
       print({ ...receipt, test: { passed, assertionCount: receipt.result?.assertions?.length || 0 } });
-      if (!passed) process.exitCode = 1;
+      if (!passed) setFailureExitCode(10);
       return;
     }
     if (action === 'watch') {
@@ -356,7 +478,7 @@ async function main() {
         process.removeListener('SIGINT', stop);
         process.removeListener('SIGTERM', stop);
       }
-      if (!lastPassed) process.exitCode = 1;
+      if (!lastPassed) setFailureExitCode(10);
       emit({ type: 'watch-stopped', runs: sequence, lastTestPassed: lastPassed });
       return;
     }
@@ -366,7 +488,7 @@ async function main() {
         buildPath: value('--build-path'), debug: args.includes('--debug'), autoCompile: args.includes('--auto-compile'),
         timeoutMs: value('--timeout-ms') === undefined ? 1200000 : Number(value('--timeout-ms')) });
       print(result);
-      if (!result.success) process.exitCode = 1;
+      if (!result.success) setFailureExitCode(4);
       return;
     }
     throw new Error('Unknown Creator workflow.');
@@ -389,7 +511,7 @@ async function main() {
     if (action === 'observe' && value('--after-sequence')) input.afterSequence = Number(value('--after-sequence'));
     print(await callCommand(instanceId, command, input)); return;
   }
-  throw new Error('Unknown command. Run cocos-creator-agent --help.');
+  throw Object.assign(new Error('Unknown command. Run cocos-creator-agent --help.'), { code: 'CLI_UNKNOWN_COMMAND' });
 }
 
-main().catch((error) => fail(error.message || String(error)));
+main().catch((error) => fail(error));

@@ -272,6 +272,8 @@ function makeInstance(body) {
       rejectedInstances.delete(body.instanceId);
       rejectedInstances.set(body.instanceId, { instanceId: body.instanceId, reportedProjectRoot: body.projectRoot,
         creatorVersion: body.creatorVersion, extensionVersion: body.extensionVersion, connected: false,
+        ...(Number.isSafeInteger(body.processId) && body.processId > 0 && body.processId <= 2147483647
+          ? { processId: body.processId } : {}),
         reasons, expectedExtensionVersion: EXTENSION_VERSION, expectedCreatorVersion: CREATOR_VERSION,
         receivedAt: new Date().toISOString(), seen: Date.now() });
       if (rejectedInstances.size > 16) rejectedInstances.delete(rejectedInstances.keys().next().value);
@@ -295,6 +297,8 @@ function makeInstance(body) {
     projectName: path.basename(projectRoot),
     creatorVersion: body.creatorVersion,
     extensionVersion: body.extensionVersion,
+    processId: Number.isSafeInteger(body.processId) && body.processId > 0 && body.processId <= 2147483647
+      ? body.processId : null,
     capabilities: body.capabilities,
     activeScene: typeof body.activeScene === 'string' ? body.activeScene.slice(0, 120) : null,
     registeredAt: new Date().toISOString(),
@@ -311,6 +315,8 @@ function publicInstance(instance) {
     projectName: instance.projectName,
     creatorVersion: instance.creatorVersion,
     extensionVersion: instance.extensionVersion,
+    ...(Number.isSafeInteger(instance.processId) && instance.processId > 0
+      ? { processId: instance.processId } : {}),
     activeScene: instance.activeScene,
     connected: instanceIsLive(instance),
     registeredAt: instance.registeredAt,
@@ -511,12 +517,40 @@ function resumeTask(task, instance) {
       command = 'creator.scene.node.set-active.reconcile';
       input = { operationId: task.input.operationId };
       recovery = true;
+    } else if (task.command === 'creator.scene.node.rename.commit' && typeof task.input?.operationId === 'string') {
+      command = 'creator.scene.node.rename.reconcile';
+      input = { operationId: task.input.operationId };
+      recovery = true;
+    } else if (task.command === 'creator.scene.node.reparent.commit' && typeof task.input?.operationId === 'string') {
+      command = 'creator.scene.node.reparent.reconcile';
+      input = { operationId: task.input.operationId };
+      recovery = true;
+    } else if (task.command === 'creator.scene.node.delete.commit' && typeof task.input?.operationId === 'string') {
+      command = 'creator.scene.node.delete.reconcile';
+      input = { operationId: task.input.operationId };
+      recovery = true;
+    } else if (task.command === 'creator.scene.node.remove-component.commit' && typeof task.input?.operationId === 'string') {
+      command = 'creator.scene.node.remove-component.reconcile';
+      input = { operationId: task.input.operationId };
+      recovery = true;
     } else if (task.command === 'creator.scene.node.add-component.commit' && typeof task.input?.operationId === 'string') {
       command = 'creator.scene.node.add-component.reconcile';
       input = { operationId: task.input.operationId };
       recovery = true;
     } else if (task.command === 'creator.scene.node.set-component-property.commit' && typeof task.input?.operationId === 'string') {
       command = 'creator.scene.node.set-component-property.reconcile';
+      input = { operationId: task.input.operationId };
+      recovery = true;
+    } else if (task.command === 'creator.asset.move.commit' && typeof task.input?.operationId === 'string') {
+      command = 'creator.asset.move.reconcile';
+      input = { operationId: task.input.operationId };
+      recovery = true;
+    } else if (task.command === 'creator.asset.delete.commit' && typeof task.input?.operationId === 'string') {
+      command = 'creator.asset.delete.reconcile';
+      input = { operationId: task.input.operationId };
+      recovery = true;
+    } else if (task.command === 'creator.asset.import-settings.commit' && typeof task.input?.operationId === 'string') {
+      command = 'creator.asset.import-settings.reconcile';
       input = { operationId: task.input.operationId };
       recovery = true;
     } else {

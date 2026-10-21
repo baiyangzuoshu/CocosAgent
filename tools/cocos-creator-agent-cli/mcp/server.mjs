@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { diffSceneSnapshots } from '../semantic-diff.mjs';
 
 const SERVER_NAME = 'cocos-creator-agent';
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -24,9 +25,46 @@ const commandToolAdapters = [
   { commandId: 'creator.project.info', name: 'cocos_project_info' },
   { commandId: 'creator.project.search', name: 'cocos_project_search' },
   { commandId: 'creator.asset.search', name: 'cocos_asset_search' },
+  { commandId: 'creator.asset.references', name: 'cocos_asset_references' },
+  { commandId: 'creator.asset.import.plan', name: 'cocos_asset_import_plan' },
+  { commandId: 'creator.asset.import.commit', name: 'cocos_asset_import_commit' },
+  { commandId: 'creator.asset.import.reconcile', name: 'cocos_asset_import_reconcile' },
+  { commandId: 'creator.asset.move.plan', name: 'cocos_asset_move_plan' },
+  { commandId: 'creator.asset.move.commit', name: 'cocos_asset_move_commit' },
+  { commandId: 'creator.asset.move.reconcile', name: 'cocos_asset_move_reconcile' },
+  { commandId: 'creator.asset.delete.plan', name: 'cocos_asset_delete_plan' },
+  { commandId: 'creator.asset.delete.commit', name: 'cocos_asset_delete_commit' },
+  { commandId: 'creator.asset.delete.reconcile', name: 'cocos_asset_delete_reconcile' },
+  { commandId: 'creator.asset.import-settings.plan', name: 'cocos_asset_import_settings_plan' },
+  { commandId: 'creator.asset.import-settings.commit', name: 'cocos_asset_import_settings_commit' },
+  { commandId: 'creator.asset.import-settings.reconcile', name: 'cocos_asset_import_settings_reconcile' },
+  { commandId: 'creator.prefab.create.plan', name: 'cocos_prefab_create_plan' },
+  { commandId: 'creator.prefab.create.commit', name: 'cocos_prefab_create_commit' },
+  { commandId: 'creator.prefab.create.reconcile', name: 'cocos_prefab_create_reconcile' },
   { commandId: 'creator.script.read', name: 'cocos_script_read' },
+  { commandId: 'creator.script.modify.plan', name: 'cocos_script_modify_plan' },
+  { commandId: 'creator.script.modify.commit', name: 'cocos_script_modify_commit' },
+  { commandId: 'creator.script.modify.reconcile', name: 'cocos_script_modify_reconcile' },
+  { commandId: 'creator.script.recompile.plan', name: 'cocos_script_recompile_plan' },
+  { commandId: 'creator.script.recompile.commit', name: 'cocos_script_recompile_commit' },
+  { commandId: 'creator.script.recompile.reconcile', name: 'cocos_script_recompile_reconcile' },
   { commandId: 'creator.scene.snapshot', name: 'cocos_scene_snapshot' },
+  { commandId: 'creator.scene.compose.plan', name: 'cocos_scene_compose_plan' },
+  { commandId: 'creator.scene.compose.commit', name: 'cocos_scene_compose_commit' },
+  { commandId: 'creator.scene.compose.reconcile', name: 'cocos_scene_compose_reconcile' },
   { commandId: 'creator.scene.node.read', name: 'cocos_scene_node_read' },
+  { commandId: 'creator.scene.node.rename.plan', name: 'cocos_scene_node_rename_plan' },
+  { commandId: 'creator.scene.node.rename.commit', name: 'cocos_scene_node_rename_commit' },
+  { commandId: 'creator.scene.node.rename.reconcile', name: 'cocos_scene_node_rename_reconcile' },
+  { commandId: 'creator.scene.node.delete.plan', name: 'cocos_scene_node_delete_plan' },
+  { commandId: 'creator.scene.node.delete.commit', name: 'cocos_scene_node_delete_commit' },
+  { commandId: 'creator.scene.node.delete.reconcile', name: 'cocos_scene_node_delete_reconcile' },
+  { commandId: 'creator.scene.node.remove-component.plan', name: 'cocos_scene_node_remove_component_plan' },
+  { commandId: 'creator.scene.node.remove-component.commit', name: 'cocos_scene_node_remove_component_commit' },
+  { commandId: 'creator.scene.node.remove-component.reconcile', name: 'cocos_scene_node_remove_component_reconcile' },
+  { commandId: 'creator.scene.node.reparent.plan', name: 'cocos_scene_node_reparent_plan' },
+  { commandId: 'creator.scene.node.reparent.commit', name: 'cocos_scene_node_reparent_commit' },
+  { commandId: 'creator.scene.node.reparent.reconcile', name: 'cocos_scene_node_reparent_reconcile' },
   { commandId: 'creator.scene.node.set-active.plan', name: 'cocos_scene_node_set_active_plan' },
   { commandId: 'creator.scene.node.set-active.commit', name: 'cocos_scene_node_set_active_commit' },
   { commandId: 'creator.scene.node.set-active.reconcile', name: 'cocos_scene_node_set_active_reconcile' },
@@ -89,6 +127,15 @@ function commandAnnotations(access) {
 }
 
 const infrastructureTools = [
+  {
+    name: 'cocos_scene_diff',
+    description: 'Compare two Creator scene snapshots returned by cocos_scene_snapshot. Requires matching scene identity and bounded, complete snapshots; reads no files and does not mutate the project.',
+    inputSchema: { type: 'object', required: ['beforeSnapshot', 'afterSnapshot'], properties: {
+      beforeSnapshot: { type: 'object', additionalProperties: true },
+      afterSnapshot: { type: 'object', additionalProperties: true },
+    }, additionalProperties: false },
+    annotations: READ_ONLY_ANNOTATIONS,
+  },
   {
     name: 'cocos_cli_status',
     description: 'Check whether the standalone Cocos Creator CLI is installed and read its version.',
@@ -165,7 +212,7 @@ const infrastructureTools = [
   },
   {
     name: 'cocos_tasks_resume',
-    description: 'Explicitly resume an interrupted read, or reconcile a script-creation or scene-node write by its original operation ID. Other dispatched writes/controls are never replayed automatically.',
+    description: 'Explicitly resume an interrupted read, or reconcile a documented Creator write by its original operation ID. Other dispatched writes/controls are never replayed automatically.',
     inputSchema: { type: 'object', required: ['instanceId', 'taskId'], properties: {
       instanceId: INSTANCE_ID_SCHEMA, taskId: { type: 'string', pattern: '^[0-9a-f-]{36}$' },
     }, additionalProperties: false },
@@ -247,6 +294,9 @@ async function getTools() {
 }
 
 async function handleTool(name, args = {}, signal) {
+  if (name === 'cocos_scene_diff') {
+    return diffSceneSnapshots(args.beforeSnapshot, args.afterSnapshot);
+  }
   if (name === 'cocos_cli_status') {
     try { return { available: true, command: CLI_COMMAND, ...(await invokeCliJson(['version'], { signal })) }; }
     catch (error) {

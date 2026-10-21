@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import test from 'node:test';
-import { resolveCreatorExecutable, runCreatorWorkflow } from '../creator-workflows.mjs';
+import { openCreatorProject, resolveCreatorExecutable, runCreatorWorkflow } from '../creator-workflows.mjs';
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-creator-workflow-'));
@@ -68,6 +68,59 @@ test('Creator build workflow verifies project and editor versions, then returns 
   await assert.rejects(runCreatorWorkflow({ operation: 'build', projectRoot: state.projectRoot,
     creatorPath: state.appRoot, platform: 'web-mobile', buildPath: path.join(state.projectRoot, 'build') }),
   (error) => error.code === 'BUILD_PATH_MUST_BE_OUTSIDE_PROJECT');
+});
+
+test('project open validates both Creator versions and launches the editor with --path', async (t) => {
+  const state = fixture();
+  t.after(() => fs.rmSync(state.root, { recursive: true, force: true }));
+  let observed;
+  let unrefCalled = false;
+  const child = new EventEmitter();
+  child.pid = 4321;
+  child.unref = () => { unrefCalled = true; };
+  const receipt = openCreatorProject({ projectRoot: state.projectRoot, creatorPath: state.appRoot }, {
+    spawnImpl(executable, args, options) {
+      observed = { executable, args, options };
+      queueMicrotask(() => child.emit('spawn'));
+      return child;
+    },
+  });
+
+  const result = await receipt;
+  assert.deepEqual(observed.args, ['--path', fs.realpathSync(state.projectRoot)]);
+  assert.equal(observed.executable, state.executable);
+  assert.equal(observed.options.cwd, fs.realpathSync(state.projectRoot));
+  assert.equal(observed.options.detached, true);
+  assert.equal(observed.options.stdio, 'ignore');
+  assert.equal(unrefCalled, true);
+  assert.equal(result.operation, 'open');
+  assert.equal(result.success, true);
+  assert.equal(result.launched, true);
+  assert.equal(result.editorReady, false);
+  assert.equal(result.projectName, 'build-fixture');
+  assert.equal(result.processId, 4321);
+  assert.deepEqual(result.command, [state.executable, '--path', fs.realpathSync(state.projectRoot)]);
+});
+
+test('project open reports process launch errors and rejects a mismatched project before spawning', async (t) => {
+  const state = fixture();
+  t.after(() => fs.rmSync(state.root, { recursive: true, force: true }));
+  let spawnCalled = false;
+  const failedChild = new EventEmitter();
+  const failed = openCreatorProject({ projectRoot: state.projectRoot, creatorPath: state.appRoot }, {
+    spawnImpl() {
+      queueMicrotask(() => failedChild.emit('error', new Error('permission denied')));
+      return failedChild;
+    },
+  });
+  await assert.rejects(failed, (error) => error.code === 'CREATOR_OPEN_START_FAILED'
+    && error.detail === 'permission denied');
+
+  fs.writeFileSync(path.join(state.projectRoot, 'project.json'), JSON.stringify({ name: 'wrong-version', version: '3.8.7' }));
+  await assert.rejects(openCreatorProject({ projectRoot: state.projectRoot, creatorPath: state.appRoot }, {
+    spawnImpl() { spawnCalled = true; },
+  }), (error) => error.code === 'PROJECT_CREATOR_VERSION_MISMATCH');
+  assert.equal(spawnCalled, false);
 });
 
 test('Creator build-finished marker closes the spawned editor and returns success', async (t) => {

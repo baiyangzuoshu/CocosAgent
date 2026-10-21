@@ -1,6 +1,6 @@
 {
   "name": "cocos-creator-agent-cli",
-  "version": "0.11.1",
+  "version": "0.12.15",
   "type": "module",
   "description": "Standalone Cocos Creator 2.4.15 CLI with MCP configuration, Agent Skills, bridge, and project extension management.",
   "repository": {
@@ -20,6 +20,7 @@
     "creator-workflows.mjs",
     "creator-watch.mjs",
     "creator-tests.mjs",
+    "semantic-diff.mjs",
     "vcs-integrity.mjs",
     "testing/",
     "release.mjs",

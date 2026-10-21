@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
+import { callCommand, listInstances } from './bridge/client.mjs';
 
 const CREATOR_VERSION = '2.4.15';
 const BUILD_PLATFORMS = new Set(['web-mobile', 'web-desktop', 'android', 'ios', 'mac', 'win32']);
@@ -53,6 +54,309 @@ export function resolveCreatorExecutable(creatorPath) {
   const version = versionMatch?.[1]?.trim();
   if (version !== CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH', version || 'unreadable bundle version');
   return { executable, bundleRoot, creatorVersion: version };
+}
+
+function creatorSearchRoots(searchRoots) {
+  if (searchRoots !== undefined) {
+    if (!Array.isArray(searchRoots) || searchRoots.some((root) => typeof root !== 'string' || !path.isAbsolute(root)))
+      throw coded('CREATOR_SEARCH_ROOTS_INVALID');
+    return searchRoots.map((root) => path.resolve(root));
+  }
+  if (process.platform !== 'darwin') return [];
+  return [...new Set([
+    '/Applications/Cocos/Creator',
+    '/Applications/CocosCreator',
+    path.join(os.homedir(), 'Applications', 'Cocos', 'Creator'),
+    path.join(os.homedir(), 'Applications', 'CocosCreator'),
+    '/Applications',
+  ])];
+}
+
+function isRealDirectory(candidate) {
+  try {
+    const stat = fs.lstatSync(candidate);
+    return stat.isDirectory() && !stat.isSymbolicLink();
+  } catch (_) { return false; }
+}
+
+function listDirectoryNames(candidate) {
+  if (!isRealDirectory(candidate)) return [];
+  try { return fs.readdirSync(candidate).sort((left, right) => left.localeCompare(right)); }
+  catch (_) { return []; }
+}
+
+function isRealAppBundle(candidate) {
+  if (!candidate.endsWith('.app')) return false;
+  try {
+    const stat = fs.lstatSync(candidate);
+    return stat.isDirectory() && !stat.isSymbolicLink()
+      && fs.lstatSync(path.join(candidate, 'Contents', 'Info.plist')).isFile();
+  } catch (_) { return false; }
+}
+
+function creatorBundlesWithin(searchRoot, { broadApplicationsRoot = false } = {}) {
+  const candidates = new Set();
+  if (isRealAppBundle(searchRoot)) candidates.add(path.resolve(searchRoot));
+  else if (isRealDirectory(searchRoot)) {
+    for (const firstName of listDirectoryNames(searchRoot)) {
+      if (broadApplicationsRoot && !/^cocos/i.test(firstName)) continue;
+      const first = path.join(searchRoot, firstName);
+      if (isRealAppBundle(first)) {
+        if (!broadApplicationsRoot || /^cocos/i.test(firstName)) candidates.add(path.resolve(first));
+        continue;
+      }
+      if (!isRealDirectory(first)) continue;
+      for (const secondName of listDirectoryNames(first)) {
+        const second = path.join(first, secondName);
+        if (isRealAppBundle(second)) candidates.add(path.resolve(second));
+      }
+    }
+  }
+  return [...candidates];
+}
+
+function inspectCreatorBundle(bundlePath) {
+  const executable = path.join(bundlePath, 'Contents', 'MacOS', 'CocosCreator');
+  let creatorVersion = null;
+  let executableAvailable = false;
+  try {
+    const plist = fs.readFileSync(path.join(bundlePath, 'Contents', 'Info.plist'), 'utf8');
+    creatorVersion = plist.match(/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/)?.[1]?.trim() || null;
+    const executableStat = fs.statSync(executable);
+    executableAvailable = executableStat.isFile() && !!(executableStat.mode & 0o111);
+  } catch (_) {}
+  return { bundlePath, executable, creatorVersion, executableAvailable,
+    supported: executableAvailable && creatorVersion === CREATOR_VERSION,
+    status: !executableAvailable || !creatorVersion ? 'invalid' : creatorVersion === CREATOR_VERSION ? 'supported' : 'unsupported-version' };
+}
+
+export function discoverCreatorInstallations({ searchRoots } = {}) {
+  if (process.platform !== 'darwin' && searchRoots === undefined)
+    return { platform: process.platform, supported: false, reason: 'CREATOR_APP_DISCOVERY_PLATFORM_UNSUPPORTED', installations: [] };
+  const roots = creatorSearchRoots(searchRoots);
+  const bundles = new Set();
+  for (const root of roots) {
+    const broadApplicationsRoot = path.resolve(root) === '/Applications';
+    for (const candidate of creatorBundlesWithin(root, { broadApplicationsRoot })) bundles.add(candidate);
+  }
+  const installations = [...bundles].map(inspectCreatorBundle)
+    .sort((left, right) => left.bundlePath.localeCompare(right.bundlePath));
+  return { platform: process.platform, supported: true, searchedRoots: roots,
+    installations, matchingCreatorVersion: CREATOR_VERSION,
+    matches: installations.filter((item) => item.supported).length };
+}
+
+function resolveMatchingCreator(projectVersion, searchRoots) {
+  const inventory = discoverCreatorInstallations(searchRoots ? { searchRoots } : {});
+  const matches = inventory.installations.filter((item) => item.creatorVersion === projectVersion && item.executableAvailable);
+  if (matches.length === 0) throw coded('CREATOR_INSTALLATION_NOT_FOUND', JSON.stringify({
+    projectVersion, searchedRoots: inventory.searchedRoots || [],
+    discoveredVersions: inventory.installations.map((item) => ({ path: item.bundlePath, version: item.creatorVersion, status: item.status })),
+  }));
+  if (matches.length > 1) throw coded('CREATOR_INSTALLATION_AMBIGUOUS', JSON.stringify({
+    projectVersion, matches: matches.map((item) => item.bundlePath),
+  }));
+  return resolveCreatorExecutable(matches[0].bundlePath);
+}
+
+export function diagnoseCreatorModal(processId, { platform = process.platform, spawnSyncImpl = spawnSync } = {}) {
+  if (platform !== 'darwin') return { status: 'unavailable', reason: 'MODAL_DIAGNOSTIC_PLATFORM_UNSUPPORTED' };
+  if (!Number.isSafeInteger(processId) || processId < 1 || processId > 2147483647)
+    return { status: 'unavailable', reason: 'CREATOR_PROCESS_ID_UNAVAILABLE' };
+  const script = [
+    'on run argv',
+    '  set targetPid to (item 1 of argv) as integer',
+    '  tell application "System Events"',
+    '    set targetProcess to first process whose unix id is targetPid',
+    '    set dialogCount to 0',
+    '    repeat with targetWindow in (windows of targetProcess)',
+    '      if (subrole of targetWindow is "AXDialog") or (subrole of targetWindow is "AXSheet") then',
+    '        set dialogCount to dialogCount + 1',
+    '      end if',
+    '    end repeat',
+    '    return dialogCount as text',
+    '  end tell',
+    'end run',
+  ].join('\n');
+  let result;
+  try {
+    result = spawnSyncImpl('/usr/bin/osascript', ['-e', script, String(processId)], {
+      encoding: 'utf8', timeout: 2000, maxBuffer: 4096, windowsHide: true,
+    });
+  } catch (error) {
+    if (error?.code === 'ETIMEDOUT') return { status: 'unavailable', reason: 'MODAL_DIAGNOSTIC_TIMEOUT' };
+    return { status: 'unavailable', reason: 'MODAL_DIAGNOSTIC_FAILED' };
+  }
+  const stderr = String(result?.stderr || '').toLowerCase();
+  if (result?.error?.code === 'ETIMEDOUT') return { status: 'unavailable', reason: 'MODAL_DIAGNOSTIC_TIMEOUT' };
+  if (result?.status !== 0) {
+    const permissionDenied = /not authorized|not allowed|assistive|accessibility/.test(stderr);
+    return { status: 'unavailable', reason: permissionDenied
+      ? 'ACCESSIBILITY_PERMISSION_REQUIRED' : 'MODAL_DIAGNOSTIC_FAILED' };
+  }
+  const output = String(result.stdout || '').trim();
+  if (!/^(?:0|[1-9][0-9]{0,2})$/.test(output))
+    return { status: 'unavailable', reason: 'MODAL_DIAGNOSTIC_RESULT_INVALID' };
+  const dialogCount = Number(output);
+  return dialogCount > 0 ? { status: 'detected', dialogCount }
+    : { status: 'not-detected', dialogCount: 0 };
+}
+
+function projectInstances(inventory, projectRoot) {
+  const matching = (inventory.instances || []).filter((instance) => sameProjectRoot(instance.projectRoot, projectRoot));
+  const rejected = (inventory.rejectedInstances || []).filter((instance) => typeof instance.reportedProjectRoot === 'string'
+    && sameProjectRoot(instance.reportedProjectRoot, projectRoot));
+  return { matching, rejected };
+}
+
+function sameProjectRoot(candidate, canonicalRoot) {
+  if (typeof candidate !== 'string' || !path.isAbsolute(candidate)) return false;
+  try { return fs.realpathSync(candidate) === canonicalRoot; }
+  catch (_) { return path.resolve(candidate) === canonicalRoot; }
+}
+
+function readyResult(receipt, instanceId, project) {
+  const info = receipt?.result && typeof receipt.result === 'object' ? receipt.result : receipt;
+  const reportedRoot = receipt?.projectRoot || info?.projectRoot;
+  if (!sameProjectRoot(reportedRoot, project.root) || info?.creatorVersion !== CREATOR_VERSION)
+    throw coded('CREATOR_OPEN_TARGET_IDENTITY_MISMATCH', JSON.stringify({
+      expectedProjectRoot: project.root,
+      actualProjectRoot: reportedRoot || null,
+      expectedCreatorVersion: CREATOR_VERSION,
+      actualCreatorVersion: info?.creatorVersion || receipt?.creatorVersion || null,
+    }));
+  return { instanceId: receipt?.instanceId || instanceId, projectName: info.projectName || project.project.name || path.basename(project.root),
+    projectRoot: project.root, creatorVersion: info.creatorVersion, extensionVersion: info.extensionVersion || receipt?.extensionVersion || null };
+}
+
+async function waitForProjectReady(project, { timeoutMs, listInstancesImpl, probeProjectImpl, sleepImpl, nowImpl }) {
+  const deadline = nowImpl() + timeoutMs;
+  let lastError = null;
+  while (nowImpl() < deadline) {
+    let inventory;
+    try { inventory = await listInstancesImpl(); }
+    catch (error) {
+      lastError = error;
+      await sleepImpl(Math.min(400, Math.max(0, deadline - nowImpl())));
+      continue;
+    }
+
+    const { matching, rejected } = projectInstances(inventory, project.root);
+    if (matching.length > 1) throw coded('CREATOR_PROJECT_INSTANCE_AMBIGUOUS', matching.map((item) => item.instanceId).join(', '));
+    if (!matching.length && rejected.length) {
+      const rejectedInstance = rejected[0];
+      throw coded('CREATOR_OPEN_EXTENSION_INCOMPATIBLE', JSON.stringify({
+        projectRoot: project.root,
+        reason: rejectedInstance.reason || rejectedInstance.code || 'CREATOR_HANDSHAKE_REJECTED',
+        creatorVersion: rejectedInstance.creatorVersion || null,
+        extensionVersion: rejectedInstance.extensionVersion || null,
+      }));
+    }
+    const instance = matching[0];
+    if (instance) {
+      const remaining = Math.max(1, deadline - nowImpl());
+      try {
+        const receipt = await probeProjectImpl(instance.instanceId, 'creator.project.info', {}, {
+          timeoutMs: Math.min(10000, remaining),
+        });
+        return { status: 'ready', ...readyResult(receipt, instance.instanceId, project) };
+      } catch (error) {
+        lastError = error;
+        const code = error?.code || error?.message;
+        if (!['CREATOR_INSTANCE_BUSY', 'CREATOR_COMMAND_TIMEOUT', 'BRIDGE_REQUEST_TIMEOUT',
+          'CREATOR_INSTANCE_DISCONNECTED', 'CREATOR_SESSION_REPLACED'].includes(code)) throw error;
+      }
+    }
+    await sleepImpl(Math.min(400, Math.max(0, deadline - nowImpl())));
+  }
+  const lastErrorCode = lastError?.code || lastError?.message || null;
+  return { status: 'timeout', reason: lastErrorCode || 'CREATOR_EXTENSION_NOT_CONNECTED', lastErrorCode };
+}
+
+export async function openCreatorProject({ projectRoot, creatorPath, waitReady = false, timeoutMs = 120000 }, {
+  spawnImpl = spawn, listInstancesImpl = listInstances, probeProjectImpl = callCommand,
+  installationSearchRoots, diagnoseModalImpl = diagnoseCreatorModal, nowImpl = Date.now,
+  sleepImpl = (duration) => new Promise((resolve) => setTimeout(resolve, duration)),
+} = {}) {
+  const project = canonicalProjectRoot(projectRoot);
+  const creator = creatorPath ? resolveCreatorExecutable(creatorPath)
+    : resolveMatchingCreator(project.project.version, installationSearchRoots);
+  if (waitReady && (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 600000))
+    throw coded('CREATOR_OPEN_TIMEOUT_INVALID');
+
+  let existingInstance = null;
+  if (waitReady) {
+    const inventory = await listInstancesImpl();
+    const { matching, rejected } = projectInstances(inventory, project.root);
+    if (matching.length > 1) throw coded('CREATOR_PROJECT_INSTANCE_AMBIGUOUS', matching.map((item) => item.instanceId).join(', '));
+    if (!matching.length && rejected.length) {
+      const rejectedInstance = rejected[0];
+      throw coded('CREATOR_OPEN_EXTENSION_INCOMPATIBLE', JSON.stringify({
+        projectRoot: project.root,
+        reason: rejectedInstance.reason || rejectedInstance.code || 'CREATOR_HANDSHAKE_REJECTED',
+        creatorVersion: rejectedInstance.creatorVersion || null,
+        extensionVersion: rejectedInstance.extensionVersion || null,
+      }));
+    }
+    existingInstance = matching[0] || null;
+  }
+
+  const args = ['--path', project.root];
+  let child = null;
+  if (!existingInstance) {
+    child = spawnImpl(creator.executable, args, {
+      cwd: project.root,
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+
+    await new Promise((resolve, reject) => {
+      let settled = false;
+      child.once('error', (error) => {
+        if (settled) return;
+        settled = true;
+        reject(coded('CREATOR_OPEN_START_FAILED', error.message || String(error)));
+      });
+      child.once('spawn', () => {
+        if (settled) return;
+        settled = true;
+        child.unref?.();
+        resolve();
+      });
+    });
+  }
+
+  const base = {
+    operation: 'open',
+    launched: !existingInstance,
+    alreadyOpen: !!existingInstance,
+    projectName: project.project.name || path.basename(project.root),
+    projectRoot: project.root,
+    creatorVersion: creator.creatorVersion,
+    processId: child?.pid ?? null,
+    ...(child ? { command: [creator.executable, ...args] } : {}),
+  };
+  if (!waitReady) return { ...base, success: true, editorReady: false, readiness: { status: 'not-checked' } };
+
+  const readiness = await waitForProjectReady(project, { timeoutMs, listInstancesImpl, probeProjectImpl, sleepImpl, nowImpl });
+  if (readiness.status !== 'ready') {
+    const modalDiagnosis = await diagnoseModalImpl(existingInstance?.processId || child?.pid);
+    return {
+    ...base,
+    success: false,
+    editorReady: false,
+    readiness: {
+      ...readiness,
+      command: 'creator.project.info',
+      modalDiagnosis,
+      possibleBlocker: modalDiagnosis?.status === 'detected'
+        ? `macOS accessibility detected ${modalDiagnosis.dialogCount} Creator modal dialog(s); dismissing it may allow startup to continue.`
+        : 'Creator may still be starting, its extension may not be loaded, or a long-running editor operation may be blocking the main process. Modal-dialog detection can be unavailable when macOS accessibility permission is missing.',
+    },
+    };
+  }
+  return { ...base, success: true, editorReady: true, readiness };
 }
 
 function pathInside(root, candidate) {

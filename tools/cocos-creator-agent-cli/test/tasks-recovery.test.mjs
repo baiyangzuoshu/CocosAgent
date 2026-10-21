@@ -120,11 +120,15 @@ test('tasks cancel before delivery and recover safely across a bridge restart', 
   const writeInstanceId = crypto.randomUUID();
   const componentInstanceId = crypto.randomUUID();
   const propertyInstanceId = crypto.randomUUID();
+  const renameInstanceId = crypto.randomUUID();
+  const reparentInstanceId = crypto.randomUUID();
   const cancelInstanceId = crypto.randomUUID();
   await register(firstState, contract, extensionPackage, readInstanceId, projectRoot);
   await register(firstState, contract, extensionPackage, writeInstanceId, projectRoot);
   await register(firstState, contract, extensionPackage, componentInstanceId, projectRoot);
   await register(firstState, contract, extensionPackage, propertyInstanceId, projectRoot);
+  await register(firstState, contract, extensionPackage, renameInstanceId, projectRoot);
+  await register(firstState, contract, extensionPackage, reparentInstanceId, projectRoot);
   await register(firstState, contract, extensionPackage, cancelInstanceId, projectRoot);
 
   const readTask = await request(firstState, 'POST', `/v1/instances/${readInstanceId}/tasks`, {
@@ -142,6 +146,14 @@ test('tasks cancel before delivery and recover safely across a bridge restart', 
   const propertyTask = await request(firstState, 'POST', `/v1/instances/${propertyInstanceId}/tasks`, {
     command: 'creator.scene.node.set-component-property.commit', input: { operationId: propertyOperationId, planHash: 'c'.repeat(64) },
   });
+  const renameOperationId = crypto.randomUUID();
+  const renameTask = await request(firstState, 'POST', `/v1/instances/${renameInstanceId}/tasks`, {
+    command: 'creator.scene.node.rename.commit', input: { operationId: renameOperationId, planHash: 'd'.repeat(64) },
+  });
+  const reparentOperationId = crypto.randomUUID();
+  const reparentTask = await request(firstState, 'POST', `/v1/instances/${reparentInstanceId}/tasks`, {
+    command: 'creator.scene.node.reparent.commit', input: { operationId: reparentOperationId, planHash: 'e'.repeat(64) },
+  });
   const cancelTask = await request(firstState, 'POST', `/v1/instances/${cancelInstanceId}/tasks`, {
     command: 'creator.project.info', input: {},
   });
@@ -149,6 +161,8 @@ test('tasks cancel before delivery and recover safely across a bridge restart', 
   await waitForTaskStatus(firstState, writeTask.taskId, 'running');
   await waitForTaskStatus(firstState, componentTask.taskId, 'running');
   await waitForTaskStatus(firstState, propertyTask.taskId, 'running');
+  await waitForTaskStatus(firstState, renameTask.taskId, 'running');
+  await waitForTaskStatus(firstState, reparentTask.taskId, 'running');
   await waitForTaskStatus(firstState, cancelTask.taskId, 'running');
   const cancelled = await request(firstState, 'POST', `/v1/tasks/${cancelTask.taskId}/cancel`, {});
   assert.equal(cancelled.status, 'cancel-requested');
@@ -159,11 +173,15 @@ test('tasks cancel before delivery and recover safely across a bridge restart', 
   const writeRecordPath = path.join(home, '.cocos-creator-agent/tasks', `${writeTask.taskId}.json`);
   const componentRecordPath = path.join(home, '.cocos-creator-agent/tasks', `${componentTask.taskId}.json`);
   const propertyRecordPath = path.join(home, '.cocos-creator-agent/tasks', `${propertyTask.taskId}.json`);
+  const renameRecordPath = path.join(home, '.cocos-creator-agent/tasks', `${renameTask.taskId}.json`);
+  const reparentRecordPath = path.join(home, '.cocos-creator-agent/tasks', `${reparentTask.taskId}.json`);
   const cancelledRecordPath = path.join(home, '.cocos-creator-agent/tasks', `${cancelTask.taskId}.json`);
   assert.equal(JSON.parse(fs.readFileSync(readRecordPath, 'utf8')).status, 'interrupted');
   assert.equal(JSON.parse(fs.readFileSync(writeRecordPath, 'utf8')).status, 'needs-reconciliation');
   assert.equal(JSON.parse(fs.readFileSync(componentRecordPath, 'utf8')).status, 'needs-reconciliation');
   assert.equal(JSON.parse(fs.readFileSync(propertyRecordPath, 'utf8')).status, 'needs-reconciliation');
+  assert.equal(JSON.parse(fs.readFileSync(renameRecordPath, 'utf8')).status, 'needs-reconciliation');
+  assert.equal(JSON.parse(fs.readFileSync(reparentRecordPath, 'utf8')).status, 'needs-reconciliation');
   assert.equal(JSON.parse(fs.readFileSync(cancelledRecordPath, 'utf8')).status, 'cancelled');
 
   firstProcess = launchBridge(home);
@@ -174,11 +192,15 @@ test('tasks cancel before delivery and recover safely across a bridge restart', 
   const writeRegistration = await register(firstState, contract, extensionPackage, writeInstanceId, projectRoot);
   const componentRegistration = await register(firstState, contract, extensionPackage, componentInstanceId, projectRoot);
   const propertyRegistration = await register(firstState, contract, extensionPackage, propertyInstanceId, projectRoot);
+  const renameRegistration = await register(firstState, contract, extensionPackage, renameInstanceId, projectRoot);
+  const reparentRegistration = await register(firstState, contract, extensionPackage, reparentInstanceId, projectRoot);
 
   const resumedRead = await runCli(['tasks', 'resume', '--instance', readInstanceId, '--id', readTask.taskId], home);
   const resumedWrite = await runCli(['tasks', 'resume', '--instance', writeInstanceId, '--id', writeTask.taskId], home);
   const resumedComponent = await runCli(['tasks', 'resume', '--instance', componentInstanceId, '--id', componentTask.taskId], home);
   const resumedProperty = await runCli(['tasks', 'resume', '--instance', propertyInstanceId, '--id', propertyTask.taskId], home);
+  const resumedRename = await runCli(['tasks', 'resume', '--instance', renameInstanceId, '--id', renameTask.taskId], home);
+  const resumedReparent = await runCli(['tasks', 'resume', '--instance', reparentInstanceId, '--id', reparentTask.taskId], home);
   const readPoll = await request(firstState, 'POST', '/v1/creator/poll', {
     instanceId: readInstanceId, sessionId: readRegistration.sessionId, activeScene: 'Untitled',
   });
@@ -214,6 +236,24 @@ test('tasks cancel before delivery and recover safely across a bridge restart', 
     instanceId: propertyInstanceId, sessionId: propertyRegistration.sessionId, requestId: propertyPoll.requestId,
     ok: true, result: { operationId: propertyOperationId, status: 'not-applied' },
   });
+  const renamePoll = await request(firstState, 'POST', '/v1/creator/poll', {
+    instanceId: renameInstanceId, sessionId: renameRegistration.sessionId, activeScene: 'Untitled',
+  });
+  assert.equal(renamePoll.command, 'creator.scene.node.rename.reconcile');
+  assert.deepEqual(renamePoll.input, { operationId: renameOperationId });
+  await request(firstState, 'POST', '/v1/creator/respond', {
+    instanceId: renameInstanceId, sessionId: renameRegistration.sessionId, requestId: renamePoll.requestId,
+    ok: true, result: { operationId: renameOperationId, status: 'not-applied' },
+  });
+  const reparentPoll = await request(firstState, 'POST', '/v1/creator/poll', {
+    instanceId: reparentInstanceId, sessionId: reparentRegistration.sessionId, activeScene: 'Untitled',
+  });
+  assert.equal(reparentPoll.command, 'creator.scene.node.reparent.reconcile');
+  assert.deepEqual(reparentPoll.input, { operationId: reparentOperationId });
+  await request(firstState, 'POST', '/v1/creator/respond', {
+    instanceId: reparentInstanceId, sessionId: reparentRegistration.sessionId, requestId: reparentPoll.requestId,
+    ok: true, result: { operationId: reparentOperationId, status: 'not-applied' },
+  });
 
   const completedRead = await runCli(['tasks', 'wait', '--id', readTask.taskId,
     '--after-sequence', String(resumedRead.eventSequence), '--wait-ms', '5000'], home);
@@ -223,6 +263,10 @@ test('tasks cancel before delivery and recover safely across a bridge restart', 
     '--after-sequence', String(resumedComponent.eventSequence), '--wait-ms', '5000'], home);
   const completedProperty = await runCli(['tasks', 'wait', '--id', propertyTask.taskId,
     '--after-sequence', String(resumedProperty.eventSequence), '--wait-ms', '5000'], home);
+  const completedRename = await runCli(['tasks', 'wait', '--id', renameTask.taskId,
+    '--after-sequence', String(resumedRename.eventSequence), '--wait-ms', '5000'], home);
+  const completedReparent = await runCli(['tasks', 'wait', '--id', reparentTask.taskId,
+    '--after-sequence', String(resumedReparent.eventSequence), '--wait-ms', '5000'], home);
   assert.equal(completedRead.status, 'completed');
   assert.equal(completedRead.result.projectName, 'tasks-recovery-test');
   assert.equal(completedWrite.status, 'completed');
@@ -234,4 +278,10 @@ test('tasks cancel before delivery and recover safely across a bridge restart', 
   assert.equal(completedProperty.status, 'completed');
   assert.equal(completedProperty.resumingWith, 'creator.scene.node.set-component-property.reconcile');
   assert.deepEqual(completedProperty.result, { operationId: propertyOperationId, status: 'not-applied' });
+  assert.equal(completedRename.status, 'completed');
+  assert.equal(completedRename.resumingWith, 'creator.scene.node.rename.reconcile');
+  assert.equal(completedReparent.status, 'completed');
+  assert.equal(completedReparent.resumingWith, 'creator.scene.node.reparent.reconcile');
+  assert.deepEqual(completedReparent.result, { operationId: reparentOperationId, status: 'not-applied' });
+  assert.deepEqual(completedRename.result, { operationId: renameOperationId, status: 'not-applied' });
 });

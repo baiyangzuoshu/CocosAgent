@@ -15,6 +15,35 @@ export default async function* report(source) {
       } }) + '\n';
     } else if (event.type === 'test:stdout' || event.type === 'test:stderr') {
       yield JSON.stringify({ type: 'log', message: String(data.message || '').slice(0, 8192) }) + '\n';
+    } else if (event.type === 'test:coverage' && data.summary && typeof data.summary === 'object') {
+      const summary = data.summary;
+      const totals = summary.totals && typeof summary.totals === 'object' ? summary.totals : {};
+      const files = Array.isArray(summary.files) ? summary.files.slice(0, 256).map((file) => ({
+        path: String(file.path || '').slice(0, 1024),
+        totalLineCount: Number(file.totalLineCount) || 0,
+        coveredLineCount: Number(file.coveredLineCount) || 0,
+        coveredLinePercent: Number(file.coveredLinePercent) || 0,
+        totalBranchCount: Number(file.totalBranchCount) || 0,
+        coveredBranchCount: Number(file.coveredBranchCount) || 0,
+        coveredBranchPercent: Number(file.coveredBranchPercent) || 0,
+        totalFunctionCount: Number(file.totalFunctionCount) || 0,
+        coveredFunctionCount: Number(file.coveredFunctionCount) || 0,
+        coveredFunctionPercent: Number(file.coveredFunctionPercent) || 0,
+      })) : [];
+      yield JSON.stringify({ type: 'coverage', summary: {
+        totals: {
+          totalLineCount: Number(totals.totalLineCount) || 0,
+          coveredLineCount: Number(totals.coveredLineCount) || 0,
+          coveredLinePercent: Number(totals.coveredLinePercent) || 0,
+          totalBranchCount: Number(totals.totalBranchCount) || 0,
+          coveredBranchCount: Number(totals.coveredBranchCount) || 0,
+          coveredBranchPercent: Number(totals.coveredBranchPercent) || 0,
+          totalFunctionCount: Number(totals.totalFunctionCount) || 0,
+          coveredFunctionCount: Number(totals.coveredFunctionCount) || 0,
+          coveredFunctionPercent: Number(totals.coveredFunctionPercent) || 0,
+        },
+        files, truncated: Array.isArray(summary.files) && summary.files.length > files.length,
+      } }) + '\n';
     }
   }
 }

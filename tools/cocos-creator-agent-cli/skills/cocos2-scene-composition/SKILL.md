@@ -15,12 +15,12 @@ Create or update a related Cocos Creator 2.4.x scene hierarchy with a bounded, v
 2. Inspect the relevant source, asset, scene or runtime evidence and record exact identities/current state before proposing a change.
 3. Inspect the active scene, target parent, existing assets/components, and relevant UI resolution before planning.
 4. List the desired nodes, parent-child order, transforms, components, and final values before execution.
-5. Use a Creator-aware node operation only when its live schema supports the exact change; otherwise provide the manual Creator steps. Do not hand-edit serialized scene files.
-6. Read back every node and reference through Creator when available. For manual work, ask the user to verify in Creator; use preview evidence only when the requested behavior is actually observed.
+5. If the live catalog offers `creator.scene.compose.plan`, express new nodes, transforms, registered components, typed resource properties, and Button click handlers in one bounded plan. Existing nodes may only be parents or handler targets in this operation. Review its generated UUIDs and before-state, then call commit with its operation ID and plan hash. Never hand-edit serialized scene files.
+6. On uncertain completion, call `creator.scene.compose.reconcile` with the original operation ID; never replay the commit. Treat `completed` as persistence evidence only when `scenePersistenceConfirmed` is true. `sceneSaveCompletionConfirmed` remains false because Creator documents no acknowledgement for the save IPC. Read back every node and reference through Creator, then verify the requested interaction in preview.
 
 ## Capability and safety gate
 
-This Skill is workflow guidance and does not install tools. Inspect the tools available in the current Host and any Creator integration, then use only supported operations and their documented inputs. Use the Host file tools for ordinary code and project text files. For scenes, Prefabs, import settings, or editor state, use a Creator-aware tool when available; if none can safely perform the requested operation, report that exact gap and provide the manual Creator steps. Preserve generated `.meta` files, UUIDs, and asset references. Do not run project scripts or SDK actions merely because a Skill describes them.
+This Skill is workflow guidance and does not install tools. Inspect the tools available in the current Host and any Creator integration, then use only supported operations and their documented inputs. `creator.scene.compose` is limited to new scene nodes and components on those nodes; it cannot edit existing component properties, import resources, or create/update Prefabs. Use the Host file tools for ordinary code and project text files. For Prefabs, resource imports, or editor state outside the live schema, use a Creator-aware tool when available; otherwise report the exact gap and provide the manual Creator steps. Preserve generated `.meta` files, UUIDs, and asset references. Do not run project scripts or SDK actions merely because a Skill describes them.
 
 ## Completion evidence
 

@@ -16,7 +16,7 @@ Inspect or set supported Cocos Creator 2.4.x UI component properties.
 3. Read the exact node and component identity and current property values.
 4. Use live schema-discovered fields and valid enum/range constraints; do not invent property names.
 5. Apply only the authorized fields and read them back from Creator.
-6. The CLI currently supports adding one registered component class and setting one declared public scalar field (`string`, `number`, or `boolean`) on one exact component instance through separate plan/commit/reconcile operations. Treat component attachment as a separate approved operation; it does not set properties.
+6. The CLI currently supports adding one registered component class and setting one declared public scalar or supported typed property on one exact component instance through separate plan/commit/reconcile operations. Typed values cover `Vec2`/`Vec3`/`Size`/`Color`, bounded scalar arrays, and exact AssetDB references for SpriteFrame, Texture2D, AudioClip, Prefab, BitmapFont, and TTFFont. Arbitrary objects and existing Button click-event edits remain unavailable. Treat component attachment as a separate approved operation; it does not set properties.
 7. Arrays, objects, asset references, internal/inherited fields, and UI event lists are outside this write contract. If a requested field is not exposed by the current command catalog, report that tool gap without serialized-file fallback.
 
 ## Capability and safety gate

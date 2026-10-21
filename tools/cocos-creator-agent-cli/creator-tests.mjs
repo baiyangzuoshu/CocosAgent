@@ -85,10 +85,52 @@ export function selectTestSuites(plan, { suiteIds = [], changedPaths } = {}) {
       || (dependency.endsWith('/') && changed.startsWith(dependency))))));
 }
 
-function runNodeSuite(plan, suite, signal) {
+export function loadFailedSuiteIds(projectRoot, reportPath) {
+  if (typeof reportPath !== 'string' || !path.isAbsolute(reportPath)) throw coded('TEST_REPORT_PATH_ABSOLUTE_REQUIRED');
+  const plan = loadTestPlan(projectRoot);
+  let stat;
+  try { stat = fs.lstatSync(reportPath); }
+  catch (error) { if (error?.code === 'ENOENT') throw coded('TEST_REPORT_NOT_FOUND'); throw error; }
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 4 * 1024 * 1024) throw coded('TEST_REPORT_FILE_INVALID');
+  let report;
+  try { report = JSON.parse(fs.readFileSync(reportPath, 'utf8')); }
+  catch (_) { throw coded('TEST_REPORT_INVALID'); }
+  let previousRoot;
+  try { previousRoot = fs.realpathSync(report.projectRoot); }
+  catch (_) { throw coded('TEST_REPORT_PROJECT_INVALID'); }
+  if (report.schemaVersion !== 1 || previousRoot !== plan.projectRoot || report.manifestHash !== plan.manifestHash
+    || !Array.isArray(report.suites)) throw coded('TEST_REPORT_STALE_OR_MISMATCHED');
+  const known = new Set(plan.suites.map((suite) => suite.id));
+  const failed = [...new Set(report.suites.filter((suite) => suite && typeof suite.id === 'string'
+    && (suite.counts?.failed > 0 || suite.tests?.some((item) => item?.status === 'failed'))).map((suite) => suite.id))];
+  if (!failed.length) throw coded('TEST_REPORT_NO_FAILED_SUITES');
+  if (failed.some((id) => !known.has(id))) throw coded('TEST_REPORT_SUITE_NOT_FOUND');
+  return failed;
+}
+
+export function parseTestShard(value) {
+  if (value === undefined) return undefined;
+  const match = typeof value === 'string' && value.match(/^([1-9][0-9]{0,2})\/([1-9][0-9]{0,2})$/);
+  if (!match) throw coded('TEST_SHARD_INVALID');
+  const index = Number(match[1]);
+  const total = Number(match[2]);
+  if (index > total || total > 64) throw coded('TEST_SHARD_INVALID');
+  const [major, minor] = process.versions.node.split('.').map(Number);
+  if (major < 20 || (major === 20 && minor < 5)) throw coded('TEST_SHARD_NODE_VERSION_UNSUPPORTED');
+  return { index, total };
+}
+
+function requireCoverageSupport() {
+  const [major, minor] = process.versions.node.split('.').map(Number);
+  if (major < 20 || (major === 20 && minor < 1)) throw coded('TEST_COVERAGE_NODE_VERSION_UNSUPPORTED');
+}
+
+function runNodeSuite(plan, suite, signal, { shard, coverage = false } = {}) {
   const files = suite.files.map((file) => safeFile(plan.projectRoot, file));
   const sourceHashes = Object.fromEntries(files.map((file) => [file.projectPath, hash(file.bytes)]));
-  const args = ['--test', `--test-reporter=${path.join(HERE, 'testing/node-reporter.mjs')}`, '--', ...files.map((file) => file.path)];
+  const args = ['--test', `--test-reporter=${path.join(HERE, 'testing/node-reporter.mjs')}`,
+    ...(shard ? [`--test-shard=${shard.index}/${shard.total}`] : []),
+    ...(coverage ? ['--experimental-test-coverage'] : []), '--', ...files.map((file) => file.path)];
   return new Promise((resolve) => {
     const env = { ...process.env, NODE_OPTIONS: '' };
     delete env.NODE_TEST_CONTEXT;
@@ -97,6 +139,7 @@ function runNodeSuite(plan, suite, signal) {
       env, detached: process.platform !== 'win32' });
     let pending = '', logs = '', failure = null, bytes = 0, killTimer;
     const tests = [];
+    let coverageSummary = null;
     const kill = () => {
       try { if (process.platform !== 'win32') process.kill(-child.pid, 'SIGTERM'); else child.kill('SIGTERM'); } catch (_) {}
       killTimer ??= setTimeout(() => {
@@ -119,6 +162,7 @@ function runNodeSuite(plan, suite, signal) {
         try {
           const event = JSON.parse(line);
           if (event.type === 'case' && plain(event.test) && tests.length < 1000) tests.push(event.test);
+          else if (event.type === 'coverage' && plain(event.summary)) coverageSummary = event.summary;
           else if (event.type === 'log') log(event.message);
           else throw new Error();
         } catch (_) { failure = 'TEST_REPORT_INVALID'; kill(); }
@@ -129,9 +173,11 @@ function runNodeSuite(plan, suite, signal) {
     child.once('close', (exitCode, exitSignal) => {
       clearTimeout(timer); clearTimeout(killTimer); signal?.removeEventListener('abort', abort);
       if (pending.trim()) failure ||= 'TEST_REPORT_INVALID';
+      if (coverage && !coverageSummary) failure ||= 'TEST_COVERAGE_REPORT_MISSING';
       if (exitCode !== 0 && !tests.some((item) => item.status === 'failed')) failure ||= `TEST_PROCESS_EXIT:${exitCode ?? exitSignal}`;
       if (failure) tests.push({ name: failure, status: 'failed', durationMs: 0, message: logs || failure });
-      resolve({ tests, sourceHashes, exitCode, signal: exitSignal, logs });
+      resolve({ tests, sourceHashes, exitCode, signal: exitSignal, logs,
+        ...(coverageSummary ? { coverage: coverageSummary } : {}) });
     });
   });
 }
@@ -192,10 +238,19 @@ function saveReports(report, target) {
 }
 
 export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, instanceId, previewSessionId, reportDir,
-  signal, refreshPreview = false, onEvent = () => {} }, dependencies = {}) {
+  signal, refreshPreview = false, onEvent = () => {}, shard, coverage = false }, dependencies = {}) {
   const plan = loadTestPlan(projectRoot);
   const selected = selectTestSuites(plan, { suiteIds, changedPaths });
   if (!selected.length) throw coded('TEST_NO_AFFECTED_SUITES');
+  let normalizedShard;
+  if (shard !== undefined) {
+    if (!plain(shard) || !Number.isInteger(shard.index) || !Number.isInteger(shard.total)) throw coded('TEST_SHARD_INVALID');
+    normalizedShard = parseTestShard(`${shard.index}/${shard.total}`);
+  }
+  if (typeof coverage !== 'boolean') throw coded('TEST_COVERAGE_INVALID');
+  if ((normalizedShard !== undefined || coverage) && selected.some((suite) => suite.adapter !== 'node'))
+    throw coded(normalizedShard !== undefined ? 'TEST_SHARD_NODE_ONLY' : 'TEST_COVERAGE_NODE_ONLY');
+  if (coverage) requireCoverageSupport();
   const liveInstances = dependencies.listInstances || listInstances;
   const call = dependencies.callCommand || callCommand;
   const discover = dependencies.getExtensionCommands || getExtensionCommands;
@@ -209,6 +264,7 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
   const started = Date.now();
   const report = { schemaVersion: 1, runId: randomUUID(), projectRoot: plan.projectRoot, projectName: plan.projectName,
     creatorVersion: '2.4.15', manifestHash: plan.manifestHash, selectedSuiteIds: selected.map((suite) => suite.id),
+    ...(normalizedShard ? { shard: normalizedShard } : {}), coverageEnabled: coverage,
     startedAt: new Date(started).toISOString(), suites: [] };
   const reportTarget = prepareReportDirectory(plan.projectRoot, reportDir, report.runId);
   let previewRefreshed = false;
@@ -220,7 +276,7 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
     try {
       if (signal?.aborted) throw coded('TEST_CANCELLED');
       if (hash(safeFile(plan.projectRoot, MANIFEST).bytes) !== plan.manifestHash) throw coded('TEST_MANIFEST_CHANGED');
-      if (suite.adapter === 'node') result = await runNodeSuite(plan, suite, signal);
+      if (suite.adapter === 'node') result = await runNodeSuite(plan, suite, signal, { shard: normalizedShard, coverage });
       else if (suite.adapter === 'creator') {
         const catalog = await discover(instanceId);
         const command = catalog.commands?.find((item) => item.providerId === suite.providerId && item.id === suite.commandId);
@@ -247,7 +303,7 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
           result.tests.push({ name: 'preview-result', status: 'failed', message: 'Preview did not confirm success.' });
       }
       result.tests = normalizeTests(result.tests);
-      if (!result.tests.some((item) => item.status !== 'skipped')) throw coded('TEST_NO_EXECUTED_CASES');
+      if (!result.tests.some((item) => item.status !== 'skipped') && !normalizedShard) throw coded('TEST_NO_EXECUTED_CASES');
       if (result.requiresManualReview && !result.tests.some((item) => item.status === 'failed'))
         throw coded('TEST_REQUIRES_MANUAL_REVIEW');
     } catch (error) {
@@ -269,9 +325,10 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
     report.suites.push({ id: '$runner', adapter: 'runner', tests, counts: counts(tests), durationMs: 0 });
   }
   report.counts = counts(report.suites.flatMap((suite) => suite.tests));
+  report.emptyShard = Boolean(normalizedShard && report.counts.total === 0);
   report.requiresManualReview = report.suites.some((suite) => suite.requiresManualReview);
   report.passed = !report.cancelled && !report.requiresManualReview && report.counts.failed === 0
-    && report.counts.passed > 0 && report.notRunSuiteIds.length === 0;
+    && (report.counts.passed > 0 || report.emptyShard) && report.notRunSuiteIds.length === 0;
   report.durationMs = Date.now() - started;
   report.completedAt = new Date().toISOString();
   return saveReports(report, reportTarget);

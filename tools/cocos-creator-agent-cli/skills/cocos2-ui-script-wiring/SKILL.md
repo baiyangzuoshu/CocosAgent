@@ -14,9 +14,9 @@ Connect a Cocos Creator 2.4.x UI control to a JavaScript/TypeScript component an
 1. Identify the exact project root from the Host workspace and verify the Creator patch from project metadata or an editor integration. Determine the active scene/target only through tools that report it; never infer it from a neighboring project.
 2. Inspect the relevant source, asset, scene or runtime evidence and record exact identities/current state before proposing a change.
 3. Trace the existing component entry point and function side effects; do not invent product behavior.
-4. Keep the component script change, scene/Prefab reference, and event binding as distinct operations with explicit targets.
-5. Use the script, scene, and event-binding specialists for their respective contracts.
-6. Compile and read back references, then verify the actual interaction and expected UI state in preview.
+4. Keep the component script change, scene/Prefab reference, and event binding as distinct concerns with explicit targets. When the live catalog supports `creator.scene.compose`, use one plan to create the Button node, attach the registered handler component, set declared typed properties, and bind `Button.clickEvents`.
+5. Use the script, scene, and event-binding specialists for their respective contracts. Reconcile an interrupted composition using its original operation ID; never replay a commit.
+6. Compile and read back references, then verify the actual interaction and expected UI state in preview. For `creator.scene.compose`, require `scenePersistenceConfirmed: true`; the separate `sceneSaveCompletionConfirmed` field remains false because Creator documents no acknowledgement for the save IPC.
 
 ## Capability and safety gate
 
