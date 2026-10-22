@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { diffCreatorSerializedAssets, inspectCreatorSerializedAsset } from './creator-asset-diff.mjs';
 
@@ -488,4 +488,236 @@ export function runVcsConflictReport({ gitRoot: requestedGitRoot, projectRoot: r
       outsideProjectConflicts: outsideProjectCount, truncated: projectConflictCount > conflicts.length,
       semanticAssets: conflicts.filter((item) => item.semantic?.available).length,
       semanticOverlaps: conflicts.filter((item) => item.semantic?.overlap?.conflictCount > 0).length }, conflicts };
+}
+
+function safeConflictPath(projectRoot, inputPath) {
+  if (typeof inputPath !== 'string' || !inputPath || inputPath.length > 1024 || inputPath.includes('\0')
+    || inputPath.includes('\\') || path.posix.isAbsolute(inputPath)) throw coded('VCS_CONFLICT_PATH_INVALID');
+  const parts = inputPath.split('/');
+  if (parts.some((part) => !part || part === '.' || part === '..')) throw coded('VCS_CONFLICT_PATH_INVALID');
+  const absolute = path.resolve(projectRoot, ...parts);
+  if (!inside(projectRoot, absolute)) throw coded('VCS_CONFLICT_PATH_INVALID');
+  return { projectRelative: parts.join('/'), absolute };
+}
+
+function workingSnapshot(projectRoot, relative, maxBytes = 16 * 1024 * 1024) {
+  const parts = relative.split('/');
+  let current = projectRoot;
+  for (let index = 0; index < parts.length; index += 1) {
+    current = path.join(current, parts[index]);
+    let stat;
+    try { stat = fs.lstatSync(current); }
+    catch (error) {
+      if (error.code === 'ENOENT' && index === parts.length - 1) return { exists: false, bytes: null, sha256: null };
+      throw coded('VCS_CONFLICT_WORKTREE_PATH_UNAVAILABLE');
+    }
+    if (stat.isSymbolicLink()) throw coded('VCS_CONFLICT_SYMLINK_REFUSED');
+    const final = index === parts.length - 1;
+    if (!final && !stat.isDirectory()) throw coded('VCS_CONFLICT_PATH_NOT_REGULAR');
+    if (final && (!stat.isFile() || stat.size > maxBytes)) throw coded('VCS_CONFLICT_FILE_UNSAFE_OR_TOO_LARGE');
+  }
+  const before = fs.lstatSync(current);
+  const bytes = fs.readFileSync(current);
+  const after = fs.lstatSync(current);
+  if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size
+    || before.mtimeMs !== after.mtimeMs || bytes.length !== after.size) throw coded('VCS_CONFLICT_FILE_CHANGED_DURING_READ');
+  return { exists: true, bytes, sha256: createHash('sha256').update(bytes).digest('hex'), mode: before.mode & 0o777 };
+}
+
+function stageSnapshot(entries) {
+  return [...entries].sort(([left], [right]) => left - right).map(([stage, entry]) => ({
+    stage, mode: entry.mode, objectId: entry.objectId,
+  }));
+}
+
+function stageEntryBytes(gitRoot, entry, maxBytes = 16 * 1024 * 1024) {
+  if (!entry) return null;
+  if (!['100644', '100755'].includes(entry.mode)) throw coded('VCS_CONFLICT_NON_REGULAR_GIT_MODE');
+  return readIndexBlob(gitRoot, entry, maxBytes);
+}
+
+function currentFileBytes(gitRoot, projectRoot, gitRelative, projectRelative, entries, selectedStage, maxBytes) {
+  const hasConflictStages = [...entries.keys()].some((stage) => stage > 0);
+  if (hasConflictStages) {
+    const entry = entries.get(selectedStage);
+    return stageEntryBytes(gitRoot, entry, maxBytes);
+  }
+  return workingSnapshot(projectRoot, projectRelative, maxBytes).bytes;
+}
+
+function resolveTargetGroup(gitRoot, projectRoot, projectRelative, side) {
+  const stage = side === 'ours' ? 2 : 3;
+  const gitPrefix = path.relative(gitRoot, projectRoot).split(path.sep).filter(Boolean).join('/');
+  const toGitPath = (relative) => gitPrefix ? `${gitPrefix}/${relative}` : relative;
+  const assetMeta = projectRelative.match(/^(.*\.(?:fire|prefab))(?:\.meta)?$/i);
+  if (assetMeta) {
+    const assetRelative = assetMeta[1];
+    projectAssetPath(projectRoot, assetRelative);
+    const metaRelative = `${assetRelative}.meta`;
+    const assetGitPath = toGitPath(assetRelative);
+    const metaGitPath = toGitPath(metaRelative);
+    const assetEntries = indexEntriesForPath(gitRoot, assetGitPath);
+    const metaEntries = indexEntriesForPath(gitRoot, metaGitPath);
+    const assetConflict = [...assetEntries.keys()].some((item) => item > 0);
+    const metaConflict = [...metaEntries.keys()].some((item) => item > 0);
+    if (!assetConflict && !metaConflict) throw coded('VCS_CONFLICT_PATH_NOT_UNMERGED');
+    const assetEntry = assetConflict ? assetEntries.get(stage) : assetEntries.get(0);
+    const metaEntry = metaConflict ? metaEntries.get(stage) : metaEntries.get(0);
+    const assetBytes = currentFileBytes(gitRoot, projectRoot, assetGitPath, assetRelative,
+      assetEntries, stage, 16 * 1024 * 1024);
+    const metaBytes = currentFileBytes(gitRoot, projectRoot, metaGitPath, metaRelative,
+      metaEntries, stage, 64 * 1024);
+    const candidates = [];
+    if (assetConflict) candidates.push({ projectRelative: assetRelative, gitRelative: assetGitPath,
+      entries: assetEntries, selectedEntry: assetEntry, selectedBytes: assetBytes });
+    if (metaConflict) candidates.push({ projectRelative: metaRelative, gitRelative: metaGitPath,
+      entries: metaEntries, selectedEntry: metaEntry, selectedBytes: metaBytes, maxBytes: 64 * 1024 });
+    return { assetRelative, files: candidates, guards: [
+      { projectRelative: assetRelative, gitRelative: assetGitPath, entries: assetEntries },
+      { projectRelative: metaRelative, gitRelative: metaGitPath, entries: metaEntries, maxBytes: 64 * 1024 },
+    ] };
+  }
+
+  const gitRelative = toGitPath(projectRelative);
+  const entries = indexEntriesForPath(gitRoot, gitRelative);
+  if (![...entries.keys()].some((item) => item > 0)) throw coded('VCS_CONFLICT_PATH_NOT_UNMERGED');
+  const selectedEntry = entries.get(stage) || null;
+  const selectedBytes = stageEntryBytes(gitRoot, selectedEntry);
+  if (/\.meta$/i.test(projectRelative) && selectedBytes) {
+    try {
+      const metadata = JSON.parse(selectedBytes.toString('utf8'));
+      if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)
+        || typeof metadata.uuid !== 'string' || typeof metadata.importer !== 'string')
+        throw coded('VCS_CONFLICT_METADATA_INVALID');
+    } catch (error) {
+      if (error.code) throw error;
+      throw coded('VCS_CONFLICT_METADATA_INVALID');
+    }
+  }
+  return { files: [{ projectRelative, gitRelative, entries, selectedEntry, selectedBytes }],
+    guards: [{ projectRelative, gitRelative, entries }] };
+}
+
+function atomicWriteResolved(projectRoot, file) {
+  const absolute = path.join(projectRoot, ...file.projectRelative.split('/'));
+  const current = workingSnapshot(projectRoot, file.projectRelative, file.maxBytes);
+  if (file.beforeWorking && (current.exists !== file.beforeWorking.exists
+    || current.sha256 !== file.beforeWorking.sha256)) throw coded('VCS_CONFLICT_RESOLUTION_STATE_CHANGED');
+  if (!file.selectedBytes) {
+    if (current.exists) fs.unlinkSync(absolute);
+    return;
+  }
+  const parent = path.dirname(absolute);
+  const temporary = path.join(parent, `.cocos-vcs-resolve-${randomUUID()}.tmp`);
+  const mode = typeof file.selectedEntry?.mode === 'number'
+    ? file.selectedEntry.mode & 0o777
+    : file.selectedEntry?.mode === '100755' ? 0o755 : 0o644;
+  try {
+    fs.writeFileSync(temporary, file.selectedBytes, { flag: 'wx', mode });
+    fs.renameSync(temporary, absolute);
+  } catch (error) {
+    try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch (_) {}
+    throw error;
+  }
+}
+
+function verifyResolvedFile(gitRoot, projectRoot, file) {
+  const entries = indexEntriesForPath(gitRoot, file.gitRelative);
+  const working = workingSnapshot(projectRoot, file.projectRelative, file.maxBytes);
+  if (!file.selectedEntry) return entries.size === 0 && !working.exists;
+  const indexEntry = entries.get(0);
+  if (entries.size !== 1 || !indexEntry || indexEntry.objectId !== file.selectedEntry.objectId
+    || indexEntry.mode !== file.selectedEntry.mode || !working.exists) return false;
+  return createHash('sha256').update(working.bytes).digest('hex')
+    === createHash('sha256').update(file.selectedBytes).digest('hex');
+}
+
+export function runVcsConflictResolve({ gitRoot: requestedGitRoot, projectRoot: requestedProjectRoot,
+  assetPath: requestedPath, side, apply = false } = {}) {
+  if (!['ours', 'theirs'].includes(side)) throw coded('VCS_CONFLICT_SIDE_INVALID');
+  if (typeof apply !== 'boolean') throw coded('VCS_CONFLICT_APPLY_INVALID');
+  const gitRoot = canonicalDirectory(requestedGitRoot, 'GIT_ROOT');
+  const projectRoot = canonicalDirectory(requestedProjectRoot, 'PROJECT_ROOT');
+  ensureProject(gitRoot, projectRoot);
+  const requested = safeConflictPath(projectRoot, requestedPath);
+  const canonicalAsset = requested.projectRelative.match(/^(.*\.(?:fire|prefab))\.meta$/i)?.[1]
+    || requested.projectRelative;
+  const canonical = safeConflictPath(projectRoot, canonicalAsset);
+  if (/\.(?:fire|prefab)$/i.test(canonical.projectRelative)) projectAssetPath(projectRoot, canonical.projectRelative);
+  const group = resolveTargetGroup(gitRoot, projectRoot, canonical.projectRelative, side);
+  const guards = group.guards.map((guard) => ({ ...guard,
+    beforeWorking: workingSnapshot(projectRoot, guard.projectRelative, guard.maxBytes),
+    beforeStages: stageSnapshot(guard.entries) }));
+  const guardByPath = new Map(guards.map((guard) => [guard.gitRelative, guard]));
+  const files = group.files.map((file) => {
+    const guard = guardByPath.get(file.gitRelative);
+    return { ...file, beforeWorking: guard.beforeWorking, beforeStages: guard.beforeStages,
+      action: file.selectedBytes ? 'write' : 'delete', selectedSha256: file.selectedBytes
+        ? createHash('sha256').update(file.selectedBytes).digest('hex') : null,
+      selectedObjectId: file.selectedEntry?.objectId || null };
+  });
+  if (group.assetRelative) {
+    const selectedByPath = new Map(files.map((file) => [file.projectRelative, file.selectedBytes]));
+    const assetRelative = group.assetRelative;
+    const metaRelative = `${assetRelative}.meta`;
+    const assetBytes = selectedByPath.has(assetRelative) ? selectedByPath.get(assetRelative)
+      : guardByPath.get(group.guards.find((guard) => guard.projectRelative === assetRelative).gitRelative).beforeWorking.bytes;
+    const metaBytes = selectedByPath.has(metaRelative) ? selectedByPath.get(metaRelative)
+      : guardByPath.get(group.guards.find((guard) => guard.projectRelative === metaRelative).gitRelative).beforeWorking.bytes;
+    if (Boolean(assetBytes) !== Boolean(metaBytes)) throw coded('VCS_CONFLICT_RESOLUTION_ASSET_METADATA_MISMATCH');
+    if (assetBytes) inspectCreatorSerializedAsset({ sourceBytes: assetBytes, metaBytes, assetPath: assetRelative });
+  }
+  const base = { schemaVersion: 1, command: 'vcs conflicts resolve', projectRoot, gitRoot,
+    creatorVersion: '2.4.15', assetPath: canonical.projectRelative, side,
+    files: files.map((file) => ({ path: file.projectRelative, action: file.action,
+      selectedObjectId: file.selectedObjectId, selectedSha256: file.selectedSha256,
+      previousSha256: file.beforeWorking.sha256, previousStages: file.beforeStages })),
+    guardedPaths: guards.map((guard) => ({ path: guard.projectRelative,
+      previousSha256: guard.beforeWorking.sha256, previousStages: guard.beforeStages })) };
+  if (!apply) return { ...base, status: 'planned', readOnly: true, applyRequired: true,
+    note: 'This plan selects the exact Git index side and will update the working file and index only when --apply is supplied.' };
+
+  for (const guard of guards) {
+    const latest = indexEntriesForPath(gitRoot, guard.gitRelative);
+    const working = workingSnapshot(projectRoot, guard.projectRelative, guard.maxBytes);
+    if (JSON.stringify(stageSnapshot(latest)) !== JSON.stringify(guard.beforeStages)
+      || working.sha256 !== guard.beforeWorking.sha256 || working.exists !== guard.beforeWorking.exists)
+      throw coded('VCS_CONFLICT_RESOLUTION_STATE_CHANGED');
+  }
+  const originals = files.map((file) => ({ file, bytes: file.beforeWorking.bytes,
+    exists: file.beforeWorking.exists, mode: file.beforeWorking.mode }));
+  try {
+    for (const file of files) atomicWriteResolved(projectRoot, file);
+  } catch (error) {
+    for (const original of originals) {
+      try {
+        if (original.exists) {
+          const current = workingSnapshot(projectRoot, original.file.projectRelative, original.file.maxBytes);
+          const file = { ...original.file, selectedBytes: original.bytes,
+            selectedEntry: { mode: original.mode === 0o755 ? '100755' : '100644' }, beforeWorking: current };
+          atomicWriteResolved(projectRoot, file);
+        } else {
+          const current = workingSnapshot(projectRoot, original.file.projectRelative, original.file.maxBytes);
+          if (current.exists) atomicWriteResolved(projectRoot, { ...original.file, selectedBytes: null, beforeWorking: current });
+        }
+      } catch (_) {}
+    }
+    throw error;
+  }
+  try {
+    for (const file of files) {
+      const latest = indexEntriesForPath(gitRoot, file.gitRelative);
+      if (JSON.stringify(stageSnapshot(latest)) !== JSON.stringify(file.beforeStages))
+        throw coded('VCS_CONFLICT_RESOLUTION_STATE_CHANGED');
+    }
+    git(gitRoot, ['add', '--', ...files.map((file) => `:(literal)${file.gitRelative}`)]);
+    if (files.some((file) => !verifyResolvedFile(gitRoot, projectRoot, file))) throw coded('VCS_CONFLICT_RESOLUTION_READBACK_MISMATCH');
+  } catch (error) {
+    return { ...base, status: 'needs-manual-review', readOnly: false, resolved: false,
+      requiresManualReview: true, error: error.code || error.message || String(error),
+      note: 'The selected bytes were written, but Git index readback did not confirm every path. Inspect git status before continuing.' };
+  }
+  return { ...base, status: 'resolved', readOnly: false, resolved: true, requiresManualReview: false,
+    indexUpdated: true, workingTreeUpdated: true,
+    note: 'The selected side was written and staged for the listed conflict paths. Review the staged result before committing.' };
 }

@@ -13,7 +13,7 @@ import { startProjectFileWatch } from './creator-watch.mjs';
 import { loadTestPlan, loadFailedSuiteIds, parseTestShard, runTestPlan, watchTestPlan } from './creator-tests.mjs';
 import { runVcsDoctor } from './vcs-integrity.mjs';
 import { runVcsStatus } from './vcs-status.mjs';
-import { runVcsDiff, runVcsObjectBlame, runVcsConflictReport } from './vcs-diff.mjs';
+import { runVcsDiff, runVcsObjectBlame, runVcsConflictReport, runVcsConflictResolve } from './vcs-diff.mjs';
 import { configureMcp, mcpStatus, removeMcp, supportedMcpClients } from './mcp/configure.mjs';
 import { availableSkills, installSkills, listSkillStatus, showSkill } from './skills.mjs';
 import { diffSceneSnapshotFiles } from './semantic-diff.mjs';
@@ -38,6 +38,7 @@ const HELP_LINES = [
   '  vcs diff --git-root <absolute-path> --project-root <absolute-path> --path <assets-relative.fire-or-prefab> [--from <revision>] [--to <revision>]',
   '  vcs blame --git-root <absolute-path> --project-root <absolute-path> --path <assets-relative.fire-or-prefab> --node <serialized-node-uuid> [--revision <revision>] [--max-commits <1-256>]',
   '  vcs conflicts --git-root <absolute-path> --project-root <absolute-path>',
+  '  vcs conflicts resolve --git-root <absolute-path> --project-root <absolute-path> --path <project-relative-path> --side <ours|theirs> [--apply]',
   '  bridge start | status | stop',
   '  extension install --project-root <absolute-path>',
   '  extension status --project-root <absolute-path>',
@@ -304,6 +305,13 @@ async function main() {
     const maxCommits = value('--max-commits') === undefined ? undefined : Number(value('--max-commits'));
     print(runVcsObjectBlame({ gitRoot: value('--git-root'), projectRoot: value('--project-root'),
       assetPath: value('--path'), nodeUuid: value('--node'), revision: value('--revision', 'HEAD'), maxCommits }));
+    return;
+  }
+  if (group === 'vcs' && action === 'conflicts' && rest[0] === 'resolve') {
+    const result = runVcsConflictResolve({ gitRoot: value('--git-root'), projectRoot: value('--project-root'),
+      assetPath: value('--path'), side: value('--side'), apply: args.includes('--apply') });
+    print(result);
+    if (result.requiresManualReview) setFailureExitCode(5);
     return;
   }
   if (group === 'vcs' && action === 'conflicts') {
