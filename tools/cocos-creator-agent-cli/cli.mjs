@@ -13,6 +13,7 @@ import { startProjectFileWatch } from './creator-watch.mjs';
 import { loadTestPlan, loadFailedSuiteIds, parseTestShard, runTestPlan, watchTestPlan } from './creator-tests.mjs';
 import { runVcsDoctor } from './vcs-integrity.mjs';
 import { runVcsStatus } from './vcs-status.mjs';
+import { runVcsDiff } from './vcs-diff.mjs';
 import { configureMcp, mcpStatus, supportedMcpClients } from './mcp/configure.mjs';
 import { availableSkills, installSkills, listSkillStatus, showSkill } from './skills.mjs';
 import { diffSceneSnapshotFiles } from './semantic-diff.mjs';
@@ -34,6 +35,7 @@ const HELP_LINES = [
   '  doctor [--project-root <absolute-path>] [--instance <instance-id>]',
   '  vcs doctor --git-root <absolute-path> --project-root <absolute-path>',
   '  vcs status --git-root <absolute-path> --project-root <absolute-path>',
+  '  vcs diff --git-root <absolute-path> --project-root <absolute-path> --path <assets-relative.fire-or-prefab> [--from <revision>] [--to <revision>]',
   '  bridge start | status | stop',
   '  extension install --project-root <absolute-path>',
   '  extension status --project-root <absolute-path>',
@@ -295,6 +297,11 @@ async function main() {
   }
   if (group === 'vcs' && action === 'status') {
     print(runVcsStatus({ gitRoot: value('--git-root'), projectRoot: value('--project-root') }));
+    return;
+  }
+  if (group === 'vcs' && action === 'diff') {
+    print(runVcsDiff({ gitRoot: value('--git-root'), projectRoot: value('--project-root'),
+      assetPath: value('--path'), from: value('--from', 'HEAD'), to: value('--to') }));
     return;
   }
   if (group === 'bridge' && action === 'status') { print(await bridgeStatus()); return; }
