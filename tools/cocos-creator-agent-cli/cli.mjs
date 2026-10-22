@@ -12,6 +12,7 @@ import { discoverCreatorInstallations, openCreatorProject, runCreatorWorkflow } 
 import { startProjectFileWatch } from './creator-watch.mjs';
 import { loadTestPlan, loadFailedSuiteIds, parseTestShard, runTestPlan, watchTestPlan } from './creator-tests.mjs';
 import { runVcsDoctor } from './vcs-integrity.mjs';
+import { runVcsStatus } from './vcs-status.mjs';
 import { configureMcp, mcpStatus, supportedMcpClients } from './mcp/configure.mjs';
 import { availableSkills, installSkills, listSkillStatus, showSkill } from './skills.mjs';
 import { diffSceneSnapshotFiles } from './semantic-diff.mjs';
@@ -32,6 +33,7 @@ const HELP_LINES = [
   '  skill list [<codex|claude-code>] [--local] | show [<skill-name>|--list] (default: cocos2-cli) | install <client> [--local] [--skill <name>] [--force] | refresh <client> [--local] [--force]',
   '  doctor [--project-root <absolute-path>] [--instance <instance-id>]',
   '  vcs doctor --git-root <absolute-path> --project-root <absolute-path>',
+  '  vcs status --git-root <absolute-path> --project-root <absolute-path>',
   '  bridge start | status | stop',
   '  extension install --project-root <absolute-path>',
   '  extension status --project-root <absolute-path>',
@@ -289,6 +291,10 @@ async function main() {
     const report = runVcsDoctor({ gitRoot: value('--git-root'), projectRoot: value('--project-root') });
     print(report);
     if (!report.ok) process.exitCode = 1;
+    return;
+  }
+  if (group === 'vcs' && action === 'status') {
+    print(runVcsStatus({ gitRoot: value('--git-root'), projectRoot: value('--project-root') }));
     return;
   }
   if (group === 'bridge' && action === 'status') { print(await bridgeStatus()); return; }
