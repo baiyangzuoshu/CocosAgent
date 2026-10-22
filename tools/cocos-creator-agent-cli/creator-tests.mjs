@@ -66,8 +66,14 @@ export function loadTestPlan(projectRoot) {
     if (suite.adapter === 'creator') {
       if (!PROVIDER_ID.test(suite.providerId || '') || !COMMAND_ID.test(suite.commandId || '')) throw coded('TEST_PROVIDER_INVALID');
     } else if (suite.providerId !== undefined || suite.commandId !== undefined) throw coded('TEST_MANIFEST_FIELD_INVALID');
-    if (suite.adapter === 'preview' && (Object.hasOwn(suite.input || {}, 'previewSessionId')
-      || !Array.isArray(suite.input?.assertions) || !suite.input.assertions.length)) throw coded('TEST_PREVIEW_ASSERTIONS_REQUIRED');
+    if (suite.adapter === 'preview') {
+      if (Object.hasOwn(suite.input || {}, 'previewSessionId') || Object.hasOwn(suite.input || {}, 'coverage'))
+        throw coded('TEST_PREVIEW_RUNNER_FIELD_RESERVED');
+      if (!Array.isArray(suite.input?.actions) || !suite.input.actions.length || suite.input.actions.length > 12)
+        throw coded('TEST_PREVIEW_ACTIONS_REQUIRED');
+      if (!Array.isArray(suite.input?.assertions) || !suite.input.assertions.length || suite.input.assertions.length > 12)
+        throw coded('TEST_PREVIEW_ASSERTIONS_REQUIRED');
+    }
     if (suite.dependsOn !== undefined && (!Array.isArray(suite.dependsOn) || suite.dependsOn.length > 256
       || suite.dependsOn.some((item) => typeof item !== 'string' || !item || path.isAbsolute(item) || item.includes('\\')
         || item.includes('\0') || item.split('/').includes('..') || item.includes('*')))) throw coded('TEST_DEPENDENCIES_INVALID');
@@ -118,6 +124,12 @@ export function parseTestShard(value) {
   const [major, minor] = process.versions.node.split('.').map(Number);
   if (major < 20 || (major === 20 && minor < 5)) throw coded('TEST_SHARD_NODE_VERSION_UNSUPPORTED');
   return { index, total };
+}
+
+export function testShardForSuite(suiteId, total) {
+  if (typeof suiteId !== 'string' || !suiteId || !Number.isInteger(total) || total < 1 || total > 64)
+    throw coded('TEST_SHARD_INVALID');
+  return createHash('sha256').update(suiteId).digest().readUInt32BE(0) % total + 1;
 }
 
 function requireCoverageSupport() {
@@ -248,9 +260,12 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
     normalizedShard = parseTestShard(`${shard.index}/${shard.total}`);
   }
   if (typeof coverage !== 'boolean') throw coded('TEST_COVERAGE_INVALID');
-  if ((normalizedShard !== undefined || coverage) && selected.some((suite) => suite.adapter !== 'node'))
-    throw coded(normalizedShard !== undefined ? 'TEST_SHARD_NODE_ONLY' : 'TEST_COVERAGE_NODE_ONLY');
+  if (coverage && selected.some((suite) => suite.adapter === 'creator'))
+    throw coded('TEST_COVERAGE_CREATOR_PROVIDER_UNSUPPORTED');
   if (coverage) requireCoverageSupport();
+  const shardSkipped = normalizedShard ? selected.filter((suite) => suite.adapter !== 'node'
+    && testShardForSuite(suite.id, normalizedShard.total) !== normalizedShard.index) : [];
+  const runnable = selected.filter((suite) => !shardSkipped.includes(suite));
   const liveInstances = dependencies.listInstances || listInstances;
   const call = dependencies.callCommand || callCommand;
   const discover = dependencies.getExtensionCommands || getExtensionCommands;
@@ -264,11 +279,13 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
   const started = Date.now();
   const report = { schemaVersion: 1, runId: randomUUID(), projectRoot: plan.projectRoot, projectName: plan.projectName,
     creatorVersion: '2.4.15', manifestHash: plan.manifestHash, selectedSuiteIds: selected.map((suite) => suite.id),
-    ...(normalizedShard ? { shard: normalizedShard } : {}), coverageEnabled: coverage,
+    ...(normalizedShard ? { shard: { ...normalizedShard, strategies: { node: 'test-case', creator: 'suite', preview: 'suite' } } } : {}),
+    shardSelectedSuiteIds: runnable.map((suite) => suite.id), shardSkippedSuiteIds: shardSkipped.map((suite) => suite.id),
+    coverageEnabled: coverage,
     startedAt: new Date(started).toISOString(), suites: [] };
   const reportTarget = prepareReportDirectory(plan.projectRoot, reportDir, report.runId);
   let previewRefreshed = false;
-  for (const suite of selected) {
+  for (const suite of runnable) {
     const suiteStart = Date.now();
     onEvent({ type: 'test-suite-started', runId: report.runId, suiteId: suite.id, adapter: suite.adapter });
     let result;
@@ -294,11 +311,14 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
           await call(instanceId, 'creator.preview.refresh', { previewSessionId });
           previewRefreshed = true;
         }
-        const receipt = await call(instanceId, 'creator.preview.interact', { ...suite.input, previewSessionId });
+        const receipt = await call(instanceId, 'creator.preview.interact', { ...suite.input, previewSessionId,
+          ...(coverage ? { coverage: true } : {}) });
         const assertions = receipt.result?.assertions;
         if (!Array.isArray(assertions) || !assertions.length) throw coded('TEST_PREVIEW_REPORT_INVALID');
+        if (coverage && !receipt.result?.coverage) throw coded('TEST_COVERAGE_REPORT_MISSING');
         result = { tests: assertions.map((item, index) => ({ name: `assertion-${index + 1}:${item.type || 'preview'}`,
           status: item.pass === true ? 'passed' : 'failed', message: JSON.stringify(item).slice(0, 8192) })), receipt };
+        if (receipt.result.coverage) result.coverage = receipt.result.coverage;
         if (receipt.result?.passed !== true && !result.tests.some((item) => item.status === 'failed'))
           result.tests.push({ name: 'preview-result', status: 'failed', message: 'Preview did not confirm success.' });
       }
@@ -319,7 +339,9 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
     if (output.requiresManualReview || signal?.aborted) break;
   }
   report.cancelled = signal?.aborted === true;
-  report.notRunSuiteIds = selected.filter((suite) => !report.suites.some((item) => item.id === suite.id)).map((suite) => suite.id);
+  report.notRunSuiteIds = runnable.filter((suite) => !report.suites.some((item) => item.id === suite.id)).map((suite) => suite.id);
+  for (const suiteId of report.shardSkippedSuiteIds)
+    onEvent({ type: 'test-suite-skipped', runId: report.runId, suiteId, reason: 'TEST_SHARD_EXCLUDED' });
   if (report.cancelled && !report.suites.some((suite) => suite.tests.some((item) => item.status === 'failed'))) {
     const tests = [{ id: 'cancelled', name: 'TEST_CANCELLED', status: 'failed', durationMs: 0, message: 'Run cancelled before completion.' }];
     report.suites.push({ id: '$runner', adapter: 'runner', tests, counts: counts(tests), durationMs: 0 });

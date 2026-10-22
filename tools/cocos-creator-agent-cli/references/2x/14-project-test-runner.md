@@ -1,6 +1,6 @@
 # Creator project tests and continuous verification
 
-CLI 0.10.0 adds project test adapters and machine-readable reports. Node tests, project-installed Creator command providers and preview assertions remain distinct evidence sources. Creator 2.4.15 has no documented built-in Unity-style Edit Mode/Play Mode test CLI.
+The project runner unifies Node tests, project-installed Creator command providers and live preview suites under one manifest with JSON/JUnit reports, watch, rerun-failed, sharding and supported coverage. These remain distinct evidence sources. Creator 2.4.15 has no documented built-in Unity-style Edit Mode/Play Mode test CLI: Editor-context suites still run through an explicitly approved project Provider, while PlayMode-like suites run against the exact attached Web preview session.
 
 ## Manifest and discovery
 
@@ -28,13 +28,15 @@ Place `.cocos-agent/tests.json` in the authorized Creator 2.4.15 project. `creat
       "id": "runtime",
       "adapter": "preview",
       "dependsOn": ["assets/"],
-      "input": { "assertions": [{ "type": "no-errors" }] }
+      "input": { "actions": [{ "type": "key", "key": "Space" }], "assertions": [{ "type": "no-errors" }] }
     }
   ]
 }
 ```
 
 The plan permits 1–64 suites with unique IDs. Node suites explicitly list 1–64 `.js`, `.cjs` or `.mjs` files inside the project. Node's `node:test` runner executes them in child processes. These tests verify host-side JavaScript logic, not Creator globals, compilation or scene behavior. TypeScript needs prior project compilation or an editor test provider; the adapter does not silently transpile it. Tests execute project code with the current user's permissions and are not sandboxed. The protocol accepts no shell-command strings or downloaded test dependencies.
+
+`--shard <index>/<total>` keeps Node's test-case sharding and assigns each `creator` or `preview` suite as a whole to one deterministic shard based on its suite ID. This makes Editor and runtime suites parallelizable across workers without splitting a stateful suite. Reports list `shardSelectedSuiteIds`, `shardSkippedSuiteIds`, and the adapter strategies. Creator Provider coverage is not inferred from its test count.
 
 `timeoutMs` applies only to Node suites (100–180000 ms, default 30000). Timeout/cancellation terminates the owned process group and fails the run. Missing tests, all-skipped suites, malformed output and nonzero process exits cannot yield a pass. Inherited Node preload flags and test-runner context are cleared in subprocesses.
 
@@ -60,11 +62,11 @@ An invoked Provider call that fails or returns an uncertain result requires manu
 
 ## Preview adapter
 
-Preview suites forward existing declarative actions/assertions to `creator.preview.interact`. At least one assertion is required. Session identity is supplied with `--session` and cannot be replaced by manifest input. Watched changes refresh the same session before its preview suites; the bridge rechecks scene identity.
+Preview suites forward declarative actions/assertions to `creator.preview.interact`. At least one action and assertion are required. Session identity is supplied with `--session` and cannot be replaced by manifest input. Watched changes refresh the same session before its preview suites; the bridge rechecks scene identity. With `--coverage`, the owned Chromium session collects V8 precise function/block-range counters during the same actions and assertions. Coverage is restricted to scripts served from the selected preview origin and reports source offsets, not line-level source coverage; external CDN scripts are excluded.
 
 ## Results and watch
 
-Each executed plan writes JSON and JUnit XML into a new directory under `~/.cocos-creator-agent/test-results/<run-id>/`. `--report-dir <new-absolute-directory>` selects an output outside the project. Existing run directories are refused. JSON includes case/suite statuses, project identity, manifest SHA-256, Node source hashes, timestamps, durations, receipts and the JUnit SHA-256. Failed or cancelled runs exit nonzero.
+Each executed plan writes JSON and JUnit XML into a new directory under `~/.cocos-creator-agent/test-results/<run-id>/`. `--report-dir <new-absolute-directory>` selects an output outside the project. Existing run directories are refused. JSON includes case/suite statuses, project identity, manifest SHA-256, Node source hashes, supported adapter coverage, shard assignment, timestamps, durations, receipts and the JUnit SHA-256. Failed or cancelled runs exit nonzero.
 
 ```sh
 cocos-creator-agent creator watch --project-root /absolute/project \

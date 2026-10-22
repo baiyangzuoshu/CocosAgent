@@ -7,6 +7,7 @@ import { EventEmitter } from 'node:events';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { findSerializedSceneIdentity } from './preview-scene-identity.mjs';
 import { readPreviewComponentProperty } from './preview-components.mjs';
+import { normalizePreviewCoverage } from './preview-coverage.mjs';
 
 const DATA_ROOT = path.join(os.homedir(), '.cocos-creator-agent');
 const SESSION_ROOT = path.join(DATA_ROOT, 'preview-sessions');
@@ -584,33 +585,54 @@ export async function interactPreview(instance, input) {
   const session = await sessionFor(instance, input.previewSessionId);
   const actions = validateActions(input.actions);
   const assertions = validateAssertions(input.assertions || []);
+  if (input.coverage !== undefined && typeof input.coverage !== 'boolean') throw failure('PREVIEW_COVERAGE_OPTION_INVALID');
+  const collectCoverage = input.coverage === true;
+  let coverageStarted = false;
   const sequenceBefore = session.consoleSequence;
   const actionResults = [];
-  await session.cdp.command('Page.bringToFront', {});
-  for (const action of actions) {
-    if (input.cancelled?.()) throw failure('PREVIEW_ACTION_CANCELLED');
-    await performAction(session, action);
-    actionResults.push({ ...action, applied: true });
-  }
-  await new Promise((resolve) => setTimeout(resolve, Math.max(100, Math.min(input.settleMs || 350, 3000))));
-  session.page = await evaluate(session, PAGE_SNAPSHOT_EXPRESSION);
-  const results = [];
-  for (const assertion of assertions) {
-    if (assertion.type === 'no-errors') {
-      const newErrors = session.console.filter((entry) => entry.level === 'error' && entry.sequence > sequenceBefore);
-      results.push({ type: assertion.type, pass: newErrors.length === 0, actual: newErrors.slice(-10) });
-    } else if (assertion.type === 'console-contains') {
-      const hit = session.console.find((entry) => entry.sequence > sequenceBefore && entry.text.includes(assertion.text));
-      results.push({ type: assertion.type, expected: assertion.text, pass: !!hit, actual: hit || null });
-    } else {
-      const actual = await evaluate(session, assertionExpression(assertion));
-      results.push({ ...assertion, ...actual });
+  try {
+    if (collectCoverage) {
+      await session.cdp.command('Profiler.enable', {});
+      await session.cdp.command('Profiler.startPreciseCoverage', { callCount: true, detailed: true });
+      coverageStarted = true;
+    }
+    await session.cdp.command('Page.bringToFront', {});
+    for (const action of actions) {
+      if (input.cancelled?.()) throw failure('PREVIEW_ACTION_CANCELLED');
+      await performAction(session, action);
+      actionResults.push({ ...action, applied: true });
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.max(100, Math.min(input.settleMs || 350, 3000))));
+    session.page = await evaluate(session, PAGE_SNAPSHOT_EXPRESSION);
+    const results = [];
+    for (const assertion of assertions) {
+      if (assertion.type === 'no-errors') {
+        const newErrors = session.console.filter((entry) => entry.level === 'error' && entry.sequence > sequenceBefore);
+        results.push({ type: assertion.type, pass: newErrors.length === 0, actual: newErrors.slice(-10) });
+      } else if (assertion.type === 'console-contains') {
+        const hit = session.console.find((entry) => entry.sequence > sequenceBefore && entry.text.includes(assertion.text));
+        results.push({ type: assertion.type, expected: assertion.text, pass: !!hit, actual: hit || null });
+      } else {
+        const actual = await evaluate(session, assertionExpression(assertion));
+        results.push({ ...assertion, ...actual });
+      }
+    }
+    let coverage;
+    if (collectCoverage) {
+      const raw = await session.cdp.command('Profiler.takePreciseCoverage', {});
+      coverage = normalizePreviewCoverage(raw.result, new URL(session.previewUrl).origin);
+    }
+    return { previewSessionId: session.previewSessionId, instanceId: session.instanceId, projectRoot: session.projectRoot,
+      sceneUuid: session.sceneUuid, navigationCount: session.navigationCount, actions: actionResults,
+      assertions: results, passed: results.every((item) => item.pass), page: session.page,
+      consoleSequence: session.consoleSequence, newErrors: session.console.filter((entry) => entry.sequence > sequenceBefore && entry.level === 'error').slice(-20),
+      ...(coverage ? { coverage } : {}) };
+  } finally {
+    if (coverageStarted) {
+      try { await session.cdp.command('Profiler.stopPreciseCoverage', {}); } catch (_) {}
+      try { await session.cdp.command('Profiler.disable', {}); } catch (_) {}
     }
   }
-  return { previewSessionId: session.previewSessionId, instanceId: session.instanceId, projectRoot: session.projectRoot,
-    sceneUuid: session.sceneUuid, navigationCount: session.navigationCount, actions: actionResults,
-    assertions: results, passed: results.every((item) => item.pass), page: session.page,
-    consoleSequence: session.consoleSequence, newErrors: session.console.filter((entry) => entry.sequence > sequenceBefore && entry.level === 'error').slice(-20) };
 }
 
 export async function refreshPreview(instance, input) {

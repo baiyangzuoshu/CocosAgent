@@ -106,7 +106,8 @@ test('empty Creator reports fail and timed-out Creator cases do not start later 
 });
 
 test('preview adapter refreshes and tests the same session using real pass field from bridge contract', async (t) => {
-  const state = fixture(t, [{ id: 'runtime', adapter: 'preview', input: { assertions: [{ type: 'no-errors' }] } }]);
+  const state = fixture(t, [{ id: 'runtime', adapter: 'preview', input: {
+    actions: [{ type: 'key', key: 'Space' }], assertions: [{ type: 'no-errors' }] } }]);
   const calls = [];
   const report = await runTestPlan({ ...state, instanceId: 'instance', previewSessionId: 'same-session', refreshPreview: true }, {
     listInstances: async () => ({ instances: [{ instanceId: 'instance', projectRoot: state.projectRoot, creatorVersion: '2.4.15' }] }),

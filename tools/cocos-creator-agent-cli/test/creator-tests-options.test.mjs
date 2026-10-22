@@ -3,10 +3,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { parseTestShard, runTestPlan } from '../creator-tests.mjs';
+import { loadTestPlan, parseTestShard, runTestPlan, testShardForSuite } from '../creator-tests.mjs';
 
-function fixture() {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-test-options-'));
+function fixture(suites) {
+  const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-test-options-')));
   const projectRoot = path.join(directory, 'project');
   const testsRoot = path.join(projectRoot, 'test');
   fs.mkdirSync(path.join(projectRoot, '.cocos-agent'), { recursive: true });
@@ -19,7 +19,7 @@ function fixture() {
     fs.writeFileSync(path.join(projectRoot, relative), `import test from 'node:test';\ntest('case-${index}', () => {});\n`);
   }
   fs.writeFileSync(path.join(projectRoot, '.cocos-agent', 'tests.json'), JSON.stringify({ schemaVersion: 1,
-    suites: [{ id: 'node-suite', adapter: 'node', files }] }));
+    suites: suites || [{ id: 'node-suite', adapter: 'node', files }] }));
   return { directory, projectRoot };
 }
 
@@ -28,6 +28,16 @@ test('test shard syntax and bounds are validated', () => {
   for (const value of ['0/2', '3/2', '1/0', '1/65', '1 / 2', 'abc'])
     assert.throws(() => parseTestShard(value), (error) => error.code === 'TEST_SHARD_INVALID');
   assert.equal(parseTestShard(undefined), undefined);
+});
+
+test('preview suites must declare actions and assertions without runner-owned fields', (t) => {
+  const state = fixture([{ id: 'runtime', adapter: 'preview', input: { assertions: [{ type: 'no-errors' }] } }]);
+  t.after(() => fs.rmSync(state.directory, { recursive: true, force: true }));
+  assert.throws(() => loadTestPlan(state.projectRoot), { code: 'TEST_PREVIEW_ACTIONS_REQUIRED' });
+  fs.writeFileSync(path.join(state.projectRoot, '.cocos-agent', 'tests.json'), JSON.stringify({ schemaVersion: 1,
+    suites: [{ id: 'runtime', adapter: 'preview', input: {
+      actions: [{ type: 'key', key: 'Space' }], assertions: [{ type: 'no-errors' }], coverage: true } }] }));
+  assert.throws(() => loadTestPlan(state.projectRoot), { code: 'TEST_PREVIEW_RUNNER_FIELD_RESERVED' });
 });
 
 test('Node test sharding splits project test files into disjoint reports', async (t) => {
@@ -56,4 +66,53 @@ test('Node coverage is included as structured per-suite evidence', async (t) => 
   assert.ok(coverage);
   assert.ok(coverage.totals.totalLineCount > 0);
   assert.ok(coverage.files.some((file) => file.path.endsWith('case-0.test.js')));
+});
+
+test('Creator provider and preview suites are assigned to deterministic engine shards', async (t) => {
+  const editorId = 'editor-suite';
+  let previewId = 'preview-suite';
+  while (testShardForSuite(editorId, 2) === testShardForSuite(previewId, 2)) previewId += '-next';
+  const state = fixture();
+  t.after(() => fs.rmSync(state.directory, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(state.projectRoot, '.cocos-agent', 'tests.json'), JSON.stringify({ schemaVersion: 1, suites: [
+    { id: editorId, adapter: 'creator', providerId: 'project-tests', commandId: 'run-tests' },
+    { id: previewId, adapter: 'preview', input: { actions: [{ type: 'key', key: 'Space' }], assertions: [{ type: 'no-errors' }] } },
+  ] }));
+  const shardReports = [];
+  for (const index of [1, 2]) {
+    shardReports.push(await runTestPlan({ projectRoot: state.projectRoot, instanceId: 'instance',
+      previewSessionId: 'same-session', shard: { index, total: 2 }, reportDir: path.join(state.directory, `engine-${index}`) }, {
+      listInstances: async () => ({ instances: [{ instanceId: 'instance', projectRoot: state.projectRoot, creatorVersion: '2.4.15' }] }),
+      getExtensionCommands: async () => ({ commands: [{ providerId: 'project-tests', id: 'run-tests', status: 'available',
+        access: 'control', approval: true, providerFingerprint: 'fingerprint' }] }),
+      callExtensionCommand: async () => ({ result: { result: { schemaVersion: 1,
+        tests: [{ id: 'editor-case', name: 'editor case', status: 'passed' }] } } }),
+      callCommand: async () => ({ result: { assertions: [{ type: 'no-errors', pass: true }], passed: true } }),
+    }));
+  }
+  const selectedByShard = shardReports.map((report) => report.shardSelectedSuiteIds);
+  assert.deepEqual(selectedByShard, [[editorId], [previewId]].sort((left, right) => testShardForSuite(left[0], 2) - testShardForSuite(right[0], 2)));
+  assert.equal(new Set(selectedByShard.flat()).size, 2);
+  assert.ok(shardReports.every((report) => report.passed));
+  assert.ok(shardReports.every((report) => report.shard.strategies.creator === 'suite'
+    && report.shard.strategies.preview === 'suite'));
+});
+
+test('preview coverage is requested through the same runtime test invocation', async (t) => {
+  const state = fixture([{ id: 'runtime', adapter: 'preview', input: {
+    actions: [{ type: 'key', key: 'Space' }], assertions: [{ type: 'no-errors' }] } }]);
+  let observedCoverageRequest = false;
+  const expectedCoverage = { kind: 'v8-precise-function-and-range', scripts: [], totals: {
+    totalFunctions: 0, coveredFunctions: 0, totalRanges: 0, coveredRanges: 0, functionPercent: 0, rangePercent: 0 } };
+  const report = await runTestPlan({ ...state, instanceId: 'instance', previewSessionId: 'same-session', coverage: true,
+    reportDir: path.join(state.directory, 'preview-coverage-report') }, {
+    listInstances: async () => ({ instances: [{ instanceId: 'instance', projectRoot: state.projectRoot, creatorVersion: '2.4.15' }] }),
+    callCommand: async (_id, _command, input) => {
+      observedCoverageRequest = input.coverage === true;
+      return { result: { assertions: [{ type: 'no-errors', pass: true }], passed: true, coverage: expectedCoverage } };
+    },
+  });
+  assert.equal(observedCoverageRequest, true);
+  assert.deepEqual(report.suites[0].coverage, expectedCoverage);
+  assert.equal(report.passed, true);
 });

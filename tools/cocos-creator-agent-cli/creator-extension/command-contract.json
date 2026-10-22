@@ -1071,12 +1071,13 @@
       "id": "creator.preview.interact",
       "access": "control",
       "execution": "bridge",
-      "description": "Apply bounded keyboard or normalized canvas clicks in the same preview session and evaluate declarative runtime assertions.",
+      "description": "Apply bounded keyboard or normalized canvas clicks in the same preview session and evaluate declarative runtime assertions, with optional V8 function and block-range coverage.",
       "input": {
         "type": "object",
         "required": ["previewSessionId", "actions"],
         "properties": {
           "previewSessionId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "coverage": { "type": "boolean" },
           "actions": {
             "type": "array", "minItems": 1, "maxItems": 12,
             "items": {
