@@ -21,7 +21,7 @@ Prefab 创建的 expected diff 同时包含场景节点和资源文件；UUID �
 
 ## Prefab 资源编辑边界
 
-本合同当前没有修改已有 Prefab 源资源内容的命令。场景中的 Prefab 实例节点补丁属于场景实例修改，不等于更新原 Prefab。2.4 手册描述通过双击资源进入 Prefab 编辑模式、保存资源，并在 FAQ 列出 `scene:enter-prefab-edit-mode` 和 `scene:apply-prefab` IPC；这些编辑器切换、保存、读回和回滚时序尚未纳入实现。新增 Prefab 源资源补丁前，必须另行验证目标节点解析、Prefab 模式进入/退出、保存后的 UUID 与文件差异、关联场景实例行为及失败恢复。
+场景中的 Prefab 实例节点补丁属于场景实例修改，不等于更新原 Prefab。CLI 现在提供独立的 `creator.prefab.source.patch.plan/commit/reconcile` 命令，在 Creator Prefab 编辑模式下对已有源资源执行受限字段修改；该命令不属于本场景节点合同。它通过场景进程探测 `scene://edit-mode` 的 `curMode/save/pop`，只在接口存在时发布能力，并要求保存、退出、重新打开和磁盘读回。内部编辑器接口的完整时序以及修改对场景实例的影响仍需 Creator 2.4.15 实机验收。
 
 官方依据：[2.4 Prefab 手册](https://docs.cocos.com/creator/2.4/manual/zh/asset-workflow/prefab.html)、[2.4 FAQ：插件控制 Prefab](https://docs.cocos.com/creator/2.4/manual/zh/getting-started/faq.html)。Prefab 手册说明修改场景实例属性只保存为实例差异，不会更新 Prefab 源资源；源资源需要在 Prefab 编辑模式显式保存。
 

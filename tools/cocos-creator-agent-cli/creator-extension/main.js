@@ -9,6 +9,7 @@ const extensionPackage = require('./package.json');
 const confirmDialog = require('./approval.cjs');
 const { inspectSceneComposition } = require('./scene-persistence.cjs');
 const { inspectPrefabSource: inspectPrefabSourceData } = require('./prefab-source.cjs');
+const prefabPatch = require('./prefab-patch.cjs');
 const { scanAssetReferences } = require('./asset-references.cjs');
 const contract = require('./command-contract.json');
 const { normalizeProvider, validateArguments, canonical, PROVIDER_ID, COMMAND_ID } = require('./provider-contract.cjs');
@@ -56,6 +57,7 @@ let diagnosticSequence = 0;
 let diagnosticEvents = [];
 let latestCompile = null;
 let diagnosticListeners = [];
+let prefabEditModeApiAvailable = false;
 
 function editorVersion() {
     const candidates = [Editor && Editor.App && Editor.App.version,
@@ -209,6 +211,7 @@ function setupDiagnosticListeners() {
         });
     }
     const ipcEmitter = mainProcessIpcEmitter();
+    addDiagnosticListener(ipcEmitter, 'scene:ready', () => { refreshPrefabEditModeCapability(); });
     addDiagnosticListener(ipcEmitter, 'asset-db:script-import-failed', (...args) => {
         recordIpcDiagnostic('creator-assetdb', 'error', args);
     });
@@ -217,6 +220,18 @@ function setupDiagnosticListeners() {
             recordIpcDiagnostic('creator-console', level === 'failed' ? 'error' : level, args);
         });
     }
+}
+
+async function refreshPrefabEditModeCapability() {
+    prefabEditModeApiAvailable = false;
+    if (!Editor || !Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function'
+        || !Editor.Ipc || typeof Editor.Ipc.sendToAll !== 'function' || typeof Editor.Ipc.on !== 'function') return false;
+    try {
+        const state = await callScene('prefabEditModeState', {}, 10000);
+        prefabEditModeApiAvailable = !!(state && state.available === true && state.saveAvailable === true
+            && state.popAvailable === true && typeof state.modeName === 'string');
+    } catch (_) { prefabEditModeApiAvailable = false; }
+    return prefabEditModeApiAvailable;
 }
 
 function removeDiagnosticListeners() {
@@ -538,6 +553,43 @@ function readPrefabCreateOperation(operationId) {
         || typeof plan.expiresAt !== 'string'
         || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'completed',
             'not-applied', 'needs-reconciliation', 'conflict'].includes(operation.status))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    return operation;
+}
+
+function readPrefabSourcePatchOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    if (!operation || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.prefab.source.patch' || !plan || typeof plan !== 'object'
+        || plan.operationId !== operationId || plan.operation !== operation.operation
+        || typeof operation.planHash !== 'string' || typeof plan.projectRoot !== 'string'
+        || typeof plan.creatorVersion !== 'string' || typeof plan.extensionVersion !== 'string'
+        || typeof plan.contractFingerprint !== 'string' || typeof plan.creatorInstanceId !== 'string'
+        || !prefabPatch.UUID.test(plan.prefabUuid || '') || typeof plan.prefabPath !== 'string'
+        || typeof plan.targetUrl !== 'string' || typeof plan.activeSceneUuid !== 'string'
+        || typeof plan.targetNodePath !== 'string' || !prefabPatch.NODE_ID.test(plan.targetNodeUuid || '')
+        || !['apply', 'compensate', 'replay'].includes(plan.action)
+        || !prefabPatch.SHA256.test(plan.expectedSourceSha256 || '')
+        || !prefabPatch.SHA256.test(plan.expectedMetaSha256 || '')
+        || !prefabPatch.validateDiff(plan.expectedDiff)
+        || !plan.expectedBeforeNode || typeof plan.expectedBeforeNode !== 'object'
+        || plan.expectedBeforeNode.nodeUuid !== plan.targetNodeUuid
+        || plan.expectedBeforeNode.nodePath !== plan.targetNodePath
+        || !prefabPatch.matchesDiff(plan.expectedBeforeNode, plan.expectedDiff, 'before')
+        || (plan.action === 'apply' && plan.sourceOperationId !== null)
+        || (plan.action !== 'apply' && !/^[0-9a-f-]{36}$/i.test(plan.sourceOperationId || ''))
+        || (plan.sourceOperationId !== null && !/^[0-9a-f-]{36}$/i.test(plan.sourceOperationId || ''))
+        || typeof plan.expiresAt !== 'string'
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-started', 'mutation-applied',
+            'save-requested', 'source-saved', 'mode-reopened', 'completed', 'not-applied',
+            'needs-reconciliation', 'conflict'].includes(operation.status))
         throw coded('OPERATION_RECORD_INVALID');
     if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
     return operation;
@@ -1968,7 +2020,8 @@ async function inspectPrefabSourceCommand(input) {
     const metaFile = safeProjectFile(`${prefabPath}.meta`);
     const prefabBytes = readStableProjectFile(prefabFile, MAX_PREFAB_SERIALIZATION_BYTES, 'PREFAB_SERIALIZATION_FILE_UNSAFE');
     const metaBytes = readStableProjectFile(metaFile, MAX_PREFAB_META_BYTES, 'PREFAB_META_FILE_UNSAFE');
-    const state = inspectPrefabSourceData({ prefabBytes, metaBytes, prefabUuid: input.prefabUuid });
+    const state = inspectPrefabSourceData({ prefabBytes, metaBytes, prefabUuid: input.prefabUuid,
+        maxComponentsPerNode: input.nodeUuid !== undefined ? 64 : 8 });
     if (!state.available) throw coded(state.reason || 'PREFAB_SOURCE_INSPECT_FAILED');
     let nodes = state.nodes;
     let truncated = nodes.length > 100;
@@ -1990,6 +2043,313 @@ async function inspectPrefabSourceCommand(input) {
         targetUrl: row.url, importer: typeof row.importer === 'string' ? row.importer : null,
         assetType: typeof row.type === 'string' ? row.type : null,
         sourceSha256: fileHash(prefabBytes), metaSha256: fileHash(metaBytes), sourceScope: 'saved-disk-only' };
+}
+
+function singlePrefabNode(source, nodeUuid) {
+    const nodes = source && Array.isArray(source.nodes) ? source.nodes : [];
+    const matches = nodes.filter((node) => node && node.nodeUuid === nodeUuid);
+    if (matches.length !== 1) throw coded('PREFAB_NODE_NOT_FOUND_OR_AMBIGUOUS');
+    return matches[0];
+}
+
+async function currentPrefabEditMode() {
+    const state = await callScene('prefabEditModeState', {}, 10000);
+    if (!state || state.available !== true || state.saveAvailable !== true || state.popAvailable !== true
+        || typeof state.modeName !== 'string') throw coded('PREFAB_EDIT_MODE_API_UNAVAILABLE');
+    prefabEditModeApiAvailable = true;
+    return state;
+}
+
+async function createPrefabSourcePatchPlan(input) {
+    if (!prefabPatch.validInput(input)) throw coded('PREFAB_SOURCE_PATCH_INPUT_INVALID');
+    if (editorVersion() !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    const mode = await currentPrefabEditMode();
+    if (mode.modeName !== 'scene' || typeof mode.sceneUuid !== 'string') throw coded('EDITOR_BUSY');
+    const source = await inspectPrefabSourceCommand({ prefabUuid: input.prefabUuid, nodeUuid: input.targetNodeUuid });
+    let expectedDiff = input.expectedDiff;
+    let sourceOperationId = null;
+    if (input.action === 'apply') {
+        if (input.expectedSourceSha256 !== source.sourceSha256) throw coded('PREFAB_SOURCE_STALE');
+    } else {
+        sourceOperationId = input.sourceOperationId;
+        const sourceOperation = readPrefabSourcePatchOperation(sourceOperationId);
+        const sourcePlan = sourceOperation.plan;
+        const allowedSourceAction = input.action === 'compensate'
+            ? ['apply', 'replay'].includes(sourcePlan.action) : sourcePlan.action === 'compensate';
+        const sourceAfterPath = prefabPatch.targetPathAt(sourcePlan.targetNodePath, sourcePlan.expectedDiff, 'after');
+        if (sourceOperation.status !== 'completed' || sourcePlan.projectRoot !== projectRoot()
+            || sourcePlan.creatorVersion !== EXPECTED_CREATOR_VERSION || sourcePlan.prefabUuid !== input.prefabUuid
+            || sourcePlan.targetNodeUuid !== input.targetNodeUuid || !allowedSourceAction
+            || sourceOperation.afterSourceSha256 !== source.sourceSha256 || sourceAfterPath !== input.targetNodePath)
+            throw coded('PREFAB_SOURCE_OPERATION_MISMATCH');
+        expectedDiff = prefabPatch.invertDiff(sourcePlan.expectedDiff);
+        if (input.expectedSourceSha256 !== undefined && input.expectedSourceSha256 !== source.sourceSha256)
+            throw coded('PREFAB_SOURCE_STALE');
+    }
+    const node = singlePrefabNode(source, input.targetNodeUuid);
+    if (node.nodePath !== input.targetNodePath || !prefabPatch.matchesDiff(node, expectedDiff, 'before'))
+        throw coded('PREFAB_EXPECTED_STATE_MISMATCH');
+    const operationId = uuid();
+    const plan = { operationId, operation: 'creator.prefab.source.patch', projectRoot: projectRoot(),
+        creatorVersion: editorVersion(), extensionVersion: extensionPackage.version,
+        contractFingerprint: CONTRACT_FINGERPRINT, creatorInstanceId: INSTANCE_ID,
+        prefabUuid: input.prefabUuid, prefabPath: source.prefabPath, targetUrl: source.targetUrl,
+        activeSceneUuid: mode.sceneUuid, targetNodePath: input.targetNodePath, targetNodeUuid: input.targetNodeUuid,
+        action: input.action, sourceOperationId, expectedSourceSha256: source.sourceSha256,
+        expectedMetaSha256: source.metaSha256, expectedDiff,
+        expectedBeforeNode: node, expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString() };
+    const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
+        planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
+        projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        prefabUuid: plan.prefabUuid, prefabPath: plan.prefabPath, targetUrl: plan.targetUrl,
+        activeSceneUuid: plan.activeSceneUuid, targetNodePath: plan.targetNodePath, targetNodeUuid: plan.targetNodeUuid,
+        action: plan.action, sourceOperationId, sourceSha256: plan.expectedSourceSha256,
+        diff: plan.expectedDiff, expiresAt: plan.expiresAt,
+        recovery: { operationId, automaticRetry: false, reconcileCommand: 'creator.prefab.source.patch.reconcile',
+            note: 'Writes are made only in Creator Prefab edit mode and require save, exit, reopen, and disk readback.' } };
+}
+
+async function verifyPrefabSourcePatchPlan(operation, { requireCurrentContract = true } = {}) {
+    const plan = operation.plan;
+    if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
+    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+        throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
+    if (requireCurrentContract && (plan.extensionVersion !== extensionPackage.version
+        || plan.contractFingerprint !== CONTRACT_FINGERPRINT)) throw coded('OPERATION_CONTRACT_MISMATCH');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    const source = await inspectPrefabSourceCommand({ prefabUuid: plan.prefabUuid, nodeUuid: plan.targetNodeUuid });
+    const node = singlePrefabNode(source, plan.targetNodeUuid);
+    if (source.prefabPath !== plan.prefabPath || source.targetUrl !== plan.targetUrl
+        || source.metaSha256 !== plan.expectedMetaSha256 || source.sourceSha256 !== plan.expectedSourceSha256
+        || node.nodePath !== plan.targetNodePath || !prefabPatch.matchesDiff(node, plan.expectedDiff, 'before'))
+        throw coded('PREFAB_SOURCE_STALE');
+    const mode = await currentPrefabEditMode();
+    if (mode.modeName !== 'scene' || mode.sceneUuid !== plan.activeSceneUuid) throw coded('EDITOR_BUSY');
+    return { source, node, mode };
+}
+
+function confirmPrefabSourcePatch(operation) {
+    if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
+    const plan = operation.plan;
+    const detail = [`Project: ${plan.projectRoot}`, `Creator: ${plan.creatorVersion}`,
+        `Prefab: ${plan.targetUrl} (${plan.prefabUuid})`, `Node: ${plan.targetNodePath} (${plan.targetNodeUuid})`,
+        `Action: ${plan.action}`, `Operation: ${operation.operationId}`, '',
+        `Field changes:\n${plan.expectedDiff.map((item) => `- ${item.path}: ${JSON.stringify(item.before)} → ${JSON.stringify(item.after)}`).join('\n')}`,
+        '', 'Creator will enter Prefab edit mode, apply these exact fields, save, exit, reopen, and verify the saved Prefab.'].join('\n');
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator Prefab source edit',
+        message: `Edit ${plan.targetNodePath} in the Prefab source?`, detail,
+        buttons: ['Cancel', 'Edit Prefab source'], defaultId: 0, cancelId: 0, noLink: true });
+}
+
+function prefabSourcePatchReceipt(operation) {
+    const plan = operation.plan;
+    return { operationId: operation.operationId, operation: operation.operation, status: operation.status,
+        action: plan.action, sourceOperationId: plan.sourceOperationId, projectRoot: plan.projectRoot,
+        creatorVersion: plan.creatorVersion, prefabUuid: plan.prefabUuid, prefabPath: plan.prefabPath,
+        targetUrl: plan.targetUrl, targetNodePath: plan.targetNodePath, targetNodeUuid: plan.targetNodeUuid,
+        expectedDiff: plan.expectedDiff, beforeSourceSha256: plan.expectedSourceSha256,
+        afterSourceSha256: operation.afterSourceSha256 || null,
+        saveCallbackConfirmed: operation.saveCallbackConfirmed === true,
+        sceneSavedEventConfirmed: operation.sceneSavedEventConfirmed === true,
+        editorExitedToScene: operation.editorExitedToScene === true,
+        editorReopened: operation.editorReopened === true,
+        editorExitedAfterReopen: operation.editorExitedAfterReopen === true,
+        diskReadback: operation.diskReadback || null,
+        plannedByInstanceId: operation.plannedByInstanceId, appliedByInstanceId: operation.appliedByInstanceId || null,
+        completedAt: operation.completedAt || null,
+        recovery: { automaticRetry: false, reconcileCommand: 'creator.prefab.source.patch.reconcile',
+            note: operation.status === 'completed' ? 'Creator save, exit, reopen, live readback, and saved-file readback all matched.'
+                : 'Do not resend the write. Reconcile this operation and inspect the current Prefab edit mode before continuing.' } };
+}
+
+async function waitForPrefabSourcePatchDisk(operation, timeoutMs = SCENE_SAVE_READBACK_TIMEOUT_MS) {
+    const plan = operation.plan;
+    const deadline = Date.now() + timeoutMs;
+    let lastReason = 'PREFAB_DISK_READBACK_PENDING';
+    do {
+        try {
+            const source = await inspectPrefabSourceCommand({ prefabUuid: plan.prefabUuid, nodeUuid: plan.targetNodeUuid });
+            const node = singlePrefabNode(source, plan.targetNodeUuid);
+            const afterPath = prefabPatch.targetPathAt(plan.targetNodePath, plan.expectedDiff, 'after');
+            if (source.prefabPath !== plan.prefabPath || source.targetUrl !== plan.targetUrl
+                || source.metaSha256 !== plan.expectedMetaSha256) throw coded('PREFAB_ASSET_IDENTITY_CHANGED');
+            if (source.sourceSha256 !== plan.expectedSourceSha256 && node.nodePath === afterPath
+                && prefabPatch.matchesDiff(node, plan.expectedDiff, 'after'))
+                return { source, node, verifiedAt: new Date().toISOString() };
+            lastReason = source.sourceSha256 === plan.expectedSourceSha256
+                ? 'PREFAB_DISK_READBACK_PENDING' : 'PREFAB_DISK_READBACK_MISMATCH';
+        } catch (error) {
+            lastReason = error.code || 'PREFAB_DISK_READBACK_FAILED';
+            if (['PREFAB_ASSET_IDENTITY_MISMATCH', 'PREFAB_ASSET_IDENTITY_CHANGED', 'UNSAFE_PROJECT_PATH',
+                'PREFAB_META_IDENTITY_MISMATCH'].includes(error.code)) throw error;
+        }
+        if (Date.now() >= deadline) break;
+        await new Promise((resolve) => setTimeout(resolve, 250));
+    } while (Date.now() <= deadline);
+    throw coded(lastReason);
+}
+
+async function commitPrefabSourcePatch(input, context) {
+    const operation = readPrefabSourcePatchOperation(input.operationId);
+    if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (operation.status !== 'planned') throw coded(['applying', 'mutation-started', 'mutation-applied', 'save-requested',
+        'source-saved', 'mode-reopened', 'needs-reconciliation'].includes(operation.status)
+        ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    await verifyPrefabSourcePatchPlan(operation);
+    operation.status = 'awaiting-approval';
+    operation.approvalRequestedAt = new Date().toISOString();
+    writeOperation(operation);
+    const approved = await confirmPrefabSourcePatch(operation);
+    if (!approved) {
+        operation.status = 'cancelled'; operation.cancelledAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('OPERATION_NOT_APPROVED');
+    }
+    try { await authorizeWriteRequest(context && context.requestId); }
+    catch (error) {
+        operation.status = 'abandoned'; operation.abandonedAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error));
+    }
+    try { await verifyPrefabSourcePatchPlan(operation); }
+    catch (error) {
+        operation.status = 'conflict'; operation.conflictAt = new Date().toISOString();
+        operation.reconcileReason = error.code || 'PREFAB_SOURCE_PRECONDITION_FAILED'; writeOperation(operation); throw error;
+    }
+    operation.status = 'applying'; operation.approvedAt = new Date().toISOString();
+    operation.approvalSource = 'creator-native-dialog'; operation.appliedByInstanceId = INSTANCE_ID; writeOperation(operation);
+    let mutationStarted = false;
+    try {
+        await enterPrefabSourceMode(operation.plan.prefabUuid, operation.plan.activeSceneUuid);
+        const params = { prefabUuid: operation.plan.prefabUuid, targetNodePath: operation.plan.targetNodePath,
+            targetNodeUuid: operation.plan.targetNodeUuid, action: operation.plan.action, expectedDiff: operation.plan.expectedDiff };
+        const preflight = await callScene('prefabSourcePatchPreflight', params, 20000);
+        if (!preflight || preflight.available !== true || preflight.prefabUuid !== operation.plan.prefabUuid
+            || !preflight.node || preflight.node.nodeUuid !== operation.plan.targetNodeUuid
+            || !prefabPatch.matchesDiff(preflight.node, operation.plan.expectedDiff, 'before')) {
+            operation.status = 'conflict'; operation.reconcileReason = preflight && preflight.reason || 'PREFAB_EDITOR_PREFLIGHT_FAILED';
+            writeOperation(operation);
+            await exitPrefabSourceMode(operation.plan.prefabUuid, operation.plan.activeSceneUuid);
+            throw coded(operation.reconcileReason);
+        }
+        operation.status = 'mutation-started'; operation.mutationStartedAt = new Date().toISOString(); writeOperation(operation);
+        mutationStarted = true;
+        const changed = await callScene('prefabSourcePatchMutate', params, 30000);
+        if (!changed || changed.available !== true || changed.prefabUuid !== operation.plan.prefabUuid
+            || !changed.node || changed.node.nodeUuid !== operation.plan.targetNodeUuid
+            || !prefabPatch.matchesDiff(changed.node, operation.plan.expectedDiff, 'after')) {
+            if (changed && changed.mutationStarted === false) {
+                operation.status = 'not-applied'; operation.reconcileReason = changed.reason || 'PREFAB_EDITOR_MUTATION_NOT_STARTED';
+                mutationStarted = false;
+                writeOperation(operation);
+                await exitPrefabSourceMode(operation.plan.prefabUuid, operation.plan.activeSceneUuid);
+                throw coded(operation.reconcileReason);
+            }
+            throw coded(changed && changed.reason || 'PREFAB_EDITOR_MUTATION_UNCERTAIN');
+        }
+        operation.status = 'mutation-applied'; operation.mutationReadback = changed.node;
+        operation.mutationAppliedAt = new Date().toISOString(); writeOperation(operation);
+        operation.status = 'save-requested'; operation.saveRequestedAt = new Date().toISOString(); writeOperation(operation);
+        const save = await savePrefabSourceMode(operation.plan.prefabUuid);
+        operation.saveCallbackConfirmed = true; operation.sceneSavedEventConfirmed = save.eventConfirmed;
+        operation.status = 'source-saved'; operation.sourceSavedAt = new Date().toISOString(); writeOperation(operation);
+        const disk = await waitForPrefabSourcePatchDisk(operation);
+        operation.afterSourceSha256 = disk.source.sourceSha256;
+        operation.diskReadback = { verified: true, prefabUuid: operation.plan.prefabUuid,
+            targetNodePath: disk.node.nodePath, targetNodeUuid: disk.node.nodeUuid,
+            sourceSha256: disk.source.sourceSha256, metaSha256: disk.source.metaSha256,
+            verifiedAt: disk.verifiedAt };
+        writeOperation(operation);
+        await exitPrefabSourceMode(operation.plan.prefabUuid, operation.plan.activeSceneUuid);
+        operation.editorExitedToScene = true;
+        operation.firstExitAt = new Date().toISOString(); writeOperation(operation);
+        await enterPrefabSourceMode(operation.plan.prefabUuid, operation.plan.activeSceneUuid);
+        const reopened = await callScene('prefabSourcePatchSnapshot', { ...params, side: 'after' }, 20000);
+        if (!reopened || reopened.available !== true || reopened.prefabUuid !== operation.plan.prefabUuid
+            || reopened.verifiedSide !== 'after' || !reopened.node
+            || reopened.node.nodeUuid !== operation.plan.targetNodeUuid
+            || !prefabPatch.matchesDiff(reopened.node, operation.plan.expectedDiff, 'after'))
+            throw coded(reopened && reopened.reason || 'PREFAB_REOPEN_READBACK_MISMATCH');
+        operation.editorReopened = true; operation.reopenedNode = reopened.node;
+        operation.status = 'mode-reopened'; operation.modeReopenedAt = new Date().toISOString(); writeOperation(operation);
+        await exitPrefabSourceMode(operation.plan.prefabUuid, operation.plan.activeSceneUuid);
+        operation.editorExitedAfterReopen = true;
+        operation.finalExitAt = new Date().toISOString(); writeOperation(operation);
+        const finalDisk = await inspectPrefabSourceCommand({ prefabUuid: operation.plan.prefabUuid,
+            nodeUuid: operation.plan.targetNodeUuid });
+        const finalNode = singlePrefabNode(finalDisk, operation.plan.targetNodeUuid);
+        if (finalDisk.sourceSha256 !== operation.afterSourceSha256 || finalDisk.metaSha256 !== operation.plan.expectedMetaSha256
+            || finalNode.nodePath !== prefabPatch.targetPathAt(operation.plan.targetNodePath, operation.plan.expectedDiff, 'after')
+            || !prefabPatch.matchesDiff(finalNode, operation.plan.expectedDiff, 'after')) throw coded('PREFAB_FINAL_DISK_READBACK_MISMATCH');
+        operation.status = 'completed'; operation.completedAt = new Date().toISOString();
+        operation.completedByInstanceId = INSTANCE_ID; writeOperation(operation);
+        return prefabSourcePatchReceipt(operation);
+    } catch (error) {
+        if (!['conflict', 'not-applied'].includes(operation.status)) {
+            operation.status = mutationStarted ? 'needs-reconciliation' : 'conflict';
+            operation.reconcileReason = error.code || 'PREFAB_SOURCE_PATCH_FAILED';
+            operation.failureAt = new Date().toISOString(); writeOperation(operation);
+        }
+        if (mutationStarted) throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason || String(error.message || error));
+        throw error;
+    }
+}
+
+async function reconcilePrefabSourcePatch(input) {
+    const operation = readPrefabSourcePatchOperation(input.operationId);
+    const plan = operation.plan;
+    if (projectRoot() !== plan.projectRoot || editorVersion() !== plan.creatorVersion) throw coded('OPERATION_TARGET_MISMATCH');
+    let source;
+    try { source = await inspectPrefabSourceCommand({ prefabUuid: plan.prefabUuid, nodeUuid: plan.targetNodeUuid }); }
+    catch (error) {
+        operation.status = 'conflict'; operation.reconcileReason = error.code || 'PREFAB_DISK_READBACK_FAILED';
+        operation.reconciledAt = new Date().toISOString(); writeOperation(operation); throw error;
+    }
+    const node = singlePrefabNode(source, plan.targetNodeUuid);
+    const afterPath = prefabPatch.targetPathAt(plan.targetNodePath, plan.expectedDiff, 'after');
+    const beforeMatches = source.sourceSha256 === plan.expectedSourceSha256 && source.metaSha256 === plan.expectedMetaSha256
+        && node.nodePath === plan.targetNodePath
+        && prefabPatch.matchesDiff(node, plan.expectedDiff, 'before');
+    const afterMatches = source.sourceSha256 !== plan.expectedSourceSha256 && node.nodePath === afterPath
+        && prefabPatch.matchesDiff(node, plan.expectedDiff, 'after') && source.metaSha256 === plan.expectedMetaSha256;
+    if (afterMatches) {
+        operation.afterSourceSha256 = source.sourceSha256;
+        operation.diskReadback = { verified: true, prefabUuid: plan.prefabUuid, targetNodePath: node.nodePath,
+            targetNodeUuid: node.nodeUuid, sourceSha256: source.sourceSha256, metaSha256: source.metaSha256,
+            verifiedAt: new Date().toISOString() };
+        if (operation.editorReopened === true && operation.editorExitedAfterReopen !== true) {
+            try {
+                const mode = await currentPrefabEditMode();
+                operation.editorExitedAfterReopen = mode.modeName === 'scene' && mode.sceneUuid === plan.activeSceneUuid;
+            } catch (_) {}
+        }
+        const editorFlowComplete = operation.editorExitedToScene === true && operation.editorReopened === true
+            && operation.editorExitedAfterReopen === true;
+        operation.status = editorFlowComplete ? 'completed' : 'needs-reconciliation';
+        operation.reconcileReason = editorFlowComplete ? null : 'PREFAB_EDITOR_EXIT_REOPEN_READBACK_REQUIRED';
+    } else if (beforeMatches) {
+        let unsavedAfter = false;
+        try {
+            const mode = await currentPrefabEditMode();
+            if (mode.modeName === 'prefab' && mode.prefabUuid === plan.prefabUuid) {
+                const live = await callScene('prefabSourcePatchSnapshot', { prefabUuid: plan.prefabUuid,
+                    targetNodePath: plan.targetNodePath, targetNodeUuid: plan.targetNodeUuid,
+                    expectedDiff: plan.expectedDiff, side: 'after' }, 20000);
+                unsavedAfter = !!(live && live.available === true);
+            }
+        } catch (_) { unsavedAfter = true; }
+        operation.status = unsavedAfter ? 'needs-reconciliation' : 'not-applied';
+        operation.reconcileReason = unsavedAfter ? 'PREFAB_HAS_UNSAVED_OR_UNCERTAIN_EDITOR_STATE' : null;
+    } else {
+        operation.status = 'conflict'; operation.reconcileReason = 'PREFAB_SOURCE_STATE_CONFLICT';
+    }
+    operation.reconciledAt = new Date().toISOString();
+    if (operation.status === 'completed') operation.completedAt = operation.completedAt || operation.reconciledAt;
+    writeOperation(operation);
+    return { ...prefabSourcePatchReceipt(operation), observed: { sourceSha256: source.sourceSha256,
+        metaSha256: source.metaSha256, targetNodePath: node.nodePath, targetNodeUuid: node.nodeUuid,
+        diskMatchesBefore: beforeMatches, diskMatchesAfter: afterMatches } };
 }
 
 function confirmPrefabCreate(operation) {
@@ -4920,6 +5280,80 @@ function callScene(method, params, timeoutMs) {
     });
 }
 
+function prepareEditorEventWait(eventName, timeoutMs = 20000) {
+    const emitter = mainProcessIpcEmitter();
+    if (!emitter || typeof emitter.on !== 'function') throw coded('CREATOR_IPC_EVENT_UNAVAILABLE');
+    let settled = false;
+    let timerId = null;
+    let resolvePromise;
+    let rejectPromise;
+    const cleanup = () => {
+        if (timerId) clearTimeout(timerId);
+        timerId = null;
+        if (typeof emitter.removeListener === 'function') emitter.removeListener(eventName, listener);
+        else if (typeof emitter.off === 'function') emitter.off(eventName, listener);
+    };
+    const settle = (error, args) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (error) rejectPromise(error); else resolvePromise(args);
+    };
+    const listener = (...args) => settle(null, args);
+    const promise = new Promise((resolve, reject) => { resolvePromise = resolve; rejectPromise = reject; });
+    emitter.on(eventName, listener);
+    timerId = setTimeout(() => settle(coded('CREATOR_EDITOR_EVENT_TIMEOUT', `Timed out waiting for ${eventName}.`)), timeoutMs);
+    return { promise, cancel: (error) => settle(error || coded('CREATOR_EDITOR_EVENT_CANCELLED')) };
+}
+
+async function enterPrefabSourceMode(prefabUuid, expectedSceneUuid) {
+    const before = await currentPrefabEditMode();
+    if (before.modeName !== 'scene' || before.sceneUuid !== expectedSceneUuid) throw coded('EDITOR_BUSY');
+    const ready = prepareEditorEventWait('scene:ready', 30000);
+    try { Editor.Ipc.sendToAll('scene:enter-prefab-edit-mode', prefabUuid); }
+    catch (error) { ready.cancel(error); await ready.promise.catch(() => undefined); throw error; }
+    await ready.promise;
+    const after = await currentPrefabEditMode();
+    if (after.modeName !== 'prefab' || after.prefabUuid !== prefabUuid)
+        throw coded('PREFAB_MODE_TARGET_MISMATCH');
+    return after;
+}
+
+async function exitPrefabSourceMode(prefabUuid, expectedSceneUuid) {
+    const before = await currentPrefabEditMode();
+    if (before.modeName !== 'prefab' || before.prefabUuid !== prefabUuid) throw coded('PREFAB_EXIT_TARGET_MISMATCH');
+    const ready = prepareEditorEventWait('scene:ready', 30000);
+    try {
+        const exit = await callScene('exitPrefabSourceMode', { prefabUuid }, 20000);
+        if (!exit || exit.available !== true || exit.prefabUuid !== prefabUuid || exit.exitRequested !== true)
+            throw coded(exit && exit.reason || 'PREFAB_EXIT_FAILED');
+    } catch (error) { ready.cancel(error); await ready.promise.catch(() => undefined); throw error; }
+    await ready.promise;
+    const after = await currentPrefabEditMode();
+    if (after.modeName !== 'scene' || expectedSceneUuid && after.sceneUuid !== expectedSceneUuid)
+        throw coded('PREFAB_EXIT_UNVERIFIED');
+    return after;
+}
+
+async function savePrefabSourceMode(prefabUuid) {
+    const mode = await currentPrefabEditMode();
+    if (mode.modeName !== 'prefab' || mode.prefabUuid !== prefabUuid) throw coded('PREFAB_SAVE_TARGET_MISMATCH');
+    const saved = prepareEditorEventWait('scene:saved', 30000);
+    let result;
+    try { result = await callScene('savePrefabSource', { prefabUuid }, 20000); }
+    catch (error) { saved.cancel(error); await saved.promise.catch(() => undefined); throw error; }
+    if (!result || result.available !== true || result.prefabUuid !== prefabUuid || result.saved !== true) {
+        const error = coded(result && result.reason || 'PREFAB_SAVE_UNVERIFIED');
+        saved.cancel(error);
+        await saved.promise.catch(() => undefined);
+        throw error;
+    }
+    await saved.promise;
+    const after = await currentPrefabEditMode();
+    if (after.modeName !== 'prefab' || after.prefabUuid !== prefabUuid) throw coded('PREFAB_SAVE_TARGET_MISMATCH');
+    return { mode: after, eventConfirmed: true };
+}
+
 function capabilityList() {
     const ready = {
         'creator.extension.commands.list': !!(Editor && Editor.Project && Editor.Project.path
@@ -4983,6 +5417,16 @@ function capabilityList() {
         'creator.prefab.create.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
             && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
         'creator.prefab.source.inspect': !!(Editor && Editor.Project && Editor.Project.path && Editor.assetdb
+            && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.prefab.source.patch.plan': prefabEditModeApiAvailable && !!(Editor && Editor.Project && Editor.Project.path
+            && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function' && Editor.assetdb
+            && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.prefab.source.patch.commit': prefabEditModeApiAvailable && !!(Editor && Editor.Project && Editor.Project.path
+            && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function' && Editor.Ipc
+            && typeof Editor.Ipc.sendToAll === 'function' && typeof Editor.Ipc.on === 'function'
+            && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'
+            && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.prefab.source.patch.reconcile': !!(Editor && Editor.Project && Editor.Project.path && Editor.assetdb
             && typeof Editor.assetdb.queryAssets === 'function'),
         'creator.script.read': !!(Editor && Editor.Project && Editor.Project.path),
         'creator.scene.snapshot': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
@@ -5491,6 +5935,9 @@ function execute(command, input, context) {
     if (command === 'creator.prefab.create.commit') return commitPrefabCreate(input, context);
     if (command === 'creator.prefab.create.reconcile') return reconcilePrefabCreate(input);
     if (command === 'creator.prefab.source.inspect') return inspectPrefabSourceCommand(input);
+    if (command === 'creator.prefab.source.patch.plan') return createPrefabSourcePatchPlan(input);
+    if (command === 'creator.prefab.source.patch.commit') return commitPrefabSourcePatch(input, context);
+    if (command === 'creator.prefab.source.patch.reconcile') return reconcilePrefabSourcePatch(input);
     if (command === 'creator.script.read') return Promise.resolve(readScript(input));
     if (command === 'creator.scene.snapshot') return callScene('snapshot', { maxNodes: 100 });
     if (command === 'creator.scene.node.read') return callScene('nodeState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);
@@ -5594,7 +6041,9 @@ module.exports = {
         stopped = false;
         timer = null;
         bridgeSession = null;
+        prefabEditModeApiAvailable = false;
         setupDiagnosticListeners();
+        refreshPrefabEditModeCapability();
         pollLoop();
     },
     unload() {
@@ -5604,6 +6053,7 @@ module.exports = {
         if (activeRequest) activeRequest.destroy(coded('EXTENSION_UNLOADED'));
         activeRequest = null;
         removeDiagnosticListeners();
+        prefabEditModeApiAvailable = false;
         bridgeSession = null;
     },
     messages: {

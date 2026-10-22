@@ -54,7 +54,7 @@ test('persisted scene verification matches nodes, transforms, resource UUIDs, co
   const source = fixture();
   const result = inspectSceneComposition({ ...source, sceneUuid, sceneAssetRow });
   assert.deepEqual(result, { verified: true, sceneUuid, sceneUrl: sceneAssetRow.url,
-    nodeCount: 1, componentCount: 2, buttonEventCount: 1 });
+    nodeCount: 1, componentCount: 2, buttonEventCount: 1, prefabInstanceCount: 0 });
 });
 
 test('persisted scene verification rejects stale transforms, wrong resources, and mismatched Button targets', () => {

@@ -105,7 +105,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
   sceneTransform = false, sceneButtonEvents = false,
   sceneProperty = null,
   assetMove = false, assetDelete = false, assetDeleteHasSubAssets = false,
-  assetTexture = false, assetTextureSaveMode = 'complete', sceneSaveMode = 'write' } = {}) {
+  assetTexture = false, assetTextureSaveMode = 'complete', sceneSaveMode = 'write', prefabPatch = false } = {}) {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-script-modify-'));
   t.after(() => fs.rmSync(tempRoot, { recursive: true, force: true }));
   const home = path.join(tempRoot, 'home');
@@ -139,6 +139,10 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
   const textureAssetPath = 'Textures/Atlas.png';
   const textureAssetFile = path.join(projectRoot, 'assets', textureAssetPath);
   const spriteUuid = 'a4cfe1a2-2b74-4ff6-a1dc-257b5ba22122';
+  const prefabPatchUuid = 'e98a93d5-9707-45a6-88f6-50a40a1511f4';
+  const prefabPatchNodeUuid = 'prefab-node-root-1';
+  const prefabPatchPath = 'Prefabs/PatchFixture.prefab';
+  const prefabPatchFile = path.join(projectRoot, 'assets', prefabPatchPath);
   let reparentApplied = false;
   let sceneNodeDeleted = false;
   let sceneComponentRemoved = false;
@@ -154,6 +158,19 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
       uuid: sceneUuid, importer: 'scene', type: 'cc.SceneAsset' });
     assetRecords.set('db://assets/Sprites/Icon.png', { url: 'db://assets/Sprites/Icon.png',
       uuid: spriteUuid, importer: 'image', type: 'cc.SpriteFrame' });
+  }
+  if (prefabPatch) {
+    fs.mkdirSync(path.dirname(prefabPatchFile), { recursive: true });
+    fs.writeFileSync(prefabPatchFile, JSON.stringify([
+      { __type__: 'cc.Prefab', data: { __id__: 1 } },
+      { __type__: 'cc.Node', _id: prefabPatchNodeUuid, _name: 'Root', _active: true,
+        _parent: null, _children: [], _components: [{ __id__: 2 }],
+        _trs: { __type__: 'TypedArray', ctor: 'Float64Array', array: [1, 2, 0, 0, 0, 0, 1, 1, 1] } },
+      { __type__: 'cc.Sprite', _enabled: true, _spriteFrame: null },
+    ]));
+    fs.writeFileSync(`${prefabPatchFile}.meta`, JSON.stringify({ uuid: prefabPatchUuid, importer: 'prefab' }));
+    assetRecords.set(`db://assets/${prefabPatchPath}`, { url: `db://assets/${prefabPatchPath}`,
+      uuid: prefabPatchUuid, importer: 'prefab', type: 'cc.Prefab' });
   }
   if (assetMove) {
     fs.mkdirSync(path.dirname(movableAssetFile), { recursive: true });
@@ -237,6 +254,11 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
     Project: { path: projectRoot },
     App: { version: '2.4.15' },
     Scene: { callSceneScript(_packageName, method, params, callback) {
+      if (method === 'prefabEditModeState' && prefabPatch) {
+        callback(null, { available: true, modeName: 'scene', prefabUuid: null, sceneUuid,
+          saveAvailable: true, popAvailable: true });
+        return;
+      }
       if (method === 'nodeState') {
         assert.equal(params.sceneUuid, sceneUuid);
         assert.equal(params.nodeUuid, nodeUuid);
@@ -446,6 +468,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
   };
   const source = fs.readFileSync(path.join(extensionRoot, 'main.js'), 'utf8') + `\nmodule.exports.__test = {
     createScriptModifyPlan, commitScriptModify, reconcileScriptModify,
+    createPrefabSourcePatchPlan,
     createScriptRecompilePlan, commitScriptRecompile, reconcileScriptRecompile, setupDiagnosticListeners,
     createAssetImportPlan, commitAssetImport, reconcileAssetImport,
     createPrefabPlan, commitPrefabCreate, reconcilePrefabCreate,
@@ -476,6 +499,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
   api.setBridgeSession({ bridgeId: 'bridge-fixture', sessionId: 'session-fixture', projectRoot });
   return { api, scriptFile, metaFile, beforeSource, projectRoot, scriptPath, meta, editorIpc, electronIpc,
     importedAssetUuid, prefabAssetUuid, sceneUuid, nodeUuid,
+    prefabPatchUuid, prefabPatchNodeUuid, prefabPatchFile,
     currentTransform, getButtonEvents: () => [...buttonEvents],
     oldParentUuid, targetParentUuid, isReparentApplied: () => reparentApplied,
     setReparentApplied(value) { reparentApplied = value; },
@@ -572,6 +596,24 @@ test('script modification commands declare approved write and bounded inputs', (
     nodeUuid: 'df1bb94e-c8e6-41ba-b9c9-a04c6e86a581', prefabPath: 'Prefabs/Button.prefab' }).ok, true);
   assert.equal(validateCommand(prefabPlan.id, { sceneUuid: '4b02b1e4-d163-47e2-91ad-2da0193a3907',
     nodeUuid: 'df1bb94e-c8e6-41ba-b9c9-a04c6e86a581', prefabPath: '../Button.prefab' }).ok, false);
+});
+
+test('Prefab source patch planning binds Creator mode, serialized identity, source hash, and exact before state', async (t) => {
+  const harness = makeHarness(t, { prefabPatch: true });
+  const expectedSourceSha256 = await sourceHash(fs.readFileSync(harness.prefabPatchFile, 'utf8'));
+  const input = { prefabUuid: harness.prefabPatchUuid, targetNodePath: 'Root',
+    targetNodeUuid: harness.prefabPatchNodeUuid, action: 'apply', expectedSourceSha256,
+    expectedDiff: [{ path: 'node.name', before: 'Root', after: 'RootRenamed' }] };
+  const plan = await harness.api.createPrefabSourcePatchPlan(input);
+  assert.equal(plan.status, 'planned');
+  assert.equal(plan.prefabUuid, harness.prefabPatchUuid);
+  assert.equal(plan.targetNodePath, 'Root');
+  assert.deepEqual(plan.diff, input.expectedDiff);
+  await assert.rejects(harness.api.createPrefabSourcePatchPlan({ ...input, expectedSourceSha256: 'a'.repeat(64) }),
+    (error) => error.code === 'PREFAB_SOURCE_STALE');
+  await assert.rejects(harness.api.createPrefabSourcePatchPlan({ ...input, targetNodePath: 'Other',
+    expectedDiff: [{ path: 'node.active', before: true, after: false }] }),
+    (error) => error.code === 'PREFAB_EXPECTED_STATE_MISMATCH');
 });
 
 test('scene-node reparent binds the hierarchy, commits once, requests save, and reconciles by readback', async (t) => {

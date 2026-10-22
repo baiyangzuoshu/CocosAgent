@@ -30,7 +30,8 @@ function validateValue(schema, value, fieldPath) {
       : type === 'integer' ? Number.isInteger(value)
         : type === 'number' ? typeof value === 'number' && Number.isFinite(value)
           : type === 'boolean' ? typeof value === 'boolean'
-            : type === 'string' ? typeof value === 'string' : false;
+            : type === 'string' ? typeof value === 'string'
+              : type === 'null' ? value === null : false;
   if (!types.some(matches)) return { ok: false, code: fieldPath === 'input' ? 'INVALID_INPUT' : 'INVALID_INPUT_FIELD', field: fieldPath };
   if (value === null || value === undefined) return { ok: true };
   if (typeof value === 'string') {

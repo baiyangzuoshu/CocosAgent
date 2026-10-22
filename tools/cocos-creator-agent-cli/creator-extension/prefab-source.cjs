@@ -41,13 +41,15 @@ function componentSummary(reference, records, index) {
     return row;
 }
 
-function inspectPrefabSource({ prefabBytes, metaBytes, prefabUuid }) {
+function inspectPrefabSource({ prefabBytes, metaBytes, prefabUuid, maxComponentsPerNode = 8 }) {
     if (!Buffer.isBuffer(prefabBytes) || prefabBytes.length < 2 || prefabBytes.length > MAX_BYTES)
         return fail('PREFAB_SERIALIZATION_SIZE_INVALID');
     if (!Buffer.isBuffer(metaBytes) || metaBytes.length < 2 || metaBytes.length > MAX_META_BYTES)
         return fail('PREFAB_META_SIZE_INVALID');
     if (typeof prefabUuid !== 'string' || !UUID_PATTERN.test(prefabUuid))
         return fail('PREFAB_UUID_INVALID');
+    if (!Number.isInteger(maxComponentsPerNode) || maxComponentsPerNode < 1 || maxComponentsPerNode > MAX_COMPONENTS_PER_NODE)
+        return fail('PREFAB_COMPONENT_LIMIT_INVALID');
 
     let meta;
     let parsed;
@@ -106,7 +108,7 @@ function inspectPrefabSource({ prefabBytes, metaBytes, prefabUuid }) {
         if (componentRefs.length > MAX_COMPONENTS_PER_NODE) return fail('PREFAB_COMPONENT_LIMIT', { nodePath });
         const allComponents = componentRefs.map((reference, index) => componentSummary(reference, records, index));
         if (allComponents.some((component) => !component)) return fail('PREFAB_COMPONENT_REFERENCE_INVALID', { nodePath });
-        const components = allComponents.slice(0, 8);
+        const components = allComponents.slice(0, maxComponentsPerNode);
         const node = { nodeUuid: nodeId, fileId, name, nodePath, parentUuid: item.parentId,
             active: typeof record._active === 'boolean' ? record._active : true,
             transform, components, componentsTruncated: allComponents.length > components.length };

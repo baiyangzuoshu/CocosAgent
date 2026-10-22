@@ -1,5 +1,7 @@
 'use strict';
 
+const prefabPatch = require('./prefab-patch.cjs');
+
 const MAX_NODES = 100;
 const MAX_DEPTH = 6;
 const MAX_NAME = 120;
@@ -1060,6 +1062,197 @@ function prefabAssetState(params, callback) {
     });
 }
 
+function prefabRootUuid() {
+    const scene = cc && cc.director && cc.director.getScene && cc.director.getScene();
+    if (!scene) return null;
+    const roots = Array.isArray(scene.children) && scene.children.length ? scene.children : [scene];
+    const candidates = new Set();
+    for (const root of roots) {
+        const asset = root && root._prefab && root._prefab.asset;
+        const uuid = asset && (asset._uuid || asset.uuid);
+        if (typeof uuid === 'string' && prefabPatch.UUID.test(uuid)) candidates.add(uuid);
+    }
+    return candidates.size === 1 ? candidates.values().next().value : null;
+}
+
+function prefabEditModeState() {
+    if (typeof Editor === 'undefined' || Editor.isMainProcess !== false || typeof Editor.require !== 'function')
+        return { available: false, reason: 'PREFAB_EDIT_MODE_API_UNAVAILABLE' };
+    let editMode;
+    try { editMode = Editor.require('scene://edit-mode'); }
+    catch (_) { return { available: false, reason: 'PREFAB_EDIT_MODE_API_UNAVAILABLE' }; }
+    if (!editMode || typeof editMode.curMode !== 'function')
+        return { available: false, reason: 'PREFAB_EDIT_MODE_API_UNAVAILABLE' };
+    let mode;
+    try { mode = editMode.curMode(); }
+    catch (_) { return { available: false, reason: 'PREFAB_EDIT_MODE_QUERY_FAILED' }; }
+    if (!mode || typeof mode.name !== 'string') return { available: false, reason: 'PREFAB_EDIT_MODE_QUERY_FAILED' };
+    const scene = cc && cc.director && cc.director.getScene && cc.director.getScene();
+    return { available: true, modeName: mode.name,
+        prefabUuid: mode.name === 'prefab' ? prefabRootUuid() : null,
+        sceneUuid: scene && (typeof scene.uuid === 'string' ? scene.uuid : scene._id) || null,
+        saveAvailable: typeof editMode.save === 'function', popAvailable: typeof editMode.pop === 'function' };
+}
+
+function matchesPrefabPath(actualPath, expectedPath) {
+    if (typeof actualPath !== 'string' || typeof expectedPath !== 'string') return false;
+    const actual = actualPath.split('/');
+    const expected = expectedPath.split('/');
+    return actual.length >= expected.length && expected.every((part, index) => actual[actual.length - expected.length + index] === part);
+}
+
+function prefabPatchSnapshot(node, nodePath) {
+    if (!node || !Array.isArray(node.children) || !Array.isArray(node._components)) return null;
+    const components = node._components.map((component) => {
+        const className = classNameOf(component);
+        if (!['cc.Sprite', 'cc.Label'].includes(className)) return null;
+        const frame = className === 'cc.Sprite' && component.spriteFrame;
+        return { className, enabled: typeof component.enabled === 'boolean' ? component.enabled : true,
+            ...(className === 'cc.Sprite' ? { spriteFrameUuid: frame && (frame._uuid || frame.uuid) || null } : {}) };
+    }).filter(Boolean);
+    const position = typeof node.getPosition === 'function' ? node.getPosition() : { x: node.x, y: node.y };
+    return { nodeUuid: typeof node.uuid === 'string' ? node.uuid : null, nodePath,
+        name: String(node.name || ''), active: node.active !== false,
+        transform: { x: Number(position.x), y: Number(position.y), scaleX: Number(node.scaleX), scaleY: Number(node.scaleY) },
+        components };
+}
+
+function locatePrefabPatchNode(params, side = 'before') {
+    const mode = prefabEditModeState();
+    if (!mode.available || mode.modeName !== 'prefab' || mode.prefabUuid !== params.prefabUuid)
+        return { available: false, reason: 'PREFAB_MODE_TARGET_MISMATCH', mode };
+    if (typeof mode.sceneUuid !== 'string') return { available: false, reason: 'PREFAB_EDIT_SCENE_UNAVAILABLE', mode };
+    const located = locateNode(mode.sceneUuid, params.targetNodeUuid);
+    if (!located.state.available || !matchesPrefabPath(located.state.nodePath, prefabPatch.targetPathAt(params.targetNodePath,
+        params.expectedDiff, side))) return { available: false, reason: 'PREFAB_NODE_IDENTITY_MISMATCH', mode };
+    const snapshot = prefabPatchSnapshot(located.node, located.state.nodePath);
+    if (!snapshot || !prefabPatch.matchesDiff(snapshot, params.expectedDiff, side))
+        return { available: false, reason: 'PREFAB_EXPECTED_STATE_MISMATCH', mode };
+    return { available: true, mode, node: located.node, snapshot };
+}
+
+function prefabPatchNameConflict(node, diff) {
+    const rename = diff.find((item) => item.path === 'node.name');
+    return !!(rename && node.parent && node.parent.children.some((child) => child !== node && child.name === rename.after));
+}
+
+function prefabSourcePatchPreflight(params) {
+    if (!params || !prefabPatch.UUID.test(params.prefabUuid || '') || !prefabPatch.NODE_ID.test(params.targetNodeUuid || '')
+        || !prefabPatch.validateDiff(params.expectedDiff) || !['apply', 'compensate', 'replay'].includes(params.action))
+        return { available: false, reason: 'PREFAB_PATCH_INPUT_INVALID' };
+    const target = locatePrefabPatchNode(params, 'before');
+    if (!target.available) return target;
+    if (prefabPatchNameConflict(target.node, params.expectedDiff))
+        return { available: false, reason: 'PREFAB_NODE_NAME_CONFLICT' };
+    return { available: true, prefabUuid: params.prefabUuid, mode: target.mode, node: target.snapshot,
+        expectedDiff: params.expectedDiff };
+}
+
+function prefabSourcePatchMutate(params, callback) {
+    const before = prefabSourcePatchPreflight(params);
+    if (!before.available) { callback(null, before); return; }
+    const located = locatePrefabPatchNode(params, 'before');
+    if (!located.available) { callback(null, located); return; }
+    const node = located.node;
+    const spriteFrames = params.expectedDiff.filter((item) => item.path === 'component.cc.Sprite.spriteFrameUuid' && item.after !== null);
+    const loaded = Object.create(null);
+    const apply = () => {
+        const current = locatePrefabPatchNode(params, 'before');
+        if (!current.available || current.node !== node || prefabPatchNameConflict(node, params.expectedDiff)) {
+            callback(null, { available: false, reason: 'PREFAB_PATCH_PRECONDITION_CHANGED', mutationStarted: false });
+            return;
+        }
+        try {
+            for (const item of params.expectedDiff) {
+                const field = item.path;
+                if (field === 'node.name') node.name = item.after;
+                else if (field === 'node.active') node.active = item.after;
+                else if (field === 'node.position.x') node.setPosition(item.after, node.y);
+                else if (field === 'node.position.y') node.setPosition(node.x, item.after);
+                else if (field === 'node.scale.x') node.setScale(item.after, node.scaleY, node.scaleZ);
+                else if (field === 'node.scale.y') node.setScale(node.scaleX, item.after, node.scaleZ);
+                else if (field.startsWith('component.')) {
+                    const [, className, property] = field.match(/^component\.(cc\.(?:Sprite|Label))\.(enabled|spriteFrameUuid)$/) || [];
+                    const matches = node._components.filter((component) => classNameOf(component) === className);
+                    if (matches.length !== 1) throw new Error('PREFAB_COMPONENT_IDENTITY_AMBIGUOUS');
+                    if (property === 'enabled') matches[0].enabled = item.after;
+                    else matches[0].spriteFrame = item.after === null ? null : loaded[item.after];
+                }
+            }
+        } catch (error) {
+            callback(null, { available: false, reason: error && error.message || 'PREFAB_PATCH_WRITE_FAILED', mutationStarted: true });
+            return;
+        }
+        const after = locatePrefabPatchNode(params, 'after');
+        if (!after.available || after.node !== node) {
+            callback(null, { available: false, reason: 'PREFAB_PATCH_WRITE_READBACK_FAILED', mutationStarted: true });
+            return;
+        }
+        callback(null, { available: true, mutationStarted: true, prefabUuid: params.prefabUuid, mode: after.mode,
+            node: after.snapshot, expectedDiff: params.expectedDiff });
+    };
+    if (!spriteFrames.length) { apply(); return; }
+    if (!cc || !cc.assetManager || typeof cc.assetManager.loadAny !== 'function' || typeof cc.SpriteFrame !== 'function') {
+        callback(null, { available: false, reason: 'PREFAB_SPRITE_FRAME_LOAD_UNAVAILABLE', mutationStarted: false });
+        return;
+    }
+    let remaining = spriteFrames.length;
+    let settled = false;
+    for (const item of spriteFrames) {
+        cc.assetManager.loadAny(item.after, (error, asset) => {
+            if (settled) return;
+            if (error || !(asset instanceof cc.SpriteFrame) || (asset._uuid || asset.uuid) !== item.after) {
+                settled = true;
+                callback(null, { available: false, reason: 'PREFAB_SPRITE_FRAME_LOAD_FAILED', mutationStarted: false });
+                return;
+            }
+            loaded[item.after] = asset;
+            remaining -= 1;
+            if (remaining === 0) { settled = true; apply(); }
+        });
+    }
+}
+
+function savePrefabSource(params, callback) {
+    const mode = prefabEditModeState();
+    if (!mode.available || mode.modeName !== 'prefab' || mode.prefabUuid !== (params && params.prefabUuid)
+        || !mode.saveAvailable) { callback(null, { available: false, reason: 'PREFAB_SAVE_TARGET_MISMATCH' }); return; }
+    let settled = false;
+    const finish = (error) => {
+        if (settled) return;
+        settled = true;
+        const after = prefabEditModeState();
+        if (error || !after.available || after.modeName !== 'prefab' || after.prefabUuid !== params.prefabUuid) {
+            callback(null, { available: false, reason: error && (error.code || error.message) || 'PREFAB_SAVE_TARGET_MISMATCH' });
+            return;
+        }
+        callback(null, { available: true, prefabUuid: params.prefabUuid, saved: true });
+    };
+    try {
+        const editMode = Editor.require('scene://edit-mode');
+        editMode.save(finish);
+    } catch (error) { finish(error); }
+}
+
+function exitPrefabSourceMode(params) {
+    const mode = prefabEditModeState();
+    if (!mode.available || mode.modeName !== 'prefab' || mode.prefabUuid !== (params && params.prefabUuid) || !mode.popAvailable)
+        return { available: false, reason: 'PREFAB_EXIT_TARGET_MISMATCH' };
+    try {
+        Editor.require('scene://edit-mode').pop();
+        return { available: true, prefabUuid: params.prefabUuid, exitRequested: true };
+    } catch (error) { return { available: false, reason: error && (error.code || error.message) || 'PREFAB_EXIT_FAILED' }; }
+}
+
+function prefabSourcePatchSnapshot(params) {
+    if (!params || !['before', 'after'].includes(params.side) || !prefabPatch.validateDiff(params.expectedDiff))
+        return { available: false, reason: 'PREFAB_PATCH_INPUT_INVALID' };
+    const target = locatePrefabPatchNode(params, params.side);
+    if (!target.available) return target;
+    return { available: true, prefabUuid: params.prefabUuid, mode: target.mode, node: target.snapshot,
+        expectedDiff: params.expectedDiff, verifiedSide: params.side };
+}
+
 function transformState(node) {
     const position = typeof node.getPosition === 'function' ? node.getPosition() : { x: node.x, y: node.y, z: 0 };
     return { x: Number(position.x) || 0, y: Number(position.y) || 0, z: Number(position.z) || 0,
@@ -1504,6 +1697,30 @@ module.exports = {
     prefabAssetState(event, params) {
         try { prefabAssetState(params || {}, (error, result) => event.reply(error || null, result)); }
         catch (error) { event.reply({ code: 'SCENE_PREFAB_ASSET_STATE_FAILED', message: String(error && error.message || error) }); }
+    },
+    prefabEditModeState(event) {
+        try { event.reply(null, prefabEditModeState()); }
+        catch (error) { event.reply(null, { available: false, reason: error && (error.code || error.message) || 'PREFAB_EDIT_MODE_QUERY_FAILED' }); }
+    },
+    prefabSourcePatchPreflight(event, params) {
+        try { event.reply(null, prefabSourcePatchPreflight(params || {})); }
+        catch (error) { event.reply(null, { available: false, reason: error && (error.code || error.message) || 'PREFAB_PATCH_PREFLIGHT_FAILED' }); }
+    },
+    prefabSourcePatchMutate(event, params) {
+        try { prefabSourcePatchMutate(params || {}, (error, result) => event.reply(error || null, result)); }
+        catch (error) { event.reply(null, { available: false, reason: error && (error.code || error.message) || 'PREFAB_PATCH_WRITE_FAILED', mutationStarted: false }); }
+    },
+    savePrefabSource(event, params) {
+        try { savePrefabSource(params || {}, (error, result) => event.reply(error || null, result)); }
+        catch (error) { event.reply(null, { available: false, reason: error && (error.code || error.message) || 'PREFAB_SAVE_FAILED' }); }
+    },
+    exitPrefabSourceMode(event, params) {
+        try { event.reply(null, exitPrefabSourceMode(params || {})); }
+        catch (error) { event.reply(null, { available: false, reason: error && (error.code || error.message) || 'PREFAB_EXIT_FAILED' }); }
+    },
+    prefabSourcePatchSnapshot(event, params) {
+        try { event.reply(null, prefabSourcePatchSnapshot(params || {})); }
+        catch (error) { event.reply(null, { available: false, reason: error && (error.code || error.message) || 'PREFAB_PATCH_READBACK_FAILED' }); }
     },
     compositionReadback(event, params) {
         try { event.reply(null, compositionReadback(params || {})); }

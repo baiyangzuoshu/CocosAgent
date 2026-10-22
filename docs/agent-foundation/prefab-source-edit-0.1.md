@@ -1,5 +1,7 @@
 # Creator 2.4 Prefab 源内容受约束编辑 0.1
 
+> 当前实现由 `tools/cocos-creator-agent-cli/` 独立拥有；仓库不再提供 Creator 原生 CocosAgent 产品。本文保留设计与历史验证依据，旧版 0.3.x 扩展记录不代表当前 CLI 的实机验收。
+
 ## 目标
 
 支持对**已有 Prefab 资源源内容**做连续、可核验的小幅修改。它与 `scene.node.patch` 的活动场景实例编辑分开：此命令进入指定 Prefab 的编辑模式，保存源资源，退出后重新打开，再比较活动对象与磁盘序列化结果。
@@ -8,8 +10,8 @@
 
 ## 命令
 
-- `prefab.source.inspect`：只读解析 `.prefab` 和 `.meta`，以 Prefab UUID 定位唯一资源，返回源 SHA-256、节点路径/UUID、层级、有限组件摘要和受支持字段当前值。
-- `prefab.source.patch`：针对一个节点的一组白名单字段执行 `apply`、`compensate` 或 `replay`，并写入持久操作记录。
+- `creator.prefab.source.inspect`：只读解析 `.prefab` 和 `.meta`，以 Prefab UUID 定位唯一资源，返回源 SHA-256、节点路径/UUID、层级、有限组件摘要和受支持字段当前值。
+- `creator.prefab.source.patch.plan/commit/reconcile`：针对一个节点的一组白名单字段执行 `apply`、`compensate` 或 `replay`，并写入持久操作记录。
 
 字段白名单沿用 `scene.node.patch`：节点名称、激活状态、二维位置/缩放、Sprite 或 Label 的启用状态、SpriteFrame UUID。Label 文本暂不开放；节点增删、组件增删、材质及任意序列化字段也不开放。
 
@@ -38,6 +40,10 @@
 `save/pop` 是内部接口，并非手册或 FAQ 承诺的公开 API。存在性探测不能证明完整时序正确；真实 2.4.15 编辑器验收必须覆盖进入、保存、退出、重新打开和磁盘读回。若任一步不匹配，操作必须失败或停在 `needs-review`，不能标记成功。
 
 ## 当前验证状态
+
+当前 CLI（0.12.21 / Creator 扩展 0.8.16）已加入上述命令合同与 Creator 场景进程实现，并有合同、源解析、补丁校验和 Host 计划测试。**真实 Creator 2.4.15 的 Prefab 编辑模式保存/退出/重开时序尚未验收**；能力仅在场景进程探测到 `curMode/save/pop` 时公布。实机验收需先在 Dashboard 核对项目身份，再验证进入、保存回调、`scene:saved`、退出原场景、重新打开、活动对象读回和磁盘 `.prefab`/`.meta` 一致性。
+
+以下 0.3.x 扩展记录是历史原型验证，不代表 CLI 的当前运行时证据：
 
 - 完成扩展消息、Host 持久操作记录、JSON Schema、MCP 命令目录、只读源检查和序列化层级校验。
 - 2026-10-13：0.3.14 场景进程桥接已实现，移除主进程固定返回 `null` 的入口；本轮构建与语法检查结果另行记录，未运行新的自动测试或真实 Prefab 写入。
