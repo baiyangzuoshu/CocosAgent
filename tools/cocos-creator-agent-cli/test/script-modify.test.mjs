@@ -99,6 +99,20 @@ function serializeSceneComposition(params, sceneUuid) {
   return records;
 }
 
+function serializeExistingTransformScene(transform, sceneUuid, nodeUuid) {
+  const angle = transform.angle * Math.PI / 360;
+  return [
+    { __type__: 'cc.SceneAsset', scene: { __id__: 1 } },
+    { __type__: 'cc.Scene', _id: sceneUuid, _active: true, _children: [{ __id__: 2 }] },
+    { __type__: 'cc.Node', _id: nodeUuid, _name: 'Button', _parent: { __id__: 1 }, _children: [],
+      _active: true, _components: [],
+      _trs: { __type__: 'TypedArray', ctor: 'Float64Array', array: [transform.x, transform.y, transform.z,
+        0, 0, Math.sin(angle), Math.cos(angle), transform.scaleX, transform.scaleY, 1] },
+      _contentSize: { __type__: 'cc.Size', width: transform.width, height: transform.height },
+      _anchorPoint: { __type__: 'cc.Vec2', x: transform.anchorX, y: transform.anchorY } },
+  ];
+}
+
 function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults, refreshFailure = null,
   ipcMode = 'electron', assetCreateMode = 'complete', sceneCompose = false, sceneReparent = false,
   sceneNodeDelete = false, sceneComponentRemove = false,
@@ -149,10 +163,13 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
   let buttonEvents = [];
   const sceneFile = path.join(projectRoot, 'assets', 'Scenes', 'Main.fire');
   const sceneMetaFile = `${sceneFile}.meta`;
-  if (sceneCompose) {
+  if (sceneCompose || sceneTransform) {
     fs.mkdirSync(path.dirname(sceneFile), { recursive: true });
-    fs.writeFileSync(sceneFile, JSON.stringify([{ __type__: 'cc.SceneAsset', scene: { __id__: 1 } },
-      { __type__: 'cc.Scene', _id: sceneUuid, _children: [] }]));
+    fs.writeFileSync(sceneFile, JSON.stringify(sceneTransform
+      ? serializeExistingTransformScene({ x: 1, y: 2, z: 0, scaleX: 1, scaleY: 1, angle: 0,
+        width: 50, height: 20, anchorX: 0.5, anchorY: 0.5 }, sceneUuid, nodeUuid)
+      : [{ __type__: 'cc.SceneAsset', scene: { __id__: 1 } },
+        { __type__: 'cc.Scene', _id: sceneUuid, _children: [] }]));
     fs.writeFileSync(sceneMetaFile, JSON.stringify({ uuid: sceneUuid, importer: 'scene' }));
     assetRecords.set('db://assets/Scenes/Main.fire', { url: 'db://assets/Scenes/Main.fire',
       uuid: sceneUuid, importer: 'scene', type: 'cc.SceneAsset' });
@@ -236,6 +253,9 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
       sceneSaveCount += 1;
       if (sceneSaveMode === 'write' && currentSceneComposition) {
         fs.writeFileSync(sceneFile, JSON.stringify(serializeSceneComposition(currentSceneComposition, sceneUuid)));
+        fs.writeFileSync(sceneMetaFile, JSON.stringify({ uuid: sceneUuid, importer: 'scene' }));
+      } else if (sceneSaveMode === 'write' && sceneTransform) {
+        fs.writeFileSync(sceneFile, JSON.stringify(serializeExistingTransformScene(currentTransform, sceneUuid, nodeUuid)));
         fs.writeFileSync(sceneMetaFile, JSON.stringify({ uuid: sceneUuid, importer: 'scene' }));
       }
       return;
@@ -466,7 +486,10 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
     if (id === './approval.cjs') return async () => { onApproval(); return approved; };
     return baseRequire(id);
   };
-  const source = fs.readFileSync(path.join(extensionRoot, 'main.js'), 'utf8') + `\nmodule.exports.__test = {
+  // Keep the save-timeout branch deterministic and fast in the mocked editor process.
+  const source = fs.readFileSync(path.join(extensionRoot, 'main.js'), 'utf8')
+    .replace('const SCENE_SAVE_READBACK_TIMEOUT_MS = 15000;', 'const SCENE_SAVE_READBACK_TIMEOUT_MS = 1;')
+    + `\nmodule.exports.__test = {
     createScriptModifyPlan, commitScriptModify, reconcileScriptModify,
     createPrefabSourcePatchPlan,
     createScriptRecompilePlan, commitScriptRecompile, reconcileScriptRecompile, setupDiagnosticListeners,
@@ -681,12 +704,31 @@ test('existing node transform plan, approval, mutation, save request and reconci
   assert.deepEqual({ ...receipt.after }, { x: 128, y: -32, angle: 45, width: 320, anchorX: 0 });
   assert.equal(receipt.sceneSaveRequestSent, true);
   assert.equal(receipt.sceneSaveCompletionConfirmed, false);
+  assert.equal(receipt.scenePersistenceConfirmed, true);
+  assert.equal(receipt.diskReadback.verified, true);
   assert.equal(harness.currentTransform.y, -32);
   assert.equal(harness.getSceneSaveCount(), 1);
 
   const reconciled = await harness.api.reconcileSceneNodeTransform({ operationId: plan.operationId });
   assert.equal(reconciled.status, 'completed');
   assert.deepEqual({ ...reconciled.observed.transform }, { x: 128, y: -32, angle: 45, width: 320, anchorX: 0 });
+  assert.equal(reconciled.scenePersistenceConfirmed, true);
+});
+
+test('existing node transform reports save-required when memory changes but saved scene does not', async (t) => {
+  const harness = makeHarness(t, { sceneTransform: true, sceneSaveMode: 'no-write', ipcMode: 'editor' });
+  const plan = await harness.api.createSceneNodeTransformPlan({ sceneUuid: harness.sceneUuid,
+    nodeUuid: harness.nodeUuid, values: { x: 128 } });
+  await assert.rejects(harness.api.commitSceneNodeTransform({ operationId: plan.operationId, planHash: plan.planHash },
+    { requestId: 'request-fixture' }), (error) => error.code === 'SCENE_DISK_READBACK_UNCONFIRMED');
+  assert.equal(harness.currentTransform.x, 128);
+  assert.equal(harness.getSceneSaveCount(), 1);
+
+  const reconciled = await harness.api.reconcileSceneNodeTransform({ operationId: plan.operationId });
+  assert.equal(reconciled.status, 'save-required');
+  assert.equal(reconciled.scenePersistenceConfirmed, false);
+  assert.equal(reconciled.observed.disk.matchesBefore, true);
+  assert.equal(reconciled.observed.disk.matchesAfter, false);
 });
 
 test('existing node transform stops on stale approval state and on user cancellation', async (t) => {

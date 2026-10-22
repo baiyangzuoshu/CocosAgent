@@ -7,7 +7,7 @@ const path = require('path');
 const crypto = require('crypto');
 const extensionPackage = require('./package.json');
 const confirmDialog = require('./approval.cjs');
-const { inspectSceneComposition } = require('./scene-persistence.cjs');
+const { inspectSceneComposition, inspectSavedSceneNode } = require('./scene-persistence.cjs');
 const { inspectPrefabSource: inspectPrefabSourceData } = require('./prefab-source.cjs');
 const prefabPatch = require('./prefab-patch.cjs');
 const { scanAssetReferences } = require('./asset-references.cjs');
@@ -631,6 +631,8 @@ function readSceneNodeTransformOperation(operationId) {
     const before = plan && plan.expectedBefore;
     const after = plan && plan.expectedAfter;
     const fields = before && typeof before === 'object' && !Array.isArray(before) ? Object.keys(before).sort() : [];
+    const diskTransformFields = ['anchorX', 'anchorY', 'angle', 'height', 'scaleX', 'scaleY', 'width', 'x', 'y', 'z'];
+    const diskBefore = plan && plan.diskBefore;
     if (!operation || operation.schemaVersion !== 1 || operation.operationId !== operationId
         || operation.operation !== 'creator.scene.node.set-transform' || !plan || plan.operation !== operation.operation
         || plan.operationId !== operationId || typeof operation.planHash !== 'string'
@@ -644,6 +646,14 @@ function readSceneNodeTransformOperation(operationId) {
             || !Number.isFinite(after[field]) || Math.abs(after[field]) > 1000000
             || (['width', 'height'].includes(field) && after[field] < 0) || before[field] === after[field])
         || Object.keys(after).sort().join(',') !== fields.join(',') || typeof plan.expiresAt !== 'string'
+        || (diskBefore !== undefined && (!diskBefore || typeof diskBefore !== 'object' || Array.isArray(diskBefore)
+            || typeof diskBefore.sceneUrl !== 'string' || !diskBefore.sceneUrl.startsWith('db://assets/')
+            || diskBefore.importer !== 'scene' || !prefabPatch.SHA256.test(diskBefore.sourceSha256 || '')
+            || !prefabPatch.SHA256.test(diskBefore.metaSha256 || '') || typeof diskBefore.active !== 'boolean'
+            || !diskBefore.transform || typeof diskBefore.transform !== 'object' || Array.isArray(diskBefore.transform)
+            || Object.keys(diskBefore.transform).sort().join(',') !== diskTransformFields.join(',')
+            || diskTransformFields.some((field) => !Number.isFinite(diskBefore.transform[field])
+                || Math.abs(diskBefore.transform[field]) > 1000000)))
         || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
             'save-requested', 'completed', 'not-applied', 'save-required', 'conflict'].includes(operation.status))
         throw coded('OPERATION_RECORD_INVALID');
@@ -3098,6 +3108,10 @@ async function createSceneNodeTransformPlan(input) {
     if (current.sceneUuid !== input.sceneUuid || current.nodeUuid !== input.nodeUuid
         || typeof current.nodePath !== 'string' || !current.transform || typeof current.transform !== 'object')
         throw coded('SCENE_NODE_TRANSFORM_STATE_INVALID');
+    const diskBefore = await sceneNodeDiskState(input.sceneUuid, input.nodeUuid);
+    if (diskBefore.nodePath !== current.nodePath
+        || !sceneDiskTransformMatches(diskBefore.transform, current.transform))
+        throw coded('SCENE_DISK_STATE_DIFFERS_FROM_EDITOR');
     const fields = Object.keys(input.values).sort();
     if (!fields.length || !current.changed) throw coded('SCENE_NODE_TRANSFORM_NO_CHANGE');
     const expectedBefore = {};
@@ -3114,6 +3128,9 @@ async function createSceneNodeTransformPlan(input) {
         contractFingerprint: CONTRACT_FINGERPRINT, creatorInstanceId: INSTANCE_ID,
         sceneUuid: current.sceneUuid, sceneName: current.sceneName, nodeUuid: current.nodeUuid,
         nodePath: current.nodePath, expectedBefore, expectedAfter,
+        diskBefore: { sceneUrl: diskBefore.sceneUrl, importer: diskBefore.importer,
+            sourceSha256: diskBefore.sourceSha256, metaSha256: diskBefore.metaSha256,
+            active: diskBefore.active, transform: diskBefore.transform },
         expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString() };
     const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
         planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
@@ -3122,11 +3139,12 @@ async function createSceneNodeTransformPlan(input) {
         projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
         sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
         expectedBefore, expectedAfter, expiresAt: plan.expiresAt,
+        savedSceneBaseline: { sourceSha256: plan.diskBefore.sourceSha256, metaSha256: plan.diskBefore.metaSha256 },
         diff: { action: 'set-node-transform', scene: plan.sceneName, node: plan.nodePath,
             changes: fields.map((field) => ({ field, before: expectedBefore[field], after: expectedAfter[field] })) },
         recovery: { operationId, automaticRetry: false, reconcileCommand: 'creator.scene.node.set-transform.reconcile',
             sameCreatorSessionRequired: true,
-            note: 'Creator 2.4 scene save IPC has no documented completion acknowledgement; reconcile reads current in-memory values only.' } };
+            note: 'The plan binds the saved .fire/.meta baseline; completion requires matching serialized .fire readback after the scene save request. Creator still provides no documented save IPC acknowledgement.' } };
 }
 
 async function createSceneButtonEventsPlan(input) {
@@ -3757,14 +3775,15 @@ function sceneNodeTransformReceipt(operation, state) {
         before: plan.expectedBefore, after: state && state.transform
             ? Object.fromEntries(fields.map((field) => [field, state.transform[field]])) : null,
         transform: state && state.transform || null, sceneSaveRequestSent: !!operation.sceneSaveRequestSent,
-        sceneSaveCompletionConfirmed: false, plannedByInstanceId: operation.plannedByInstanceId,
+        sceneSaveCompletionConfirmed: false, scenePersistenceConfirmed: !!(operation.diskReadback && operation.diskReadback.verified === true),
+        diskReadback: operation.diskReadback || null, plannedByInstanceId: operation.plannedByInstanceId,
         appliedByInstanceId: operation.appliedByInstanceId || null,
         completedByInstanceId: operation.completedByInstanceId || null,
         approvedAt: operation.approvedAt || null, completedAt: operation.completedAt || null,
         reconciledAt: operation.reconciledAt || null,
         recovery: { automaticRetry: false, reconcileCommand: 'creator.scene.node.set-transform.reconcile',
             manualSaveMayBeRequired: operation.status === 'save-required',
-            note: 'Creator 2.4 scene save IPC has no documented completion acknowledgement; this receipt separates in-memory readback from the save request.' } };
+            note: 'The scene-save IPC has no documented completion acknowledgement. scenePersistenceConfirmed is true only after the exact AssetDB .fire/.meta and serialized node transform read back from disk.' } };
 }
 
 async function commitSceneNodeTransform(input, context) {
@@ -3778,6 +3797,7 @@ async function commitSceneNodeTransform(input, context) {
     if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
     let before = await readPlannedSceneNode(operation.plan);
     if (!transformMapMatches(before.transform, operation.plan.expectedBefore)) throw coded('OPERATION_PRECONDITION_FAILED');
+    await verifySceneNodeDiskBefore(operation.plan);
     operation.status = 'awaiting-approval';
     operation.approvalRequestedAt = new Date().toISOString();
     writeOperation(operation);
@@ -3795,6 +3815,7 @@ async function commitSceneNodeTransform(input, context) {
         if (operation.plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
         before = await readPlannedSceneNode(operation.plan);
         if (!transformMapMatches(before.transform, operation.plan.expectedBefore)) throw coded('OPERATION_PRECONDITION_FAILED');
+        await verifySceneNodeDiskBefore(operation.plan);
     } catch (error) {
         operation.status = 'conflict'; operation.conflictAt = new Date().toISOString(); writeOperation(operation); throw error;
     }
@@ -3817,6 +3838,17 @@ async function commitSceneNodeTransform(input, context) {
     operation.sceneSaveRequestedAt = new Date().toISOString(); writeOperation(operation);
     const readback = await readPlannedSceneNode(operation.plan);
     if (!transformMapMatches(readback.transform, operation.plan.expectedAfter)) throw coded('OPERATION_READBACK_STATE_MISMATCH');
+    let diskReadback;
+    try { diskReadback = await waitForSceneNodeDiskAfter(operation); }
+    catch (error) {
+        operation.status = 'save-required'; operation.reconcileReason = error.code || 'SCENE_DISK_READBACK_UNCONFIRMED';
+        operation.diskReadbackFailureAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('SCENE_DISK_READBACK_UNCONFIRMED', operation.reconcileReason);
+    }
+    operation.diskReadback = { verified: true, sceneUrl: diskReadback.sceneUrl,
+        sceneUuid: diskReadback.sceneUuid, nodePath: diskReadback.nodePath, nodeUuid: diskReadback.nodeUuid,
+        sourceSha256: diskReadback.sourceSha256, metaSha256: diskReadback.metaSha256,
+        transform: diskReadback.transform, active: diskReadback.active, verifiedAt: new Date().toISOString() };
     operation.status = 'completed'; operation.completedAt = new Date().toISOString();
     operation.completedByInstanceId = INSTANCE_ID; writeOperation(operation);
     return sceneNodeTransformReceipt(operation, readback);
@@ -3831,6 +3863,49 @@ async function reconcileSceneNodeTransform(input) {
         operation.status = 'conflict'; operation.reconciledAt = new Date().toISOString();
         operation.reconcileReason = error.code || 'SCENE_NODE_STATE_UNAVAILABLE'; writeOperation(operation);
         return { ...sceneNodeTransformReceipt(operation, null), observed: null, reason: operation.reconcileReason };
+    }
+    if (operation.plan.diskBefore) {
+        let disk;
+        try { disk = await sceneNodeDiskState(operation.plan.sceneUuid, operation.plan.nodeUuid); }
+        catch (error) {
+            operation.status = 'conflict'; operation.reconciledAt = new Date().toISOString();
+            operation.reconcileReason = error.code || 'SCENE_DISK_READBACK_FAILED'; writeOperation(operation);
+            return { ...sceneNodeTransformReceipt(operation, observed), observed: { transform: observed.transform,
+                sceneUuid: observed.sceneUuid, nodeUuid: observed.nodeUuid, nodePath: observed.nodePath,
+                disk: null }, reason: operation.reconcileReason };
+        }
+        const liveBefore = transformMapMatches(observed.transform, operation.plan.expectedBefore);
+        const liveAfter = transformMapMatches(observed.transform, operation.plan.expectedAfter);
+        const diskBefore = disk.sourceSha256 === operation.plan.diskBefore.sourceSha256
+            && sceneNodeDiskMatchesPlan(disk, operation.plan, 'before');
+        const diskAfter = disk.sourceSha256 !== operation.plan.diskBefore.sourceSha256
+            && sceneNodeDiskMatchesPlan(disk, operation.plan, 'after');
+        const mutationMayHaveRun = operation.appliedByInstanceId === INSTANCE_ID
+            || ['applying', 'mutation-applied', 'save-requested', 'save-required', 'completed'].includes(operation.status);
+        if (mutationMayHaveRun && liveAfter && diskAfter) {
+            operation.status = 'completed'; operation.reconcileReason = null;
+            operation.diskReadback = { verified: true, sceneUrl: disk.sceneUrl, sceneUuid: disk.sceneUuid,
+                nodePath: disk.nodePath, nodeUuid: disk.nodeUuid, sourceSha256: disk.sourceSha256,
+                metaSha256: disk.metaSha256, transform: disk.transform, active: disk.active,
+                verifiedAt: new Date().toISOString() };
+        } else if (mutationMayHaveRun && liveAfter && diskBefore) {
+            operation.status = 'save-required'; operation.reconcileReason = 'SCENE_MEMORY_UPDATED_BUT_DISK_UNCHANGED';
+        } else if (liveBefore && diskBefore && ['planned', 'awaiting-approval', 'applying', 'not-applied'].includes(operation.status)) {
+            operation.status = 'not-applied'; operation.reconcileReason = null;
+        } else {
+            operation.status = 'conflict'; operation.reconcileReason = 'SCENE_MEMORY_DISK_STATE_MISMATCH';
+        }
+        operation.reconciledAt = new Date().toISOString();
+        if (operation.status === 'completed') operation.completedAt = operation.completedAt || operation.reconciledAt;
+        writeOperation(operation);
+        return { ...sceneNodeTransformReceipt(operation, observed), observed: {
+            transform: Object.fromEntries(Object.keys(operation.plan.expectedAfter).map((field) => [field, observed.transform[field]])),
+            sceneUuid: observed.sceneUuid, nodeUuid: observed.nodeUuid, nodePath: observed.nodePath,
+            disk: { sourceSha256: disk.sourceSha256, metaSha256: disk.metaSha256,
+                nodePath: disk.nodePath, transform: disk.transform, matchesBefore: diskBefore, matchesAfter: diskAfter } },
+            retry: operation.status === 'save-required'
+                ? 'Save the scene in Creator, then reconcile again; do not replay this operation.'
+                : 'Never replay this operation. Create a new plan only after reviewing the observed editor and disk state.' };
     }
     if (transformMapMatches(observed.transform, operation.plan.expectedBefore)) {
         if (['applying', 'awaiting-approval'].includes(operation.status)) operation.status = 'not-applied';
@@ -4748,6 +4823,82 @@ async function sceneAssetIdentity(sceneUuid) {
         || !row.url.startsWith('db://assets/') || !/\.fire$/i.test(row.url)
         || (row.importer && row.importer !== 'scene')) throw coded('SCENE_ASSETDB_IDENTITY_UNAVAILABLE');
     return { uuid: row.uuid, url: row.url, importer: row.importer || 'scene' };
+}
+
+async function sceneNodeDiskState(sceneUuid, nodeUuid) {
+    const identity = await sceneAssetIdentity(sceneUuid);
+    const row = await queryAssetByUrl(identity.url);
+    if (!row || row.uuid !== sceneUuid || row.url !== identity.url
+        || (row.importer || 'scene') !== identity.importer) throw coded('SCENE_ASSETDB_IDENTITY_MISMATCH');
+    const relative = identity.url.slice('db://assets/'.length);
+    const sceneFile = safeProjectFile(relative, /\.fire$/i);
+    const metaFile = safeProjectFile(`${relative}.meta`);
+    const sceneBytes = readStableProjectFile(sceneFile, MAX_SCENE_SERIALIZATION_BYTES, 'SCENE_SERIALIZATION_FILE_UNSAFE');
+    const metaBytes = readStableProjectFile(metaFile, MAX_SCENE_META_BYTES, 'SCENE_META_FILE_UNSAFE');
+    const state = inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow: row, nodeUuid });
+    if (!state.verified) throw coded(state.reason || 'SCENE_DISK_READBACK_FAILED');
+    const freshRow = await queryAssetByUrl(identity.url);
+    const freshSceneBytes = readStableProjectFile(sceneFile, MAX_SCENE_SERIALIZATION_BYTES, 'SCENE_SERIALIZATION_FILE_UNSAFE');
+    const freshMetaBytes = readStableProjectFile(metaFile, MAX_SCENE_META_BYTES, 'SCENE_META_FILE_UNSAFE');
+    if (!freshRow || freshRow.uuid !== sceneUuid || freshRow.url !== identity.url
+        || fileHash(freshSceneBytes) !== fileHash(sceneBytes) || fileHash(freshMetaBytes) !== fileHash(metaBytes))
+        throw coded('SCENE_CHANGED_DURING_INSPECT');
+    return { ...state, sourceSha256: fileHash(sceneBytes), metaSha256: fileHash(metaBytes), importer: identity.importer };
+}
+
+function sceneDiskNumberMatches(field, actual, expected) {
+    if (!Number.isFinite(actual) || !Number.isFinite(expected)) return false;
+    if (field !== 'angle') return Math.abs(actual - expected) <= 0.002;
+    const delta = ((actual - expected + 180) % 360 + 360) % 360 - 180;
+    return Math.abs(delta) <= 0.002;
+}
+
+function sceneDiskTransformMatches(actual, expected) {
+    return !!actual && !!expected && Object.keys(expected).every((field) =>
+        sceneDiskNumberMatches(field, actual[field], expected[field]));
+}
+
+function sceneNodeDiskMatchesPlan(disk, plan, side) {
+    if (!disk || disk.verified !== true || disk.sceneUuid !== plan.sceneUuid || disk.nodeUuid !== plan.nodeUuid
+        || disk.nodePath !== plan.nodePath || disk.active !== plan.diskBefore.active
+        || disk.sceneUrl !== plan.diskBefore.sceneUrl || disk.importer !== plan.diskBefore.importer
+        || disk.metaSha256 !== plan.diskBefore.metaSha256) return false;
+    const expected = side === 'before' ? plan.diskBefore.transform
+        : { ...plan.diskBefore.transform, ...plan.expectedAfter };
+    return sceneDiskTransformMatches(disk.transform, expected);
+}
+
+async function verifySceneNodeDiskBefore(plan) {
+    if (!plan.diskBefore) return null;
+    const disk = await sceneNodeDiskState(plan.sceneUuid, plan.nodeUuid);
+    if (disk.sourceSha256 !== plan.diskBefore.sourceSha256 || disk.metaSha256 !== plan.diskBefore.metaSha256
+        || !sceneNodeDiskMatchesPlan(disk, plan, 'before')) throw coded('SCENE_DISK_PRECONDITION_FAILED');
+    return disk;
+}
+
+async function waitForSceneNodeDiskAfter(operation, timeoutMs = SCENE_SAVE_READBACK_TIMEOUT_MS) {
+    const plan = operation.plan;
+    if (!plan.diskBefore) throw coded('SCENE_DISK_BASELINE_MISSING');
+    const deadline = Date.now() + timeoutMs;
+    let lastReason = 'SCENE_DISK_READBACK_PENDING';
+    do {
+        try {
+            const disk = await sceneNodeDiskState(plan.sceneUuid, plan.nodeUuid);
+            if (disk.sceneUrl !== plan.diskBefore.sceneUrl || disk.importer !== plan.diskBefore.importer)
+                throw coded('SCENE_ASSETDB_IDENTITY_CHANGED');
+            if (disk.sourceSha256 !== plan.diskBefore.sourceSha256 && sceneNodeDiskMatchesPlan(disk, plan, 'after'))
+                return disk;
+            lastReason = disk.sourceSha256 === plan.diskBefore.sourceSha256
+                ? 'SCENE_DISK_READBACK_PENDING' : 'SCENE_DISK_READBACK_MISMATCH';
+        } catch (error) {
+            lastReason = error.code || 'SCENE_DISK_READBACK_FAILED';
+            if (['SCENE_ASSETDB_IDENTITY_CHANGED', 'SCENE_ASSETDB_IDENTITY_MISMATCH',
+                'SCENE_META_IDENTITY_MISMATCH', 'UNSAFE_PROJECT_PATH'].includes(error.code)) throw error;
+        }
+        if (Date.now() >= deadline) break;
+        await new Promise((resolve) => setTimeout(resolve, 250));
+    } while (Date.now() <= deadline);
+    throw coded(lastReason);
 }
 
 async function validateSceneComposePlan(operation) {

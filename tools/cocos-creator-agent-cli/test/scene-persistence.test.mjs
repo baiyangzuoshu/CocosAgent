@@ -3,7 +3,7 @@ import test from 'node:test';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { inspectSceneComposition } = require('../creator-extension/scene-persistence.cjs');
+const { inspectSceneComposition, inspectSavedSceneNode } = require('../creator-extension/scene-persistence.cjs');
 
 const sceneUuid = '4b02b1e4-d163-47e2-91ad-2da0193a3907';
 const nodeUuid = 'df1bb94e-c8e6-41ba-b9c9-a04c6e86a581';
@@ -40,6 +40,7 @@ function fixture() {
       _trs: { __type__: 'TypedArray', ctor: 'Float64Array', array: [12, 20, 0, 0, 0,
         Math.sin(Math.PI / 12), Math.cos(Math.PI / 12), 1.5, 0.75, 1] },
       _contentSize: { __type__: 'cc.Size', width: 180, height: 64 },
+      _anchorPoint: { __type__: 'cc.Vec2', x: 0.5, y: 0.5 },
       _components: [{ __id__: 3 }, { __id__: 4 }] },
     { __type__: 'cc.Button', clickEvents: [{ __id__: 5 }] },
     { __type__: handlerClassId, count: 0, spriteFrame: { __uuid__: spriteUuid } },
@@ -49,6 +50,36 @@ function fixture() {
   return { operation, sceneBytes: Buffer.from(JSON.stringify(records)),
     metaBytes: Buffer.from(JSON.stringify({ uuid: sceneUuid, importer: 'scene' })) };
 }
+
+test('saved scene node inspection resolves exact UUID, hierarchy, active state, and serialized transform', () => {
+  const source = fixture();
+  assert.deepEqual(inspectSavedSceneNode({ ...source, sceneUuid, sceneAssetRow, nodeUuid }), {
+    verified: true, sceneUuid, sceneUrl: sceneAssetRow.url, nodeUuid, nodePath: 'Scene/StartButton', active: true,
+    transform: { x: 12, y: 20, z: 0, angle: 30, scaleX: 1.5, scaleY: 0.75,
+      width: 180, height: 64, anchorX: 0.5, anchorY: 0.5 },
+  });
+});
+
+test('saved scene node inspection rejects wrong metadata, detached nodes, and missing node UUIDs', () => {
+  const source = fixture();
+  assert.equal(inspectSavedSceneNode({ ...source, sceneUuid, sceneAssetRow, nodeUuid,
+    metaBytes: Buffer.from(JSON.stringify({ uuid: sceneUuid, importer: 'prefab' })) }).reason,
+  'SCENE_META_IDENTITY_MISMATCH');
+  const detached = fixture();
+  const records = JSON.parse(detached.sceneBytes.toString('utf8'));
+  records[2]._parent = null;
+  detached.sceneBytes = Buffer.from(JSON.stringify(records));
+  assert.equal(inspectSavedSceneNode({ ...detached, sceneUuid, sceneAssetRow, nodeUuid }).reason,
+    'SCENE_NODE_OUTSIDE_TARGET_SCENE');
+  assert.equal(inspectSavedSceneNode({ ...source, sceneUuid, sceneAssetRow, nodeUuid: spriteUuid }).reason,
+    'SCENE_NODE_NOT_FOUND');
+  const inconsistentHierarchy = fixture();
+  const hierarchyRows = JSON.parse(inconsistentHierarchy.sceneBytes.toString('utf8'));
+  hierarchyRows[1]._children = [];
+  inconsistentHierarchy.sceneBytes = Buffer.from(JSON.stringify(hierarchyRows));
+  assert.equal(inspectSavedSceneNode({ ...inconsistentHierarchy, sceneUuid, sceneAssetRow, nodeUuid }).reason,
+    'SCENE_HIERARCHY_INVALID');
+});
 
 test('persisted scene verification matches nodes, transforms, resource UUIDs, components, and Button events', () => {
   const source = fixture();

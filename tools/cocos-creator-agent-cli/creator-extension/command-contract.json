@@ -510,7 +510,7 @@
     {
       "id": "creator.scene.node.set-transform.plan",
       "access": "plan",
-      "description": "Plan changes to selected transform fields on one existing active-scene node. Values are bound to the observed before-state and no scene change is made.",
+      "description": "Plan changes to selected transform fields on one existing scene node. The live state must match the exact AssetDB-saved .fire/.meta baseline; values are bound to both before-states and no scene change is made.",
       "input": {
         "type": "object",
         "required": ["sceneUuid", "nodeUuid", "values"],
@@ -537,7 +537,7 @@
       "id": "creator.scene.node.set-transform.commit",
       "access": "write",
       "approval": true,
-      "description": "Apply one planned transform update after native Creator approval and exact scene/node before-state checks, then request scene save and read the values back.",
+      "description": "Apply one planned transform update after native Creator approval and exact live/disk before-state checks, request scene save, and confirm persistence only after the exact serialized AssetDB .fire/.meta node transform reads back from disk.",
       "input": {
         "type": "object",
         "required": ["operationId", "planHash"],
@@ -551,7 +551,7 @@
     {
       "id": "creator.scene.node.set-transform.reconcile",
       "access": "plan",
-      "description": "Read and reconcile one interrupted transform operation by exact scene/node UUIDs and selected before/after values; never repeats the mutation.",
+      "description": "Read and reconcile one interrupted transform operation against exact live and saved scene before/after state; reports save-required when memory changed but disk did not, and never repeats the mutation.",
       "input": { "type": "object", "required": ["operationId"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
       }, "additionalProperties": false }

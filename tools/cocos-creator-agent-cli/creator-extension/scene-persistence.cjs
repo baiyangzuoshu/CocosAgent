@@ -22,6 +22,89 @@ function refIndex(value, records) {
     return value.__id__;
 }
 
+function inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow, nodeUuid }) {
+    if (!Buffer.isBuffer(sceneBytes) || sceneBytes.length < 2 || sceneBytes.length > MAX_SCENE_BYTES)
+        return fail('SCENE_SERIALIZATION_SIZE_INVALID');
+    if (!Buffer.isBuffer(metaBytes) || metaBytes.length < 2 || metaBytes.length > MAX_META_BYTES)
+        return fail('SCENE_META_SIZE_INVALID');
+    if (typeof sceneUuid !== 'string' || typeof nodeUuid !== 'string' || !sceneAssetRow
+        || sceneAssetRow.uuid !== sceneUuid || typeof sceneAssetRow.url !== 'string'
+        || !sceneAssetRow.url.startsWith('db://assets/') || !/\.fire$/i.test(sceneAssetRow.url))
+        return fail('SCENE_ASSETDB_IDENTITY_MISMATCH');
+
+    let meta;
+    let records;
+    try {
+        meta = JSON.parse(metaBytes.toString('utf8'));
+        records = JSON.parse(sceneBytes.toString('utf8'));
+    } catch (_) { return fail('SCENE_SERIALIZATION_INVALID'); }
+    if (!meta || meta.uuid !== sceneUuid || meta.importer !== 'scene') return fail('SCENE_META_IDENTITY_MISMATCH');
+    if (!Array.isArray(records) || records.length < 2 || records.length > MAX_SERIALIZED_OBJECTS
+        || records.some((record) => !record || typeof record !== 'object' || Array.isArray(record)))
+        return fail('SCENE_SERIALIZED_OBJECT_COUNT_INVALID');
+
+    const scenes = [];
+    const nodes = new Map();
+    for (let index = 0; index < records.length; index += 1) {
+        const record = records[index];
+        if (record.__type__ === 'cc.Scene' && record._id === sceneUuid) scenes.push({ record, index });
+        if (record.__type__ === 'cc.Node' && typeof record._id === 'string') {
+            if (nodes.has(record._id)) return fail('SCENE_NODE_UUID_DUPLICATE', { nodeUuid: record._id });
+            nodes.set(record._id, { record, index });
+        }
+    }
+    if (scenes.length !== 1) return fail('SCENE_ROOT_IDENTITY_MISMATCH');
+    const root = scenes[0].record;
+    const sceneAssets = records.filter((record) => record.__type__ === 'cc.SceneAsset'
+        && resolveRef(record.scene, records) === root);
+    if (sceneAssets.length !== 1) return fail('SCENE_ASSET_REFERENCE_MISMATCH');
+    const found = nodes.get(nodeUuid);
+    if (!found) return fail('SCENE_NODE_NOT_FOUND');
+
+    const pathParts = [typeof found.record._name === 'string' ? found.record._name : ''];
+    if (!pathParts[0]) return fail('SCENE_NODE_NAME_INVALID');
+    const visited = new Set([found.index]);
+    let cursor = found.record;
+    let childIndex = found.index;
+    let reachedScene = false;
+    for (let depth = 0; depth <= 64; depth += 1) {
+        const parentIndex = refIndex(cursor._parent, records);
+        if (parentIndex === null) break;
+        if (visited.has(parentIndex)) return fail('SCENE_HIERARCHY_INVALID');
+        visited.add(parentIndex);
+        const parent = records[parentIndex];
+        if (!Array.isArray(parent._children)
+            || parent._children.filter((child) => refIndex(child, records) === childIndex).length !== 1)
+            return fail('SCENE_HIERARCHY_INVALID');
+        if (parent === root) { reachedScene = true; break; }
+        if (parent.__type__ !== 'cc.Node' || typeof parent._name !== 'string' || !parent._name)
+            return fail('SCENE_PARENT_REFERENCE_INVALID');
+        pathParts.push(parent._name);
+        childIndex = parentIndex;
+        cursor = parent;
+        if (depth === 64) return fail('SCENE_HIERARCHY_LIMIT');
+    }
+    if (!reachedScene) return fail('SCENE_NODE_OUTSIDE_TARGET_SCENE');
+    const sceneName = typeof root._name === 'string' && root._name ? root._name : 'Scene';
+    const nodePath = [sceneName, ...pathParts.reverse()].join('/');
+
+    const record = found.record;
+    const trs = record._trs && record._trs.array;
+    const size = record._contentSize;
+    const anchor = record._anchorPoint;
+    if (!Array.isArray(trs) || trs.length < 10 || !size || !Number.isFinite(size.width)
+        || !Number.isFinite(size.height) || !anchor || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)
+        || trs.slice(0, 10).some((value) => !Number.isFinite(value))) return fail('SCENE_NODE_TRANSFORM_INVALID');
+    const [qx, qy, qz, qw] = trs.slice(3, 7);
+    const sinZ = 2 * (qw * qz + qx * qy);
+    const cosZ = 1 - 2 * (qy * qy + qz * qz);
+    const angle = Math.round(Math.atan2(sinZ, cosZ) * 180 / Math.PI * 1e6) / 1e6;
+    return { verified: true, sceneUuid, sceneUrl: sceneAssetRow.url, nodeUuid, nodePath,
+        active: typeof record._active === 'boolean' ? record._active : true,
+        transform: { x: trs[0], y: trs[1], z: trs[2], angle, scaleX: trs[7], scaleY: trs[8],
+            width: size.width, height: size.height, anchorX: anchor.x, anchorY: anchor.y } };
+}
+
 function inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow, operation, readback }) {
     if (!Buffer.isBuffer(sceneBytes) || sceneBytes.length < 2 || sceneBytes.length > MAX_SCENE_BYTES)
         return fail('SCENE_SERIALIZATION_SIZE_INVALID');
@@ -199,4 +282,4 @@ function inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid, sceneAssetR
         buttonEventCount: verifiedButtonEventCount, prefabInstanceCount: verifiedPrefabInstanceCount };
 }
 
-module.exports = { inspectSceneComposition };
+module.exports = { inspectSceneComposition, inspectSavedSceneNode };
