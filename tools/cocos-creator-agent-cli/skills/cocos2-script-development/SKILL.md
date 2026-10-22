@@ -1,6 +1,6 @@
 ---
 name: cocos2-script-development
-description: Create, inspect, or modify a Cocos Creator 2.4.x JavaScript or TypeScript component script.
+description: Use when creating, reading, or modifying a Cocos Creator 2.4.x component script, not plain Node.js utilities.
 ---
 
 # Component script development

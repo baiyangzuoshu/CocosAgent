@@ -1,6 +1,6 @@
 ---
 name: cocos2-task-review-recovery
-description: Review coding-agent task changes and recover interrupted Creator 2.4.x operations without overwriting later work.
+description: Use when reviewing Creator task changes or reconciling interrupted Creator 2.4.x operations, not other-engine recovery.
 ---
 
 # Task review and recovery

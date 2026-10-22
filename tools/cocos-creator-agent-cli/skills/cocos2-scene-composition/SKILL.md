@@ -1,6 +1,6 @@
 ---
 name: cocos2-scene-composition
-description: Create or update a related Cocos Creator 2.4.x scene hierarchy with a bounded, verifiable node set.
+description: Use when composing a new Creator 2.4.x scene hierarchy; route existing-node edits to cocos2-scene-node-operations.
 ---
 
 # Scene composition
@@ -8,6 +8,8 @@ description: Create or update a related Cocos Creator 2.4.x scene hierarchy with
 ## Scope
 
 Create or update a related Cocos Creator 2.4.x scene hierarchy with a bounded, verifiable node set.
+
+Use this Skill for related sets of new scene nodes. Route edits to an existing node or component, including rename, reparent, transform, active state, properties, and Button events, to `cocos2-scene-node-operations`. Route serialized Prefab source edits to `cocos2-prefab-source-edit`.
 
 ## Workflow
 

@@ -1,0 +1,333 @@
+{
+  "schemaVersion": 1,
+  "baselineRef": "c5d1006bafd6c90c066d81f8bf7dfb02fd61c6f4",
+  "model": "gpt-6.1-sol",
+  "reasoningEffort": "medium",
+  "outputFile": "evaluation.json",
+  "skills": [
+    {
+      "name": "cocos2-cli",
+      "cases": [
+        {
+          "id": "cocos2-cli-mcp-registration-plan",
+          "title": "Draft a safe Codex MCP registration sequence",
+          "purpose": "Positive: select the CLI Skill for Codex/Cocos CLI setup and keep setup read-only until reviewed.",
+          "userInput": "This is an offline evaluation fixture; there is no Creator editor or Cocos MCP connected. Read the supplied state and write only evaluation.json as raw JSON using the schema below. Do not execute commands or change configuration. State: Creator 2.4.15; cocos-creator-agent CLI 0.12.24 is installed; `mcp status codex` reports not configured; `mcp list` is empty. Draft the safe command sequence to confirm the CLI version and preview Codex MCP registration, and identify the command that would actually register it later. Include the exact read-only checks and make clear that registration has not happened. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
+          "successChecklist": [
+            "Recognizes CLI/MCP setup as in scope.",
+            "Names version and MCP status/list read-only checks.",
+            "Uses the Codex MCP dry-run command before registration.",
+            "Does not claim registration occurred or write configuration."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "plan",
+            "target": ["Codex MCP registration", "codex"],
+            "operation": ["cocos-creator-agent mcp configure codex --dry-run", "Preview MCP registration", "Preview registration"],
+            "status": ["dry_run_ready", "planned_not_executed", "planned_only_not_registered"],
+            "requiredEvidence": ["version --format json", "mcp status codex", "mcp list", "--dry-run"]
+          }
+        },
+        {
+          "id": "cocos2-cli-unity-package-nearmiss",
+          "title": "Decline an unrelated Unity package task",
+          "purpose": "Near miss: ensure the Creator CLI Skill does not take over Unity Package Manager work.",
+          "userInput": "This is an offline evaluation fixture; there is no Creator editor or Cocos MCP connected. I am updating a Unity 6 project's Packages/manifest.json to change a package version. Give a short answer about the scope boundary and write only evaluation.json as raw JSON using the schema below. Do not edit any file or invent a Cocos command. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
+          "successChecklist": [
+            "Identifies Unity package management as outside this Cocos Creator CLI workflow.",
+            "Does not invent or run a Cocos CLI command.",
+            "Makes no workspace changes beyond the requested evaluation result."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": "no_action",
+            "status": ["unrelated_request", "out_of_scope_no_action"],
+            "requiredEvidence": ["Unity", "outside"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-prefab-source-edit",
+      "cases": [
+        {
+          "id": "prefab-source-supported-field-plan",
+          "title": "Prepare a supported Prefab source patch plan",
+          "purpose": "Positive: use the exact Prefab identity and source hash for an allowlisted field, without pretending to commit.",
+          "userInput": "This is an offline evaluation fixture; no Creator editor or Cocos MCP is connected. Review this captured inspection and tool contract, then write only evaluation.json as raw JSON. Do not edit serialized files or claim a patch ran. Inspection: Creator 2.4.15, project Puzzle24; Prefab UUID `prefab-6e`; sourceSha256 `sha256:prefab-a1`; metaSha256 `sha256:meta-b2`; node UUID `node-3`, path `MainMenu/StartButton`; cc.Sprite.enabled is true. The supplied contract supports `creator.prefab.source.patch.plan` for `cc.Sprite.enabled` and requires the inspected sourceSha256; commit requires Creator native approval. Prepare a review-only plan to set cc.Sprite.enabled to false. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
+          "successChecklist": [
+            "Selects the supported Prefab patch-plan path.",
+            "Binds the plan to the exact Prefab UUID, node UUID, and inspected source hash.",
+            "Does not patch .prefab/.meta directly or claim a commit."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "plan",
+            "target": "prefab-6e",
+            "operation": "creator.prefab.source.patch.plan",
+            "status": ["plan_ready", "review_only_plan"],
+            "requiredEvidence": ["node-3", "sha256:prefab-a1", "cc.Sprite.enabled", "false"]
+          }
+        },
+        {
+          "id": "prefab-source-unsupported-label-text",
+          "title": "Reject an unsupported Prefab Label text edit",
+          "purpose": "Boundary: distinguish the Prefab patch allowlist from arbitrary serialized properties.",
+          "userInput": "This is an offline evaluation fixture; no Creator editor or Cocos MCP is connected. A captured Prefab source-patch contract supports `cc.Label.enabled` but does not support label text. The request is to change `cc.Label.string` from `Start` to `Play`. Write only evaluation.json as raw JSON. Do not invent a patch field or modify serialized data. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
+          "successChecklist": [
+            "Recognizes this as a Prefab request but rejects the unsupported field.",
+            "Does not silently substitute Label.enabled for Label.string.",
+            "Does not edit serialized data or claim success."
+          ],
+          "expected": {
+            "scope": ["partial", "out_of_scope"],
+            "action": "unsupported",
+            "target": "cc.Label.string",
+            "operation": null,
+            "status": ["field_not_supported", "unsupported_field"],
+            "requiredEvidence": ["cc.Label.string", "does not support"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-mcp-tools",
+      "cases": [
+        {
+          "id": "mcp-catalog-scene-node-plan-route",
+          "title": "Route a scene-node request through the supplied tool catalog",
+          "purpose": "Positive: use the supplied instance-scoped catalog and exact operation schemas, without assuming other tools exist.",
+          "userInput": "This is an offline evaluation fixture; no live MCP is connected. Treat the following as a captured catalog, not a live response: Creator 2.4.15; instanceId `inst-42`; node UUID `node-7f92`; full path `Canvas/HUD/Score`; available tools are `cocos_capabilities_list(instanceId)`, `creator.scene.node.read(instanceId, nodeUuid)`, and `creator.scene.node.set-active.plan(instanceId, sceneUuid, nodeUuid, active)`. We need inspect the node and prepare to set active=false, but must not commit. Write only evaluation.json as raw JSON. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
+          "successChecklist": [
+            "Treats the catalog as a snapshot and does not claim live discovery.",
+            "Uses the exact instance ID and node UUID.",
+            "Routes through the node read and set-active plan operations; does not commit."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "plan",
+            "target": "node-7f92",
+            "operation": "creator.scene.node.set-active.plan",
+            "status": "offline_plan_only",
+            "requiredEvidence": ["inst-42", "creator.scene.node.read", "active=false"]
+          }
+        },
+        {
+          "id": "mcp-tools-python-csv-nearmiss",
+          "title": "Decline an unrelated Python data-conversion task",
+          "purpose": "Near miss: do not load the Creator MCP workflow for general scripting.",
+          "userInput": "This is an offline evaluation fixture; no Creator editor or Cocos MCP is connected. Write a short Python function that converts a CSV string into a list of dictionaries. Do not use Cocos tools. Write only evaluation.json as raw JSON and classify whether the Creator MCP integration skill applies. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
+          "successChecklist": [
+            "Recognizes ordinary Python data conversion as outside Creator MCP discovery/calls.",
+            "Does not invent a Cocos MCP tool call."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": "no_action",
+            "status": "not_applicable",
+            "requiredEvidence": ["Python", "does not apply"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-runtime-observation",
+      "cases": [
+        {
+          "id": "runtime-evidence-does-not-prove-health",
+          "title": "Separate compile events from observed runtime errors",
+          "purpose": "Positive: interpret diagnostics and preview evidence without overclaiming success or starting a preview.",
+          "userInput": "This is an offline evaluation fixture; no Creator editor or preview is connected. Interpret these captured records only; do not start, refresh, or interact with a preview. Creator 2.4.15 project `HarborDemo`; diagnostics cursor 51 contains `compile-finished` and no compile result; captured browser session `web-77` has Console error `ReferenceError: score is not defined`; no screenshot or assertion result is attached. Can we report a successful compile and healthy gameplay? Write only evaluation.json as raw JSON. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
+          "successChecklist": [
+            "Distinguishes a compile-finished event from successful compilation.",
+            "Reports the captured runtime Console error accurately.",
+            "Does not claim healthy gameplay without assertions or visual evidence."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "observe",
+            "target": "web-77",
+            "status": "runtime_error",
+            "requiredEvidence": ["compile-finished", "does not establish", "ReferenceError"],
+            "forbiddenOperationFragments": ["creator.preview.start", "creator.preview.interact", "creator.preview.refresh"]
+          }
+        },
+        {
+          "id": "runtime-observation-react-server-nearmiss",
+          "title": "Decline a React development-server issue",
+          "purpose": "Near miss: do not route a generic React localhost failure into Creator preview tools.",
+          "userInput": "This is an offline evaluation fixture; no Creator editor or Cocos MCP is connected. A React app on localhost:5173 returns ERR_CONNECTION_REFUSED. Give a brief scope classification; do not invent a Creator preview session or tool call. Write only evaluation.json as raw JSON. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
+          "successChecklist": [
+            "Recognizes the React server issue as outside Creator Web preview observation.",
+            "Does not invent a Creator session ID or preview call."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": "no_action",
+            "status": "outside_creator",
+            "requiredEvidence": ["React", "outside"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-scene-composition",
+      "cases": [
+        {
+          "id": "scene-compose-prefab-root-constraint",
+          "title": "Reject unsupported edits to a Prefab root in a composition plan",
+          "purpose": "Positive: apply the scene-composition capability boundary to a concrete proposed plan.",
+          "userInput": "This is an offline evaluation fixture; no Creator editor or Cocos MCP is connected. Review this captured `creator.scene.compose.plan` preview; do not commit it. The plan creates a new node `HudRoot` by instantiating Prefab UUID `prefab-hud`, then tries to add `cc.Button` to that Prefab root and bind its click event to existing node UUID `node-9`. The Creator 2.4.15 composition contract says Prefab roots are instantiated as authored and cannot receive added components or Button edits in this operation. Write only evaluation.json as raw JSON. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
+          "successChecklist": [
+            "Recognizes this as a scene-composition plan review.",
+            "Blocks the component/event edits on the instantiated Prefab root.",
+            "Does not commit or suggest hand-editing serialized scene data."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": ["plan", "observe"],
+            "target": "HudRoot",
+            "operation": "creator.scene.compose.plan",
+            "status": ["rejected_contract_violation", "preview_rejected_contract_violation"],
+            "requiredEvidence": ["prefab-hud", "cc.Button", "Prefab root"]
+          }
+        },
+        {
+          "id": "scene-compose-existing-node-rename-nearmiss",
+          "title": "Route an existing-node rename away from composition",
+          "purpose": "Near miss: distinguish composing new nodes from modifying an existing scene node.",
+          "userInput": "This is an offline evaluation fixture; no Creator editor or Cocos MCP is connected. Rename existing scene node UUID `node-18` from `ScoreLabel` to `PointsLabel`; do not add any nodes. Classify whether the scene-composition workflow owns this operation and write only evaluation.json as raw JSON. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
+          "successChecklist": [
+            "Does not use scene composition for renaming an existing node.",
+            "Routes the request to the scene-node operation workflow and makes no mutation."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": ["unsupported", "no_action"],
+            "status": ["unsupported_by_scene_composition", "routed_to_cocos2_scene_node_operations"],
+            "requiredEvidence": ["existing", "rename", "cocos2-scene-node-operations"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-scene-node-operations",
+      "cases": [
+        {
+          "id": "scene-node-plan-awaits-native-approval",
+          "title": "Require Creator approval before committing a node plan",
+          "purpose": "Positive: inspect an exact plan receipt and retain the Creator-side approval gate.",
+          "userInput": "This is an offline evaluation fixture; no Creator editor or Cocos MCP is connected. Review this captured plan receipt only. Project `HarborDemo`, Creator 2.4.15, scene UUID `scene-2`; node UUID `node-7f92`, full path `Canvas/HUD/Score`; `creator.scene.node.set-active.plan` returned operationId `op-204`, planHash `sha256:plan-55`, before active=true, after active=false. The Creator native approval dialog has not been accepted. Is this ready to commit? Write only evaluation.json as raw JSON; do not commit or claim a mutation. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
+          "successChecklist": [
+            "Binds the decision to the exact scene/node, operation ID, plan hash, and before-state.",
+            "States that native Creator approval is still required.",
+            "Does not commit or claim persistence."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "observe",
+            "target": "node-7f92",
+            "operation": "creator.scene.node.set-active.plan",
+            "status": "awaiting_native_approval",
+            "requiredEvidence": ["op-204", "sha256:plan-55", "native approval", "active", "false"]
+          }
+        },
+        {
+          "id": "scene-node-new-hierarchy-nearmiss",
+          "title": "Route a new node hierarchy to scene composition",
+          "purpose": "Near miss: distinguish existing-node operations from adding a related set of new nodes.",
+          "userInput": "This is an offline evaluation fixture; no Creator editor or Cocos MCP is connected. Add a new `HudRoot` with `ScoreLabel` and `TimerLabel` children. No existing node needs changing. Classify whether the scene-node operation workflow owns this request; write only evaluation.json as raw JSON. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
+          "successChecklist": [
+            "Does not force a single-node operation workflow onto a new hierarchy.",
+            "Routes the request to scene composition and makes no mutation."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": ["unsupported", "no_action"],
+            "status": "route_to_cocos2_scene_composition",
+            "requiredEvidence": ["new", "hierarchy", "cocos2-scene-composition"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-script-development",
+      "cases": [
+        {
+          "id": "script-modify-stale-source-plan",
+          "title": "Reject a stale script modification plan",
+          "purpose": "Positive: enforce source-hash binding before an existing Creator script can be changed.",
+          "userInput": "This is an offline evaluation fixture; no Creator editor or Cocos MCP is connected. Review these captured values and decide whether to commit. Creator 2.4.15 project `HarborDemo`; target asset UUID `asset-4`; a fresh `creator.script.read` returned sourceSha256 `sha256:current-22`; the proposed `creator.script.modify.plan` was created with expectedSourceSha256 `sha256:old-11`, and returned operationId `op-901` and planHash `sha256:plan-98`. The task is to add `resetScore()` to `Score.ts`. Write only evaluation.json as raw JSON; do not edit the source, commit, or claim compilation. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
+          "successChecklist": [
+            "Detects the stale source hash and refuses to commit the plan.",
+            "Requires a fresh plan bound to the current complete source read.",
+            "Does not claim a compile or runtime result."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "no_action",
+            "target": "asset-4",
+            "operation": ["creator.script.modify.plan", "op-901"],
+            "status": "stale",
+            "requiredEvidence": ["sha256:current-22", "sha256:old-11", "must not be committed"]
+          }
+        },
+        {
+          "id": "script-development-node-utility-nearmiss",
+          "title": "Decline an unrelated Node utility request",
+          "purpose": "Near miss: do not invoke Creator script-asset procedures for a plain Node.js utility.",
+          "userInput": "This is an offline evaluation fixture; no Creator editor or Cocos MCP is connected. I need a plain Node.js helper outside any Creator project that parses a CSV header and rows. Classify whether the Creator component-script workflow applies; write only evaluation.json as raw JSON and do not invent Creator asset operations. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
+          "successChecklist": [
+            "Recognizes a plain Node.js utility outside a Creator project as unrelated.",
+            "Does not invent Creator asset UUID, source hash, or commit steps."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": "no_action",
+            "status": "workflow_not_applicable",
+            "requiredEvidence": ["Node.js", "outside"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-task-review-recovery",
+      "cases": [
+        {
+          "id": "task-recovery-reconcile-dispatched-rename",
+          "title": "Reconcile an interrupted scene rename without replay",
+          "purpose": "Positive: resume the documented observation path for a dispatched Creator operation.",
+          "userInput": "This is an offline evaluation fixture; no Creator editor or Cocos MCP is connected. A `creator.scene.node.rename.commit` request for operationId `op-rename-33` timed out after dispatch. Task state is `needs-reconciliation`; it is unknown whether the scene save completed. What is the next safe operation? Write only evaluation.json as raw JSON. Do not replay the commit or claim rollback. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
+          "successChecklist": [
+            "Uses the original operation ID with the matching rename reconcile operation.",
+            "Treats reconciliation as observation and never replays the dispatched write.",
+            "Does not assume timeout means rollback."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "plan",
+            "operation": "creator.scene.node.rename.reconcile",
+            "status": "needs-reconciliation",
+            "requiredEvidence": ["op-rename-33", "reconcile", "Do not replay"]
+          }
+        },
+        {
+          "id": "task-recovery-unity-import-nearmiss",
+          "title": "Decline recovery of an interrupted Unity asset import",
+          "purpose": "Near miss: do not apply Creator recovery commands to another engine's operation ledger.",
+          "userInput": "This is an offline evaluation fixture; no Creator editor or Cocos MCP is connected. A Unity Editor asset import was interrupted after dispatch. Tell me how to resume or replay it. Classify whether the Creator 2.4.x task-recovery workflow applies; write only evaluation.json as raw JSON and do not invent Creator operation IDs or commands. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
+          "successChecklist": [
+            "Recognizes a Unity operation as outside the Creator recovery contract.",
+            "Does not invent a Cocos reconcile call or claim a recovery occurred."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": "unsupported",
+            "status": "Creator 2.4.x recovery workflow",
+            "requiredEvidence": ["Unity", "does not apply"]
+          }
+        }
+      ]
+    }
+  ]
+}

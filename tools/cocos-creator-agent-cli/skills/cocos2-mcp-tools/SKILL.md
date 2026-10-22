@@ -1,6 +1,6 @@
 ---
 name: cocos2-mcp-tools
-description: Discover and call Cocos Creator tools exposed through a third-party Host's MCP connection.
+description: Use when discovering or calling Cocos Creator MCP tools; use cocos2-cli for terminal-only CLI tasks.
 ---
 
 # Cocos integration tool discovery

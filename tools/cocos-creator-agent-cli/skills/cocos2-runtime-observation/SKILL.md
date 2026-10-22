@@ -1,6 +1,6 @@
 ---
 name: cocos2-runtime-observation
-description: Observe a running Creator 2.4.x Web preview, diagnose runtime errors, and verify bounded interactions.
+description: Use when observing or diagnosing a running Creator 2.4.x Web preview, not generic browser or server issues.
 ---
 
 # Runtime observation

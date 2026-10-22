@@ -1,6 +1,6 @@
 ---
 name: cocos2-cli
-description: Set up and use the standalone Cocos Creator CLI, its bundled Creator workflow Skills, and its native Codex/Claude MCP server configuration.
+description: Use when setting up or operating the Cocos Creator CLI, bundled Skills, MCP registration, or project extensions.
 ---
 
 # Cocos Creator CLI

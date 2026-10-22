@@ -1,6 +1,6 @@
 ---
 name: cocos2-scene-node-operations
-description: Inspect or modify supported Cocos Creator 2.4.x scene nodes, component properties, and Prefab instances.
+description: Use when inspecting or changing existing Creator 2.4.x scene nodes; route new hierarchies to cocos2-scene-composition.
 ---
 
 # Scene node operations
@@ -8,6 +8,8 @@ description: Inspect or modify supported Cocos Creator 2.4.x scene nodes, compon
 ## Scope
 
 Inspect or modify supported Cocos Creator 2.4.x scene nodes, component properties, and Prefab instances.
+
+Use this Skill for supported operations on exact existing scene nodes and components. Route a related set of new parent/child nodes to `cocos2-scene-composition`. Route edits to serialized Prefab source to `cocos2-prefab-source-edit`.
 
 ## Workflow
 

@@ -1,6 +1,6 @@
 ---
 name: cocos2-prefab-source-edit
-description: Inspect a Cocos Creator 2.4.x Prefab and use a Creator-aware edit only when the live tool contract explicitly supports it.
+description: Use when inspecting or safely patching a Creator 2.4.15 Prefab through its supported source-patch contract.
 ---
 
 # Prefab source editing
