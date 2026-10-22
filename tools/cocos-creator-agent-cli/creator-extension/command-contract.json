@@ -251,7 +251,7 @@
     {
       "id": "creator.editor.eval-file.plan",
       "access": "plan",
-      "description": "Freeze a project package editor-scripts JavaScript file and JSON input for an explicit Creator Editor execution approval. Only packages/*/editor-scripts/*.js paths without symlinks are accepted; source runs with Editor privileges and is not sandboxed.",
+      "description": "Freeze a project package editor-scripts JavaScript file and JSON input for an explicit Creator Editor execution approval. Test scripts also receive the bounded CreatorTest harness. Only packages/*/editor-scripts/*.js paths without symlinks are accepted; source runs with Editor privileges and is not sandboxed.",
       "input": { "type": "object", "required": ["scriptPath"], "properties": {
         "scriptPath": { "type": "string", "minLength": 1, "maxLength": 512,
         "pattern": "^packages/(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?($|/))(?!.*(?:^|/)\\.)[^\\\\]+/(?:[^\\\\]+/)*editor-scripts/(?:[^\\\\]+/)*[^\\\\]+\\.js$" },

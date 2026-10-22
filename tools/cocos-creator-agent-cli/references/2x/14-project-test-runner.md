@@ -28,6 +28,7 @@ Place `.cocos-agent/tests.json` in the authorized Creator 2.4.15 project. `creat
       "id": "editor-script-tests",
       "adapter": "editor",
       "scriptPath": "packages/project-tests/editor-scripts/run-tests.js",
+      "testIds": ["project-open", "assetdb-ready"],
       "input": {}
     },
     {
@@ -40,9 +41,9 @@ Place `.cocos-agent/tests.json` in the authorized Creator 2.4.15 project. `creat
 }
 ```
 
-The plan permits 1–64 suites with unique IDs. Node suites explicitly list 1–64 `.js`, `.cjs` or `.mjs` files inside the project. Node's `node:test` runner executes them in child processes. These tests verify host-side JavaScript logic, not Creator globals, compilation or scene behavior. TypeScript needs prior project compilation or an editor test provider; the adapter does not silently transpile it. Tests execute project code with the current user's permissions and are not sandboxed. The protocol accepts no shell-command strings or downloaded test dependencies.
+The plan permits 1–64 suites with unique IDs. Node suites explicitly list 1–64 `.js`, `.cjs` or `.mjs` files inside the project. Node's `node:test` runner executes them in child processes. These tests verify host-side JavaScript logic, not Creator globals, compilation or scene behavior. TypeScript needs prior project compilation or an editor test provider; the adapter does not silently transpile it. Tests execute project code with the current user's permissions and are not sandboxed. The protocol accepts no shell-command strings or downloaded test dependencies. Editor `testIds` are unique stable IDs, with up to 1000 declared per suite; each approved Editor run executes at most 64 selected cases.
 
-`--shard <index>/<total>` keeps Node's test-case sharding and assigns each `creator`, `editor` or `preview` suite as a whole to one deterministic shard based on its suite ID. This makes Editor and runtime suites parallelizable across workers without splitting a stateful suite. Reports list `shardSelectedSuiteIds`, `shardSkippedSuiteIds`, and the adapter strategies. Creator Provider coverage is not inferred from its test count; direct Editor script coverage is unsupported.
+`--shard <index>/<total>` keeps Node's test-case sharding and assigns each `creator` or `preview` suite as a whole to one deterministic shard based on its suite ID. An Editor suite with `testIds` is split by stable test ID; an Editor suite without `testIds` stays whole. Reports include selected/skipped suites and selected Editor case IDs. Creator Provider coverage is not inferred from its test count; direct Editor script coverage is unsupported.
 
 `timeoutMs` applies only to Node suites (100–180000 ms, default 30000). Timeout/cancellation terminates the owned process group and fails the run. Missing tests, all-skipped suites, malformed output and nonzero process exits cannot yield a pass. Inherited Node preload flags and test-runner context are cleared in subprocesses.
 
@@ -70,27 +71,24 @@ An invoked Provider call that fails or returns an uncertain result requires manu
 
 Use this adapter for a project-owned JavaScript test file under `packages/<package>/editor-scripts/`. The file must be at most 16 KiB and cannot be a symlink. The CLI first asks the connected 2.4.15 Editor to freeze the exact source and JSON input, checks the returned identity and SHA-256 against the local file, then requests the `creator.editor.eval-file.commit` operation. Creator displays its native approval dialog for every execution. The script runs with `Editor` privileges and is not sandboxed; its effects and persistence are not verified.
 
-The file body runs inside an async function with `Editor` and `input` arguments. Return a JSON object with `schemaVersion: 1` and a `tests` array. Each case needs a unique `id`, a `name`, and a `status` of `passed`, `failed` or `skipped`:
+The file body runs inside an async function with `Editor`, `input`, and the built-in `CreatorTest` harness. To enable case-level sharding, list the script's stable case IDs in the suite's optional `testIds` array. `CreatorTest.run()` checks that every selected ID exists in the script, runs only assigned cases, captures thrown errors, and returns the required JSON report. The CLI verifies that every assigned case appears exactly once in the result.
 
 ```js
-const startedAt = Date.now();
-const tests = [];
-try {
-  tests.push({
+return CreatorTest.run([
+  {
     id: 'project-open',
     name: 'Editor has an open project',
-    status: Editor.Project.path ? 'passed' : 'failed',
-    durationMs: Date.now() - startedAt,
-    message: Editor.Project.path || 'No project is open.',
-  });
-} catch (error) {
-  tests.push({ id: 'project-open', name: 'Editor has an open project', status: 'failed',
-    durationMs: Date.now() - startedAt, message: String(error.message || error) });
-}
-return { schemaVersion: 1, tests };
+    run: () => CreatorTest.assert(Boolean(Editor.Project.path), 'No project is open.'),
+  },
+  {
+    id: 'assetdb-ready',
+    name: 'AssetDB is available',
+    run: () => CreatorTest.assert(Boolean(Editor.assetdb), 'AssetDB is unavailable.'),
+  },
+]);
 ```
 
-The Editor script runner bounds source, input, result and execution time; its 30-second async timeout cannot cancel side effects already started. A commit timeout, malformed receipt or uncertain result is marked for manual review. Watch stops and does not replay that script automatically. Mock adapter tests verify orchestration and receipt handling; live Creator 2.4.15 execution is required for Editor acceptance.
+`CreatorTest.run` accepts up to 64 selected cases per execution, with a default 10-second per-case timeout and a 25-second total budget. A timeout marks the run for manual review and skips remaining cases because already-started Editor work cannot be cancelled. The Editor script runner also bounds source, input and result size. A commit timeout, malformed receipt or uncertain result is marked for manual review; watch stops and does not replay that script automatically. Mock adapter tests verify orchestration and receipt handling; live Creator 2.4.15 execution is required for Editor acceptance.
 
 ## Preview adapter
 

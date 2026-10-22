@@ -11,6 +11,8 @@ import { PROVIDER_ID, COMMAND_ID } from './creator-extension/provider-contract.c
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MANIFEST = '.cocos-agent/tests.json';
 const ID = /^[a-z][a-z0-9-]{0,63}$/;
+const CASE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const MAX_EDITOR_CASES_PER_RUN = 100;
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const coded = (code) => Object.assign(new Error(code), { code });
 const plain = (value) => value && typeof value === 'object' && !Array.isArray(value);
@@ -61,7 +63,7 @@ export function loadTestPlan(projectRoot) {
     throw coded('TEST_MANIFEST_INVALID');
   const ids = new Set();
   const suites = manifest.suites.map((suite) => {
-    rejectUnknown(suite, ['id', 'adapter', 'files', 'dependsOn', 'providerId', 'commandId', 'scriptPath', 'input', 'timeoutMs']);
+    rejectUnknown(suite, ['id', 'adapter', 'files', 'dependsOn', 'providerId', 'commandId', 'scriptPath', 'input', 'testIds', 'timeoutMs']);
     if (!ID.test(suite.id || '') || ids.has(suite.id)) throw coded('TEST_SUITE_ID_INVALID');
     ids.add(suite.id);
     if (!['node', 'creator', 'editor', 'preview'].includes(suite.adapter)) throw coded('TEST_ADAPTER_UNSUPPORTED');
@@ -84,8 +86,14 @@ export function loadTestPlan(projectRoot) {
       suite.scriptPath = safeEditorTestFile(root, suite.scriptPath);
       if (suite.input !== undefined && Buffer.byteLength(JSON.stringify(suite.input), 'utf8') > 16 * 1024)
         throw coded('TEST_EDITOR_SCRIPT_INPUT_TOO_LARGE');
+      if (suite.testIds !== undefined && (!Array.isArray(suite.testIds) || !suite.testIds.length || suite.testIds.length > 1000
+        || suite.testIds.some((id) => typeof id !== 'string' || !CASE_ID.test(id))
+        || new Set(suite.testIds).size !== suite.testIds.length)) throw coded('TEST_EDITOR_CASE_IDS_INVALID');
     } else if (suite.providerId !== undefined || suite.commandId !== undefined || suite.scriptPath !== undefined)
       throw coded('TEST_MANIFEST_FIELD_INVALID');
+    if (suite.adapter !== 'editor' && suite.testIds !== undefined) throw coded('TEST_MANIFEST_FIELD_INVALID');
+    if (suite.adapter === 'editor' && Object.hasOwn(suite.input || {}, '__cocosAgentTest'))
+      throw coded('TEST_EDITOR_RUNNER_INPUT_RESERVED');
     if (suite.adapter === 'preview') {
       if (Object.hasOwn(suite.input || {}, 'previewSessionId') || Object.hasOwn(suite.input || {}, 'coverage'))
         throw coded('TEST_PREVIEW_RUNNER_FIELD_RESERVED');
@@ -150,6 +158,12 @@ export function testShardForSuite(suiteId, total) {
   if (typeof suiteId !== 'string' || !suiteId || !Number.isInteger(total) || total < 1 || total > 64)
     throw coded('TEST_SHARD_INVALID');
   return createHash('sha256').update(suiteId).digest().readUInt32BE(0) % total + 1;
+}
+
+export function testShardForCase(suiteId, caseId, total) {
+  if (typeof suiteId !== 'string' || !suiteId || typeof caseId !== 'string' || !CASE_ID.test(caseId)
+    || !Number.isInteger(total) || total < 1 || total > 64) throw coded('TEST_SHARD_INVALID');
+  return testShardForSuite(`${suiteId}:${caseId}`, total);
 }
 
 function requireCoverageSupport() {
@@ -285,8 +299,16 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
   if (coverage && selected.some((suite) => suite.adapter === 'editor'))
     throw coded('TEST_COVERAGE_EDITOR_SCRIPT_UNSUPPORTED');
   if (coverage) requireCoverageSupport();
+  const selectedCaseIdsBySuite = {};
   const shardSkipped = normalizedShard ? selected.filter((suite) => suite.adapter !== 'node'
+    && !(suite.adapter === 'editor' && suite.testIds)
     && testShardForSuite(suite.id, normalizedShard.total) !== normalizedShard.index) : [];
+  for (const suite of selected.filter((item) => item.adapter === 'editor' && item.testIds)) {
+    const selectedCaseIds = normalizedShard ? suite.testIds.filter((id) =>
+      testShardForCase(suite.id, id, normalizedShard.total) === normalizedShard.index) : suite.testIds;
+    selectedCaseIdsBySuite[suite.id] = selectedCaseIds;
+    if (normalizedShard && !selectedCaseIds.length) shardSkipped.push(suite);
+  }
   const runnable = selected.filter((suite) => !shardSkipped.includes(suite));
   const liveInstances = dependencies.listInstances || listInstances;
   const call = dependencies.callCommand || callCommand;
@@ -302,8 +324,9 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
   const report = { schemaVersion: 1, runId: randomUUID(), projectRoot: plan.projectRoot, projectName: plan.projectName,
     creatorVersion: '2.4.15', manifestHash: plan.manifestHash, selectedSuiteIds: selected.map((suite) => suite.id),
     ...(normalizedShard ? { shard: { ...normalizedShard,
-      strategies: { node: 'test-case', creator: 'suite', editor: 'suite', preview: 'suite' } } } : {}),
+      strategies: { node: 'test-case', creator: 'suite', editor: 'test-case-when-manifested-otherwise-suite', preview: 'suite' } } } : {}),
     shardSelectedSuiteIds: runnable.map((suite) => suite.id), shardSkippedSuiteIds: shardSkipped.map((suite) => suite.id),
+    ...(Object.keys(selectedCaseIdsBySuite).length ? { selectedCaseIdsBySuite } : {}),
     coverageEnabled: coverage,
     startedAt: new Date(started).toISOString(), suites: [] };
   const reportTarget = prepareReportDirectory(plan.projectRoot, reportDir, report.runId);
@@ -319,11 +342,20 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
       if (suite.adapter === 'node') result = await runNodeSuite(plan, suite, signal, { shard: normalizedShard, coverage });
       else if (suite.adapter === 'editor') {
         const before = safeFile(plan.projectRoot, suite.scriptPath, { maxBytes: 16 * 1024 });
+        const selectedCaseIds = suite.testIds ? selectedCaseIdsBySuite[suite.id] : undefined;
+        if (selectedCaseIds && selectedCaseIds.length > MAX_EDITOR_CASES_PER_RUN)
+          throw coded('TEST_EDITOR_CASE_BATCH_LIMIT');
+        const editorInput = suite.testIds ? { ...(suite.input || {}), __cocosAgentTest: {
+          selectedCaseIds,
+          ...(normalizedShard ? { shard: normalizedShard } : {}),
+        } } : suite.input || {};
+        if (Buffer.byteLength(JSON.stringify(editorInput), 'utf8') > 16 * 1024)
+          throw coded('TEST_EDITOR_SCRIPT_INPUT_TOO_LARGE');
         const planReceipt = await call(instanceId, 'creator.editor.eval-file.plan', {
-          scriptPath: suite.scriptPath, input: suite.input || {},
+          scriptPath: suite.scriptPath, input: editorInput,
         });
         const planned = planReceipt.result;
-        const expectedInput = JSON.stringify(suite.input || {});
+        const expectedInput = JSON.stringify(editorInput);
         if (planned?.status !== 'planned' || planned.mode !== 'file' || planned.projectRoot !== plan.projectRoot
           || planned.creatorVersion !== '2.4.15' || planned.creatorInstanceId !== instanceId
           || planned.scriptPath !== suite.scriptPath
@@ -348,6 +380,9 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
           throw coded('TEST_EDITOR_EXECUTION_UNCONFIRMED');
         const returned = execution.result;
         if (returned?.schemaVersion !== 1 || !Array.isArray(returned.tests)) throw coded('TEST_EDITOR_REPORT_INVALID');
+        if (suite.testIds && (returned.tests.length !== selectedCaseIds.length
+          || selectedCaseIds.some((id) => !returned.tests.some((item) => item?.id === id))))
+          throw coded('TEST_EDITOR_CASE_RESULTS_MISMATCH');
         result = { tests: returned.tests, requiresManualReview: returned.requiresManualReview === true,
           sourceHashes: { [suite.scriptPath]: planned.sourceSha256 }, receipt: {
             operationId: planned.operationId, planHash: planned.planHash, status: execution.status,
