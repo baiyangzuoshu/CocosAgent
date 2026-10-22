@@ -368,6 +368,20 @@
       }
     },
     {
+      "id": "creator.scene.ui.inspect",
+      "access": "read",
+      "description": "Read bounded public serializable properties and configured event lists for supported built-in Creator 2.4 UI components on one exact active-scene node. Event lists cover Button, Toggle, ToggleContainer, Slider, ScrollView, PageView, and EditBox callbacks. Reports component instance IDs and per-property availability; does not mutate the scene.",
+      "input": {
+        "type": "object",
+        "required": ["sceneUuid", "nodeUuid"],
+        "properties": {
+          "sceneUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+          "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
       "id": "creator.scene.compose.plan",
       "access": "plan",
       "description": "Plan a bounded Creator 2.4 scene composition of new nodes, optional AssetDB-backed Prefab instances, transforms, registered components, typed scalar or asset properties, and Button click handlers. Prefab roots are instantiated as authored and cannot receive additional components or Button edits in this operation. Existing scene nodes are read-only parents or event targets.",
@@ -410,7 +424,7 @@
                       "value": { "type": ["string", "number", "boolean", "object"], "maxLength": 1024,
                         "properties": {
                           "assetUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
-                          "assetClass": { "type": "string", "enum": ["SpriteFrame", "Texture2D", "AudioClip", "Prefab", "BitmapFont", "TTFFont"] }
+                          "assetClass": { "type": "string", "enum": ["SpriteFrame", "Texture2D", "AudioClip", "Prefab", "Font", "BitmapFont", "TTFFont"] }
                         }, "required": ["assetUuid", "assetClass"], "additionalProperties": false,
                         "minimum": -1000000000, "maximum": 1000000000 }
                     }, "additionalProperties": false }
@@ -864,7 +878,7 @@
               "kind": { "type": "string", "enum": ["asset"] },
               "assetUuid": { "type": "string", "minLength": 22, "maxLength": 36,
                 "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
-              "assetClass": { "type": "string", "enum": ["SpriteFrame", "Texture2D", "AudioClip", "Prefab", "BitmapFont", "TTFFont"] }
+              "assetClass": { "type": "string", "enum": ["SpriteFrame", "Texture2D", "AudioClip", "Prefab", "Font", "BitmapFont", "TTFFont"] }
             }, "additionalProperties": false }
           ] }
         },
@@ -1071,7 +1085,7 @@
       "id": "creator.preview.interact",
       "access": "control",
       "execution": "bridge",
-      "description": "Apply bounded keyboard or normalized canvas clicks in the same preview session and evaluate declarative runtime assertions, with optional V8 function and block-range coverage.",
+      "description": "Apply bounded keyboard, canvas click/drag, text-entry, or explicit Widget/Layout refresh actions in the same preview session, evaluate declarative runtime assertions, and optionally collect V8 function/block coverage.",
       "input": {
         "type": "object",
         "required": ["previewSessionId", "actions"],
@@ -1080,17 +1094,36 @@
           "coverage": { "type": "boolean" },
           "actions": {
             "type": "array", "minItems": 1, "maxItems": 12,
-            "items": {
-              "type": "object", "required": ["type"],
-              "properties": {
-                "type": { "type": "string", "enum": ["key", "click"] },
+            "items": { "oneOf": [
+              { "type": "object", "required": ["type", "key"], "properties": {
+                "type": { "type": "string", "enum": ["key"] },
                 "key": { "type": "string", "maxLength": 20 },
-                "durationMs": { "type": "integer", "minimum": 1, "maximum": 2000 },
+                "durationMs": { "type": "integer", "minimum": 1, "maximum": 2000 }
+              }, "additionalProperties": false },
+              { "type": "object", "required": ["type", "x", "y"], "properties": {
+                "type": { "type": "string", "enum": ["click"] },
                 "x": { "type": "number", "minimum": 0, "maximum": 1 },
                 "y": { "type": "number", "minimum": 0, "maximum": 1 }
-              },
-              "additionalProperties": false
-            }
+              }, "additionalProperties": false },
+              { "type": "object", "required": ["type", "startX", "startY", "endX", "endY"], "properties": {
+                "type": { "type": "string", "enum": ["drag"] },
+                "startX": { "type": "number", "minimum": 0, "maximum": 1 },
+                "startY": { "type": "number", "minimum": 0, "maximum": 1 },
+                "endX": { "type": "number", "minimum": 0, "maximum": 1 },
+                "endY": { "type": "number", "minimum": 0, "maximum": 1 },
+                "durationMs": { "type": "integer", "minimum": 1, "maximum": 2000 }
+              }, "additionalProperties": false },
+              { "type": "object", "required": ["type", "text"], "properties": {
+                "type": { "type": "string", "enum": ["text"] },
+                "text": { "type": "string", "maxLength": 512 }
+              }, "additionalProperties": false },
+              { "type": "object", "required": ["type", "path", "componentType"], "properties": {
+                "type": { "type": "string", "enum": ["ui-refresh"] },
+                "path": { "type": "string", "minLength": 1, "maxLength": 240,
+                  "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?($|/)).+$" },
+                "componentType": { "type": "string", "enum": ["cc.Widget", "cc.Layout"] }
+              }, "additionalProperties": false }
+            ] }
           },
           "assertions": {
             "type": "array", "minItems": 1, "maxItems": 12,
@@ -1102,7 +1135,7 @@
                 "name": { "type": "string", "maxLength": 120 },
                 "uuid": { "type": "string", "maxLength": 80 },
                 "path": { "type": "string", "maxLength": 240 },
-                "property": { "type": "string", "enum": ["active", "x", "y"] },
+                "property": { "type": "string", "enum": ["active", "x", "y", "width", "height", "anchorX", "anchorY"] },
                 "componentType": { "type": "string", "maxLength": 100 },
                 "componentProperty": { "type": "string", "maxLength": 64, "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$" },
                 "expected": { "type": ["string", "number", "boolean"] },

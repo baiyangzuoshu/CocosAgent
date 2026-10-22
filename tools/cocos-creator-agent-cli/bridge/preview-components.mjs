@@ -5,7 +5,9 @@
  */
 export function readPreviewComponentProperty(node, componentType, componentProperty) {
   const components = node && Array.isArray(node._components) ? node._components : [];
-  const component = components.find((item) => item && item.constructor && item.constructor.name === componentType);
+  const component = components.find((item) => item && item.constructor
+    && (item.constructor.name === componentType
+      || item.constructor.prototype && item.constructor.prototype.__classname__ === componentType));
   const descriptor = component && Object.getOwnPropertyDescriptor(component, componentProperty);
   const found = !!descriptor && Object.prototype.hasOwnProperty.call(descriptor, 'value');
   const actual = found ? descriptor.value : null;

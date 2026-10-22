@@ -13,6 +13,16 @@ test('scene contracts accept real Creator compact object UUIDs without accepting
   assert.equal(validateCommand('creator.scene.node.set-active.commit', { operationId: input.nodeUuid, planHash: 'a'.repeat(64) }).ok, false);
 });
 
+test('UI inspection is a bounded read command bound to one exact scene node', () => {
+  const inspect = COMMANDS.get('creator.scene.ui.inspect');
+  assert.ok(inspect);
+  assert.equal(inspect.access, 'read');
+  assert.equal(validateCommand(inspect.id, { sceneUuid, nodeUuid }).ok, true);
+  assert.equal(validateCommand(inspect.id, { sceneUuid, nodeUuid, componentClassName: 'cc.Button' }).code,
+    'UNKNOWN_INPUT_FIELD');
+  assert.equal(validateCommand(inspect.id, { sceneUuid, nodeUuid: '../outside' }).ok, false);
+});
+
 test('existing node transform commands use a bounded field schema and approved reconcile lifecycle', () => {
   const plan = COMMANDS.get('creator.scene.node.set-transform.plan');
   const commit = COMMANDS.get('creator.scene.node.set-transform.commit');
@@ -110,6 +120,7 @@ test('component-property contract accepts bounded scalars and typed Creator prop
     { kind: 'component-ref', componentClassName: 'game.Controller', nodeUuid,
       componentInstanceId: 'component-1' },
     { kind: 'asset', assetClass: 'SpriteFrame' },
+    { kind: 'asset', assetClass: 'Font' },
     { kind: 'asset', assetClass: 'SpriteFrame', assetUuid: '44444444-4444-4444-8444-444444444444' },
   ]) assert.equal(validateCommand(plan.id, { ...input, value }).ok, true, JSON.stringify(value));
   assert.equal(validateCommand(plan.id, { ...input, value: { text: 'bad' } }).code, 'INVALID_INPUT_FIELD');

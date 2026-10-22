@@ -11,6 +11,22 @@ const MAX_MUTATION_SCAN_DEPTH = 64;
 const MAX_COMPONENT_INSTANCES = 32;
 const MAX_DELETE_SUBTREE_NODES = 256;
 const MAX_PREFAB_INSTANCE_NODES = 256;
+const UI_COMPONENT_CLASS_NAMES = new Set([
+    'cc.Canvas', 'cc.Widget', 'cc.Layout', 'cc.Sprite', 'cc.Label', 'cc.Button',
+    'cc.Toggle', 'cc.ToggleContainer', 'cc.Slider', 'cc.ProgressBar', 'cc.EditBox', 'cc.RichText',
+    'cc.ScrollView', 'cc.Scrollbar', 'cc.Mask', 'cc.PageView', 'cc.PageViewIndicator', 'cc.BlockInputEvents',
+]);
+const UI_EVENT_PROPERTIES = Object.freeze({
+    'cc.Button': ['clickEvents'],
+    'cc.Toggle': ['checkEvents'],
+    'cc.ToggleContainer': ['checkEvents'],
+    'cc.Slider': ['slideEvents'],
+    'cc.ScrollView': ['scrollEvents'],
+    'cc.PageView': ['pageEvents'],
+    'cc.EditBox': ['editingDidBegan', 'textChanged', 'editingDidEnded', 'editingReturn'],
+});
+const MAX_UI_COMPONENTS_PER_NODE = 16;
+const MAX_UI_PROPERTIES_PER_COMPONENT = 48;
 
 function editorManaged(object) {
     const flags = cc && cc.Object && cc.Object.Flags;
@@ -195,6 +211,26 @@ function normalizedButtonEvents(button) {
         handler: event && typeof event.handler === 'string' ? event.handler : '',
         customEventData: event && typeof event.customEventData === 'string' ? event.customEventData : '',
     })) };
+}
+
+function normalizedUiEvents(component, property) {
+    const rawEvents = component && component[property];
+    if (!Array.isArray(rawEvents) || rawEvents.length > 12)
+        return { available: false, reason: 'SCENE_UI_EVENT_LIMIT' };
+    const events = [];
+    for (const event of rawEvents) {
+        const target = event && event.target;
+        if (!event || (target != null && (!cc.Node || !(target instanceof cc.Node)))
+            || (event.component != null && typeof event.component !== 'string')
+            || (event.handler != null && typeof event.handler !== 'string')
+            || (event.customEventData != null && typeof event.customEventData !== 'string'))
+            return { available: false, reason: 'SCENE_UI_EVENT_ENTRY_INVALID' };
+        events.push({ targetUuid: target && typeof target.uuid === 'string' ? target.uuid : null,
+            component: typeof event.component === 'string' ? event.component.slice(0, 120) : '',
+            handler: typeof event.handler === 'string' ? event.handler.slice(0, 64) : '',
+            customEventData: typeof event.customEventData === 'string' ? event.customEventData.slice(0, 512) : '' });
+    }
+    return { available: true, events };
 }
 
 function buttonEventsState(params) {
@@ -784,7 +820,7 @@ function isScalar(value) {
         || (typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 1000000000);
 }
 
-const ASSET_CLASS_NAMES = ['SpriteFrame', 'Texture2D', 'AudioClip', 'Prefab', 'BitmapFont', 'TTFFont'];
+const ASSET_CLASS_NAMES = ['SpriteFrame', 'Texture2D', 'AudioClip', 'Prefab', 'Font', 'BitmapFont', 'TTFFont'];
 
 function sameValue(left, right) {
     if (isScalar(left) || isScalar(right) || left === null || right === null) return Object.is(left, right);
@@ -1074,6 +1110,71 @@ function componentPropertyState(params) {
         serializedClassId: classId(constructor), referenceClasses: Array.from(referenceClasses, ([componentClassName, serializedClassId]) =>
             ({ componentClassName, serializedClassId })).sort((left, right) => left.componentClassName.localeCompare(right.componentClassName)),
         property: params.property, propertyKind: serialized.kind, value: serialized.value };
+}
+
+function uiComponentState(params) {
+    if (!params || typeof params.sceneUuid !== 'string' || typeof params.nodeUuid !== 'string')
+        return { available: false, reason: 'SCENE_UI_INSPECT_INPUT_INVALID' };
+    const located = locateNode(params.sceneUuid, params.nodeUuid);
+    if (!located.state.available) return located.state;
+    if (!located.node || typeof located.node.getComponents !== 'function' || !cc.Component)
+        return { ...located.state, available: false, reason: 'SCENE_UI_COMPONENTS_UNAVAILABLE' };
+    const allComponents = located.node.getComponents(cc.Component);
+    if (!Array.isArray(allComponents))
+        return { ...located.state, available: false, reason: 'SCENE_UI_COMPONENTS_UNAVAILABLE' };
+    const components = allComponents.filter((component) => component && !editorManaged(component)
+        && UI_COMPONENT_CLASS_NAMES.has(classNameOf(component)));
+    const truncated = components.length > MAX_UI_COMPONENTS_PER_NODE;
+    const result = [];
+    for (const component of components.slice(0, MAX_UI_COMPONENTS_PER_NODE)) {
+        const componentClassName = classNameOf(component);
+        const componentInstanceId = component && component._id != null ? String(component._id).slice(0, 128) : null;
+        if (!componentClassName || !componentInstanceId)
+            return { ...located.state, available: false, reason: 'SCENE_UI_COMPONENT_IDENTITY_INVALID' };
+        const constructor = component.constructor;
+        const declared = Array.isArray(constructor && constructor.__props__) ? constructor.__props__ : [];
+        const inherited = new Set([
+            ...(Array.isArray(constructor && constructor.$super && constructor.$super.__props__)
+                ? constructor.$super.__props__ : []),
+            ...(Array.isArray(cc.Component.__props__) ? cc.Component.__props__ : []),
+        ]);
+        const publicProperties = declared.filter((property) => typeof property === 'string'
+            && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(property) && !property.startsWith('_')
+            && !inherited.has(property)
+            && !(Array.isArray(constructor.__values__) && !constructor.__values__.includes(property))
+            && !(cc.Class && typeof cc.Class.attr === 'function'
+                && cc.Class.attr(constructor, property, 'serializable') === false));
+        const properties = [];
+        const unsupportedProperties = [];
+        const propertyNames = publicProperties.slice(0, MAX_UI_PROPERTIES_PER_COMPONENT);
+        for (const property of propertyNames) {
+            const state = componentPropertyState({ sceneUuid: params.sceneUuid, nodeUuid: params.nodeUuid,
+                nodePath: located.state.nodePath, componentClassName, componentInstanceId, property });
+            if (state.available) properties.push({ name: property, kind: state.propertyKind, value: state.value });
+            else unsupportedProperties.push({ name: property, reason: state.reason || 'SCENE_UI_PROPERTY_UNAVAILABLE' });
+        }
+        const row = { componentClassName, componentInstanceId, properties,
+            unsupportedProperties, propertiesTruncated: publicProperties.length > propertyNames.length };
+        const eventProperties = UI_EVENT_PROPERTIES[componentClassName] || [];
+        if (eventProperties.length) {
+            row.eventLists = {};
+            row.eventListsUnavailable = {};
+            for (const property of eventProperties) {
+                const events = normalizedUiEvents(component, property);
+                if (events.available) row.eventLists[property] = events.events;
+                else row.eventListsUnavailable[property] = events.reason;
+            }
+            if (componentClassName === 'cc.Button') {
+                row.clickEvents = row.eventLists.clickEvents;
+                if (row.eventListsUnavailable.clickEvents)
+                    row.clickEventsUnavailableReason = row.eventListsUnavailable.clickEvents;
+            }
+        }
+        result.push(row);
+    }
+    return { available: true, sceneName: located.state.sceneName, sceneUuid: params.sceneUuid,
+        nodeName: located.state.nodeName, nodeUuid: params.nodeUuid, nodePath: located.state.nodePath,
+        componentCount: result.length, componentsTruncated: truncated, components: result };
 }
 
 function setComponentProperty(params, loadedAsset) {
@@ -1771,6 +1872,10 @@ module.exports = {
     componentPropertyState(event, params) {
         try { event.reply(null, componentPropertyState(params || {})); }
         catch (error) { event.reply({ code: 'SCENE_COMPONENT_PROPERTY_STATE_FAILED', message: String(error && error.message || error) }); }
+    },
+    uiComponentState(event, params) {
+        try { event.reply(null, uiComponentState(params || {})); }
+        catch (error) { event.reply({ code: 'SCENE_UI_INSPECT_FAILED', message: String(error && error.message || error) }); }
     },
     setComponentProperty(event, params) {
         try {

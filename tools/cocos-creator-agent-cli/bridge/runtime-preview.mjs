@@ -469,7 +469,7 @@ function windowsVirtualKeyCode(key) {
   throw failure('PREVIEW_KEY_NOT_ALLOWED');
 }
 
-function validateActions(actions) {
+export function validatePreviewActions(actions) {
   if (!Array.isArray(actions) || actions.length < 1 || actions.length > MAX_ACTIONS) throw failure('PREVIEW_ACTIONS_INVALID');
   return actions.map((action) => {
     if (!action || typeof action !== 'object') throw failure('PREVIEW_ACTION_INVALID');
@@ -487,6 +487,28 @@ function validateActions(actions) {
     throw failure('PREVIEW_ACTION_TYPE_UNSUPPORTED');
   });
 }
+    if (action.type === 'drag') {
+      if (Object.keys(action).some((key) => !['type', 'startX', 'startY', 'endX', 'endY', 'durationMs'].includes(key)))
+        throw failure('PREVIEW_ACTION_FIELD_INVALID');
+      const coords = [action.startX, action.startY, action.endX, action.endY];
+      if (coords.some((value) => typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1))
+        throw failure('PREVIEW_DRAG_OUT_OF_BOUNDS');
+      return { type: 'drag', startX: action.startX, startY: action.startY, endX: action.endX, endY: action.endY,
+        durationMs: Number.isInteger(action.durationMs) ? Math.max(1, Math.min(action.durationMs, 2000)) : 300 };
+    }
+    if (action.type === 'text') {
+      if (Object.keys(action).some((key) => !['type', 'text'].includes(key))) throw failure('PREVIEW_ACTION_FIELD_INVALID');
+      if (typeof action.text !== 'string' || action.text.length > 512 || action.text.includes('\0'))
+        throw failure('PREVIEW_TEXT_INPUT_INVALID');
+      return { type: 'text', text: action.text };
+    }
+    if (action.type === 'ui-refresh') {
+      if (Object.keys(action).some((key) => !['type', 'path', 'componentType'].includes(key))) throw failure('PREVIEW_ACTION_FIELD_INVALID');
+      if (typeof action.path !== 'string' || !action.path || action.path.length > 240
+        || action.path.split('/').some((part) => !part || part === '.' || part === '..')
+        || !['cc.Widget', 'cc.Layout'].includes(action.componentType)) throw failure('PREVIEW_UI_REFRESH_INPUT_INVALID');
+      return { type: 'ui-refresh', path: action.path, componentType: action.componentType };
+    }
 
 function validateAssertions(assertions) {
   if (!Array.isArray(assertions) || assertions.length < 1 || assertions.length > MAX_ASSERTIONS) throw failure('PREVIEW_ASSERTIONS_INVALID');
@@ -517,9 +539,9 @@ function validateAssertions(assertions) {
     if (assertion.type === 'node-property') {
       if (Object.keys(assertion).some((key) => !['type', 'path', 'property', 'expected', 'tolerance'].includes(key))) throw failure('PREVIEW_ASSERTION_FIELD_INVALID');
       if (typeof assertion.path !== 'string' || !assertion.path || assertion.path.length > 240
-        || !['active', 'x', 'y'].includes(assertion.property)
+        || !['active', 'x', 'y', 'width', 'height', 'anchorX', 'anchorY'].includes(assertion.property)
         || (assertion.property === 'active' && typeof assertion.expected !== 'boolean')
-        || (['x', 'y'].includes(assertion.property) && typeof assertion.expected !== 'number')
+        || (['x', 'y', 'width', 'height', 'anchorX', 'anchorY'].includes(assertion.property) && typeof assertion.expected !== 'number')
         || !['string', 'number', 'boolean'].includes(typeof assertion.expected)) throw failure('PREVIEW_ASSERTION_INVALID');
       return { type: assertion.type, path: assertion.path, property: assertion.property, expected: assertion.expected,
         tolerance: Number.isFinite(assertion.tolerance) ? Math.max(0, Math.min(assertion.tolerance, 100)) : 0.01 };
@@ -550,8 +572,7 @@ function assertionExpression(assertion) {
     if (a.type === 'node-exists') { const node = find(a.path); return { actual: !!node, pass: !!node }; }
     if (a.type === 'node-property') { const node = find(a.path); let actual = null;
       if (node && a.property === 'active') actual = node.active !== false;
-      else if (node && a.property === 'x') actual = Number(node.x);
-      else if (node && a.property === 'y') actual = Number(node.y);
+      else if (node && ['x', 'y', 'width', 'height', 'anchorX', 'anchorY'].includes(a.property)) actual = Number(node[a.property]);
       const pass = typeof a.expected === 'number' ? typeof actual === 'number' && Math.abs(actual - a.expected) <= a.tolerance : actual === a.expected;
       return { actual, pass }; }
     if (a.type === 'component-property') { const node = find(a.path);
@@ -564,7 +585,54 @@ function assertionExpression(assertion) {
 async function performAction(session, action) {
   if (action.type === 'key') {
     const key = action.key === 'Space' ? ' ' : action.key.startsWith('Key') ? action.key.slice(3).toLowerCase() : action.key;
+export function previewUiRefreshExpression(action) {
+  const encoded = JSON.stringify(action);
+  return `(() => { const a = ${encoded}; const cc = window.cc;
+    const root = cc && cc.director && cc.director.getScene && cc.director.getScene();
+    if (!root) return { available: false, applied: false, reason: 'NO_ACTIVE_SCENE' };
+    const parts = a.path.split('/');
+    if (parts[0] === String(root.name || '')) parts.shift();
+    let node = root;
+    for (const part of parts) {
+      const flags = cc.Object && cc.Object.Flags;
+      const hidden = flags ? flags.DontSave | flags.HideInHierarchy : 0;
+      const matches = (node.children || []).filter((child) => String(child.name || '') === part
+        && !(Number(child._objFlags || 0) & hidden));
+      if (matches.length !== 1) return { available: false, applied: false,
+        reason: matches.length ? 'PREVIEW_UI_NODE_PATH_AMBIGUOUS' : 'PREVIEW_UI_NODE_NOT_FOUND' };
+      node = matches[0];
+    }
+    const componentType = a.componentType === 'cc.Widget' ? cc.Widget : cc.Layout;
+    if (typeof componentType !== 'function' || !node || typeof node.getComponent !== 'function')
+      return { available: false, applied: false, reason: 'PREVIEW_UI_COMPONENT_UNAVAILABLE' };
+    const component = node.getComponent(componentType);
+    const method = a.componentType === 'cc.Widget' ? 'updateAlignment' : 'updateLayout';
+    if (!component || typeof component[method] !== 'function')
+      return { available: false, applied: false, reason: 'PREVIEW_UI_REFRESH_METHOD_UNAVAILABLE' };
+    const children = Array.isArray(node.children) ? node.children : [];
+    if (a.componentType === 'cc.Layout' && children.length > 128)
+      return { available: false, applied: false, reason: 'PREVIEW_UI_LAYOUT_CHILD_LIMIT' };
+    const metrics = (item) => ({ x: Number.isFinite(item.x) ? item.x : null, y: Number.isFinite(item.y) ? item.y : null,
+      width: Number.isFinite(item.width) ? item.width : null, height: Number.isFinite(item.height) ? item.height : null,
+      anchorX: Number.isFinite(item.anchorX) ? item.anchorX : null, anchorY: Number.isFinite(item.anchorY) ? item.anchorY : null });
+    const before = metrics(node);
+    const childrenBefore = children.map((child) => ({ name: String(child.name || ''), uuid: child.uuid || null, ...metrics(child) }));
+    let error = null;
+    try { component[method](); } catch (caught) { error = String(caught && caught.message || caught).slice(0, 240); }
+    const after = metrics(node);
+    const childrenAfter = children.map((child) => ({ name: String(child.name || ''), uuid: child.uuid || null, ...metrics(child) }));
+    return { available: true, applied: error === null, path: a.path, componentType: a.componentType, method,
+      error, changed: JSON.stringify([before, childrenBefore]) !== JSON.stringify([after, childrenAfter]),
+      before, after, childrenBefore, childrenAfter };
+  })()`;
+}
+
     const code = action.key;
+  if (action.type === 'ui-refresh') {
+    const result = await evaluate(session, previewUiRefreshExpression(action));
+    if (!result || result.available !== true) throw failure(result && result.reason || 'PREVIEW_UI_REFRESH_FAILED');
+    return result;
+  }
     const windowsCode = windowsVirtualKeyCode(action.key);
     await session.cdp.command('Input.dispatchKeyEvent', { type: 'keyDown', key, code, windowsVirtualKeyCode: windowsCode });
     try { await new Promise((resolve) => setTimeout(resolve, action.durationMs)); }
@@ -572,18 +640,44 @@ async function performAction(session, action) {
   } else {
     const canvas = await evaluate(session, `(() => { const c = document.querySelector('canvas'); if (!c) return null; const r = c.getBoundingClientRect();
       return { x: r.left, y: r.top, width: r.width, height: r.height }; })()`);
+  } else if (action.type === 'text') {
+    await session.cdp.command('Input.insertText', { text: action.text });
     if (!canvas || canvas.width <= 0 || canvas.height <= 0) throw failure('PREVIEW_CANVAS_NOT_FOUND');
-    const x = canvas.x + canvas.width * action.x;
-    const y = canvas.y + canvas.height * action.y;
-    await session.cdp.command('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none' });
-    await session.cdp.command('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
-    await session.cdp.command('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
+    if (action.type === 'click') {
+      const x = canvas.x + canvas.width * action.x;
+      const y = canvas.y + canvas.height * action.y;
+      await session.cdp.command('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none' });
+      await session.cdp.command('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
+      await session.cdp.command('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
+    } else {
+      const start = { x: canvas.x + canvas.width * action.startX, y: canvas.y + canvas.height * action.startY };
+      const end = { x: canvas.x + canvas.width * action.endX, y: canvas.y + canvas.height * action.endY };
+      await session.cdp.command('Input.dispatchMouseEvent', { type: 'mouseMoved', ...start, button: 'none' });
+      await session.cdp.command('Input.dispatchMouseEvent', { type: 'mousePressed', ...start, button: 'left', buttons: 1, clickCount: 1 });
+      let releaseRequired = true;
+      try {
+        const steps = 8;
+        const stepDelay = Math.max(1, Math.floor(action.durationMs / steps));
+        for (let index = 1; index <= steps; index += 1) {
+          const progress = index / steps;
+          await session.cdp.command('Input.dispatchMouseEvent', { type: 'mouseMoved',
+            x: start.x + (end.x - start.x) * progress, y: start.y + (end.y - start.y) * progress,
+            button: 'left', buttons: 1 });
+          await new Promise((resolve) => setTimeout(resolve, stepDelay));
+        }
+      } finally {
+        if (releaseRequired) {
+          releaseRequired = false;
+          await session.cdp.command('Input.dispatchMouseEvent', { type: 'mouseReleased', ...end, button: 'left', clickCount: 1 });
+        }
+      }
+    }
   }
 }
 
 export async function interactPreview(instance, input) {
   const session = await sessionFor(instance, input.previewSessionId);
-  const actions = validateActions(input.actions);
+  const actions = validatePreviewActions(input.actions);
   const assertions = validateAssertions(input.assertions || []);
   if (input.coverage !== undefined && typeof input.coverage !== 'boolean') throw failure('PREVIEW_COVERAGE_OPTION_INVALID');
   const collectCoverage = input.coverage === true;
@@ -599,8 +693,9 @@ export async function interactPreview(instance, input) {
     await session.cdp.command('Page.bringToFront', {});
     for (const action of actions) {
       if (input.cancelled?.()) throw failure('PREVIEW_ACTION_CANCELLED');
-      await performAction(session, action);
-      actionResults.push({ ...action, applied: true });
+      const observation = await performAction(session, action);
+      actionResults.push({ ...action, applied: observation ? observation.applied : true,
+        ...(observation ? { observation } : {}) });
     }
     await new Promise((resolve) => setTimeout(resolve, Math.max(100, Math.min(input.settleMs || 350, 3000))));
     session.page = await evaluate(session, PAGE_SNAPSHOT_EXPRESSION);
@@ -624,7 +719,7 @@ export async function interactPreview(instance, input) {
     }
     return { previewSessionId: session.previewSessionId, instanceId: session.instanceId, projectRoot: session.projectRoot,
       sceneUuid: session.sceneUuid, navigationCount: session.navigationCount, actions: actionResults,
-      assertions: results, passed: results.every((item) => item.pass), page: session.page,
+      assertions: results, passed: results.every((item) => item.pass) && actionResults.every((item) => item.applied), page: session.page,
       consoleSequence: session.consoleSequence, newErrors: session.console.filter((entry) => entry.sequence > sequenceBefore && entry.level === 'error').slice(-20),
       ...(coverage ? { coverage } : {}) };
   } finally {

@@ -51,3 +51,36 @@ test('preview interaction contract accepts only a boolean coverage option', () =
   assert.equal(validateCommand('creator.preview.interact', { ...base, coverage: true }).ok, true);
   assert.equal(validateCommand('creator.preview.interact', { ...base, coverage: 'yes' }).ok, false);
 });
+
+test('preview interaction accepts explicit UI refresh actions and geometry assertions', () => {
+  const base = { previewSessionId: '12345678-1234-4234-8234-123456789012',
+    actions: [{ type: 'ui-refresh', path: 'Scene/Canvas/List', componentType: 'cc.Layout' }],
+    assertions: [{ type: 'node-property', path: 'Scene/Canvas/List/Item', property: 'y', expected: 24 }] };
+  assert.equal(validateCommand('creator.preview.interact', base).ok, true);
+  assert.equal(validateCommand('creator.preview.interact', { ...base, actions: [
+    { type: 'ui-refresh', path: '../List', componentType: 'cc.Layout' },
+  ] }).ok, false);
+  assert.equal(validateCommand('creator.preview.interact', { ...base, assertions: [
+    { type: 'node-property', path: 'Scene/Canvas/List/Item', property: 'height', expected: 30 },
+  ] }).ok, true);
+});
+
+test('preview interaction contract accepts bounded drag and text actions with control-state assertions', () => {
+  const previewSessionId = '12345678-1234-4234-8234-123456789012';
+  assert.equal(validateCommand('creator.preview.interact', { previewSessionId,
+    actions: [
+      { type: 'drag', startX: 0.2, startY: 0.8, endX: 0.8, endY: 0.2, durationMs: 400 },
+      { type: 'text', text: 'hello' },
+    ],
+    assertions: [
+      { type: 'component-property', path: 'Scene/Canvas/Slider', componentType: 'cc.Slider',
+        componentProperty: 'progress', expected: 0.8 },
+    ],
+  }).ok, true);
+  assert.equal(validateCommand('creator.preview.interact', { previewSessionId,
+    actions: [{ type: 'drag', startX: 0.2, startY: 0.2, endX: 1.1, endY: 0.8 }],
+  }).ok, false);
+  assert.equal(validateCommand('creator.preview.interact', { previewSessionId,
+    actions: [{ type: 'text', text: 'x'.repeat(513) }],
+  }).ok, false);
+});

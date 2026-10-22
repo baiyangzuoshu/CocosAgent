@@ -964,7 +964,7 @@ function validSceneComponentValue(value, depth = 0) {
               || (typeof item === 'number' && Number.isFinite(item) && Math.abs(item) <= 1000000000)
               || (validSceneComponentValue(item, depth + 1) && !['array', 'asset'].includes(item.kind)));
     if (value.kind === 'asset') return (keys === 'assetClass,kind' || keys === 'assetClass,assetUuid,kind')
-        && ['SpriteFrame', 'Texture2D', 'AudioClip', 'Prefab', 'BitmapFont', 'TTFFont'].includes(value.assetClass)
+        && ['SpriteFrame', 'Texture2D', 'AudioClip', 'Prefab', 'Font', 'BitmapFont', 'TTFFont'].includes(value.assetClass)
         && (value.assetUuid === undefined || (typeof value.assetUuid === 'string'
             && (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value.assetUuid)
                 || /^[A-Za-z0-9+/]{22,23}$/.test(value.assetUuid))));
@@ -6741,6 +6741,7 @@ function capabilityList() {
         'creator.script.read': !!(Editor && Editor.Project && Editor.Project.path),
         'creator.scene.snapshot': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
         'creator.scene.node.read': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.ui.inspect': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
         'creator.scene.node.rename.plan': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
         'creator.scene.node.rename.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
             && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'
@@ -7261,6 +7262,8 @@ function execute(command, input, context) {
     if (command === 'creator.script.read') return Promise.resolve(readScript(input));
     if (command === 'creator.scene.snapshot') return callScene('snapshot', { maxNodes: 100 });
     if (command === 'creator.scene.node.read') return callScene('nodeState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);
+    if (command === 'creator.scene.ui.inspect') return callScene('uiComponentState',
+        { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);
     if (command === 'creator.scene.node.rename.plan') return createSceneNodeRenamePlan(input);
     if (command === 'creator.scene.node.rename.commit') return commitSceneNodeRename(input, context);
     if (command === 'creator.scene.node.rename.reconcile') return reconcileSceneNodeRename(input);

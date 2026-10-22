@@ -13,7 +13,7 @@ Create or revise a Cocos Creator 2.4.x UI hierarchy, Canvas, or UI Prefab struct
 
 1. Identify the exact project root from the Host workspace and verify the Creator patch from project metadata or an editor integration. Determine the active scene/target only through tools that report it; never infer it from a neighboring project.
 2. Inspect the relevant source, asset, scene or runtime evidence and record exact identities/current state before proposing a change.
-3. Inspect the existing Canvas, design resolution, parent hierarchy, reusable Prefabs, and project naming conventions.
+3. Inspect the existing Canvas, design resolution, parent hierarchy, reusable Prefabs, and project naming conventions. Use `creator.scene.ui.inspect` on exact nodes to read supported built-in UI component values and Button events before planning changes.
 4. Plan only requested nodes and component roles; use existing art assets and avoid inventing missing references.
 5. Use Creator scene/Prefab commands when available; do not hand-edit .fire/.prefab serialization.
 6. Read back hierarchy and references, then preview at the project’s target resolution.

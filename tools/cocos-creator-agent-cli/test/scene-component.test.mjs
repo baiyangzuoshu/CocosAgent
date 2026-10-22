@@ -42,6 +42,15 @@ function fixture() {
   class Rect { constructor(x = 0, y = 0, width = 0, height = 0) { this.x = x; this.y = y; this.width = width; this.height = height; } }
   class Size { constructor(width = 0, height = 0) { this.width = width; this.height = height; } }
   class Color { constructor(r = 0, g = 0, b = 0, a = 255) { this.r = r; this.g = g; this.b = b; this.a = a; } }
+  class Canvas extends Component { constructor() { super(); this.designResolution = new Size(960, 640); this.fitWidth = false; this.fitHeight = true; } }
+  Canvas.prototype.__classname__ = 'cc.Canvas';
+  Canvas.__props__ = ['designResolution', 'fitWidth', 'fitHeight'];
+  class Widget extends Component { constructor() { super(); this.target = null; this.isAlignTop = false; this.top = 0; this.alignMode = 0; } }
+  Widget.prototype.__classname__ = 'cc.Widget';
+  Widget.__props__ = ['target', 'isAlignTop', 'top', 'alignMode'];
+  class Layout extends Component { constructor() { super(); this.type = 0; this.resizeMode = 0; this.cellSize = new Size(40, 40); this.spacingY = 0; } }
+  Layout.prototype.__classname__ = 'cc.Layout';
+  Layout.__props__ = ['type', 'resizeMode', 'cellSize', 'spacingY'];
   class Sprite extends BaseSprite {
     constructor() {
       super();
@@ -65,9 +74,34 @@ function fixture() {
   Sprite.__props__ = ['mode', 'labelText', 'enabled', 'inheritedValue', '_privateValue', 'vector', 'spriteFrame',
     'position', 'direction', 'size', 'tint', 'thresholds'];
   class SpriteFrame { constructor(uuid = 'sprite-frame') { this._uuid = uuid; } }
+  class Font { constructor(uuid = 'font') { this._uuid = uuid; } }
+  class TTFFont extends Font {}
+  class Label extends Component { constructor() { super(); this.font = null; } }
+  Label.prototype.__classname__ = 'cc.Label';
+  Label.__props__ = ['font'];
   class Button extends Component { constructor() { super(); this._id = 'button-component'; this.clickEvents = []; } }
   Button.prototype.__classname__ = 'cc.Button';
   Button.__props__ = ['clickEvents'];
+  class Toggle extends Component { constructor() { super(); this.checkEvents = []; this.isChecked = false; } }
+  Toggle.prototype.__classname__ = 'cc.Toggle';
+  Toggle.__props__ = ['checkEvents', 'isChecked'];
+  class ToggleContainer extends Component { constructor() { super(); this.checkEvents = []; } }
+  ToggleContainer.prototype.__classname__ = 'cc.ToggleContainer';
+  ToggleContainer.__props__ = ['checkEvents'];
+  class Slider extends Component { constructor() { super(); this.slideEvents = []; this.progress = 0; } }
+  Slider.prototype.__classname__ = 'cc.Slider';
+  Slider.__props__ = ['slideEvents', 'progress'];
+  class ScrollView extends Component { constructor() { super(); this.scrollEvents = []; } }
+  ScrollView.prototype.__classname__ = 'cc.ScrollView';
+  ScrollView.__props__ = ['scrollEvents'];
+  class PageView extends Component { constructor() { super(); this.pageEvents = []; } }
+  PageView.prototype.__classname__ = 'cc.PageView';
+  PageView.__props__ = ['pageEvents'];
+  class EditBox extends Component {
+    constructor() { super(); this.editingDidBegan = []; this.textChanged = []; this.editingDidEnded = []; this.editingReturn = []; }
+  }
+  EditBox.prototype.__classname__ = 'cc.EditBox';
+  EditBox.__props__ = ['editingDidBegan', 'textChanged', 'editingDidEnded', 'editingReturn'];
   class Controller extends Component { onClick() {} }
   Controller.prototype.__classname__ = 'sample.Controller';
   Controller.__props__ = [];
@@ -97,7 +131,8 @@ function fixture() {
     },
   };
   const cc = {
-    Component, Node: FakeNode, SpriteFrame, Button, Vec2, Vec3, Vec4, Rect, Size, Color,
+    Component, Node: FakeNode, SpriteFrame, Font, TTFFont, Label, Canvas, Widget, Layout, Button, Toggle,
+    ToggleContainer, Slider, ScrollView, PageView, EditBox, Vec2, Vec3, Vec4, Rect, Size, Color,
     Class: { attr(type, property, key) {
       if (key === 'serializable' && property === 'transient') return false;
       if (key !== 'type') return null;
@@ -107,6 +142,10 @@ function fixture() {
       if (type === Sprite && property === 'size') return Size;
       if (type === Sprite && property === 'tint') return Color;
       if (type === Sprite && property === 'thresholds') return Array;
+      if (type === Label && property === 'font') return Font;
+      if (type === Canvas && property === 'designResolution') return Size;
+      if (type === Widget && property === 'target') return FakeNode;
+      if (type === Layout && property === 'cellSize') return Size;
       if (type === ReferenceHolder && property === 'targetNode') return FakeNode;
       if (type === ReferenceHolder && property === 'targetComponent') return Controller;
       if (type === ReferenceHolder && property === 'nodeList') return FakeNode;
@@ -115,12 +154,17 @@ function fixture() {
       if (type === ReferenceHolder && property === 'rect') return Rect;
       return null;
     } },
-    assetManager: { loadAny(uuid, callback) { callback(null, new SpriteFrame(uuid)); } },
+    assetManager: { loadAny(uuid, callback) {
+      callback(null, uuid === '55555555-5555-4555-8555-555555555555' ? new TTFFont(uuid) : new SpriteFrame(uuid));
+    } },
     Object: { Flags: { DontSave: 1 << 3, HideInHierarchy: 1 << 10 } },
     isValid(object) { return !!object && object.destroyed !== true; },
     director: { getScene: () => root },
     js: {
-      getClassByName(name) { return ({ 'cc.Component': Component, 'cc.Sprite': Sprite, 'cc.Button': Button,
+      getClassByName(name) { return ({ 'cc.Component': Component, 'cc.Sprite': Sprite, 'cc.Label': Label,
+        'cc.Canvas': Canvas, 'cc.Widget': Widget, 'cc.Layout': Layout, 'cc.Button': Button, 'cc.Toggle': Toggle,
+        'cc.ToggleContainer': ToggleContainer, 'cc.Slider': Slider, 'cc.ScrollView': ScrollView,
+        'cc.PageView': PageView, 'cc.EditBox': EditBox,
         'sample.Controller': Controller, 'sample.ReferenceHolder': ReferenceHolder,
         'sample.NeedsOther': NeedsOther, 'sample.NotAComponent': NotAComponent })[name]; },
       getClassName(type) { return type.prototype.__classname__ || ''; },
@@ -132,8 +176,9 @@ function fixture() {
   const module = { exports: {} };
   vm.runInNewContext(sceneSource, { module, exports: module.exports, cc, Array,
     require: createRequire(path.join(packageRoot, 'creator-extension/scene.js')) }, { filename: 'scene.js' });
-  return { api: module.exports, root, Sprite, Button, Controller, ReferenceHolder, Vec2, Vec3, Vec4, Rect,
-    Size, Color, SpriteFrame, cc, FakeNode };
+  return { api: module.exports, root, Sprite, Label, Canvas, Widget, Layout, Button, Toggle, ToggleContainer,
+    Slider, ScrollView, PageView, EditBox, Controller, ReferenceHolder, Vec2, Vec3, Vec4, Rect,
+    Size, Color, SpriteFrame, Font, TTFFont, cc, FakeNode };
 }
 
 function invoke(api, method, input) {
@@ -167,6 +212,124 @@ test('scene queries and writes exclude editor-managed nodes and all descendants'
   }
   assert.equal(helper.active, true);
   assert.equal(hiddenChild.active, true);
+});
+
+test('UI inspection reads typed declared properties and bounded event lists for supported built-in controls', () => {
+  const { api, root, FakeNode, Sprite, Button, Toggle, Slider, EditBox, ReferenceHolder } = fixture();
+  const node = new FakeNode('Controls');
+  node._id = '11111111-1111-4111-8111-111111111111';
+  root.addChild(node);
+  const sprite = node.addComponent(Sprite);
+  const button = node.addComponent(Button);
+  const toggle = node.addComponent(Toggle);
+  const slider = node.addComponent(Slider);
+  const editBox = node.addComponent(EditBox);
+  node.addComponent(ReferenceHolder);
+  button.clickEvents = [{ target: node, component: 'sample.Controller', handler: 'onClick', customEventData: 'open' }];
+  toggle.checkEvents = [{ target: node, component: 'sample.Controller', handler: 'onClick', customEventData: 'checked' }];
+  slider.slideEvents = [{ target: node, component: 'sample.Controller', handler: 'onClick', customEventData: 'slide' }];
+  editBox.textChanged = [{ target: node, component: 'sample.Controller', handler: 'onClick', customEventData: 'text' }];
+
+  const inspected = invoke(api, 'uiComponentState', { sceneUuid: root.uuid, nodeUuid: node.uuid }).result;
+  assert.equal(inspected.available, true);
+  assert.equal(inspected.nodePath, 'Scene/Controls');
+  assert.deepEqual(Array.from(inspected.components, (component) => component.componentClassName),
+    ['cc.Sprite', 'cc.Button', 'cc.Toggle', 'cc.Slider', 'cc.EditBox']);
+  const spriteState = inspected.components.find((component) => component.componentClassName === 'cc.Sprite');
+  assert.ok(spriteState.properties.some((property) => property.name === 'position' && property.kind === 'vec2'));
+  assert.ok(spriteState.properties.some((property) => property.name === 'spriteFrame'
+    && property.kind === 'asset' && property.value.assetClass === 'SpriteFrame'));
+  assert.ok(!spriteState.properties.some((property) => property.name.startsWith('_')));
+  assert.ok(spriteState.unsupportedProperties.some((property) => property.name === 'vector'));
+  const buttonState = inspected.components.find((component) => component.componentClassName === 'cc.Button');
+  assert.deepEqual(Array.from(buttonState.clickEvents, (event) => ({ ...event })), [{
+    targetUuid: node.uuid, component: 'sample.Controller', handler: 'onClick', customEventData: 'open',
+  }]);
+  const toggleState = inspected.components.find((component) => component.componentClassName === 'cc.Toggle');
+  assert.deepEqual(Array.from(toggleState.eventLists.checkEvents, (event) => ({ ...event })), [{
+    targetUuid: node.uuid, component: 'sample.Controller', handler: 'onClick', customEventData: 'checked',
+  }]);
+  const sliderState = inspected.components.find((component) => component.componentClassName === 'cc.Slider');
+  assert.equal(sliderState.eventLists.slideEvents[0].customEventData, 'slide');
+  const editBoxState = inspected.components.find((component) => component.componentClassName === 'cc.EditBox');
+  assert.equal(editBoxState.eventLists.textChanged[0].customEventData, 'text');
+  assert.deepEqual(Object.keys(editBoxState.eventLists).sort(),
+    ['editingDidBegan', 'editingDidEnded', 'editingReturn', 'textChanged']);
+  assert.equal(sprite.spriteFrame, null);
+});
+
+test('Label font inspection and assignment use the cc.Font base type for derived Creator font assets', () => {
+  const { api, root, FakeNode, Label, Font, TTFFont } = fixture();
+  const node = new FakeNode('Text');
+  node._id = '22222222-2222-4222-8222-222222222222';
+  root.addChild(node);
+  const label = node.addComponent(Label);
+  const inspected = invoke(api, 'uiComponentState', { sceneUuid: root.uuid, nodeUuid: node.uuid }).result;
+  const labelState = inspected.components.find((component) => component.componentClassName === 'cc.Label');
+  const font = labelState.properties.find((property) => property.name === 'font');
+  assert.deepEqual(JSON.parse(JSON.stringify(font)), { name: 'font', kind: 'asset',
+    value: { kind: 'asset', assetClass: 'Font' } });
+
+  const changed = invoke(api, 'setComponentProperty', { sceneUuid: root.uuid, nodeUuid: node.uuid,
+    nodePath: 'Scene/Text', componentClassName: 'cc.Label', componentInstanceId: label._id, property: 'font',
+    expectedValue: font.value, value: { kind: 'asset', assetClass: 'Font',
+      assetUuid: '55555555-5555-4555-8555-555555555555' } }).result;
+  assert.equal(changed.available, true, changed.reason);
+  assert.ok(label.font instanceof TTFFont);
+  assert.ok(label.font instanceof Font);
+});
+
+test('Canvas, Widget, and Layout UI fields inspect and write typed values and exact Node targets', () => {
+  const { api, root, FakeNode, Canvas, Widget, Layout, Size } = fixture();
+  const canvasNode = new FakeNode('Canvas');
+  const widgetNode = new FakeNode('Panel');
+  const oldTarget = new FakeNode('OldTarget');
+  const newTarget = new FakeNode('NewTarget');
+  for (const [node, uuid] of [[canvasNode, '11111111-1111-4111-8111-111111111111'],
+    [widgetNode, '22222222-2222-4222-8222-222222222222'], [oldTarget, '33333333-3333-4333-8333-333333333333'],
+    [newTarget, '44444444-4444-4444-8444-444444444444']]) {
+    node._id = uuid;
+    root.addChild(node);
+  }
+  const canvas = canvasNode.addComponent(Canvas);
+  const widget = widgetNode.addComponent(Widget);
+  widget.target = oldTarget;
+  const layout = widgetNode.addComponent(Layout);
+
+  function inspect(node) {
+    return invoke(api, 'uiComponentState', { sceneUuid: root.uuid, nodeUuid: node.uuid }).result;
+  }
+  function set(node, component, property, value) {
+    const state = inspect(node).components.find((item) => item.componentClassName === component.constructor.prototype.__classname__);
+    const before = state.properties.find((item) => item.name === property).value;
+    return invoke(api, 'setComponentProperty', { sceneUuid: root.uuid, nodeUuid: node.uuid,
+      nodePath: state && inspect(node).nodePath, componentClassName: component.constructor.prototype.__classname__,
+      componentInstanceId: component._id, property, expectedValue: before, value }).result;
+  }
+
+  const canvasRead = inspect(canvasNode).components[0].properties.find((item) => item.name === 'designResolution');
+  assert.deepEqual(JSON.parse(JSON.stringify(canvasRead.value)), { kind: 'size', width: 960, height: 640 });
+  assert.equal(set(canvasNode, canvas, 'designResolution', { kind: 'size', width: 1280, height: 720 }).available, true);
+  assert.ok(canvas.designResolution instanceof Size);
+  assert.deepEqual([canvas.designResolution.width, canvas.designResolution.height], [1280, 720]);
+  assert.equal(set(canvasNode, canvas, 'fitWidth', true).available, true);
+  assert.equal(canvas.fitWidth, true);
+
+  const widgetRead = inspect(widgetNode).components.find((item) => item.componentClassName === 'cc.Widget');
+  assert.deepEqual(JSON.parse(JSON.stringify(widgetRead.properties.find((item) => item.name === 'target').value)),
+    { kind: 'node-ref', nodeUuid: oldTarget.uuid });
+  assert.equal(set(widgetNode, widget, 'target', { kind: 'node-ref', nodeUuid: newTarget.uuid }).available, true);
+  assert.equal(widget.target, newTarget);
+  assert.equal(set(widgetNode, widget, 'isAlignTop', true).available, true);
+  assert.equal(set(widgetNode, widget, 'top', 16).available, true);
+  assert.equal(widget.top, 16);
+
+  assert.equal(set(widgetNode, layout, 'type', 2).available, true);
+  assert.equal(set(widgetNode, layout, 'cellSize', { kind: 'size', width: 200, height: 48 }).available, true);
+  assert.equal(set(widgetNode, layout, 'spacingY', 12).available, true);
+  assert.equal(layout.type, 2);
+  assert.equal(layout.cellSize.height, 48);
+  assert.equal(layout.spacingY, 12);
 });
 
 test('Prefab instance inspection resolves the exact source root and bounded linked descendants without mutation', () => {
