@@ -12,7 +12,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MANIFEST = '.cocos-agent/tests.json';
 const ID = /^[a-z][a-z0-9-]{0,63}$/;
 const CASE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
-const MAX_EDITOR_CASES_PER_RUN = 100;
+const MAX_ENGINE_CASES_PER_RUN = 64;
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const coded = (code) => Object.assign(new Error(code), { code });
 const plain = (value) => value && typeof value === 'object' && !Array.isArray(value);
@@ -81,6 +81,11 @@ export function loadTestPlan(projectRoot) {
     if (suite.adapter === 'creator') {
       if (!PROVIDER_ID.test(suite.providerId || '') || !COMMAND_ID.test(suite.commandId || '')
         || suite.scriptPath !== undefined) throw coded('TEST_PROVIDER_INVALID');
+      if (suite.testIds !== undefined && (!Array.isArray(suite.testIds) || !suite.testIds.length || suite.testIds.length > 64
+        || suite.testIds.some((id) => typeof id !== 'string' || !CASE_ID.test(id))
+        || new Set(suite.testIds).size !== suite.testIds.length)) throw coded('TEST_CREATOR_CASE_IDS_INVALID');
+      if (suite.testIds && Object.hasOwn(suite.input || {}, 'testIds'))
+        throw coded('TEST_CREATOR_RUNNER_INPUT_RESERVED');
     } else if (suite.adapter === 'editor') {
       if (suite.providerId !== undefined || suite.commandId !== undefined) throw coded('TEST_MANIFEST_FIELD_INVALID');
       suite.scriptPath = safeEditorTestFile(root, suite.scriptPath);
@@ -91,7 +96,7 @@ export function loadTestPlan(projectRoot) {
         || new Set(suite.testIds).size !== suite.testIds.length)) throw coded('TEST_EDITOR_CASE_IDS_INVALID');
     } else if (suite.providerId !== undefined || suite.commandId !== undefined || suite.scriptPath !== undefined)
       throw coded('TEST_MANIFEST_FIELD_INVALID');
-    if (suite.adapter !== 'editor' && suite.testIds !== undefined) throw coded('TEST_MANIFEST_FIELD_INVALID');
+    if (!['creator', 'editor'].includes(suite.adapter) && suite.testIds !== undefined) throw coded('TEST_MANIFEST_FIELD_INVALID');
     if (suite.adapter === 'editor' && Object.hasOwn(suite.input || {}, '__cocosAgentTest'))
       throw coded('TEST_EDITOR_RUNNER_INPUT_RESERVED');
     if (suite.adapter === 'preview') {
@@ -301,9 +306,9 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
   if (coverage) requireCoverageSupport();
   const selectedCaseIdsBySuite = {};
   const shardSkipped = normalizedShard ? selected.filter((suite) => suite.adapter !== 'node'
-    && !(suite.adapter === 'editor' && suite.testIds)
+    && !(['creator', 'editor'].includes(suite.adapter) && suite.testIds)
     && testShardForSuite(suite.id, normalizedShard.total) !== normalizedShard.index) : [];
-  for (const suite of selected.filter((item) => item.adapter === 'editor' && item.testIds)) {
+  for (const suite of selected.filter((item) => ['creator', 'editor'].includes(item.adapter) && item.testIds)) {
     const selectedCaseIds = normalizedShard ? suite.testIds.filter((id) =>
       testShardForCase(suite.id, id, normalizedShard.total) === normalizedShard.index) : suite.testIds;
     selectedCaseIdsBySuite[suite.id] = selectedCaseIds;
@@ -324,7 +329,8 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
   const report = { schemaVersion: 1, runId: randomUUID(), projectRoot: plan.projectRoot, projectName: plan.projectName,
     creatorVersion: '2.4.15', manifestHash: plan.manifestHash, selectedSuiteIds: selected.map((suite) => suite.id),
     ...(normalizedShard ? { shard: { ...normalizedShard,
-      strategies: { node: 'test-case', creator: 'suite', editor: 'test-case-when-manifested-otherwise-suite', preview: 'suite' } } } : {}),
+      strategies: { node: 'test-case', creator: 'test-case-when-manifested-otherwise-suite',
+        editor: 'test-case-when-manifested-otherwise-suite', preview: 'suite' } } } : {}),
     shardSelectedSuiteIds: runnable.map((suite) => suite.id), shardSkippedSuiteIds: shardSkipped.map((suite) => suite.id),
     ...(Object.keys(selectedCaseIdsBySuite).length ? { selectedCaseIdsBySuite } : {}),
     coverageEnabled: coverage,
@@ -343,7 +349,7 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
       else if (suite.adapter === 'editor') {
         const before = safeFile(plan.projectRoot, suite.scriptPath, { maxBytes: 16 * 1024 });
         const selectedCaseIds = suite.testIds ? selectedCaseIdsBySuite[suite.id] : undefined;
-        if (selectedCaseIds && selectedCaseIds.length > MAX_EDITOR_CASES_PER_RUN)
+        if (selectedCaseIds && selectedCaseIds.length > MAX_ENGINE_CASES_PER_RUN)
           throw coded('TEST_EDITOR_CASE_BATCH_LIMIT');
         const editorInput = suite.testIds ? { ...(suite.input || {}), __cocosAgentTest: {
           selectedCaseIds,
@@ -381,7 +387,7 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
         const returned = execution.result;
         if (returned?.schemaVersion !== 1 || !Array.isArray(returned.tests)) throw coded('TEST_EDITOR_REPORT_INVALID');
         if (suite.testIds && (returned.tests.length !== selectedCaseIds.length
-          || selectedCaseIds.some((id) => !returned.tests.some((item) => item?.id === id))))
+          || selectedCaseIds.some((id) => returned.tests.filter((item) => item?.id === id).length !== 1)))
           throw coded('TEST_EDITOR_CASE_RESULTS_MISMATCH');
         result = { tests: returned.tests, requiresManualReview: returned.requiresManualReview === true,
           sourceHashes: { [suite.scriptPath]: planned.sourceSha256 }, receipt: {
@@ -396,11 +402,23 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
         const command = catalog.commands?.find((item) => item.providerId === suite.providerId && item.id === suite.commandId);
         if (command?.status !== 'available' || command.access !== 'control' || command.approval !== true)
           throw coded('TEST_PROVIDER_APPROVAL_REQUIRED');
+        const selectedCaseIds = suite.testIds ? selectedCaseIdsBySuite[suite.id] : undefined;
+        const providerInput = { ...(suite.input || {}) };
+        if (selectedCaseIds) {
+          const selection = command.input?.properties?.testIds;
+          if (selection?.type !== 'array' || selection.items?.type !== 'string'
+            || !Number.isInteger(selection.maxItems) || selection.maxItems > 64
+            || selectedCaseIds.length > selection.maxItems) throw coded('TEST_PROVIDER_CASE_SELECTION_UNSUPPORTED');
+          providerInput.testIds = selectedCaseIds;
+        }
         executionDispatched = true;
-        const receipt = await invoke(instanceId, suite.providerId, suite.commandId, suite.input || {},
+        const receipt = await invoke(instanceId, suite.providerId, suite.commandId, providerInput,
           { expectedFingerprint: command.providerFingerprint });
         const returned = receipt.result?.result;
-        if (returned?.schemaVersion !== 1) throw coded('TEST_PROVIDER_REPORT_INVALID');
+        if (returned?.schemaVersion !== 1 || !Array.isArray(returned.tests)) throw coded('TEST_PROVIDER_REPORT_INVALID');
+        if (selectedCaseIds && (returned.tests.length !== selectedCaseIds.length
+          || selectedCaseIds.some((id) => returned.tests.filter((item) => item?.id === id).length !== 1)))
+          throw coded('TEST_PROVIDER_CASE_RESULTS_MISMATCH');
         result = { tests: returned.tests, receipt, requiresManualReview: returned.requiresManualReview === true };
       } else {
         if (typeof previewSessionId !== 'string' || !previewSessionId) throw coded('PREVIEW_SESSION_REQUIRED');

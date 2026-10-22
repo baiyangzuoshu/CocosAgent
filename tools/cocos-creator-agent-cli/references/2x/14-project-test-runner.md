@@ -22,6 +22,7 @@ Place `.cocos-agent/tests.json` in the authorized Creator 2.4.15 project. `creat
       "adapter": "creator",
       "providerId": "project-tests",
       "commandId": "run-tests",
+      "testIds": ["asset-identity", "asset-import-ready"],
       "input": {}
     },
     {
@@ -41,15 +42,15 @@ Place `.cocos-agent/tests.json` in the authorized Creator 2.4.15 project. `creat
 }
 ```
 
-The plan permits 1–64 suites with unique IDs. Node suites explicitly list 1–64 `.js`, `.cjs` or `.mjs` files inside the project. Node's `node:test` runner executes them in child processes. These tests verify host-side JavaScript logic, not Creator globals, compilation or scene behavior. TypeScript needs prior project compilation or an editor test provider; the adapter does not silently transpile it. Tests execute project code with the current user's permissions and are not sandboxed. The protocol accepts no shell-command strings or downloaded test dependencies. Editor `testIds` are unique stable IDs, with up to 1000 declared per suite; each approved Editor run executes at most 64 selected cases.
+The plan permits 1–64 suites with unique IDs. Node suites explicitly list 1–64 `.js`, `.cjs` or `.mjs` files inside the project. Node's `node:test` runner executes them in child processes. These tests verify host-side JavaScript logic, not Creator globals, compilation or scene behavior. TypeScript needs prior project compilation or an editor test provider; the adapter does not silently transpile it. Tests execute project code with the current user's permissions and are not sandboxed. The protocol accepts no shell-command strings or downloaded test dependencies. Editor `testIds` are unique stable IDs, with up to 1000 declared per suite; each approved Editor run executes at most 64 selected cases. Creator Provider suites may declare up to 64 `testIds`; their command input schema must expose a string-array `testIds` property, and the CLI sends only the cases assigned to that shard.
 
-`--shard <index>/<total>` keeps Node's test-case sharding and assigns each `creator` or `preview` suite as a whole to one deterministic shard based on its suite ID. An Editor suite with `testIds` is split by stable test ID; an Editor suite without `testIds` stays whole. Reports include selected/skipped suites and selected Editor case IDs. Creator Provider coverage is not inferred from its test count; direct Editor script coverage is unsupported.
+`--shard <index>/<total>` keeps Node's test-case sharding and assigns each `preview` suite as a whole to one deterministic shard based on its suite ID. A Creator Provider or direct Editor suite with `testIds` is split by stable test ID; without `testIds`, it stays whole. The CLI verifies that each selected Provider or Editor case appears exactly once in the approved result. Reports include selected/skipped suites and selected engine case IDs. Creator Provider coverage is not inferred from its test count; direct Editor script coverage is unsupported.
 
 `timeoutMs` applies only to Node suites (100–180000 ms, default 30000). Timeout/cancellation terminates the owned process group and fails the run. Missing tests, all-skipped suites, malformed output and nonzero process exits cannot yield a pass. Inherited Node preload flags and test-runner context are cleared in subprocesses.
 
 ## Creator Provider adapter
 
-An editor test provider uses [the project command Provider contract](13-agent-command-providers.md). Its run command must be `control` with `approval: true`, including read-only test cases. CLI verifies the connected project's exact path and Creator version, discovers the provider live, and binds the invocation to its fingerprint. Creator's native approval remains required.
+An editor test provider uses [the project command Provider contract](13-agent-command-providers.md). Its run command must be `control` with `approval: true`, including read-only test cases. To shard cases, declare an optional `testIds` array of strings in the command input schema and call the helper with those IDs: `runTests(cases, { ids: input.testIds })`. The CLI verifies the connected project's exact path and Creator version, discovers the provider live, binds the invocation to its fingerprint, and checks the selected result IDs. Creator's native approval remains required.
 
 Return this data as the provider command's `result`:
 

@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { loadTestPlan, parseTestShard, runTestPlan, testShardForSuite } from '../creator-tests.mjs';
+import { loadTestPlan, parseTestShard, runTestPlan, testShardForCase, testShardForSuite } from '../creator-tests.mjs';
+import creatorTestHarness from '../testing/creator-test-harness.cjs';
 
 function fixture(suites) {
   const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-test-options-')));
@@ -94,8 +95,66 @@ test('Creator provider and preview suites are assigned to deterministic engine s
   assert.deepEqual(selectedByShard, [[editorId], [previewId]].sort((left, right) => testShardForSuite(left[0], 2) - testShardForSuite(right[0], 2)));
   assert.equal(new Set(selectedByShard.flat()).size, 2);
   assert.ok(shardReports.every((report) => report.passed));
-  assert.ok(shardReports.every((report) => report.shard.strategies.creator === 'suite'
+  assert.ok(shardReports.every((report) => report.shard.strategies.creator === 'test-case-when-manifested-otherwise-suite'
     && report.shard.strategies.preview === 'suite'));
+});
+
+test('Creator Provider test IDs shard into disjoint approved engine test batches', async (t) => {
+  const suiteId = 'editor-cases';
+  const caseIds = [];
+  const shardIndexes = new Set();
+  for (let index = 0; shardIndexes.size < 2 && index < 64; index += 1) {
+    const id = `case-${index}`;
+    caseIds.push(id);
+    shardIndexes.add(testShardForCase(suiteId, id, 2));
+  }
+  const state = fixture([{ id: suiteId, adapter: 'creator', providerId: 'project-tests', commandId: 'run-tests', testIds: caseIds }]);
+  t.after(() => fs.rmSync(state.directory, { recursive: true, force: true }));
+  const selectedPerShard = [];
+  const reports = [];
+  for (const index of [1, 2]) {
+    reports.push(await runTestPlan({ projectRoot: state.projectRoot, instanceId: 'instance', shard: { index, total: 2 },
+      reportDir: path.join(state.directory, `provider-shard-${index}`) }, {
+      listInstances: async () => ({ instances: [{ instanceId: 'instance', projectRoot: state.projectRoot, creatorVersion: '2.4.15' }] }),
+      getExtensionCommands: async () => ({ commands: [{ providerId: 'project-tests', id: 'run-tests', status: 'available',
+        access: 'control', approval: true, providerFingerprint: 'fingerprint', input: {
+          type: 'object', required: ['testIds'], properties: { testIds: {
+            type: 'array', minItems: 1, maxItems: 64, items: { type: 'string', minLength: 1, maxLength: 128 },
+          } }, additionalProperties: false,
+        } }] }),
+      callExtensionCommand: async (_instance, _provider, _command, input) => {
+        selectedPerShard.push(input.testIds);
+        const cases = caseIds.map((id) => ({ id, run: () => assert.ok(input.testIds.includes(id)) }));
+        return { result: { result: await creatorTestHarness.runTests(cases, { ids: input.testIds }) } };
+      },
+    }));
+  }
+  const assigned = selectedPerShard.flat();
+  assert.deepEqual(assigned.slice().sort(), caseIds.slice().sort());
+  assert.equal(new Set(assigned).size, caseIds.length);
+  assert.ok(reports.every((report) => report.passed), JSON.stringify(reports.map((report) => report.suites)));
+  assert.ok(reports.every((report) => report.shard.strategies.creator === 'test-case-when-manifested-otherwise-suite'));
+  assert.deepEqual(reports.map((report) => report.selectedCaseIdsBySuite[suiteId]), selectedPerShard);
+});
+
+test('Creator Provider shard fails when its approved receipt omits or invents selected case IDs', async (t) => {
+  const state = fixture([{ id: 'editor-cases', adapter: 'creator', providerId: 'project-tests', commandId: 'run-tests',
+    testIds: ['case-a', 'case-b'] }]);
+  t.after(() => fs.rmSync(state.directory, { recursive: true, force: true }));
+  const report = await runTestPlan({ projectRoot: state.projectRoot, instanceId: 'instance',
+    reportDir: path.join(state.directory, 'invalid-provider-report') }, {
+    listInstances: async () => ({ instances: [{ instanceId: 'instance', projectRoot: state.projectRoot, creatorVersion: '2.4.15' }] }),
+    getExtensionCommands: async () => ({ commands: [{ providerId: 'project-tests', id: 'run-tests', status: 'available',
+      access: 'control', approval: true, providerFingerprint: 'fingerprint', input: {
+        type: 'object', required: ['testIds'], properties: { testIds: {
+          type: 'array', minItems: 1, maxItems: 64, items: { type: 'string', minLength: 1, maxLength: 128 },
+        } }, additionalProperties: false,
+      } }] }),
+    callExtensionCommand: async () => ({ result: { result: { schemaVersion: 1,
+      tests: [{ id: 'not-selected', name: 'wrong case', status: 'passed' }] } } }),
+  });
+  assert.equal(report.passed, false);
+  assert.equal(report.suites[0].error, 'TEST_PROVIDER_CASE_RESULTS_MISMATCH');
 });
 
 test('preview coverage is requested through the same runtime test invocation', async (t) => {
