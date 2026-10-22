@@ -33,6 +33,16 @@ test('Creator Editor test harness runs only manifest-selected cases and returns 
   assert.equal(result.result.tests[0].status, 'passed');
 });
 
+test('Creator Editor test harness accepts a provider-measured coverage report beside test results', async () => {
+  const result = await runEditorScript({ source: `
+    const report = await CreatorTest.run([{ id: 'selected', run: () => {} }]);
+    return { ...report, coverage: { schemaVersion: 1, files: [{ path: 'assets/Scripts/Game.js',
+      sha256: 'a'.repeat(64), metrics: { functions: { covered: 2, total: 3 } } }] } };
+  `, input: { __cocosAgentTest: { coverage: true } }, editor: {} });
+  assert.equal(result.result.tests[0].status, 'passed');
+  assert.equal(result.result.coverage.files[0].metrics.functions.total, 3);
+});
+
 test('Creator Editor test harness records failures and skips later tests after a timeout', async () => {
   let laterRan = false;
   const result = await runEditorScript({ source: `return CreatorTest.run([

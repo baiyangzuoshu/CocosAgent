@@ -38,5 +38,10 @@ exports.runTests = async function runTests(cases, options) {
                 message: String(error && (error.stack || error.message) || error).slice(0, 8192) });
         } finally { clearTimeout(timer); }
     }
-    return { schemaVersion: 1, tests: tests, requiresManualReview: interrupted };
+    var report = { schemaVersion: 1, tests: tests, requiresManualReview: interrupted };
+    // Providers may attach counters from their own instrumentation. The CLI
+    // validates the coverage schema and source hashes before storing them.
+    if (options.coverage && typeof options.coverage === 'object' && !Array.isArray(options.coverage))
+        report.coverage = options.coverage;
+    return report;
 };

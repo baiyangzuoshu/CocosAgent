@@ -78,7 +78,7 @@ test('Editor suite executes the hash-bound script only after an exact native-app
   assert.equal(report.suites[0].receipt.startedAt, '2026-10-22T00:00:00.000Z');
 });
 
-test('Editor suites reject paths outside editor-scripts, symlinks and coverage requests', async (t) => {
+test('Editor suites reject paths outside editor-scripts and symlinks', async (t) => {
   const state = fixture(t);
   const manifestPath = path.join(state.projectRoot, '.cocos-agent', 'tests.json');
   const writeManifest = (scriptPath) => fs.writeFileSync(manifestPath, JSON.stringify({ schemaVersion: 1, suites: [
@@ -93,9 +93,7 @@ test('Editor suites reject paths outside editor-scripts, symlinks and coverage r
   assert.throws(() => loadTestPlan(state.projectRoot), { code: 'TEST_PATH_SYMLINK' });
 
   writeManifest(state.scriptPath);
-  await assert.rejects(runTestPlan({ projectRoot: state.projectRoot, suiteIds: ['editor-suite'], coverage: true,
-    instanceId: 'creator-instance', reportDir: path.join(state.directory, 'coverage-report') }),
-  { code: 'TEST_COVERAGE_EDITOR_SCRIPT_UNSUPPORTED' });
+  assert.equal(loadTestPlan(state.projectRoot).suites[0].scriptPath, state.scriptPath);
 
   fs.writeFileSync(manifestPath, JSON.stringify({ schemaVersion: 1, suites: [
     { id: 'editor-suite', adapter: 'editor', scriptPath: state.scriptPath, testIds: ['same', 'same'] },
@@ -105,6 +103,29 @@ test('Editor suites reject paths outside editor-scripts, symlinks and coverage r
     { id: 'editor-suite', adapter: 'editor', scriptPath: state.scriptPath, input: { __cocosAgentTest: {} } },
   ] }));
   assert.throws(() => loadTestPlan(state.projectRoot), { code: 'TEST_EDITOR_RUNNER_INPUT_RESERVED' });
+});
+
+test('direct Editor script coverage is requested and source-bound in the approved report', async (t) => {
+  const state = fixture(t);
+  const sourceHash = sha256(fs.readFileSync(state.scriptFile));
+  const mock = editorDependencies(state, { commit(input) {
+    assert.deepEqual(input.__cocosAgentTest, { coverage: true });
+    return { result: { status: 'completed', mode: 'file', projectRoot: state.projectRoot,
+      creatorVersion: '2.4.15', creatorInstanceId: 'creator-instance', scriptPath: state.scriptPath,
+      operationId: '123e4567-e89b-42d3-a456-426614174000', sourceSha256: sourceHash,
+      inputSha256: sha256(Buffer.from(JSON.stringify(input))), startedAt: '2026-10-22T00:00:00.000Z',
+      completedAt: '2026-10-22T00:00:01.000Z', manualReviewRequired: false,
+      result: { schemaVersion: 1, tests: [{ id: 'project-path', name: 'Editor project path', status: 'passed' }],
+        coverage: { schemaVersion: 1, files: [{ path: state.scriptPath, sha256: sourceHash, metrics: {
+          functions: { covered: 3, total: 4 },
+        } }] } } } };
+  } });
+  const report = await runTestPlan({ projectRoot: state.projectRoot, instanceId: mock.instanceId, coverage: true,
+    reportDir: path.join(state.directory, 'coverage-report') }, mock.dependencies);
+
+  assert.equal(report.passed, true);
+  assert.equal(report.suites[0].coverage.kind, 'creator-editor-script');
+  assert.deepEqual(report.suites[0].coverage.totals.functions, { covered: 3, total: 4, percent: 75 });
 });
 
 test('Editor case manifests shard deterministically and require every assigned case in the approved result', async (t) => {

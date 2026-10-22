@@ -42,15 +42,15 @@ Place `.cocos-agent/tests.json` in the authorized Creator 2.4.15 project. `creat
 }
 ```
 
-The plan permits 1–64 suites with unique IDs. Node suites explicitly list 1–64 `.js`, `.cjs` or `.mjs` files inside the project. Node's `node:test` runner executes them in child processes. These tests verify host-side JavaScript logic, not Creator globals, compilation or scene behavior. TypeScript needs prior project compilation or an editor test provider; the adapter does not silently transpile it. Tests execute project code with the current user's permissions and are not sandboxed. The protocol accepts no shell-command strings or downloaded test dependencies. Editor `testIds` are unique stable IDs, with up to 1000 declared per suite; each approved Editor run executes at most 64 selected cases. Creator Provider suites may declare up to 64 `testIds`; their command input schema must expose a string-array `testIds` property, and the CLI sends only the cases assigned to that shard.
+The plan permits 1–64 suites with unique IDs. Node suites explicitly list 1–64 `.js`, `.cjs` or `.mjs` files inside the project. Node's `node:test` runner executes them in child processes. These tests verify host-side JavaScript logic, not Creator globals, compilation or scene behavior. TypeScript needs prior project compilation or an editor test provider; the adapter does not silently transpile it. Tests execute project code with the current user's permissions and are not sandboxed. The protocol accepts no shell-command strings or downloaded test dependencies. Editor `testIds` are unique stable IDs, with up to 1000 declared per suite; each approved Editor run executes at most 64 selected cases. Creator Provider suites may declare up to 64 `testIds`; their command input schema must expose a string-array `testIds` property, and the CLI sends only the cases assigned to that shard. Provider suite input reserves `coverage`; use the CLI flag to request it.
 
-`--shard <index>/<total>` keeps Node's test-case sharding and assigns each `preview` suite as a whole to one deterministic shard based on its suite ID. A Creator Provider or direct Editor suite with `testIds` is split by stable test ID; without `testIds`, it stays whole. The CLI verifies that each selected Provider or Editor case appears exactly once in the approved result. Reports include selected/skipped suites and selected engine case IDs. Creator Provider coverage is not inferred from its test count; direct Editor script coverage is unsupported.
+`--shard <index>/<total>` keeps Node's test-case sharding and assigns each `preview` suite as a whole to one deterministic shard based on its suite ID. A Creator Provider or direct Editor suite with `testIds` is split by stable test ID; without `testIds`, it stays whole. The CLI verifies that each selected Provider or Editor case appears exactly once in the approved result. Reports include selected/skipped suites and selected engine case IDs.
 
 `timeoutMs` applies only to Node suites (100–180000 ms, default 30000). Timeout/cancellation terminates the owned process group and fails the run. Missing tests, all-skipped suites, malformed output and nonzero process exits cannot yield a pass. Inherited Node preload flags and test-runner context are cleared in subprocesses.
 
 ## Creator Provider adapter
 
-An editor test provider uses [the project command Provider contract](13-agent-command-providers.md). Its run command must be `control` with `approval: true`, including read-only test cases. To shard cases, declare an optional `testIds` array of strings in the command input schema and call the helper with those IDs: `runTests(cases, { ids: input.testIds })`. The CLI verifies the connected project's exact path and Creator version, discovers the provider live, binds the invocation to its fingerprint, and checks the selected result IDs. Creator's native approval remains required.
+An editor test provider uses [the project command Provider contract](13-agent-command-providers.md). Its run command must be `control` with `approval: true`, including read-only test cases. To shard cases, declare an optional `testIds` array of strings in the command input schema and call the helper with those IDs: `runTests(cases, { ids: input.testIds })`. To support `creator test --coverage`, also declare an optional boolean `coverage` property. The CLI sets it to `true`; the provider owns instrumentation and must return per-file counters bound to source hashes. The CLI verifies the connected project's exact path and Creator version, discovers the provider live, binds the invocation to its fingerprint, and checks the selected result IDs. Creator's native approval remains required.
 
 Return this data as the provider command's `result`:
 
@@ -60,11 +60,25 @@ Return this data as the provider command's `result`:
   "tests": [
     { "id": "asset-identity", "name": "AssetDB identity", "status": "passed", "durationMs": 3 }
   ],
+  "coverage": {
+    "schemaVersion": 1,
+    "files": [{
+      "path": "assets/Scripts/Inventory.js",
+      "sha256": "<sha256-of-current-project-source>",
+      "metrics": {
+        "lines": { "covered": 18, "total": 20 },
+        "branches": { "covered": 3, "total": 4 },
+        "functions": { "covered": 5, "total": 6 }
+      }
+    }]
+  },
   "requiresManualReview": false
 }
 ```
 
-Case statuses are `passed`, `failed` or `skipped`; failures can include a bounded `message`. The optional CLI helper `testing/creator-test-harness.cjs` can be copied into a project-owned provider. It exports `runTests([{id, name, run}], {ids, timeoutMs})`; each `run` function uses the project's Creator APIs. The provider owns setup and cleanup, preferably in `finally`. The helper limits total execution to 25 seconds to fit the 30 second Provider IPC. Timed-out code may still execute inside Creator: the helper marks manual review and skips later cases; it cannot claim cancellation or automatic restoration.
+Case statuses are `passed`, `failed` or `skipped`; failures can include a bounded `message`. Coverage files must be unique project-relative `.js`, `.cjs`, `.mjs`, `.ts` or `.tsx` paths. Each file includes its lowercase SHA-256 and one or more `lines`, `statements`, `branches` or `functions` counters, each with nonnegative integer `covered` and `total` values where covered does not exceed total. The CLI rejects unsafe/missing files, stale hashes and malformed counters; it aggregates totals and percentages in the saved report. This checks that reported counters name the current source, but the provider remains responsible for measuring the code it actually executed. The coverage payload is limited to 256 KiB and 512 files.
+
+The optional CLI helper `testing/creator-test-harness.cjs` can be copied into a project-owned provider. It exports `runTests([{id, name, run}], {ids, timeoutMs, coverage})`; `coverage` is an optional provider-produced report passed through for CLI validation, not an instrumentation engine. Each `run` function uses the project's Creator APIs. The provider owns setup and cleanup, preferably in `finally`. The helper limits total execution to 25 seconds to fit the 30 second Provider IPC. Timed-out code may still execute inside Creator: the helper marks manual review and skips later cases; it cannot claim cancellation or automatic restoration.
 
 An invoked Provider call that fails or returns an uncertain result requires manual review. Watch then stops without repeating it. Reports preserve actual Provider receipts; mock adapter tests prove only response handling. Live Creator evidence is required for editor acceptance.
 
@@ -89,7 +103,14 @@ return CreatorTest.run([
 ]);
 ```
 
-`CreatorTest.run` accepts up to 64 selected cases per execution, with a default 10-second per-case timeout and a 25-second total budget. A timeout marks the run for manual review and skips remaining cases because already-started Editor work cannot be cancelled. The Editor script runner also bounds source, input and result size. A commit timeout, malformed receipt or uncertain result is marked for manual review; watch stops and does not replay that script automatically. Mock adapter tests verify orchestration and receipt handling; live Creator 2.4.15 execution is required for Editor acceptance.
+`CreatorTest.run` accepts up to 64 selected cases per execution, with a default 10-second per-case timeout and a 25-second total budget. A timeout marks the run for manual review and skips remaining cases because already-started Editor work cannot be cancelled. With `--coverage`, the CLI adds `coverage: true` to the reserved `input.__cocosAgentTest` object; the script must return its own instrumentation counters in the same `coverage` shape described for Creator Providers. The CLI validates current-source hashes and aggregates the results. The complete Editor response is limited to 64 KiB, so its coverage object is limited to 48 KiB. A commit timeout, malformed receipt or uncertain result is marked for manual review; watch stops and does not replay that script automatically. Mock adapter tests verify orchestration and receipt handling; live Creator 2.4.15 execution is required for Editor acceptance.
+
+For example, after running the cases the script can return the test result with its measured counters:
+
+```js
+const report = await CreatorTest.run(cases);
+return { ...report, coverage: { schemaVersion: 1, files: measuredCoverageFiles } };
+```
 
 ## Preview adapter
 

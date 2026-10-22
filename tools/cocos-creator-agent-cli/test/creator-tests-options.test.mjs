@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -155,6 +156,71 @@ test('Creator Provider shard fails when its approved receipt omits or invents se
   });
   assert.equal(report.passed, false);
   assert.equal(report.suites[0].error, 'TEST_PROVIDER_CASE_RESULTS_MISMATCH');
+});
+
+test('Creator Provider coverage is requested, source-bound, and aggregated by the CLI', async (t) => {
+  const state = fixture([{ id: 'provider-coverage', adapter: 'creator', providerId: 'project-tests', commandId: 'run-tests' }]);
+  t.after(() => fs.rmSync(state.directory, { recursive: true, force: true }));
+  const sourcePath = 'test/case-0.test.js';
+  const sourceBytes = fs.readFileSync(path.join(state.projectRoot, sourcePath));
+  const sourceHash = createHash('sha256').update(sourceBytes).digest('hex');
+  let requestedCoverage = false;
+  const report = await runTestPlan({ ...state, instanceId: 'instance', coverage: true,
+    reportDir: path.join(state.directory, 'provider-coverage-report') }, {
+    listInstances: async () => ({ instances: [{ instanceId: 'instance', projectRoot: state.projectRoot, creatorVersion: '2.4.15' }] }),
+    getExtensionCommands: async () => ({ commands: [{ providerId: 'project-tests', id: 'run-tests', status: 'available',
+      access: 'control', approval: true, providerFingerprint: 'fingerprint', input: {
+        type: 'object', required: [], properties: { coverage: { type: 'boolean' } }, additionalProperties: false,
+      } }] }),
+    callExtensionCommand: async (_instance, _provider, _command, input) => {
+      requestedCoverage = input.coverage === true;
+      return { result: { result: await creatorTestHarness.runTests([
+        { id: 'provider-case', name: 'provider case', run: () => true },
+      ], { coverage: { schemaVersion: 1, files: [{ path: sourcePath, sha256: sourceHash, metrics: {
+        lines: { covered: 8, total: 10 }, branches: { covered: 1, total: 2 },
+      } }] } }) } };
+    },
+  });
+  assert.equal(requestedCoverage, true);
+  assert.equal(report.passed, true);
+  assert.deepEqual(report.suites[0].coverage.totals.lines, { covered: 8, total: 10, percent: 80 });
+  assert.deepEqual(report.suites[0].coverage.totals.branches, { covered: 1, total: 2, percent: 50 });
+  assert.equal(report.suites[0].coverage.files[0].sha256, sourceHash);
+});
+
+test('Creator Provider coverage is refused before dispatch when its command schema omits coverage', async (t) => {
+  const state = fixture([{ id: 'provider-coverage', adapter: 'creator', providerId: 'project-tests', commandId: 'run-tests' }]);
+  t.after(() => fs.rmSync(state.directory, { recursive: true, force: true }));
+  let dispatched = false;
+  const report = await runTestPlan({ ...state, instanceId: 'instance', coverage: true,
+    reportDir: path.join(state.directory, 'provider-coverage-schema-report') }, {
+    listInstances: async () => ({ instances: [{ instanceId: 'instance', projectRoot: state.projectRoot, creatorVersion: '2.4.15' }] }),
+    getExtensionCommands: async () => ({ commands: [{ providerId: 'project-tests', id: 'run-tests', status: 'available',
+      access: 'control', approval: true, providerFingerprint: 'fingerprint', input: { type: 'object', properties: {} } }] }),
+    callExtensionCommand: async () => { dispatched = true; return {}; },
+  });
+  assert.equal(dispatched, false);
+  assert.equal(report.suites[0].error, 'TEST_COVERAGE_CREATOR_PROVIDER_UNSUPPORTED');
+});
+
+test('Creator Provider coverage rejects a source hash that no longer matches the project file', async (t) => {
+  const state = fixture([{ id: 'provider-coverage', adapter: 'creator', providerId: 'project-tests', commandId: 'run-tests' }]);
+  t.after(() => fs.rmSync(state.directory, { recursive: true, force: true }));
+  const report = await runTestPlan({ ...state, instanceId: 'instance', coverage: true,
+    reportDir: path.join(state.directory, 'provider-stale-coverage-report') }, {
+    listInstances: async () => ({ instances: [{ instanceId: 'instance', projectRoot: state.projectRoot, creatorVersion: '2.4.15' }] }),
+    getExtensionCommands: async () => ({ commands: [{ providerId: 'project-tests', id: 'run-tests', status: 'available',
+      access: 'control', approval: true, providerFingerprint: 'fingerprint', input: {
+        type: 'object', properties: { coverage: { type: 'boolean' } },
+      } }] }),
+    callExtensionCommand: async () => ({ result: { result: { schemaVersion: 1, tests: [
+      { name: 'provider case', status: 'passed' },
+    ], coverage: { schemaVersion: 1, files: [{ path: 'test/case-0.test.js', sha256: '0'.repeat(64), metrics: {
+      functions: { covered: 1, total: 1 },
+    } }] } } } }),
+  });
+  assert.equal(report.passed, false);
+  assert.equal(report.suites[0].error, 'TEST_PROVIDER_COVERAGE_SOURCE_CHANGED');
 });
 
 test('preview coverage is requested through the same runtime test invocation', async (t) => {

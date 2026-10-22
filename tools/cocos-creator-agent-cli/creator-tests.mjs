@@ -13,6 +13,9 @@ const MANIFEST = '.cocos-agent/tests.json';
 const ID = /^[a-z][a-z0-9-]{0,63}$/;
 const CASE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const MAX_ENGINE_CASES_PER_RUN = 64;
+const MAX_PROVIDER_COVERAGE_FILES = 512;
+const MAX_PROVIDER_COVERAGE_BYTES = 256 * 1024;
+const COVERAGE_METRICS = ['lines', 'statements', 'branches', 'functions'];
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const coded = (code) => Object.assign(new Error(code), { code });
 const plain = (value) => value && typeof value === 'object' && !Array.isArray(value);
@@ -33,6 +36,49 @@ function safeFile(root, relative, { maxBytes = 1024 * 1024 } = {}) {
   const stat = fs.statSync(target);
   if (!stat.isFile() || stat.size > maxBytes) throw coded('TEST_FILE_INVALID');
   return { path: target, projectPath: path.relative(root, target).split(path.sep).join('/'), bytes: fs.readFileSync(target) };
+}
+
+function normalizeCreatorCoverage(root, raw, { kind, maxBytes, errorPrefix }) {
+  const fail = (suffix) => { throw coded(`${errorPrefix}_${suffix}`); };
+  let encoded;
+  try { encoded = JSON.stringify(raw); } catch (_) { fail('INVALID'); }
+  if (!plain(raw) || raw.schemaVersion !== 1 || !Array.isArray(raw.files)
+    || raw.files.length > MAX_PROVIDER_COVERAGE_FILES || Buffer.byteLength(encoded || '', 'utf8') > maxBytes)
+    fail('INVALID');
+  const seen = new Set();
+  const totals = Object.fromEntries(COVERAGE_METRICS.map((name) => [name, { covered: 0, total: 0 }]));
+  const files = raw.files.map((file) => {
+    if (!plain(file) || typeof file.path !== 'string' || file.path.length > 512 || file.path.includes('\\')
+      || file.path.includes('\0') || path.posix.isAbsolute(file.path)
+      || file.path.split('/').some((part) => !part || part === '.' || part === '..')
+      || path.posix.normalize(file.path) !== file.path || seen.has(file.path)
+      || !/\.(?:[cm]?js|tsx?)$/.test(file.path) || !/^[0-9a-f]{64}$/.test(file.sha256 || '')
+      || !plain(file.metrics) || Object.keys(file.metrics).some((key) => !COVERAGE_METRICS.includes(key)))
+      fail('INVALID');
+    seen.add(file.path);
+    let source;
+    try { source = safeFile(root, file.path); }
+    catch (_) { fail('SOURCE_INVALID'); }
+    if (source.projectPath !== file.path) fail('INVALID');
+    if (hash(source.bytes) !== file.sha256) fail('SOURCE_CHANGED');
+    const metrics = {};
+    for (const [name, counts] of Object.entries(file.metrics)) {
+      if (!plain(counts) || Object.keys(counts).some((key) => !['covered', 'total'].includes(key))
+        || !Number.isSafeInteger(counts.covered) || !Number.isSafeInteger(counts.total)
+        || counts.covered < 0 || counts.total < counts.covered || counts.total > 100_000_000)
+        fail('INVALID');
+      metrics[name] = { covered: counts.covered, total: counts.total };
+      totals[name].covered += counts.covered;
+      totals[name].total += counts.total;
+      if (!Number.isSafeInteger(totals[name].covered) || !Number.isSafeInteger(totals[name].total))
+        fail('INVALID');
+    }
+    if (!Object.values(metrics).some((counts) => counts.total > 0)) fail('INVALID');
+    return { path: file.path, sha256: file.sha256, metrics };
+  });
+  if (!files.length) fail('INVALID');
+  for (const metric of Object.values(totals)) metric.percent = metric.total ? metric.covered / metric.total * 100 : 0;
+  return { kind, schemaVersion: 1, files, totals };
 }
 
 function safeEditorTestFile(root, relative) {
@@ -86,6 +132,7 @@ export function loadTestPlan(projectRoot) {
         || new Set(suite.testIds).size !== suite.testIds.length)) throw coded('TEST_CREATOR_CASE_IDS_INVALID');
       if (suite.testIds && Object.hasOwn(suite.input || {}, 'testIds'))
         throw coded('TEST_CREATOR_RUNNER_INPUT_RESERVED');
+      if (Object.hasOwn(suite.input || {}, 'coverage')) throw coded('TEST_CREATOR_RUNNER_INPUT_RESERVED');
     } else if (suite.adapter === 'editor') {
       if (suite.providerId !== undefined || suite.commandId !== undefined) throw coded('TEST_MANIFEST_FIELD_INVALID');
       suite.scriptPath = safeEditorTestFile(root, suite.scriptPath);
@@ -299,11 +346,7 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
     normalizedShard = parseTestShard(`${shard.index}/${shard.total}`);
   }
   if (typeof coverage !== 'boolean') throw coded('TEST_COVERAGE_INVALID');
-  if (coverage && selected.some((suite) => suite.adapter === 'creator'))
-    throw coded('TEST_COVERAGE_CREATOR_PROVIDER_UNSUPPORTED');
-  if (coverage && selected.some((suite) => suite.adapter === 'editor'))
-    throw coded('TEST_COVERAGE_EDITOR_SCRIPT_UNSUPPORTED');
-  if (coverage) requireCoverageSupport();
+  if (coverage && selected.some((suite) => suite.adapter === 'node')) requireCoverageSupport();
   const selectedCaseIdsBySuite = {};
   const shardSkipped = normalizedShard ? selected.filter((suite) => suite.adapter !== 'node'
     && !(['creator', 'editor'].includes(suite.adapter) && suite.testIds)
@@ -351,10 +394,13 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
         const selectedCaseIds = suite.testIds ? selectedCaseIdsBySuite[suite.id] : undefined;
         if (selectedCaseIds && selectedCaseIds.length > MAX_ENGINE_CASES_PER_RUN)
           throw coded('TEST_EDITOR_CASE_BATCH_LIMIT');
-        const editorInput = suite.testIds ? { ...(suite.input || {}), __cocosAgentTest: {
-          selectedCaseIds,
-          ...(normalizedShard ? { shard: normalizedShard } : {}),
-        } } : suite.input || {};
+        const editorRunnerInput = {
+          ...(suite.testIds ? { selectedCaseIds } : {}),
+          ...(normalizedShard && suite.testIds ? { shard: normalizedShard } : {}),
+          ...(coverage ? { coverage: true } : {}),
+        };
+        const editorInput = Object.keys(editorRunnerInput).length
+          ? { ...(suite.input || {}), __cocosAgentTest: editorRunnerInput } : suite.input || {};
         if (Buffer.byteLength(JSON.stringify(editorInput), 'utf8') > 16 * 1024)
           throw coded('TEST_EDITOR_SCRIPT_INPUT_TOO_LARGE');
         const planReceipt = await call(instanceId, 'creator.editor.eval-file.plan', {
@@ -396,6 +442,11 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
             inputSha256: execution.inputSha256, startedAt: execution.startedAt,
             completedAt: execution.completedAt,
           } };
+        if (coverage) {
+          if (!returned.coverage) throw coded('TEST_COVERAGE_REPORT_MISSING');
+          result.coverage = normalizeCreatorCoverage(plan.projectRoot, returned.coverage,
+            { kind: 'creator-editor-script', maxBytes: 48 * 1024, errorPrefix: 'TEST_EDITOR_COVERAGE' });
+        }
       }
       else if (suite.adapter === 'creator') {
         const catalog = await discover(instanceId);
@@ -411,6 +462,11 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
             || selectedCaseIds.length > selection.maxItems) throw coded('TEST_PROVIDER_CASE_SELECTION_UNSUPPORTED');
           providerInput.testIds = selectedCaseIds;
         }
+        if (coverage) {
+          const coverageInput = command.input?.properties?.coverage;
+          if (coverageInput?.type !== 'boolean') throw coded('TEST_COVERAGE_CREATOR_PROVIDER_UNSUPPORTED');
+          providerInput.coverage = true;
+        }
         executionDispatched = true;
         const receipt = await invoke(instanceId, suite.providerId, suite.commandId, providerInput,
           { expectedFingerprint: command.providerFingerprint });
@@ -420,6 +476,11 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
           || selectedCaseIds.some((id) => returned.tests.filter((item) => item?.id === id).length !== 1)))
           throw coded('TEST_PROVIDER_CASE_RESULTS_MISMATCH');
         result = { tests: returned.tests, receipt, requiresManualReview: returned.requiresManualReview === true };
+        if (coverage) {
+          if (!returned.coverage) throw coded('TEST_COVERAGE_REPORT_MISSING');
+          result.coverage = normalizeCreatorCoverage(plan.projectRoot, returned.coverage,
+            { kind: 'creator-provider', maxBytes: MAX_PROVIDER_COVERAGE_BYTES, errorPrefix: 'TEST_PROVIDER_COVERAGE' });
+        }
       } else {
         if (typeof previewSessionId !== 'string' || !previewSessionId) throw coded('PREVIEW_SESSION_REQUIRED');
         if (refreshPreview && !previewRefreshed) {
