@@ -326,6 +326,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
   const editorIpc = new EventEmitter();
   const electronIpc = new EventEmitter();
   const editorBuilder = new EventEmitter();
+  const evalFixture = { value: 0 };
   editorIpc.sendToPanel = (panel, message, sourceNodeUuid, targetUrl) => {
     assert.equal(panel, 'scene');
     if (message === 'scene:stash-and-save') {
@@ -367,6 +368,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
   const Editor = {
     Project: { path: projectRoot },
     App: { version: '2.4.15' },
+    evalFixture,
     Scene: { callSceneScript(_packageName, method, params, callback) {
       if (method === 'prefabEditModeState' && prefabPatch) {
         callback(null, { available: true, modeName: 'scene', prefabUuid: null, sceneUuid,
@@ -645,6 +647,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
     createScriptModifyPlan, commitScriptModify, reconcileScriptModify,
     createPrefabSourcePatchPlan,
     createScriptRecompilePlan, commitScriptRecompile, reconcileScriptRecompile, setupDiagnosticListeners,
+    createEditorEvalPlan, commitEditorEval, reconcileEditorEval,
     createAssetImportPlan, commitAssetImport, reconcileAssetImport,
     createPrefabPlan, commitPrefabCreate, reconcilePrefabCreate,
     createSceneComposePlan, commitSceneCompose, reconcileSceneCompose,
@@ -678,7 +681,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
   api.setBridgeSession({ bridgeId: 'bridge-fixture', sessionId: 'session-fixture', projectRoot });
   return { api, scriptFile, metaFile, beforeSource, projectRoot, scriptPath, meta, editorIpc, electronIpc,
     importedAssetUuid, prefabAssetUuid, sceneUuid, nodeUuid,
-    prefabPatchUuid, prefabPatchNodeUuid, prefabPatchFile,
+    prefabPatchUuid, prefabPatchNodeUuid, prefabPatchFile, evalFixture,
     currentTransform, getButtonEvents: () => [...buttonEvents],
     oldParentUuid, targetParentUuid, isReparentApplied: () => reparentApplied,
     setReparentApplied(value) { reparentApplied = value; },
@@ -698,6 +701,68 @@ const sourceHash = (value) => import('node:crypto').then(({ createHash }) =>
   createHash('sha256').update(Buffer.from(value)).digest('hex'));
 
 function command(id) { return contract.commands.find((entry) => entry.id === id); }
+
+test('Editor eval commands expose explicit plan, approved execution, and read-only recovery', async (t) => {
+  const inline = makeHarness(t, { ipcMode: 'editor' });
+  const plan = await inline.api.createEditorEvalPlan({
+    source: 'Editor.evalFixture.value = input.value; return { project: Editor.Project.path, value: input.value };',
+    input: { value: 23 },
+  }, 'inline');
+  assert.equal(plan.status, 'planned');
+  assert.equal(plan.mode, 'inline');
+  assert.equal(plan.sourceBytes > 0, true);
+  assert.equal(plan.sourcePreview, 'Editor.evalFixture.value = input.value; return { project: Editor.Project.path, value: input.value };');
+  assert.equal(inline.evalFixture.value, 0);
+  const receipt = await inline.api.commitEditorEval({ operationId: plan.operationId, planHash: plan.planHash },
+    { requestId: 'request-fixture' }, 'inline');
+  assert.equal(receipt.status, 'completed');
+  assert.equal(receipt.result.value, 23);
+  assert.equal(receipt.sideEffectsVerified, false);
+  assert.equal(inline.evalFixture.value, 23);
+  assert.equal((await inline.api.reconcileEditorEval({ operationId: plan.operationId }, 'inline')).status, 'completed');
+
+  const interrupted = makeHarness(t, { ipcMode: 'editor' });
+  const interruptedPlan = await interrupted.api.createEditorEvalPlan({
+    source: 'Editor.evalFixture.value = input.value; throw new Error("after mutation");', input: { value: 41 },
+  }, 'inline');
+  await assert.rejects(interrupted.api.commitEditorEval({ operationId: interruptedPlan.operationId,
+    planHash: interruptedPlan.planHash }, { requestId: 'request-fixture' }, 'inline'),
+  { code: 'EDITOR_SCRIPT_EXECUTION_FAILED' });
+  const interruptedReceipt = await interrupted.api.reconcileEditorEval({ operationId: interruptedPlan.operationId }, 'inline');
+  assert.equal(interruptedReceipt.status, 'needs-reconciliation');
+  assert.equal(interruptedReceipt.manualReviewRequired, true);
+  assert.equal(interrupted.evalFixture.value, 41);
+  await assert.rejects(interrupted.api.commitEditorEval({ operationId: interruptedPlan.operationId,
+    planHash: interruptedPlan.planHash }, { requestId: 'request-fixture' }, 'inline'),
+  { code: 'OPERATION_RECONCILIATION_REQUIRED' });
+
+  const fileMode = makeHarness(t, { ipcMode: 'editor' });
+  const editorScript = path.join(fileMode.projectRoot, 'packages', 'sample-package', 'editor-scripts', 'read.js');
+  fs.mkdirSync(path.dirname(editorScript), { recursive: true });
+  fs.writeFileSync(editorScript, 'Editor.evalFixture.value = input.value; return input.value;');
+  const filePlan = await fileMode.api.createEditorEvalPlan({ scriptPath: 'packages/sample-package/editor-scripts/read.js',
+    input: { value: 9 } }, 'file');
+  fs.writeFileSync(editorScript, 'Editor.evalFixture.value = 100; return 100;');
+  await assert.rejects(fileMode.api.commitEditorEval({ operationId: filePlan.operationId, planHash: filePlan.planHash },
+    { requestId: 'request-fixture' }, 'file'), { code: 'EDITOR_SCRIPT_SOURCE_CHANGED' });
+  assert.equal(fileMode.evalFixture.value, 0);
+  const oversized = path.join(fileMode.projectRoot, 'packages', 'sample-package', 'editor-scripts', 'large.js');
+  fs.writeFileSync(oversized, Buffer.alloc(16385, 0x61));
+  await assert.rejects(fileMode.api.createEditorEvalPlan({ scriptPath: 'packages/sample-package/editor-scripts/large.js' }, 'file'),
+    { code: 'EDITOR_SCRIPT_SOURCE_INVALID' });
+  const linked = path.join(fileMode.projectRoot, 'packages', 'sample-package', 'editor-scripts', 'linked.js');
+  fs.symlinkSync(fileMode.scriptFile, linked);
+  await assert.rejects(fileMode.api.createEditorEvalPlan({ scriptPath: 'packages/sample-package/editor-scripts/linked.js' }, 'file'),
+    { code: 'UNSAFE_EDITOR_SCRIPT_PATH' });
+});
+
+test('Editor eval contract bounds source and accepts arbitrary JSON script input only inside its nested object', () => {
+  assert.equal(validateCommand('creator.editor.eval.plan', { source: 'return input.value;', input: { value: 1 } }).ok, true);
+  assert.equal(validateCommand('creator.editor.eval.plan', { source: 'return input.value;', input: { value: 1 }, extra: true }).ok, false);
+  assert.equal(validateCommand('creator.editor.eval.plan', { source: 'x'.repeat(16385) }).ok, false);
+  assert.equal(validateCommand('creator.editor.eval-file.plan', { scriptPath: 'packages/sample/editor-scripts/a.js' }).ok, true);
+  assert.equal(validateCommand('creator.editor.eval-file.plan', { scriptPath: 'assets/Scripts/a.js' }).ok, false);
+});
 
 test('script modification commands declare approved write and bounded inputs', () => {
   const plan = command('creator.script.modify.plan');

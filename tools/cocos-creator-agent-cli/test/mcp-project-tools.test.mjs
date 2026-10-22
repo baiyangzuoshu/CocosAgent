@@ -172,7 +172,7 @@ test('MCP discovers a project alias and routes it through CLI to the selected Cr
     result: { projectRoot: canonicalRoot, creatorVersion: '2.4.15', providers: [], commands: [providerCommand], skipped: [] },
   });
   const listing = await listingPromise;
-  assert.equal(listing.tools.length, 77, 'Expected 74 fixed tools, two project aliases, and one live extension command.');
+  assert.equal(listing.tools.length, 83, 'Expected 80 fixed tools, two project aliases, and one live extension command.');
   assert.equal(listing.tools.find((item) => item.name === 'cocos_project_tool_call').annotations.destructiveHint, true,
     'The generic project-alias call can invoke approved writes and must be marked destructive.');
   const componentPlanTool = listing.tools.find((item) => item.name === 'cocos_scene_node_add_component_plan');
@@ -245,6 +245,12 @@ test('MCP discovers a project alias and routes it through CLI to the selected Cr
     'cocos_script_modify_plan', 'cocos_script_modify_commit', 'cocos_script_modify_reconcile']) {
     assert.ok(listing.tools.some((item) => item.name === name), `MCP tool ${name} was not discovered.`);
   }
+  for (const name of ['cocos_editor_eval_plan', 'cocos_editor_eval_commit', 'cocos_editor_eval_reconcile',
+    'cocos_editor_eval_file_plan', 'cocos_editor_eval_file_commit', 'cocos_editor_eval_file_reconcile']) {
+    assert.ok(listing.tools.some((item) => item.name === name), `MCP tool ${name} was not discovered.`);
+  }
+  assert.equal(listing.tools.find((item) => item.name === 'cocos_editor_eval_plan').inputSchema.additionalProperties, false);
+  assert.equal(listing.tools.find((item) => item.name === 'cocos_editor_eval_commit').annotations.destructiveHint, true);
   const assetReferencesTool = listing.tools.find((item) => item.name === 'cocos_asset_references');
   assert.deepEqual(assetReferencesTool.inputSchema.required, ['instanceId', 'assetUuid']);
   assert.equal(assetReferencesTool.annotations.readOnlyHint, true);

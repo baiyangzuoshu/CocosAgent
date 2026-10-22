@@ -183,6 +183,59 @@
       }, "additionalProperties": false }
     },
     {
+      "id": "creator.editor.eval.plan",
+      "access": "plan",
+      "description": "Freeze bounded inline JavaScript and JSON input for an explicit Creator Editor execution approval. Source runs with Editor privileges, is not sandboxed, and has no automatic persistence verification.",
+      "input": { "type": "object", "required": ["source"], "properties": {
+        "source": { "type": "string", "minLength": 1, "maxLength": 16384 },
+        "input": { "type": "object", "additionalProperties": true }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.editor.eval.commit",
+      "access": "write", "approval": true,
+      "description": "After native Creator approval, execute the exact planned inline script and return its bounded JSON result. Script effects and persistence are not verified; interrupted calls require manual review and are never replayed.",
+      "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+        "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.editor.eval.reconcile",
+      "access": "plan",
+      "description": "Read the recorded state and bounded result of one inline Editor script operation. Never executes or retries the script.",
+      "input": { "type": "object", "required": ["operationId"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.editor.eval-file.plan",
+      "access": "plan",
+      "description": "Freeze a project package editor-scripts JavaScript file and JSON input for an explicit Creator Editor execution approval. Only packages/*/editor-scripts/*.js paths without symlinks are accepted; source runs with Editor privileges and is not sandboxed.",
+      "input": { "type": "object", "required": ["scriptPath"], "properties": {
+        "scriptPath": { "type": "string", "minLength": 1, "maxLength": 512,
+        "pattern": "^packages/(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?($|/))(?!.*(?:^|/)\\.)[^\\\\]+/(?:[^\\\\]+/)*editor-scripts/(?:[^\\\\]+/)*[^\\\\]+\\.js$" },
+        "input": { "type": "object", "additionalProperties": true }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.editor.eval-file.commit",
+      "access": "write", "approval": true,
+      "description": "After native Creator approval, execute the exact planned and hash-checked editor script file and return its bounded JSON result. Script effects and persistence are not verified; interrupted calls require manual review and are never replayed.",
+      "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+        "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.editor.eval-file.reconcile",
+      "access": "plan",
+      "description": "Read the recorded state and bounded result of one editor script file operation. Never executes or retries the file.",
+      "input": { "type": "object", "required": ["operationId"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+      }, "additionalProperties": false }
+    },
+    {
       "id": "creator.script.read",
       "access": "read",
       "description": "Read a project JavaScript or TypeScript source file and its Creator metadata identity.",

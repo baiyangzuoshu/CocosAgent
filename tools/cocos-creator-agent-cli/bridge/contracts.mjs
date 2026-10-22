@@ -55,7 +55,10 @@ function validateValue(schema, value, fieldPath) {
     if (schema.additionalProperties === false && Object.keys(value).some((key) => !Object.hasOwn(properties, key)))
       return { ok: false, code: 'UNKNOWN_INPUT_FIELD', field: fieldPath };
     for (const [key, child] of Object.entries(value)) {
-      if (!Object.hasOwn(properties, key)) return { ok: false, code: 'UNKNOWN_INPUT_FIELD', field: `${fieldPath}.${key}` };
+      if (!Object.hasOwn(properties, key)) {
+        if (schema.additionalProperties === true) continue;
+        return { ok: false, code: 'UNKNOWN_INPUT_FIELD', field: `${fieldPath}.${key}` };
+      }
       const result = validateValue(properties[key], child, `${fieldPath}.${key}`);
       if (!result.ok) return result;
     }

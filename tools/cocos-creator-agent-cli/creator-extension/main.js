@@ -11,6 +11,7 @@ const { inspectSceneComposition, inspectSavedSceneNode, componentValueForDisk,
     validComponentDiskValue } = require('./scene-persistence.cjs');
 const { inspectPrefabSource: inspectPrefabSourceData } = require('./prefab-source.cjs');
 const prefabPatch = require('./prefab-patch.cjs');
+const editorScriptEval = require('./editor-script-eval.cjs');
 const { scanAssetReferences } = require('./asset-references.cjs');
 const contract = require('./command-contract.json');
 const { normalizeProvider, validateArguments, canonical, PROVIDER_ID, COMMAND_ID } = require('./provider-contract.cjs');
@@ -307,6 +308,60 @@ function safeProjectFile(relative, extensionPattern) {
     const real = fs.realpathSync(current);
     if (!real.startsWith(`${assets}${path.sep}`)) throw coded('UNSAFE_PROJECT_PATH');
     return current;
+}
+
+function safeProjectExtensionScript(relative) {
+    if (typeof relative !== 'string' || relative.length > 512 || relative.includes('\\') || relative.includes('\0')
+        || !relative.startsWith('packages/') || !/\.js$/i.test(relative)) throw coded('UNSAFE_EDITOR_SCRIPT_PATH');
+    const parts = relative.split('/');
+    const editorScriptsIndex = parts.indexOf('editor-scripts');
+    if (parts.length < 4 || parts[0] !== 'packages' || editorScriptsIndex < 2
+        || editorScriptsIndex === parts.length - 1
+        || parts.some((part) => !part || part === '.' || part === '..' || part.startsWith('.')))
+        throw coded('UNSAFE_EDITOR_SCRIPT_PATH');
+    const root = projectRoot();
+    const packages = path.join(root, 'packages');
+    const packagesStat = fs.lstatSync(packages);
+    if (!packagesStat.isDirectory() || packagesStat.isSymbolicLink()) throw coded('UNSAFE_EDITOR_SCRIPT_PATH');
+    let current = packages;
+    for (let index = 1; index < parts.length; index += 1) {
+        current = path.join(current, parts[index]);
+        const stat = fs.lstatSync(current);
+        if (stat.isSymbolicLink() || (index < parts.length - 1 ? !stat.isDirectory() : !stat.isFile()))
+            throw coded('UNSAFE_EDITOR_SCRIPT_PATH');
+    }
+    const real = fs.realpathSync(current);
+    if (!real.startsWith(`${packages}${path.sep}`)) throw coded('UNSAFE_EDITOR_SCRIPT_PATH');
+    return current;
+}
+
+function readProjectExtensionScript(relative) {
+    const filename = safeProjectExtensionScript(relative);
+    let fd;
+    try {
+        fd = fs.openSync(filename, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+        const before = fs.fstatSync(fd);
+        if (!before.isFile() || before.size > editorScriptEval.MAX_SOURCE_BYTES)
+            throw coded('EDITOR_SCRIPT_SOURCE_INVALID');
+        const buffer = Buffer.alloc(editorScriptEval.MAX_SOURCE_BYTES + 1);
+        let bytesRead = 0;
+        while (bytesRead < buffer.length) {
+            const count = fs.readSync(fd, buffer, bytesRead, buffer.length - bytesRead, bytesRead);
+            if (!count) break;
+            bytesRead += count;
+        }
+        const after = fs.fstatSync(fd);
+        if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size
+            || before.mtimeMs !== after.mtimeMs || bytesRead !== before.size)
+            throw coded('EDITOR_SCRIPT_SOURCE_CHANGED');
+        if (bytesRead > editorScriptEval.MAX_SOURCE_BYTES) throw coded('EDITOR_SCRIPT_SOURCE_INVALID');
+        const bytes = buffer.subarray(0, bytesRead);
+        const source = bytes.toString('utf8');
+        if (!Buffer.from(source, 'utf8').equals(bytes)) throw coded('EDITOR_SCRIPT_SOURCE_INVALID');
+        return source;
+    } finally {
+        if (fd !== undefined) fs.closeSync(fd);
+    }
 }
 
 function fileHash(bytes) { return crypto.createHash('sha256').update(bytes).digest('hex'); }
@@ -5974,6 +6029,197 @@ async function savePrefabSourceMode(prefabUuid) {
     return { mode: after, eventConfirmed: true };
 }
 
+function readEditorEvalOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES)
+        throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    if (!operation || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.editor.eval' || !plan || typeof plan !== 'object'
+        || plan.operation !== operation.operation || plan.operationId !== operationId
+        || !['inline', 'file'].includes(plan.mode) || typeof plan.projectRoot !== 'string'
+        || typeof plan.creatorVersion !== 'string' || typeof plan.extensionVersion !== 'string'
+        || typeof plan.contractFingerprint !== 'string' || typeof plan.creatorInstanceId !== 'string'
+        || typeof plan.source !== 'string' || typeof plan.sourceSha256 !== 'string'
+        || !plan.input || typeof plan.input !== 'object' || Array.isArray(plan.input)
+        || typeof plan.inputSha256 !== 'string' || typeof plan.expiresAt !== 'string'
+        || (plan.mode === 'file' && typeof plan.scriptPath !== 'string')
+        || (plan.mode === 'inline' && plan.scriptPath !== null)
+        || typeof operation.planHash !== 'string'
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'completed',
+            'needs-reconciliation'].includes(operation.status)) throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    const validated = editorScriptEval.validateEditorScript(plan.source, plan.input);
+    if (fileHash(Buffer.from(validated.source, 'utf8')) !== plan.sourceSha256
+        || fileHash(Buffer.from(JSON.stringify(validated.input), 'utf8')) !== plan.inputSha256)
+        throw coded('OPERATION_SOURCE_HASH_MISMATCH');
+    return operation;
+}
+
+function verifyEditorEvalIdentity(operation) {
+    const plan = operation.plan;
+    if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
+    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+        throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
+    if (plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
+    if (plan.extensionVersion !== extensionPackage.version || plan.contractFingerprint !== CONTRACT_FINGERPRINT)
+        throw coded('OPERATION_CONTRACT_MISMATCH');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+}
+
+function editorEvalReceipt(operation) {
+    const plan = operation.plan;
+    return { operationId: operation.operationId, status: operation.status, mode: plan.mode,
+        projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        scriptPath: plan.scriptPath, sourceBytes: Buffer.byteLength(plan.source, 'utf8'),
+        sourceSha256: plan.sourceSha256, inputSha256: plan.inputSha256,
+        startedAt: operation.startedAt || null, completedAt: operation.completedAt || null,
+        result: operation.status === 'completed' ? operation.result : null,
+        errorCode: operation.errorCode || null,
+        sideEffectsVerified: false, automaticRetry: false,
+        manualReviewRequired: ['applying', 'needs-reconciliation'].includes(operation.status),
+        recovery: { automaticRetry: false, reconcileCommand: plan.mode === 'file'
+            ? 'creator.editor.eval-file.reconcile' : 'creator.editor.eval.reconcile',
+        note: 'This command runs trusted script code inside Creator with Editor API access. Its effects and persistence are not verified; reconciliation never reruns it.' } };
+}
+
+async function createEditorEvalPlan(input, mode) {
+    const currentRoot = projectRoot();
+    const currentVersion = editorVersion();
+    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    let source;
+    let scriptPath = null;
+    if (mode === 'inline') source = input.source;
+    else {
+        scriptPath = input.scriptPath;
+        source = readProjectExtensionScript(scriptPath);
+    }
+    const validated = editorScriptEval.validateEditorScript(source, input.input || {});
+    if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
+    const plan = { operationId: uuid(), operation: 'creator.editor.eval', mode,
+        projectRoot: currentRoot, creatorVersion: currentVersion, extensionVersion: extensionPackage.version,
+        contractFingerprint: CONTRACT_FINGERPRINT, creatorInstanceId: INSTANCE_ID,
+        scriptPath, source: validated.source, sourceSha256: fileHash(Buffer.from(validated.source, 'utf8')),
+        input: validated.input, inputSha256: fileHash(Buffer.from(JSON.stringify(validated.input), 'utf8')),
+        expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString() };
+    const operation = { schemaVersion: 1, operationId: plan.operationId, operation: plan.operation,
+        plan, planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(),
+        plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { ...editorEvalReceipt(operation), planHash: operation.planHash, expiresAt: plan.expiresAt,
+        sourcePreview: plan.source, input: plan.input, recovery: { automaticRetry: false,
+            reconcileCommand: mode === 'file' ? 'creator.editor.eval-file.reconcile' : 'creator.editor.eval.reconcile',
+            note: 'The exact script and JSON input are frozen into this plan. Review both before approving.' } };
+}
+
+function confirmEditorEval(operation) {
+    if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
+    const plan = operation.plan;
+    const detail = [
+        `Project: ${plan.projectRoot}`,
+        `Creator: ${plan.creatorVersion}`,
+        `Mode: ${plan.mode}${plan.scriptPath ? ` (${plan.scriptPath})` : ''}`,
+        `Script SHA-256: ${plan.sourceSha256}`,
+        `JSON input SHA-256: ${plan.inputSha256}`,
+        `Operation: ${operation.operationId}`,
+        '',
+        'The script runs with Creator Editor API access and is not sandboxed. It can change project/editor data. Effects and disk persistence are not verified. Time limits are best-effort and do not cancel side effects already started or guarantee an untrusted script will terminate. Only approve code and input you trust.',
+        '',
+        'JSON input:', JSON.stringify(plan.input, null, 2),
+        '',
+        'Exact script source:', plan.source,
+    ].join('\n');
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Creator Editor script execution',
+        message: `Run the planned ${plan.mode === 'file' ? 'Editor script file' : 'inline Editor script'}?`, detail,
+        buttons: ['Cancel', 'Run script'], defaultId: 0, cancelId: 0, noLink: true });
+}
+
+async function commitEditorEval(input, context, requestedMode) {
+    const operation = readEditorEvalOperation(input.operationId);
+    verifyEditorEvalIdentity(operation);
+    const plan = operation.plan;
+    if (requestedMode && plan.mode !== requestedMode) throw coded('OPERATION_MODE_MISMATCH');
+    if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (operation.status !== 'planned') throw coded(['applying', 'awaiting-approval', 'needs-reconciliation'].includes(operation.status)
+        ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+    if (Date.now() > Date.parse(plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    if (plan.mode === 'file') {
+        const source = readProjectExtensionScript(plan.scriptPath);
+        if (fileHash(Buffer.from(source, 'utf8')) !== plan.sourceSha256 || source !== plan.source)
+            throw coded('EDITOR_SCRIPT_SOURCE_CHANGED');
+    }
+    operation.status = 'awaiting-approval';
+    operation.approvalRequestedAt = new Date().toISOString();
+    writeOperation(operation);
+    let approved;
+    try { approved = await confirmEditorEval(operation); }
+    catch (error) {
+        operation.status = 'abandoned';
+        operation.abandonedAt = new Date().toISOString();
+        writeOperation(operation);
+        throw error;
+    }
+    if (!approved) {
+        operation.status = 'cancelled';
+        operation.cancelledAt = new Date().toISOString();
+        writeOperation(operation);
+        throw coded('OPERATION_NOT_APPROVED');
+    }
+    try { await authorizeWriteRequest(context && context.requestId); }
+    catch (error) {
+        operation.status = 'abandoned';
+        operation.abandonedAt = new Date().toISOString();
+        writeOperation(operation);
+        throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error));
+    }
+    try {
+        verifyEditorEvalIdentity(operation);
+        if (Date.now() > Date.parse(plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+        if (plan.mode === 'file') {
+            const source = readProjectExtensionScript(plan.scriptPath);
+            if (fileHash(Buffer.from(source, 'utf8')) !== plan.sourceSha256 || source !== plan.source)
+                throw coded('EDITOR_SCRIPT_SOURCE_CHANGED');
+        }
+    } catch (error) {
+        operation.status = 'abandoned';
+        operation.abandonedAt = new Date().toISOString();
+        writeOperation(operation);
+        throw error;
+    }
+    operation.status = 'applying';
+    operation.startedAt = new Date().toISOString();
+    operation.approvedAt = operation.startedAt;
+    operation.approvalSource = 'creator-native-dialog';
+    operation.appliedByInstanceId = INSTANCE_ID;
+    writeOperation(operation);
+    try {
+        const outcome = await editorScriptEval.runEditorScript({ source: plan.source, input: plan.input, editor: Editor });
+        operation.status = 'completed';
+        operation.result = outcome.result;
+        operation.resultBytes = outcome.resultBytes;
+        operation.completedAt = new Date().toISOString();
+        operation.completedByInstanceId = INSTANCE_ID;
+        writeOperation(operation);
+        return editorEvalReceipt(operation);
+    } catch (error) {
+        operation.status = 'needs-reconciliation';
+        operation.errorCode = error.code || 'EDITOR_SCRIPT_EXECUTION_FAILED';
+        operation.failedAt = new Date().toISOString();
+        writeOperation(operation);
+        throw error;
+    }
+}
+
+function reconcileEditorEval(input, requestedMode) {
+    const operation = readEditorEvalOperation(input.operationId);
+    if (requestedMode && operation.plan.mode !== requestedMode) throw coded('OPERATION_MODE_MISMATCH');
+    return editorEvalReceipt(operation);
+}
+
 function capabilityList() {
     const ready = {
         'creator.extension.commands.list': !!(Editor && Editor.Project && Editor.Project.path
@@ -6048,6 +6294,14 @@ function capabilityList() {
             && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
         'creator.prefab.source.patch.reconcile': !!(Editor && Editor.Project && Editor.Project.path && Editor.assetdb
             && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.editor.eval.plan': !!(Editor && Editor.Project && Editor.Project.path),
+        'creator.editor.eval.commit': !!(Editor && Editor.Project && Editor.Project.path
+            && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.editor.eval.reconcile': !!(Editor && Editor.Project && Editor.Project.path),
+        'creator.editor.eval-file.plan': !!(Editor && Editor.Project && Editor.Project.path),
+        'creator.editor.eval-file.commit': !!(Editor && Editor.Project && Editor.Project.path
+            && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.editor.eval-file.reconcile': !!(Editor && Editor.Project && Editor.Project.path),
         'creator.script.read': !!(Editor && Editor.Project && Editor.Project.path),
         'creator.scene.snapshot': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
         'creator.scene.node.read': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
@@ -6558,6 +6812,12 @@ function execute(command, input, context) {
     if (command === 'creator.prefab.source.patch.plan') return createPrefabSourcePatchPlan(input);
     if (command === 'creator.prefab.source.patch.commit') return commitPrefabSourcePatch(input, context);
     if (command === 'creator.prefab.source.patch.reconcile') return reconcilePrefabSourcePatch(input);
+    if (command === 'creator.editor.eval.plan') return createEditorEvalPlan(input, 'inline');
+    if (command === 'creator.editor.eval.commit') return commitEditorEval(input, context, 'inline');
+    if (command === 'creator.editor.eval.reconcile') return reconcileEditorEval(input, 'inline');
+    if (command === 'creator.editor.eval-file.plan') return createEditorEvalPlan(input, 'file');
+    if (command === 'creator.editor.eval-file.commit') return commitEditorEval(input, context, 'file');
+    if (command === 'creator.editor.eval-file.reconcile') return reconcileEditorEval(input, 'file');
     if (command === 'creator.script.read') return Promise.resolve(readScript(input));
     if (command === 'creator.scene.snapshot') return callScene('snapshot', { maxNodes: 100 });
     if (command === 'creator.scene.node.read') return callScene('nodeState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);
