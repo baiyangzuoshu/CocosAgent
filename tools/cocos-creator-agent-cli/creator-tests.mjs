@@ -33,6 +33,18 @@ function safeFile(root, relative, { maxBytes = 1024 * 1024 } = {}) {
   return { path: target, projectPath: path.relative(root, target).split(path.sep).join('/'), bytes: fs.readFileSync(target) };
 }
 
+function safeEditorTestFile(root, relative) {
+  if (typeof relative !== 'string' || relative.length > 512 || relative.includes('\\')
+    || relative.startsWith('/') || relative.includes('\0')) throw coded('TEST_EDITOR_SCRIPT_PATH_INVALID');
+  const parts = relative.split('/');
+  const editorScriptsIndex = parts.indexOf('editor-scripts');
+  if (parts[0] !== 'packages' || parts.length < 4 || editorScriptsIndex < 2
+    || editorScriptsIndex === parts.length - 1 || !/\.js$/.test(relative)
+    || parts.some((part) => !part || part === '.' || part === '..' || part.startsWith('.')))
+    throw coded('TEST_EDITOR_SCRIPT_PATH_INVALID');
+  return safeFile(root, relative, { maxBytes: 16 * 1024 }).projectPath;
+}
+
 function rejectUnknown(value, allowed) {
   if (!plain(value) || Object.keys(value).some((key) => !allowed.includes(key))) throw coded('TEST_MANIFEST_FIELD_INVALID');
 }
@@ -49,10 +61,10 @@ export function loadTestPlan(projectRoot) {
     throw coded('TEST_MANIFEST_INVALID');
   const ids = new Set();
   const suites = manifest.suites.map((suite) => {
-    rejectUnknown(suite, ['id', 'adapter', 'files', 'dependsOn', 'providerId', 'commandId', 'input', 'timeoutMs']);
+    rejectUnknown(suite, ['id', 'adapter', 'files', 'dependsOn', 'providerId', 'commandId', 'scriptPath', 'input', 'timeoutMs']);
     if (!ID.test(suite.id || '') || ids.has(suite.id)) throw coded('TEST_SUITE_ID_INVALID');
     ids.add(suite.id);
-    if (!['node', 'creator', 'preview'].includes(suite.adapter)) throw coded('TEST_ADAPTER_UNSUPPORTED');
+    if (!['node', 'creator', 'editor', 'preview'].includes(suite.adapter)) throw coded('TEST_ADAPTER_UNSUPPORTED');
     if (suite.adapter !== 'node' && suite.timeoutMs !== undefined) throw coded('TEST_TIMEOUT_NODE_ONLY');
     if (suite.timeoutMs !== undefined && (!Number.isInteger(suite.timeoutMs) || suite.timeoutMs < 100 || suite.timeoutMs > 180000))
       throw coded('TEST_TIMEOUT_INVALID');
@@ -61,11 +73,19 @@ export function loadTestPlan(projectRoot) {
       if (!Array.isArray(suite.files) || !suite.files.length || suite.files.length > 64
         || suite.files.some((item) => typeof item !== 'string' || !/\.(?:c|m)?js$/.test(item))) throw coded('TEST_FILES_INVALID');
       suite.files = suite.files.map((file) => safeFile(root, file).projectPath);
-      if (suite.providerId !== undefined || suite.commandId !== undefined || suite.input !== undefined) throw coded('TEST_MANIFEST_FIELD_INVALID');
+      if (suite.providerId !== undefined || suite.commandId !== undefined || suite.scriptPath !== undefined
+        || suite.input !== undefined) throw coded('TEST_MANIFEST_FIELD_INVALID');
     } else if (suite.files !== undefined) throw coded('TEST_MANIFEST_FIELD_INVALID');
     if (suite.adapter === 'creator') {
-      if (!PROVIDER_ID.test(suite.providerId || '') || !COMMAND_ID.test(suite.commandId || '')) throw coded('TEST_PROVIDER_INVALID');
-    } else if (suite.providerId !== undefined || suite.commandId !== undefined) throw coded('TEST_MANIFEST_FIELD_INVALID');
+      if (!PROVIDER_ID.test(suite.providerId || '') || !COMMAND_ID.test(suite.commandId || '')
+        || suite.scriptPath !== undefined) throw coded('TEST_PROVIDER_INVALID');
+    } else if (suite.adapter === 'editor') {
+      if (suite.providerId !== undefined || suite.commandId !== undefined) throw coded('TEST_MANIFEST_FIELD_INVALID');
+      suite.scriptPath = safeEditorTestFile(root, suite.scriptPath);
+      if (suite.input !== undefined && Buffer.byteLength(JSON.stringify(suite.input), 'utf8') > 16 * 1024)
+        throw coded('TEST_EDITOR_SCRIPT_INPUT_TOO_LARGE');
+    } else if (suite.providerId !== undefined || suite.commandId !== undefined || suite.scriptPath !== undefined)
+      throw coded('TEST_MANIFEST_FIELD_INVALID');
     if (suite.adapter === 'preview') {
       if (Object.hasOwn(suite.input || {}, 'previewSessionId') || Object.hasOwn(suite.input || {}, 'coverage'))
         throw coded('TEST_PREVIEW_RUNNER_FIELD_RESERVED');
@@ -262,6 +282,8 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
   if (typeof coverage !== 'boolean') throw coded('TEST_COVERAGE_INVALID');
   if (coverage && selected.some((suite) => suite.adapter === 'creator'))
     throw coded('TEST_COVERAGE_CREATOR_PROVIDER_UNSUPPORTED');
+  if (coverage && selected.some((suite) => suite.adapter === 'editor'))
+    throw coded('TEST_COVERAGE_EDITOR_SCRIPT_UNSUPPORTED');
   if (coverage) requireCoverageSupport();
   const shardSkipped = normalizedShard ? selected.filter((suite) => suite.adapter !== 'node'
     && testShardForSuite(suite.id, normalizedShard.total) !== normalizedShard.index) : [];
@@ -279,7 +301,8 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
   const started = Date.now();
   const report = { schemaVersion: 1, runId: randomUUID(), projectRoot: plan.projectRoot, projectName: plan.projectName,
     creatorVersion: '2.4.15', manifestHash: plan.manifestHash, selectedSuiteIds: selected.map((suite) => suite.id),
-    ...(normalizedShard ? { shard: { ...normalizedShard, strategies: { node: 'test-case', creator: 'suite', preview: 'suite' } } } : {}),
+    ...(normalizedShard ? { shard: { ...normalizedShard,
+      strategies: { node: 'test-case', creator: 'suite', editor: 'suite', preview: 'suite' } } } : {}),
     shardSelectedSuiteIds: runnable.map((suite) => suite.id), shardSkippedSuiteIds: shardSkipped.map((suite) => suite.id),
     coverageEnabled: coverage,
     startedAt: new Date(started).toISOString(), suites: [] };
@@ -289,17 +312,56 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
     const suiteStart = Date.now();
     onEvent({ type: 'test-suite-started', runId: report.runId, suiteId: suite.id, adapter: suite.adapter });
     let result;
-    let providerDispatched = false;
+    let executionDispatched = false;
     try {
       if (signal?.aborted) throw coded('TEST_CANCELLED');
       if (hash(safeFile(plan.projectRoot, MANIFEST).bytes) !== plan.manifestHash) throw coded('TEST_MANIFEST_CHANGED');
       if (suite.adapter === 'node') result = await runNodeSuite(plan, suite, signal, { shard: normalizedShard, coverage });
+      else if (suite.adapter === 'editor') {
+        const before = safeFile(plan.projectRoot, suite.scriptPath, { maxBytes: 16 * 1024 });
+        const planReceipt = await call(instanceId, 'creator.editor.eval-file.plan', {
+          scriptPath: suite.scriptPath, input: suite.input || {},
+        });
+        const planned = planReceipt.result;
+        const expectedInput = JSON.stringify(suite.input || {});
+        if (planned?.status !== 'planned' || planned.mode !== 'file' || planned.projectRoot !== plan.projectRoot
+          || planned.creatorVersion !== '2.4.15' || planned.creatorInstanceId !== instanceId
+          || planned.scriptPath !== suite.scriptPath
+          || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(planned.operationId || '')
+          || !/^[0-9a-f]{64}$/.test(planned.planHash || '') || !/^[0-9a-f]{64}$/.test(planned.sourceSha256 || '')
+          || planned.inputSha256 !== hash(Buffer.from(expectedInput, 'utf8'))
+          || JSON.stringify(planned.input) !== expectedInput)
+          throw coded('TEST_EDITOR_PLAN_INVALID');
+        const checkedPlan = safeFile(plan.projectRoot, suite.scriptPath, { maxBytes: 16 * 1024 });
+        if (hash(before.bytes) !== hash(checkedPlan.bytes) || hash(checkedPlan.bytes) !== planned.sourceSha256)
+          throw coded('TEST_EDITOR_SOURCE_CHANGED');
+        executionDispatched = true;
+        const runReceipt = await call(instanceId, 'creator.editor.eval-file.commit', {
+          operationId: planned.operationId, planHash: planned.planHash,
+        });
+        const execution = runReceipt.result;
+        if (execution?.status !== 'completed' || execution.manualReviewRequired !== false
+          || execution.projectRoot !== plan.projectRoot || execution.creatorVersion !== '2.4.15'
+          || execution.creatorInstanceId !== instanceId || execution.operationId !== planned.operationId
+          || execution.mode !== 'file' || execution.scriptPath !== suite.scriptPath
+          || execution.sourceSha256 !== planned.sourceSha256 || execution.inputSha256 !== planned.inputSha256)
+          throw coded('TEST_EDITOR_EXECUTION_UNCONFIRMED');
+        const returned = execution.result;
+        if (returned?.schemaVersion !== 1 || !Array.isArray(returned.tests)) throw coded('TEST_EDITOR_REPORT_INVALID');
+        result = { tests: returned.tests, requiresManualReview: returned.requiresManualReview === true,
+          sourceHashes: { [suite.scriptPath]: planned.sourceSha256 }, receipt: {
+            operationId: planned.operationId, planHash: planned.planHash, status: execution.status,
+            creatorInstanceId: execution.creatorInstanceId, sourceSha256: execution.sourceSha256,
+            inputSha256: execution.inputSha256, startedAt: execution.startedAt,
+            completedAt: execution.completedAt,
+          } };
+      }
       else if (suite.adapter === 'creator') {
         const catalog = await discover(instanceId);
         const command = catalog.commands?.find((item) => item.providerId === suite.providerId && item.id === suite.commandId);
         if (command?.status !== 'available' || command.access !== 'control' || command.approval !== true)
           throw coded('TEST_PROVIDER_APPROVAL_REQUIRED');
-        providerDispatched = true;
+        executionDispatched = true;
         const receipt = await invoke(instanceId, suite.providerId, suite.commandId, suite.input || {},
           { expectedFingerprint: command.providerFingerprint });
         const returned = receipt.result?.result;
@@ -329,13 +391,13 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
     } catch (error) {
       result = { ...result, tests: [{ id: 'runner-error', name: suite.id, status: 'failed', durationMs: 0,
         message: error.code || error.message || String(error) }], error: error.code || error.message || String(error),
-      requiresManualReview: providerDispatched };
+      requiresManualReview: executionDispatched };
     }
     const output = { id: suite.id, adapter: suite.adapter, ...result,
       durationMs: Date.now() - suiteStart, counts: counts(result.tests) };
     report.suites.push(output);
     onEvent({ type: 'test-suite-finished', runId: report.runId, suiteId: suite.id, counts: output.counts });
-    // Provider calls cannot be safely cancelled/retried after interruption.
+    // Creator calls cannot be safely cancelled/retried after interruption.
     if (output.requiresManualReview || signal?.aborted) break;
   }
   report.cancelled = signal?.aborted === true;
