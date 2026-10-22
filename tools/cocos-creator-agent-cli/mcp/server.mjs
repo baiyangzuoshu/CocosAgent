@@ -15,6 +15,7 @@ const CLI_PREFIX_ARGS = process.env.COCOS_CREATOR_AGENT_CLI ? [] : [path.join(PA
 const INSTANCE_ID_SCHEMA = { type: 'string', minLength: 36, maxLength: 36 };
 const READ_ONLY_ANNOTATIONS = { readOnlyHint: true, destructiveHint: false };
 const CONTROL_ANNOTATIONS = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
+const EXTERNAL_ACTION_ANNOTATIONS = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true };
 const activeToolRequests = new Map();
 let projectToolAdapters = new Map();
 let extensionCommandAdapters = new Map();
@@ -195,6 +196,38 @@ const infrastructureTools = [
       perPage: { type: 'integer', minimum: 1, maximum: 100 },
     }, additionalProperties: false },
     annotations: READ_ONLY_ANNOTATIONS,
+  },
+  {
+    name: 'cocos_cloud_actions_artifacts',
+    description: 'List artifact metadata for one GitHub Actions run. Does not download files; requires Actions read permission for private repositories.',
+    inputSchema: { type: 'object', required: ['runId'], properties: {
+      repository: { type: 'string', minLength: 3, maxLength: 300 }, projectRoot: { type: 'string', minLength: 1, maxLength: 4096 },
+      runId: { type: 'integer', minimum: 1 }, page: { type: 'integer', minimum: 1, maximum: 1000 },
+      perPage: { type: 'integer', minimum: 1, maximum: 100 },
+    }, additionalProperties: false },
+    annotations: READ_ONLY_ANNOTATIONS,
+  },
+  {
+    name: 'cocos_cloud_actions_dispatch',
+    description: 'Dispatch a configured GitHub Actions workflow. This starts a remote run and may consume repository CI minutes; requires an explicit workflow and branch or tag ref plus Actions write permission. Do not pass secrets as inputs; use repository Actions secrets.',
+    inputSchema: { type: 'object', required: ['workflow', 'ref'], properties: {
+      repository: { type: 'string', minLength: 3, maxLength: 300 }, projectRoot: { type: 'string', minLength: 1, maxLength: 4096 },
+      workflow: { anyOf: [{ type: 'string', minLength: 1, maxLength: 200 }, { type: 'integer', minimum: 1 }] },
+      ref: { type: 'string', minLength: 1, maxLength: 255 },
+      inputs: { type: 'object', maxProperties: 25, additionalProperties: { anyOf: [
+        { type: 'string', maxLength: 2048 }, { type: 'boolean' }, { type: 'number' },
+      ] } },
+    }, additionalProperties: false },
+    annotations: EXTERNAL_ACTION_ANNOTATIONS,
+  },
+  {
+    name: 'cocos_cloud_actions_cancel',
+    description: 'Request cancellation of one GitHub Actions run. The remote workflow may already have completed; requires Actions write permission.',
+    inputSchema: { type: 'object', required: ['runId'], properties: {
+      repository: { type: 'string', minLength: 3, maxLength: 300 }, projectRoot: { type: 'string', minLength: 1, maxLength: 4096 },
+      runId: { type: 'integer', minimum: 1 },
+    }, additionalProperties: false },
+    annotations: EXTERNAL_ACTION_ANNOTATIONS,
   },
   {
     name: 'cocos_capabilities_list',
@@ -383,13 +416,30 @@ async function handleTool(name, args = {}, signal) {
     }
   }
   if (name === 'cocos_instances_list') return invokeCliJson(['instances', 'list'], { signal });
-  if (name === 'cocos_cloud_actions_workflows' || name === 'cocos_cloud_actions_runs' || name === 'cocos_cloud_actions_jobs') {
-    const kind = name.endsWith('_workflows') ? 'workflows' : name.endsWith('_runs') ? 'runs' : 'jobs';
+  if (name === 'cocos_cloud_actions_workflows' || name === 'cocos_cloud_actions_runs'
+    || name === 'cocos_cloud_actions_jobs' || name === 'cocos_cloud_actions_artifacts') {
+    const kind = name.endsWith('_workflows') ? 'workflows' : name.endsWith('_runs') ? 'runs'
+      : name.endsWith('_artifacts') ? 'artifacts' : 'jobs';
     const cliArgs = ['cloud', 'actions', kind];
     for (const [key, flag] of [['repository', '--repository'], ['projectRoot', '--project-root'], ['workflow', '--workflow'],
       ['runId', '--run'], ['branch', '--branch'], ['event', '--event'], ['status', '--status'], ['page', '--page'], ['perPage', '--per-page']]) {
       if (args[key] !== undefined) cliArgs.push(flag, String(args[key]));
     }
+    return invokeCliJson(cliArgs, { signal, timeoutMs: 20000 });
+  }
+  if (name === 'cocos_cloud_actions_dispatch') {
+    const cliArgs = ['cloud', 'actions', 'dispatch'];
+    for (const [key, flag] of [['repository', '--repository'], ['projectRoot', '--project-root'],
+      ['workflow', '--workflow'], ['ref', '--ref']]) {
+      if (args[key] !== undefined) cliArgs.push(flag, String(args[key]));
+    }
+    if (args.inputs !== undefined) cliArgs.push('--inputs', JSON.stringify(args.inputs));
+    return invokeCliJson(cliArgs, { signal, timeoutMs: 20000 });
+  }
+  if (name === 'cocos_cloud_actions_cancel') {
+    const cliArgs = ['cloud', 'actions', 'cancel', '--run', String(args.runId)];
+    if (args.repository !== undefined) cliArgs.push('--repository', args.repository);
+    if (args.projectRoot !== undefined) cliArgs.push('--project-root', args.projectRoot);
     return invokeCliJson(cliArgs, { signal, timeoutMs: 20000 });
   }
   if (name === 'cocos_capabilities_list') {

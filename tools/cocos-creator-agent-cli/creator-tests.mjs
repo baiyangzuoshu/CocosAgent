@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { listInstances, callCommand, getExtensionCommands, callExtensionCommand } from './bridge/client.mjs';
 import { validateCommand } from './bridge/contracts.mjs';
 import { mergePreviewCoverageReports } from './bridge/preview-coverage.mjs';
+import { MAX_PREVIEW_TEST_INPUT_BYTES, MAX_PREVIEW_TEST_SOURCE_BYTES, MAX_PREVIEW_TEST_TIMEOUT_MS } from './bridge/preview-test-script.mjs';
 import { startProjectFileWatch } from './creator-watch.mjs';
 import { PROVIDER_ID, COMMAND_ID } from './creator-extension/provider-contract.cjs';
 
@@ -98,6 +99,15 @@ function safeEditorTestFile(root, relative) {
   return safeFile(root, relative, { maxBytes: 16 * 1024 }).projectPath;
 }
 
+function safePreviewTestFile(root, relative) {
+  if (typeof relative !== 'string' || relative.length > 512 || relative.includes('\\')
+    || relative.includes('\0') || relative.startsWith('/') || relative.split('/').length !== 3
+    || relative.split('/')[0] !== '.cocos-agent' || relative.split('/')[1] !== 'preview-tests'
+    || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.js$/.test(relative.split('/')[2]))
+    throw coded('TEST_PREVIEW_SCRIPT_PATH_INVALID');
+  return safeFile(root, relative, { maxBytes: MAX_PREVIEW_TEST_SOURCE_BYTES }).projectPath;
+}
+
 function rejectUnknown(value, allowed) {
   if (!plain(value) || Object.keys(value).some((key) => !allowed.includes(key))) throw coded('TEST_MANIFEST_FIELD_INVALID');
 }
@@ -118,7 +128,8 @@ export function loadTestPlan(projectRoot) {
     if (!ID.test(suite.id || '') || ids.has(suite.id)) throw coded('TEST_SUITE_ID_INVALID');
     ids.add(suite.id);
     if (!['node', 'creator', 'editor', 'preview'].includes(suite.adapter)) throw coded('TEST_ADAPTER_UNSUPPORTED');
-    if (suite.adapter !== 'node' && suite.timeoutMs !== undefined) throw coded('TEST_TIMEOUT_NODE_ONLY');
+    if (suite.adapter !== 'node' && !(suite.adapter === 'preview' && suite.scriptPath) && suite.timeoutMs !== undefined)
+      throw coded('TEST_TIMEOUT_NODE_ONLY');
     if (suite.timeoutMs !== undefined && (!Number.isInteger(suite.timeoutMs) || suite.timeoutMs < 100 || suite.timeoutMs > 180000))
       throw coded('TEST_TIMEOUT_INVALID');
     if (suite.input !== undefined && !plain(suite.input)) throw coded('TEST_INPUT_INVALID');
@@ -146,13 +157,28 @@ export function loadTestPlan(projectRoot) {
       if (suite.testIds !== undefined && (!Array.isArray(suite.testIds) || !suite.testIds.length || suite.testIds.length > 1000
         || suite.testIds.some((id) => typeof id !== 'string' || !CASE_ID.test(id))
         || new Set(suite.testIds).size !== suite.testIds.length)) throw coded('TEST_EDITOR_CASE_IDS_INVALID');
+    } else if (suite.adapter === 'preview' && suite.scriptPath !== undefined) {
+      if (suite.providerId !== undefined || suite.commandId !== undefined || suite.testCases !== undefined)
+        throw coded('TEST_MANIFEST_FIELD_INVALID');
+      suite.scriptPath = safePreviewTestFile(root, suite.scriptPath);
+      if (!Array.isArray(suite.testIds) || !suite.testIds.length || suite.testIds.length > 1000
+        || suite.testIds.some((id) => typeof id !== 'string' || !CASE_ID.test(id))
+        || new Set(suite.testIds).size !== suite.testIds.length) throw coded('TEST_PREVIEW_SCRIPT_CASE_IDS_INVALID');
+      if (suite.input !== undefined && Buffer.byteLength(JSON.stringify(suite.input), 'utf8') > MAX_PREVIEW_TEST_INPUT_BYTES)
+        throw coded('TEST_PREVIEW_SCRIPT_INPUT_TOO_LARGE');
+      if (suite.timeoutMs !== undefined && suite.timeoutMs > MAX_PREVIEW_TEST_TIMEOUT_MS)
+        throw coded('TEST_PREVIEW_SCRIPT_TIMEOUT_INVALID');
     } else if (suite.providerId !== undefined || suite.commandId !== undefined || suite.scriptPath !== undefined)
       throw coded('TEST_MANIFEST_FIELD_INVALID');
-    if (!['creator', 'editor'].includes(suite.adapter) && suite.testIds !== undefined) throw coded('TEST_MANIFEST_FIELD_INVALID');
+    if (!['creator', 'editor'].includes(suite.adapter) && !(suite.adapter === 'preview' && suite.scriptPath)
+      && suite.testIds !== undefined) throw coded('TEST_MANIFEST_FIELD_INVALID');
     if (suite.adapter === 'editor' && Object.hasOwn(suite.input || {}, '__cocosAgentTest'))
       throw coded('TEST_EDITOR_RUNNER_INPUT_RESERVED');
     if (suite.adapter === 'preview') {
-      if (suite.testCases !== undefined) {
+      if (suite.scriptPath !== undefined) {
+        if (Object.hasOwn(suite.input || {}, 'previewSessionId') || Object.hasOwn(suite.input || {}, 'coverage'))
+          throw coded('TEST_PREVIEW_RUNNER_FIELD_RESERVED');
+      } else if (suite.testCases !== undefined) {
         if (suite.input !== undefined) throw coded('TEST_PREVIEW_CASES_INPUT_EXCLUSIVE');
         if (!Array.isArray(suite.testCases) || !suite.testCases.length || suite.testCases.length > MAX_ENGINE_CASES_PER_RUN)
           throw coded('TEST_PREVIEW_CASES_INVALID');
@@ -186,7 +212,8 @@ export function loadTestPlan(projectRoot) {
     if (suite.dependsOn !== undefined && (!Array.isArray(suite.dependsOn) || suite.dependsOn.length > 256
       || suite.dependsOn.some((item) => typeof item !== 'string' || !item || path.isAbsolute(item) || item.includes('\\')
         || item.includes('\0') || item.split('/').includes('..') || item.includes('*')))) throw coded('TEST_DEPENDENCIES_INVALID');
-    return { ...suite, timeoutMs: suite.timeoutMs ?? 30000 };
+    return { ...suite, timeoutMs: suite.timeoutMs ?? (suite.adapter === 'preview' && suite.scriptPath
+      ? MAX_PREVIEW_TEST_TIMEOUT_MS : 30000) };
   });
   return { projectRoot: root, projectName: project.name || path.basename(root), manifestPath: MANIFEST,
     manifestHash: hash(source.bytes), suites };
@@ -196,7 +223,7 @@ export function selectTestSuites(plan, { suiteIds = [], changedPaths } = {}) {
   if (suiteIds.some((id) => !plan.suites.some((suite) => suite.id === id))) throw coded('TEST_SUITE_NOT_FOUND');
   return plan.suites.filter((suite) => (!suiteIds.length || suiteIds.includes(suite.id)) && (!changedPaths
     || changedPaths.includes(MANIFEST) || !suite.dependsOn?.length
-    || changedPaths.some((changed) => [...(suite.files || []), ...suite.dependsOn].some((dependency) => changed === dependency
+    || changedPaths.some((changed) => [...(suite.files || []), ...(suite.scriptPath ? [suite.scriptPath] : []), ...suite.dependsOn].some((dependency) => changed === dependency
       || (dependency.endsWith('/') && changed.startsWith(dependency))))));
 }
 
@@ -530,6 +557,19 @@ export function mergeTestReports({ reportPaths, reportDir } = {}) {
             throw coded('TEST_MERGE_SOURCE_MISMATCH');
           sourceHashesBySuite[suite.id][relative] = digest;
         }
+      } else if (planSuite.adapter === 'editor' || (planSuite.adapter === 'preview' && planSuite.scriptPath)) {
+        if (!plain(suite.sourceHashes) || Object.keys(suite.sourceHashes).length !== 1
+          || suite.sourceHashes[planSuite.scriptPath] === undefined) throw coded('TEST_MERGE_SOURCE_MISMATCH');
+        let source;
+        try { source = safeFile(plan.projectRoot, planSuite.scriptPath, { maxBytes: planSuite.adapter === 'editor'
+          ? 16 * 1024 : MAX_PREVIEW_TEST_SOURCE_BYTES }); }
+        catch (_) { throw coded('TEST_MERGE_SOURCE_MISMATCH'); }
+        const digest = suite.sourceHashes[planSuite.scriptPath];
+        if (!/^[0-9a-f]{64}$/.test(digest) || hash(source.bytes) !== digest
+          || (sourceHashesBySuite[suite.id]?.[planSuite.scriptPath]
+            && sourceHashesBySuite[suite.id][planSuite.scriptPath] !== digest)) throw coded('TEST_MERGE_SOURCE_MISMATCH');
+        sourceHashesBySuite[suite.id] ||= {};
+        sourceHashesBySuite[suite.id][planSuite.scriptPath] = digest;
       } else if (suite.sourceHashes !== undefined) throw coded('TEST_MERGE_SOURCE_MISMATCH');
     }
   }
@@ -603,6 +643,7 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
   const selectedCaseIdsBySuite = {};
   const shardSkipped = normalizedShard ? selected.filter((suite) => suite.adapter !== 'node'
     && !(['creator', 'editor'].includes(suite.adapter) && suite.testIds)
+    && !(suite.adapter === 'preview' && suite.scriptPath && suite.testIds)
     && !(suite.adapter === 'preview' && suite.testCases)
     && testShardForSuite(suite.id, normalizedShard.total) !== normalizedShard.index) : [];
   for (const suite of selected.filter((item) => ['creator', 'editor'].includes(item.adapter) && item.testIds)) {
@@ -615,6 +656,12 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
     const selectedCaseIds = normalizedShard ? suite.testCases.filter((item) =>
       testShardForCase(suite.id, item.id, normalizedShard.total) === normalizedShard.index).map((item) => item.id)
       : suite.testCases.map((item) => item.id);
+    selectedCaseIdsBySuite[suite.id] = selectedCaseIds;
+    if (normalizedShard && !selectedCaseIds.length) shardSkipped.push(suite);
+  }
+  for (const suite of selected.filter((item) => item.adapter === 'preview' && item.scriptPath)) {
+    const selectedCaseIds = normalizedShard ? suite.testIds.filter((id) =>
+      testShardForCase(suite.id, id, normalizedShard.total) === normalizedShard.index) : suite.testIds;
     selectedCaseIdsBySuite[suite.id] = selectedCaseIds;
     if (normalizedShard && !selectedCaseIds.length) shardSkipped.push(suite);
   }
@@ -742,6 +789,46 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
           result.coverage = normalizeCreatorCoverage(plan.projectRoot, returned.coverage,
             { kind: 'creator-provider', maxBytes: MAX_PROVIDER_COVERAGE_BYTES, errorPrefix: 'TEST_PROVIDER_COVERAGE' });
         }
+      } else if (suite.adapter === 'preview' && suite.scriptPath) {
+        if (typeof previewSessionId !== 'string' || !previewSessionId) throw coded('PREVIEW_SESSION_REQUIRED');
+        if (refreshPreview && !previewRefreshed) {
+          await call(instanceId, 'creator.preview.refresh', { previewSessionId });
+          previewRefreshed = true;
+        }
+        const before = safeFile(plan.projectRoot, suite.scriptPath, { maxBytes: MAX_PREVIEW_TEST_SOURCE_BYTES });
+        const sourceSha256 = hash(before.bytes);
+        const selectedIds = selectedCaseIdsBySuite[suite.id];
+        if (!selectedIds?.length || selectedIds.length > MAX_ENGINE_CASES_PER_RUN)
+          throw coded('TEST_PREVIEW_SCRIPT_CASE_BATCH_LIMIT');
+        // Keep the source identity in failed reports too, including uncertain bridge execution.
+        result = { sourceHashes: { [suite.scriptPath]: sourceSha256 } };
+        executionDispatched = true;
+        const receipt = await call(instanceId, 'creator.preview.test-script', {
+          previewSessionId, scriptPath: suite.scriptPath, sourceSha256, testIds: selectedIds,
+          ...(suite.input === undefined ? {} : { input: suite.input }), timeoutMs: suite.timeoutMs,
+          ...(coverage ? { coverage: true } : {}),
+        });
+        const previewResult = receipt.result;
+        if (previewResult?.previewSessionId !== previewSessionId || previewResult.instanceId !== instanceId
+          || previewResult.projectRoot !== plan.projectRoot || previewResult.scriptPath !== suite.scriptPath
+          || previewResult.sourceSha256 !== sourceSha256 || !Array.isArray(previewResult.tests)
+          || previewResult.tests.length !== selectedIds.length || typeof previewResult.requiresManualReview !== 'boolean')
+          throw coded('TEST_PREVIEW_SCRIPT_REPORT_INVALID');
+        const after = safeFile(plan.projectRoot, suite.scriptPath, { maxBytes: MAX_PREVIEW_TEST_SOURCE_BYTES });
+        if (hash(after.bytes) !== sourceSha256) throw coded('TEST_PREVIEW_SCRIPT_SOURCE_CHANGED');
+        if (selectedIds.some((id) => previewResult.tests.filter((item) => item?.id === id).length !== 1))
+          throw coded('TEST_PREVIEW_SCRIPT_CASE_RESULTS_MISMATCH');
+        if (coverage && !previewResult.coverage) throw coded('TEST_COVERAGE_REPORT_MISSING');
+        result = { tests: previewResult.tests, requiresManualReview: previewResult.requiresManualReview,
+          sourceHashes: { [suite.scriptPath]: sourceSha256 }, receipt: {
+            previewSessionId: previewResult.previewSessionId, instanceId: previewResult.instanceId,
+            projectRoot: previewResult.projectRoot, creatorSessionId: previewResult.creatorSessionId,
+            sceneName: previewResult.sceneName, sceneUuid: previewResult.sceneUuid,
+            sceneAssetIdentity: previewResult.sceneAssetIdentity, navigationCount: previewResult.navigationCount,
+            scriptPath: previewResult.scriptPath, sourceSha256: previewResult.sourceSha256,
+            browserTerminatedForManualReview: previewResult.browserTerminatedForManualReview === true,
+          } };
+        if (previewResult.coverage) result.coverage = previewResult.coverage;
       } else {
         if (typeof previewSessionId !== 'string' || !previewSessionId) throw coded('PREVIEW_SESSION_REQUIRED');
         if (refreshPreview && !previewRefreshed) {

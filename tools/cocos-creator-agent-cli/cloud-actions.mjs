@@ -113,6 +113,25 @@ function normalizeJob(job) {
   };
 }
 
+function normalizeArtifact(artifact) {
+  const workflowRun = artifact.workflow_run && typeof artifact.workflow_run === 'object' ? artifact.workflow_run : {};
+  return {
+    id: artifact.id,
+    name: boundedString(artifact.name, 240),
+    sizeBytes: Number.isSafeInteger(artifact.size_in_bytes) && artifact.size_in_bytes >= 0 ? artifact.size_in_bytes : null,
+    expired: artifact.expired === true,
+    digest: boundedString(artifact.digest, 100),
+    createdAt: boundedString(artifact.created_at, 80),
+    updatedAt: boundedString(artifact.updated_at, 80),
+    expiresAt: boundedString(artifact.expires_at, 80),
+    workflowRun: Number.isSafeInteger(workflowRun.id) ? {
+      id: workflowRun.id,
+      branch: boundedString(workflowRun.head_branch, 240),
+      commit: boundedString(workflowRun.head_sha, 80),
+    } : null,
+  };
+}
+
 function pageInfo(body, page, perPage, count) {
   const totalCount = Number.isSafeInteger(body?.total_count) && body.total_count >= 0 ? body.total_count : null;
   return { page, perPage, totalCount, returned: count, hasMore: totalCount === null ? count === perPage : page * perPage < totalCount };
@@ -121,19 +140,20 @@ function pageInfo(body, page, perPage, count) {
 export async function queryGitHubActions(kind, options = {}, {
   fetchImpl = globalThis.fetch, env = process.env, spawnSyncImpl = spawnSync,
 } = {}) {
-  if (!['workflows', 'runs', 'jobs'].includes(kind)) throw failure('CLOUD_ACTIONS_QUERY_INVALID');
+  if (!['workflows', 'runs', 'jobs', 'artifacts'].includes(kind)) throw failure('CLOUD_ACTIONS_QUERY_INVALID');
   const repository = options.repository ? parseGitHubRepository(options.repository)
     : detectGitHubRepository(options.projectRoot || process.cwd(), { spawnSyncImpl });
   const page = options.page ?? 1;
   const perPage = options.perPage ?? (kind === 'runs' ? 20 : 100);
   validatePage(page, perPage);
-  if (kind === 'jobs' && (!Number.isSafeInteger(options.runId) || options.runId < 1))
+  if (['jobs', 'artifacts'].includes(kind) && (!Number.isSafeInteger(options.runId) || options.runId < 1))
     throw failure('CLOUD_ACTIONS_RUN_ID_INVALID');
 
   const query = new URLSearchParams({ per_page: String(perPage), page: String(page) });
   let endpoint;
   if (kind === 'workflows') endpoint = `/repos/${repository}/actions/workflows?${query}`;
   else if (kind === 'jobs') endpoint = `/repos/${repository}/actions/runs/${options.runId}/jobs?${query}`;
+  else if (kind === 'artifacts') endpoint = `/repos/${repository}/actions/runs/${options.runId}/artifacts?${query}`;
   else {
     let runsPath = `/repos/${repository}/actions/runs`;
     if (options.workflow !== undefined) {
@@ -189,7 +209,111 @@ export async function queryGitHubActions(kind, options = {}, {
     return { provider: 'github-actions', kind, repository, authenticated: !!auth.token, authSource: auth.source,
       pagination: pageInfo(body, page, perPage, body.workflow_runs.length), runs: body.workflow_runs.slice(0, perPage).map(normalizeRun) };
   }
-  if (!Array.isArray(body?.jobs)) throw failure('CLOUD_GITHUB_RESPONSE_INVALID');
+  if (kind === 'jobs') {
+    if (!Array.isArray(body?.jobs)) throw failure('CLOUD_GITHUB_RESPONSE_INVALID');
+    return { provider: 'github-actions', kind, repository, runId: options.runId, authenticated: !!auth.token,
+      authSource: auth.source, pagination: pageInfo(body, page, perPage, body.jobs.length), jobs: body.jobs.slice(0, perPage).map(normalizeJob) };
+  }
+  if (!Array.isArray(body?.artifacts)) throw failure('CLOUD_GITHUB_RESPONSE_INVALID');
   return { provider: 'github-actions', kind, repository, runId: options.runId, authenticated: !!auth.token,
-    authSource: auth.source, pagination: pageInfo(body, page, perPage, body.jobs.length), jobs: body.jobs.slice(0, perPage).map(normalizeJob) };
+    authSource: auth.source, pagination: pageInfo(body, page, perPage, body.artifacts.length),
+    artifacts: body.artifacts.slice(0, perPage).map(normalizeArtifact) };
+}
+
+function validateWorkflow(value) {
+  if (typeof value !== 'string' && !Number.isSafeInteger(value)) throw failure('CLOUD_ACTIONS_WORKFLOW_REQUIRED');
+  const workflow = String(value);
+  if (!/^(?:[1-9][0-9]{0,19}|[A-Za-z0-9_.-]{1,200}\.ya?ml)$/i.test(workflow))
+    throw failure('CLOUD_ACTIONS_WORKFLOW_INVALID');
+  return workflow;
+}
+
+function validateRef(value) {
+  if (typeof value !== 'string' || value.length < 1 || value.length > 255
+    || !/^[A-Za-z0-9._/-]+$/.test(value) || value.startsWith('/') || value.endsWith('/')
+    || value.includes('//') || value.includes('..') || value.endsWith('.') || value.endsWith('.lock'))
+    throw failure(value === undefined ? 'CLOUD_ACTIONS_REF_REQUIRED' : 'CLOUD_ACTIONS_REF_INVALID');
+  return value;
+}
+
+function validateDispatchInputs(inputs) {
+  if (inputs === undefined) return undefined;
+  if (!inputs || typeof inputs !== 'object' || Array.isArray(inputs)
+    || (Object.getPrototypeOf(inputs) !== Object.prototype && Object.getPrototypeOf(inputs) !== null))
+    throw failure('CLOUD_ACTIONS_INPUTS_INVALID');
+  const entries = Object.entries(inputs);
+  if (entries.length > 25) throw failure('CLOUD_ACTIONS_INPUTS_TOO_MANY');
+  const result = {};
+  for (const [key, value] of entries) {
+    if (!/^[A-Za-z_][A-Za-z0-9_-]{0,99}$/.test(key)
+      || !(typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)))
+      || (typeof value === 'string' && Buffer.byteLength(value, 'utf8') > 2048))
+      throw failure('CLOUD_ACTIONS_INPUTS_INVALID');
+    result[key] = value;
+  }
+  if (Buffer.byteLength(JSON.stringify(result), 'utf8') > 16000) throw failure('CLOUD_ACTIONS_INPUTS_TOO_LARGE');
+  return result;
+}
+
+async function mutateGitHubActions(action, repository, endpoint, body, {
+  fetchImpl = globalThis.fetch, env = process.env, spawnSyncImpl = spawnSync,
+} = {}) {
+  if (typeof fetchImpl !== 'function') throw failure('CLOUD_FETCH_UNAVAILABLE');
+  const auth = readGitHubToken({ env, spawnSyncImpl });
+  if (!auth.token) throw failure('CLOUD_GITHUB_AUTH_REQUIRED', 'Set GH_TOKEN or GITHUB_TOKEN, or sign in with gh. The token needs Actions write permission.');
+  const headers = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': API_VERSION,
+    'User-Agent': 'cocos-creator-agent-cli', Authorization: `Bearer ${auth.token}` };
+  let response;
+  try {
+    response = await fetchImpl(`${API_ROOT}${endpoint}`, {
+      method: 'POST', headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: AbortSignal.timeout(15000), redirect: 'error',
+    });
+  } catch {
+    throw failure(`CLOUD_ACTIONS_${action.toUpperCase()}_UNCERTAIN`,
+      'GitHub did not return a response; the request outcome may be unknown. Check workflow run history before retrying.');
+  }
+  if (response?.ok) return { response, auth };
+  const status = Number(response?.status) || 0;
+  if (status === 401) throw failure('CLOUD_GITHUB_AUTH_INVALID');
+  if (status === 403 && response.headers?.get?.('x-ratelimit-remaining') === '0') throw failure('CLOUD_GITHUB_RATE_LIMITED');
+  if (status === 403) throw failure('CLOUD_GITHUB_PERMISSION_DENIED', 'The token needs Actions write permission for this repository.');
+  if (status === 404) throw failure('CLOUD_GITHUB_REPOSITORY_NOT_FOUND_OR_FORBIDDEN',
+    'Check repository access, workflow identity, and Actions write permission.');
+  if (status === 409 && action === 'cancel') throw failure('CLOUD_ACTIONS_CANCEL_CONFLICT', 'GitHub could not cancel this workflow run in its current state.');
+  if (status === 422 && action === 'dispatch') throw failure('CLOUD_ACTIONS_DISPATCH_REJECTED',
+    'Check that the workflow is enabled and declares workflow_dispatch, and that the ref and inputs are valid.');
+  throw failure('CLOUD_GITHUB_HTTP_ERROR', `GitHub Actions ${action} failed with HTTP ${status}.`);
+}
+
+export async function dispatchGitHubActions(options = {}, dependencies = {}) {
+  const repository = options.repository ? parseGitHubRepository(options.repository)
+    : detectGitHubRepository(options.projectRoot || process.cwd(), { spawnSyncImpl: dependencies.spawnSyncImpl });
+  const workflow = validateWorkflow(options.workflow);
+  const ref = validateRef(options.ref);
+  const inputs = validateDispatchInputs(options.inputs);
+  const body = { ref, ...(inputs === undefined ? {} : { inputs }) };
+  const { response, auth } = await mutateGitHubActions('dispatch', repository,
+    `/repos/${repository}/actions/workflows/${encodeURIComponent(workflow)}/dispatches`, body, dependencies);
+  let receipt = {};
+  if (response.status !== 204) {
+    try {
+      const data = await response.json();
+      if (Number.isSafeInteger(data?.workflow_run_id) && data.workflow_run_id > 0) receipt.runId = data.workflow_run_id;
+      if (typeof data?.html_url === 'string' && data.html_url.startsWith('https://github.com/')) receipt.htmlUrl = data.html_url.slice(0, 1000);
+    } catch (_) { /* Some API versions return an empty success response. */ }
+  }
+  return { provider: 'github-actions', action: 'dispatch', state: 'accepted', repository, workflow, ref,
+    authenticated: true, authSource: auth.source, acceptedAt: new Date().toISOString(), ...receipt };
+}
+
+export async function cancelGitHubActionsRun(options = {}, dependencies = {}) {
+  const repository = options.repository ? parseGitHubRepository(options.repository)
+    : detectGitHubRepository(options.projectRoot || process.cwd(), { spawnSyncImpl: dependencies.spawnSyncImpl });
+  const runId = options.runId;
+  if (!Number.isSafeInteger(runId) || runId < 1) throw failure('CLOUD_ACTIONS_RUN_ID_INVALID');
+  const { auth } = await mutateGitHubActions('cancel', repository,
+    `/repos/${repository}/actions/runs/${runId}/cancel`, undefined, dependencies);
+  return { provider: 'github-actions', action: 'cancel', state: 'accepted', repository, runId,
+    authenticated: true, authSource: auth.source, acceptedAt: new Date().toISOString() };
 }

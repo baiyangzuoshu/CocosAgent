@@ -20,7 +20,9 @@ test('CLI supports filtered subcommand help and command catalog search', () => {
 
   const cloud = runCli(['cloud', '--help']);
   assert.equal(cloud.status, 0);
-  assert.match(cloud.stdout, /cloud actions workflows\|runs\|jobs/);
+  assert.match(cloud.stdout, /cloud actions workflows\|runs\|jobs\|artifacts/);
+  assert.match(cloud.stdout, /cloud actions dispatch --workflow/);
+  assert.match(cloud.stdout, /cloud actions cancel --run/);
 
   const testHelp = runCli(['help', 'creator', 'test', 'merge']);
   assert.equal(testHelp.status, 0);

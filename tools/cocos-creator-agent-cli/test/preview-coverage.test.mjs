@@ -84,3 +84,11 @@ test('preview interaction contract accepts bounded drag and text actions with co
     actions: [{ type: 'text', text: 'x'.repeat(513) }],
   }).ok, false);
 });
+
+test('preview script contract requires exact source identity and bounded stable case selection', () => {
+  const base = { previewSessionId: '12345678-1234-4234-8234-123456789012',
+    scriptPath: '.cocos-agent/preview-tests/runtime.js', sourceSha256: 'a'.repeat(64), testIds: ['loads-scene'] };
+  assert.equal(validateCommand('creator.preview.test-script', { ...base, timeoutMs: 10000, coverage: true }).ok, true);
+  assert.equal(validateCommand('creator.preview.test-script', { ...base, timeoutMs: 30000 }).ok, false);
+  assert.equal(validateCommand('creator.preview.test-script', { ...base, testIds: [] }).ok, false);
+});

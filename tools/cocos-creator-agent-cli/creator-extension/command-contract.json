@@ -1150,6 +1150,29 @@
       }
     },
     {
+      "id": "creator.preview.test-script",
+      "access": "control",
+      "execution": "bridge",
+      "description": "Run a bounded project-local JavaScript test suite in the exact attached Creator Preview runtime with the live cc API. Project scripts execute without sandboxing; uncertain or timed-out execution closes the Agent-owned browser and requires manual review.",
+      "input": {
+        "type": "object",
+        "required": ["previewSessionId", "scriptPath", "sourceSha256", "testIds"],
+        "properties": {
+          "previewSessionId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "scriptPath": { "type": "string", "maxLength": 512 },
+          "sourceSha256": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" },
+          "testIds": {
+            "type": "array", "minItems": 1, "maxItems": 64,
+            "items": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" }
+          },
+          "input": { "type": "object", "maxProperties": 64, "additionalProperties": true },
+          "timeoutMs": { "type": "integer", "minimum": 100, "maximum": 25000 },
+          "coverage": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
       "id": "creator.preview.refresh",
       "access": "control",
       "execution": "bridge",

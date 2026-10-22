@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { loadTestPlan, mergeTestReports, parseTestShard, runTestPlan, testShardForCase, testShardForSuite } from '../creator-tests.mjs';
+import { loadTestPlan, mergeTestReports, parseTestShard, runTestPlan, selectTestSuites, testShardForCase, testShardForSuite } from '../creator-tests.mjs';
 import creatorTestHarness from '../testing/creator-test-harness.cjs';
 
 const cliPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../cli.mjs');
@@ -44,6 +44,95 @@ test('preview suites must declare actions and assertions without runner-owned fi
     suites: [{ id: 'runtime', adapter: 'preview', input: {
       actions: [{ type: 'key', key: 'Space' }], assertions: [{ type: 'no-errors' }], coverage: true } }] }));
   assert.throws(() => loadTestPlan(state.projectRoot), { code: 'TEST_PREVIEW_RUNNER_FIELD_RESERVED' });
+});
+
+test('preview script suites require a bounded project-local source and stable case IDs', (t) => {
+  const scriptPath = '.cocos-agent/preview-tests/runtime.js';
+  const state = fixture([{ id: 'runtime-script', adapter: 'preview', scriptPath, testIds: ['loads-scene', 'moves-player'],
+    dependsOn: ['assets/'], input: { expectedName: 'Game' }, timeoutMs: 12000 }]);
+  t.after(() => fs.rmSync(state.directory, { recursive: true, force: true }));
+  const scriptRoot = path.join(state.projectRoot, '.cocos-agent', 'preview-tests');
+  fs.mkdirSync(scriptRoot);
+  fs.writeFileSync(path.join(scriptRoot, 'runtime.js'), 'return CreatorTest.run([]);');
+  const suite = loadTestPlan(state.projectRoot).suites[0];
+  assert.equal(suite.scriptPath, scriptPath);
+  assert.deepEqual(suite.testIds, ['loads-scene', 'moves-player']);
+  assert.equal(suite.timeoutMs, 12000);
+  assert.deepEqual(selectTestSuites(loadTestPlan(state.projectRoot), { changedPaths: [scriptPath] }).map((item) => item.id),
+    ['runtime-script']);
+
+  fs.writeFileSync(path.join(state.projectRoot, '.cocos-agent', 'tests.json'), JSON.stringify({ schemaVersion: 1,
+    suites: [{ id: 'runtime-script', adapter: 'preview', scriptPath: '../escape.js', testIds: ['loads-scene'] }] }));
+  assert.throws(() => loadTestPlan(state.projectRoot), { code: 'TEST_PREVIEW_SCRIPT_PATH_INVALID' });
+  fs.writeFileSync(path.join(state.projectRoot, '.cocos-agent', 'tests.json'), JSON.stringify({ schemaVersion: 1,
+    suites: [{ id: 'runtime-script', adapter: 'preview', scriptPath, testIds: ['loads-scene'], timeoutMs: 30000 }] }));
+  assert.throws(() => loadTestPlan(state.projectRoot), { code: 'TEST_PREVIEW_SCRIPT_TIMEOUT_INVALID' });
+});
+
+test('preview script cases shard, bind their source hash, and merge as one report', async (t) => {
+  const suiteId = 'runtime-script';
+  const scriptPath = '.cocos-agent/preview-tests/runtime.js';
+  const testIds = ['case-a', 'case-b', 'case-c', 'case-d'];
+  const state = fixture([{ id: suiteId, adapter: 'preview', scriptPath, testIds }]);
+  t.after(() => fs.rmSync(state.directory, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(state.projectRoot, '.cocos-agent', 'preview-tests'));
+  fs.writeFileSync(path.join(state.projectRoot, scriptPath), 'return CreatorTest.run([]);');
+  const instanceId = 'preview-instance';
+  const scriptHash = createHash('sha256').update(fs.readFileSync(path.join(state.projectRoot, scriptPath))).digest('hex');
+  const reports = [];
+  const selectedByShard = [];
+  for (const index of [1, 2]) {
+    reports.push(await runTestPlan({ ...state, instanceId, previewSessionId: '12345678-1234-4234-8234-123456789012',
+      shard: { index, total: 2 }, reportDir: path.join(state.directory, `preview-script-${index}`) }, {
+      listInstances: async () => ({ instances: [{ instanceId, projectRoot: state.projectRoot, creatorVersion: '2.4.15' }] }),
+      callCommand: async (_id, command, input) => {
+        assert.equal(command, 'creator.preview.test-script');
+        assert.equal(input.scriptPath, scriptPath);
+        assert.equal(input.sourceSha256, scriptHash);
+        assert.equal(input.timeoutMs, 25000);
+        selectedByShard.push(input.testIds);
+        return { result: { previewSessionId: input.previewSessionId, instanceId, projectRoot: state.projectRoot,
+          creatorSessionId: 'creator-session', sceneName: 'Game', sceneUuid: 'scene-uuid', navigationCount: 0,
+          scriptPath, sourceSha256: scriptHash, requiresManualReview: false,
+          tests: input.testIds.map((id) => ({ id, name: id, status: 'passed', durationMs: 1, message: '' })) } };
+      },
+    }));
+  }
+  assert.equal(new Set(selectedByShard.flat()).size, testIds.length);
+  assert.equal(selectedByShard.flat().length, testIds.length);
+  const merged = mergeTestReports({ reportPaths: reports.map((report) => report.artifacts.json),
+    reportDir: path.join(state.directory, 'preview-script-merged') });
+  assert.equal(merged.passed, true);
+  assert.deepEqual(merged.suites[0].tests.map((item) => item.id).sort(), testIds.slice().sort());
+  assert.equal(merged.suites[0].sourceHashes[scriptPath], scriptHash);
+  fs.writeFileSync(path.join(state.projectRoot, scriptPath), 'return CreatorTest.run([{ id: "changed" }]);');
+  assert.throws(() => mergeTestReports({ reportPaths: reports.map((report) => report.artifacts.json),
+    reportDir: path.join(state.directory, 'preview-script-stale-merged') }), { code: 'TEST_MERGE_SOURCE_MISMATCH' });
+});
+
+test('uncertain preview script execution requires manual review and is never dispatched twice', async (t) => {
+  const suiteId = 'runtime-script';
+  const scriptPath = '.cocos-agent/preview-tests/runtime.js';
+  const state = fixture([{ id: suiteId, adapter: 'preview', scriptPath, testIds: ['case-a'] }]);
+  t.after(() => fs.rmSync(state.directory, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(state.projectRoot, '.cocos-agent', 'preview-tests'));
+  fs.writeFileSync(path.join(state.projectRoot, scriptPath), 'return CreatorTest.run([]);');
+  let invocations = 0;
+  const report = await runTestPlan({ ...state, instanceId: 'preview-instance',
+    previewSessionId: '12345678-1234-4234-8234-123456789012',
+    reportDir: path.join(state.directory, 'uncertain-preview-script-report') }, {
+    listInstances: async () => ({ instances: [{ instanceId: 'preview-instance', projectRoot: state.projectRoot, creatorVersion: '2.4.15' }] }),
+    callCommand: async (_id, command) => {
+      assert.equal(command, 'creator.preview.test-script');
+      invocations += 1;
+      throw Object.assign(new Error('BRIDGE_REQUEST_TIMEOUT'), { code: 'BRIDGE_REQUEST_TIMEOUT' });
+    },
+  });
+  assert.equal(invocations, 1);
+  assert.equal(report.requiresManualReview, true);
+  assert.equal(report.passed, false);
+  assert.equal(report.suites[0].sourceHashes[scriptPath], createHash('sha256')
+    .update(fs.readFileSync(path.join(state.projectRoot, scriptPath))).digest('hex'));
 });
 
 test('Node test sharding splits project test files into disjoint reports', async (t) => {

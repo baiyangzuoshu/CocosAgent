@@ -8,6 +8,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { findSerializedSceneIdentity } from './preview-scene-identity.mjs';
 import { readPreviewComponentProperty } from './preview-components.mjs';
 import { normalizePreviewCoverage } from './preview-coverage.mjs';
+import { createPreviewTestHarness, MAX_PREVIEW_TEST_CASES_PER_RUN, MAX_PREVIEW_TEST_INPUT_BYTES,
+  MAX_PREVIEW_TEST_RESULT_BYTES, MAX_PREVIEW_TEST_TIMEOUT_MS, readPreviewTestSource } from './preview-test-script.mjs';
 
 const DATA_ROOT = path.join(os.homedir(), '.cocos-creator-agent');
 const SESSION_ROOT = path.join(DATA_ROOT, 'preview-sessions');
@@ -67,7 +69,8 @@ export function previewHostCapabilities(creatorPreviewAvailable = false) {
   let available = true;
   let reason;
   try { findBrowser(); } catch (error) { available = false; reason = error.code || 'PREVIEW_BROWSER_NOT_FOUND'; }
-  const commands = ['creator.preview.observe', 'creator.preview.screenshot', 'creator.preview.interact', 'creator.preview.refresh', 'creator.preview.stop'];
+  const commands = ['creator.preview.observe', 'creator.preview.screenshot', 'creator.preview.interact', 'creator.preview.test-script',
+    'creator.preview.refresh', 'creator.preview.stop'];
   const result = commands.map((id) => ({ id, status: available ? 'available' : 'unavailable', ...(available ? {} : { reason }) }));
   result.push({ id: 'creator.preview.start', status: available && creatorPreviewAvailable ? 'available' : 'unavailable',
     reason: available ? 'CREATOR_PREVIEW_API_UNAVAILABLE' : (reason || 'PREVIEW_BROWSER_NOT_FOUND') });
@@ -484,9 +487,6 @@ export function validatePreviewActions(actions) {
         || action.x < 0 || action.x > 1 || action.y < 0 || action.y > 1) throw failure('PREVIEW_CLICK_OUT_OF_BOUNDS');
       return { type: 'click', x: action.x, y: action.y };
     }
-    throw failure('PREVIEW_ACTION_TYPE_UNSUPPORTED');
-  });
-}
     if (action.type === 'drag') {
       if (Object.keys(action).some((key) => !['type', 'startX', 'startY', 'endX', 'endY', 'durationMs'].includes(key)))
         throw failure('PREVIEW_ACTION_FIELD_INVALID');
@@ -509,6 +509,9 @@ export function validatePreviewActions(actions) {
         || !['cc.Widget', 'cc.Layout'].includes(action.componentType)) throw failure('PREVIEW_UI_REFRESH_INPUT_INVALID');
       return { type: 'ui-refresh', path: action.path, componentType: action.componentType };
     }
+    throw failure('PREVIEW_ACTION_TYPE_UNSUPPORTED');
+  });
+}
 
 function validateAssertions(assertions) {
   if (!Array.isArray(assertions) || assertions.length < 1 || assertions.length > MAX_ASSERTIONS) throw failure('PREVIEW_ASSERTIONS_INVALID');
@@ -582,9 +585,6 @@ function assertionExpression(assertion) {
     return { pass: false, actual: null }; })()`;
 }
 
-async function performAction(session, action) {
-  if (action.type === 'key') {
-    const key = action.key === 'Space' ? ' ' : action.key.startsWith('Key') ? action.key.slice(3).toLowerCase() : action.key;
 export function previewUiRefreshExpression(action) {
   const encoded = JSON.stringify(action);
   return `(() => { const a = ${encoded}; const cc = window.cc;
@@ -627,21 +627,24 @@ export function previewUiRefreshExpression(action) {
   })()`;
 }
 
-    const code = action.key;
+async function performAction(session, action) {
   if (action.type === 'ui-refresh') {
     const result = await evaluate(session, previewUiRefreshExpression(action));
     if (!result || result.available !== true) throw failure(result && result.reason || 'PREVIEW_UI_REFRESH_FAILED');
     return result;
   }
+  if (action.type === 'key') {
+    const key = action.key === 'Space' ? ' ' : action.key.startsWith('Key') ? action.key.slice(3).toLowerCase() : action.key;
+    const code = action.key;
     const windowsCode = windowsVirtualKeyCode(action.key);
     await session.cdp.command('Input.dispatchKeyEvent', { type: 'keyDown', key, code, windowsVirtualKeyCode: windowsCode });
     try { await new Promise((resolve) => setTimeout(resolve, action.durationMs)); }
     finally { await session.cdp.command('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: windowsCode }); }
+  } else if (action.type === 'text') {
+    await session.cdp.command('Input.insertText', { text: action.text });
   } else {
     const canvas = await evaluate(session, `(() => { const c = document.querySelector('canvas'); if (!c) return null; const r = c.getBoundingClientRect();
       return { x: r.left, y: r.top, width: r.width, height: r.height }; })()`);
-  } else if (action.type === 'text') {
-    await session.cdp.command('Input.insertText', { text: action.text });
     if (!canvas || canvas.width <= 0 || canvas.height <= 0) throw failure('PREVIEW_CANVAS_NOT_FOUND');
     if (action.type === 'click') {
       const x = canvas.x + canvas.width * action.x;
@@ -730,6 +733,133 @@ export async function interactPreview(instance, input) {
   }
 }
 
+export function previewTestExpression(source, input, testIds, timeoutMs) {
+  const sourceLiteral = JSON.stringify(source);
+  const inputLiteral = JSON.stringify(input);
+  const idsLiteral = JSON.stringify(testIds);
+  const harnessSource = createPreviewTestHarness.toString();
+  return `(() => {
+    const input = ${inputLiteral};
+    const selectedIds = ${idsLiteral};
+    const cc = window.cc;
+    if (!cc) throw new Error('PREVIEW_CREATOR_RUNTIME_UNAVAILABLE');
+    const context = Object.freeze({ cc, input });
+    const CreatorTest = (${harnessSource})(selectedIds, ${timeoutMs}, ${MAX_PREVIEW_TEST_RESULT_BYTES}, context);
+    const run = new Function('cc', 'input', 'CreatorTest', '"use strict";\\n' + ${sourceLiteral});
+    return Promise.resolve().then(() => run(cc, input, CreatorTest)).then((result) => {
+      if (!CreatorTest.isReport(result)) throw new Error('PREVIEW_TEST_REPORT_NOT_FROM_HARNESS');
+      return result;
+    });
+  })()`;
+}
+
+function validatePreviewTestReport(report, selectedIds) {
+  if (!report || report.schemaVersion !== 1 || typeof report.requiresManualReview !== 'boolean'
+    || !Array.isArray(report.tests) || report.tests.length !== selectedIds.length)
+    throw failure('PREVIEW_TEST_REPORT_INVALID');
+  const seen = new Set();
+  for (const test of report.tests) {
+    if (!test || typeof test.id !== 'string' || !selectedIds.includes(test.id) || seen.has(test.id)
+      || typeof test.name !== 'string' || !['passed', 'failed', 'skipped'].includes(test.status)
+      || !Number.isFinite(test.durationMs) || test.durationMs < 0 || typeof test.message !== 'string')
+      throw failure('PREVIEW_TEST_REPORT_INVALID');
+    seen.add(test.id);
+  }
+  if (seen.size !== selectedIds.length || selectedIds.some((id) => !seen.has(id)))
+    throw failure('PREVIEW_TEST_CASE_RESULTS_MISMATCH');
+  if (Buffer.byteLength(JSON.stringify(report), 'utf8') > MAX_PREVIEW_TEST_RESULT_BYTES)
+    throw failure('PREVIEW_TEST_RESULT_TOO_LARGE');
+  return report;
+}
+
+export async function testPreviewScript(instance, input) {
+  if (input.cancelled?.()) throw failure('PREVIEW_ACTION_CANCELLED');
+  const session = await sessionFor(instance, input.previewSessionId);
+  const selectedIds = input.testIds;
+  if (!Array.isArray(selectedIds) || !selectedIds.length || selectedIds.length > MAX_PREVIEW_TEST_CASES_PER_RUN
+    || selectedIds.some((id) => typeof id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(id))
+    || new Set(selectedIds).size !== selectedIds.length) throw failure('PREVIEW_TEST_SELECTION_INVALID');
+  const timeoutMs = input.timeoutMs === undefined ? MAX_PREVIEW_TEST_TIMEOUT_MS : input.timeoutMs;
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > MAX_PREVIEW_TEST_TIMEOUT_MS)
+    throw failure('PREVIEW_TEST_TIMEOUT_INVALID');
+  const testInput = input.input === undefined ? {} : input.input;
+  if (!testInput || typeof testInput !== 'object' || Array.isArray(testInput)
+    || Buffer.byteLength(JSON.stringify(testInput), 'utf8') > MAX_PREVIEW_TEST_INPUT_BYTES)
+    throw failure('PREVIEW_TEST_INPUT_INVALID');
+  const source = readPreviewTestSource(session.projectRoot, input.scriptPath);
+  if (source.sha256 !== input.sourceSha256) throw failure('PREVIEW_TEST_SOURCE_CHANGED');
+  const before = await evaluate(session, PAGE_SNAPSHOT_EXPRESSION);
+  if (!before?.ready || before.sceneName !== session.sceneName || before.sceneUuid !== session.sceneUuid
+    || !before.url || new URL(before.url).origin !== new URL(session.previewUrl).origin)
+    throw failure('PREVIEW_SCENE_IDENTITY_MISMATCH');
+
+  const sequenceBefore = session.consoleSequence;
+  let coverageStarted = false;
+  let executionDispatched = false;
+  let executionUncertain = false;
+  let report;
+  let coverage;
+  let cancellationTimer;
+  try {
+    if (input.coverage === true) {
+      await session.cdp.command('Profiler.enable', {});
+      await session.cdp.command('Profiler.startPreciseCoverage', { callCount: true, detailed: true });
+      coverageStarted = true;
+    }
+    executionDispatched = true;
+    const evaluation = evaluate(session, previewTestExpression(source.source, testInput, selectedIds, timeoutMs), timeoutMs + 1500);
+    const cancellation = new Promise((resolve, reject) => {
+      cancellationTimer = setInterval(() => {
+        if (input.cancelled?.()) reject(failure('PREVIEW_TEST_CANCELLED_AFTER_DISPATCH'));
+      }, 50);
+    });
+    const value = await Promise.race([evaluation, cancellation]);
+    clearInterval(cancellationTimer);
+    cancellationTimer = undefined;
+    report = validatePreviewTestReport(value, selectedIds);
+    const current = readPreviewTestSource(session.projectRoot, input.scriptPath);
+    if (current.sha256 !== source.sha256) throw failure('PREVIEW_TEST_SOURCE_CHANGED_DURING_RUN');
+    const after = await evaluate(session, PAGE_SNAPSHOT_EXPRESSION);
+    if (!after?.ready || after.sceneName !== session.sceneName || after.sceneUuid !== session.sceneUuid
+      || !after.url || new URL(after.url).origin !== new URL(session.previewUrl).origin)
+      throw failure('PREVIEW_TEST_SCENE_IDENTITY_CHANGED');
+    session.page = after;
+    if (coverageStarted) {
+      const raw = await session.cdp.command('Profiler.takePreciseCoverage', {});
+      coverage = normalizePreviewCoverage(raw.result, new URL(session.previewUrl).origin);
+    }
+  } catch (error) {
+    executionUncertain = executionDispatched;
+    clearInterval(cancellationTimer);
+    if (executionUncertain) {
+      await closeOwnedBrowser(session);
+      sessions.delete(session.previewSessionId);
+    }
+    throw failure(executionUncertain ? 'PREVIEW_TEST_EXECUTION_UNCONFIRMED' : (error.code || 'PREVIEW_TEST_FAILED'),
+      error.code || error.message);
+  } finally {
+    if (coverageStarted && !executionUncertain) {
+      try { await session.cdp.command('Profiler.stopPreciseCoverage', {}); } catch (_) {}
+      try { await session.cdp.command('Profiler.disable', {}); } catch (_) {}
+    }
+  }
+
+  const result = { previewSessionId: session.previewSessionId, instanceId: session.instanceId,
+    projectRoot: session.projectRoot, creatorSessionId: session.creatorSessionId, sceneName: session.sceneName,
+    sceneUuid: session.sceneUuid, sceneAssetIdentity: session.sceneAssetIdentity || null,
+    navigationCount: session.navigationCount, scriptPath: source.projectPath, sourceSha256: source.sha256,
+    tests: report.tests, requiresManualReview: report.requiresManualReview,
+    consoleSequence: session.consoleSequence,
+    newErrors: session.console.filter((entry) => entry.sequence > sequenceBefore && entry.level === 'error').slice(-20),
+    ...(coverage ? { coverage } : {}) };
+  if (report.requiresManualReview) {
+    await closeOwnedBrowser(session);
+    sessions.delete(session.previewSessionId);
+    result.browserTerminatedForManualReview = true;
+  }
+  return result;
+}
+
 export async function refreshPreview(instance, input) {
   if (input.cancelled?.()) throw failure('PREVIEW_ACTION_CANCELLED');
   const session = await sessionFor(instance, input.previewSessionId);
@@ -786,6 +916,7 @@ export function previewCommand(command, instance, input, cancelled = () => false
     case 'creator.preview.observe': return observePreview(instance, input);
     case 'creator.preview.screenshot': return screenshotPreview(instance, input);
     case 'creator.preview.interact': return interactPreview(instance, scopedInput);
+    case 'creator.preview.test-script': return testPreviewScript(instance, scopedInput);
     case 'creator.preview.refresh': return refreshPreview(instance, scopedInput);
     case 'creator.preview.stop': return stopPreview(instance, input);
     default: throw failure('PREVIEW_COMMAND_UNKNOWN');

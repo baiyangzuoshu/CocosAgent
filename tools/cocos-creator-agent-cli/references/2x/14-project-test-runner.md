@@ -47,9 +47,9 @@ Place `.cocos-agent/tests.json` in the authorized Creator 2.4.15 project. `creat
 
 The plan permits 1–64 suites with unique IDs. Node suites explicitly list 1–64 `.js`, `.cjs` or `.mjs` files inside the project. Node's `node:test` runner executes them in child processes. These tests verify host-side JavaScript logic, not Creator globals, compilation or scene behavior. TypeScript needs prior project compilation or an editor test provider; the adapter does not silently transpile it. Tests execute project code with the current user's permissions and are not sandboxed. The protocol accepts no shell-command strings or downloaded test dependencies. Editor `testIds` are unique stable IDs, with up to 1000 declared per suite; each approved Editor run executes at most 64 selected cases. Creator Provider suites may declare up to 64 `testIds`; their command input schema must expose a string-array `testIds` property, and the CLI sends only the cases assigned to that shard. Provider suite input reserves `coverage`; use the CLI flag to request it.
 
-`--shard <index>/<total>` keeps Node's test-case sharding. Creator Provider and direct Editor suites with `testIds`, and preview suites with `testCases`, split by stable case ID; suites without case IDs stay whole on one deterministic shard. The CLI verifies that every selected Provider or Editor case appears exactly once in the approved result, and preview reports include one test result per selected case. Preview cases run sequentially against the same attached session; they are not automatically reset between cases, so make each case establish the state it needs. Reports include selected/skipped suites and selected case IDs.
+`--shard <index>/<total>` keeps Node's test-case sharding. Creator Provider and direct Editor suites with `testIds`, preview script suites with `testIds`, and declarative preview suites with `testCases`, split by stable case ID; suites without case IDs stay whole on one deterministic shard. The CLI verifies that every selected case appears exactly once in its result. Preview cases run sequentially against the same attached session; they are not automatically reset between cases, so make each case establish the state it needs. Reports include selected/skipped suites and selected case IDs.
 
-`timeoutMs` applies only to Node suites (100–180000 ms, default 30000). Timeout/cancellation terminates the owned process group and fails the run. Missing tests, all-skipped suites, malformed output and nonzero process exits cannot yield a pass. Inherited Node preload flags and test-runner context are cleared in subprocesses.
+`timeoutMs` applies to Node suites (100–180000 ms, default 30000) and Preview script suites (100–25000 ms, default 25000). A Preview script timeout closes the Agent-owned browser and requires manual review because JavaScript already running in the page cannot be cancelled safely. Timeout/cancellation terminates the owned Node process group and fails the run. Missing tests, all-skipped suites, malformed output and nonzero process exits cannot yield a pass. Inherited Node preload flags and test-runner context are cleared in subprocesses.
 
 ## Creator Provider adapter
 
@@ -119,6 +119,39 @@ return { ...report, coverage: { schemaVersion: 1, files: measuredCoverageFiles }
 
 Preview suites forward declarative actions/assertions to `creator.preview.interact`. A legacy suite uses `input.actions` and `input.assertions`; a case suite uses 1–64 `testCases`, each with a unique stable `id`, optional `name`, and its own `actions`, `assertions`, and optional `settleMs`. Each case requires at least one action and assertion. Session identity is supplied with `--session` and cannot be replaced by manifest input. Watched changes refresh the same session before its preview suites; the bridge rechecks scene identity. With `--coverage`, the owned Chromium session collects V8 precise function/block-range counters during the same actions and assertions. Case-level coverage in a shard is merged by script URL and matching function/range offsets. Coverage is restricted to scripts served from the selected preview origin and reports source offsets, not line-level source coverage; external CDN scripts are excluded.
 
+For PlayMode-like tests that need to call `cc` directly, declare a Preview script suite with a project-local file under `.cocos-agent/preview-tests/`, stable `testIds`, optional JSON `input`, and an optional 100–25000 ms `timeoutMs`:
+
+```json
+{
+  "id": "runtime-script",
+  "adapter": "preview",
+  "scriptPath": ".cocos-agent/preview-tests/runtime.js",
+  "testIds": ["scene-loaded", "player-present"],
+  "input": { "expectedScene": "Main" },
+  "timeoutMs": 15000,
+  "dependsOn": ["assets/Scripts/"]
+}
+```
+
+The file runs inside the exact attached Preview page with `cc`, `input`, and `CreatorTest`. It must return the report from `CreatorTest.run()`; each `run` callback receives `{ cc, input }`. The CLI and bridge bind the execution to the exact project, current script SHA-256, Preview session, and scene identity. Scripts are limited to 16 KiB, input and results to 16 KiB and 64 KiB, and each invocation runs at most 64 selected cases. `CreatorTest.run` defaults to a 5-second per-case limit and uses the suite timeout as its total budget. With `--coverage`, the same Chromium V8 capture includes project code exercised by the script, subject to the Preview-origin rule above. This executes project JavaScript in the live game page and is not sandboxed; use it only for tests whose runtime side effects are understood. A timed-out, malformed, or identity-changing execution closes the Agent-owned browser, requires manual review, and is never replayed automatically. Shard merging validates the test script's current source hash.
+
+```js
+return CreatorTest.run([
+  {
+    id: 'scene-loaded',
+    name: 'Expected scene is active',
+    run: ({ cc, input }) => {
+      const scene = cc.director.getScene();
+      CreatorTest.assert(scene && scene.name === input.expectedScene, 'Expected scene is not active.');
+    },
+  },
+  {
+    id: 'player-present',
+    run: ({ cc }) => CreatorTest.assert(Boolean(cc.find('Player')), 'Player node was not found.'),
+  },
+]);
+```
+
 ## Results and watch
 
 Each executed plan writes JSON and JUnit XML into a new directory under `~/.cocos-creator-agent/test-results/<run-id>/`. `--report-dir <new-absolute-directory>` selects an output outside the project. Existing run directories are refused. JSON includes case/suite statuses, project identity, manifest SHA-256, Node source hashes, supported adapter coverage, shard assignment, timestamps, durations, receipts and the JUnit SHA-256. Failed or cancelled runs exit nonzero.
@@ -131,7 +164,7 @@ cocos-creator-agent creator test merge \
   --report-dir /tmp/merged-test-results
 ```
 
-The merger requires one successful-to-completion report for every index from `1/N` through `N/N`, with matching project path, Creator version, test manifest, selected suites, coverage setting and sharding strategy. A report with failed test cases is mergeable and the aggregate remains failed; cancelled or manual-review reports are refused. The merger validates stable case assignments, rejects duplicate results, and checks each Node suite's test files against the saved SHA-256 values and the current project files. The output has a new JSON/JUnit pair and keeps adapter coverage under `coverageByShard`, because per-shard file totals can overlap and cannot safely be summed into a unique project-wide coverage percentage. Output directories must be new and outside the project.
+The merger requires one successful-to-completion report for every index from `1/N` through `N/N`, with matching project path, Creator version, test manifest, selected suites, coverage setting and sharding strategy. A report with failed test cases is mergeable and the aggregate remains failed; cancelled or manual-review reports are refused. The merger validates stable case assignments, rejects duplicate results, and checks Node, Editor script and Preview script sources against the saved SHA-256 values and current project files. The output has a new JSON/JUnit pair and keeps adapter coverage under `coverageByShard`, because per-shard file totals can overlap and cannot safely be summed into a unique project-wide coverage percentage. Output directories must be new and outside the project.
 
 ```sh
 cocos-creator-agent creator watch --project-root /absolute/project \

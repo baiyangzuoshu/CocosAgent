@@ -7,7 +7,7 @@ import { bridgeStatus, stopBridge, ensureBridge, listInstances, getCapabilities,
 import { COMMANDS, CREATOR_VERSION } from './bridge/contracts.mjs';
 import { installExtension, extensionStatus, updateExtension, uninstallExtension } from './extension-lifecycle.mjs';
 import { updateCli } from './release.mjs';
-import { queryGitHubActions } from './cloud-actions.mjs';
+import { cancelGitHubActionsRun, dispatchGitHubActions, queryGitHubActions } from './cloud-actions.mjs';
 import { runDoctor } from './doctor.mjs';
 import { closeCreatorProject, discoverCreatorInstallations, openCreatorProject, runCreatorWorkflow } from './creator-workflows.mjs';
 import { cloneCreatorProject, createCreatorProject, listCreatorProjects, listCreatorTemplates } from './project-lifecycle.mjs';
@@ -33,7 +33,9 @@ const HELP_LINES = [
   '  help [<command> [<subcommand>]] | help search <query>',
   '  catalog [--format json]',
   '  self-update [--check] [--version <version>]',
-  '  cloud actions workflows|runs|jobs [--repository <owner/name>] [--project-root <path>] [--workflow <id|file>] [--run <id>] [--branch <name>] [--event <name>] [--status <status>] [--page N] [--per-page N]',
+  '  cloud actions workflows|runs|jobs|artifacts [--repository <owner/name>] [--project-root <path>] [--workflow <id|file>] [--run <id>] [--branch <name>] [--event <name>] [--status <status>] [--page N] [--per-page N]',
+  '  cloud actions dispatch --workflow <id|file> --ref <branch|tag> [--inputs <json-object>] [--repository <owner/name>] [--project-root <path>]',
+  '  cloud actions cancel --run <id> [--repository <owner/name>] [--project-root <path>]',
   '  mcp configure <codex|claude-code|cursor|vscode> [--local] [--force] [--dry-run] | list | status <client> [--local] | remove <client> [--local] | serve',
   '  skill list [<codex|claude-code>] [--local] | show [<skill-name>|--list] (default: cocos2-cli) | install <client> [--local] [--skill <name>] [--force] | refresh <client> [--local] [--force]',
   '  doctor [--project-root <absolute-path>] [--instance <instance-id>]',
@@ -146,7 +148,8 @@ function normalizedErrorCode(error) {
 
 function failureExitCode(code, message) {
   if (code.startsWith('UNKNOWN_') || code.startsWith('INVALID_') || code.startsWith('REQUIRED_')
-    || code.endsWith('_REQUIRED') || code.endsWith('_UNSUPPORTED') || code.startsWith('UNSUPPORTED_')
+    || code.endsWith('_REQUIRED') || code.endsWith('_INVALID') || code.endsWith('_TOO_MANY')
+    || code.endsWith('_TOO_LARGE') || code.endsWith('_UNSUPPORTED') || code.startsWith('UNSUPPORTED_')
     || code.includes('_EXCLUSIVE') || code === 'CLI_UNKNOWN_COMMAND'
     || /Unknown (command|MCP action|skill action|Creator workflow)/i.test(message)
     || code === 'CLI_USAGE_ERROR') return 2;
@@ -234,8 +237,23 @@ async function main() {
     const runId = runIdValue === undefined ? undefined : Number(runIdValue);
     const page = Number(pageValue);
     const perPage = perPageValue === undefined ? undefined : Number(perPageValue);
+    const repository = value('--repository');
+    const projectRoot = value('--project-root');
+    if (kind === 'dispatch') {
+      let inputs;
+      if (value('--inputs') !== undefined) {
+        try { inputs = JSON.parse(value('--inputs')); }
+        catch (_) { throw Object.assign(new Error('--inputs must be valid JSON'), { code: 'CLOUD_ACTIONS_INPUTS_JSON_INVALID' }); }
+      }
+      print(await dispatchGitHubActions({ repository, projectRoot, workflow: value('--workflow'), ref: value('--ref'), inputs }));
+      return;
+    }
+    if (kind === 'cancel') {
+      print(await cancelGitHubActionsRun({ repository, projectRoot, runId }));
+      return;
+    }
     print(await queryGitHubActions(kind, {
-      repository: value('--repository'), projectRoot: value('--project-root'), workflow: value('--workflow'),
+      repository, projectRoot, workflow: value('--workflow'),
       runId, branch: value('--branch'), event: value('--event'), status: value('--status'), page, perPage,
     }));
     return;

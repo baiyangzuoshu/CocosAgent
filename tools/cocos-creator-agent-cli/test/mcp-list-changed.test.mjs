@@ -85,10 +85,17 @@ test('MCP advertises listChanged and notifies after dynamic command tools change
   mcp.notify('notifications/initialized');
   const first = await mcp.request('tools/list');
   assert.equal(first.tools.some((tool) => tool.name === 'cocos_project_info'), false);
-  for (const name of ['cocos_cloud_actions_workflows', 'cocos_cloud_actions_runs', 'cocos_cloud_actions_jobs']) {
+  for (const name of ['cocos_cloud_actions_workflows', 'cocos_cloud_actions_runs', 'cocos_cloud_actions_jobs', 'cocos_cloud_actions_artifacts']) {
     const tool = first.tools.find((item) => item.name === name);
     assert.ok(tool, `Expected ${name} in tools/list`);
     assert.equal(tool.annotations.readOnlyHint, true);
+  }
+  for (const name of ['cocos_cloud_actions_dispatch', 'cocos_cloud_actions_cancel']) {
+    const tool = first.tools.find((item) => item.name === name);
+    assert.ok(tool, `Expected ${name} in tools/list`);
+    assert.equal(tool.annotations.readOnlyHint, false);
+    assert.equal(tool.annotations.destructiveHint, true);
+    assert.equal(tool.annotations.openWorldHint, true);
   }
   const cloudResult = await mcp.request('tools/call', { name: 'cocos_cloud_actions_runs', arguments: {
     repository: 'acme/game', workflow: 'build.yml', status: 'completed', page: 2, perPage: 5,
@@ -97,6 +104,30 @@ test('MCP advertises listChanged and notifies after dynamic command tools change
   assert.deepEqual(JSON.parse(fs.readFileSync(cloudCallPath, 'utf8')), [
     'cloud', 'actions', 'runs', '--repository', 'acme/game', '--workflow', 'build.yml',
     '--status', 'completed', '--page', '2', '--per-page', '5', '--format', 'json',
+  ]);
+
+  const artifactTool = first.tools.find((tool) => tool.name === 'cocos_cloud_actions_artifacts');
+  assert.equal(artifactTool.inputSchema.required.includes('runId'), true);
+  await mcp.request('tools/call', { name: 'cocos_cloud_actions_artifacts', arguments: {
+    repository: 'acme/game', runId: 42, page: 2, perPage: 5,
+  } });
+  assert.deepEqual(JSON.parse(fs.readFileSync(cloudCallPath, 'utf8')), [
+    'cloud', 'actions', 'artifacts', '--repository', 'acme/game', '--run', '42', '--page', '2', '--per-page', '5', '--format', 'json',
+  ]);
+
+  await mcp.request('tools/call', { name: 'cocos_cloud_actions_dispatch', arguments: {
+    repository: 'acme/game', workflow: 'build.yml', ref: 'main', inputs: { platform: 'web-mobile' },
+  } });
+  assert.deepEqual(JSON.parse(fs.readFileSync(cloudCallPath, 'utf8')), [
+    'cloud', 'actions', 'dispatch', '--repository', 'acme/game', '--workflow', 'build.yml', '--ref', 'main',
+    '--inputs', '{"platform":"web-mobile"}', '--format', 'json',
+  ]);
+
+  await mcp.request('tools/call', { name: 'cocos_cloud_actions_cancel', arguments: {
+    repository: 'acme/game', runId: 99,
+  } });
+  assert.deepEqual(JSON.parse(fs.readFileSync(cloudCallPath, 'utf8')), [
+    'cloud', 'actions', 'cancel', '--run', '99', '--repository', 'acme/game', '--format', 'json',
   ]);
 
   fs.writeFileSync(statePath, JSON.stringify({ commands: [{ id: 'creator.project.info',
