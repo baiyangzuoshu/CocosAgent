@@ -559,7 +559,7 @@
     {
       "id": "creator.scene.button-events.set.plan",
       "access": "plan",
-      "description": "Plan replacing the bounded click-event list on one exact existing cc.Button instance. Every new target and handler is resolved against the active scene and registered component methods.",
+      "description": "Plan replacing the bounded click-event list on one exact existing cc.Button instance. Binds the unique serialized Button and exact saved event list from the AssetDB .fire/.meta. Every new target and handler is resolved against the active scene and registered component methods.",
       "input": { "type": "object", "required": ["sceneUuid", "nodeUuid", "componentInstanceId", "events"], "properties": {
         "sceneUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
         "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
@@ -575,7 +575,7 @@
     {
       "id": "creator.scene.button-events.set.commit",
       "access": "write", "approval": true,
-      "description": "Replace the exact planned Button click-event list after native Creator approval and a second complete before-state check, then request scene save and read the events back.",
+      "description": "Replace the exact planned Button click-event list after native Creator approval and a second live and saved before-state check, then request scene save. Completion requires semantic readback of the planned serialized events from the exact AssetDB .fire; reports save-required if only editor memory changed.",
       "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
         "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
@@ -584,7 +584,7 @@
     {
       "id": "creator.scene.button-events.set.reconcile",
       "access": "plan",
-      "description": "Observe and reconcile one interrupted Button click-event update by exact scene, node, component instance, and before/after lists. Never retries the mutation.",
+      "description": "Observe and reconcile one interrupted Button click-event update by exact scene, node, component instance, and live and serialized before/after lists. Reports save-required when memory changed but disk did not; never retries the mutation.",
       "input": { "type": "object", "required": ["operationId"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
       }, "additionalProperties": false }

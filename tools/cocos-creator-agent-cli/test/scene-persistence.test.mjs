@@ -56,9 +56,28 @@ test('saved scene node inspection resolves exact UUID, hierarchy, active state, 
   assert.deepEqual(inspectSavedSceneNode({ ...source, sceneUuid, sceneAssetRow, nodeUuid }), {
     verified: true, sceneUuid, sceneUrl: sceneAssetRow.url, nodeUuid, nodeName: 'StartButton',
     parentUuid: sceneUuid, nodePath: 'Scene/StartButton', active: true,
+    buttonComponentCount: 1, buttonEvents: [{ targetUuid: nodeUuid, component: 'game.ButtonState',
+      handler: 'onClick', customEventData: 'toggle' }],
     transform: { x: 12, y: 20, z: 0, angle: 30, scaleX: 1.5, scaleY: 0.75,
       width: 180, height: 64, anchorX: 0.5, anchorY: 0.5 },
   });
+});
+
+test('saved scene node inspection reads an exact serialized Button event list and refuses ambiguous instances', () => {
+  const source = fixture();
+  const inspected = inspectSavedSceneNode({ ...source, sceneUuid, sceneAssetRow, nodeUuid });
+  assert.equal(inspected.buttonComponentCount, 1);
+  assert.deepEqual(inspected.buttonEvents, [{ targetUuid: nodeUuid, component: 'game.ButtonState',
+    handler: 'onClick', customEventData: 'toggle' }]);
+
+  const records = JSON.parse(source.sceneBytes.toString('utf8'));
+  records[2]._components.push({ __id__: records.length });
+  records.push({ __type__: 'cc.Button', clickEvents: [] });
+  source.sceneBytes = Buffer.from(JSON.stringify(records));
+  const ambiguous = inspectSavedSceneNode({ ...source, sceneUuid, sceneAssetRow, nodeUuid });
+  assert.equal(ambiguous.verified, true);
+  assert.equal(ambiguous.buttonComponentCount, 2);
+  assert.equal(ambiguous.buttonEvents, null);
 });
 
 test('saved scene node inspection rejects wrong metadata, detached nodes, and missing node UUIDs', () => {

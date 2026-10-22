@@ -690,6 +690,8 @@ function readSceneButtonEventsOperation(operationId) {
         || typeof plan.sceneName !== 'string' || typeof plan.nodeUuid !== 'string' || typeof plan.nodePath !== 'string'
         || typeof plan.componentInstanceId !== 'string' || !validButtonEventList(plan.expectedBefore, { allowUnbound: true })
         || !validButtonEventList(plan.expectedAfter) || sceneComponentValuesEqual(plan.expectedBefore, plan.expectedAfter)
+        || (plan.diskBefore !== undefined && (!validSceneNodeDiskBaseline(plan.diskBefore)
+            || !Array.isArray(plan.diskBefore.buttonEvents)))
         || typeof plan.expiresAt !== 'string'
         || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
             'save-requested', 'completed', 'not-applied', 'save-required', 'conflict'].includes(operation.status))
@@ -3170,6 +3172,11 @@ async function createSceneButtonEventsPlan(input) {
         || current.nodePath !== node.nodePath || current.componentInstanceId !== input.componentInstanceId
         || !Array.isArray(current.events) || !Array.isArray(current.requestedEvents)) throw coded('SCENE_BUTTON_EVENTS_STATE_INVALID');
     if (!current.changed) throw coded('SCENE_BUTTON_EVENTS_NO_CHANGE');
+    const diskBefore = await sceneNodeDiskState(input.sceneUuid, input.nodeUuid);
+    if (diskBefore.buttonComponentCount !== 1) throw coded('SCENE_DISK_BUTTON_COMPONENT_AMBIGUOUS');
+    if (!Array.isArray(diskBefore.buttonEvents)) throw coded('SCENE_DISK_BUTTON_EVENTS_UNREADABLE');
+    if (!buttonEventListMatches(diskBefore.buttonEvents, current.events))
+        throw coded('SCENE_DISK_STATE_DIFFERS_FROM_EDITOR');
     if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
     const operationId = uuid();
     const plan = { operationId, operation: 'creator.scene.button-events.set', projectRoot: currentRoot,
@@ -3178,6 +3185,7 @@ async function createSceneButtonEventsPlan(input) {
         sceneUuid: current.sceneUuid, sceneName: current.sceneName, nodeUuid: current.nodeUuid,
         nodePath: current.nodePath, componentInstanceId: current.componentInstanceId,
         expectedBefore: current.events, expectedAfter: current.requestedEvents,
+        diskBefore: sceneNodeDiskBaseline(diskBefore, { includeButtonEvents: true }),
         expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString() };
     const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
         planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
@@ -3187,11 +3195,13 @@ async function createSceneButtonEventsPlan(input) {
         sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
         componentInstanceId: plan.componentInstanceId, expectedBefore: plan.expectedBefore,
         expectedAfter: plan.expectedAfter, expiresAt: plan.expiresAt,
+        savedSceneBaseline: { sourceSha256: plan.diskBefore.sourceSha256,
+            metaSha256: plan.diskBefore.metaSha256, buttonEvents: plan.diskBefore.buttonEvents },
         diff: { action: 'set-button-click-events', scene: plan.sceneName, node: plan.nodePath,
             componentInstanceId: plan.componentInstanceId, before: plan.expectedBefore, after: plan.expectedAfter },
         recovery: { operationId, automaticRetry: false, reconcileCommand: 'creator.scene.button-events.set.reconcile',
             sameCreatorSessionRequired: true,
-            note: 'Creator 2.4 scene save IPC has no documented completion acknowledgement; reconcile reads the current in-memory event list.' } };
+            note: 'The plan binds the exact saved .fire/.meta and click-event list. Reconcile compares live and disk state; save manually if it reports save-required. Creator 2.4 has no documented scene-save IPC completion acknowledgement.' } };
 }
 
 async function createSceneNodeRenamePlan(input) {
@@ -3977,7 +3987,7 @@ function confirmSceneButtonEvents(operation) {
         `Scene: ${plan.sceneName} (${plan.sceneUuid})`, `Button: ${plan.nodePath} (${plan.nodeUuid})`,
         `Button component instance: ${plan.componentInstanceId}`, `Operation: ${operation.operationId}`,
         '', `Before:\n${format(plan.expectedBefore)}`, '', `After:\n${format(plan.expectedAfter)}`, '',
-        'This replaces the complete click-event list on the exact existing cc.Button instance. Creator will recheck the exact before-list after approval, then request scene save. The receipt confirms same-session readback; the 2.4 save IPC has no documented completion acknowledgement.'].join('\n');
+        'This replaces the complete click-event list on the exact existing cc.Button instance. Creator will recheck the exact live and saved before-list after approval, then request scene save. Completion requires the serialized .fire click-event list to match on disk; the 2.4 save IPC has no documented completion acknowledgement.'].join('\n');
     return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator Button events',
         message: `Replace ${plan.expectedBefore.length} click event(s) with ${plan.expectedAfter.length}?`, detail,
         buttons: ['Cancel', 'Apply Button events'], defaultId: 0, cancelId: 0, noLink: true });
@@ -3990,14 +4000,16 @@ function sceneButtonEventsReceipt(operation, state) {
         sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
         componentInstanceId: plan.componentInstanceId, before: plan.expectedBefore,
         events: state && state.events || null, sceneSaveRequestSent: !!operation.sceneSaveRequestSent,
-        sceneSaveCompletionConfirmed: false, plannedByInstanceId: operation.plannedByInstanceId,
+        sceneSaveCompletionConfirmed: false,
+        scenePersistenceConfirmed: !!(operation.diskReadback && operation.diskReadback.verified === true),
+        diskReadback: operation.diskReadback || null, plannedByInstanceId: operation.plannedByInstanceId,
         appliedByInstanceId: operation.appliedByInstanceId || null,
         completedByInstanceId: operation.completedByInstanceId || null,
         approvedAt: operation.approvedAt || null, completedAt: operation.completedAt || null,
         reconciledAt: operation.reconciledAt || null,
         recovery: { automaticRetry: false, reconcileCommand: 'creator.scene.button-events.set.reconcile',
             manualSaveMayBeRequired: operation.status === 'save-required',
-            note: 'Creator 2.4 scene save IPC has no documented completion acknowledgement; this receipt separates event-list readback from the save request.' } };
+            note: 'Creator 2.4 has no documented scene-save IPC acknowledgement. scenePersistenceConfirmed requires the exact serialized Button event list to read back from the saved .fire file.' } };
 }
 
 async function commitSceneButtonEvents(input, context) {
@@ -4011,6 +4023,7 @@ async function commitSceneButtonEvents(input, context) {
     if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
     let before = await readPlannedSceneButtonEvents(operation.plan);
     if (!buttonEventListMatches(before.events, operation.plan.expectedBefore)) throw coded('OPERATION_PRECONDITION_FAILED');
+    await verifySceneNodeDiskBefore(operation.plan);
     operation.status = 'awaiting-approval'; operation.approvalRequestedAt = new Date().toISOString(); writeOperation(operation);
     if (!await confirmSceneButtonEvents(operation)) {
         operation.status = 'cancelled'; operation.cancelledAt = new Date().toISOString(); writeOperation(operation);
@@ -4026,6 +4039,7 @@ async function commitSceneButtonEvents(input, context) {
         if (operation.plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
         before = await readPlannedSceneButtonEvents(operation.plan);
         if (!buttonEventListMatches(before.events, operation.plan.expectedBefore)) throw coded('OPERATION_PRECONDITION_FAILED');
+        await verifySceneNodeDiskBefore(operation.plan);
     } catch (error) {
         operation.status = 'conflict'; operation.conflictAt = new Date().toISOString(); writeOperation(operation); throw error;
     }
@@ -4048,6 +4062,7 @@ async function commitSceneButtonEvents(input, context) {
     operation.sceneSaveRequestedAt = new Date().toISOString(); writeOperation(operation);
     const readback = await readPlannedSceneButtonEvents(operation.plan);
     if (!buttonEventListMatches(readback.events, operation.plan.expectedAfter)) throw coded('OPERATION_READBACK_STATE_MISMATCH');
+    await confirmSceneNodeDiskPersistence(operation);
     operation.status = 'completed'; operation.completedAt = new Date().toISOString();
     operation.completedByInstanceId = INSTANCE_ID; writeOperation(operation);
     return sceneButtonEventsReceipt(operation, readback);
@@ -4063,7 +4078,19 @@ async function reconcileSceneButtonEvents(input) {
         operation.reconcileReason = error.code || 'SCENE_BUTTON_EVENTS_STATE_UNAVAILABLE'; writeOperation(operation);
         return { ...sceneButtonEventsReceipt(operation, null), observed: null, reason: operation.reconcileReason };
     }
-    if (buttonEventListMatches(observed.events, operation.plan.expectedBefore)) {
+    let diskState = null;
+    if (operation.plan.diskBefore) {
+        try { diskState = await reconcileSceneNodeDiskOperation(operation,
+            buttonEventListMatches(observed.events, operation.plan.expectedBefore),
+            buttonEventListMatches(observed.events, operation.plan.expectedAfter)); }
+        catch (error) {
+            operation.status = 'conflict'; operation.reconciledAt = new Date().toISOString();
+            operation.reconcileReason = error.code || 'SCENE_DISK_READBACK_FAILED'; writeOperation(operation);
+            return { ...sceneButtonEventsReceipt(operation, observed), observed: { events: observed.events,
+                sceneUuid: observed.sceneUuid, nodeUuid: observed.nodeUuid, nodePath: observed.nodePath, disk: null },
+                reason: operation.reconcileReason };
+        }
+    } else if (buttonEventListMatches(observed.events, operation.plan.expectedBefore)) {
         if (['applying', 'awaiting-approval'].includes(operation.status)) operation.status = 'not-applied';
         else if (['mutation-applied', 'save-requested', 'completed'].includes(operation.status)) operation.status = 'conflict';
     } else if (buttonEventListMatches(observed.events, operation.plan.expectedAfter)) {
@@ -4073,7 +4100,9 @@ async function reconcileSceneButtonEvents(input) {
     } else operation.status = 'conflict';
     operation.reconciledAt = new Date().toISOString(); writeOperation(operation);
     return { ...sceneButtonEventsReceipt(operation, observed), observed: { events: observed.events,
-        sceneUuid: observed.sceneUuid, nodeUuid: observed.nodeUuid, nodePath: observed.nodePath },
+        sceneUuid: observed.sceneUuid, nodeUuid: observed.nodeUuid, nodePath: observed.nodePath,
+        ...(diskState ? { disk: { sourceSha256: diskState.disk.sourceSha256, metaSha256: diskState.disk.metaSha256,
+            buttonEvents: diskState.disk.buttonEvents, matchesBefore: diskState.before, matchesAfter: diskState.after } } : {}) },
         retry: 'Never replay this operation. If unchanged, create a new plan; if save-required, save manually in Creator and review before continuing.' };
 }
 
@@ -4934,17 +4963,21 @@ function sceneDiskTransformMatches(actual, expected) {
         sceneDiskNumberMatches(field, actual[field], expected[field]));
 }
 
-function sceneNodeDiskBaseline(disk) {
-    return { sceneUrl: disk.sceneUrl, importer: disk.importer, sourceSha256: disk.sourceSha256,
+function sceneNodeDiskBaseline(disk, { includeButtonEvents = false } = {}) {
+    const baseline = { sceneUrl: disk.sceneUrl, importer: disk.importer, sourceSha256: disk.sourceSha256,
         metaSha256: disk.metaSha256, active: disk.active, nodeName: disk.nodeName,
         parentUuid: disk.parentUuid, nodePath: disk.nodePath, transform: disk.transform };
+    if (includeButtonEvents) baseline.buttonEvents = disk.buttonEvents;
+    return baseline;
 }
 
 function sceneNodeDiskReadback(disk) {
-    return { verified: true, sceneUrl: disk.sceneUrl, sceneUuid: disk.sceneUuid,
+    const readback = { verified: true, sceneUrl: disk.sceneUrl, sceneUuid: disk.sceneUuid,
         nodePath: disk.nodePath, nodeName: disk.nodeName, parentUuid: disk.parentUuid, nodeUuid: disk.nodeUuid,
         sourceSha256: disk.sourceSha256, metaSha256: disk.metaSha256, transform: disk.transform,
         active: disk.active, verifiedAt: new Date().toISOString() };
+    if (Array.isArray(disk.buttonEvents)) readback.buttonEvents = disk.buttonEvents;
+    return readback;
 }
 
 function validSceneNodeDiskBaseline(disk) {
@@ -4956,6 +4989,7 @@ function validSceneNodeDiskBaseline(disk) {
         && (disk.nodeName === undefined || typeof disk.nodeName === 'string')
         && (disk.parentUuid === undefined || typeof disk.parentUuid === 'string')
         && (disk.nodePath === undefined || typeof disk.nodePath === 'string')
+        && (disk.buttonEvents === undefined || validButtonEventList(disk.buttonEvents))
         && !!disk.transform && typeof disk.transform === 'object' && !Array.isArray(disk.transform)
         && Object.keys(disk.transform).sort().join(',') === fields.join(',')
         && fields.every((field) => Number.isFinite(disk.transform[field])
@@ -4975,6 +5009,8 @@ function sceneNodeDiskExpected(plan, side) {
     } else if (plan.operation === 'creator.scene.node.reparent') {
         expected.parentUuid = plan.expectedAfter.parentUuid;
         expected.nodePath = plan.expectedAfter.nodePath;
+    } else if (plan.operation === 'creator.scene.button-events.set') {
+        expected.buttonEvents = plan.expectedAfter;
     }
     return expected;
 }
@@ -4988,6 +5024,7 @@ function sceneNodeDiskMatchesPlan(disk, plan, side) {
     for (const field of ['nodeName', 'parentUuid', 'nodePath']) {
         if (expected[field] !== undefined && disk[field] !== expected[field]) return false;
     }
+    if (expected.buttonEvents !== undefined && !buttonEventListMatches(disk.buttonEvents, expected.buttonEvents)) return false;
     return true;
 }
 

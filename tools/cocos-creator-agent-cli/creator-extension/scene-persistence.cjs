@@ -22,6 +22,29 @@ function refIndex(value, records) {
     return value.__id__;
 }
 
+function inspectButtonEvents(nodeRecord, records) {
+    if (!Array.isArray(nodeRecord._components)) return { buttonComponentCount: 0, buttonEvents: null };
+    const buttons = nodeRecord._components.map((reference) => resolveRef(reference, records))
+        .filter((component) => component && component.__type__ === 'cc.Button');
+    if (buttons.length !== 1)
+        return { buttonComponentCount: buttons.length, buttonEvents: null };
+    const clickEvents = buttons[0].clickEvents === undefined ? [] : buttons[0].clickEvents;
+    if (!Array.isArray(clickEvents)) return { buttonComponentCount: buttons.length, buttonEvents: null };
+    const events = [];
+    for (const reference of clickEvents) {
+        const event = resolveRef(reference, records);
+        const target = event && resolveRef(event.target, records);
+        if (!event || event.__type__ !== 'cc.ClickEvent' || !target || target.__type__ !== 'cc.Node'
+            || typeof target._id !== 'string' || typeof event.component !== 'string'
+            || typeof event.handler !== 'string'
+            || (event.customEventData !== undefined && typeof event.customEventData !== 'string'))
+            return { buttonComponentCount: buttons.length, buttonEvents: null };
+        events.push({ targetUuid: target._id, component: event.component, handler: event.handler,
+            customEventData: event.customEventData || '' });
+    }
+    return { buttonComponentCount: buttons.length, buttonEvents: events };
+}
+
 function inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow, nodeUuid }) {
     if (!Buffer.isBuffer(sceneBytes) || sceneBytes.length < 2 || sceneBytes.length > MAX_SCENE_BYTES)
         return fail('SCENE_SERIALIZATION_SIZE_INVALID');
@@ -91,6 +114,7 @@ function inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow
     const nodePath = [sceneName, ...pathParts.reverse()].join('/');
 
     const record = found.record;
+    const buttonState = inspectButtonEvents(record, records);
     const trs = record._trs && record._trs.array;
     const size = record._contentSize;
     const anchor = record._anchorPoint;
@@ -104,6 +128,7 @@ function inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow
     return { verified: true, sceneUuid, sceneUrl: sceneAssetRow.url, nodeUuid,
         nodeName: record._name, parentUuid, nodePath,
         active: typeof record._active === 'boolean' ? record._active : true,
+        ...buttonState,
         transform: { x: trs[0], y: trs[1], z: trs[2], angle, scaleX: trs[7], scaleY: trs[8],
             width: size.width, height: size.height, anchorX: anchor.x, anchorY: anchor.y } };
 }

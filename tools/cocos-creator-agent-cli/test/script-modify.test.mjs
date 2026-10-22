@@ -99,7 +99,8 @@ function serializeSceneComposition(params, sceneUuid) {
   return records;
 }
 
-function serializeExistingSceneNode({ transform, name = 'Button', active = true, parentUuid = null },
+function serializeExistingSceneNode({ transform, name = 'Button', active = true, parentUuid = null,
+  buttonEvents = null },
   sceneUuid, nodeUuid, oldParentUuid, targetParentUuid, withParents = false) {
   const angle = transform.angle * Math.PI / 360;
   const records = [{ __type__: 'cc.SceneAsset', scene: { __id__: 1 } },
@@ -120,6 +121,18 @@ function serializeExistingSceneNode({ transform, name = 'Button', active = true,
       0, 0, Math.sin(angle), Math.cos(angle), transform.scaleX, transform.scaleY, 1] },
     _contentSize: { __type__: 'cc.Size', width: transform.width, height: transform.height },
     _anchorPoint: { __type__: 'cc.Vec2', x: transform.anchorX, y: transform.anchorY } });
+  if (Array.isArray(buttonEvents)) {
+    const nodeIndex = records.length - 1;
+    const buttonIndex = records.length;
+    records[nodeIndex]._components.push({ __id__: buttonIndex });
+    records.push({ __type__: 'cc.Button', clickEvents: [] });
+    for (const event of buttonEvents) {
+      const eventIndex = records.length;
+      records.push({ __type__: 'cc.ClickEvent', target: { __id__: nodeIndex }, component: event.component,
+        handler: event.handler, customEventData: event.customEventData });
+      records[buttonIndex].clickEvents.push({ __id__: eventIndex });
+    }
+  }
   return records;
 }
 
@@ -176,13 +189,14 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
   let buttonEvents = [];
   const sceneFile = path.join(projectRoot, 'assets', 'Scenes', 'Main.fire');
   const sceneMetaFile = `${sceneFile}.meta`;
-  if (sceneCompose || sceneTransform || sceneActive || sceneRename || sceneReparent) {
+  if (sceneCompose || sceneTransform || sceneActive || sceneRename || sceneReparent || sceneButtonEvents) {
     fs.mkdirSync(path.dirname(sceneFile), { recursive: true });
     fs.writeFileSync(sceneFile, JSON.stringify(serializeExistingSceneNode({
       transform: { x: 1, y: 2, z: 0, scaleX: 1, scaleY: 1, angle: 0,
         width: 50, height: 20, anchorX: 0.5, anchorY: 0.5 },
       name: sceneNodeName, active: sceneNodeActive,
       parentUuid: sceneReparent ? oldParentUuid : sceneUuid,
+      buttonEvents: sceneButtonEvents ? buttonEvents : null,
     }, sceneUuid, nodeUuid, oldParentUuid, targetParentUuid, sceneReparent)));
     fs.writeFileSync(sceneMetaFile, JSON.stringify({ uuid: sceneUuid, importer: 'scene' }));
     assetRecords.set('db://assets/Scenes/Main.fire', { url: 'db://assets/Scenes/Main.fire',
@@ -269,10 +283,11 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
       if (sceneSaveMode === 'write' && currentSceneComposition) {
         fs.writeFileSync(sceneFile, JSON.stringify(serializeSceneComposition(currentSceneComposition, sceneUuid)));
         fs.writeFileSync(sceneMetaFile, JSON.stringify({ uuid: sceneUuid, importer: 'scene' }));
-      } else if (sceneSaveMode === 'write' && (sceneActive || sceneRename || sceneReparent || sceneTransform)) {
+      } else if (sceneSaveMode === 'write' && (sceneActive || sceneRename || sceneReparent || sceneTransform || sceneButtonEvents)) {
         fs.writeFileSync(sceneFile, JSON.stringify(serializeExistingSceneNode({ transform: currentTransform,
           name: sceneNodeName, active: sceneNodeActive,
           parentUuid: sceneReparent ? (reparentApplied ? targetParentUuid : oldParentUuid) : sceneUuid,
+          buttonEvents: sceneButtonEvents ? buttonEvents : null,
         }, sceneUuid, nodeUuid, oldParentUuid, targetParentUuid, sceneReparent)));
         fs.writeFileSync(sceneMetaFile, JSON.stringify({ uuid: sceneUuid, importer: 'scene' }));
       }
@@ -849,6 +864,7 @@ test('existing Button events require an exact plan, native approval, one save re
   assert.equal(plan.status, 'planned');
   assert.deepEqual(Array.from(plan.expectedBefore), []);
   assert.deepEqual(Array.from(plan.expectedAfter, (event) => ({ ...event })), events);
+  assert.deepEqual(Array.from(plan.savedSceneBaseline.buttonEvents), []);
   assert.deepEqual(harness.getButtonEvents(), []);
 
   const receipt = await harness.api.commitSceneButtonEvents({ operationId: plan.operationId, planHash: plan.planHash },
@@ -857,11 +873,33 @@ test('existing Button events require an exact plan, native approval, one save re
   assert.deepEqual(Array.from(receipt.events, (event) => ({ ...event })), events);
   assert.equal(receipt.sceneSaveRequestSent, true);
   assert.equal(receipt.sceneSaveCompletionConfirmed, false);
+  assert.equal(receipt.scenePersistenceConfirmed, true);
+  assert.deepEqual(Array.from(receipt.diskReadback.buttonEvents, (event) => ({ ...event })), events);
   assert.equal(harness.getSceneSaveCount(), 1);
 
   const reconciled = await harness.api.reconcileSceneButtonEvents({ operationId: plan.operationId });
   assert.equal(reconciled.status, 'completed');
   assert.deepEqual(Array.from(reconciled.observed.events, (event) => ({ ...event })), events);
+  assert.equal(reconciled.observed.disk.matchesAfter, true);
+  assert.equal(harness.getSceneSaveCount(), 1);
+});
+
+test('Button events report save-required when memory changes but the serialized scene stays unchanged', async (t) => {
+  const harness = makeHarness(t, { sceneButtonEvents: true, sceneSaveMode: 'ignore', ipcMode: 'editor' });
+  const events = [{ targetUuid: harness.nodeUuid, component: 'game.ButtonState', handler: 'onClick', customEventData: 'open' }];
+  const plan = await harness.api.createSceneButtonEventsPlan({ sceneUuid: harness.sceneUuid,
+    nodeUuid: harness.nodeUuid, componentInstanceId: 'button-instance', events });
+
+  await assert.rejects(harness.api.commitSceneButtonEvents({ operationId: plan.operationId, planHash: plan.planHash },
+    { requestId: 'request-fixture' }), (error) => error.code === 'SCENE_DISK_READBACK_UNCONFIRMED');
+  assert.deepEqual(Array.from(harness.getButtonEvents(), (event) => ({ ...event })), events);
+  assert.equal(harness.getSceneSaveCount(), 1);
+
+  const reconciled = await harness.api.reconcileSceneButtonEvents({ operationId: plan.operationId });
+  assert.equal(reconciled.status, 'save-required');
+  assert.equal(reconciled.scenePersistenceConfirmed, false);
+  assert.equal(reconciled.observed.disk.matchesBefore, true);
+  assert.equal(reconciled.observed.disk.matchesAfter, false);
   assert.equal(harness.getSceneSaveCount(), 1);
 });
 
