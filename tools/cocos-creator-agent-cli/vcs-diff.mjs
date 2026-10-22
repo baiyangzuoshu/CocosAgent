@@ -231,3 +231,261 @@ export function runVcsObjectBlame({ gitRoot: requestedGitRoot, projectRoot: requ
       renames: 'The path history does not follow asset renames.',
       prefabOverrides: 'Scene changes on linked Prefab instances remain attributed to the scene instance node.' } };
 }
+
+const INDEX_STAGES = new Map([[1, 'base'], [2, 'ours'], [3, 'theirs']]);
+const MAX_CONFLICT_ROWS = 500;
+
+function parseIndexEntries(buffer) {
+  const byPath = new Map();
+  for (const record of buffer.toString('utf8').split('\0').filter(Boolean)) {
+    const separator = record.indexOf('\t');
+    if (separator < 0) throw coded('VCS_CONFLICT_INDEX_OUTPUT_INVALID');
+    const [mode, objectId, stageText] = record.slice(0, separator).split(' ');
+    const relative = record.slice(separator + 1);
+    const stage = Number(stageText);
+    if (!/^[0-7]{6}$/.test(mode || '') || !/^[0-9a-f]{40,64}$/i.test(objectId || '')
+      || !Number.isInteger(stage) || stage < 0 || stage > 3 || !relative || relative.startsWith('/')
+      || relative.split('/').some((part) => part === '..' || part === '.'))
+      throw coded('VCS_CONFLICT_INDEX_OUTPUT_INVALID');
+    const entries = byPath.get(relative) || new Map();
+    if (entries.has(stage)) throw coded('VCS_CONFLICT_INDEX_OUTPUT_INVALID');
+    entries.set(stage, { mode, objectId, stage });
+    byPath.set(relative, entries);
+  }
+  return byPath;
+}
+
+function indexEntriesForPath(gitRoot, relative) {
+  const listed = git(gitRoot, ['ls-files', '--stage', '-z', '--', `:(literal)${relative}`]);
+  return parseIndexEntries(listed.stdout).get(relative) || new Map();
+}
+
+function readIndexBlob(gitRoot, entry, maxBytes) {
+  const blob = git(gitRoot, ['cat-file', 'blob', entry.objectId]);
+  if (blob.stdout.length > maxBytes) throw coded('VCS_DIFF_FILE_UNSAFE_OR_TOO_LARGE');
+  return blob.stdout;
+}
+
+function mergeContext(gitRoot) {
+  const headResult = git(gitRoot, ['rev-parse', '--verify', 'HEAD'], { allowFailure: true });
+  const mergeResult = git(gitRoot, ['rev-parse', '--verify', 'MERGE_HEAD'], { allowFailure: true });
+  if (headResult.status !== 0 || mergeResult.status !== 0) return null;
+  const head = headResult.stdout.toString('utf8').trim();
+  const mergeHeads = mergeResult.stdout.toString('utf8').trim().split(/\r?\n/).filter(Boolean);
+  if (!/^[0-9a-f]{40,64}$/i.test(head) || mergeHeads.length !== 1
+    || !/^[0-9a-f]{40,64}$/i.test(mergeHeads[0])) return null;
+  const baseResult = git(gitRoot, ['merge-base', '--all', head, mergeHeads[0]], { allowFailure: true });
+  const bases = baseResult.stdout.toString('utf8').trim().split(/\r?\n/).filter(Boolean);
+  if (baseResult.status !== 0 || bases.length !== 1 || !/^[0-9a-f]{40,64}$/i.test(bases[0])) return null;
+  return { base: bases[0], ours: head, theirs: mergeHeads[0] };
+}
+
+function metadataSides(gitRoot, metadataPath, stages, context) {
+  if ([1, 2, 3].every((stage) => stages.has(stage))) return Object.fromEntries([1, 2, 3].map((stage) =>
+    [INDEX_STAGES.get(stage), readIndexBlob(gitRoot, stages.get(stage), 64 * 1024)]));
+  if (!context) return null;
+  const result = {};
+  for (const side of ['base', 'ours', 'theirs']) {
+    const bytes = readRevisionFileIfPresent(gitRoot, context[side], metadataPath, 64 * 1024);
+    if (!bytes) return null;
+    result[side] = bytes;
+  }
+  return result;
+}
+
+function conflictAssetSide(gitRoot, sourceStages, metaSides, stage) {
+  const sourceEntry = sourceStages.get(stage);
+  const side = INDEX_STAGES.get(stage);
+  const metaBytes = metaSides?.[side];
+  if (!sourceEntry || !metaBytes) return null;
+  return { sourceBytes: readIndexBlob(gitRoot, sourceEntry, 16 * 1024 * 1024),
+    metaBytes };
+}
+
+function metadataIdentity(bytes) {
+  try {
+    const value = JSON.parse(bytes.toString('utf8'));
+    return { uuid: typeof value?.uuid === 'string' ? value.uuid : null,
+      importer: typeof value?.importer === 'string' ? value.importer : null };
+  } catch (_) { return null; }
+}
+
+function stableJson(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
+}
+
+function addMutation(mutations, key, before, after) {
+  mutations.set(key, { before, after });
+}
+
+function flattenAssetMutations(diff) {
+  const mutations = new Map();
+  const nodeKey = (uuid) => `node:${uuid}`;
+  const flattenNodeValues = (uuid, node, direction) => {
+    const fields = ['name', 'parentUuid', 'active', 'transform', 'serializedProperties', 'prefabUuid'];
+    for (const field of fields) {
+      const value = { present: true, value: node[field] ?? null };
+      addMutation(mutations, `${nodeKey(uuid)}:${field}`,
+        direction === 'added' ? { present: false } : value,
+        direction === 'removed' ? { present: false } : value);
+    }
+    for (const component of node.componentDetails || []) {
+      const prefix = `${nodeKey(uuid)}:component:${component.key}`;
+      addMutation(mutations, `${prefix}:classId`, direction === 'added'
+        ? { present: false } : { present: true, value: component.classId },
+      direction === 'removed' ? { present: false } : { present: true, value: component.classId });
+      for (const [property, value] of Object.entries(component.properties || {}))
+        addMutation(mutations, `${prefix}:property:${property}`, direction === 'added'
+          ? { present: false } : { present: true, value },
+        direction === 'removed' ? { present: false } : { present: true, value });
+    }
+  };
+  for (const node of diff.added) {
+    addMutation(mutations, `${nodeKey(node.uuid)}:exists`, { present: false }, { present: true });
+    flattenNodeValues(node.uuid, node, 'added');
+  }
+  for (const node of diff.removed) {
+    addMutation(mutations, `${nodeKey(node.uuid)}:exists`, { present: true }, { present: false });
+    flattenNodeValues(node.uuid, node, 'removed');
+  }
+  for (const node of diff.changed) {
+    addMutation(mutations, `${nodeKey(node.uuid)}:exists`, { present: true }, { present: true });
+    for (const [field, values] of Object.entries(node.changes || {})) {
+      if (field === 'path') continue;
+      addMutation(mutations, `${nodeKey(node.uuid)}:${field}`,
+        { present: true, value: values.before }, { present: true, value: values.after });
+    }
+    const prefix = nodeKey(node.uuid);
+    for (const component of node.components.added) {
+      const key = `${prefix}:component:${component.key}`;
+      addMutation(mutations, `${key}:exists`, { present: false }, { present: true });
+      addMutation(mutations, `${key}:classId`, { present: false }, { present: true, value: component.classId });
+      for (const [property, value] of Object.entries(component.properties || {}))
+        addMutation(mutations, `${key}:property:${property}`, { present: false }, { present: true, value });
+    }
+    for (const component of node.components.removed) {
+      const key = `${prefix}:component:${component.key}`;
+      addMutation(mutations, `${key}:exists`, { present: true }, { present: false });
+      addMutation(mutations, `${key}:classId`, { present: true, value: component.classId }, { present: false });
+      for (const [property, value] of Object.entries(component.properties || {}))
+        addMutation(mutations, `${key}:property:${property}`, { present: true, value }, { present: false });
+    }
+    for (const component of node.components.changed) {
+      const key = `${prefix}:component:${component.key}`;
+      const existingClass = component.classId || component.beforeClassId;
+      if (!component.replaced) addMutation(mutations, `${key}:classId`,
+        { present: true, value: existingClass }, { present: true, value: existingClass });
+      if (component.replaced) addMutation(mutations, `${key}:classId`,
+        { present: true, value: component.beforeClassId }, { present: true, value: component.afterClassId });
+      for (const [property, values] of Object.entries(component.properties || {}))
+        addMutation(mutations, `${key}:property:${property}`,
+          { present: true, value: values.before }, { present: true, value: values.after });
+    }
+  }
+  return mutations;
+}
+
+function conflictDiffSummary(diff) {
+  const nodes = (items) => items.slice(0, MAX_CONFLICT_ROWS).map((node) => ({ uuid: node.uuid,
+    name: node.name, path: node.path, parentUuid: node.parentUuid,
+    componentClasses: node.componentDetails?.map((component) => component.className) || [] }));
+  return { counts: diff.counts, added: nodes(diff.added), removed: nodes(diff.removed),
+    changed: diff.changed.slice(0, MAX_CONFLICT_ROWS),
+    truncated: diff.added.length > MAX_CONFLICT_ROWS || diff.removed.length > MAX_CONFLICT_ROWS
+      || diff.changed.length > MAX_CONFLICT_ROWS };
+}
+
+function semanticConflict(gitRoot, sourceStages, metaSides, projectAssetRelative) {
+  const sides = Object.fromEntries([1, 2, 3].map((stage) => [INDEX_STAGES.get(stage),
+    conflictAssetSide(gitRoot, sourceStages, metaSides, stage)]));
+  if (Object.values(sides).some((side) => !side)) return { available: false, reason: 'CREATOR_ASSET_STAGES_INCOMPLETE',
+    stageAvailability: Object.fromEntries(Object.entries(sides).map(([side, value]) => [side, Boolean(value)])) };
+  const identities = Object.fromEntries(Object.entries(sides).map(([side, value]) => [side, metadataIdentity(value.metaBytes)]));
+  try {
+    const diffs = {
+      ours: diffCreatorSerializedAssets({ beforeBytes: sides.base.sourceBytes, beforeMetaBytes: sides.base.metaBytes,
+        afterBytes: sides.ours.sourceBytes, afterMetaBytes: sides.ours.metaBytes, assetPath: projectAssetRelative }),
+      theirs: diffCreatorSerializedAssets({ beforeBytes: sides.base.sourceBytes, beforeMetaBytes: sides.base.metaBytes,
+        afterBytes: sides.theirs.sourceBytes, afterMetaBytes: sides.theirs.metaBytes, assetPath: projectAssetRelative }),
+    };
+    const mutations = { ours: flattenAssetMutations(diffs.ours), theirs: flattenAssetMutations(diffs.theirs) };
+    const overlapKeys = [...mutations.ours.keys()].filter((key) => mutations.theirs.has(key)).sort();
+    const conflicts = [];
+    const converged = [];
+    for (const key of overlapKeys) {
+      const ours = mutations.ours.get(key);
+      const theirs = mutations.theirs.get(key);
+      const row = { key, base: ours.before, ours: ours.after, theirs: theirs.after };
+      if (stableJson(ours.after) === stableJson(theirs.after)) converged.push(row);
+      else conflicts.push(row);
+    }
+    const oursOnly = [...mutations.ours.keys()].filter((key) => !mutations.theirs.has(key)).sort();
+    const theirsOnly = [...mutations.theirs.keys()].filter((key) => !mutations.ours.has(key)).sort();
+    const rows = (items) => items.slice(0, MAX_CONFLICT_ROWS);
+    return { available: true, status: conflicts.length ? 'overlapping-changes' : 'disjoint-or-converged',
+      metadataIdentities: identities, baseToOurs: conflictDiffSummary(diffs.ours),
+      baseToTheirs: conflictDiffSummary(diffs.theirs),
+      overlap: { conflictCount: conflicts.length, convergedCount: converged.length,
+        conflicts: rows(conflicts), converged: rows(converged), truncated: conflicts.length > MAX_CONFLICT_ROWS
+          || converged.length > MAX_CONFLICT_ROWS },
+      nonOverlapping: { oursCount: oursOnly.length, theirsCount: theirsOnly.length,
+        oursKeys: rows(oursOnly), theirsKeys: rows(theirsOnly), truncated: oursOnly.length > MAX_CONFLICT_ROWS
+          || theirsOnly.length > MAX_CONFLICT_ROWS },
+      resolution: { automatic: false, required: true,
+        note: 'Semantic overlap explains the conflict but does not rewrite serialized files or resolve Git index stages.' } };
+  } catch (error) {
+    return { available: false, reason: error.code || error.message || 'CREATOR_ASSET_CONFLICT_ANALYSIS_FAILED',
+      metadataIdentities: identities };
+  }
+}
+
+export function runVcsConflictReport({ gitRoot: requestedGitRoot, projectRoot: requestedProjectRoot } = {}) {
+  const gitRoot = canonicalDirectory(requestedGitRoot, 'GIT_ROOT');
+  const projectRoot = canonicalDirectory(requestedProjectRoot, 'PROJECT_ROOT');
+  ensureProject(gitRoot, projectRoot);
+  const unmerged = parseIndexEntries(git(gitRoot, ['ls-files', '--unmerged', '-z']).stdout);
+  const repoPrefix = path.relative(gitRoot, projectRoot).split(path.sep).filter(Boolean).join('/');
+  const projectPrefix = repoPrefix ? `${repoPrefix}/` : '';
+  const conflicts = [];
+  let outsideProjectCount = 0;
+  const context = mergeContext(gitRoot);
+  let projectConflictCount = 0;
+  for (const [repoPath, stages] of unmerged) {
+    if (repoPrefix && !repoPath.startsWith(projectPrefix)) { outsideProjectCount += 1; continue; }
+    projectConflictCount += 1;
+    if (conflicts.length >= MAX_CONFLICT_ROWS) continue;
+    const projectRelative = repoPrefix ? repoPath.slice(projectPrefix.length) : repoPath;
+    if (!projectRelative || projectRelative.startsWith('/') || projectRelative.split('/').some((part) => !part || part === '.' || part === '..'))
+      throw coded('VCS_CONFLICT_INDEX_PATH_INVALID');
+    const completeStages = [1, 2, 3].every((stage) => stages.has(stage));
+    const assetType = /\.fire$/i.test(projectRelative) ? 'scene'
+      : /\.prefab$/i.test(projectRelative) ? 'prefab' : null;
+    const row = { path: projectRelative, kind: assetType || (projectRelative.endsWith('.meta') ? 'metadata' : 'other'),
+      stages: Object.fromEntries([...stages].filter(([stage]) => stage > 0)
+        .map(([stage, entry]) => [INDEX_STAGES.get(stage), { mode: entry.mode, objectId: entry.objectId }])),
+      completeStages };
+    if (assetType) {
+      try {
+        const asset = projectAssetPath(projectRoot, projectRelative);
+        const metaPath = `${repoPath}.meta`;
+        const metadataStages = indexEntriesForPath(gitRoot, metaPath);
+        const metaSides = metadataSides(gitRoot, metaPath, metadataStages, context);
+        row.semantic = metaSides
+          ? semanticConflict(gitRoot, stages, metaSides, asset.relative)
+          : { available: false, reason: 'VCS_CONFLICT_METADATA_SIDES_UNAVAILABLE' };
+      } catch (error) {
+        row.semantic = { available: false, reason: error.code || error.message || 'CREATOR_ASSET_CONFLICT_ANALYSIS_FAILED' };
+      }
+    }
+    conflicts.push(row);
+  }
+  conflicts.sort((left, right) => left.path.localeCompare(right.path));
+  return { schemaVersion: 1, readOnly: true, projectRoot, gitRoot, creatorVersion: '2.4.15',
+    hasConflicts: projectConflictCount > 0 || outsideProjectCount > 0,
+    summary: { projectConflicts: projectConflictCount, reportedProjectConflicts: conflicts.length,
+      outsideProjectConflicts: outsideProjectCount, truncated: projectConflictCount > conflicts.length,
+      semanticAssets: conflicts.filter((item) => item.semantic?.available).length,
+      semanticOverlaps: conflicts.filter((item) => item.semantic?.overlap?.conflictCount > 0).length }, conflicts };
+}
