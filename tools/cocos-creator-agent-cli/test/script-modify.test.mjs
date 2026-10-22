@@ -99,22 +99,33 @@ function serializeSceneComposition(params, sceneUuid) {
   return records;
 }
 
-function serializeExistingTransformScene(transform, sceneUuid, nodeUuid) {
+function serializeExistingSceneNode({ transform, name = 'Button', active = true, parentUuid = null },
+  sceneUuid, nodeUuid, oldParentUuid, targetParentUuid, withParents = false) {
   const angle = transform.angle * Math.PI / 360;
-  return [
-    { __type__: 'cc.SceneAsset', scene: { __id__: 1 } },
-    { __type__: 'cc.Scene', _id: sceneUuid, _active: true, _children: [{ __id__: 2 }] },
-    { __type__: 'cc.Node', _id: nodeUuid, _name: 'Button', _parent: { __id__: 1 }, _children: [],
-      _active: true, _components: [],
-      _trs: { __type__: 'TypedArray', ctor: 'Float64Array', array: [transform.x, transform.y, transform.z,
-        0, 0, Math.sin(angle), Math.cos(angle), transform.scaleX, transform.scaleY, 1] },
-      _contentSize: { __type__: 'cc.Size', width: transform.width, height: transform.height },
-      _anchorPoint: { __type__: 'cc.Vec2', x: transform.anchorX, y: transform.anchorY } },
-  ];
+  const records = [{ __type__: 'cc.SceneAsset', scene: { __id__: 1 } },
+    { __type__: 'cc.Scene', _id: sceneUuid, _name: 'Scene',
+      _children: withParents ? [{ __id__: 2 }, { __id__: 3 }] : [{ __id__: 2 }] }];
+  let parentIndex = 1;
+  if (withParents) {
+    const moved = parentUuid === targetParentUuid;
+    records.push({ __type__: 'cc.Node', _id: oldParentUuid, _name: 'Old', _parent: { __id__: 1 },
+      _children: moved ? [] : [{ __id__: 4 }] });
+    records.push({ __type__: 'cc.Node', _id: targetParentUuid, _name: 'New', _parent: { __id__: 1 },
+      _children: moved ? [{ __id__: 4 }] : [] });
+    parentIndex = moved ? 3 : 2;
+  }
+  records.push({ __type__: 'cc.Node', _id: nodeUuid, _name: name, _parent: { __id__: parentIndex }, _children: [],
+    _active: active, _components: [],
+    _trs: { __type__: 'TypedArray', ctor: 'Float64Array', array: [transform.x, transform.y, transform.z,
+      0, 0, Math.sin(angle), Math.cos(angle), transform.scaleX, transform.scaleY, 1] },
+    _contentSize: { __type__: 'cc.Size', width: transform.width, height: transform.height },
+    _anchorPoint: { __type__: 'cc.Vec2', x: transform.anchorX, y: transform.anchorY } });
+  return records;
 }
 
 function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults, refreshFailure = null,
-  ipcMode = 'electron', assetCreateMode = 'complete', sceneCompose = false, sceneReparent = false,
+  ipcMode = 'electron', assetCreateMode = 'complete', sceneCompose = false, sceneActive = false,
+  sceneRename = false, sceneReparent = false,
   sceneNodeDelete = false, sceneComponentRemove = false,
   sceneTransform = false, sceneButtonEvents = false,
   sceneProperty = null,
@@ -158,18 +169,21 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
   const prefabPatchPath = 'Prefabs/PatchFixture.prefab';
   const prefabPatchFile = path.join(projectRoot, 'assets', prefabPatchPath);
   let reparentApplied = false;
+  let sceneNodeActive = true;
+  let sceneNodeName = 'Button';
   let sceneNodeDeleted = false;
   let sceneComponentRemoved = false;
   let buttonEvents = [];
   const sceneFile = path.join(projectRoot, 'assets', 'Scenes', 'Main.fire');
   const sceneMetaFile = `${sceneFile}.meta`;
-  if (sceneCompose || sceneTransform) {
+  if (sceneCompose || sceneTransform || sceneActive || sceneRename || sceneReparent) {
     fs.mkdirSync(path.dirname(sceneFile), { recursive: true });
-    fs.writeFileSync(sceneFile, JSON.stringify(sceneTransform
-      ? serializeExistingTransformScene({ x: 1, y: 2, z: 0, scaleX: 1, scaleY: 1, angle: 0,
-        width: 50, height: 20, anchorX: 0.5, anchorY: 0.5 }, sceneUuid, nodeUuid)
-      : [{ __type__: 'cc.SceneAsset', scene: { __id__: 1 } },
-        { __type__: 'cc.Scene', _id: sceneUuid, _children: [] }]));
+    fs.writeFileSync(sceneFile, JSON.stringify(serializeExistingSceneNode({
+      transform: { x: 1, y: 2, z: 0, scaleX: 1, scaleY: 1, angle: 0,
+        width: 50, height: 20, anchorX: 0.5, anchorY: 0.5 },
+      name: sceneNodeName, active: sceneNodeActive,
+      parentUuid: sceneReparent ? oldParentUuid : sceneUuid,
+    }, sceneUuid, nodeUuid, oldParentUuid, targetParentUuid, sceneReparent)));
     fs.writeFileSync(sceneMetaFile, JSON.stringify({ uuid: sceneUuid, importer: 'scene' }));
     assetRecords.set('db://assets/Scenes/Main.fire', { url: 'db://assets/Scenes/Main.fire',
       uuid: sceneUuid, importer: 'scene', type: 'cc.SceneAsset' });
@@ -249,13 +263,17 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
   editorIpc.sendToPanel = (panel, message, sourceNodeUuid, targetUrl) => {
     assert.equal(panel, 'scene');
     if (message === 'scene:stash-and-save') {
-      assert.ok(sceneCompose || sceneReparent || sceneNodeDelete || sceneComponentRemove || sceneTransform || sceneButtonEvents);
+      assert.ok(sceneCompose || sceneActive || sceneRename || sceneReparent || sceneNodeDelete
+        || sceneComponentRemove || sceneTransform || sceneButtonEvents);
       sceneSaveCount += 1;
       if (sceneSaveMode === 'write' && currentSceneComposition) {
         fs.writeFileSync(sceneFile, JSON.stringify(serializeSceneComposition(currentSceneComposition, sceneUuid)));
         fs.writeFileSync(sceneMetaFile, JSON.stringify({ uuid: sceneUuid, importer: 'scene' }));
-      } else if (sceneSaveMode === 'write' && sceneTransform) {
-        fs.writeFileSync(sceneFile, JSON.stringify(serializeExistingTransformScene(currentTransform, sceneUuid, nodeUuid)));
+      } else if (sceneSaveMode === 'write' && (sceneActive || sceneRename || sceneReparent || sceneTransform)) {
+        fs.writeFileSync(sceneFile, JSON.stringify(serializeExistingSceneNode({ transform: currentTransform,
+          name: sceneNodeName, active: sceneNodeActive,
+          parentUuid: sceneReparent ? (reparentApplied ? targetParentUuid : oldParentUuid) : sceneUuid,
+        }, sceneUuid, nodeUuid, oldParentUuid, targetParentUuid, sceneReparent)));
         fs.writeFileSync(sceneMetaFile, JSON.stringify({ uuid: sceneUuid, importer: 'scene' }));
       }
       return;
@@ -282,8 +300,8 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
       if (method === 'nodeState') {
         assert.equal(params.sceneUuid, sceneUuid);
         assert.equal(params.nodeUuid, nodeUuid);
-        callback(null, { available: true, sceneName: 'Scene', sceneUuid, nodeName: 'Button', nodeUuid,
-          nodePath: 'Scene/Button', active: true, children: 0, componentsAvailable: true,
+        callback(null, { available: true, sceneName: 'Scene', sceneUuid, nodeName: sceneNodeName, nodeUuid,
+          nodePath: `Scene/${sceneNodeName}`, active: sceneNodeActive, children: 0, componentsAvailable: true,
           componentCount: sceneButtonEvents ? 2 : 0,
           components: sceneButtonEvents ? [{ componentClassName: 'cc.Button', componentInstanceId: 'button-instance' },
             { componentClassName: 'game.ButtonState', componentInstanceId: 'handler-instance' }] : [],
@@ -318,6 +336,31 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
         callback(null, { available: true, sceneName: 'Scene', sceneUuid, nodeUuid, nodePath: 'Scene/Button',
           transform: { ...currentTransform }, ...(params.values ? { requested: params.values,
             changed: Object.keys(params.values).some((field) => currentTransform[field] !== params.values[field]) } : {}) });
+        return;
+      }
+      if (method === 'nodeNameState' && sceneRename) {
+        callback(null, { available: true, sceneName: 'Scene', sceneUuid, nodeUuid,
+          nodeName: sceneNodeName, nodePath: `Scene/${sceneNodeName}`, parentUuid: sceneUuid,
+          nameAvailable: true });
+        return;
+      }
+      if (method === 'renameNode' && sceneRename) {
+        if (params.expectedName !== sceneNodeName || params.expectedParentUuid !== sceneUuid) {
+          callback(null, { available: false, reason: 'SCENE_NODE_NAME_PRECONDITION_FAILED' });
+          return;
+        }
+        sceneNodeName = params.newName;
+        callback(null, { available: true, sceneUuid, nodeUuid, nodeName: sceneNodeName,
+          nodePath: `Scene/${sceneNodeName}`, parentUuid: sceneUuid });
+        return;
+      }
+      if (method === 'setNodeActive' && sceneActive) {
+        if (params.expectedActive !== sceneNodeActive) {
+          callback(null, { available: false, reason: 'SCENE_NODE_ACTIVE_PRECONDITION_FAILED' });
+          return;
+        }
+        sceneNodeActive = params.active;
+        callback(null, { available: true, sceneUuid, nodeUuid, active: sceneNodeActive });
         return;
       }
       if (method === 'setNodeTransform' && sceneTransform) {
@@ -496,8 +539,10 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
     createAssetImportPlan, commitAssetImport, reconcileAssetImport,
     createPrefabPlan, commitPrefabCreate, reconcilePrefabCreate,
     createSceneComposePlan, commitSceneCompose, reconcileSceneCompose,
+    createSceneNodeActivePlan, commitSceneNodeActive, reconcileSceneNodeActive,
     createSceneNodeTransformPlan, commitSceneNodeTransform, reconcileSceneNodeTransform,
     createSceneButtonEventsPlan, commitSceneButtonEvents, reconcileSceneButtonEvents,
+    createSceneNodeRenamePlan, commitSceneNodeRename, reconcileSceneNodeRename,
     createSceneNodeReparentPlan, commitSceneNodeReparent, reconcileSceneNodeReparent,
     createSceneNodeDeletePlan, createSceneComponentRemovePlan, createSceneComponentPropertyPlan,
     commitSceneNodeDelete(input, context) { return commitSceneDestructiveOperation(readSceneNodeDeleteOperation(input.operationId), input, context); },
@@ -659,6 +704,9 @@ test('scene-node reparent binds the hierarchy, commits once, requests save, and 
   assert.equal(receipt.after.parentUuid, harness.targetParentUuid);
   assert.equal(receipt.sceneSaveRequestSent, true);
   assert.equal(receipt.sceneSaveCompletionConfirmed, false);
+  assert.equal(receipt.scenePersistenceConfirmed, true);
+  assert.equal(receipt.diskReadback.parentUuid, harness.targetParentUuid);
+  assert.equal(receipt.diskReadback.nodePath, 'Scene/New/Button');
   assert.equal(harness.isReparentApplied(), true);
   assert.equal(harness.getSceneSaveCount(), 1);
 
@@ -666,6 +714,45 @@ test('scene-node reparent binds the hierarchy, commits once, requests save, and 
   assert.equal(reconciled.status, 'completed');
   assert.equal(reconciled.observed.nodeUuid, harness.nodeUuid);
   assert.equal(reconciled.observed.parentUuid, harness.targetParentUuid);
+});
+
+test('set-active and rename require exact serialized scene readback before completion', async (t) => {
+  const active = makeHarness(t, { sceneActive: true, ipcMode: 'editor' });
+  const activePlan = await active.api.createSceneNodeActivePlan({ sceneUuid: active.sceneUuid,
+    nodeUuid: active.nodeUuid, active: false });
+  const activeReceipt = await active.api.commitSceneNodeActive({ operationId: activePlan.operationId,
+    planHash: activePlan.planHash }, { requestId: 'request-fixture' });
+  assert.equal(activeReceipt.status, 'completed');
+  assert.equal(activeReceipt.active, false);
+  assert.equal(activeReceipt.scenePersistenceConfirmed, true);
+  assert.equal(activeReceipt.diskReadback.active, false);
+  assert.equal((await active.api.reconcileSceneNodeActive({ operationId: activePlan.operationId })).status, 'completed');
+
+  const rename = makeHarness(t, { sceneRename: true, ipcMode: 'editor' });
+  const renamePlan = await rename.api.createSceneNodeRenamePlan({ sceneUuid: rename.sceneUuid,
+    nodeUuid: rename.nodeUuid, newName: 'PrimaryButton' });
+  const renameReceipt = await rename.api.commitSceneNodeRename({ operationId: renamePlan.operationId,
+    planHash: renamePlan.planHash }, { requestId: 'request-fixture' });
+  assert.equal(renameReceipt.status, 'completed');
+  assert.equal(renameReceipt.after.name, 'PrimaryButton');
+  assert.equal(renameReceipt.scenePersistenceConfirmed, true);
+  assert.equal(renameReceipt.diskReadback.nodeName, 'PrimaryButton');
+  assert.equal(renameReceipt.diskReadback.nodePath, 'Scene/PrimaryButton');
+  assert.equal((await rename.api.reconcileSceneNodeRename({ operationId: renamePlan.operationId })).status, 'completed');
+});
+
+test('set-active reports save-required when memory changes but the serialized scene stays unchanged', async (t) => {
+  const harness = makeHarness(t, { sceneActive: true, sceneSaveMode: 'ignore', ipcMode: 'editor' });
+  const plan = await harness.api.createSceneNodeActivePlan({ sceneUuid: harness.sceneUuid,
+    nodeUuid: harness.nodeUuid, active: false });
+  await assert.rejects(harness.api.commitSceneNodeActive({ operationId: plan.operationId,
+    planHash: plan.planHash }, { requestId: 'request-fixture' }),
+  (error) => error.code === 'SCENE_DISK_READBACK_UNCONFIRMED');
+  const reconciled = await harness.api.reconcileSceneNodeActive({ operationId: plan.operationId });
+  assert.equal(reconciled.status, 'save-required');
+  assert.equal(reconciled.scenePersistenceConfirmed, false);
+  assert.equal(reconciled.observed.disk.matchesBefore, true);
+  assert.equal(reconciled.observed.disk.matchesAfter, false);
 });
 
 test('scene-node reparent stops if the hierarchy changes during approval and does not replay a cancelled plan', async (t) => {

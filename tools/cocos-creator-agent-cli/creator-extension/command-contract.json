@@ -359,7 +359,7 @@
     {
       "id": "creator.scene.node.rename.plan",
       "access": "plan",
-      "description": "Plan renaming one existing authoring-scene node, bound to scene/node UUIDs, parent UUID, current path/name, and a collision-free sibling name. Does not modify the scene.",
+      "description": "Plan renaming one existing authoring-scene node, bound to scene/node UUIDs, parent UUID, current path/name, a collision-free sibling name, and the exact saved .fire/.meta baseline. Does not modify the scene.",
       "input": { "type": "object", "required": ["sceneUuid", "nodeUuid", "newName"], "properties": {
         "sceneUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
         "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
@@ -369,7 +369,7 @@
     {
       "id": "creator.scene.node.rename.commit",
       "access": "write", "approval": true,
-      "description": "After Creator approval, rename the exact planned node if its scene, UUID, parent, path, and old name still match, request scene save, and read the resulting node state back.",
+      "description": "After Creator approval, rename the exact planned node if its live and saved scene before-state still matches, request scene save, and confirm completion only after the exact serialized node state reads back from disk.",
       "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
         "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
@@ -378,7 +378,7 @@
     {
       "id": "creator.scene.node.rename.reconcile",
       "access": "plan",
-      "description": "Read and reconcile one interrupted node rename by exact scene/node/parent UUID and before/after names. Never repeats the rename.",
+      "description": "Read and reconcile one interrupted node rename against both editor memory and the exact saved .fire/.meta before/after state. Reports save-required if only memory changed; never repeats the rename.",
       "input": { "type": "object", "required": ["operationId"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
       }, "additionalProperties": false }
@@ -440,7 +440,7 @@
     {
       "id": "creator.scene.node.reparent.plan",
       "access": "plan",
-      "description": "Plan moving one existing authoring-scene node under one exact existing parent UUID. Binds the node and parent paths, rejects cycles and sibling-name collisions, and states that local transforms stay while world position may change.",
+      "description": "Plan moving one existing authoring-scene node under one exact existing parent UUID. Binds live and saved node identity/path/parent state, rejects cycles and sibling-name collisions, and states that local transforms stay while world position may change.",
       "input": { "type": "object", "required": ["sceneUuid", "nodeUuid", "targetParentUuid"], "properties": {
         "sceneUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
         "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
@@ -450,7 +450,7 @@
     {
       "id": "creator.scene.node.reparent.commit",
       "access": "write", "approval": true,
-      "description": "After Creator approval, reparent the exact node if its original path, name, parent, and destination parent still match; request a scene save and verify same-session state. Reparenting keeps local transforms and may change world position and lifecycle callbacks.",
+      "description": "After Creator approval, reparent the exact node if its live and saved before-state still matches; request a scene save and confirm completion only after the exact serialized hierarchy reads back from disk. Reparenting keeps local transforms and may change world position and lifecycle callbacks.",
       "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
         "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
@@ -459,7 +459,7 @@
     {
       "id": "creator.scene.node.reparent.reconcile",
       "access": "plan",
-      "description": "Read and reconcile one interrupted node reparent by exact node and target-parent UUIDs and before/after paths. Never repeats the mutation.",
+      "description": "Read and reconcile one interrupted node reparent against editor memory and the exact saved .fire/.meta before/after hierarchy. Reports save-required if only memory changed; never repeats the mutation.",
       "input": { "type": "object", "required": ["operationId"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
       }, "additionalProperties": false }
@@ -467,7 +467,7 @@
     {
       "id": "creator.scene.node.set-active.plan",
       "access": "plan",
-      "description": "Plan a single active-state change for one existing node in the active scene, bound to scene/node UUIDs and the observed before-state. Does not modify or save the scene.",
+      "description": "Plan a single active-state change for one existing node in the active scene, bound to scene/node UUIDs, the observed before-state, and the exact saved .fire/.meta baseline. Does not modify or save the scene.",
       "input": {
         "type": "object",
         "required": ["sceneUuid", "nodeUuid", "active"],
@@ -483,7 +483,7 @@
       "id": "creator.scene.node.set-active.commit",
       "access": "write",
       "approval": true,
-      "description": "Apply one planned active-state change after a native Creator confirmation, live scene/node identity and before-state checks, then request scene save and read the node state back from the same Creator scene session.",
+      "description": "Apply one planned active-state change after a native Creator confirmation, live and saved scene identity/before-state checks, then request scene save and confirm completion only after the exact serialized node state reads back from disk.",
       "input": {
         "type": "object",
         "required": ["operationId", "planHash"],
@@ -497,7 +497,7 @@
     {
       "id": "creator.scene.node.set-active.reconcile",
       "access": "plan",
-      "description": "Read and reconcile one planned scene-node active-state operation after interruption; never retries the mutation or claims disk-save completion without a Creator save acknowledgement.",
+      "description": "Read and reconcile one planned scene-node active-state operation against editor memory and the exact saved .fire/.meta before/after state. Reports save-required if only memory changed; never retries the mutation or claims a Creator save acknowledgement.",
       "input": {
         "type": "object",
         "required": ["operationId"],

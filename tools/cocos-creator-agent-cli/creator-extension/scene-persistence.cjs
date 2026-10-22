@@ -66,6 +66,7 @@ function inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow
     const visited = new Set([found.index]);
     let cursor = found.record;
     let childIndex = found.index;
+    let parentUuid = null;
     let reachedScene = false;
     for (let depth = 0; depth <= 64; depth += 1) {
         const parentIndex = refIndex(cursor._parent, records);
@@ -76,6 +77,7 @@ function inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow
         if (!Array.isArray(parent._children)
             || parent._children.filter((child) => refIndex(child, records) === childIndex).length !== 1)
             return fail('SCENE_HIERARCHY_INVALID');
+        if (depth === 0) parentUuid = parent === root ? sceneUuid : parent._id;
         if (parent === root) { reachedScene = true; break; }
         if (parent.__type__ !== 'cc.Node' || typeof parent._name !== 'string' || !parent._name)
             return fail('SCENE_PARENT_REFERENCE_INVALID');
@@ -99,7 +101,8 @@ function inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow
     const sinZ = 2 * (qw * qz + qx * qy);
     const cosZ = 1 - 2 * (qy * qy + qz * qz);
     const angle = Math.round(Math.atan2(sinZ, cosZ) * 180 / Math.PI * 1e6) / 1e6;
-    return { verified: true, sceneUuid, sceneUrl: sceneAssetRow.url, nodeUuid, nodePath,
+    return { verified: true, sceneUuid, sceneUrl: sceneAssetRow.url, nodeUuid,
+        nodeName: record._name, parentUuid, nodePath,
         active: typeof record._active === 'boolean' ? record._active : true,
         transform: { x: trs[0], y: trs[1], z: trs[2], angle, scaleX: trs[7], scaleY: trs[8],
             width: size.width, height: size.height, anchorX: anchor.x, anchorY: anchor.y } };

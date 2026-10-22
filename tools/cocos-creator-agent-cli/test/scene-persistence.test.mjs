@@ -54,7 +54,8 @@ function fixture() {
 test('saved scene node inspection resolves exact UUID, hierarchy, active state, and serialized transform', () => {
   const source = fixture();
   assert.deepEqual(inspectSavedSceneNode({ ...source, sceneUuid, sceneAssetRow, nodeUuid }), {
-    verified: true, sceneUuid, sceneUrl: sceneAssetRow.url, nodeUuid, nodePath: 'Scene/StartButton', active: true,
+    verified: true, sceneUuid, sceneUrl: sceneAssetRow.url, nodeUuid, nodeName: 'StartButton',
+    parentUuid: sceneUuid, nodePath: 'Scene/StartButton', active: true,
     transform: { x: 12, y: 20, z: 0, angle: 30, scaleX: 1.5, scaleY: 0.75,
       width: 180, height: 64, anchorX: 0.5, anchorY: 0.5 },
   });
