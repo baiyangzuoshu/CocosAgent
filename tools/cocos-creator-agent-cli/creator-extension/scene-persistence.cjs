@@ -3,6 +3,8 @@
 const MAX_SCENE_BYTES = 16 * 1024 * 1024;
 const MAX_META_BYTES = 16 * 1024;
 const MAX_SERIALIZED_OBJECTS = 100000;
+const MAX_COMPONENTS = 32;
+const MAX_SUBTREE_NODES = 256;
 const TRANSFORM_TOLERANCE = 0.002;
 const VALUE_TYPES = {
     vec2: { type: 'cc.Vec2', fields: ['x', 'y'] },
@@ -29,6 +31,73 @@ function refIndex(value, records) {
     if (!value || typeof value !== 'object' || !Number.isInteger(value.__id__)
         || value.__id__ < 0 || value.__id__ >= records.length) return null;
     return value.__id__;
+}
+
+function inspectSerializedComponents(nodeRecord, records) {
+    if (nodeRecord._components === undefined) return { verified: true, components: [] };
+    if (!Array.isArray(nodeRecord._components) || nodeRecord._components.length > MAX_COMPONENTS)
+        return fail('SCENE_COMPONENT_SERIALIZED_LIST_INVALID');
+    const seenIndexes = new Set();
+    const seenIds = new Set();
+    const components = [];
+    for (const reference of nodeRecord._components) {
+        const index = refIndex(reference, records);
+        const component = resolveRef(reference, records);
+        if (index === null || seenIndexes.has(index) || !component || typeof component._id !== 'string'
+            || !component._id || component._id.length > 128 || typeof component.__type__ !== 'string'
+            || !component.__type__ || component.__type__.length > 128 || seenIds.has(component._id)
+            || records.filter((record) => record._id === component._id).length !== 1
+            || resolveRef(component.node, records) !== nodeRecord)
+            return fail('SCENE_COMPONENT_SERIALIZED_IDENTITY_INVALID');
+        seenIndexes.add(index);
+        seenIds.add(component._id);
+        components.push({ componentInstanceId: component._id, serializedClassId: component.__type__ });
+    }
+    return { verified: true, components };
+}
+
+function inspectSerializedSubtree(nodeRecord, records) {
+    const parent = resolveRef(nodeRecord._parent, records);
+    if (!parent || !['cc.Node', 'cc.Scene'].includes(parent.__type__) || !Array.isArray(parent._children))
+        return fail('SCENE_SUBTREE_PARENT_INVALID');
+    const rootIndex = refIndex(nodeRecord._parent, records);
+    const siblingIndexes = parent._children.map((reference, index) =>
+        resolveRef(reference, records) === nodeRecord ? index : -1).filter((index) => index >= 0);
+    if (rootIndex === null || siblingIndexes.length !== 1) return fail('SCENE_SUBTREE_PARENT_INVALID');
+    const stack = [{ record: nodeRecord, parentUuid: parent._id, siblingIndex: siblingIndexes[0], depth: 0 }];
+    const visited = new Set();
+    const subtree = [];
+    while (stack.length) {
+        const item = stack.pop();
+        const current = item.record;
+        if (!current || current.__type__ !== 'cc.Node' || !UUID.test(current._id || '')
+            || typeof current._name !== 'string' || !current._name || current._name.length > 120
+            || visited.has(current) || item.depth > 64
+            || (current._children !== undefined && !Array.isArray(current._children)))
+            return fail('SCENE_SUBTREE_NODE_INVALID');
+        visited.add(current);
+        const serializedChildren = Array.isArray(current._children) ? current._children : [];
+        if (subtree.length >= MAX_SUBTREE_NODES || serializedChildren.length > MAX_SUBTREE_NODES)
+            return fail('SCENE_SUBTREE_LIMIT');
+        const children = [];
+        const childIndexes = new Set();
+        for (let index = 0; index < serializedChildren.length; index += 1) {
+            const childRef = serializedChildren[index];
+            const child = resolveRef(childRef, records);
+            const childIndex = refIndex(childRef, records);
+            if (!child || child.__type__ !== 'cc.Node' || childIndex === null || childIndexes.has(childIndex)
+                || resolveRef(child._parent, records) !== current)
+                return fail('SCENE_SUBTREE_CHILD_INVALID');
+            childIndexes.add(childIndex);
+            children.push({ record: child, parentUuid: current._id, siblingIndex: index, depth: item.depth + 1 });
+        }
+        subtree.push({ nodeUuid: current._id, nodeName: current._name, parentUuid: item.parentUuid,
+            siblingIndex: item.siblingIndex, childCount: children.length });
+        if (subtree.length + stack.length + children.length > MAX_SUBTREE_NODES)
+            return fail('SCENE_SUBTREE_LIMIT');
+        for (let index = children.length - 1; index >= 0; index -= 1) stack.push(children[index]);
+    }
+    return { verified: true, subtree };
 }
 
 function validComponentDiskValue(value, depth = 0) {
@@ -162,7 +231,8 @@ function inspectButtonEvents(nodeRecord, records) {
     return { buttonComponentCount: buttons.length, buttonEvents: events };
 }
 
-function inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow, nodeUuid, componentProperty }) {
+function inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow, nodeUuid, componentProperty,
+    includeComponents = false, includeSubtree = false, absentNodeUuids }) {
     if (!Buffer.isBuffer(sceneBytes) || sceneBytes.length < 2 || sceneBytes.length > MAX_SCENE_BYTES)
         return fail('SCENE_SERIALIZATION_SIZE_INVALID');
     if (!Buffer.isBuffer(metaBytes) || metaBytes.length < 2 || metaBytes.length > MAX_META_BYTES)
@@ -199,6 +269,15 @@ function inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow
         && resolveRef(record.scene, records) === root);
     if (sceneAssets.length !== 1) return fail('SCENE_ASSET_REFERENCE_MISMATCH');
     const found = nodes.get(nodeUuid);
+    if (absentNodeUuids !== undefined) {
+        if (!Array.isArray(absentNodeUuids) || absentNodeUuids.length < 1 || absentNodeUuids.length > MAX_SUBTREE_NODES
+            || absentNodeUuids.some((id) => typeof id !== 'string' || !UUID.test(id))
+            || new Set(absentNodeUuids).size !== absentNodeUuids.length || !absentNodeUuids.includes(nodeUuid))
+            return fail('SCENE_NODE_ABSENCE_SELECTOR_INVALID');
+        if (found || absentNodeUuids.some((id) => nodes.has(id))) return fail('SCENE_NODE_STILL_PRESENT');
+        return { verified: true, sceneUuid, sceneUrl: sceneAssetRow.url, nodeUuid,
+            nodeAbsent: true, absentNodeUuids: [...absentNodeUuids] };
+    }
     if (!found) return fail('SCENE_NODE_NOT_FOUND');
 
     const pathParts = [typeof found.record._name === 'string' ? found.record._name : ''];
@@ -231,6 +310,10 @@ function inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow
     const nodePath = [sceneName, ...pathParts.reverse()].join('/');
 
     const record = found.record;
+    const componentState = includeComponents ? inspectSerializedComponents(record, records) : null;
+    if (componentState && !componentState.verified) return componentState;
+    const subtreeState = includeSubtree ? inspectSerializedSubtree(record, records) : null;
+    if (subtreeState && !subtreeState.verified) return subtreeState;
     const propertyState = componentProperty === undefined ? null
         : inspectComponentProperty(record, records, sceneUuid, componentProperty);
     if (propertyState && !propertyState.verified) return propertyState;
@@ -249,6 +332,8 @@ function inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow
         nodeName: record._name, parentUuid, nodePath,
         active: typeof record._active === 'boolean' ? record._active : true,
         ...buttonState,
+        ...(componentState ? { components: componentState.components } : {}),
+        ...(subtreeState ? { subtree: subtreeState.subtree } : {}),
         ...(propertyState ? { componentProperty: propertyState.componentProperty } : {}),
         transform: { x: trs[0], y: trs[1], z: trs[2], angle, scaleX: trs[7], scaleY: trs[8],
             width: size.width, height: size.height, anchorX: anchor.x, anchorY: anchor.y } };

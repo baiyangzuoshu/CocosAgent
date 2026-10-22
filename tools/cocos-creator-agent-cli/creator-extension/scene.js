@@ -28,6 +28,11 @@ function classNameOf(value) {
     return typeof name === 'string' && name ? name.slice(0, MAX_NAME) : null;
 }
 
+function serializedClassIdOf(constructor) {
+    return cc && cc.js && typeof cc.js._getClassId === 'function'
+        ? cc.js._getClassId(constructor, false) : null;
+}
+
 function ownDataValue(object, key) {
     if (!object || (typeof object !== 'object' && typeof object !== 'function')) return undefined;
     const descriptor = Object.getOwnPropertyDescriptor(object, key);
@@ -353,6 +358,7 @@ function locateNode(sceneUuid, nodeUuid) {
         const className = constructor && cc.js && typeof cc.js.getClassName === 'function'
             ? cc.js.getClassName(constructor) : constructor && constructor.name;
         return { componentClassName: typeof className === 'string' ? className.slice(0, MAX_NAME) : null,
+            serializedClassId: serializedClassIdOf(constructor),
             componentInstanceId: component && component._id != null ? String(component._id).slice(0, 128) : null };
     });
     return { node: match.node, state: { available: true, sceneName: String(scene.name || '').slice(0, MAX_NAME), sceneUuid: scene.uuid,
@@ -630,7 +636,8 @@ function componentRemoveState(params) {
         && String(item._id) === params.componentInstanceId && cc.isValid(item, true));
     if (!component) return { available: true, sceneName: located.state.sceneName,
         sceneUuid: located.state.sceneUuid, nodePath: located.state.nodePath, nodeUuid: located.state.nodeUuid,
-        componentClassName: resolved.componentClassName, componentInstanceId: params.componentInstanceId,
+        componentClassName: resolved.componentClassName, serializedClassId: serializedClassIdOf(resolved.constructor),
+        componentInstanceId: params.componentInstanceId,
         present: false, dependentComponents: [] };
     const all = located.node.getComponents(cc.Component);
     if (!Array.isArray(all) || all.length > MAX_COMPONENT_INSTANCES)
@@ -641,7 +648,8 @@ function componentRemoveState(params) {
         && component instanceof candidate.constructor._requireComponent);
     return { available: true, sceneName: located.state.sceneName, sceneUuid: located.state.sceneUuid,
         nodePath: located.state.nodePath, nodeUuid: located.state.nodeUuid,
-        componentClassName: resolved.componentClassName, componentInstanceId: params.componentInstanceId,
+        componentClassName: resolved.componentClassName, serializedClassId: serializedClassIdOf(resolved.constructor),
+        componentInstanceId: params.componentInstanceId,
         present: true, dependentComponents: dependents.map((candidate) => classNameOf(candidate)) };
 }
 
@@ -685,7 +693,8 @@ function componentState(params) {
     const components = query.components;
     return { available: true, sceneName: located.state.sceneName, sceneUuid: located.state.sceneUuid,
         nodePath: located.state.nodePath, nodeUuid: located.state.nodeUuid,
-        componentClassName: resolved.componentClassName, componentCount: components.length,
+        componentClassName: resolved.componentClassName, serializedClassId: serializedClassIdOf(resolved.constructor),
+        componentCount: components.length,
         componentInstanceIds: components.map((component) => component && component._id != null ? String(component._id) : null),
         requiresComponent: resolved.requiresComponent, disallowMultiple: resolved.disallowMultiple,
         canAdd: components.length === 0 && !resolved.requiresComponent };
@@ -1049,6 +1058,7 @@ function addNodeComponent(params) {
             observedComponentCount: Array.isArray(components) ? components.length : null };
     return { available: true, sceneUuid: params.sceneUuid, nodeUuid: params.nodeUuid,
         nodePath: params.nodePath, componentClassName: resolved.componentClassName,
+        serializedClassId: serializedClassIdOf(resolved.constructor),
         beforeComponentCount: params.expectedComponentCount, componentCount: components.length,
         componentInstanceId: component._id != null ? String(component._id) : null };
 }

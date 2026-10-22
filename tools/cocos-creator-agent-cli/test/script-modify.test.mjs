@@ -121,7 +121,7 @@ function serializePropertyValue(value, records, nodeIndex, referenceClasses = []
 }
 
 function serializeExistingSceneNode({ transform, name = 'Button', active = true, parentUuid = null,
-  buttonEvents = null, componentProperty = null },
+  buttonEvents = null, componentProperty = null, components = [], nodeSubtree = [], nodeDeleted = false },
   sceneUuid, nodeUuid, oldParentUuid, targetParentUuid, withParents = false) {
   const angle = transform.angle * Math.PI / 360;
   const records = [{ __type__: 'cc.SceneAsset', scene: { __id__: 1 } },
@@ -131,17 +131,25 @@ function serializeExistingSceneNode({ transform, name = 'Button', active = true,
   if (withParents) {
     const moved = parentUuid === targetParentUuid;
     records.push({ __type__: 'cc.Node', _id: oldParentUuid, _name: 'Old', _parent: { __id__: 1 },
-      _children: moved ? [] : [{ __id__: 4 }] });
+      _children: !moved && !nodeDeleted ? [{ __id__: 4 }] : [] });
     records.push({ __type__: 'cc.Node', _id: targetParentUuid, _name: 'New', _parent: { __id__: 1 },
       _children: moved ? [{ __id__: 4 }] : [] });
     parentIndex = moved ? 3 : 2;
   }
+  if (nodeDeleted) return records;
   records.push({ __type__: 'cc.Node', _id: nodeUuid, _name: name, _parent: { __id__: parentIndex }, _children: [],
     _active: active, _components: [],
     _trs: { __type__: 'TypedArray', ctor: 'Float64Array', array: [transform.x, transform.y, transform.z,
       0, 0, Math.sin(angle), Math.cos(angle), transform.scaleX, transform.scaleY, 1] },
     _contentSize: { __type__: 'cc.Size', width: transform.width, height: transform.height },
     _anchorPoint: { __type__: 'cc.Vec2', x: transform.anchorX, y: transform.anchorY } });
+  const nodeIndex = records.length - 1;
+  for (const child of nodeSubtree) {
+    const index = records.length;
+    records[nodeIndex]._children.push({ __id__: index });
+    records.push({ __type__: 'cc.Node', _id: child.nodeUuid, _name: child.nodeName,
+      _parent: { __id__: nodeIndex }, _children: [] });
+  }
   if (Array.isArray(buttonEvents)) {
     const nodeIndex = records.length - 1;
     const buttonIndex = records.length;
@@ -161,13 +169,18 @@ function serializeExistingSceneNode({ transform, name = 'Button', active = true,
     records.push(component); records[nodeIndex]._components.push({ __id__: index });
     component[componentProperty.property] = serializePropertyValue(componentProperty.value, records, nodeIndex, componentProperty.referenceClasses);
   }
+  for (const component of components) {
+    const index = records.length;
+    records[nodeIndex]._components.push({ __id__: index });
+    records.push({ __type__: component.serializedClassId, _id: component.componentInstanceId, node: { __id__: nodeIndex } });
+  }
   return records;
 }
 
 function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults, refreshFailure = null,
   ipcMode = 'electron', assetCreateMode = 'complete', sceneCompose = false, sceneActive = false,
   sceneRename = false, sceneReparent = false,
-  sceneNodeDelete = false, sceneComponentRemove = false,
+  sceneNodeDelete = false, sceneComponentRemove = false, sceneComponentAdd = false,
   sceneTransform = false, sceneButtonEvents = false,
   sceneProperty = null,
   assetMove = false, assetDelete = false, assetDeleteHasSubAssets = false,
@@ -214,21 +227,29 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
   let sceneNodeName = 'Button';
   let sceneNodeDeleted = false;
   let sceneComponentRemoved = false;
+  let sceneComponentAdded = false;
   let buttonEvents = [];
   if (sceneProperty) sceneProperty = { serializedClassId: 'cc.Sprite', referenceClasses: [],
     property: sceneProperty.propertyKind === 'asset' ? 'spriteFrame' : 'position', ...sceneProperty };
   const sceneFile = path.join(projectRoot, 'assets', 'Scenes', 'Main.fire');
   const sceneMetaFile = `${sceneFile}.meta`;
-  if (sceneCompose || sceneTransform || sceneActive || sceneRename || sceneReparent || sceneButtonEvents || sceneProperty) {
+  if (sceneCompose || sceneTransform || sceneActive || sceneRename || sceneReparent || sceneButtonEvents || sceneProperty
+    || sceneNodeDelete || sceneComponentRemove || sceneComponentAdd) {
     fs.mkdirSync(path.dirname(sceneFile), { recursive: true });
     fs.writeFileSync(sceneFile, JSON.stringify(serializeExistingSceneNode({
       transform: { x: 1, y: 2, z: 0, scaleX: 1, scaleY: 1, angle: 0,
         width: 50, height: 20, anchorX: 0.5, anchorY: 0.5 },
       name: sceneNodeName, active: sceneNodeActive,
-      parentUuid: sceneReparent ? oldParentUuid : sceneUuid,
+      parentUuid: sceneReparent || sceneNodeDelete ? oldParentUuid : sceneUuid,
       buttonEvents: sceneButtonEvents ? buttonEvents : null,
       componentProperty: sceneProperty,
-    }, sceneUuid, nodeUuid, oldParentUuid, targetParentUuid, sceneReparent)));
+      components: sceneComponentRemove ? [{ serializedClassId: 'cc.Sprite', componentInstanceId: 'sprite-instance' }]
+        : sceneComponentAdd && sceneComponentAdded ? [{ serializedClassId: 'cc.Sprite', componentInstanceId: 'added-instance' }] : [],
+      nodeSubtree: sceneNodeDelete ? [
+        { nodeUuid: 'd65c11a9-260b-44e6-91d5-6ee2d654a8b5', nodeName: 'Icon' },
+        { nodeUuid: '952a8e13-eac6-4a0e-9eea-b4e5fe76c991', nodeName: 'Label' },
+      ] : [], nodeDeleted: sceneNodeDeleted,
+    }, sceneUuid, nodeUuid, oldParentUuid, targetParentUuid, sceneReparent || sceneNodeDelete)));
     fs.writeFileSync(sceneMetaFile, JSON.stringify({ uuid: sceneUuid, importer: 'scene' }));
     assetRecords.set('db://assets/Scenes/Main.fire', { url: 'db://assets/Scenes/Main.fire',
       uuid: sceneUuid, importer: 'scene', type: 'cc.SceneAsset' });
@@ -309,18 +330,26 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
     assert.equal(panel, 'scene');
     if (message === 'scene:stash-and-save') {
       assert.ok(sceneCompose || sceneActive || sceneRename || sceneReparent || sceneNodeDelete
-        || sceneComponentRemove || sceneTransform || sceneButtonEvents || sceneProperty);
+        || sceneComponentRemove || sceneComponentAdd || sceneTransform || sceneButtonEvents || sceneProperty);
       sceneSaveCount += 1;
       if (sceneSaveMode === 'write' && currentSceneComposition) {
         fs.writeFileSync(sceneFile, JSON.stringify(serializeSceneComposition(currentSceneComposition, sceneUuid)));
         fs.writeFileSync(sceneMetaFile, JSON.stringify({ uuid: sceneUuid, importer: 'scene' }));
-      } else if (sceneSaveMode === 'write' && (sceneActive || sceneRename || sceneReparent || sceneTransform || sceneButtonEvents || sceneProperty)) {
+      } else if (sceneSaveMode === 'write' && (sceneActive || sceneRename || sceneReparent || sceneNodeDelete
+        || sceneComponentRemove || sceneComponentAdd || sceneTransform || sceneButtonEvents || sceneProperty)) {
         fs.writeFileSync(sceneFile, JSON.stringify(serializeExistingSceneNode({ transform: currentTransform,
           name: sceneNodeName, active: sceneNodeActive,
-          parentUuid: sceneReparent ? (reparentApplied ? targetParentUuid : oldParentUuid) : sceneUuid,
+          parentUuid: sceneReparent ? (reparentApplied ? targetParentUuid : oldParentUuid)
+            : sceneNodeDelete ? oldParentUuid : sceneUuid,
           buttonEvents: sceneButtonEvents ? buttonEvents : null,
           componentProperty: sceneProperty,
-        }, sceneUuid, nodeUuid, oldParentUuid, targetParentUuid, sceneReparent)));
+          components: sceneComponentRemove ? (sceneComponentRemoved ? [] : [{ serializedClassId: 'cc.Sprite', componentInstanceId: 'sprite-instance' }])
+            : sceneComponentAdd && sceneComponentAdded ? [{ serializedClassId: 'cc.Sprite', componentInstanceId: 'added-instance' }] : [],
+          nodeSubtree: sceneNodeDelete ? [
+            { nodeUuid: 'd65c11a9-260b-44e6-91d5-6ee2d654a8b5', nodeName: 'Icon' },
+            { nodeUuid: '952a8e13-eac6-4a0e-9eea-b4e5fe76c991', nodeName: 'Label' },
+          ] : [], nodeDeleted: sceneNodeDeleted,
+        }, sceneUuid, nodeUuid, oldParentUuid, targetParentUuid, sceneReparent || sceneNodeDelete)));
         fs.writeFileSync(sceneMetaFile, JSON.stringify({ uuid: sceneUuid, importer: 'scene' }));
       }
       return;
@@ -468,10 +497,10 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
         assert.equal(params.nodeUuid, nodeUuid);
         callback(null, sceneNodeDeleted ? { available: false, reason: 'SCENE_NODE_NOT_FOUND' }
           : { available: true, sceneName: 'Scene', sceneUuid, nodeName: 'Button', nodeUuid,
-            nodePath: 'Scene/Button', parentUuid: oldParentUuid, childCount: 2,
+            nodePath: 'Scene/Old/Button', parentUuid: oldParentUuid, childCount: 2,
             subtree: [{ nodeUuid, nodeName: 'Button', parentUuid: oldParentUuid, siblingIndex: 0, childCount: 2 },
-              { nodeUuid: 'child-node-one', nodeName: 'Icon', parentUuid: nodeUuid, siblingIndex: 0, childCount: 0 },
-              { nodeUuid: 'child-node-two', nodeName: 'Label', parentUuid: nodeUuid, siblingIndex: 1, childCount: 0 }] });
+              { nodeUuid: 'd65c11a9-260b-44e6-91d5-6ee2d654a8b5', nodeName: 'Icon', parentUuid: nodeUuid, siblingIndex: 0, childCount: 0 },
+              { nodeUuid: '952a8e13-eac6-4a0e-9eea-b4e5fe76c991', nodeName: 'Label', parentUuid: nodeUuid, siblingIndex: 1, childCount: 0 }] });
         return;
       }
       if (method === 'deleteNode' && sceneNodeDelete) {
@@ -484,7 +513,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
         assert.equal(params.nodeUuid, nodeUuid);
         callback(null, { available: true, sceneName: 'Scene', sceneUuid, nodeUuid, nodePath: 'Scene/Button',
           componentClassName: params.componentClassName, componentInstanceId: params.componentInstanceId,
-          present: !sceneComponentRemoved, dependentComponents: [] });
+          serializedClassId: 'cc.Sprite', present: !sceneComponentRemoved, dependentComponents: [] });
         return;
       }
       if (method === 'removeNodeComponent' && sceneComponentRemove) {
@@ -492,6 +521,30 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
         callback(null, { available: true, sceneUuid, nodeUuid, nodePath: 'Scene/Button',
           componentClassName: params.componentClassName, componentInstanceId: params.componentInstanceId,
           beforePresent: true, present: false });
+        return;
+      }
+      if (method === 'nodeState' && (sceneComponentRemove || sceneComponentAdd)) {
+        callback(null, { available: true, sceneName: 'Scene', sceneUuid, nodeName: 'Button', nodeUuid,
+          nodePath: 'Scene/Button', active: true, children: 0, componentsAvailable: true,
+          componentCount: sceneComponentRemove && !sceneComponentRemoved ? 1 : 0,
+          components: sceneComponentRemove && !sceneComponentRemoved
+            ? [{ componentClassName: 'cc.Sprite', serializedClassId: 'cc.Sprite', componentInstanceId: 'sprite-instance' }] : [],
+          componentsTruncated: false });
+        return;
+      }
+      if (method === 'componentState' && sceneComponentAdd) {
+        callback(null, { available: true, sceneName: 'Scene', sceneUuid, nodeUuid, nodePath: 'Scene/Button',
+          componentClassName: params.componentClassName, serializedClassId: 'cc.Sprite',
+          componentCount: sceneComponentAdded ? 1 : 0,
+          componentInstanceIds: sceneComponentAdded ? ['added-instance'] : [],
+          requiresComponent: false, canAdd: !sceneComponentAdded });
+        return;
+      }
+      if (method === 'addNodeComponent' && sceneComponentAdd) {
+        sceneComponentAdded = true;
+        callback(null, { available: true, sceneUuid, nodeUuid, nodePath: 'Scene/Button',
+          componentClassName: params.componentClassName, serializedClassId: 'cc.Sprite',
+          beforeComponentCount: 0, componentCount: 1, componentInstanceId: 'added-instance' });
         return;
       }
       assert.ok(sceneCompose, `unexpected scene method: ${method}`);
@@ -600,8 +653,9 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
     createSceneButtonEventsPlan, commitSceneButtonEvents, reconcileSceneButtonEvents,
     createSceneNodeRenamePlan, commitSceneNodeRename, reconcileSceneNodeRename,
     createSceneNodeReparentPlan, commitSceneNodeReparent, reconcileSceneNodeReparent,
-    createSceneNodeDeletePlan, createSceneComponentRemovePlan, createSceneComponentPropertyPlan,
+    createSceneNodeDeletePlan, createSceneComponentRemovePlan, createSceneComponentAddPlan, createSceneComponentPropertyPlan,
     commitSceneComponentProperty, reconcileSceneComponentProperty,
+    commitSceneComponentAdd, reconcileSceneComponentAdd,
     commitSceneNodeDelete(input, context) { return commitSceneDestructiveOperation(readSceneNodeDeleteOperation(input.operationId), input, context); },
     reconcileSceneNodeDelete(input) { return reconcileSceneDestructiveOperation(readSceneNodeDeleteOperation(input.operationId)); },
     commitSceneComponentRemove(input, context) { return commitSceneDestructiveOperation(readSceneComponentRemoveOperation(input.operationId), input, context); },
@@ -1337,6 +1391,9 @@ test('scene subtree deletion and component removal require approval, save once, 
   assert.equal(deleted.action, 'delete-node-subtree');
   assert.equal(deleted.sceneSaveRequestSent, true);
   assert.equal(deleted.sceneSaveCompletionConfirmed, false);
+  assert.equal(deleted.scenePersistenceConfirmed, true);
+  assert.equal(deleted.diskReadback.nodeAbsent, true);
+  assert.deepEqual(deleted.diskReadback.absentNodeUuids, nodePlan.expectedBefore.subtree.map((node) => node.nodeUuid));
   assert.equal(deletion.isSceneNodeDeleted(), true);
   const deleteReconcile = await deletion.api.reconcileSceneNodeDelete({ operationId: nodePlan.operationId });
   assert.equal(deleteReconcile.status, 'completed');
@@ -1351,10 +1408,92 @@ test('scene subtree deletion and component removal require approval, save once, 
   assert.equal(removed.action, 'remove-component');
   assert.equal(removed.componentInstanceId, 'sprite-instance');
   assert.equal(removed.sceneSaveCompletionConfirmed, false);
+  assert.equal(removed.scenePersistenceConfirmed, true);
+  assert.deepEqual(removed.diskReadback.components, []);
   assert.equal(removal.isSceneComponentRemoved(), true);
   const removeReconcile = await removal.api.reconcileSceneComponentRemove({ operationId: componentPlan.operationId });
   assert.equal(removeReconcile.status, 'completed');
   assert.equal(removal.getSceneSaveCount(), 1);
+});
+
+test('component addition completes only after the exact serialized component identity is saved', async (t) => {
+  const harness = makeHarness(t, { sceneComponentAdd: true, ipcMode: 'editor' });
+  const plan = await harness.api.createSceneComponentAddPlan({ sceneUuid: harness.sceneUuid,
+    nodeUuid: harness.nodeUuid, componentClassName: 'cc.Sprite' });
+  assert.equal(plan.expectedBefore.componentCount, 0);
+  assert.equal(plan.serializedClassId, 'cc.Sprite');
+  const receipt = await harness.api.commitSceneComponentAdd({ operationId: plan.operationId, planHash: plan.planHash },
+    { requestId: 'add-request' });
+  assert.equal(receipt.status, 'completed');
+  assert.equal(receipt.componentInstanceId, 'added-instance');
+  assert.equal(receipt.scenePersistenceConfirmed, true);
+  assert.deepEqual(receipt.diskReadback.components, [
+    { componentInstanceId: 'added-instance', serializedClassId: 'cc.Sprite' },
+  ]);
+  const reconciled = await harness.api.reconcileSceneComponentAdd({ operationId: plan.operationId });
+  assert.equal(reconciled.status, 'completed');
+  assert.equal(reconciled.observed.disk.matchesAfter, true);
+  assert.equal(harness.getSceneSaveCount(), 1);
+});
+
+test('component add, removal, and subtree deletion reconcile manual saves without replaying mutations', async (t) => {
+  const addition = makeHarness(t, { sceneComponentAdd: true, sceneSaveMode: 'ignore', ipcMode: 'editor' });
+  const addPlan = await addition.api.createSceneComponentAddPlan({ sceneUuid: addition.sceneUuid,
+    nodeUuid: addition.nodeUuid, componentClassName: 'cc.Sprite' });
+  await assert.rejects(addition.api.commitSceneComponentAdd({ operationId: addPlan.operationId, planHash: addPlan.planHash },
+    { requestId: 'add-request' }), { code: 'SCENE_DISK_READBACK_UNCONFIRMED' });
+  const addPending = await addition.api.reconcileSceneComponentAdd({ operationId: addPlan.operationId });
+  assert.equal(addPending.status, 'save-required');
+  assert.equal(addPending.observed.disk.matchesBefore, true);
+  const addRows = JSON.parse(fs.readFileSync(addition.sceneFile, 'utf8'));
+  const addNodeIndex = addRows.findIndex((record) => record._id === addition.nodeUuid);
+  addRows[addNodeIndex]._components.push({ __id__: addRows.length });
+  addRows.push({ __type__: 'cc.Sprite', _id: 'added-instance', node: { __id__: addNodeIndex } });
+  fs.writeFileSync(addition.sceneFile, JSON.stringify(addRows));
+  const addSaved = await addition.api.reconcileSceneComponentAdd({ operationId: addPlan.operationId });
+  assert.equal(addSaved.status, 'completed');
+  assert.equal(addSaved.scenePersistenceConfirmed, true);
+  assert.equal(addition.getSceneSaveCount(), 1);
+
+  const removal = makeHarness(t, { sceneComponentRemove: true, sceneSaveMode: 'ignore', ipcMode: 'editor' });
+  const removePlan = await removal.api.createSceneComponentRemovePlan({ sceneUuid: removal.sceneUuid,
+    nodeUuid: removal.nodeUuid, componentClassName: 'cc.Sprite', componentInstanceId: 'sprite-instance' });
+  await assert.rejects(removal.api.commitSceneComponentRemove({ operationId: removePlan.operationId,
+    planHash: removePlan.planHash }, { requestId: 'remove-request' }), { code: 'SCENE_DISK_READBACK_UNCONFIRMED' });
+  const removePending = await removal.api.reconcileSceneComponentRemove({ operationId: removePlan.operationId });
+  assert.equal(removePending.status, 'save-required');
+  assert.equal(removePending.observed.disk.matchesBefore, true);
+  const removeRows = JSON.parse(fs.readFileSync(removal.sceneFile, 'utf8'));
+  const removeNodeIndex = removeRows.findIndex((record) => record._id === removal.nodeUuid);
+  const componentIndex = removeRows.findIndex((record) => record._id === 'sprite-instance');
+  removeRows[removeNodeIndex]._components = removeRows[removeNodeIndex]._components
+    .filter((reference) => reference.__id__ !== componentIndex);
+  removeRows.splice(componentIndex, 1);
+  fs.writeFileSync(removal.sceneFile, JSON.stringify(removeRows));
+  const removeSaved = await removal.api.reconcileSceneComponentRemove({ operationId: removePlan.operationId });
+  assert.equal(removeSaved.status, 'completed');
+  assert.equal(removeSaved.scenePersistenceConfirmed, true);
+  assert.deepEqual(removeSaved.diskReadback.components, []);
+  assert.equal(removal.getSceneSaveCount(), 1);
+
+  const deletion = makeHarness(t, { sceneNodeDelete: true, sceneSaveMode: 'ignore', ipcMode: 'editor' });
+  const deletePlan = await deletion.api.createSceneNodeDeletePlan({ sceneUuid: deletion.sceneUuid, nodeUuid: deletion.nodeUuid });
+  await assert.rejects(deletion.api.commitSceneNodeDelete({ operationId: deletePlan.operationId,
+    planHash: deletePlan.planHash }, { requestId: 'delete-request' }), { code: 'SCENE_DISK_READBACK_UNCONFIRMED' });
+  const deletePending = await deletion.api.reconcileSceneNodeDelete({ operationId: deletePlan.operationId });
+  assert.equal(deletePending.status, 'save-required');
+  assert.equal(deletePending.observed.disk.matchesBefore, true);
+  const deleteRows = JSON.parse(fs.readFileSync(deletion.sceneFile, 'utf8'));
+  const deletedIds = new Set(deletePlan.expectedBefore.subtree.map((node) => node.nodeUuid));
+  const remaining = deleteRows.filter((record) => !deletedIds.has(record._id));
+  const parent = remaining.find((record) => record._id === deletion.oldParentUuid);
+  parent._children = [];
+  fs.writeFileSync(deletion.sceneFile, JSON.stringify(remaining));
+  const deleteSaved = await deletion.api.reconcileSceneNodeDelete({ operationId: deletePlan.operationId });
+  assert.equal(deleteSaved.status, 'completed');
+  assert.equal(deleteSaved.scenePersistenceConfirmed, true);
+  assert.deepEqual(deleteSaved.diskReadback.absentNodeUuids, [...deletedIds]);
+  assert.equal(deletion.getSceneSaveCount(), 1);
 });
 
 test('component-property plans preserve typed before/after values and reject kind or resource-class changes', async (t) => {

@@ -42,6 +42,7 @@ function fixture() {
         Math.sin(Math.PI / 12), Math.cos(Math.PI / 12), 1.5, 0.75, 1] },
       _contentSize: { __type__: 'cc.Size', width: 180, height: 64 },
       _anchorPoint: { __type__: 'cc.Vec2', x: 0.5, y: 0.5 },
+      _children: [],
       _components: [{ __id__: 3 }, { __id__: 4 }] },
     { __type__: 'cc.Button', clickEvents: [{ __id__: 5 }] },
     { __type__: handlerClassId, count: 0, spriteFrame: { __uuid__: spriteUuid } },
@@ -145,6 +146,45 @@ test('saved component properties reject wrong identity, missing fields, unresolv
     source.sceneBytes = Buffer.from(JSON.stringify(records));
     assert.equal(inspectSavedSceneNode({ ...source, sceneUuid, sceneAssetRow, nodeUuid }).reason, reason);
   }
+});
+
+test('saved component identity sets and deletion subtrees are read back by persistent IDs', () => {
+  const source = propertyFixture(1);
+  const components = inspectSavedSceneNode({ ...source, sceneUuid, sceneAssetRow, nodeUuid, includeComponents: true });
+  assert.equal(components.verified, true);
+  assert.deepEqual(components.components, [
+    { componentInstanceId: 'button-instance', serializedClassId: 'cc.Button' },
+    { componentInstanceId: 'handler-instance', serializedClassId: handlerClassId },
+  ]);
+
+  const subtreeUuid = '21b763df-9648-4f56-b1a7-d08bd1f629b2';
+  const childUuid = '585df788-f08e-43c1-bfad-55798ed7c64f';
+  const rows = [
+    { __type__: 'cc.SceneAsset', scene: { __id__: 1 } },
+    { __type__: 'cc.Scene', _id: sceneUuid, _name: 'Scene', _children: [{ __id__: 2 }] },
+    { __type__: 'cc.Node', _id: subtreeUuid, _name: 'Root', _parent: { __id__: 1 }, _children: [{ __id__: 3 }],
+      _trs: { __type__: 'TypedArray', ctor: 'Float64Array', array: [0, 0, 0, 0, 0, 0, 1, 1, 1, 1] },
+      _contentSize: { __type__: 'cc.Size', width: 1, height: 1 }, _anchorPoint: { __type__: 'cc.Vec2', x: 0.5, y: 0.5 } },
+    { __type__: 'cc.Node', _id: childUuid, _name: 'Child', _parent: { __id__: 2 }, _children: [],
+      _trs: { __type__: 'TypedArray', ctor: 'Float64Array', array: [0, 0, 0, 0, 0, 0, 1, 1, 1, 1] },
+      _contentSize: { __type__: 'cc.Size', width: 1, height: 1 }, _anchorPoint: { __type__: 'cc.Vec2', x: 0.5, y: 0.5 } },
+  ];
+  const subtree = inspectSavedSceneNode({ ...source, sceneBytes: Buffer.from(JSON.stringify(rows)),
+    sceneUuid, sceneAssetRow, nodeUuid: subtreeUuid, componentProperty: undefined, includeSubtree: true });
+  assert.equal(subtree.verified, true, subtree.reason);
+  assert.deepEqual(subtree.subtree, [
+    { nodeUuid: subtreeUuid, nodeName: 'Root', parentUuid: sceneUuid, siblingIndex: 0, childCount: 1 },
+    { nodeUuid: childUuid, nodeName: 'Child', parentUuid: subtreeUuid, siblingIndex: 0, childCount: 0 },
+  ]);
+  const deleted = [{ __type__: 'cc.SceneAsset', scene: { __id__: 1 } },
+    { __type__: 'cc.Scene', _id: sceneUuid, _name: 'Scene', _children: [] }];
+  const absence = inspectSavedSceneNode({ ...source, sceneBytes: Buffer.from(JSON.stringify(deleted)), sceneUuid,
+    sceneAssetRow, nodeUuid: subtreeUuid, componentProperty: undefined, absentNodeUuids: [subtreeUuid, childUuid] });
+  assert.equal(absence.verified, true);
+  assert.deepEqual(absence.absentNodeUuids, [subtreeUuid, childUuid]);
+  assert.equal(inspectSavedSceneNode({ ...source, sceneBytes: Buffer.from(JSON.stringify(rows)), sceneUuid,
+    sceneAssetRow, nodeUuid: subtreeUuid, componentProperty: undefined, absentNodeUuids: [subtreeUuid, childUuid] }).reason,
+  'SCENE_NODE_STILL_PRESENT');
 });
 
 test('planned property values normalize resource types and persistent component references without losing array order', () => {

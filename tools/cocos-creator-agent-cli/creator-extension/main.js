@@ -720,6 +720,9 @@ function readSceneNodeDeleteOperation(operationId) {
         || typeof before.nodeName !== 'string' || typeof before.nodePath !== 'string'
         || typeof before.parentUuid !== 'string' || !Number.isInteger(before.childCount) || before.childCount < 0
         || !Array.isArray(before.subtree) || before.subtree.length < 1 || before.subtree.length > 256
+        || (plan.diskBefore !== undefined && (!validSceneNodeDiskBaseline(plan.diskBefore)
+            || !Array.isArray(plan.diskBefore.subtree)
+            || JSON.stringify(plan.diskBefore.subtree) !== JSON.stringify(before.subtree)))
         || typeof plan.expiresAt !== 'string'
         || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
             'save-requested', 'completed', 'not-applied', 'save-required', 'needs-reconciliation', 'conflict'].includes(operation.status))
@@ -746,6 +749,11 @@ function readSceneComponentRemoveOperation(operationId) {
         || typeof plan.nodePath !== 'string' || typeof plan.componentClassName !== 'string'
         || typeof plan.componentInstanceId !== 'string' || !plan.expectedBefore || plan.expectedBefore.present !== true
         || !Array.isArray(plan.expectedBefore.dependentComponents) || plan.expectedBefore.dependentComponents.length !== 0
+        || (plan.diskBefore !== undefined && (!validSceneNodeDiskBaseline(plan.diskBefore)
+            || !Array.isArray(plan.diskBefore.components)
+            || typeof plan.serializedClassId !== 'string' || !plan.serializedClassId
+            || !plan.diskBefore.components.some((component) => component.componentInstanceId === plan.componentInstanceId
+                && component.serializedClassId === plan.serializedClassId)))
         || typeof plan.expiresAt !== 'string'
         || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
             'save-requested', 'completed', 'not-applied', 'save-required', 'needs-reconciliation', 'conflict'].includes(operation.status))
@@ -837,6 +845,10 @@ function readSceneComponentOperation(operationId) {
         || typeof plan.componentClassName !== 'string' || !plan.expectedBefore || !plan.expectedAfter
         || !Number.isInteger(plan.expectedBefore.componentCount) || plan.expectedBefore.componentCount !== 0
         || !Number.isInteger(plan.expectedAfter.componentCount) || plan.expectedAfter.componentCount !== 1
+        || (plan.diskBefore !== undefined && (!validSceneNodeDiskBaseline(plan.diskBefore)
+            || !Array.isArray(plan.diskBefore.components)
+            || typeof plan.serializedClassId !== 'string' || !plan.serializedClassId
+            || plan.diskBefore.components.some((component) => component.serializedClassId === plan.serializedClassId)))
         || typeof plan.expiresAt !== 'string'
         || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
             'save-requested', 'completed', 'not-applied', 'save-required', 'needs-reconciliation', 'conflict'].includes(operation.status))
@@ -3272,6 +3284,11 @@ async function createSceneNodeDeletePlan(input) {
         || !Array.isArray(current.subtree) || current.subtree.length < 1 || current.subtree.length > 256)
         throw coded('SCENE_NODE_DELETE_STATE_INVALID');
     if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
+    const diskBefore = await sceneNodeDiskState(input.sceneUuid, input.nodeUuid, { includeSubtree: true });
+    if (diskBefore.nodePath !== current.nodePath || diskBefore.nodeName !== current.nodeName
+        || diskBefore.parentUuid !== current.parentUuid
+        || JSON.stringify(diskBefore.subtree) !== JSON.stringify(current.subtree))
+        throw coded('SCENE_DISK_STATE_DIFFERS_FROM_EDITOR');
     const operationId = uuid();
     const plan = { operationId, operation: 'creator.scene.node.delete', projectRoot: currentRoot,
         creatorVersion: currentVersion, extensionVersion: extensionPackage.version,
@@ -3279,6 +3296,7 @@ async function createSceneNodeDeletePlan(input) {
         sceneUuid: current.sceneUuid, sceneName: current.sceneName, nodeUuid: current.nodeUuid,
         expectedBefore: { nodeName: current.nodeName, nodePath: current.nodePath,
             parentUuid: current.parentUuid, childCount: current.childCount, subtree: current.subtree },
+        diskBefore: sceneNodeDiskBaseline(diskBefore),
         expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString() };
     const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
         planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
@@ -3291,7 +3309,7 @@ async function createSceneNodeDeletePlan(input) {
             path: plan.expectedBefore.nodePath, directChildren: plan.expectedBefore.childCount,
             subtreeNodeCount: plan.expectedBefore.subtree.length },
         recovery: { operationId, automaticRetry: false, reconcileCommand: 'creator.scene.node.delete.reconcile',
-            note: 'Node destruction is deferred by Creator. Reconciliation observes the hierarchy and never repeats deletion; the save receipt does not confirm disk persistence.' } };
+            note: 'Node destruction is deferred by Creator. Completion requires every subtree UUID to be absent from the exact saved .fire; reconciliation observes editor and disk state and never repeats deletion.' } };
 }
 
 async function createSceneComponentRemovePlan(input) {
@@ -3308,17 +3326,25 @@ async function createSceneComponentRemovePlan(input) {
     if (current.sceneUuid !== input.sceneUuid || current.nodeUuid !== input.nodeUuid
         || current.nodePath !== node.nodePath || current.componentClassName !== input.componentClassName
         || current.componentInstanceId !== input.componentInstanceId || current.present !== true
-        || !Array.isArray(current.dependentComponents)) throw coded('SCENE_COMPONENT_REMOVE_STATE_INVALID');
+        || !Array.isArray(current.dependentComponents) || typeof current.serializedClassId !== 'string'
+        || !current.serializedClassId || current.serializedClassId.length > 128)
+        throw coded('SCENE_COMPONENT_REMOVE_STATE_INVALID');
     if (current.dependentComponents.length) throw coded('SCENE_COMPONENT_REQUIRED_BY_OTHER_COMPONENT');
     if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
+    const diskBefore = await sceneNodeDiskState(input.sceneUuid, input.nodeUuid, { includeComponents: true });
+    if (diskBefore.nodePath !== current.nodePath
+        || !diskBefore.components.some((component) => component.componentInstanceId === current.componentInstanceId
+            && component.serializedClassId === current.serializedClassId))
+        throw coded('SCENE_DISK_STATE_DIFFERS_FROM_EDITOR');
     const operationId = uuid();
     const plan = { operationId, operation: 'creator.scene.node.remove-component', projectRoot: currentRoot,
         creatorVersion: currentVersion, extensionVersion: extensionPackage.version,
         contractFingerprint: CONTRACT_FINGERPRINT, creatorInstanceId: INSTANCE_ID,
         sceneUuid: current.sceneUuid, sceneName: current.sceneName, nodeUuid: current.nodeUuid,
         nodePath: current.nodePath, componentClassName: current.componentClassName,
-        componentInstanceId: current.componentInstanceId,
+        componentInstanceId: current.componentInstanceId, serializedClassId: current.serializedClassId,
         expectedBefore: { present: true, dependentComponents: [] },
+        diskBefore: sceneNodeDiskBaseline(diskBefore),
         expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString() };
     const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
         planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
@@ -3410,7 +3436,13 @@ async function createSceneComponentAddPlan(input) {
         throw coded('SCENE_COMPONENT_STATE_INVALID');
     if (current.componentCount !== 0) throw coded('SCENE_COMPONENT_ALREADY_PRESENT');
     if (current.requiresComponent || current.canAdd !== true) throw coded('SCENE_COMPONENT_HAS_UNAPPROVED_REQUIREMENT');
+    if (typeof current.serializedClassId !== 'string' || !current.serializedClassId || current.serializedClassId.length > 128)
+        throw coded('SCENE_COMPONENT_SERIALIZED_CLASS_ID_UNAVAILABLE');
     if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
+    const diskBefore = await sceneNodeDiskState(input.sceneUuid, input.nodeUuid, { includeComponents: true });
+    if (diskBefore.nodePath !== node.nodePath || diskBefore.components.some((component) =>
+        component.serializedClassId === current.serializedClassId))
+        throw coded('SCENE_DISK_STATE_DIFFERS_FROM_EDITOR');
     const operationId = uuid();
     const plan = {
         operationId,
@@ -3424,8 +3456,10 @@ async function createSceneComponentAddPlan(input) {
         nodeUuid: current.nodeUuid,
         nodePath: current.nodePath,
         componentClassName: current.componentClassName,
+        serializedClassId: current.serializedClassId,
         expectedBefore: { componentCount: current.componentCount },
         expectedAfter: { componentCount: current.componentCount + 1 },
+        diskBefore: sceneNodeDiskBaseline(diskBefore),
         expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString(),
     };
     const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
@@ -3434,13 +3468,14 @@ async function createSceneComponentAddPlan(input) {
     return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
         projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, sceneName: plan.sceneName,
         sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
-        componentClassName: plan.componentClassName, expectedBefore: plan.expectedBefore,
+        componentClassName: plan.componentClassName, serializedClassId: plan.serializedClassId,
+        expectedBefore: plan.expectedBefore,
         expectedAfter: plan.expectedAfter, expiresAt: plan.expiresAt,
         diff: { action: 'add-component', scene: plan.sceneName, node: plan.nodePath,
             componentClassName: plan.componentClassName, before: 'absent', after: 'one component instance' },
         recovery: { operationId, automaticRetry: false,
             reconcileCommand: 'creator.scene.node.add-component.reconcile',
-            sceneSaveAcknowledgement: 'Creator 2.4 scene:stash-and-save has no documented completion acknowledgement; reconcile requires a same-session component instance identity.' } };
+            sceneSaveAcknowledgement: 'Creator 2.4 scene:stash-and-save has no documented completion acknowledgement. Completion requires the added component ID and serialized class to match on disk.' } };
 }
 
 async function composeAssetIdentities(request) {
@@ -3564,8 +3599,8 @@ async function createSceneComponentPropertyPlan(input) {
     const serializedBefore = componentValueForDisk(state.value, referenceClasses);
     const serializedAfter = componentValueForDisk(input.value, referenceClasses);
     if (!serializedBefore.verified || !serializedAfter.verified) throw coded('SCENE_COMPONENT_SERIALIZED_VALUE_UNAVAILABLE');
-    const diskBefore = await sceneNodeDiskState(input.sceneUuid, input.nodeUuid, {
-        serializedClassId: state.serializedClassId, componentInstanceId: state.componentInstanceId, property: state.property });
+    const diskBefore = await sceneNodeDiskState(input.sceneUuid, input.nodeUuid, { componentProperty: {
+        serializedClassId: state.serializedClassId, componentInstanceId: state.componentInstanceId, property: state.property } });
     if (diskBefore.nodePath !== state.nodePath
         || !sceneComponentValuesEqual(diskBefore.componentProperty.value, serializedBefore.value))
         throw coded('SCENE_DISK_STATE_DIFFERS_FROM_EDITOR');
@@ -4469,6 +4504,7 @@ async function readPlannedSceneComponentRemove(plan) {
     if (!state || state.available !== true) throw coded(state && state.reason || 'SCENE_COMPONENT_REMOVE_STATE_UNAVAILABLE');
     if (state.sceneUuid !== plan.sceneUuid || state.nodeUuid !== plan.nodeUuid || state.nodePath !== plan.nodePath
         || state.componentClassName !== plan.componentClassName || state.componentInstanceId !== plan.componentInstanceId
+        || state.serializedClassId !== plan.serializedClassId
         || typeof state.present !== 'boolean' || !Array.isArray(state.dependentComponents))
         throw coded('OPERATION_TARGET_MISMATCH');
     return state;
@@ -4495,6 +4531,8 @@ function sceneDestructiveReceipt(operation, observed) {
         componentClassName: plan.componentClassName || null, componentInstanceId: plan.componentInstanceId || null,
         before: plan.expectedBefore, after: observed && observed.present === false ? { present: false } : null,
         sceneSaveRequestSent: !!operation.sceneSaveRequestSent, sceneSaveCompletionConfirmed: false,
+        scenePersistenceConfirmed: operation.status === 'completed' && !!(operation.diskReadback && operation.diskReadback.verified),
+        diskReadback: operation.diskReadback || null,
         plannedByInstanceId: operation.plannedByInstanceId, appliedByInstanceId: operation.appliedByInstanceId || null,
         completedByInstanceId: operation.completedByInstanceId || null,
         approvedAt: operation.approvedAt || null, completedAt: operation.completedAt || null,
@@ -4503,7 +4541,7 @@ function sceneDestructiveReceipt(operation, observed) {
             reconcileCommand: operation.operation === 'creator.scene.node.delete'
                 ? 'creator.scene.node.delete.reconcile' : 'creator.scene.node.remove-component.reconcile',
             manualSaveMayBeRequired: operation.status === 'save-required',
-            note: 'Creator 2.4 destroys objects asynchronously and has no documented scene-save completion acknowledgement. This receipt separates in-memory readback from the save request.' } };
+            note: 'Creator 2.4 destroys objects asynchronously and has no documented scene-save completion acknowledgement. Persistence requires the exact saved component set or absence of every deleted subtree UUID.' } };
 }
 
 function confirmSceneDestructiveOperation(operation) {
@@ -4511,8 +4549,8 @@ function confirmSceneDestructiveOperation(operation) {
     const plan = operation.plan;
     const isNode = operation.operation === 'creator.scene.node.delete';
     const description = isNode
-        ? `This removes the exact node and its full descendant subtree (${plan.expectedBefore.subtree.length} total node(s), including ${plan.expectedBefore.childCount} direct child node(s)) from the authoring hierarchy, then requests a scene save. Component destruction and lifecycle callbacks may run. The receipt confirms same-session hierarchy readback, not disk persistence.`
-        : 'This destroys the exact component instance and requests a scene save. onDestroy and other project code may run. Components that require this instance are rejected. The receipt confirms same-session readback, not disk persistence.';
+        ? `This removes the exact node and its full descendant subtree (${plan.expectedBefore.subtree.length} total node(s), including ${plan.expectedBefore.childCount} direct child node(s)) from the authoring hierarchy, then requests a scene save. Component destruction and lifecycle callbacks may run. Completion requires every planned subtree UUID to be absent from the saved .fire file; the save IPC itself has no completion acknowledgement.`
+        : 'This destroys the exact component instance and requests a scene save. onDestroy and other project code may run. Components that require this instance are rejected. Completion requires the exact saved component identity set to omit this instance; the save IPC itself has no completion acknowledgement.';
     const detail = [
         `Project: ${plan.projectRoot}`,
         `Creator: ${plan.creatorVersion}`,
@@ -4535,6 +4573,7 @@ async function commitSceneDestructiveOperation(operation, input, context) {
     if (operation.status !== 'planned') throw coded(['applying', 'awaiting-approval', 'mutation-applied', 'save-requested',
         'needs-reconciliation', 'save-required'].includes(operation.status) ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
     if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    if (!operation.plan.diskBefore) throw coded('SCENE_DISK_BASELINE_MISSING');
     const isNode = operation.operation === 'creator.scene.node.delete';
     const read = () => isNode ? readPlannedSceneNodeDelete(operation.plan) : readPlannedSceneComponentRemove(operation.plan);
     let before = await read();
@@ -4558,6 +4597,7 @@ async function commitSceneDestructiveOperation(operation, input, context) {
     try {
         before = await read();
         if (!sceneDestructiveStateMatchesBefore(operation, before)) throw coded('OPERATION_PRECONDITION_FAILED');
+        await verifySceneNodeDiskBefore(operation.plan);
     } catch (error) {
         operation.status = 'conflict'; operation.conflictAt = new Date().toISOString(); writeOperation(operation); throw error;
     }
@@ -4590,6 +4630,8 @@ async function commitSceneDestructiveOperation(operation, input, context) {
     operation.sceneSaveRequestedAt = new Date().toISOString(); writeOperation(operation);
     const observed = await read();
     if (observed.present !== false) throw coded('OPERATION_READBACK_STATE_MISMATCH');
+    if (isNode) await confirmSceneNodeDeletionDiskPersistence(operation);
+    else await confirmSceneNodeDiskPersistence(operation);
     operation.status = 'completed'; operation.completedAt = new Date().toISOString();
     operation.completedByInstanceId = INSTANCE_ID; writeOperation(operation);
     return sceneDestructiveReceipt(operation, observed);
@@ -4606,16 +4648,24 @@ async function reconcileSceneDestructiveOperation(operation) {
         operation.reconcileReason = error.code || 'SCENE_DESTRUCTIVE_STATE_UNAVAILABLE'; writeOperation(operation);
         return { ...sceneDestructiveReceipt(operation, null), observed: null, reason: operation.reconcileReason };
     }
-    if (sceneDestructiveStateMatchesBefore(operation, observed)) {
-        if (['planned', 'awaiting-approval', 'applying', 'abandoned', 'needs-reconciliation'].includes(operation.status)) operation.status = 'not-applied';
-        else if (['mutation-applied', 'save-requested', 'completed', 'save-required'].includes(operation.status)) operation.status = 'conflict';
-    } else if (observed.present === false) {
-        if (['save-requested', 'completed'].includes(operation.status)) operation.status = 'completed';
-        else if (['applying', 'mutation-applied', 'save-required', 'needs-reconciliation'].includes(operation.status)) operation.status = 'save-required';
-        else operation.status = 'conflict';
-    } else operation.status = 'conflict';
+    let diskState = null;
+    try {
+        if (!operation.plan.diskBefore) throw coded('SCENE_DISK_BASELINE_MISSING');
+        const liveBefore = sceneDestructiveStateMatchesBefore(operation, observed);
+        const liveAfter = observed.present === false;
+        diskState = isNode
+            ? await reconcileSceneNodeDeletionDiskOperation(operation, liveBefore, liveAfter)
+            : await reconcileSceneNodeDiskOperation(operation, liveBefore, liveAfter);
+    } catch (error) {
+        operation.status = 'conflict'; operation.reconcileReason = error.code || 'SCENE_DISK_READBACK_FAILED';
+    }
     operation.reconciledAt = new Date().toISOString(); writeOperation(operation);
-    return { ...sceneDestructiveReceipt(operation, observed), observed,
+    return { ...sceneDestructiveReceipt(operation, observed), observed: { ...observed,
+        ...(diskState ? { disk: { sourceSha256: diskState.disk.sourceSha256, metaSha256: diskState.disk.metaSha256,
+            nodeAbsent: diskState.disk.nodeAbsent === true,
+            ...(Array.isArray(diskState.disk.absentNodeUuids) ? { absentNodeUuids: diskState.disk.absentNodeUuids } : {}),
+            ...(Array.isArray(diskState.disk.components) ? { components: diskState.disk.components } : {}),
+            matchesBefore: diskState.before, matchesAfter: diskState.after } } : {}) },
         retry: 'Never replay this operation. If the original object remains, create a fresh plan after inspection; if save-required, save in Creator and inspect the scene.' };
 }
 
@@ -4640,7 +4690,7 @@ function confirmSceneComponentAdd(operation) {
         `Existing instances: ${plan.expectedBefore.componentCount}`,
         `Operation: ${operation.operationId}`,
         '',
-        'This adds one registered component class to the current scene node and requests a scene save. Component constructors and lifecycle hooks are project code; approve only if this component is expected for the task. The receipt confirms in-memory readback, not disk persistence.',
+        'This adds one registered component class to the current scene node and requests a scene save. Component constructors and lifecycle hooks are project code; approve only if this component is expected for the task. Completion requires the added component instance ID and serialized class to match in the saved .fire file; the save IPC itself has no completion acknowledgement.',
     ].join('\n');
     return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator component addition',
                 message: `Add ${plan.componentClassName} to ${plan.nodePath}?`, detail,
@@ -4656,13 +4706,15 @@ function sceneComponentAddReceipt(operation, state) {
         componentCount: Number.isInteger(state.componentCount) ? state.componentCount : null,
         componentInstanceId: operation.componentInstanceId || null,
         sceneSaveRequestSent: !!operation.sceneSaveRequestSent, sceneSaveCompletionConfirmed: false,
+        scenePersistenceConfirmed: operation.status === 'completed' && !!(operation.diskReadback && operation.diskReadback.verified),
+        diskReadback: operation.diskReadback || null,
         plannedByInstanceId: operation.plannedByInstanceId, appliedByInstanceId: operation.appliedByInstanceId || null,
         completedByInstanceId: operation.completedByInstanceId || null,
         approvedAt: operation.approvedAt || null, completedAt: operation.completedAt || null,
         reconciledAt: operation.reconciledAt || null,
         recovery: { automaticRetry: false, reconcileCommand: 'creator.scene.node.add-component.reconcile',
             manualSaveMayBeRequired: operation.status === 'save-required',
-            note: 'Creator 2.4 does not document a scene save completion acknowledgement. If reconciliation lacks the original component instance identity, inspect the scene manually; this operation will not be replayed.' } };
+            note: 'Creator 2.4 does not document a scene save completion acknowledgement. Persistence requires the exact added component ID and serialized class on disk; this operation will not be replayed.' } };
 }
 
 async function commitSceneComponentAdd(input, context) {
@@ -4673,9 +4725,11 @@ async function commitSceneComponentAdd(input, context) {
         || operation.status === 'mutation-applied' || operation.status === 'save-requested'
         || operation.status === 'needs-reconciliation' ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
     if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    if (!operation.plan.diskBefore) throw coded('SCENE_DISK_BASELINE_MISSING');
     let before = await readPlannedSceneComponent(operation.plan);
     if (before.componentCount !== operation.plan.expectedBefore.componentCount || !before.canAdd)
         throw coded('OPERATION_PRECONDITION_FAILED');
+    await verifySceneNodeDiskBefore(operation.plan);
     operation.status = 'awaiting-approval';
     operation.approvalRequestedAt = new Date().toISOString();
     writeOperation(operation);
@@ -4699,6 +4753,7 @@ async function commitSceneComponentAdd(input, context) {
         before = await readPlannedSceneComponent(operation.plan);
         if (before.componentCount !== operation.plan.expectedBefore.componentCount || !before.canAdd)
             throw coded('OPERATION_PRECONDITION_FAILED');
+        await verifySceneNodeDiskBefore(operation.plan);
     } catch (error) {
         operation.status = 'conflict';
         operation.conflictAt = new Date().toISOString();
@@ -4729,7 +4784,14 @@ async function commitSceneComponentAdd(input, context) {
         writeOperation(operation);
         throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
     }
-    operation.componentInstanceId = mutation.componentInstanceId || null;
+    operation.componentInstanceId = typeof mutation.componentInstanceId === 'string' && mutation.componentInstanceId
+        ? mutation.componentInstanceId : null;
+    if (!operation.componentInstanceId || mutation.serializedClassId !== operation.plan.serializedClassId) {
+        operation.status = 'needs-reconciliation';
+        operation.reconcileReason = 'SCENE_COMPONENT_SERIALIZED_IDENTITY_UNAVAILABLE';
+        writeOperation(operation);
+        throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
+    }
     operation.status = 'mutation-applied';
     operation.mutationAppliedAt = new Date().toISOString();
     writeOperation(operation);
@@ -4742,8 +4804,9 @@ async function commitSceneComponentAdd(input, context) {
     writeOperation(operation);
     const readback = await readPlannedSceneComponent(operation.plan);
     if (readback.componentCount !== operation.plan.expectedAfter.componentCount
-        || (operation.componentInstanceId && !readback.componentInstanceIds.includes(operation.componentInstanceId)))
+        || !readback.componentInstanceIds.includes(operation.componentInstanceId))
         throw coded('OPERATION_READBACK_STATE_MISMATCH');
+    await confirmSceneNodeDiskPersistence(operation);
     operation.status = 'completed';
     operation.completedAt = new Date().toISOString();
     operation.completedByInstanceId = INSTANCE_ID;
@@ -4764,21 +4827,24 @@ async function reconcileSceneComponentAdd(input) {
         return { ...sceneComponentAddReceipt(operation, { componentCount: null }),
             observed: null, reason: operation.reconcileReason };
     }
-    if (observed.componentCount === operation.plan.expectedBefore.componentCount) {
-        if (['planned', 'awaiting-approval', 'applying', 'needs-reconciliation'].includes(operation.status)) operation.status = 'not-applied';
-        else if (['mutation-applied', 'save-requested', 'completed'].includes(operation.status)) operation.status = 'conflict';
-    } else if (observed.componentCount === operation.plan.expectedAfter.componentCount) {
-        const identityMatches = operation.componentInstanceId
-            && observed.componentInstanceIds.includes(operation.componentInstanceId);
-        if (identityMatches && ['save-requested', 'completed'].includes(operation.status)) operation.status = 'completed';
-        else if (identityMatches && operation.status === 'mutation-applied') operation.status = 'save-required';
-        else operation.status = 'needs-reconciliation';
-    } else operation.status = 'conflict';
+    const liveBefore = observed.componentCount === operation.plan.expectedBefore.componentCount;
+    const identityMatches = !!operation.componentInstanceId && observed.componentInstanceIds.includes(operation.componentInstanceId);
+    const liveAfter = observed.componentCount === operation.plan.expectedAfter.componentCount && identityMatches;
+    let diskState = null;
+    try {
+        if (!operation.plan.diskBefore) throw coded('SCENE_DISK_BASELINE_MISSING');
+        diskState = await reconcileSceneNodeDiskOperation(operation, liveBefore, liveAfter);
+    } catch (error) {
+        operation.status = 'conflict';
+        operation.reconcileReason = error.code || 'SCENE_DISK_READBACK_FAILED';
+    }
     operation.reconciledAt = new Date().toISOString();
     writeOperation(operation);
     return { ...sceneComponentAddReceipt(operation, observed),
         observed: { componentClassName: observed.componentClassName, componentCount: observed.componentCount,
-            componentInstanceIds: observed.componentInstanceIds },
+            componentInstanceIds: observed.componentInstanceIds,
+            ...(diskState ? { disk: { sourceSha256: diskState.disk.sourceSha256, metaSha256: diskState.disk.metaSha256,
+                components: diskState.disk.components, matchesBefore: diskState.before, matchesAfter: diskState.after } } : {}) },
         retry: 'Never retry this operation. If no component exists, create a new plan. If component identity is unavailable, inspect the node and save manually in Creator.' };
 }
 
@@ -4970,7 +5036,8 @@ async function sceneAssetIdentity(sceneUuid) {
     return { uuid: row.uuid, url: row.url, importer: row.importer || 'scene' };
 }
 
-async function sceneNodeDiskState(sceneUuid, nodeUuid, componentProperty) {
+async function sceneNodeDiskState(sceneUuid, nodeUuid, options = {}) {
+    if (!options || typeof options !== 'object' || Array.isArray(options)) throw coded('SCENE_DISK_SELECTOR_INVALID');
     const identity = await sceneAssetIdentity(sceneUuid);
     const row = await queryAssetByUrl(identity.url);
     if (!row || row.uuid !== sceneUuid || row.url !== identity.url
@@ -4980,7 +5047,9 @@ async function sceneNodeDiskState(sceneUuid, nodeUuid, componentProperty) {
     const metaFile = safeProjectFile(`${relative}.meta`);
     const sceneBytes = readStableProjectFile(sceneFile, MAX_SCENE_SERIALIZATION_BYTES, 'SCENE_SERIALIZATION_FILE_UNSAFE');
     const metaBytes = readStableProjectFile(metaFile, MAX_SCENE_META_BYTES, 'SCENE_META_FILE_UNSAFE');
-    const state = inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow: row, nodeUuid, componentProperty });
+    const state = inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow: row, nodeUuid,
+        componentProperty: options.componentProperty, includeComponents: options.includeComponents === true,
+        includeSubtree: options.includeSubtree === true, absentNodeUuids: options.absentNodeUuids });
     if (!state.verified) throw coded(state.reason || 'SCENE_DISK_READBACK_FAILED');
     const freshRow = await queryAssetByUrl(identity.url);
     const freshSceneBytes = readStableProjectFile(sceneFile, MAX_SCENE_SERIALIZATION_BYTES, 'SCENE_SERIALIZATION_FILE_UNSAFE');
@@ -4989,6 +5058,18 @@ async function sceneNodeDiskState(sceneUuid, nodeUuid, componentProperty) {
         || fileHash(freshSceneBytes) !== fileHash(sceneBytes) || fileHash(freshMetaBytes) !== fileHash(metaBytes))
         throw coded('SCENE_CHANGED_DURING_INSPECT');
     return { ...state, sourceSha256: fileHash(sceneBytes), metaSha256: fileHash(metaBytes), importer: identity.importer };
+}
+
+function sceneNodeDiskOptionsForPlan(plan) {
+    const options = {};
+    if (plan.diskBefore.componentProperty) options.componentProperty = plan.diskBefore.componentProperty;
+    if (Array.isArray(plan.diskBefore.components)) options.includeComponents = true;
+    if (Array.isArray(plan.diskBefore.subtree)) options.includeSubtree = true;
+    return options;
+}
+
+async function sceneNodeDiskStateForPlan(plan) {
+    return sceneNodeDiskState(plan.sceneUuid, plan.nodeUuid, sceneNodeDiskOptionsForPlan(plan));
 }
 
 function sceneDiskNumberMatches(field, actual, expected) {
@@ -5009,6 +5090,8 @@ function sceneNodeDiskBaseline(disk, { includeButtonEvents = false } = {}) {
         parentUuid: disk.parentUuid, nodePath: disk.nodePath, transform: disk.transform };
     if (includeButtonEvents) baseline.buttonEvents = disk.buttonEvents;
     if (disk.componentProperty) baseline.componentProperty = disk.componentProperty;
+    if (Array.isArray(disk.components)) baseline.components = disk.components;
+    if (Array.isArray(disk.subtree)) baseline.subtree = disk.subtree;
     return baseline;
 }
 
@@ -5019,6 +5102,8 @@ function sceneNodeDiskReadback(disk) {
         active: disk.active, verifiedAt: new Date().toISOString() };
     if (Array.isArray(disk.buttonEvents)) readback.buttonEvents = disk.buttonEvents;
     if (disk.componentProperty) readback.componentProperty = disk.componentProperty;
+    if (Array.isArray(disk.components)) readback.components = disk.components;
+    if (Array.isArray(disk.subtree)) readback.subtree = disk.subtree;
     return readback;
 }
 
@@ -5043,13 +5128,27 @@ function validSceneNodeDiskBaseline(disk) {
         && (disk.nodePath === undefined || typeof disk.nodePath === 'string')
         && (disk.buttonEvents === undefined || validButtonEventList(disk.buttonEvents))
         && (disk.componentProperty === undefined || validSavedComponentProperty(disk.componentProperty))
+        && (disk.components === undefined || (Array.isArray(disk.components) && disk.components.length <= 32
+            && disk.components.every((component) => component && typeof component === 'object' && !Array.isArray(component)
+                && Object.keys(component).sort().join(',') === 'componentInstanceId,serializedClassId'
+                && typeof component.componentInstanceId === 'string' && component.componentInstanceId.length > 0
+                && component.componentInstanceId.length <= 128 && typeof component.serializedClassId === 'string'
+                && component.serializedClassId.length > 0 && component.serializedClassId.length <= 128)
+            && new Set(disk.components.map((component) => component.componentInstanceId)).size === disk.components.length))
+        && (disk.subtree === undefined || (Array.isArray(disk.subtree) && disk.subtree.length >= 1
+            && disk.subtree.length <= 256 && disk.subtree.every((node) => node && typeof node === 'object' && !Array.isArray(node)
+                && Object.keys(node).sort().join(',') === 'childCount,nodeName,nodeUuid,parentUuid,siblingIndex'
+                && typeof node.nodeUuid === 'string' && typeof node.nodeName === 'string'
+                && typeof node.parentUuid === 'string' && Number.isInteger(node.siblingIndex) && node.siblingIndex >= 0
+                && Number.isInteger(node.childCount) && node.childCount >= 0)
+            && new Set(disk.subtree.map((node) => node.nodeUuid)).size === disk.subtree.length))
         && !!disk.transform && typeof disk.transform === 'object' && !Array.isArray(disk.transform)
         && Object.keys(disk.transform).sort().join(',') === fields.join(',')
         && fields.every((field) => Number.isFinite(disk.transform[field])
             && Math.abs(disk.transform[field]) <= 1000000);
 }
 
-function sceneNodeDiskExpected(plan, side) {
+function sceneNodeDiskExpected(plan, side, operation) {
     const expected = { ...plan.diskBefore, transform: { ...plan.diskBefore.transform } };
     if (side === 'before') return expected;
     if (plan.operation === 'creator.scene.node.set-transform') {
@@ -5066,34 +5165,45 @@ function sceneNodeDiskExpected(plan, side) {
         expected.buttonEvents = plan.expectedAfter;
     } else if (plan.operation === 'creator.scene.node.set-component-property') {
         expected.componentProperty = { ...expected.componentProperty, value: plan.expectedAfter.serializedValue };
+    } else if (plan.operation === 'creator.scene.node.add-component') {
+        if (operation && typeof operation.componentInstanceId === 'string')
+            expected.components = [...expected.components, { componentInstanceId: operation.componentInstanceId,
+                serializedClassId: plan.serializedClassId }];
+    } else if (plan.operation === 'creator.scene.node.remove-component') {
+        expected.components = expected.components.filter((component) =>
+            component.componentInstanceId !== plan.componentInstanceId);
     }
     return expected;
 }
 
-function sceneNodeDiskMatchesPlan(disk, plan, side) {
+function sceneNodeDiskMatchesPlan(disk, plan, side, operation) {
     if (!disk || disk.verified !== true || disk.sceneUuid !== plan.sceneUuid || disk.nodeUuid !== plan.nodeUuid
         || disk.sceneUrl !== plan.diskBefore.sceneUrl || disk.importer !== plan.diskBefore.importer
         || disk.metaSha256 !== plan.diskBefore.metaSha256) return false;
-    const expected = sceneNodeDiskExpected(plan, side);
+    const expected = sceneNodeDiskExpected(plan, side, operation);
     if (disk.active !== expected.active || !sceneDiskTransformMatches(disk.transform, expected.transform)) return false;
     for (const field of ['nodeName', 'parentUuid', 'nodePath']) {
         if (expected[field] !== undefined && disk[field] !== expected[field]) return false;
     }
     if (expected.buttonEvents !== undefined && !buttonEventListMatches(disk.buttonEvents, expected.buttonEvents)) return false;
     if (expected.componentProperty !== undefined && !sceneComponentValuesEqual(disk.componentProperty, expected.componentProperty)) return false;
+    if (expected.components !== undefined && !sceneComponentValuesEqual(disk.components, expected.components)) return false;
+    if (expected.subtree !== undefined && !sceneComponentValuesEqual(disk.subtree, expected.subtree)) return false;
     return true;
 }
 
-async function observeSceneNodeDiskForReconcile(plan) {
+async function observeSceneNodeDiskForReconcile(operation) {
+    const plan = operation.plan;
     if (!plan.diskBefore) return null;
-    const disk = await sceneNodeDiskState(plan.sceneUuid, plan.nodeUuid, plan.diskBefore.componentProperty);
+    const disk = await sceneNodeDiskStateForPlan(plan);
     return { disk,
         before: disk.sourceSha256 === plan.diskBefore.sourceSha256 && sceneNodeDiskMatchesPlan(disk, plan, 'before'),
-        after: disk.sourceSha256 !== plan.diskBefore.sourceSha256 && sceneNodeDiskMatchesPlan(disk, plan, 'after') };
+        after: disk.sourceSha256 !== plan.diskBefore.sourceSha256
+            && sceneNodeDiskMatchesPlan(disk, plan, 'after', operation) };
 }
 
 async function reconcileSceneNodeDiskOperation(operation, liveBefore, liveAfter) {
-    const state = await observeSceneNodeDiskForReconcile(operation.plan);
+    const state = await observeSceneNodeDiskForReconcile(operation);
     if (!state) return null;
     const mutationMayHaveRun = operation.appliedByInstanceId === INSTANCE_ID
         || ['applying', 'mutation-applied', 'save-requested', 'save-required', 'completed'].includes(operation.status);
@@ -5117,7 +5227,7 @@ async function reconcileSceneNodeDiskOperation(operation, liveBefore, liveAfter)
 
 async function verifySceneNodeDiskBefore(plan) {
     if (!plan.diskBefore) return null;
-    const disk = await sceneNodeDiskState(plan.sceneUuid, plan.nodeUuid, plan.diskBefore.componentProperty);
+    const disk = await sceneNodeDiskStateForPlan(plan);
     if (disk.sourceSha256 !== plan.diskBefore.sourceSha256 || disk.metaSha256 !== plan.diskBefore.metaSha256
         || !sceneNodeDiskMatchesPlan(disk, plan, 'before')) throw coded('SCENE_DISK_PRECONDITION_FAILED');
     return disk;
@@ -5130,10 +5240,11 @@ async function waitForSceneNodeDiskAfter(operation, timeoutMs = SCENE_SAVE_READB
     let lastReason = 'SCENE_DISK_READBACK_PENDING';
     do {
         try {
-            const disk = await sceneNodeDiskState(plan.sceneUuid, plan.nodeUuid, plan.diskBefore.componentProperty);
+            const disk = await sceneNodeDiskStateForPlan(plan);
             if (disk.sceneUrl !== plan.diskBefore.sceneUrl || disk.importer !== plan.diskBefore.importer)
                 throw coded('SCENE_ASSETDB_IDENTITY_CHANGED');
-            if (disk.sourceSha256 !== plan.diskBefore.sourceSha256 && sceneNodeDiskMatchesPlan(disk, plan, 'after'))
+            if (disk.sourceSha256 !== plan.diskBefore.sourceSha256
+                && sceneNodeDiskMatchesPlan(disk, plan, 'after', operation))
                 return disk;
             lastReason = disk.sourceSha256 === plan.diskBefore.sourceSha256
                 ? 'SCENE_DISK_READBACK_PENDING' : 'SCENE_DISK_READBACK_MISMATCH';
@@ -5160,6 +5271,103 @@ async function confirmSceneNodeDiskPersistence(operation) {
     }
     operation.diskReadback = sceneNodeDiskReadback(disk);
     return disk;
+}
+
+function sceneNodeDeletionAbsentUuids(operation) {
+    return operation.plan.expectedBefore.subtree.map((node) => node.nodeUuid);
+}
+
+async function waitForSceneNodeDeletionDiskAfter(operation, timeoutMs = SCENE_SAVE_READBACK_TIMEOUT_MS) {
+    const plan = operation.plan;
+    if (!plan.diskBefore || !Array.isArray(plan.diskBefore.subtree)) throw coded('SCENE_DISK_BASELINE_MISSING');
+    const deadline = Date.now() + timeoutMs;
+    let lastReason = 'SCENE_DISK_READBACK_PENDING';
+    do {
+        try {
+            const disk = await sceneNodeDiskState(plan.sceneUuid, plan.nodeUuid,
+                { absentNodeUuids: sceneNodeDeletionAbsentUuids(operation) });
+            if (disk.metaSha256 !== plan.diskBefore.metaSha256) throw coded('SCENE_META_IDENTITY_CHANGED');
+            if (disk.nodeAbsent && disk.sourceSha256 !== plan.diskBefore.sourceSha256) return disk;
+            lastReason = 'SCENE_DISK_READBACK_PENDING';
+        } catch (error) {
+            if (error.code === 'SCENE_NODE_STILL_PRESENT') {
+                try {
+                    const disk = await sceneNodeDiskStateForPlan(plan);
+                    lastReason = disk.sourceSha256 === plan.diskBefore.sourceSha256
+                        && sceneNodeDiskMatchesPlan(disk, plan, 'before')
+                        ? 'SCENE_DISK_READBACK_PENDING' : 'SCENE_DISK_READBACK_MISMATCH';
+                } catch (stateError) { lastReason = stateError.code || 'SCENE_DISK_READBACK_FAILED'; }
+            } else {
+                lastReason = error.code || 'SCENE_DISK_READBACK_FAILED';
+                if (['SCENE_ASSETDB_IDENTITY_CHANGED', 'SCENE_ASSETDB_IDENTITY_MISMATCH',
+                    'SCENE_META_IDENTITY_MISMATCH', 'SCENE_META_IDENTITY_CHANGED', 'UNSAFE_PROJECT_PATH'].includes(error.code))
+                    throw error;
+            }
+        }
+        if (Date.now() >= deadline) break;
+        await new Promise((resolve) => setTimeout(resolve, 250));
+    } while (Date.now() <= deadline);
+    throw coded(lastReason);
+}
+
+async function confirmSceneNodeDeletionDiskPersistence(operation) {
+    let disk;
+    try { disk = await waitForSceneNodeDeletionDiskAfter(operation); }
+    catch (error) {
+        operation.status = 'save-required';
+        operation.reconcileReason = error.code || 'SCENE_DISK_READBACK_UNCONFIRMED';
+        operation.diskReadbackFailureAt = new Date().toISOString();
+        writeOperation(operation);
+        throw coded('SCENE_DISK_READBACK_UNCONFIRMED', operation.reconcileReason);
+    }
+    operation.diskReadback = { verified: true, sceneUrl: disk.sceneUrl, sceneUuid: disk.sceneUuid,
+        nodeUuid: disk.nodeUuid, nodeAbsent: true, absentNodeUuids: disk.absentNodeUuids,
+        sourceSha256: disk.sourceSha256, metaSha256: disk.metaSha256, verifiedAt: new Date().toISOString() };
+    return disk;
+}
+
+async function reconcileSceneNodeDeletionDiskOperation(operation, liveBefore, liveAfter) {
+    const plan = operation.plan;
+    let disk;
+    let before = false;
+    let after = false;
+    if (liveAfter) {
+        try {
+            disk = await sceneNodeDiskState(plan.sceneUuid, plan.nodeUuid,
+                { absentNodeUuids: sceneNodeDeletionAbsentUuids(operation) });
+            after = disk.metaSha256 === plan.diskBefore.metaSha256
+                && disk.sourceSha256 !== plan.diskBefore.sourceSha256 && disk.nodeAbsent === true;
+        } catch (error) {
+            if (error.code !== 'SCENE_NODE_STILL_PRESENT') throw error;
+            disk = await sceneNodeDiskStateForPlan(plan);
+            before = disk.sourceSha256 === plan.diskBefore.sourceSha256
+                && sceneNodeDiskMatchesPlan(disk, plan, 'before');
+        }
+    } else {
+        disk = await sceneNodeDiskStateForPlan(plan);
+        before = disk.sourceSha256 === plan.diskBefore.sourceSha256
+            && sceneNodeDiskMatchesPlan(disk, plan, 'before');
+    }
+    const mutationMayHaveRun = operation.appliedByInstanceId === INSTANCE_ID
+        || ['applying', 'mutation-applied', 'save-requested', 'save-required', 'completed'].includes(operation.status);
+    if (mutationMayHaveRun && liveAfter && after) {
+        operation.status = 'completed'; operation.reconcileReason = null;
+        operation.diskReadback = { verified: true, sceneUrl: disk.sceneUrl, sceneUuid: disk.sceneUuid,
+            nodeUuid: disk.nodeUuid, nodeAbsent: true, absentNodeUuids: disk.absentNodeUuids,
+            sourceSha256: disk.sourceSha256, metaSha256: disk.metaSha256, verifiedAt: new Date().toISOString() };
+        operation.completedAt = operation.completedAt || new Date().toISOString();
+        operation.completedByInstanceId = operation.completedByInstanceId || operation.appliedByInstanceId || INSTANCE_ID;
+    } else if (mutationMayHaveRun && liveAfter && before) {
+        operation.status = 'save-required'; operation.reconcileReason = 'SCENE_MEMORY_UPDATED_BUT_DISK_UNCHANGED';
+    } else if (liveBefore && before && operation.status === 'cancelled') {
+        // Preserve explicit cancellation when both the editor and saved scene match the plan.
+    } else if (liveBefore && before
+        && ['planned', 'awaiting-approval', 'applying', 'abandoned', 'needs-reconciliation', 'not-applied'].includes(operation.status)) {
+        operation.status = 'not-applied'; operation.reconcileReason = null;
+    } else {
+        operation.status = 'conflict'; operation.reconcileReason = 'SCENE_MEMORY_DISK_STATE_MISMATCH';
+    }
+    return { disk, before, after };
 }
 
 async function validateSceneComposePlan(operation) {
