@@ -13,6 +13,7 @@ import { startProjectFileWatch } from './creator-watch.mjs';
 import { loadTestPlan, loadFailedSuiteIds, parseTestShard, runTestPlan, watchTestPlan } from './creator-tests.mjs';
 import { runVcsDoctor } from './vcs-integrity.mjs';
 import { runVcsStatus } from './vcs-status.mjs';
+import { runVcsImpact } from './vcs-impact.mjs';
 import { runVcsDiff, runVcsObjectBlame, runVcsConflictReport, runVcsConflictResolve } from './vcs-diff.mjs';
 import { configureMcp, mcpStatus, removeMcp, supportedMcpClients } from './mcp/configure.mjs';
 import { availableSkills, installSkills, listSkillStatus, showSkill } from './skills.mjs';
@@ -35,6 +36,7 @@ const HELP_LINES = [
   '  doctor [--project-root <absolute-path>] [--instance <instance-id>]',
   '  vcs doctor --git-root <absolute-path> --project-root <absolute-path>',
   '  vcs status --git-root <absolute-path> --project-root <absolute-path>',
+  '  vcs impact --git-root <absolute-path> --project-root <absolute-path> [--target <ref>] [--operation switch|sync]',
   '  vcs diff --git-root <absolute-path> --project-root <absolute-path> --path <assets-relative.fire-or-prefab> [--from <revision>] [--to <revision>]',
   '  vcs blame --git-root <absolute-path> --project-root <absolute-path> --path <assets-relative.fire-or-prefab> --node <serialized-node-uuid> [--revision <revision>] [--max-commits <1-256>]',
   '  vcs conflicts --git-root <absolute-path> --project-root <absolute-path>',
@@ -294,6 +296,11 @@ async function main() {
   }
   if (group === 'vcs' && action === 'status') {
     print(runVcsStatus({ gitRoot: value('--git-root'), projectRoot: value('--project-root') }));
+    return;
+  }
+  if (group === 'vcs' && action === 'impact') {
+    print(runVcsImpact({ gitRoot: value('--git-root'), projectRoot: value('--project-root'),
+      target: value('--target'), operation: value('--operation', 'switch') }));
     return;
   }
   if (group === 'vcs' && action === 'diff') {
