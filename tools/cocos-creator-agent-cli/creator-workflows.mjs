@@ -38,38 +38,119 @@ function creatorBundleRoot(candidate) {
   return null;
 }
 
-export function resolveCreatorExecutable(creatorPath) {
+function regularFile(candidate) {
+  try {
+    const stat = fs.lstatSync(candidate);
+    return stat.isFile() && !stat.isSymbolicLink();
+  } catch (_) { return false; }
+}
+
+function windowsCreatorExecutable(candidate) {
+  try {
+    const stat = fs.lstatSync(candidate);
+    if (stat.isSymbolicLink()) return null;
+    if (stat.isFile()) return path.basename(candidate).toLowerCase() === 'cocoscreator.exe' ? candidate : null;
+    if (!stat.isDirectory()) return null;
+    const executable = path.join(candidate, 'CocosCreator.exe');
+    return regularFile(executable) ? executable : null;
+  } catch (_) { return null; }
+}
+
+function readPackageVersion(packagePath) {
+  try {
+    const stat = fs.lstatSync(packagePath);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 256 * 1024) return null;
+    const value = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+    return typeof value.version === 'string' ? value.version.trim() : null;
+  } catch (_) { return null; }
+}
+
+function readAsarPackageVersion(archivePath) {
+  let descriptor;
+  try {
+    const archiveStat = fs.lstatSync(archivePath);
+    if (!archiveStat.isFile() || archiveStat.isSymbolicLink() || archiveStat.size < 16) return null;
+    descriptor = fs.openSync(archivePath, 'r');
+    const prefix = Buffer.alloc(16);
+    if (fs.readSync(descriptor, prefix, 0, prefix.length, 0) !== prefix.length || prefix.readUInt32LE(0) !== 4) return null;
+    const headerPickleSize = prefix.readUInt32LE(4);
+    const jsonSize = prefix.readUInt32LE(12);
+    const dataStart = 16 + jsonSize;
+    if (headerPickleSize < jsonSize || jsonSize < 2 || jsonSize > 8 * 1024 * 1024 || dataStart > archiveStat.size) return null;
+    const headerBuffer = Buffer.alloc(jsonSize);
+    if (fs.readSync(descriptor, headerBuffer, 0, jsonSize, 16) !== jsonSize) return null;
+    const header = JSON.parse(headerBuffer.toString('utf8'));
+    const entry = header?.files?.['package.json'];
+    if (!entry || !Number.isSafeInteger(entry.size) || entry.size < 2 || entry.size > 256 * 1024) return null;
+    const offset = Number(entry.offset);
+    if (!Number.isSafeInteger(offset) || offset < 0 || dataStart + offset + entry.size > archiveStat.size) return null;
+    const packageBuffer = Buffer.alloc(entry.size);
+    if (fs.readSync(descriptor, packageBuffer, 0, entry.size, dataStart + offset) !== entry.size) return null;
+    const packageInfo = JSON.parse(packageBuffer.toString('utf8'));
+    return typeof packageInfo.version === 'string' ? packageInfo.version.trim() : null;
+  } catch (_) { return null; }
+  finally { if (descriptor !== undefined) { try { fs.closeSync(descriptor); } catch (_) {} } }
+}
+
+function windowsCreatorVersion(installRoot) {
+  const resources = path.join(installRoot, 'resources');
+  return readPackageVersion(path.join(resources, 'app', 'package.json'))
+    || readPackageVersion(path.join(resources, 'package.json'))
+    || readPackageVersion(path.join(installRoot, 'package.json'))
+    || readAsarPackageVersion(path.join(resources, 'app.asar'));
+}
+
+export function resolveCreatorExecutable(creatorPath, { platform = process.platform } = {}) {
   if (typeof creatorPath !== 'string' || !path.isAbsolute(creatorPath)) throw coded('CREATOR_ABSOLUTE_PATH_REQUIRED');
   const selected = path.resolve(creatorPath);
   const bundleRoot = creatorBundleRoot(selected);
+  if (platform === 'win32') {
+    const executable = windowsCreatorExecutable(selected);
+    if (!executable) throw coded('CREATOR_EXECUTABLE_INVALID');
+    const installRoot = path.dirname(executable);
+    const version = windowsCreatorVersion(installRoot);
+    if (!version) throw coded('CREATOR_VERSION_UNREADABLE');
+    if (version !== CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH', version);
+    return { executable, bundleRoot: installRoot, creatorVersion: version };
+  }
+  if (platform !== 'darwin') throw coded('CREATOR_EXECUTABLE_PLATFORM_UNSUPPORTED', platform);
   const executable = path.basename(selected).endsWith('.app')
-    ? path.join(selected, 'Contents', 'MacOS', 'CocosCreator')
-    : selected;
-  const executableStat = fs.statSync(executable);
-  if (!executableStat.isFile() || (process.platform !== 'win32' && !(executableStat.mode & 0o111)))
-    throw coded('CREATOR_EXECUTABLE_INVALID');
+    ? path.join(selected, 'Contents', 'MacOS', 'CocosCreator') : selected;
+  let executableStat;
+  try { executableStat = fs.statSync(executable); } catch (_) { throw coded('CREATOR_EXECUTABLE_INVALID'); }
+  if (!executableStat.isFile() || !(executableStat.mode & 0o111)) throw coded('CREATOR_EXECUTABLE_INVALID');
   if (!bundleRoot) throw coded('CREATOR_APP_BUNDLE_REQUIRED');
-  const plist = fs.readFileSync(path.join(bundleRoot, 'Contents', 'Info.plist'), 'utf8');
+  let plist;
+  try { plist = fs.readFileSync(path.join(bundleRoot, 'Contents', 'Info.plist'), 'utf8'); }
+  catch (_) { throw coded('CREATOR_VERSION_UNREADABLE'); }
   const versionMatch = plist.match(/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/);
   const version = versionMatch?.[1]?.trim();
   if (version !== CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH', version || 'unreadable bundle version');
   return { executable, bundleRoot, creatorVersion: version };
 }
 
-function creatorSearchRoots(searchRoots) {
+function creatorSearchRoots(searchRoots, { platform = process.platform, home = os.homedir(), env = process.env } = {}) {
   if (searchRoots !== undefined) {
     if (!Array.isArray(searchRoots) || searchRoots.some((root) => typeof root !== 'string' || !path.isAbsolute(root)))
       throw coded('CREATOR_SEARCH_ROOTS_INVALID');
     return searchRoots.map((root) => path.resolve(root));
   }
-  if (process.platform !== 'darwin') return [];
-  return [...new Set([
-    '/Applications/Cocos/Creator',
-    '/Applications/CocosCreator',
-    path.join(os.homedir(), 'Applications', 'Cocos', 'Creator'),
-    path.join(os.homedir(), 'Applications', 'CocosCreator'),
-    '/Applications',
+  if (platform === 'darwin') return [...new Set([
+    '/Applications/Cocos/Creator', '/Applications/CocosCreator',
+    path.join(home, 'Applications', 'Cocos', 'Creator'), path.join(home, 'Applications', 'CocosCreator'), '/Applications',
   ])];
+  if (platform === 'win32') {
+    const drive = env.SystemDrive || 'C:';
+    const userProfile = env.USERPROFILE || home;
+    const dashboardRoot = env.COCOS_DASHBOARD_ROOT || path.join(drive, 'CocosDashboard');
+    return [...new Set([
+      path.join(drive, 'CocosCreator'),
+      path.join(dashboardRoot, 'resources', '.editors', 'Creator'),
+      path.join(userProfile, 'CocosCreator'),
+      path.join(userProfile, 'CocosDashboard', 'resources', '.editors', 'Creator'),
+    ])];
+  }
+  return [];
 }
 
 function isRealDirectory(candidate) {
@@ -115,6 +196,34 @@ function creatorBundlesWithin(searchRoot, { broadApplicationsRoot = false } = {}
   return [...candidates];
 }
 
+function creatorExecutablesWithin(searchRoot, { maxDepth = 6, maxDirectories = 5000 } = {}) {
+  const direct = windowsCreatorExecutable(searchRoot);
+  if (direct) return { executables: [path.resolve(direct)], truncated: false };
+  if (!isRealDirectory(searchRoot)) return { executables: [], truncated: false };
+  const candidates = new Set();
+  const visited = new Set();
+  const stack = [{ directory: path.resolve(searchRoot), depth: 0 }];
+  while (stack.length && visited.size < maxDirectories) {
+    const current = stack.pop();
+    if (visited.has(current.directory)) continue;
+    visited.add(current.directory);
+    let entries;
+    try { entries = fs.readdirSync(current.directory, { withFileTypes: true }); } catch (_) { continue; }
+    const executableEntry = entries.find((entry) => entry.isFile() && entry.name.toLowerCase() === 'cocoscreator.exe');
+    if (executableEntry) {
+      const executable = path.join(current.directory, executableEntry.name);
+      if (regularFile(executable)) candidates.add(path.resolve(executable));
+      continue;
+    }
+    if (current.depth >= maxDepth) continue;
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.isSymbolicLink() || ['.git', 'node_modules', 'cache', 'temp', 'build'].includes(entry.name.toLowerCase())) continue;
+      stack.push({ directory: path.join(current.directory, entry.name), depth: current.depth + 1 });
+    }
+  }
+  return { executables: [...candidates], truncated: stack.length > 0 };
+}
+
 function inspectCreatorBundle(bundlePath) {
   const executable = path.join(bundlePath, 'Contents', 'MacOS', 'CocosCreator');
   let creatorVersion = null;
@@ -130,24 +239,43 @@ function inspectCreatorBundle(bundlePath) {
     status: !executableAvailable || !creatorVersion ? 'invalid' : creatorVersion === CREATOR_VERSION ? 'supported' : 'unsupported-version' };
 }
 
-export function discoverCreatorInstallations({ searchRoots } = {}) {
-  if (process.platform !== 'darwin' && searchRoots === undefined)
-    return { platform: process.platform, supported: false, reason: 'CREATOR_APP_DISCOVERY_PLATFORM_UNSUPPORTED', installations: [] };
-  const roots = creatorSearchRoots(searchRoots);
-  const bundles = new Set();
-  for (const root of roots) {
-    const broadApplicationsRoot = path.resolve(root) === '/Applications';
-    for (const candidate of creatorBundlesWithin(root, { broadApplicationsRoot })) bundles.add(candidate);
+function inspectCreatorWindowsExecutable(executable) {
+  const installRoot = path.dirname(executable);
+  const creatorVersion = windowsCreatorVersion(installRoot);
+  const executableAvailable = regularFile(executable);
+  return { bundlePath: installRoot, executable, creatorVersion, executableAvailable,
+    supported: executableAvailable && creatorVersion === CREATOR_VERSION,
+    status: !executableAvailable || !creatorVersion ? 'invalid' : creatorVersion === CREATOR_VERSION ? 'supported' : 'unsupported-version' };
+}
+
+export function discoverCreatorInstallations({ searchRoots, platform = process.platform, home, env } = {}) {
+  if (!['darwin', 'win32'].includes(platform))
+    return { platform, supported: false, reason: 'CREATOR_APP_DISCOVERY_PLATFORM_UNSUPPORTED', installations: [] };
+  const roots = creatorSearchRoots(searchRoots, { platform, home, env });
+  const candidates = new Set();
+  let scanTruncated = false;
+  if (platform === 'darwin') {
+    for (const root of roots) {
+      const broadApplicationsRoot = path.resolve(root) === '/Applications';
+      for (const candidate of creatorBundlesWithin(root, { broadApplicationsRoot })) candidates.add(candidate);
+    }
+  } else {
+    for (const root of roots) {
+      const scan = creatorExecutablesWithin(root);
+      scanTruncated ||= scan.truncated;
+      for (const candidate of scan.executables) candidates.add(candidate);
+    }
   }
-  const installations = [...bundles].map(inspectCreatorBundle)
+  const installations = [...candidates].map((candidate) => platform === 'darwin'
+    ? inspectCreatorBundle(candidate) : inspectCreatorWindowsExecutable(candidate))
     .sort((left, right) => left.bundlePath.localeCompare(right.bundlePath));
-  return { platform: process.platform, supported: true, searchedRoots: roots,
+  return { platform, supported: true, searchedRoots: roots, scanTruncated,
     installations, matchingCreatorVersion: CREATOR_VERSION,
     matches: installations.filter((item) => item.supported).length };
 }
 
-function resolveMatchingCreator(projectVersion, searchRoots) {
-  const inventory = discoverCreatorInstallations(searchRoots ? { searchRoots } : {});
+function resolveMatchingCreator(projectVersion, searchRoots, platform = process.platform) {
+  const inventory = discoverCreatorInstallations({ ...(searchRoots ? { searchRoots } : {}), platform });
   const matches = inventory.installations.filter((item) => item.creatorVersion === projectVersion && item.executableAvailable);
   if (matches.length === 0) throw coded('CREATOR_INSTALLATION_NOT_FOUND', JSON.stringify({
     projectVersion, searchedRoots: inventory.searchedRoots || [],
@@ -156,7 +284,7 @@ function resolveMatchingCreator(projectVersion, searchRoots) {
   if (matches.length > 1) throw coded('CREATOR_INSTALLATION_AMBIGUOUS', JSON.stringify({
     projectVersion, matches: matches.map((item) => item.bundlePath),
   }));
-  return resolveCreatorExecutable(matches[0].bundlePath);
+  return resolveCreatorExecutable(matches[0].bundlePath, { platform });
 }
 
 export function diagnoseCreatorModal(processId, { platform = process.platform, spawnSyncImpl = spawnSync } = {}) {
@@ -200,6 +328,191 @@ export function diagnoseCreatorModal(processId, { platform = process.platform, s
   const dialogCount = Number(output);
   return dialogCount > 0 ? { status: 'detected', dialogCount }
     : { status: 'not-detected', dialogCount: 0 };
+}
+
+export function requestCreatorProjectClose(processId, { platform = process.platform, spawnSyncImpl = spawnSync } = {}) {
+  if (!['darwin', 'win32'].includes(platform)) throw coded('CREATOR_CLOSE_PLATFORM_UNSUPPORTED');
+  if (!Number.isSafeInteger(processId) || processId < 1 || processId > 2147483647)
+    throw coded('CREATOR_CLOSE_PROCESS_ID_UNAVAILABLE');
+  if (platform === 'win32') {
+    const script = String.raw`
+$ErrorActionPreference = 'Stop'
+$source = @'
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.RegularExpressions;
+public static class CocosCreatorCloseWin32 {
+  private delegate bool EnumWindowsProc(IntPtr window, IntPtr state);
+  [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr state);
+  [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+  [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr window);
+  [DllImport("user32.dll")] private static extern IntPtr GetMenu(IntPtr window);
+  [DllImport("user32.dll")] private static extern int GetMenuItemCount(IntPtr menu);
+  [DllImport("user32.dll")] private static extern IntPtr GetSubMenu(IntPtr menu, int position);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetMenuString(IntPtr menu, uint item, StringBuilder text, int maxCount, uint flags);
+  [DllImport("user32.dll")] private static extern uint GetMenuItemID(IntPtr menu, int position);
+  [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+  private const uint MF_BYPOSITION = 0x00000400;
+  private const uint WM_COMMAND = 0x00000111;
+  private static string Label(IntPtr menu, int position) {
+    var text = new StringBuilder(256);
+    GetMenuString(menu, (uint)position, text, text.Capacity, MF_BYPOSITION);
+    string label = text.ToString().Replace("&", "").Trim();
+    int shortcut = label.IndexOf('\t');
+    if (shortcut >= 0) label = label.Substring(0, shortcut).Trim();
+    label = label.TrimEnd('.');
+    if (label.EndsWith("…", StringComparison.Ordinal)) label = label.Substring(0, label.Length - 1);
+    return Regex.Replace(label, @"\s*\([A-Za-z]\)$", "").Trim();
+  }
+  private static bool IsFileMenu(string text) { return text == "File" || text == "文件"; }
+  private static bool IsOpenProject(string text) {
+    return text == "Open Project" || text == "打开项目";
+  }
+  public static bool RequestOpenProject(uint targetProcessId) {
+    bool posted = false;
+    EnumWindowsProc callback = delegate(IntPtr window, IntPtr state) {
+      uint windowProcessId;
+      GetWindowThreadProcessId(window, out windowProcessId);
+      if (windowProcessId != targetProcessId || !IsWindowVisible(window)) return true;
+      IntPtr menu = GetMenu(window);
+      if (menu == IntPtr.Zero) return true;
+      int menuCount = GetMenuItemCount(menu);
+      for (int i = 0; i < menuCount; i++) {
+        if (!IsFileMenu(Label(menu, i))) continue;
+        IntPtr fileMenu = GetSubMenu(menu, i);
+        if (fileMenu == IntPtr.Zero) continue;
+        int itemCount = GetMenuItemCount(fileMenu);
+        for (int j = 0; j < itemCount; j++) {
+          if (!IsOpenProject(Label(fileMenu, j))) continue;
+          uint commandId = GetMenuItemID(fileMenu, j);
+          if (commandId == 0 || commandId == UInt32.MaxValue) continue;
+          posted = PostMessage(window, WM_COMMAND, new IntPtr((int)commandId), IntPtr.Zero);
+          return false;
+        }
+      }
+      return true;
+    };
+    EnumWindows(callback, IntPtr.Zero);
+    return posted;
+  }
+}
+'@
+Add-Type -TypeDefinition $source -Language CSharp
+if ([CocosCreatorCloseWin32]::RequestOpenProject(${processId}u)) {
+  [Console]::Out.WriteLine('requested')
+  exit 0
+}
+[Console]::Error.WriteLine('CREATOR_CLOSE_MENU_ITEM_NOT_FOUND')
+exit 3
+`;
+    let result;
+    try {
+      const encoded = Buffer.from(script, 'utf16le').toString('base64');
+      result = spawnSyncImpl('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], {
+        encoding: 'utf8', timeout: 5000, maxBuffer: 4096, windowsHide: true,
+      });
+    } catch (error) {
+      if (error?.code === 'ETIMEDOUT') throw coded('CREATOR_CLOSE_REQUEST_TIMEOUT');
+      throw coded('CREATOR_CLOSE_REQUEST_FAILED', error.message || String(error));
+    }
+    if (result?.error?.code === 'ETIMEDOUT') throw coded('CREATOR_CLOSE_REQUEST_TIMEOUT');
+    if (result?.status !== 0 || String(result?.stdout || '').trim() !== 'requested') {
+      const output = String(result?.stderr || result?.stdout || '').slice(0, 1000);
+      if (/CREATOR_CLOSE_MENU_ITEM_NOT_FOUND/.test(output)) throw coded('CREATOR_CLOSE_MENU_ITEM_NOT_FOUND');
+      throw coded('CREATOR_CLOSE_REQUEST_FAILED', output || 'PowerShell menu request failed');
+    }
+    return { requested: true };
+  }
+  const script = [
+    'on run argv',
+    '  set targetPid to (item 1 of argv) as integer',
+    '  tell application "System Events"',
+    '    set targetProcess to first process whose unix id is targetPid',
+    '    tell targetProcess',
+    '      set frontmost to true',
+    '      set targetMenu to missing value',
+    '      repeat with menuBarItem in menu bar items of menu bar 1',
+    '        if (name of menuBarItem is "File") or (name of menuBarItem is "文件") then',
+    '          set targetMenu to menu 1 of menuBarItem',
+    '        end if',
+    '      end repeat',
+    '      if targetMenu is missing value then error "CREATOR_CLOSE_FILE_MENU_NOT_FOUND"',
+    '      repeat with menuItem in menu items of targetMenu',
+    '        set itemName to name of menuItem',
+    '        if itemName is "Open Project..." or itemName is "Open Project…" or itemName is "打开项目..." or itemName is "打开项目…" then',
+    '          click menuItem',
+    '          return "requested"',
+    '        end if',
+    '      end repeat',
+    '      error "CREATOR_CLOSE_OPEN_PROJECT_MENU_ITEM_NOT_FOUND"',
+    '    end tell',
+    '  end tell',
+    'end run',
+  ].join('\n');
+  let result;
+  try {
+    result = spawnSyncImpl('/usr/bin/osascript', ['-e', script, String(processId)], {
+      encoding: 'utf8', timeout: 5000, maxBuffer: 4096, windowsHide: true,
+    });
+  } catch (error) {
+    if (error?.code === 'ETIMEDOUT') throw coded('CREATOR_CLOSE_REQUEST_TIMEOUT');
+    throw coded('CREATOR_CLOSE_REQUEST_FAILED', error.message || String(error));
+  }
+  if (result?.error?.code === 'ETIMEDOUT') throw coded('CREATOR_CLOSE_REQUEST_TIMEOUT');
+  if (result?.status !== 0 || String(result?.stdout || '').trim() !== 'requested') {
+    const stderr = String(result?.stderr || '').toLowerCase();
+    if (/not authorized|not allowed|assistive|accessibility/.test(stderr))
+      throw coded('CREATOR_CLOSE_ACCESSIBILITY_PERMISSION_REQUIRED');
+    if (/CREATOR_CLOSE_FILE_MENU_NOT_FOUND/.test(stderr)) throw coded('CREATOR_CLOSE_FILE_MENU_NOT_FOUND');
+    if (/CREATOR_CLOSE_OPEN_PROJECT_MENU_ITEM_NOT_FOUND/.test(stderr)) throw coded('CREATOR_CLOSE_MENU_ITEM_NOT_FOUND');
+    throw coded('CREATOR_CLOSE_REQUEST_FAILED', String(result?.stderr || result?.stdout || 'osascript failed'));
+  }
+  return { requested: true };
+}
+
+export async function closeCreatorProject({ instanceId, timeoutMs = 30000 }, {
+  listInstancesImpl = listInstances, requestCloseImpl = requestCreatorProjectClose,
+  diagnoseModalImpl = diagnoseCreatorModal, platform = process.platform, nowImpl = Date.now,
+  sleepImpl = (duration) => new Promise((resolve) => setTimeout(resolve, duration)),
+} = {}) {
+  if (typeof instanceId !== 'string' || !/^[0-9a-f-]{36}$/i.test(instanceId)) throw coded('CREATOR_INSTANCE_ID_INVALID');
+  if (!['darwin', 'win32'].includes(platform)) throw coded('CREATOR_CLOSE_PLATFORM_UNSUPPORTED');
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 120000)
+    throw coded('CREATOR_CLOSE_TIMEOUT_INVALID');
+  const inventory = await listInstancesImpl({ start: false });
+  const instance = inventory.instances?.find((item) => item.instanceId === instanceId);
+  if (!instance || instance.connected !== true) throw coded('CREATOR_CLOSE_INSTANCE_NOT_CONNECTED');
+  const isAbsoluteProjectPath = platform === 'win32' ? path.win32.isAbsolute(instance.projectRoot) : path.isAbsolute(instance.projectRoot);
+  if (instance.creatorVersion !== CREATOR_VERSION || !isAbsoluteProjectPath)
+    throw coded('CREATOR_CLOSE_INSTANCE_IDENTITY_INVALID');
+  if (!Number.isSafeInteger(instance.processId) || instance.processId < 1)
+    throw coded('CREATOR_CLOSE_PROCESS_ID_UNAVAILABLE');
+  requestCloseImpl(instance.processId, { platform });
+  const closeRoute = 'file.open-project';
+  const deadline = nowImpl() + timeoutMs;
+  let lastError = null;
+  while (nowImpl() < deadline) {
+    try {
+      const current = await listInstancesImpl({ start: false });
+      const remaining = current.instances?.find((item) => item.instanceId === instanceId);
+      if (!remaining || remaining.connected !== true)
+        return { operation: 'close', success: true, closed: true, instanceId,
+          projectName: instance.projectName, projectRoot: instance.projectRoot,
+          creatorVersion: instance.creatorVersion, processId: instance.processId,
+          closeRoute };
+    } catch (error) { lastError = error; }
+    await sleepImpl(Math.min(400, Math.max(0, deadline - nowImpl())));
+  }
+  const modalDiagnosis = diagnoseModalImpl(instance.processId);
+  return { operation: 'close', success: false, closed: false, instanceId,
+    projectName: instance.projectName, projectRoot: instance.projectRoot,
+    creatorVersion: instance.creatorVersion, processId: instance.processId,
+    closeRoute, modalDiagnosis,
+    possibleBlocker: modalDiagnosis?.status === 'detected'
+      ? 'Creator is showing a modal dialog; resolve its save or close prompt in the Editor.'
+      : 'Creator remains connected; close may be waiting for a save prompt or a long-running Editor operation.',
+    ...(lastError ? { lastErrorCode: lastError.code || lastError.message || String(lastError) } : {}) };
 }
 
 function projectInstances(inventory, projectRoot) {
@@ -275,12 +588,12 @@ async function waitForProjectReady(project, { timeoutMs, listInstancesImpl, prob
 
 export async function openCreatorProject({ projectRoot, creatorPath, waitReady = false, timeoutMs = 120000 }, {
   spawnImpl = spawn, listInstancesImpl = listInstances, probeProjectImpl = callCommand,
-  installationSearchRoots, diagnoseModalImpl = diagnoseCreatorModal, nowImpl = Date.now,
+  installationSearchRoots, installationPlatform = process.platform, diagnoseModalImpl = diagnoseCreatorModal, nowImpl = Date.now,
   sleepImpl = (duration) => new Promise((resolve) => setTimeout(resolve, duration)),
 } = {}) {
   const project = canonicalProjectRoot(projectRoot);
-  const creator = creatorPath ? resolveCreatorExecutable(creatorPath)
-    : resolveMatchingCreator(project.project.version, installationSearchRoots);
+  const creator = creatorPath ? resolveCreatorExecutable(creatorPath, { platform: installationPlatform })
+    : resolveMatchingCreator(project.project.version, installationSearchRoots, installationPlatform);
   if (waitReady && (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 600000))
     throw coded('CREATOR_OPEN_TIMEOUT_INVALID');
 
@@ -422,11 +735,17 @@ function appendTail(current, chunk) {
 }
 
 export async function runCreatorWorkflow({ operation, projectRoot, creatorPath, platform, buildPath,
-  debug = false, autoCompile = false, timeoutMs = 1200000 }, { spawnImpl = spawn } = {}) {
+  debug = false, autoCompile = false, excludedModules, timeoutMs = 1200000 }, { spawnImpl = spawn } = {}) {
   if (!['build', 'compile'].includes(operation)) throw coded('CREATOR_WORKFLOW_INVALID');
   const allowedPlatforms = operation === 'build' ? BUILD_PLATFORMS : NATIVE_PLATFORMS;
   if (!allowedPlatforms.has(platform)) throw coded(operation === 'build' ? 'BUILD_PLATFORM_UNSUPPORTED' : 'COMPILE_PLATFORM_UNSUPPORTED');
   if (autoCompile && (operation !== 'build' || !NATIVE_PLATFORMS.has(platform))) throw coded('AUTO_COMPILE_NATIVE_BUILD_ONLY');
+  if (excludedModules !== undefined) {
+    if (operation !== 'build') throw coded('BUILD_MODULES_EXCLUDED_BUILD_ONLY');
+    if (!Array.isArray(excludedModules) || excludedModules.length > 128
+      || excludedModules.some((name) => typeof name !== 'string' || !/^[A-Za-z0-9_.-]{1,80}$/.test(name))
+      || new Set(excludedModules).size !== excludedModules.length) throw coded('BUILD_EXCLUDED_MODULES_INVALID');
+  }
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 3600000) throw coded('CREATOR_WORKFLOW_TIMEOUT_INVALID');
   const project = canonicalProjectRoot(projectRoot);
   const creator = resolveCreatorExecutable(creatorPath);
@@ -437,6 +756,7 @@ export async function runCreatorWorkflow({ operation, projectRoot, creatorPath, 
   const startTime = Date.now();
   const parameters = [`platform=${platform}`, `buildPath=${outputPath}`, `debug=${debug ? 'true' : 'false'}`];
   if (operation === 'build' && autoCompile) parameters.push('autoCompile=true');
+  if (excludedModules?.length) parameters.push(`excludedModules=[${excludedModules.map((name) => `'${name}'`).join(',')}]`);
   const args = ['--path', project.root, operation === 'build' ? '--build' : '--compile', parameters.join(';')];
   const child = spawnImpl(creator.executable, args, { cwd: project.root, windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe'] });
@@ -512,6 +832,7 @@ export async function runCreatorWorkflow({ operation, projectRoot, creatorPath, 
       const completedAt = new Date().toISOString();
       resolve({ operation, projectName: project.project.name || path.basename(project.root), projectRoot: project.root,
         creatorVersion: creator.creatorVersion, platform, outputPath, outputExists, toolchain,
+        ...(excludedModules === undefined ? {} : { excludedModules }),
         command: [creator.executable, ...args], exitCode, signal: signal || null, timedOut, builderFinished,
         success: failureCode === null, failureCode, failureReason: builderFailure,
         startedAt, completedAt, durationMs: Date.now() - startTime, stdout, stderr });

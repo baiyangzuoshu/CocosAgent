@@ -7,10 +7,12 @@ import { bridgeStatus, stopBridge, ensureBridge, listInstances, getCapabilities,
 import { COMMANDS, CREATOR_VERSION } from './bridge/contracts.mjs';
 import { installExtension, extensionStatus, updateExtension, uninstallExtension } from './extension-lifecycle.mjs';
 import { updateCli } from './release.mjs';
+import { queryGitHubActions } from './cloud-actions.mjs';
 import { runDoctor } from './doctor.mjs';
-import { discoverCreatorInstallations, openCreatorProject, runCreatorWorkflow } from './creator-workflows.mjs';
+import { closeCreatorProject, discoverCreatorInstallations, openCreatorProject, runCreatorWorkflow } from './creator-workflows.mjs';
+import { cloneCreatorProject, createCreatorProject, listCreatorProjects, listCreatorTemplates } from './project-lifecycle.mjs';
 import { startProjectFileWatch } from './creator-watch.mjs';
-import { loadTestPlan, loadFailedSuiteIds, parseTestShard, runTestPlan, watchTestPlan } from './creator-tests.mjs';
+import { loadTestPlan, loadFailedSuiteIds, mergeTestReports, parseTestShard, runTestPlan, watchTestPlan } from './creator-tests.mjs';
 import { runVcsDoctor } from './vcs-integrity.mjs';
 import { runVcsStatus } from './vcs-status.mjs';
 import { runVcsImpact } from './vcs-impact.mjs';
@@ -31,6 +33,7 @@ const HELP_LINES = [
   '  help [<command> [<subcommand>]] | help search <query>',
   '  catalog [--format json]',
   '  self-update [--check] [--version <version>]',
+  '  cloud actions workflows|runs|jobs [--repository <owner/name>] [--project-root <path>] [--workflow <id|file>] [--run <id>] [--branch <name>] [--event <name>] [--status <status>] [--page N] [--per-page N]',
   '  mcp configure <codex|claude-code|cursor|vscode> [--local] [--force] [--dry-run] | list | status <client> [--local] | remove <client> [--local] | serve',
   '  skill list [<codex|claude-code>] [--local] | show [<skill-name>|--list] (default: cocos2-cli) | install <client> [--local] [--skill <name>] [--force] | refresh <client> [--local] [--force]',
   '  doctor [--project-root <absolute-path>] [--instance <instance-id>]',
@@ -51,7 +54,12 @@ const HELP_LINES = [
   '  instances list',
   '  capabilities --instance <instance-id>',
   '  creator installations [--search-root <absolute-path>]',
-  '  project open --project-root <absolute-path> [--creator <Creator-2.4.15.app>] [--timeout-ms N (default 120000)] [--no-wait-ready]',
+  '  project open --project-root <absolute-path> [--creator <Creator-install-path-or-CocosCreator.exe>] [--timeout-ms N (default 120000)] [--no-wait-ready]',
+  '  project close --instance <instance-id> [--timeout-ms N (default 30000)]',
+  '  project list [--search-root <absolute-path> ...] [--max-depth 0-8]',
+  '  project clone --project-root <source> --target <new-absolute-path> [--name <project-name>]',
+  '  project templates list [--creator <Creator-install-path-or-CocosCreator.exe> | --template-root <absolute-path>]',
+  '  project create --template <template-id> --target <new-absolute-path> [--name <project-name>] [--creator <Creator-install-path-or-CocosCreator.exe> | --template-root <absolute-path>]',
   '  project info --instance <instance-id>',
   '  project-tools list --instance <instance-id>',
   '  project-tools call --instance <instance-id> --tool <tool-id> --input <json-object>',
@@ -94,10 +102,11 @@ const HELP_LINES = [
   '  call --instance <instance-id> --command creator.scene.node.set-component-property.plan --input <json-object>',
   '  call --instance <instance-id> --command creator.scene.node.set-component-property.commit --input <json-object>',
   '  call --instance <instance-id> --command creator.scene.node.set-component-property.reconcile --input <json-object>',
-  '  creator build --project-root <path> --creator <Creator-2.4.15.app> --platform web-mobile|web-desktop|android|ios|mac|win32 [--build-path <new-path>] [--debug] [--auto-compile] [--timeout-ms N]',
-  '  creator compile --project-root <path> --creator <Creator-2.4.15.app> --platform android|ios|mac|win32 --build-path <existing-native-build-path> [--debug] [--timeout-ms N]',
+  '  creator build --project-root <path> --creator <Creator-install-path-or-CocosCreator.exe> --platform web-mobile|web-desktop|android|ios|mac|win32 [--build-path <new-path>] [--debug] [--auto-compile] [--excluded-modules <json-array>] [--timeout-ms N]',
+  '  creator compile --project-root <path> --creator <Creator-install-path-or-CocosCreator.exe> --platform android|ios|mac|win32 --build-path <existing-native-build-path> [--debug] [--timeout-ms N]',
   '  creator test --instance <instance-id> --session <preview-session-id> --input <actions-and-assertions-json>',
   '  creator test --project-root <path> [--list] [--suite <id>] [--rerun-failed <results.json>] [--shard <index>/<total>] [--coverage] [--instance <id>] [--session <id>] [--report-dir <new-path>]',
+  '  creator test merge --reports <json-array-of-shard-results.json> [--report-dir <new-path>]',
   '  creator watch --instance <instance-id> --session <preview-session-id> --paths <project-relative-paths-json> --input <actions-and-assertions-json> [--interval-ms N]',
   '  creator watch --project-root <path> --paths <files-or-directories-json> [--affected] [--suite <id>] [--instance <id>] [--session <id>] [--report-dir <path>]',
   '  diagnostics read --instance <instance-id> [--after-sequence N] [--limit N]',
@@ -215,6 +224,20 @@ async function main() {
   }
   if (group === 'self-update') {
     print(await updateCli(packageInfo, { checkOnly: args.includes('--check'), version: value('--version') }));
+    return;
+  }
+  if (group === 'cloud' && action === 'actions') {
+    const kind = rest[0];
+    const runIdValue = value('--run');
+    const pageValue = value('--page', '1');
+    const perPageValue = value('--per-page');
+    const runId = runIdValue === undefined ? undefined : Number(runIdValue);
+    const page = Number(pageValue);
+    const perPage = perPageValue === undefined ? undefined : Number(perPageValue);
+    print(await queryGitHubActions(kind, {
+      repository: value('--repository'), projectRoot: value('--project-root'), workflow: value('--workflow'),
+      runId, branch: value('--branch'), event: value('--event'), status: value('--status'), page, perPage,
+    }));
     return;
   }
   if (group === 'mcp') {
@@ -372,10 +395,36 @@ async function main() {
     throw new Error('Unknown tasks action.');
   }
   if (group === 'call') { print(await callCommand(instanceId, value('--command'), parseInput())); return; }
+  if (group === 'project' && action === 'templates' && rest[0] === 'list') {
+    print(listCreatorTemplates({ creatorPath: value('--creator'), templateRoot: value('--template-root') }));
+    return;
+  }
+  if (group === 'project' && action === 'create') {
+    print(createCreatorProject({ templateId: value('--template'), targetPath: value('--target'),
+      name: value('--name'), creatorPath: value('--creator'), templateRoot: value('--template-root') }));
+    return;
+  }
+  if (group === 'project' && action === 'list') {
+    const searchRoots = args.flatMap((item, index) => item === '--search-root' ? [args[index + 1]] : []);
+    print(listCreatorProjects({ searchRoots: searchRoots.length ? searchRoots : undefined,
+      maxDepth: value('--max-depth') === undefined ? undefined : Number(value('--max-depth')) }));
+    return;
+  }
+  if (group === 'project' && action === 'clone') {
+    print(cloneCreatorProject({ projectRoot: value('--project-root'), targetPath: value('--target'), name: value('--name') }));
+    return;
+  }
   if (group === 'project' && action === 'open') {
     const result = await openCreatorProject({ projectRoot: value('--project-root'), creatorPath: value('--creator'),
       waitReady: !args.includes('--no-wait-ready'),
       timeoutMs: value('--timeout-ms') === undefined ? 120000 : Number(value('--timeout-ms')) });
+    print(result);
+    if (!result.success) setFailureExitCode(4);
+    return;
+  }
+  if (group === 'project' && action === 'close') {
+    const result = await closeCreatorProject({ instanceId: value('--instance'),
+      timeoutMs: value('--timeout-ms') === undefined ? 30000 : Number(value('--timeout-ms')) });
     print(result);
     if (!result.success) setFailureExitCode(4);
     return;
@@ -408,6 +457,31 @@ async function main() {
     if (action === 'installations') {
       const searchRoot = value('--search-root');
       print(discoverCreatorInstallations(searchRoot ? { searchRoots: [searchRoot] } : {}));
+      return;
+    }
+    if (action === 'test' && args[2] === 'merge') {
+      const options = new Set();
+      for (let index = 3; index < args.length;) {
+        const option = args[index];
+        if (!['--reports', '--report-dir'].includes(option) || options.has(option) || !args[index + 1]
+          || args[index + 1].startsWith('--'))
+          throw Object.assign(new Error('creator test merge accepts --reports and optional --report-dir only'),
+            { code: 'CLI_USAGE_ERROR', exitCode: 2 });
+        options.add(option);
+        index += 2;
+      }
+      if (!options.has('--reports'))
+        throw Object.assign(new Error('creator test merge requires --reports'), { code: 'CLI_USAGE_ERROR', exitCode: 2 });
+      let reportPaths;
+      try { reportPaths = JSON.parse(value('--reports', '')); }
+      catch (_) { throw Object.assign(new Error('--reports must be a JSON array of absolute shard results.json paths'),
+        { code: 'CLI_USAGE_ERROR', exitCode: 2 }); }
+      if (!Array.isArray(reportPaths))
+        throw Object.assign(new Error('--reports must be a JSON array of absolute shard results.json paths'),
+          { code: 'CLI_USAGE_ERROR', exitCode: 2 });
+      const result = mergeTestReports({ reportPaths, reportDir: value('--report-dir') });
+      print(result);
+      if (!result.passed) setFailureExitCode(10);
       return;
     }
     if ((action === 'test' || action === 'watch') && value('--project-root') !== undefined) {
@@ -523,9 +597,15 @@ async function main() {
       return;
     }
     if (action === 'build' || action === 'compile') {
+      let excludedModules;
+      if (value('--excluded-modules') !== undefined) {
+        try { excludedModules = JSON.parse(value('--excluded-modules')); }
+        catch (_) { throw Object.assign(new Error('--excluded-modules must be a JSON array'), { code: 'CLI_USAGE_ERROR' }); }
+      }
       const result = await runCreatorWorkflow({ operation: action,
         projectRoot: value('--project-root'), creatorPath: value('--creator'), platform: value('--platform'),
         buildPath: value('--build-path'), debug: args.includes('--debug'), autoCompile: args.includes('--auto-compile'),
+        excludedModules,
         timeoutMs: value('--timeout-ms') === undefined ? 1200000 : Number(value('--timeout-ms')) });
       print(result);
       if (!result.success) setFailureExitCode(4);

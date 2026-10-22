@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import test from 'node:test';
-import { openCreatorProject, resolveCreatorExecutable, runCreatorWorkflow } from '../creator-workflows.mjs';
+import { closeCreatorProject, openCreatorProject, requestCreatorProjectClose, resolveCreatorExecutable,
+  runCreatorWorkflow } from '../creator-workflows.mjs';
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-creator-workflow-'));
@@ -41,7 +42,8 @@ test('Creator build workflow verifies project and editor versions, then returns 
   const outputPath = path.join(state.root, 'build-output');
   let observedArgs;
   const result = await runCreatorWorkflow({ operation: 'build', projectRoot: state.projectRoot,
-    creatorPath: state.appRoot, platform: 'web-mobile', buildPath: outputPath, debug: true }, {
+    creatorPath: state.appRoot, platform: 'web-mobile', buildPath: outputPath, debug: true,
+    excludedModules: ['physics-2d', 'physics-3d'] }, {
     spawnImpl(executable, args, options) {
       assert.equal(executable, state.executable);
       assert.equal(options.cwd, fs.realpathSync(state.projectRoot));
@@ -65,6 +67,8 @@ test('Creator build workflow verifies project and editor versions, then returns 
   assert.ok(observedArgs.includes('--build'));
   assert.ok(observedArgs.at(-1).includes(`buildPath=${fs.realpathSync(path.dirname(outputPath))}/${path.basename(outputPath)}`));
   assert.ok(observedArgs.at(-1).includes('debug=true'));
+  assert.ok(observedArgs.at(-1).includes("excludedModules=['physics-2d','physics-3d']"));
+  assert.deepEqual(result.excludedModules, ['physics-2d', 'physics-3d']);
   await assert.rejects(runCreatorWorkflow({ operation: 'build', projectRoot: state.projectRoot,
     creatorPath: state.appRoot, platform: 'web-mobile', buildPath: path.join(state.projectRoot, 'build') }),
   (error) => error.code === 'BUILD_PATH_MUST_BE_OUTSIDE_PROJECT');
@@ -263,4 +267,131 @@ test('native compile requires an existing output directory and native build auto
   await assert.rejects(runCreatorWorkflow({ operation: 'build', projectRoot: state.projectRoot,
     creatorPath: state.appRoot, platform: 'web-mobile', autoCompile: true }),
   (error) => error.code === 'AUTO_COMPILE_NATIVE_BUILD_ONLY');
+  await assert.rejects(runCreatorWorkflow({ operation: 'build', projectRoot: state.projectRoot,
+    creatorPath: state.appRoot, platform: 'web-mobile', excludedModules: ['valid', 'valid'] }),
+  (error) => error.code === 'BUILD_EXCLUDED_MODULES_INVALID');
+  await assert.rejects(runCreatorWorkflow({ operation: 'compile', projectRoot: state.projectRoot,
+    creatorPath: state.appRoot, platform: 'android', buildPath: missingOutput, excludedModules: ['physics-2d'] }),
+  (error) => error.code === 'BUILD_MODULES_EXCLUDED_BUILD_ONLY');
+});
+
+test('project close invokes the exact live instance menu action and confirms its disconnect', async () => {
+  const instanceId = '12345678-1234-4234-8234-123456789012';
+  let inventoryReads = 0;
+  let requestedProcessId = null;
+  let now = 0;
+  const result = await closeCreatorProject({ instanceId, timeoutMs: 1000 }, {
+    platform: 'darwin',
+    listInstancesImpl: async ({ start }) => {
+      assert.equal(start, false);
+      inventoryReads += 1;
+      return { instances: [{ instanceId, projectName: 'TestProject', projectRoot: '/projects/TestProject',
+        creatorVersion: '2.4.15', processId: 4321, connected: inventoryReads === 1 }] };
+    },
+    requestCloseImpl(processId) { requestedProcessId = processId; return { requested: true }; },
+    nowImpl: () => now,
+    sleepImpl: async (duration) => { now += duration; },
+  });
+  assert.equal(requestedProcessId, 4321);
+  assert.equal(result.success, true);
+  assert.equal(result.closed, true);
+  assert.equal(result.projectRoot, '/projects/TestProject');
+  assert.equal(result.closeRoute, 'file.open-project');
+});
+
+test('project close invokes the exact Windows Creator menu command for one PID and confirms disconnect', async () => {
+  const instanceId = '12345678-1234-4234-8234-123456789012';
+  let inventoryReads = 0;
+  let requestedProcessId = null;
+  let now = 0;
+  const result = await closeCreatorProject({ instanceId, timeoutMs: 1000 }, {
+    platform: 'win32',
+    listInstancesImpl: async () => ({ instances: [{ instanceId, projectName: 'TestProject', projectRoot: 'C:\\projects\\TestProject',
+      creatorVersion: '2.4.15', processId: 4321, connected: inventoryReads++ === 0 }] }),
+    requestCloseImpl(processId) { requestedProcessId = processId; return { requested: true }; },
+    nowImpl: () => now,
+    sleepImpl: async (duration) => { now += duration; },
+  });
+  assert.equal(requestedProcessId, 4321);
+  assert.equal(result.success, true);
+  assert.equal(result.closed, true);
+  assert.equal(result.closeRoute, 'file.open-project');
+});
+
+test('project close timeout reports the modal prompt and never force-kills Creator', async () => {
+  const instanceId = '12345678-1234-4234-8234-123456789012';
+  let now = 0;
+  let closeRequests = 0;
+  const result = await closeCreatorProject({ instanceId, timeoutMs: 1000 }, {
+    platform: 'darwin',
+    listInstancesImpl: async () => ({ instances: [{ instanceId, projectName: 'TestProject',
+      projectRoot: '/projects/TestProject', creatorVersion: '2.4.15', processId: 4321, connected: true }] }),
+    requestCloseImpl() { closeRequests += 1; return { requested: true }; },
+    diagnoseModalImpl: (processId) => ({ status: 'detected', dialogCount: processId === 4321 ? 1 : 0 }),
+    nowImpl: () => now,
+    sleepImpl: async (duration) => { now += duration; },
+  });
+  assert.equal(closeRequests, 1);
+  assert.equal(result.success, false);
+  assert.equal(result.closed, false);
+  assert.deepEqual(result.modalDiagnosis, { status: 'detected', dialogCount: 1 });
+  assert.match(result.possibleBlocker, /save or close prompt/);
+});
+
+test('project close refuses unsupported platforms and disconnected instances before menu dispatch', async () => {
+  let closeRequests = 0;
+  await assert.rejects(closeCreatorProject({ instanceId: '12345678-1234-4234-8234-123456789012' }, {
+    platform: 'linux', listInstancesImpl: async () => ({ instances: [] }),
+    requestCloseImpl() { closeRequests += 1; },
+  }), { code: 'CREATOR_CLOSE_PLATFORM_UNSUPPORTED' });
+  await assert.rejects(closeCreatorProject({ instanceId: '12345678-1234-4234-8234-123456789012' }, {
+    platform: 'darwin', listInstancesImpl: async () => ({ instances: [] }),
+    requestCloseImpl() { closeRequests += 1; },
+  }), { code: 'CREATOR_CLOSE_INSTANCE_NOT_CONNECTED' });
+  assert.equal(closeRequests, 0);
+});
+
+test('project close requests only Creator’s normal Open Project menu item for the selected PID', () => {
+  let invocation;
+  const result = requestCreatorProjectClose(4321, { platform: 'darwin', spawnSyncImpl(command, args, options) {
+    invocation = { command, args, options };
+    return { status: 0, stdout: 'requested\n', stderr: '' };
+  } });
+  assert.deepEqual(result, { requested: true });
+  assert.equal(invocation.command, '/usr/bin/osascript');
+  assert.deepEqual(invocation.args.slice(0, 1), ['-e']);
+  assert.equal(invocation.args.at(-1), '4321');
+  assert.match(invocation.args[1], /whose unix id is targetPid/);
+  assert.match(invocation.args[1], /Open Project\.\.\./);
+  assert.match(invocation.args[1], /打开项目/);
+  assert.match(invocation.args[1], /click menuItem/);
+  assert.equal(invocation.options.timeout, 5000);
+});
+
+test('project close surfaces missing Accessibility permission without retrying another route', () => {
+  let invocationCount = 0;
+  assert.throws(() => requestCreatorProjectClose(4321, { platform: 'darwin', spawnSyncImpl() {
+    invocationCount += 1;
+    return { status: 1, stdout: '', stderr: 'Not authorized to send Apple events to System Events.' };
+  } }), { code: 'CREATOR_CLOSE_ACCESSIBILITY_PERMISSION_REQUIRED' });
+  assert.equal(invocationCount, 1);
+});
+
+test('Windows project close sends WM_COMMAND only for the exact Open Project menu item', () => {
+  let invocation;
+  const result = requestCreatorProjectClose(4321, { platform: 'win32', spawnSyncImpl(command, args, options) {
+    invocation = { command, args, options };
+    return { status: 0, stdout: 'requested\n', stderr: '' };
+  } });
+  assert.deepEqual(result, { requested: true });
+  assert.equal(invocation.command, 'powershell.exe');
+  assert.deepEqual(invocation.args.slice(0, 3), ['-NoProfile', '-NonInteractive', '-EncodedCommand']);
+  const script = Buffer.from(invocation.args[3], 'base64').toString('utf16le');
+  assert.match(script, /RequestOpenProject\(4321u\)/);
+  assert.match(script, /windowProcessId != targetProcessId/);
+  assert.match(script, /IsFileMenu/);
+  assert.match(script, /Open Project/);
+  assert.match(script, /Regex\.Replace/);
+  assert.match(script, /PostMessage\(window, WM_COMMAND/);
+  assert.equal(invocation.options.timeout, 5000);
 });

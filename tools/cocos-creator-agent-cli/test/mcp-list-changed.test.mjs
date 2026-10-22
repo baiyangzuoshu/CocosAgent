@@ -64,10 +64,11 @@ test('MCP advertises listChanged and notifies after dynamic command tools change
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-mcp-list-changed-'));
   const home = path.join(root, 'home');
   const statePath = path.join(root, 'catalog.json');
+  const cloudCallPath = path.join(root, 'cloud-call.json');
   fs.mkdirSync(home, { recursive: true });
   fs.writeFileSync(statePath, JSON.stringify({ commands: [] }));
   const cliShim = path.join(root, 'cocos-agent-cli.mjs');
-  fs.writeFileSync(cliShim, `#!/usr/bin/env node\nimport fs from 'node:fs';\nconst args = process.argv.slice(2);\nconst state = JSON.parse(fs.readFileSync(${JSON.stringify(statePath)}, 'utf8'));\nlet result;\nif (args[0] === 'catalog') result = { commands: state.commands };\nelse if (args[0] === 'instances' && args[1] === 'list') result = { instances: [] };\nelse result = {};\nprocess.stdout.write(JSON.stringify(result) + '\\n');\n`);
+  fs.writeFileSync(cliShim, `#!/usr/bin/env node\nimport fs from 'node:fs';\nconst args = process.argv.slice(2);\nconst state = JSON.parse(fs.readFileSync(${JSON.stringify(statePath)}, 'utf8'));\nlet result;\nif (args[0] === 'catalog') result = { commands: state.commands };\nelse if (args[0] === 'instances' && args[1] === 'list') result = { instances: [] };\nelse if (args[0] === 'cloud') { fs.writeFileSync(${JSON.stringify(cloudCallPath)}, JSON.stringify(args)); result = { provider: 'github-actions', kind: args[2] }; }\nelse result = {};\nprocess.stdout.write(JSON.stringify(result) + '\\n');\n`);
   fs.chmodSync(cliShim, 0o755);
   let mcp;
   t.after(async () => {
@@ -84,6 +85,19 @@ test('MCP advertises listChanged and notifies after dynamic command tools change
   mcp.notify('notifications/initialized');
   const first = await mcp.request('tools/list');
   assert.equal(first.tools.some((tool) => tool.name === 'cocos_project_info'), false);
+  for (const name of ['cocos_cloud_actions_workflows', 'cocos_cloud_actions_runs', 'cocos_cloud_actions_jobs']) {
+    const tool = first.tools.find((item) => item.name === name);
+    assert.ok(tool, `Expected ${name} in tools/list`);
+    assert.equal(tool.annotations.readOnlyHint, true);
+  }
+  const cloudResult = await mcp.request('tools/call', { name: 'cocos_cloud_actions_runs', arguments: {
+    repository: 'acme/game', workflow: 'build.yml', status: 'completed', page: 2, perPage: 5,
+  } });
+  assert.match(cloudResult.content[0].text, /github-actions/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(cloudCallPath, 'utf8')), [
+    'cloud', 'actions', 'runs', '--repository', 'acme/game', '--workflow', 'build.yml',
+    '--status', 'completed', '--page', '2', '--per-page', '5', '--format', 'json',
+  ]);
 
   fs.writeFileSync(statePath, JSON.stringify({ commands: [{ id: 'creator.project.info',
     description: 'Read the selected Creator project identity.', access: 'read', input: {

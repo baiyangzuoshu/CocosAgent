@@ -18,6 +18,14 @@ test('CLI supports filtered subcommand help and command catalog search', () => {
   assert.match(subcommand.stdout, /project search/);
   assert.doesNotMatch(subcommand.stdout, /creator build/);
 
+  const cloud = runCli(['cloud', '--help']);
+  assert.equal(cloud.status, 0);
+  assert.match(cloud.stdout, /cloud actions workflows\|runs\|jobs/);
+
+  const testHelp = runCli(['help', 'creator', 'test', 'merge']);
+  assert.equal(testHelp.status, 0);
+  assert.match(testHelp.stdout, /creator test merge --reports/);
+
   const search = runCli(['help', 'search', 'rename']);
   assert.equal(search.status, 0);
   assert.match(search.stdout, /creator\.scene\.node\.rename\.plan/);

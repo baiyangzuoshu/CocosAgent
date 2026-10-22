@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { loadTestPlan, parseTestShard, runTestPlan, testShardForCase, testShardForSuite } from '../creator-tests.mjs';
+import { fileURLToPath } from 'node:url';
+import { loadTestPlan, mergeTestReports, parseTestShard, runTestPlan, testShardForCase, testShardForSuite } from '../creator-tests.mjs';
 import creatorTestHarness from '../testing/creator-test-harness.cjs';
+
+const cliPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../cli.mjs');
 
 function fixture(suites) {
   const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-test-options-')));
@@ -59,6 +63,53 @@ test('Node test sharding splits project test files into disjoint reports', async
   assert.ok(reports.every((report) => report.passed));
 });
 
+test('shard reports merge into one JSON and JUnit run with all test cases', async (t) => {
+  const state = fixture();
+  t.after(() => fs.rmSync(state.directory, { recursive: true, force: true }));
+  const shards = [];
+  for (const index of [1, 2]) {
+    shards.push(await runTestPlan({ projectRoot: state.projectRoot, shard: { index, total: 2 }, coverage: true,
+      reportDir: path.join(state.directory, `merge-source-${index}`) }));
+  }
+  const merged = mergeTestReports({ reportPaths: shards.map((report) => report.artifacts.json),
+    reportDir: path.join(state.directory, 'merged-results') });
+  assert.equal(merged.passed, true);
+  assert.equal(merged.counts.total, 4);
+  assert.equal(merged.counts.passed, 4);
+  assert.equal(new Set(merged.suites[0].tests.map((item) => item.id)).size, 4);
+  assert.deepEqual(merged.shard.indexes, [1, 2]);
+  assert.deepEqual(merged.suites[0].coverageByShard.map((item) => item.index), [1, 2]);
+  assert.equal(fs.existsSync(merged.artifacts.junit), true);
+});
+
+test('shard merge refuses an incomplete or repeated shard set', async (t) => {
+  const state = fixture();
+  t.after(() => fs.rmSync(state.directory, { recursive: true, force: true }));
+  const first = await runTestPlan({ projectRoot: state.projectRoot, shard: { index: 1, total: 2 },
+    reportDir: path.join(state.directory, 'incomplete-source-1') });
+  assert.throws(() => mergeTestReports({ reportPaths: [first.artifacts.json],
+    reportDir: path.join(state.directory, 'incomplete-merged') }), { code: 'TEST_MERGE_SHARD_SET_INCOMPLETE' });
+  assert.throws(() => mergeTestReports({ reportPaths: [first.artifacts.json, first.artifacts.json],
+    reportDir: path.join(state.directory, 'duplicate-merged') }), { code: 'TEST_MERGE_DUPLICATE_REPORT' });
+});
+
+test('CLI exposes shard report merging and returns its aggregate result', async (t) => {
+  const state = fixture();
+  t.after(() => fs.rmSync(state.directory, { recursive: true, force: true }));
+  const reports = [];
+  for (const index of [1, 2]) {
+    reports.push(await runTestPlan({ projectRoot: state.projectRoot, shard: { index, total: 2 },
+      reportDir: path.join(state.directory, `cli-merge-source-${index}`) }));
+  }
+  const result = spawnSync(process.execPath, [cliPath, 'creator', 'test', 'merge', '--reports',
+    JSON.stringify(reports.map((report) => report.artifacts.json)), '--report-dir', path.join(state.directory, 'cli-merged')],
+  { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  const merged = JSON.parse(result.stdout);
+  assert.equal(merged.passed, true);
+  assert.equal(merged.counts.total, 4);
+});
+
 test('Node coverage is included as structured per-suite evidence', async (t) => {
   const state = fixture();
   t.after(() => fs.rmSync(state.directory, { recursive: true, force: true }));
@@ -97,7 +148,63 @@ test('Creator provider and preview suites are assigned to deterministic engine s
   assert.equal(new Set(selectedByShard.flat()).size, 2);
   assert.ok(shardReports.every((report) => report.passed));
   assert.ok(shardReports.every((report) => report.shard.strategies.creator === 'test-case-when-manifested-otherwise-suite'
-    && report.shard.strategies.preview === 'suite'));
+    && report.shard.strategies.preview === 'test-case-when-manifested-otherwise-suite'));
+});
+
+test('preview test cases shard by stable IDs and merge same-session coverage per shard', async (t) => {
+  const suiteId = 'preview-cases';
+  const cases = [];
+  const shardIndexes = new Set();
+  for (let index = 0; shardIndexes.size < 2 && index < 64; index += 1) {
+    const id = `runtime-${index}`;
+    cases.push({ id, name: `Runtime case ${index}`, actions: [{ type: 'key', key: 'Space' }],
+      assertions: [{ type: 'console-contains', text: id }] });
+    shardIndexes.add(testShardForCase(suiteId, id, 2));
+  }
+  const state = fixture();
+  t.after(() => fs.rmSync(state.directory, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(state.projectRoot, '.cocos-agent', 'tests.json'), JSON.stringify({ schemaVersion: 1,
+    suites: [{ id: suiteId, adapter: 'preview', testCases: cases }] }));
+  const invokedByShard = new Map();
+  const reports = [];
+  for (const index of [1, 2]) {
+    const invoked = [];
+    invokedByShard.set(index, invoked);
+    reports.push(await runTestPlan({ projectRoot: state.projectRoot, instanceId: 'instance',
+      previewSessionId: 'same-session', shard: { index, total: 2 }, coverage: true,
+      reportDir: path.join(state.directory, `preview-case-shard-${index}`) }, {
+      listInstances: async () => ({ instances: [{ instanceId: 'instance', projectRoot: state.projectRoot, creatorVersion: '2.4.15' }] }),
+      callCommand: async (_instance, command, input) => {
+        assert.equal(command, 'creator.preview.interact');
+        invoked.push(input.assertions[0].text);
+        return { result: { previewSessionId: input.previewSessionId, instanceId: 'instance',
+          projectRoot: state.projectRoot, sceneUuid: 'scene-uuid', navigationCount: 1,
+          assertions: [{ type: 'console-contains', pass: true }], passed: true,
+          coverage: { kind: 'v8-precise-function-and-range', scripts: [{ url: 'http://127.0.0.1:7456/src/game.js',
+            functions: [{ name: 'update', blockCoverage: true, ranges: [
+              { startOffset: 0, endOffset: 100, count: 1 },
+              { startOffset: 20, endOffset: 40, count: input.assertions[0].text === 'runtime-0' ? 1 : 0 },
+            ] }] }] } } };
+      },
+    }));
+  }
+  const assigned = [...invokedByShard.values()].flat();
+  assert.deepEqual(assigned.slice().sort(), cases.map((item) => item.id).sort());
+  assert.equal(new Set(assigned).size, cases.length);
+  for (const report of reports) {
+    const shard = report.shard.index;
+    assert.deepEqual(invokedByShard.get(shard).slice().sort(), report.selectedCaseIdsBySuite[suiteId].slice().sort());
+    assert.deepEqual(report.suites[0].tests.map((item) => item.id).sort(), invokedByShard.get(shard).slice().sort());
+    assert.equal(report.suites[0].coverage.totals.totalFunctions, 1);
+    assert.equal(report.suites[0].coverage.totals.totalRanges, 2);
+    assert.equal(report.suites[0].coverage.totals.coveredRanges, invokedByShard.get(shard).includes('runtime-0') ? 2 : 1);
+    assert.ok(report.passed, JSON.stringify(report.suites));
+  }
+  assert.ok(reports.every((report) => report.shard.strategies.preview === 'test-case-when-manifested-otherwise-suite'));
+  const merged = mergeTestReports({ reportPaths: reports.map((report) => report.artifacts.json),
+    reportDir: path.join(state.directory, 'preview-cases-merged') });
+  assert.deepEqual(merged.suites[0].tests.map((item) => item.id).sort(), cases.map((item) => item.id).sort());
+  assert.deepEqual(merged.suites[0].coverageByShard.map((item) => item.index), [1, 2]);
 });
 
 test('Creator Provider test IDs shard into disjoint approved engine test batches', async (t) => {

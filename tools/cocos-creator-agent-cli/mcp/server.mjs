@@ -167,6 +167,36 @@ const infrastructureTools = [
     annotations: READ_ONLY_ANNOTATIONS,
   },
   {
+    name: 'cocos_cloud_actions_workflows',
+    description: 'List GitHub Actions workflow targets for a repository. Uses the origin remote from projectRoot when repository is omitted. Read-only; requires Actions read permission for private repositories.',
+    inputSchema: { type: 'object', properties: {
+      repository: { type: 'string', minLength: 3, maxLength: 300 }, projectRoot: { type: 'string', minLength: 1, maxLength: 4096 },
+      page: { type: 'integer', minimum: 1, maximum: 1000 }, perPage: { type: 'integer', minimum: 1, maximum: 100 },
+    }, additionalProperties: false },
+    annotations: READ_ONLY_ANNOTATIONS,
+  },
+  {
+    name: 'cocos_cloud_actions_runs',
+    description: 'List GitHub Actions build/automation runs with optional workflow, branch, event, and status filters. Read-only.',
+    inputSchema: { type: 'object', properties: {
+      repository: { type: 'string', minLength: 3, maxLength: 300 }, projectRoot: { type: 'string', minLength: 1, maxLength: 4096 },
+      workflow: { type: 'string', minLength: 1, maxLength: 200 }, branch: { type: 'string', minLength: 1, maxLength: 240 },
+      event: { type: 'string', minLength: 1, maxLength: 80 }, status: { type: 'string', minLength: 1, maxLength: 32 },
+      page: { type: 'integer', minimum: 1, maximum: 1000 }, perPage: { type: 'integer', minimum: 1, maximum: 100 },
+    }, additionalProperties: false },
+    annotations: READ_ONLY_ANNOTATIONS,
+  },
+  {
+    name: 'cocos_cloud_actions_jobs',
+    description: 'List jobs and step status for one GitHub Actions run. Read-only.',
+    inputSchema: { type: 'object', required: ['runId'], properties: {
+      repository: { type: 'string', minLength: 3, maxLength: 300 }, projectRoot: { type: 'string', minLength: 1, maxLength: 4096 },
+      runId: { type: 'integer', minimum: 1 }, page: { type: 'integer', minimum: 1, maximum: 1000 },
+      perPage: { type: 'integer', minimum: 1, maximum: 100 },
+    }, additionalProperties: false },
+    annotations: READ_ONLY_ANNOTATIONS,
+  },
+  {
     name: 'cocos_capabilities_list',
     description: 'Read the live command catalog for one explicit Creator instance.',
     inputSchema: {
@@ -353,6 +383,15 @@ async function handleTool(name, args = {}, signal) {
     }
   }
   if (name === 'cocos_instances_list') return invokeCliJson(['instances', 'list'], { signal });
+  if (name === 'cocos_cloud_actions_workflows' || name === 'cocos_cloud_actions_runs' || name === 'cocos_cloud_actions_jobs') {
+    const kind = name.endsWith('_workflows') ? 'workflows' : name.endsWith('_runs') ? 'runs' : 'jobs';
+    const cliArgs = ['cloud', 'actions', kind];
+    for (const [key, flag] of [['repository', '--repository'], ['projectRoot', '--project-root'], ['workflow', '--workflow'],
+      ['runId', '--run'], ['branch', '--branch'], ['event', '--event'], ['status', '--status'], ['page', '--page'], ['perPage', '--per-page']]) {
+      if (args[key] !== undefined) cliArgs.push(flag, String(args[key]));
+    }
+    return invokeCliJson(cliArgs, { signal, timeoutMs: 20000 });
+  }
   if (name === 'cocos_capabilities_list') {
     if (typeof args.instanceId !== 'string' || !args.instanceId) throw new Error('INSTANCE_ID_REQUIRED');
     return invokeCliJson(['capabilities', '--instance', args.instanceId], { signal });

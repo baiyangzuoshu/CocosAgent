@@ -5,6 +5,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { listInstances, callCommand, getExtensionCommands, callExtensionCommand } from './bridge/client.mjs';
+import { validateCommand } from './bridge/contracts.mjs';
+import { mergePreviewCoverageReports } from './bridge/preview-coverage.mjs';
 import { startProjectFileWatch } from './creator-watch.mjs';
 import { PROVIDER_ID, COMMAND_ID } from './creator-extension/provider-contract.cjs';
 
@@ -15,6 +17,9 @@ const CASE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const MAX_ENGINE_CASES_PER_RUN = 64;
 const MAX_PROVIDER_COVERAGE_FILES = 512;
 const MAX_PROVIDER_COVERAGE_BYTES = 256 * 1024;
+const MAX_TEST_MERGE_REPORTS = 64;
+const MAX_TEST_MERGE_INPUT_BYTES = 16 * 1024 * 1024;
+const MAX_TEST_MERGE_OUTPUT_BYTES = 16 * 1024 * 1024;
 const COVERAGE_METRICS = ['lines', 'statements', 'branches', 'functions'];
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const coded = (code) => Object.assign(new Error(code), { code });
@@ -109,7 +114,7 @@ export function loadTestPlan(projectRoot) {
     throw coded('TEST_MANIFEST_INVALID');
   const ids = new Set();
   const suites = manifest.suites.map((suite) => {
-    rejectUnknown(suite, ['id', 'adapter', 'files', 'dependsOn', 'providerId', 'commandId', 'scriptPath', 'input', 'testIds', 'timeoutMs']);
+    rejectUnknown(suite, ['id', 'adapter', 'files', 'dependsOn', 'providerId', 'commandId', 'scriptPath', 'input', 'testIds', 'testCases', 'timeoutMs']);
     if (!ID.test(suite.id || '') || ids.has(suite.id)) throw coded('TEST_SUITE_ID_INVALID');
     ids.add(suite.id);
     if (!['node', 'creator', 'editor', 'preview'].includes(suite.adapter)) throw coded('TEST_ADAPTER_UNSUPPORTED');
@@ -147,13 +152,37 @@ export function loadTestPlan(projectRoot) {
     if (suite.adapter === 'editor' && Object.hasOwn(suite.input || {}, '__cocosAgentTest'))
       throw coded('TEST_EDITOR_RUNNER_INPUT_RESERVED');
     if (suite.adapter === 'preview') {
-      if (Object.hasOwn(suite.input || {}, 'previewSessionId') || Object.hasOwn(suite.input || {}, 'coverage'))
-        throw coded('TEST_PREVIEW_RUNNER_FIELD_RESERVED');
-      if (!Array.isArray(suite.input?.actions) || !suite.input.actions.length || suite.input.actions.length > 12)
-        throw coded('TEST_PREVIEW_ACTIONS_REQUIRED');
-      if (!Array.isArray(suite.input?.assertions) || !suite.input.assertions.length || suite.input.assertions.length > 12)
-        throw coded('TEST_PREVIEW_ASSERTIONS_REQUIRED');
+      if (suite.testCases !== undefined) {
+        if (suite.input !== undefined) throw coded('TEST_PREVIEW_CASES_INPUT_EXCLUSIVE');
+        if (!Array.isArray(suite.testCases) || !suite.testCases.length || suite.testCases.length > MAX_ENGINE_CASES_PER_RUN)
+          throw coded('TEST_PREVIEW_CASES_INVALID');
+        const caseIds = new Set();
+        suite.testCases = suite.testCases.map((testCase) => {
+          rejectUnknown(testCase, ['id', 'name', 'actions', 'assertions', 'settleMs']);
+          if (typeof testCase.id !== 'string' || !CASE_ID.test(testCase.id) || caseIds.has(testCase.id))
+            throw coded('TEST_PREVIEW_CASE_ID_INVALID');
+          caseIds.add(testCase.id);
+          if (testCase.name !== undefined && (typeof testCase.name !== 'string' || !testCase.name || testCase.name.length > 512))
+            throw coded('TEST_PREVIEW_CASE_NAME_INVALID');
+          if (!Array.isArray(testCase.assertions) || !testCase.assertions.length || testCase.assertions.length > 12)
+            throw coded('TEST_PREVIEW_CASE_ASSERTIONS_REQUIRED');
+          const checked = validateCommand('creator.preview.interact', {
+            previewSessionId: '00000000-0000-0000-0000-000000000000', actions: testCase.actions,
+            assertions: testCase.assertions, ...(testCase.settleMs === undefined ? {} : { settleMs: testCase.settleMs }),
+          });
+          if (!checked.ok) throw coded(`TEST_PREVIEW_CASE_${checked.code}`);
+          return { ...testCase };
+        });
+      } else {
+        if (Object.hasOwn(suite.input || {}, 'previewSessionId') || Object.hasOwn(suite.input || {}, 'coverage'))
+          throw coded('TEST_PREVIEW_RUNNER_FIELD_RESERVED');
+        if (!Array.isArray(suite.input?.actions) || !suite.input.actions.length || suite.input.actions.length > 12)
+          throw coded('TEST_PREVIEW_ACTIONS_REQUIRED');
+        if (!Array.isArray(suite.input?.assertions) || !suite.input.assertions.length || suite.input.assertions.length > 12)
+          throw coded('TEST_PREVIEW_ASSERTIONS_REQUIRED');
+      }
     }
+    if (suite.adapter !== 'preview' && suite.testCases !== undefined) throw coded('TEST_MANIFEST_FIELD_INVALID');
     if (suite.dependsOn !== undefined && (!Array.isArray(suite.dependsOn) || suite.dependsOn.length > 256
       || suite.dependsOn.some((item) => typeof item !== 'string' || !item || path.isAbsolute(item) || item.includes('\\')
         || item.includes('\0') || item.split('/').includes('..') || item.includes('*')))) throw coded('TEST_DEPENDENCIES_INVALID');
@@ -292,7 +321,9 @@ function normalizeTests(items) {
     ids.add(id);
     return { id, name: item.name.slice(0, 512),
       status: item.status, durationMs: item.durationMs || 0, message: String(item.message || '').slice(0, 8192),
-      ...(typeof item.file === 'string' ? { file: item.file.slice(0, 1024), line: item.line } : {}) };
+      ...(typeof item.file === 'string' ? { file: item.file.slice(0, 1024), line: item.line,
+        ...(Number.isInteger(item.column) ? { column: item.column } : {}),
+        ...(Number.isInteger(item.nesting) ? { nesting: item.nesting } : {}) } : {}) };
   });
 }
 
@@ -335,6 +366,228 @@ function saveReports(report, target) {
   return report;
 }
 
+function readMergeReport(reportPath, seenPaths, byteBudget) {
+  if (typeof reportPath !== 'string' || !path.isAbsolute(reportPath)) throw coded('TEST_MERGE_REPORT_PATH_ABSOLUTE_REQUIRED');
+  let stat;
+  try { stat = fs.lstatSync(reportPath); }
+  catch (error) { if (error?.code === 'ENOENT') throw coded('TEST_MERGE_REPORT_NOT_FOUND'); throw error; }
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 4 * 1024 * 1024)
+    throw coded('TEST_MERGE_REPORT_FILE_INVALID');
+  const realPath = fs.realpathSync(reportPath);
+  if (seenPaths.has(realPath)) throw coded('TEST_MERGE_DUPLICATE_REPORT');
+  seenPaths.add(realPath);
+  byteBudget.total += stat.size;
+  if (byteBudget.total > MAX_TEST_MERGE_INPUT_BYTES) throw coded('TEST_MERGE_INPUT_TOO_LARGE');
+  let report;
+  try { report = JSON.parse(fs.readFileSync(realPath, 'utf8')); }
+  catch (_) { throw coded('TEST_MERGE_REPORT_INVALID'); }
+  return { report, realPath };
+}
+
+function sameList(actual, expected) {
+  return Array.isArray(actual) && actual.length === expected.length
+    && actual.every((item, index) => item === expected[index]);
+}
+
+function validateMergeReport(report, plan, selectedSuiteIds, expectedCoverage) {
+  if (!plain(report) || report.schemaVersion !== 1 || typeof report.runId !== 'string'
+    || report.creatorVersion !== '2.4.15' || report.projectName !== plan.projectName
+    || report.manifestHash !== plan.manifestHash || report.projectRoot !== plan.projectRoot
+    || report.coverageEnabled !== expectedCoverage || report.cancelled === true || report.requiresManualReview === true
+    || report.passed !== (report.counts?.failed === 0 && report.counts?.passed > 0 || report.emptyShard === true)
+    || !Array.isArray(report.selectedSuiteIds) || !sameList(report.selectedSuiteIds, selectedSuiteIds)
+    || !Array.isArray(report.notRunSuiteIds) || report.notRunSuiteIds.length !== 0
+    || !Array.isArray(report.suites) || !plain(report.shard)) throw coded('TEST_MERGE_REPORT_MISMATCH');
+
+  const shard = parseTestShard(`${report.shard.index}/${report.shard.total}`);
+  if (!plain(report.shard.strategies)) throw coded('TEST_MERGE_REPORT_MISMATCH');
+  const selected = selectedSuiteIds.map((id) => plan.suites.find((suite) => suite.id === id));
+  const expectedCaseIds = {};
+  const expectedSelectedSuites = [];
+  const expectedSkippedSuites = [];
+  for (const suite of selected) {
+    if (suite.adapter === 'node') {
+      expectedSelectedSuites.push(suite.id);
+    } else if (suite.testIds || suite.testCases) {
+      const ids = suite.testIds || suite.testCases.map((item) => item.id);
+      const assigned = ids.filter((id) => testShardForCase(suite.id, id, shard.total) === shard.index);
+      expectedCaseIds[suite.id] = assigned;
+      (assigned.length ? expectedSelectedSuites : expectedSkippedSuites).push(suite.id);
+    } else if (testShardForSuite(suite.id, shard.total) === shard.index) {
+      expectedSelectedSuites.push(suite.id);
+    } else {
+      expectedSkippedSuites.push(suite.id);
+    }
+  }
+  if (!sameList(report.shardSelectedSuiteIds, expectedSelectedSuites)
+    || !sameList(report.shardSkippedSuiteIds, expectedSkippedSuites)
+    || JSON.stringify(report.selectedCaseIdsBySuite || {}) !== JSON.stringify(expectedCaseIds))
+    throw coded('TEST_MERGE_SHARD_ASSIGNMENT_INVALID');
+
+  const suiteById = new Map(selected.map((suite) => [suite.id, suite]));
+  const seenSuiteIds = new Set();
+  const tests = [];
+  for (const output of report.suites) {
+    if (!plain(output) || !suiteById.has(output.id) || seenSuiteIds.has(output.id)
+      || output.adapter !== suiteById.get(output.id).adapter || !Array.isArray(output.tests)
+      || output.tests.length > 1000 || !Number.isFinite(output.durationMs) || output.durationMs < 0)
+      throw coded('TEST_MERGE_SUITE_REPORT_INVALID');
+    seenSuiteIds.add(output.id);
+    const suiteTests = output.tests;
+    for (const item of suiteTests) {
+      if (!plain(item) || typeof item.id !== 'string' || !item.id || item.id.length > 512
+        || typeof item.name !== 'string' || !item.name || item.name.length > 512
+        || !['passed', 'failed', 'skipped'].includes(item.status)
+        || !Number.isFinite(item.durationMs) || item.durationMs < 0
+        || typeof item.message !== 'string' || item.message.length > 8192
+        || (item.file !== undefined && typeof item.file !== 'string')) throw coded('TEST_MERGE_CASE_REPORT_INVALID');
+      tests.push(item);
+    }
+    const actualCounts = counts(suiteTests);
+    if (!plain(output.counts) || Object.keys(actualCounts).some((key) => output.counts[key] !== actualCounts[key]))
+      throw coded('TEST_MERGE_SUITE_COUNTS_MISMATCH');
+  }
+  if (!sameList(report.suites.map((suite) => suite.id), expectedSelectedSuites))
+    throw coded('TEST_MERGE_SUITE_REPORT_INCOMPLETE');
+  const actualCounts = counts(tests);
+  if (!plain(report.counts) || Object.keys(actualCounts).some((key) => report.counts[key] !== actualCounts[key]))
+    throw coded('TEST_MERGE_COUNTS_MISMATCH');
+
+  for (const suite of selected) {
+    const output = report.suites.find((item) => item.id === suite.id);
+    const assigned = expectedCaseIds[suite.id];
+    if (assigned) {
+      const received = output.tests.map((item) => item.id);
+      if (received.length !== assigned.length || new Set(received).size !== received.length
+        || assigned.some((id) => !received.includes(id))) throw coded('TEST_MERGE_CASE_ASSIGNMENT_INVALID');
+    }
+  }
+  return { shard, selected, expectedCaseIds };
+}
+
+function mergeTestCaseKey(item, suite, shard) {
+  if (suite.adapter === 'node') {
+    if (typeof item.file === 'string' && Number.isInteger(item.line))
+      return `node:${JSON.stringify([item.file, item.line, item.column ?? null, item.nesting ?? null, item.name])}`;
+    return `node-shard:${shard.index}:${item.id}`;
+  }
+  return `case:${item.id}`;
+}
+
+export function mergeTestReports({ reportPaths, reportDir } = {}) {
+  if (!Array.isArray(reportPaths) || reportPaths.length < 1 || reportPaths.length > MAX_TEST_MERGE_REPORTS
+    || reportPaths.some((item) => typeof item !== 'string')) throw coded('TEST_MERGE_REPORTS_INVALID');
+  const seenPaths = new Set();
+  const byteBudget = { total: 0 };
+  const loaded = reportPaths.map((reportPath) => readMergeReport(reportPath, seenPaths, byteBudget));
+  const first = loaded[0].report;
+  if (!plain(first) || typeof first.projectRoot !== 'string' || !path.isAbsolute(first.projectRoot))
+    throw coded('TEST_MERGE_PROJECT_INVALID');
+  let plan;
+  try { plan = loadTestPlan(first.projectRoot); }
+  catch (_) { throw coded('TEST_MERGE_PROJECT_INVALID'); }
+  let root;
+  try { root = fs.realpathSync(first.projectRoot); }
+  catch (_) { throw coded('TEST_MERGE_PROJECT_INVALID'); }
+  if (root !== plan.projectRoot || typeof first.manifestHash !== 'string') throw coded('TEST_MERGE_PROJECT_INVALID');
+  const selectedSuiteIds = first.selectedSuiteIds;
+  if (!Array.isArray(selectedSuiteIds) || !selectedSuiteIds.length || selectedSuiteIds.length > 64
+    || new Set(selectedSuiteIds).size !== selectedSuiteIds.length
+    || selectedSuiteIds.some((id) => !plan.suites.some((suite) => suite.id === id)))
+    throw coded('TEST_MERGE_REPORT_MISMATCH');
+  const selectedOrder = plan.suites.filter((suite) => selectedSuiteIds.includes(suite.id)).map((suite) => suite.id);
+  if (!sameList(selectedSuiteIds, selectedOrder)) throw coded('TEST_MERGE_REPORT_MISMATCH');
+  if (loaded.length !== first.shard?.total) throw coded('TEST_MERGE_SHARD_SET_INCOMPLETE');
+
+  const coverageEnabled = first.coverageEnabled;
+  if (typeof coverageEnabled !== 'boolean') throw coded('TEST_MERGE_REPORT_MISMATCH');
+  const entries = loaded.map(({ report, realPath }) => ({ report, realPath,
+    validation: validateMergeReport(report, plan, selectedSuiteIds, coverageEnabled) }));
+  const total = entries[0].validation.shard.total;
+  if (entries.some((entry) => entry.validation.shard.total !== total)) throw coded('TEST_MERGE_REPORT_MISMATCH');
+  entries.sort((left, right) => left.validation.shard.index - right.validation.shard.index);
+  if (entries.some((entry, index) => entry.validation.shard.index !== index + 1))
+    throw coded('TEST_MERGE_SHARD_SET_INCOMPLETE');
+  const strategies = JSON.stringify(entries[0].report.shard.strategies);
+  if (entries.some((entry) => JSON.stringify(entry.report.shard.strategies) !== strategies))
+    throw coded('TEST_MERGE_REPORT_MISMATCH');
+
+  const sourceHashesBySuite = {};
+  for (const { report } of entries) {
+    for (const suite of report.suites) {
+      const planSuite = plan.suites.find((item) => item.id === suite.id);
+      if (planSuite.adapter === 'node') {
+        if (!plain(suite.sourceHashes)) throw coded('TEST_MERGE_SOURCE_MISMATCH');
+        const expectedFiles = planSuite.files.slice().sort();
+        if (!sameList(Object.keys(suite.sourceHashes).sort(), expectedFiles)) throw coded('TEST_MERGE_SOURCE_MISMATCH');
+        sourceHashesBySuite[suite.id] ||= {};
+        for (const [relative, digest] of Object.entries(suite.sourceHashes)) {
+          let source;
+          try { source = safeFile(plan.projectRoot, relative); }
+          catch (_) { throw coded('TEST_MERGE_SOURCE_MISMATCH'); }
+          if (!/^[0-9a-f]{64}$/.test(digest) || hash(source.bytes) !== digest
+            || (sourceHashesBySuite[suite.id][relative] && sourceHashesBySuite[suite.id][relative] !== digest))
+            throw coded('TEST_MERGE_SOURCE_MISMATCH');
+          sourceHashesBySuite[suite.id][relative] = digest;
+        }
+      } else if (suite.sourceHashes !== undefined) throw coded('TEST_MERGE_SOURCE_MISMATCH');
+    }
+  }
+
+  const mergedSuites = [];
+  for (const suite of plan.suites.filter((item) => selectedSuiteIds.includes(item.id))) {
+    const shardOutputs = entries.flatMap(({ report, validation }) => report.suites
+      .filter((item) => item.id === suite.id).map((item) => ({ shard: validation.shard, output: item })));
+    const tests = [];
+    const keys = new Set();
+    for (const { shard, output } of shardOutputs) {
+      for (const item of output.tests) {
+        const key = mergeTestCaseKey(item, suite, shard);
+        if (keys.has(key)) throw coded('TEST_MERGE_DUPLICATE_CASE');
+        keys.add(key);
+        tests.push({ ...item, id: suite.adapter === 'node' ? `node-${hash(key).slice(0, 24)}` : item.id });
+      }
+    }
+    if (suite.adapter !== 'node' && (suite.testIds || suite.testCases)) {
+      const expected = suite.testIds || suite.testCases.map((item) => item.id);
+      const actual = tests.map((item) => item.id);
+      if (actual.length !== expected.length || new Set(actual).size !== actual.length
+        || expected.some((id) => !actual.includes(id))) throw coded('TEST_MERGE_CASE_SET_INCOMPLETE');
+    }
+    const suiteCoverage = shardOutputs.flatMap(({ shard, output }) => output.coverage === undefined
+      ? [] : [{ index: shard.index, coverage: output.coverage }]);
+    const receipts = shardOutputs.flatMap(({ shard, output }) => output.receipt === undefined
+      ? [] : [{ index: shard.index, receipt: output.receipt }]);
+    const merged = { id: suite.id, adapter: suite.adapter, tests, counts: counts(tests),
+      durationMs: shardOutputs.reduce((sum, item) => sum + item.output.durationMs, 0),
+      shardIndexes: shardOutputs.map((item) => item.shard.index) };
+    if (suiteCoverage.length) merged.coverageByShard = suiteCoverage;
+    if (receipts.length) merged.receiptsByShard = receipts;
+    if (sourceHashesBySuite[suite.id]) merged.sourceHashes = sourceHashesBySuite[suite.id];
+    mergedSuites.push(merged);
+  }
+  const allTests = mergedSuites.flatMap((suite) => suite.tests);
+  const mergedCounts = counts(allTests);
+  const startedAt = entries.map(({ report }) => report.startedAt).filter((value) => typeof value === 'string').sort()[0];
+  const completedAt = entries.map(({ report }) => report.completedAt).filter((value) => typeof value === 'string').sort().at(-1);
+  const report = { schemaVersion: 1, runId: randomUUID(), projectRoot: plan.projectRoot, projectName: plan.projectName,
+    creatorVersion: '2.4.15', manifestHash: plan.manifestHash, selectedSuiteIds,
+    mergedFrom: entries.map(({ report: source, realPath, validation }) => ({ runId: source.runId,
+      reportPath: realPath, shard: validation.shard })),
+    shard: { total, indexes: entries.map((entry) => entry.validation.shard.index), strategies: entries[0].report.shard.strategies },
+    coverageEnabled, suites: mergedSuites, counts: mergedCounts, emptyShard: mergedCounts.total === 0,
+    requiresManualReview: false, cancelled: false, notRunSuiteIds: [],
+    passed: mergedCounts.failed === 0 && (mergedCounts.passed > 0 || mergedCounts.total === 0),
+    durationMs: Math.max(...entries.map((entry) => Number(entry.report.durationMs) || 0)),
+    ...(startedAt ? { startedAt } : {}), ...(completedAt ? { completedAt } : {}) };
+  const jsonBytes = Buffer.byteLength(JSON.stringify(report, null, 2) + '\n', 'utf8');
+  const junitBytes = Buffer.byteLength(junitReport(report), 'utf8');
+  if (jsonBytes > MAX_TEST_MERGE_OUTPUT_BYTES || junitBytes > MAX_TEST_MERGE_OUTPUT_BYTES)
+    throw coded('TEST_MERGE_OUTPUT_TOO_LARGE');
+  const target = prepareReportDirectory(plan.projectRoot, reportDir, report.runId);
+  return saveReports(report, target);
+}
+
 export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, instanceId, previewSessionId, reportDir,
   signal, refreshPreview = false, onEvent = () => {}, shard, coverage = false }, dependencies = {}) {
   const plan = loadTestPlan(projectRoot);
@@ -350,10 +603,18 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
   const selectedCaseIdsBySuite = {};
   const shardSkipped = normalizedShard ? selected.filter((suite) => suite.adapter !== 'node'
     && !(['creator', 'editor'].includes(suite.adapter) && suite.testIds)
+    && !(suite.adapter === 'preview' && suite.testCases)
     && testShardForSuite(suite.id, normalizedShard.total) !== normalizedShard.index) : [];
   for (const suite of selected.filter((item) => ['creator', 'editor'].includes(item.adapter) && item.testIds)) {
     const selectedCaseIds = normalizedShard ? suite.testIds.filter((id) =>
       testShardForCase(suite.id, id, normalizedShard.total) === normalizedShard.index) : suite.testIds;
+    selectedCaseIdsBySuite[suite.id] = selectedCaseIds;
+    if (normalizedShard && !selectedCaseIds.length) shardSkipped.push(suite);
+  }
+  for (const suite of selected.filter((item) => item.adapter === 'preview' && item.testCases)) {
+    const selectedCaseIds = normalizedShard ? suite.testCases.filter((item) =>
+      testShardForCase(suite.id, item.id, normalizedShard.total) === normalizedShard.index).map((item) => item.id)
+      : suite.testCases.map((item) => item.id);
     selectedCaseIdsBySuite[suite.id] = selectedCaseIds;
     if (normalizedShard && !selectedCaseIds.length) shardSkipped.push(suite);
   }
@@ -373,7 +634,7 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
     creatorVersion: '2.4.15', manifestHash: plan.manifestHash, selectedSuiteIds: selected.map((suite) => suite.id),
     ...(normalizedShard ? { shard: { ...normalizedShard,
       strategies: { node: 'test-case', creator: 'test-case-when-manifested-otherwise-suite',
-        editor: 'test-case-when-manifested-otherwise-suite', preview: 'suite' } } } : {}),
+        editor: 'test-case-when-manifested-otherwise-suite', preview: 'test-case-when-manifested-otherwise-suite' } } } : {}),
     shardSelectedSuiteIds: runnable.map((suite) => suite.id), shardSkippedSuiteIds: shardSkipped.map((suite) => suite.id),
     ...(Object.keys(selectedCaseIdsBySuite).length ? { selectedCaseIdsBySuite } : {}),
     coverageEnabled: coverage,
@@ -487,16 +748,49 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
           await call(instanceId, 'creator.preview.refresh', { previewSessionId });
           previewRefreshed = true;
         }
-        const receipt = await call(instanceId, 'creator.preview.interact', { ...suite.input, previewSessionId,
-          ...(coverage ? { coverage: true } : {}) });
-        const assertions = receipt.result?.assertions;
-        if (!Array.isArray(assertions) || !assertions.length) throw coded('TEST_PREVIEW_REPORT_INVALID');
-        if (coverage && !receipt.result?.coverage) throw coded('TEST_COVERAGE_REPORT_MISSING');
-        result = { tests: assertions.map((item, index) => ({ name: `assertion-${index + 1}:${item.type || 'preview'}`,
-          status: item.pass === true ? 'passed' : 'failed', message: JSON.stringify(item).slice(0, 8192) })), receipt };
-        if (receipt.result.coverage) result.coverage = receipt.result.coverage;
-        if (receipt.result?.passed !== true && !result.tests.some((item) => item.status === 'failed'))
-          result.tests.push({ name: 'preview-result', status: 'failed', message: 'Preview did not confirm success.' });
+        if (suite.testCases) {
+          const selectedIds = new Set(selectedCaseIdsBySuite[suite.id]);
+          const tests = [];
+          const receipts = [];
+          const coverages = [];
+          for (const testCase of suite.testCases.filter((item) => selectedIds.has(item.id))) {
+            if (signal?.aborted) throw coded('TEST_CANCELLED');
+            executionDispatched = true;
+            const receipt = await call(instanceId, 'creator.preview.interact', {
+              actions: testCase.actions, assertions: testCase.assertions,
+              ...(testCase.settleMs === undefined ? {} : { settleMs: testCase.settleMs }),
+              previewSessionId, ...(coverage ? { coverage: true } : {}),
+            });
+            const previewResult = receipt.result;
+            if (!Array.isArray(previewResult?.assertions) || !previewResult.assertions.length)
+              throw coded('TEST_PREVIEW_REPORT_INVALID');
+            if (coverage && !previewResult.coverage) throw coded('TEST_COVERAGE_REPORT_MISSING');
+            const passed = previewResult.passed === true;
+            const failedAssertions = previewResult.assertions.filter((item) => item.pass !== true);
+            tests.push({ id: testCase.id, name: testCase.name || testCase.id,
+              status: passed ? 'passed' : 'failed', durationMs: 0,
+              message: passed ? '' : JSON.stringify(failedAssertions.length ? failedAssertions : previewResult.assertions).slice(0, 8192) });
+            receipts.push({ caseId: testCase.id, previewSessionId: previewResult.previewSessionId,
+              instanceId: previewResult.instanceId, projectRoot: previewResult.projectRoot,
+              sceneUuid: previewResult.sceneUuid, navigationCount: previewResult.navigationCount,
+              assertions: previewResult.assertions, passed });
+            if (previewResult.coverage) coverages.push(previewResult.coverage);
+          }
+          if (tests.length !== selectedIds.size) throw coded('TEST_PREVIEW_CASE_RESULTS_MISMATCH');
+          result = { tests, receipts };
+          if (coverage) result.coverage = mergePreviewCoverageReports(coverages);
+        } else {
+          const receipt = await call(instanceId, 'creator.preview.interact', { ...suite.input, previewSessionId,
+            ...(coverage ? { coverage: true } : {}) });
+          const assertions = receipt.result?.assertions;
+          if (!Array.isArray(assertions) || !assertions.length) throw coded('TEST_PREVIEW_REPORT_INVALID');
+          if (coverage && !receipt.result?.coverage) throw coded('TEST_COVERAGE_REPORT_MISSING');
+          result = { tests: assertions.map((item, index) => ({ name: `assertion-${index + 1}:${item.type || 'preview'}`,
+            status: item.pass === true ? 'passed' : 'failed', message: JSON.stringify(item).slice(0, 8192) })), receipt };
+          if (receipt.result.coverage) result.coverage = receipt.result.coverage;
+          if (receipt.result?.passed !== true && !result.tests.some((item) => item.status === 'failed'))
+            result.tests.push({ name: 'preview-result', status: 'failed', message: 'Preview did not confirm success.' });
+        }
       }
       result.tests = normalizeTests(result.tests);
       if (!result.tests.some((item) => item.status !== 'skipped') && !normalizedShard) throw coded('TEST_NO_EXECUTED_CASES');

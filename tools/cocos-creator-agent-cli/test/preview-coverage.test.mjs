@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { validateCommand } from '../bridge/contracts.mjs';
-import { normalizePreviewCoverage } from '../bridge/preview-coverage.mjs';
+import { mergePreviewCoverageReports, normalizePreviewCoverage } from '../bridge/preview-coverage.mjs';
 
 test('preview coverage keeps only scripts served by the selected Creator preview origin', () => {
   const report = normalizePreviewCoverage([
@@ -23,6 +23,26 @@ test('preview coverage rejects invalid and over-budget V8 records', () => {
   assert.throws(() => normalizePreviewCoverage([{ url: 'http://127.0.0.1:7456/a.js', functions: [
     { functionName: 'bad', ranges: [{ startOffset: 4, endOffset: 2, count: 1 }] },
   ] }], 'http://127.0.0.1:7456'), { code: 'PREVIEW_COVERAGE_INVALID' });
+});
+
+test('preview coverage merges repeated script ranges across independent test cases', () => {
+  const reports = [
+    { kind: 'v8-precise-function-and-range', scripts: [{ url: 'http://127.0.0.1:7456/src/game.js', functions: [
+      { name: 'move', blockCoverage: true, ranges: [
+        { startOffset: 0, endOffset: 100, count: 1 }, { startOffset: 20, endOffset: 40, count: 0 },
+      ] },
+    ] }] },
+    { kind: 'v8-precise-function-and-range', scripts: [{ url: 'http://127.0.0.1:7456/src/game.js', functions: [
+      { name: 'move', blockCoverage: true, ranges: [
+        { startOffset: 0, endOffset: 100, count: 1 }, { startOffset: 20, endOffset: 40, count: 1 },
+      ] },
+    ] }] },
+  ];
+  const merged = mergePreviewCoverageReports(reports);
+  assert.equal(merged.scripts.length, 1);
+  assert.deepEqual(merged.totals, { totalFunctions: 1, coveredFunctions: 1, totalRanges: 2,
+    coveredRanges: 2, functionPercent: 100, rangePercent: 100 });
+  assert.deepEqual(merged.scripts[0].functions[0].ranges.map((range) => range.count), [2, 1]);
 });
 
 test('preview interaction contract accepts only a boolean coverage option', () => {
