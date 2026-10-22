@@ -7,7 +7,8 @@ const path = require('path');
 const crypto = require('crypto');
 const extensionPackage = require('./package.json');
 const confirmDialog = require('./approval.cjs');
-const { inspectSceneComposition, inspectSavedSceneNode } = require('./scene-persistence.cjs');
+const { inspectSceneComposition, inspectSavedSceneNode, componentValueForDisk,
+    validComponentDiskValue } = require('./scene-persistence.cjs');
 const { inspectPrefabSource: inspectPrefabSourceData } = require('./prefab-source.cjs');
 const prefabPatch = require('./prefab-patch.cjs');
 const { scanAssetReferences } = require('./asset-references.cjs');
@@ -929,6 +930,11 @@ function readSceneComponentPropertyOperation(operationId) {
         || sceneComponentValueKind(plan.expectedAfter.value) !== plan.propertyKind
         || (plan.propertyKind === 'asset' && plan.expectedBefore.value.assetClass !== plan.expectedAfter.value.assetClass)
         || sceneComponentValuesEqual(plan.expectedBefore.value, plan.expectedAfter.value)
+        || (plan.diskBefore !== undefined && (!validSceneNodeDiskBaseline(plan.diskBefore)
+            || !validSavedComponentProperty(plan.diskBefore.componentProperty)
+            || plan.diskBefore.componentProperty.componentInstanceId !== plan.componentInstanceId
+            || plan.diskBefore.componentProperty.property !== plan.property
+            || !validComponentDiskValue(plan.expectedAfter.serializedValue)))
         || typeof plan.expiresAt !== 'string'
         || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
             'save-requested', 'completed', 'not-applied', 'save-required', 'needs-reconciliation', 'conflict'].includes(operation.status))
@@ -3545,12 +3551,24 @@ async function createSceneComponentPropertyPlan(input) {
         || state.componentClassName !== input.componentClassName || state.componentInstanceId !== input.componentInstanceId
         || state.property !== input.property || typeof state.propertyKind !== 'string')
         throw coded('SCENE_COMPONENT_PROPERTY_STATE_INVALID');
-    if (!validSceneComponentValue(input.value)) throw coded('SCENE_COMPONENT_PROPERTY_VALUE_INVALID');
+    if (!validSceneComponentValue(input.value) || !validSceneComponentValue(state.value))
+        throw coded('SCENE_COMPONENT_PROPERTY_VALUE_INVALID');
     const inputKind = input.value && typeof input.value === 'object' ? input.value.kind : typeof input.value;
     if (inputKind !== state.propertyKind) throw coded('SCENE_COMPONENT_PROPERTY_TYPE_MISMATCH');
     if (inputKind === 'asset' && (!state.value || input.value.assetClass !== state.value.assetClass))
         throw coded('SCENE_COMPONENT_PROPERTY_TYPE_MISMATCH');
     if (sceneComponentValuesEqual(state.value, input.value)) throw coded('SCENE_COMPONENT_PROPERTY_NO_CHANGE');
+    if (typeof state.serializedClassId !== 'string' || !state.serializedClassId || state.serializedClassId.length > 128)
+        throw coded('SCENE_COMPONENT_SERIALIZED_CLASS_ID_UNAVAILABLE');
+    const referenceClasses = Array.isArray(state.referenceClasses) ? state.referenceClasses : [];
+    const serializedBefore = componentValueForDisk(state.value, referenceClasses);
+    const serializedAfter = componentValueForDisk(input.value, referenceClasses);
+    if (!serializedBefore.verified || !serializedAfter.verified) throw coded('SCENE_COMPONENT_SERIALIZED_VALUE_UNAVAILABLE');
+    const diskBefore = await sceneNodeDiskState(input.sceneUuid, input.nodeUuid, {
+        serializedClassId: state.serializedClassId, componentInstanceId: state.componentInstanceId, property: state.property });
+    if (diskBefore.nodePath !== state.nodePath
+        || !sceneComponentValuesEqual(diskBefore.componentProperty.value, serializedBefore.value))
+        throw coded('SCENE_DISK_STATE_DIFFERS_FROM_EDITOR');
     if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
     const operationId = uuid();
     const plan = {
@@ -3570,7 +3588,8 @@ async function createSceneComponentPropertyPlan(input) {
         property: state.property,
         propertyKind: state.propertyKind,
         expectedBefore: { value: state.value },
-        expectedAfter: { value: input.value },
+        expectedAfter: { value: input.value, serializedValue: serializedAfter.value },
+        diskBefore: sceneNodeDiskBaseline(diskBefore),
         expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString(),
     };
     const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
@@ -3582,13 +3601,15 @@ async function createSceneComponentPropertyPlan(input) {
         componentClassName: plan.componentClassName, componentInstanceId: plan.componentInstanceId,
         property: plan.property, expectedBefore: plan.expectedBefore, expectedAfter: plan.expectedAfter,
         propertyKind: plan.propertyKind, expiresAt: plan.expiresAt,
+        savedSceneBaseline: { sourceSha256: plan.diskBefore.sourceSha256, metaSha256: plan.diskBefore.metaSha256,
+            componentProperty: plan.diskBefore.componentProperty },
         diff: { action: 'set-component-property', scene: plan.sceneName, node: plan.nodePath,
             componentClassName: plan.componentClassName, componentInstanceId: plan.componentInstanceId,
             property: plan.property, before: plan.expectedBefore.value, after: plan.expectedAfter.value },
         recovery: { operationId, automaticRetry: false,
             reconcileCommand: 'creator.scene.node.set-component-property.reconcile',
             sameCreatorSessionRequired: true,
-            sceneSaveAcknowledgement: 'Creator 2.4 scene:stash-and-save has no documented completion acknowledgement; readback is in-memory only.' } };
+            sceneSaveAcknowledgement: 'Creator 2.4 scene:stash-and-save has no documented completion acknowledgement. Completion requires the exact serialized component identity and property to match on disk.' } };
 }
 
 function verifySceneOperationIdentity(operation, { requireCurrentContract = true } = {}) {
@@ -4768,7 +4789,9 @@ async function readPlannedSceneComponentProperty(plan) {
     if (!state || state.available !== true) throw coded(state && state.reason || 'SCENE_COMPONENT_PROPERTY_STATE_UNAVAILABLE');
     if (state.sceneUuid !== plan.sceneUuid || state.nodeUuid !== plan.nodeUuid || state.nodePath !== plan.nodePath
         || state.componentClassName !== plan.componentClassName || state.componentInstanceId !== plan.componentInstanceId
-        || state.property !== plan.property || state.propertyKind !== plan.propertyKind) throw coded('OPERATION_TARGET_MISMATCH');
+        || state.property !== plan.property || state.propertyKind !== plan.propertyKind
+        || (plan.diskBefore && state.serializedClassId !== plan.diskBefore.componentProperty.serializedClassId))
+        throw coded('OPERATION_TARGET_MISMATCH');
     return state;
 }
 
@@ -4785,7 +4808,7 @@ function confirmSceneComponentProperty(operation) {
         `Value: ${JSON.stringify(plan.expectedBefore.value)} → ${JSON.stringify(plan.expectedAfter.value)}`,
         `Operation: ${operation.operationId}`,
         '',
-        'This changes one declared public property on the exact component instance and requests a scene save. Supported values include scalars, Vec2/Vec3/Vec4/Size/Rect/Color, bounded arrays of supported primitives and typed references, exact active-scene Node and Component references, and supported AssetDB resources. Arbitrary project objects and asset-reference arrays are refused. Property setters are project/engine code and may have side effects. The receipt confirms in-memory readback, not disk persistence.',
+        'This changes one declared public serializable property on the exact component instance and requests a scene save. Supported values include scalars, Vec2/Vec3/Vec4/Size/Rect/Color, bounded arrays of supported primitives and typed references, exact active-scene Node and Component references, and supported AssetDB resources. Arbitrary project objects and asset-reference arrays are refused. Property setters are project/engine code and may have side effects. Creator will recheck the exact saved before-state after approval. Completion requires the serialized component identity and property to match in the saved .fire file.',
     ].join('\n');
     return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator component property change',
                 message: `Set ${plan.componentClassName}.${plan.property}?`, detail,
@@ -4801,13 +4824,15 @@ function sceneComponentPropertyReceipt(operation, state) {
         property: plan.property, propertyKind: plan.propertyKind, beforeValue: plan.expectedBefore.value,
         value: Object.prototype.hasOwnProperty.call(state, 'value') ? state.value : null,
         sceneSaveRequestSent: !!operation.sceneSaveRequestSent, sceneSaveCompletionConfirmed: false,
+        scenePersistenceConfirmed: operation.status === 'completed' && !!(operation.diskReadback && operation.diskReadback.verified),
+        diskReadback: operation.diskReadback || null,
         plannedByInstanceId: operation.plannedByInstanceId, appliedByInstanceId: operation.appliedByInstanceId || null,
         completedByInstanceId: operation.completedByInstanceId || null,
         approvedAt: operation.approvedAt || null, completedAt: operation.completedAt || null,
         reconciledAt: operation.reconciledAt || null,
         recovery: { automaticRetry: false, reconcileCommand: 'creator.scene.node.set-component-property.reconcile',
             sameCreatorSessionRequired: true, manualSaveMayBeRequired: operation.status === 'save-required',
-            note: 'Creator 2.4 has no documented scene save completion acknowledgement. Property readback is in-memory only; if the component instance ID changed, inspect the scene manually.' } };
+            note: 'Creator 2.4 has no documented scene-save IPC acknowledgement. scenePersistenceConfirmed requires the exact serialized component identity and property on disk. If memory changed but disk did not, save manually and reconcile. A changed Creator session still requires manual review.' } };
 }
 
 async function commitSceneComponentProperty(input, context) {
@@ -4821,6 +4846,7 @@ async function commitSceneComponentProperty(input, context) {
     if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
     let before = await readPlannedSceneComponentProperty(operation.plan);
     if (!sceneComponentValuesEqual(before.value, operation.plan.expectedBefore.value)) throw coded('OPERATION_PRECONDITION_FAILED');
+    await verifySceneNodeDiskBefore(operation.plan);
     operation.status = 'awaiting-approval';
     operation.approvalRequestedAt = new Date().toISOString();
     writeOperation(operation);
@@ -4844,6 +4870,7 @@ async function commitSceneComponentProperty(input, context) {
     try {
         before = await readPlannedSceneComponentProperty(operation.plan);
         if (!sceneComponentValuesEqual(before.value, operation.plan.expectedBefore.value)) throw coded('OPERATION_PRECONDITION_FAILED');
+        await verifySceneNodeDiskBefore(operation.plan);
     } catch (error) {
         operation.status = 'conflict';
         operation.conflictAt = new Date().toISOString();
@@ -4886,6 +4913,7 @@ async function commitSceneComponentProperty(input, context) {
     writeOperation(operation);
     const readback = await readPlannedSceneComponentProperty(operation.plan);
     if (!sceneComponentValuesEqual(readback.value, operation.plan.expectedAfter.value)) throw coded('OPERATION_READBACK_STATE_MISMATCH');
+    await confirmSceneNodeDiskPersistence(operation);
     operation.status = 'completed';
     operation.completedAt = new Date().toISOString();
     operation.completedByInstanceId = INSTANCE_ID;
@@ -4905,7 +4933,17 @@ async function reconcileSceneComponentProperty(input) {
         writeOperation(operation);
         return { ...sceneComponentPropertyReceipt(operation, {}), observed: null, reason: operation.reconcileReason };
     }
-    if (sceneComponentValuesEqual(observed.value, operation.plan.expectedBefore.value)) {
+    let diskState = null;
+    if (operation.plan.diskBefore && operation.plan.creatorInstanceId === INSTANCE_ID) {
+        try { diskState = await reconcileSceneNodeDiskOperation(operation,
+            sceneComponentValuesEqual(observed.value, operation.plan.expectedBefore.value),
+            sceneComponentValuesEqual(observed.value, operation.plan.expectedAfter.value)); }
+        catch (error) {
+            operation.status = 'conflict'; operation.reconciledAt = new Date().toISOString();
+            operation.reconcileReason = error.code || 'SCENE_DISK_READBACK_FAILED'; writeOperation(operation);
+            return { ...sceneComponentPropertyReceipt(operation, observed), observed: null, reason: operation.reconcileReason };
+        }
+    } else if (sceneComponentValuesEqual(observed.value, operation.plan.expectedBefore.value)) {
         if (['planned', 'awaiting-approval', 'applying', 'needs-reconciliation'].includes(operation.status)) operation.status = 'not-applied';
         else if (['mutation-applied', 'save-requested', 'completed'].includes(operation.status)) operation.status = 'conflict';
     } else if (sceneComponentValuesEqual(observed.value, operation.plan.expectedAfter.value)) {
@@ -4918,7 +4956,9 @@ async function reconcileSceneComponentProperty(input) {
     writeOperation(operation);
     return { ...sceneComponentPropertyReceipt(operation, observed),
         observed: { componentClassName: observed.componentClassName, componentInstanceId: observed.componentInstanceId,
-            property: observed.property, value: observed.value },
+            property: observed.property, value: observed.value,
+            ...(diskState ? { disk: { sourceSha256: diskState.disk.sourceSha256, metaSha256: diskState.disk.metaSha256,
+                componentProperty: diskState.disk.componentProperty, matchesBefore: diskState.before, matchesAfter: diskState.after } } : {}) },
         retry: 'Never replay this operation. If the component instance changed after Creator restart, inspect the property manually and create a new plan.' };
 }
 
@@ -4930,7 +4970,7 @@ async function sceneAssetIdentity(sceneUuid) {
     return { uuid: row.uuid, url: row.url, importer: row.importer || 'scene' };
 }
 
-async function sceneNodeDiskState(sceneUuid, nodeUuid) {
+async function sceneNodeDiskState(sceneUuid, nodeUuid, componentProperty) {
     const identity = await sceneAssetIdentity(sceneUuid);
     const row = await queryAssetByUrl(identity.url);
     if (!row || row.uuid !== sceneUuid || row.url !== identity.url
@@ -4940,7 +4980,7 @@ async function sceneNodeDiskState(sceneUuid, nodeUuid) {
     const metaFile = safeProjectFile(`${relative}.meta`);
     const sceneBytes = readStableProjectFile(sceneFile, MAX_SCENE_SERIALIZATION_BYTES, 'SCENE_SERIALIZATION_FILE_UNSAFE');
     const metaBytes = readStableProjectFile(metaFile, MAX_SCENE_META_BYTES, 'SCENE_META_FILE_UNSAFE');
-    const state = inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow: row, nodeUuid });
+    const state = inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow: row, nodeUuid, componentProperty });
     if (!state.verified) throw coded(state.reason || 'SCENE_DISK_READBACK_FAILED');
     const freshRow = await queryAssetByUrl(identity.url);
     const freshSceneBytes = readStableProjectFile(sceneFile, MAX_SCENE_SERIALIZATION_BYTES, 'SCENE_SERIALIZATION_FILE_UNSAFE');
@@ -4968,6 +5008,7 @@ function sceneNodeDiskBaseline(disk, { includeButtonEvents = false } = {}) {
         metaSha256: disk.metaSha256, active: disk.active, nodeName: disk.nodeName,
         parentUuid: disk.parentUuid, nodePath: disk.nodePath, transform: disk.transform };
     if (includeButtonEvents) baseline.buttonEvents = disk.buttonEvents;
+    if (disk.componentProperty) baseline.componentProperty = disk.componentProperty;
     return baseline;
 }
 
@@ -4977,7 +5018,18 @@ function sceneNodeDiskReadback(disk) {
         sourceSha256: disk.sourceSha256, metaSha256: disk.metaSha256, transform: disk.transform,
         active: disk.active, verifiedAt: new Date().toISOString() };
     if (Array.isArray(disk.buttonEvents)) readback.buttonEvents = disk.buttonEvents;
+    if (disk.componentProperty) readback.componentProperty = disk.componentProperty;
     return readback;
+}
+
+function validSavedComponentProperty(property) {
+    return !!property && typeof property === 'object' && !Array.isArray(property)
+        && Object.keys(property).sort().join(',') === 'componentInstanceId,property,serializedClassId,value'
+        && typeof property.componentInstanceId === 'string' && property.componentInstanceId.length > 0
+        && property.componentInstanceId.length <= 128 && typeof property.serializedClassId === 'string'
+        && property.serializedClassId.length > 0 && property.serializedClassId.length <= 128
+        && typeof property.property === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(property.property)
+        && validComponentDiskValue(property.value);
 }
 
 function validSceneNodeDiskBaseline(disk) {
@@ -4990,6 +5042,7 @@ function validSceneNodeDiskBaseline(disk) {
         && (disk.parentUuid === undefined || typeof disk.parentUuid === 'string')
         && (disk.nodePath === undefined || typeof disk.nodePath === 'string')
         && (disk.buttonEvents === undefined || validButtonEventList(disk.buttonEvents))
+        && (disk.componentProperty === undefined || validSavedComponentProperty(disk.componentProperty))
         && !!disk.transform && typeof disk.transform === 'object' && !Array.isArray(disk.transform)
         && Object.keys(disk.transform).sort().join(',') === fields.join(',')
         && fields.every((field) => Number.isFinite(disk.transform[field])
@@ -5011,6 +5064,8 @@ function sceneNodeDiskExpected(plan, side) {
         expected.nodePath = plan.expectedAfter.nodePath;
     } else if (plan.operation === 'creator.scene.button-events.set') {
         expected.buttonEvents = plan.expectedAfter;
+    } else if (plan.operation === 'creator.scene.node.set-component-property') {
+        expected.componentProperty = { ...expected.componentProperty, value: plan.expectedAfter.serializedValue };
     }
     return expected;
 }
@@ -5025,12 +5080,13 @@ function sceneNodeDiskMatchesPlan(disk, plan, side) {
         if (expected[field] !== undefined && disk[field] !== expected[field]) return false;
     }
     if (expected.buttonEvents !== undefined && !buttonEventListMatches(disk.buttonEvents, expected.buttonEvents)) return false;
+    if (expected.componentProperty !== undefined && !sceneComponentValuesEqual(disk.componentProperty, expected.componentProperty)) return false;
     return true;
 }
 
 async function observeSceneNodeDiskForReconcile(plan) {
     if (!plan.diskBefore) return null;
-    const disk = await sceneNodeDiskState(plan.sceneUuid, plan.nodeUuid);
+    const disk = await sceneNodeDiskState(plan.sceneUuid, plan.nodeUuid, plan.diskBefore.componentProperty);
     return { disk,
         before: disk.sourceSha256 === plan.diskBefore.sourceSha256 && sceneNodeDiskMatchesPlan(disk, plan, 'before'),
         after: disk.sourceSha256 !== plan.diskBefore.sourceSha256 && sceneNodeDiskMatchesPlan(disk, plan, 'after') };
@@ -5061,7 +5117,7 @@ async function reconcileSceneNodeDiskOperation(operation, liveBefore, liveAfter)
 
 async function verifySceneNodeDiskBefore(plan) {
     if (!plan.diskBefore) return null;
-    const disk = await sceneNodeDiskState(plan.sceneUuid, plan.nodeUuid);
+    const disk = await sceneNodeDiskState(plan.sceneUuid, plan.nodeUuid, plan.diskBefore.componentProperty);
     if (disk.sourceSha256 !== plan.diskBefore.sourceSha256 || disk.metaSha256 !== plan.diskBefore.metaSha256
         || !sceneNodeDiskMatchesPlan(disk, plan, 'before')) throw coded('SCENE_DISK_PRECONDITION_FAILED');
     return disk;
@@ -5074,7 +5130,7 @@ async function waitForSceneNodeDiskAfter(operation, timeoutMs = SCENE_SAVE_READB
     let lastReason = 'SCENE_DISK_READBACK_PENDING';
     do {
         try {
-            const disk = await sceneNodeDiskState(plan.sceneUuid, plan.nodeUuid);
+            const disk = await sceneNodeDiskState(plan.sceneUuid, plan.nodeUuid, plan.diskBefore.componentProperty);
             if (disk.sceneUrl !== plan.diskBefore.sceneUrl || disk.importer !== plan.diskBefore.importer)
                 throw coded('SCENE_ASSETDB_IDENTITY_CHANGED');
             if (disk.sourceSha256 !== plan.diskBefore.sourceSha256 && sceneNodeDiskMatchesPlan(disk, plan, 'after'))

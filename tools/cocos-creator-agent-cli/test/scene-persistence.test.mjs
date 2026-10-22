@@ -3,7 +3,8 @@ import test from 'node:test';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { inspectSceneComposition, inspectSavedSceneNode } = require('../creator-extension/scene-persistence.cjs');
+const { inspectSceneComposition, inspectSavedSceneNode, componentValueForDisk,
+  validComponentDiskValue } = require('../creator-extension/scene-persistence.cjs');
 
 const sceneUuid = '4b02b1e4-d163-47e2-91ad-2da0193a3907';
 const nodeUuid = 'df1bb94e-c8e6-41ba-b9c9-a04c6e86a581';
@@ -78,6 +79,85 @@ test('saved scene node inspection reads an exact serialized Button event list an
   assert.equal(ambiguous.verified, true);
   assert.equal(ambiguous.buttonComponentCount, 2);
   assert.equal(ambiguous.buttonEvents, null);
+});
+
+function propertyFixture(value) {
+  const source = fixture();
+  const records = JSON.parse(source.sceneBytes.toString('utf8'));
+  Object.assign(records[3], { _id: 'button-instance', node: { __id__: 2 } });
+  Object.assign(records[4], { _id: 'handler-instance', node: { __id__: 2 }, state: value });
+  return { ...source, sceneBytes: Buffer.from(JSON.stringify(records)),
+    componentProperty: { serializedClassId: handlerClassId, componentInstanceId: 'handler-instance', property: 'state' } };
+}
+
+test('saved component properties bind exact instance IDs and decode all supported serialized value types', () => {
+  const cases = [
+    [12, 12], ['saved', 'saved'], [false, false], [null, null],
+    [{ __uuid__: spriteUuid }, { kind: 'asset', assetUuid: spriteUuid }],
+    [{ __id__: 2 }, { kind: 'node-ref', nodeUuid }],
+    [{ __id__: 3 }, { kind: 'component-ref', nodeUuid, componentInstanceId: 'button-instance', serializedClassId: 'cc.Button' }],
+    ...[
+      ['vec2', 'cc.Vec2', { x: 1, y: 2 }], ['vec3', 'cc.Vec3', { x: 1, y: 2, z: 3 }],
+      ['vec4', 'cc.Vec4', { x: 1, y: 2, z: 3, w: 4 }], ['size', 'cc.Size', { width: 20, height: 30 }],
+      ['rect', 'cc.Rect', { x: 1, y: 2, width: 20, height: 30 }], ['color', 'cc.Color', { r: 1, g: 2, b: 3, a: 255 }],
+    ].map(([kind, type, fields]) => [{ __type__: type, ...fields }, { kind, ...fields }]),
+    [[1, 'value', false, { __type__: 'cc.Vec2', x: 1, y: 2 }, { __id__: 2 }, { __id__: 3 }, null],
+      { kind: 'array', items: [1, 'value', false, { kind: 'vec2', x: 1, y: 2 }, { kind: 'node-ref', nodeUuid },
+        { kind: 'component-ref', nodeUuid, componentInstanceId: 'button-instance', serializedClassId: 'cc.Button' }, null] }],
+  ];
+  for (const [raw, expected] of cases) {
+    const inspected = inspectSavedSceneNode({ ...propertyFixture(raw), sceneUuid, sceneAssetRow, nodeUuid });
+    assert.equal(inspected.verified, true, JSON.stringify(raw));
+    assert.deepEqual(inspected.componentProperty.value, expected);
+  }
+  const source = propertyFixture({ __id__: 6 });
+  const records = JSON.parse(source.sceneBytes.toString('utf8'));
+  records.push({ __type__: 'cc.Vec2', x: 8, y: 9 });
+  source.sceneBytes = Buffer.from(JSON.stringify(records));
+  assert.deepEqual(inspectSavedSceneNode({ ...source, sceneUuid, sceneAssetRow, nodeUuid }).componentProperty.value,
+    { kind: 'vec2', x: 8, y: 9 });
+
+  const exact = propertyFixture(10);
+  const duplicates = JSON.parse(exact.sceneBytes.toString('utf8'));
+  duplicates[2]._components.push({ __id__: duplicates.length });
+  duplicates.push({ __type__: handlerClassId, _id: 'another-instance', node: { __id__: 2 }, state: 99 });
+  exact.sceneBytes = Buffer.from(JSON.stringify(duplicates));
+  assert.equal(inspectSavedSceneNode({ ...exact, sceneUuid, sceneAssetRow, nodeUuid }).componentProperty.value, 10);
+});
+
+test('saved component properties reject wrong identity, missing fields, unresolved references, and arbitrary objects', () => {
+  for (const [mutate, reason] of [
+    [(records) => { records[4]._id = 'other-instance'; }, 'SCENE_COMPONENT_SERIALIZED_IDENTITY_MISMATCH'],
+    [(records) => { records[4].__type__ = 'cc.Sprite'; }, 'SCENE_COMPONENT_SERIALIZED_IDENTITY_MISMATCH'],
+    [(records) => { records[4].node = { __id__: 1 }; }, 'SCENE_COMPONENT_SERIALIZED_IDENTITY_MISMATCH'],
+    [(records) => { records.push({ ...records[4] }); }, 'SCENE_COMPONENT_SERIALIZED_IDENTITY_MISMATCH'],
+    [(records) => { delete records[4].state; }, 'SCENE_COMPONENT_SERIALIZED_PROPERTY_MISSING'],
+    [(records) => { records[4].state = { arbitrary: true }; }, 'SCENE_COMPONENT_SERIALIZED_VALUE_UNSUPPORTED'],
+    [(records) => { records[4].state = { __id__: 999 }; }, 'SCENE_COMPONENT_SERIALIZED_VALUE_UNSUPPORTED'],
+    [(records) => { records[4].state = [[1]]; }, 'SCENE_COMPONENT_SERIALIZED_VALUE_UNSUPPORTED'],
+    [(records) => { records[4].state = [{ __uuid__: spriteUuid }]; }, 'SCENE_COMPONENT_SERIALIZED_VALUE_UNSUPPORTED'],
+    [(records) => { records[4].state = { __id__: 6 }; records.push({ __id__: 6 }); }, 'SCENE_COMPONENT_SERIALIZED_VALUE_UNSUPPORTED'],
+    [(records) => { records[4].state = { __id__: 6 }; records.push({ __type__: 'cc.Node', _id: spriteUuid, _parent: null }); },
+      'SCENE_COMPONENT_SERIALIZED_VALUE_UNSUPPORTED'],
+  ]) {
+    const source = propertyFixture(1);
+    const records = JSON.parse(source.sceneBytes.toString('utf8')); mutate(records);
+    source.sceneBytes = Buffer.from(JSON.stringify(records));
+    assert.equal(inspectSavedSceneNode({ ...source, sceneUuid, sceneAssetRow, nodeUuid }).reason, reason);
+  }
+});
+
+test('planned property values normalize resource types and persistent component references without losing array order', () => {
+  const reference = { kind: 'component-ref', componentClassName: 'game.ButtonState', nodeUuid, componentInstanceId: 'handler-instance' };
+  const classes = [{ componentClassName: 'game.ButtonState', serializedClassId: handlerClassId }];
+  assert.deepEqual(componentValueForDisk({ kind: 'asset', assetClass: 'SpriteFrame', assetUuid: spriteUuid }),
+    { verified: true, value: { kind: 'asset', assetUuid: spriteUuid } });
+  assert.deepEqual(componentValueForDisk({ kind: 'array', items: [{ kind: 'node-ref' }, reference, 1] }, classes),
+    { verified: true, value: { kind: 'array', items: [null,
+      { kind: 'component-ref', nodeUuid, componentInstanceId: 'handler-instance', serializedClassId: handlerClassId }, 1] } });
+  assert.equal(componentValueForDisk(reference).verified, false);
+  assert.equal(componentValueForDisk(reference, [...classes, ...classes]).verified, false);
+  assert.equal(validComponentDiskValue({ kind: '__proto__' }), false);
 });
 
 test('saved scene node inspection rejects wrong metadata, detached nodes, and missing node UUIDs', () => {

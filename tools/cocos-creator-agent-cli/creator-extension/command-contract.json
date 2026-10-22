@@ -635,7 +635,7 @@
     {
       "id": "creator.scene.node.set-component-property.plan",
       "access": "plan",
-      "description": "Plan changing one declared public scalar, supported typed value, bounded typed array, active-scene node reference, component-instance reference, or supported AssetDB resource property on one exact component instance. Arbitrary project objects, lifecycle, and internal fields are rejected.",
+      "description": "Plan changing one declared public serializable scalar, supported typed value, bounded typed array, active-scene node reference, component-instance reference, or supported AssetDB resource property on one exact component instance. Binds the saved AssetDB .fire/.meta, component ID, serialized class ID, owning node, and property value. Arbitrary project objects, lifecycle, and internal fields are rejected.",
       "input": {
         "type": "object",
         "required": ["sceneUuid", "nodeUuid", "componentClassName", "componentInstanceId", "property", "value"],
@@ -782,7 +782,7 @@
       "id": "creator.scene.node.set-component-property.commit",
       "access": "write",
       "approval": true,
-      "description": "Apply the exact planned scalar or supported typed component-property change after Creator approval and fresh component-instance/property precondition checks, then request scene save and read back in memory.",
+      "description": "Apply the exact planned component-property change after native Creator approval and fresh live and saved before-state checks. Request scene save, then confirm the serialized component identity and property in the exact AssetDB .fire; reports save-required if memory changed but persistence was not verified.",
       "input": {
         "type": "object",
         "required": ["operationId", "planHash"],
@@ -796,7 +796,7 @@
     {
       "id": "creator.scene.node.set-component-property.reconcile",
       "access": "plan",
-      "description": "Observe and reconcile one component-property operation after interruption. Never reapplies the value; if the original component instance cannot be identified, manual review is required.",
+      "description": "Observe one component-property operation against both live state and the exact saved .fire/.meta. Reports save-required when only memory changed and confirms completion after a matching manual save. Never reapplies the value; a changed Creator session or missing original component instance requires manual review.",
       "input": {
         "type": "object",
         "required": ["operationId"],

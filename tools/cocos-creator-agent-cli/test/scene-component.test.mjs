@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import vm from 'node:vm';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -98,6 +99,7 @@ function fixture() {
   const cc = {
     Component, Node: FakeNode, SpriteFrame, Button, Vec2, Vec3, Vec4, Rect, Size, Color,
     Class: { attr(type, property, key) {
+      if (key === 'serializable' && property === 'transient') return false;
       if (key !== 'type') return null;
       if (type === Sprite && property === 'spriteFrame') return SpriteFrame;
       if (type === Sprite && property === 'position') return Vec2;
@@ -122,12 +124,14 @@ function fixture() {
         'sample.Controller': Controller, 'sample.ReferenceHolder': ReferenceHolder,
         'sample.NeedsOther': NeedsOther, 'sample.NotAComponent': NotAComponent })[name]; },
       getClassName(type) { return type.prototype.__classname__ || ''; },
+      _getClassId(type) { return type.prototype.__classname__ || ''; },
       isChildClassOf(type, base) { return type === base || type.prototype instanceof base; },
     },
   };
   cc.Component.EventHandler = class EventHandler { constructor() { this.target = null; this.component = ''; this.handler = ''; this.customEventData = ''; } };
   const module = { exports: {} };
-  vm.runInNewContext(sceneSource, { module, exports: module.exports, cc, Array }, { filename: 'scene.js' });
+  vm.runInNewContext(sceneSource, { module, exports: module.exports, cc, Array,
+    require: createRequire(path.join(packageRoot, 'creator-extension/scene.js')) }, { filename: 'scene.js' });
   return { api: module.exports, root, Sprite, Button, Controller, ReferenceHolder, Vec2, Vec3, Vec4, Rect,
     Size, Color, SpriteFrame, cc, FakeNode };
 }
@@ -346,6 +350,7 @@ test('component property writes support declared public scalars with exact befor
   assert.equal(state.result.available, true);
   assert.equal(state.result.value, 0);
   assert.equal(state.result.propertyKind, 'number');
+  assert.equal(state.result.serializedClassId, 'cc.Sprite');
 
   const changed = invoke(api, 'setComponentProperty', { ...stateInput, expectedValue: 0, value: 1 });
   assert.equal(changed.result.available, true);
@@ -421,9 +426,13 @@ test('component properties round-trip exact scene node/component references and 
   assert.equal(holder.targetNode, targetNode);
   assert.deepEqual({ ...nodeWrite.value }, { kind: 'node-ref', nodeUuid: targetNode.uuid });
 
-  const componentBefore = invoke(api, 'componentPropertyState', { ...base, property: 'targetComponent' }).result;
+  const componentBefore = invoke(api, 'componentPropertyState', { ...base, property: 'targetComponent', requestedValue: {
+    kind: 'component-ref', nodeUuid: targetNode.uuid, componentClassName: 'sample.Controller', componentInstanceId: targetComponent._id,
+  } }).result;
   assert.equal(componentBefore.available, true);
   assert.deepEqual({ ...componentBefore.value }, { kind: 'component-ref', componentClassName: 'sample.Controller' });
+  assert.deepEqual(Array.from(componentBefore.referenceClasses, (entry) => ({ ...entry })),
+    [{ componentClassName: 'sample.Controller', serializedClassId: 'sample.Controller' }]);
   const componentWrite = invoke(api, 'setComponentProperty', { ...base, property: 'targetComponent',
     expectedValue: componentBefore.value, value: { kind: 'component-ref', nodeUuid: targetNode.uuid,
       componentClassName: 'sample.Controller', componentInstanceId: targetComponent._id } }).result;
@@ -488,13 +497,14 @@ test('component asset properties load exact resources and represent an empty ref
   assert.deepEqual(JSON.parse(JSON.stringify(cleared.value)), { kind: 'asset', assetClass: 'SpriteFrame' });
 });
 
-test('component property writes reject inherited, internal, and object-valued fields', () => {
-  const { api } = fixture();
+test('component property writes reject inherited, internal, transient, and object-valued fields', () => {
+  const { api, Sprite } = fixture();
+  Sprite.__props__.push('transient');
   invoke(api, 'addNodeComponent', {
     sceneUuid: 'scene-uuid', nodeUuid: 'scene-uuid', nodePath: 'Scene',
     componentClassName: 'cc.Sprite', expectedComponentCount: 0,
   });
-  for (const property of ['enabled', 'inheritedValue', '_privateValue', 'vector']) {
+  for (const property of ['enabled', 'inheritedValue', '_privateValue', 'vector', 'transient']) {
     const state = invoke(api, 'componentPropertyState', {
       sceneUuid: 'scene-uuid', nodeUuid: 'scene-uuid', nodePath: 'Scene',
       componentClassName: 'cc.Sprite', componentInstanceId: 'component-1', property,

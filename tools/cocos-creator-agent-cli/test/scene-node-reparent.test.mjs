@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import vm from 'node:vm';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -31,7 +32,8 @@ function fixture() {
   const cc = { Component: class Component {}, Object: { Flags: { DontSave: 8, HideInHierarchy: 1024 } },
     director: { getScene: () => scene }, js: { getClassName: () => 'FixtureNode' } };
   const module = { exports: {} };
-  vm.runInNewContext(sceneSource, { module, exports: module.exports, cc }, { filename: 'scene.js' });
+  vm.runInNewContext(sceneSource, { module, exports: module.exports, cc,
+    require: createRequire(path.join(packageRoot, 'creator-extension/scene.js')) }, { filename: 'scene.js' });
   return { api: module.exports, scene, oldParent, targetParent, child };
 }
 

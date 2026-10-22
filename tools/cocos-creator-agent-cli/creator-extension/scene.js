@@ -946,7 +946,10 @@ function componentPropertyState(params) {
         ? constructor.$super.__props__ : [];
     const baseProperties = Array.isArray(cc.Component.__props__) ? cc.Component.__props__ : [];
     if (!declared.includes(params.property) || inherited.includes(params.property)
-        || baseProperties.includes(params.property) || params.property.startsWith('_'))
+        || baseProperties.includes(params.property) || params.property.startsWith('_')
+        || (Array.isArray(constructor.__values__) && !constructor.__values__.includes(params.property))
+        || (cc.Class && typeof cc.Class.attr === 'function'
+            && cc.Class.attr(constructor, params.property, 'serializable') === false))
         return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_NOT_SERIALIZABLE' };
     const attrType = cc.Class && typeof cc.Class.attr === 'function'
         ? cc.Class.attr(resolved.constructor, params.property, 'type') : null;
@@ -964,9 +967,24 @@ function componentPropertyState(params) {
         const requested = decodeComponentValue(params.requestedValue, attrType, null, params.sceneUuid);
         if (!requested.available) return { available: false, reason: requested.reason };
     }
+    const classId = (type) => cc.js && typeof cc.js._getClassId === 'function'
+        ? cc.js._getClassId(type, false) : null;
+    const referenceClasses = new Map();
+    function collectReferenceClasses(descriptor) {
+        if (!descriptor || typeof descriptor !== 'object') return;
+        if (descriptor.kind === 'array') descriptor.items.forEach(collectReferenceClasses);
+        else if (descriptor.kind === 'component-ref' && descriptor.nodeUuid !== undefined) {
+            const reference = componentClass(descriptor.componentClassName);
+            referenceClasses.set(descriptor.componentClassName, reference.available ? classId(reference.constructor) : null);
+        }
+    }
+    collectReferenceClasses(serialized.value);
+    collectReferenceClasses(params.requestedValue);
     return { available: true, sceneName: located.state.sceneName, sceneUuid: located.state.sceneUuid,
         nodePath: located.state.nodePath, nodeUuid: located.state.nodeUuid,
         componentClassName: resolved.componentClassName, componentInstanceId: params.componentInstanceId,
+        serializedClassId: classId(constructor), referenceClasses: Array.from(referenceClasses, ([componentClassName, serializedClassId]) =>
+            ({ componentClassName, serializedClassId })).sort((left, right) => left.componentClassName.localeCompare(right.componentClassName)),
         property: params.property, propertyKind: serialized.kind, value: serialized.value };
 }
 

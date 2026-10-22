@@ -99,8 +99,29 @@ function serializeSceneComposition(params, sceneUuid) {
   return records;
 }
 
+function serializePropertyValue(value, records, nodeIndex, referenceClasses = []) {
+  if (!value || typeof value !== 'object') return value;
+  if (value.kind === 'asset') return value.assetUuid ? { __uuid__: value.assetUuid } : null;
+  if (value.kind === 'node-ref') return value.nodeUuid ? { __id__: nodeIndex } : null;
+  if (value.kind === 'component-ref') {
+    if (!value.nodeUuid) return null;
+    let index = records.findIndex((record) => record._id === value.componentInstanceId);
+    if (index === -1) {
+      index = records.length;
+      const classId = referenceClasses.find((entry) => entry.componentClassName === value.componentClassName)?.serializedClassId
+        || value.componentClassName;
+      records.push({ __type__: classId, _id: value.componentInstanceId, node: { __id__: nodeIndex } });
+      records[nodeIndex]._components.push({ __id__: index });
+    }
+    return { __id__: index };
+  }
+  if (value.kind === 'array') return value.items.map((item) => serializePropertyValue(item, records, nodeIndex, referenceClasses));
+  const type = ({ vec2: 'cc.Vec2', vec3: 'cc.Vec3', vec4: 'cc.Vec4', size: 'cc.Size', rect: 'cc.Rect', color: 'cc.Color' })[value.kind];
+  return { __type__: type, ...Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'kind')) };
+}
+
 function serializeExistingSceneNode({ transform, name = 'Button', active = true, parentUuid = null,
-  buttonEvents = null },
+  buttonEvents = null, componentProperty = null },
   sceneUuid, nodeUuid, oldParentUuid, targetParentUuid, withParents = false) {
   const angle = transform.angle * Math.PI / 360;
   const records = [{ __type__: 'cc.SceneAsset', scene: { __id__: 1 } },
@@ -132,6 +153,13 @@ function serializeExistingSceneNode({ transform, name = 'Button', active = true,
         handler: event.handler, customEventData: event.customEventData });
       records[buttonIndex].clickEvents.push({ __id__: eventIndex });
     }
+  }
+  if (componentProperty) {
+    const nodeIndex = records.findIndex((record) => record.__type__ === 'cc.Node' && record._id === nodeUuid);
+    const index = records.length;
+    const component = { __type__: componentProperty.serializedClassId, _id: 'sprite-instance', node: { __id__: nodeIndex } };
+    records.push(component); records[nodeIndex]._components.push({ __id__: index });
+    component[componentProperty.property] = serializePropertyValue(componentProperty.value, records, nodeIndex, componentProperty.referenceClasses);
   }
   return records;
 }
@@ -187,9 +215,11 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
   let sceneNodeDeleted = false;
   let sceneComponentRemoved = false;
   let buttonEvents = [];
+  if (sceneProperty) sceneProperty = { serializedClassId: 'cc.Sprite', referenceClasses: [],
+    property: sceneProperty.propertyKind === 'asset' ? 'spriteFrame' : 'position', ...sceneProperty };
   const sceneFile = path.join(projectRoot, 'assets', 'Scenes', 'Main.fire');
   const sceneMetaFile = `${sceneFile}.meta`;
-  if (sceneCompose || sceneTransform || sceneActive || sceneRename || sceneReparent || sceneButtonEvents) {
+  if (sceneCompose || sceneTransform || sceneActive || sceneRename || sceneReparent || sceneButtonEvents || sceneProperty) {
     fs.mkdirSync(path.dirname(sceneFile), { recursive: true });
     fs.writeFileSync(sceneFile, JSON.stringify(serializeExistingSceneNode({
       transform: { x: 1, y: 2, z: 0, scaleX: 1, scaleY: 1, angle: 0,
@@ -197,6 +227,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
       name: sceneNodeName, active: sceneNodeActive,
       parentUuid: sceneReparent ? oldParentUuid : sceneUuid,
       buttonEvents: sceneButtonEvents ? buttonEvents : null,
+      componentProperty: sceneProperty,
     }, sceneUuid, nodeUuid, oldParentUuid, targetParentUuid, sceneReparent)));
     fs.writeFileSync(sceneMetaFile, JSON.stringify({ uuid: sceneUuid, importer: 'scene' }));
     assetRecords.set('db://assets/Scenes/Main.fire', { url: 'db://assets/Scenes/Main.fire',
@@ -278,16 +309,17 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
     assert.equal(panel, 'scene');
     if (message === 'scene:stash-and-save') {
       assert.ok(sceneCompose || sceneActive || sceneRename || sceneReparent || sceneNodeDelete
-        || sceneComponentRemove || sceneTransform || sceneButtonEvents);
+        || sceneComponentRemove || sceneTransform || sceneButtonEvents || sceneProperty);
       sceneSaveCount += 1;
       if (sceneSaveMode === 'write' && currentSceneComposition) {
         fs.writeFileSync(sceneFile, JSON.stringify(serializeSceneComposition(currentSceneComposition, sceneUuid)));
         fs.writeFileSync(sceneMetaFile, JSON.stringify({ uuid: sceneUuid, importer: 'scene' }));
-      } else if (sceneSaveMode === 'write' && (sceneActive || sceneRename || sceneReparent || sceneTransform || sceneButtonEvents)) {
+      } else if (sceneSaveMode === 'write' && (sceneActive || sceneRename || sceneReparent || sceneTransform || sceneButtonEvents || sceneProperty)) {
         fs.writeFileSync(sceneFile, JSON.stringify(serializeExistingSceneNode({ transform: currentTransform,
           name: sceneNodeName, active: sceneNodeActive,
           parentUuid: sceneReparent ? (reparentApplied ? targetParentUuid : oldParentUuid) : sceneUuid,
           buttonEvents: sceneButtonEvents ? buttonEvents : null,
+          componentProperty: sceneProperty,
         }, sceneUuid, nodeUuid, oldParentUuid, targetParentUuid, sceneReparent)));
         fs.writeFileSync(sceneMetaFile, JSON.stringify({ uuid: sceneUuid, importer: 'scene' }));
       }
@@ -395,7 +427,16 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
       if (method === 'componentPropertyState' && sceneProperty) {
         callback(null, { available: true, sceneName: 'Scene', sceneUuid, nodeUuid, nodePath: 'Scene/Button',
           componentClassName: params.componentClassName, componentInstanceId: params.componentInstanceId,
+          serializedClassId: sceneProperty.serializedClassId, referenceClasses: sceneProperty.referenceClasses,
           property: params.property, propertyKind: sceneProperty.propertyKind, value: sceneProperty.value });
+        return;
+      }
+      if (method === 'setComponentProperty' && sceneProperty) {
+        assert.deepEqual(JSON.parse(JSON.stringify(params.expectedValue)), sceneProperty.value);
+        sceneProperty.value = JSON.parse(JSON.stringify(params.value));
+        callback(null, { available: true, sceneUuid, nodeUuid, nodePath: 'Scene/Button',
+          componentClassName: params.componentClassName, componentInstanceId: params.componentInstanceId,
+          property: params.property, value: sceneProperty.value });
         return;
       }
       if (method === 'nodeReparentState' && sceneReparent) {
@@ -560,6 +601,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
     createSceneNodeRenamePlan, commitSceneNodeRename, reconcileSceneNodeRename,
     createSceneNodeReparentPlan, commitSceneNodeReparent, reconcileSceneNodeReparent,
     createSceneNodeDeletePlan, createSceneComponentRemovePlan, createSceneComponentPropertyPlan,
+    commitSceneComponentProperty, reconcileSceneComponentProperty,
     commitSceneNodeDelete(input, context) { return commitSceneDestructiveOperation(readSceneNodeDeleteOperation(input.operationId), input, context); },
     reconcileSceneNodeDelete(input) { return reconcileSceneDestructiveOperation(readSceneNodeDeleteOperation(input.operationId)); },
     commitSceneComponentRemove(input, context) { return commitSceneDestructiveOperation(readSceneComponentRemoveOperation(input.operationId), input, context); },
@@ -591,6 +633,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
     textureAssetUuid, textureAssetPath, textureAssetFile,
     isSceneNodeDeleted: () => sceneNodeDeleted,
     isSceneComponentRemoved: () => sceneComponentRemoved,
+    getPropertyValue: () => JSON.parse(JSON.stringify(sceneProperty.value)),
     getSaveCount: () => saveCount, getSceneSaveCount: () => sceneSaveCount,
     getTextureMetaSaveCount: () => textureMetaSaveCount,
     readTextureMeta: () => JSON.parse(fs.readFileSync(`${textureAssetFile}.meta`, 'utf8')),
@@ -1339,4 +1382,84 @@ test('component-property plans preserve typed before/after values and reject kin
     property: 'spriteFrame', value: { kind: 'asset', assetClass: 'Texture2D',
       assetUuid: '55555555-5555-4555-8555-555555555555' } }),
   { code: 'SCENE_COMPONENT_PROPERTY_TYPE_MISMATCH' });
+});
+
+test('component-property commits verify serialized scalar, typed, array, asset, node, and exact component references', async (t) => {
+  const referenceClasses = [{ componentClassName: 'sample.Controller', serializedClassId: 'controller-script-class-id' }];
+  for (const [propertyKind, before, next] of [
+    ['number', 1, () => 2],
+    ['vec2', { kind: 'vec2', x: 1, y: 2 }, () => ({ kind: 'vec2', x: 3, y: 4 })],
+    ['array', { kind: 'array', items: [1] }, () => ({ kind: 'array', items: [2, 3] })],
+    ['asset', { kind: 'asset', assetClass: 'SpriteFrame' }, (harness) => ({ kind: 'asset', assetClass: 'SpriteFrame', assetUuid: harness.spriteUuid })],
+    ['node-ref', { kind: 'node-ref' }, (harness) => ({ kind: 'node-ref', nodeUuid: harness.nodeUuid })],
+    ['component-ref', { kind: 'component-ref', componentClassName: 'sample.Controller' }, (harness) => ({ kind: 'component-ref',
+      componentClassName: 'sample.Controller', nodeUuid: harness.nodeUuid, componentInstanceId: 'controller-instance' })],
+  ]) {
+    const harness = makeHarness(t, { ipcMode: 'editor', sceneProperty: { property: 'state', propertyKind, value: before, referenceClasses } });
+    const value = next(harness);
+    const plan = await harness.api.createSceneComponentPropertyPlan({ sceneUuid: harness.sceneUuid, nodeUuid: harness.nodeUuid,
+      componentClassName: 'cc.Sprite', componentInstanceId: 'sprite-instance', property: 'state', value });
+    assert.equal(plan.savedSceneBaseline.componentProperty.componentInstanceId, 'sprite-instance');
+    const receipt = await harness.api.commitSceneComponentProperty({ operationId: plan.operationId, planHash: plan.planHash },
+      { requestId: 'request-fixture' });
+    assert.equal(receipt.status, 'completed', propertyKind);
+    assert.equal(receipt.scenePersistenceConfirmed, true, propertyKind);
+    assert.equal(receipt.sceneSaveCompletionConfirmed, false);
+    assert.deepEqual(JSON.parse(JSON.stringify(receipt.value)), value);
+    assert.deepEqual(JSON.parse(JSON.stringify(receipt.diskReadback.componentProperty.value)),
+      JSON.parse(JSON.stringify(plan.expectedAfter.serializedValue)));
+    const reconciled = await harness.api.reconcileSceneComponentProperty({ operationId: plan.operationId });
+    assert.equal(reconciled.status, 'completed');
+    assert.equal(reconciled.observed.disk.matchesAfter, true);
+    assert.equal(harness.getSceneSaveCount(), 1);
+  }
+});
+
+test('component properties require saved before-state and recheck the scene file after approval', async (t) => {
+  const unsaved = makeHarness(t, { sceneProperty: { property: 'state', propertyKind: 'number', value: 1 } });
+  const rows = JSON.parse(fs.readFileSync(unsaved.sceneFile, 'utf8'));
+  rows.find((record) => record._id === 'sprite-instance').state = 99;
+  fs.writeFileSync(unsaved.sceneFile, JSON.stringify(rows));
+  await assert.rejects(unsaved.api.createSceneComponentPropertyPlan({ sceneUuid: unsaved.sceneUuid, nodeUuid: unsaved.nodeUuid,
+    componentClassName: 'cc.Sprite', componentInstanceId: 'sprite-instance', property: 'state', value: 2 }),
+  { code: 'SCENE_DISK_STATE_DIFFERS_FROM_EDITOR' });
+
+  let stale;
+  stale = makeHarness(t, { sceneProperty: { property: 'state', propertyKind: 'number', value: 1 },
+    onApproval() { fs.appendFileSync(stale.sceneFile, '\n'); } });
+  const plan = await stale.api.createSceneComponentPropertyPlan({ sceneUuid: stale.sceneUuid, nodeUuid: stale.nodeUuid,
+    componentClassName: 'cc.Sprite', componentInstanceId: 'sprite-instance', property: 'state', value: 2 });
+  await assert.rejects(stale.api.commitSceneComponentProperty({ operationId: plan.operationId, planHash: plan.planHash },
+    { requestId: 'request-fixture' }), { code: 'SCENE_DISK_PRECONDITION_FAILED' });
+  assert.equal(stale.getPropertyValue(), 1);
+  assert.equal(stale.getSceneSaveCount(), 0);
+});
+
+test('component properties recover from memory-only mutation after manual save without replaying the write', async (t) => {
+  const harness = makeHarness(t, { ipcMode: 'editor', sceneSaveMode: 'ignore',
+    sceneProperty: { property: 'state', propertyKind: 'number', value: 1 } });
+  const plan = await harness.api.createSceneComponentPropertyPlan({ sceneUuid: harness.sceneUuid, nodeUuid: harness.nodeUuid,
+    componentClassName: 'cc.Sprite', componentInstanceId: 'sprite-instance', property: 'state', value: 2 });
+  await assert.rejects(harness.api.commitSceneComponentProperty({ operationId: plan.operationId, planHash: plan.planHash },
+    { requestId: 'request-fixture' }), { code: 'SCENE_DISK_READBACK_UNCONFIRMED' });
+  const pending = await harness.api.reconcileSceneComponentProperty({ operationId: plan.operationId });
+  assert.equal(pending.status, 'save-required');
+  assert.equal(pending.scenePersistenceConfirmed, false);
+  assert.equal(pending.observed.disk.matchesBefore, true);
+  assert.equal(pending.observed.disk.matchesAfter, false);
+  assert.equal(harness.getPropertyValue(), 2);
+
+  const rows = JSON.parse(fs.readFileSync(harness.sceneFile, 'utf8'));
+  const component = rows.find((record) => record._id === 'sprite-instance');
+  component.state = 2; fs.writeFileSync(harness.sceneFile, JSON.stringify(rows));
+  const saved = await harness.api.reconcileSceneComponentProperty({ operationId: plan.operationId });
+  assert.equal(saved.status, 'completed');
+  assert.equal(saved.scenePersistenceConfirmed, true);
+  assert.equal(harness.getSceneSaveCount(), 1);
+
+  component.state = 3; fs.writeFileSync(harness.sceneFile, JSON.stringify(rows));
+  const changed = await harness.api.reconcileSceneComponentProperty({ operationId: plan.operationId });
+  assert.equal(changed.status, 'conflict');
+  assert.equal(changed.scenePersistenceConfirmed, false);
+  assert.equal(harness.getSceneSaveCount(), 1);
 });
