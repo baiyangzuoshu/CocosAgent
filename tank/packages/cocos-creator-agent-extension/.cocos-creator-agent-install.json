@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
   "extensionName": "cocos-creator-agent-extension",
-  "extensionVersion": "0.7.0",
-  "installedByCliVersion": "0.11.0",
-  "installedAt": "2026-10-21T00:38:14.456Z",
+  "extensionVersion": "0.8.1",
+  "installedByCliVersion": "0.12.1",
+  "installedAt": "2026-10-21T14:47:30.260Z",
   "files": {
     "approval.cjs": "04d0a24cd2de4034b11e3552f59b7a59c729697da462df4f504291255d8c180b",
-    "command-contract.json": "fe71e1802c40965d9104d2c988637dfeced38313129fd0758d167271291c83df",
-    "main.js": "e41372d36766bb70d2ea28a11148f99d4579b20b158ed99de38b424d2d9223ed",
-    "package.json": "72f061dee51d956f1b17ba55fbf1099602fadfd6e3d868374bdef142e8ebd18b",
+    "command-contract.json": "53b7660e9f68482a250f60997a5fd2aff0479980b68d25680f1b47fc9ce8f1e0",
+    "main.js": "9b3a9016c7777d4f409a29c9b73cbe321bfe82e018ffab2be3a64f064a86cf6f",
+    "package.json": "9f10ca46241021ce740f80ca094e93113afda6bf784ba292715346e5da7bd004",
     "provider-contract.cjs": "4d070471d4b37d02968707b1eca4cc17c7696e5769e612b23f667d5a83017bab",
-    "scene.js": "ae1498442402f0c98be66d3a2c1ac57bdd8013a5af470cbc4fc1a588133ae3fc"
+    "scene.js": "761fa8fbbd6fda7bff7abc0f2c55cd867bf459efe51e3660844dd83c67525e33"
   }
 }

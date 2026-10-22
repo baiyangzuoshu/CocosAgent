@@ -70,6 +70,87 @@
       }
     },
     {
+      "id": "creator.scene.compose.plan",
+      "access": "plan",
+      "description": "Plan a bounded Creator 2.4 scene composition of new nodes, transforms, registered components, typed scalar or asset properties, and Button click handlers. Existing scene nodes are read-only parents or event targets.",
+      "input": {
+        "type": "object",
+        "required": ["sceneUuid", "nodes", "components", "buttonEvents"],
+        "properties": {
+          "sceneUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+          "nodes": {
+            "type": "array", "minItems": 1, "maxItems": 12,
+            "items": { "type": "object", "required": ["id", "name", "parentRef"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-z][a-z0-9_-]{0,31}$" },
+                "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+                "parentRef": { "type": "string", "minLength": 5, "maxLength": 100, "pattern": "^(?:new:[a-z][a-z0-9_-]{0,31}|uuid:(?:[0-9a-fA-F-]{36}|[A-Za-z0-9+/]{22,23}))$" },
+                "transform": { "type": "object", "properties": {
+                  "x": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+                  "y": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+                  "z": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+                  "scaleX": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+                  "scaleY": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+                  "angle": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+                  "width": { "type": "number", "minimum": 0, "maximum": 1000000 },
+                  "height": { "type": "number", "minimum": 0, "maximum": 1000000 }
+                }, "additionalProperties": false }
+              }, "additionalProperties": false }
+          },
+          "components": {
+            "type": "array", "maxItems": 24,
+            "items": { "type": "object", "required": ["id", "nodeRef", "className", "properties"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-z][a-z0-9_-]{0,31}$" },
+                "nodeRef": { "type": "string", "minLength": 5, "maxLength": 100, "pattern": "^(?:new:[a-z][a-z0-9_-]{0,31}|uuid:(?:[0-9a-fA-F-]{36}|[A-Za-z0-9+/]{22,23}))$" },
+                "className": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[A-Za-z_$][A-Za-z0-9_$.]*$" },
+                "properties": { "type": "array", "maxItems": 16,
+                  "items": { "type": "object", "required": ["name", "value"],
+                    "properties": {
+                      "name": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z][A-Za-z0-9_]*$" },
+                      "value": { "type": ["string", "number", "boolean", "object"], "maxLength": 1024,
+                        "properties": {
+                          "assetUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+                          "assetClass": { "type": "string", "enum": ["SpriteFrame", "Texture2D", "AudioClip", "Prefab", "BitmapFont", "TTFFont"] }
+                        }, "required": ["assetUuid", "assetClass"], "additionalProperties": false,
+                        "minimum": -1000000000, "maximum": 1000000000 }
+                    }, "additionalProperties": false }
+                }
+              }, "additionalProperties": false }
+          },
+          "buttonEvents": {
+            "type": "array", "maxItems": 12,
+            "items": { "type": "object", "required": ["buttonRef", "handlerRef", "handlerComponentClassName", "handler"],
+              "properties": {
+                "buttonRef": { "type": "string", "minLength": 5, "maxLength": 100, "pattern": "^new:[a-z][a-z0-9_-]{0,31}$" },
+                "handlerRef": { "type": "string", "minLength": 5, "maxLength": 100, "pattern": "^(?:new:[a-z][a-z0-9_-]{0,31}|uuid:(?:[0-9a-fA-F-]{36}|[A-Za-z0-9+/]{22,23}))$" },
+                "handlerComponentClassName": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[A-Za-z_$][A-Za-z0-9_$.]*$" },
+                "handler": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$" },
+                "customEventData": { "type": "string", "maxLength": 240 }
+              }, "additionalProperties": false }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.compose.commit",
+      "access": "write", "approval": true,
+      "description": "Apply one exact planned composition after Creator approval and fresh precondition checks, request scene save, then read created nodes, transforms, component properties, resource UUIDs, and Button handlers back from the same scene session.",
+      "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+        "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.scene.compose.reconcile",
+      "access": "plan",
+      "description": "Read the exact nodes and components from an interrupted scene composition without replaying or saving it.",
+      "input": { "type": "object", "required": ["operationId"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+      }, "additionalProperties": false }
+    },
+    {
       "id": "creator.scene.node.set-active.plan",
       "access": "plan",
       "description": "Plan a single active-state change for one existing node in the active scene, bound to scene/node UUIDs and the observed before-state. Does not modify or save the scene.",
@@ -285,6 +366,32 @@
         },
         "additionalProperties": false
       }
+    },
+    {
+      "id": "creator.script.recompile.plan",
+      "access": "plan",
+      "description": "Plan an exact Creator AssetDB reimport for one unchanged script asset, bound to its source hash, UUID, importer, and .meta hash.",
+      "input": { "type": "object", "required": ["scriptPath", "expectedSourceSha256"], "properties": {
+        "scriptPath": { "type": "string", "minLength": 1, "maxLength": 240, "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?($|/))(?!.*(?:^|/)\\.)[^\\\\]+\\.(?:js|ts)$" },
+        "expectedSourceSha256": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.script.recompile.commit",
+      "access": "control", "approval": true, "execution": "creator",
+      "description": "After native Creator approval, refresh one exact script through AssetDB and return the importer result plus correlated script-import-failed diagnostics. Does not edit source or claim success when AssetDB returns no matching import result.",
+      "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+        "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.script.recompile.reconcile",
+      "access": "plan",
+      "description": "Read and reconcile the persisted result of one exact script AssetDB refresh. Never reruns the import.",
+      "input": { "type": "object", "required": ["operationId"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+      }, "additionalProperties": false }
     },
     {
       "id": "creator.diagnostics.read",
