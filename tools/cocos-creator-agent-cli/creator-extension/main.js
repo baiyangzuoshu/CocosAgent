@@ -2133,6 +2133,32 @@ async function inspectPrefabSourceCommand(input) {
         sourceSha256: fileHash(prefabBytes), metaSha256: fileHash(metaBytes), sourceScope: 'saved-disk-only' };
 }
 
+async function inspectPrefabInstanceCommand(input) {
+    if (editorVersion() !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!input || typeof input.sceneUuid !== 'string' || typeof input.nodeUuid !== 'string')
+        throw coded('PREFAB_INSTANCE_INPUT_INVALID');
+    const live = await callScene('prefabInstanceState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);
+    if (!live || live.available !== true) throw coded(live && live.reason || 'PREFAB_INSTANCE_INSPECT_FAILED');
+    const result = { ...live, projectRoot: projectRoot(), creatorVersion: editorVersion(), liveStateScope: 'active-editor-memory' };
+    if (!live.linked) return result;
+    const prefab = await inspectPrefabSourceCommand({ prefabUuid: live.prefabUuid });
+    result.prefabAsset = { uuid: prefab.prefabUuid, url: prefab.targetUrl, path: prefab.prefabPath,
+        sourceSha256: prefab.sourceSha256, metaSha256: prefab.metaSha256,
+        nodeCount: prefab.nodeCount, sourceScope: prefab.sourceScope };
+    try {
+        const savedScene = await sceneNodeDiskState(input.sceneUuid, live.prefabRootUuid,
+            { includeComponents: true, includeSubtree: true });
+        result.savedScene = { sceneUuid: input.sceneUuid, url: savedScene.sceneUrl || null,
+            sourceSha256: savedScene.sourceSha256, metaSha256: savedScene.metaSha256,
+            subtreeNodeCount: savedScene.subtree && savedScene.subtree.length || null,
+            verified: true, scope: 'assetdb-disk-readback' };
+    } catch (error) {
+        result.savedScene = { verified: false, reason: error && error.code || 'SCENE_DISK_READBACK_UNAVAILABLE',
+            scope: 'assetdb-disk-readback' };
+    }
+    return result;
+}
+
 function singlePrefabNode(source, nodeUuid) {
     const nodes = source && Array.isArray(source.nodes) ? source.nodes : [];
     const matches = nodes.filter((node) => node && node.nodeUuid === nodeUuid);
@@ -6284,6 +6310,9 @@ function capabilityList() {
             && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
         'creator.prefab.source.inspect': !!(Editor && Editor.Project && Editor.Project.path && Editor.assetdb
             && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.prefab.instance.inspect': !!(Editor && Editor.Project && Editor.Project.path
+            && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
         'creator.prefab.source.patch.plan': prefabEditModeApiAvailable && !!(Editor && Editor.Project && Editor.Project.path
             && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function' && Editor.assetdb
             && typeof Editor.assetdb.queryAssets === 'function'),
@@ -6809,6 +6838,7 @@ function execute(command, input, context) {
     if (command === 'creator.prefab.create.commit') return commitPrefabCreate(input, context);
     if (command === 'creator.prefab.create.reconcile') return reconcilePrefabCreate(input);
     if (command === 'creator.prefab.source.inspect') return inspectPrefabSourceCommand(input);
+    if (command === 'creator.prefab.instance.inspect') return inspectPrefabInstanceCommand(input);
     if (command === 'creator.prefab.source.patch.plan') return createPrefabSourcePatchPlan(input);
     if (command === 'creator.prefab.source.patch.commit') return commitPrefabSourcePatch(input, context);
     if (command === 'creator.prefab.source.patch.reconcile') return reconcilePrefabSourcePatch(input);

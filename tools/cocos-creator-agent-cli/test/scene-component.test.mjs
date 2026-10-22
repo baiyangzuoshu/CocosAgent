@@ -169,6 +169,42 @@ test('scene queries and writes exclude editor-managed nodes and all descendants'
   assert.equal(hiddenChild.active, true);
 });
 
+test('Prefab instance inspection resolves the exact source root and bounded linked descendants without mutation', () => {
+  const { api, root, FakeNode, Sprite } = fixture();
+  const prefabNode = new FakeNode('Enemy');
+  const child = new FakeNode('Body');
+  prefabNode._id = '11111111-1111-4111-8111-111111111111';
+  child._id = '22222222-2222-4222-8222-222222222222';
+  const asset = { _uuid: '33333333-3333-4333-8333-333333333333' };
+  prefabNode._prefab = { root: prefabNode, asset, fileId: '', sync: true };
+  child._prefab = { root: prefabNode, asset, fileId: 'prefab-child-file-id' };
+  child.addComponent(Sprite);
+  prefabNode.addChild(child);
+  root.addChild(prefabNode);
+
+  const inspected = invoke(api, 'prefabInstanceState', { sceneUuid: root.uuid, nodeUuid: child.uuid }).result;
+  assert.equal(inspected.available, true);
+  assert.equal(inspected.linked, true);
+  assert.equal(inspected.prefabRootUuid, prefabNode.uuid);
+  assert.equal(inspected.prefabUuid, asset._uuid);
+  assert.equal(inspected.prefabSync, true);
+  assert.equal(inspected.selectedNodePath, 'Scene/Enemy/Body');
+  assert.equal(inspected.nodeCount, 2);
+  assert.deepEqual({ ...inspected.nodes[1].prefabLink }, {
+    root: false, fileId: 'prefab-child-file-id', assetUuid: asset._uuid,
+  });
+  assert.equal(inspected.nodes[1].components[0].componentClassName, 'cc.Sprite');
+  assert.equal(prefabNode.children[0], child);
+  assert.equal(child.name, 'Body');
+
+  const plain = new FakeNode('Plain');
+  plain._id = '44444444-4444-4444-8444-444444444444';
+  root.addChild(plain);
+  const unlinked = invoke(api, 'prefabInstanceState', { sceneUuid: root.uuid, nodeUuid: plain.uuid }).result;
+  assert.equal(unlinked.available, true);
+  assert.equal(unlinked.linked, false);
+});
+
 test('component state resolves exact registered component class and scene node', () => {
   const { api } = fixture();
   const result = invoke(api, 'componentState', {

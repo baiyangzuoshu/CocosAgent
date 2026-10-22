@@ -144,6 +144,17 @@
       }, "additionalProperties": false }
     },
     {
+      "id": "creator.prefab.instance.inspect",
+      "access": "read",
+      "description": "Inspect one live scene Prefab instance by scene/node UUID, including its exact linked Prefab asset, root identity, bounded descendant links, and saved scene/Prefab hashes. Does not apply, revert, or save overrides.",
+      "input": { "type": "object", "required": ["sceneUuid", "nodeUuid"], "properties": {
+        "sceneUuid": { "type": "string", "minLength": 22, "maxLength": 36,
+          "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+        "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36,
+          "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" }
+      }, "additionalProperties": false }
+    },
+    {
       "id": "creator.prefab.source.patch.plan",
       "access": "plan",
       "description": "Plan an allowlisted edit to an existing Prefab in Creator Prefab edit mode. Apply binds the inspected source hash and explicit before/after values; compensation and replay derive their inverse from a completed source operation.",

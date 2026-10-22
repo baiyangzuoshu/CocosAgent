@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const prefabPatch = require('./prefab-patch.cjs');
 
 const MAX_NODES = 100;
@@ -9,6 +10,7 @@ const MAX_MUTATION_SCAN_NODES = 10000;
 const MAX_MUTATION_SCAN_DEPTH = 64;
 const MAX_COMPONENT_INSTANCES = 32;
 const MAX_DELETE_SUBTREE_NODES = 256;
+const MAX_PREFAB_INSTANCE_NODES = 256;
 
 function editorManaged(object) {
     const flags = cc && cc.Object && cc.Object.Flags;
@@ -377,6 +379,83 @@ function nodeState(params) {
     const located = locateNode(params && params.sceneUuid, params && params.nodeUuid);
     if (!located.state.available) return located.state;
     return { ...located.state, transform: transformSummary(located.node) };
+}
+
+function prefabInstanceState(params) {
+    if (!params || typeof params.sceneUuid !== 'string' || typeof params.nodeUuid !== 'string')
+        return { available: false, reason: 'SCENE_PREFAB_INSTANCE_INPUT_INVALID' };
+    const selected = locateNode(params.sceneUuid, params.nodeUuid);
+    if (!selected.state.available) return selected.state;
+    const selectedInfo = ownDataValue(selected.node, '_prefab');
+    if (!selectedInfo || typeof selectedInfo !== 'object')
+        return { available: true, linked: false, sceneName: selected.state.sceneName, sceneUuid: params.sceneUuid,
+            nodeUuid: params.nodeUuid, nodePath: selected.state.nodePath, nodeName: selected.state.nodeName };
+    const root = ownDataValue(selectedInfo, 'root') || selected.node;
+    const rootUuid = root && typeof root.uuid === 'string' ? root.uuid : null;
+    if (!rootUuid) return { available: false, reason: 'SCENE_PREFAB_INSTANCE_ROOT_IDENTITY_INVALID' };
+    const locatedRoot = locateNode(params.sceneUuid, rootUuid);
+    if (!locatedRoot.state.available || locatedRoot.node !== root)
+        return { available: false, reason: 'SCENE_PREFAB_INSTANCE_ROOT_NOT_IN_SCENE' };
+    const rootInfo = ownDataValue(root, '_prefab');
+    if (!rootInfo || typeof rootInfo !== 'object' || (ownDataValue(rootInfo, 'root') || root) !== root)
+        return { available: false, reason: 'SCENE_PREFAB_INSTANCE_ROOT_LINK_INVALID' };
+    const asset = ownDataValue(rootInfo, 'asset');
+    const prefabUuid = asset && (ownDataValue(asset, '_uuid') || ownDataValue(asset, 'uuid'));
+    if (typeof prefabUuid !== 'string' || !prefabPatch.UUID.test(prefabUuid))
+        return { available: false, reason: 'SCENE_PREFAB_INSTANCE_ASSET_IDENTITY_INVALID' };
+
+    const nodes = [];
+    const visited = new Set();
+    const stack = [{ node: root, parentPath: '', parentUuid: null, depth: 0 }];
+    while (stack.length) {
+        const item = stack.pop();
+        const node = item.node;
+        if (!node || visited.has(node) || item.depth > MAX_MUTATION_SCAN_DEPTH)
+            return { available: false, reason: 'SCENE_PREFAB_INSTANCE_HIERARCHY_INVALID' };
+        visited.add(node);
+        if (nodes.length >= MAX_PREFAB_INSTANCE_NODES)
+            return { available: false, reason: 'SCENE_PREFAB_INSTANCE_NODE_LIMIT', maxNodes: MAX_PREFAB_INSTANCE_NODES };
+        const nodeUuid = typeof node.uuid === 'string' ? node.uuid : null;
+        const nodeName = typeof node.name === 'string' ? node.name.slice(0, MAX_NAME) : '';
+        if (!nodeUuid || !nodeName) return { available: false, reason: 'SCENE_PREFAB_INSTANCE_NODE_IDENTITY_INVALID' };
+        const nodePath = item.parentPath ? `${item.parentPath}/${nodeName}` : nodeName;
+        if (nodePath.length > 2048) return { available: false, reason: 'SCENE_PREFAB_INSTANCE_PATH_TOO_LONG' };
+        const info = ownDataValue(node, '_prefab');
+        const infoRoot = info && ownDataValue(info, 'root');
+        const linkedToRoot = node === root || infoRoot === root;
+        const nodeAsset = info && ownDataValue(info, 'asset');
+        const nodeAssetUuid = nodeAsset && (ownDataValue(nodeAsset, '_uuid') || ownDataValue(nodeAsset, 'uuid'));
+        const rawFileId = info && ownDataValue(info, 'fileId');
+        const allComponents = Array.isArray(node._components) ? node._components.filter((component) => component && !editorManaged(component)) : [];
+        if (allComponents.length > MAX_COMPONENT_INSTANCES)
+            return { available: false, reason: 'SCENE_PREFAB_INSTANCE_COMPONENT_LIMIT', nodeUuid };
+        const components = allComponents.map((component, index) => {
+            const detail = componentSemanticDetail(component, index);
+            return { componentClassName: classNameOf(component),
+                serializedClassId: component && component.constructor ? serializedClassIdOf(component.constructor) : null,
+                componentInstanceId: component && component._id != null ? String(component._id).slice(0, 128) : null,
+                stateSha256: crypto.createHash('sha256').update(JSON.stringify(detail), 'utf8').digest('hex') };
+        });
+        nodes.push({ nodeUuid, nodeName, nodePath, parentUuid: item.parentUuid,
+            active: node.active !== false, transform: transformSummary(node),
+            prefabLink: linkedToRoot ? { root: node === root, fileId: typeof rawFileId === 'string' ? rawFileId.slice(0, 128) : null,
+                assetUuid: typeof nodeAssetUuid === 'string' && prefabPatch.UUID.test(nodeAssetUuid) ? nodeAssetUuid : null }
+                : info ? { root: infoRoot === node, fileId: typeof rawFileId === 'string' ? rawFileId.slice(0, 128) : null,
+                    assetUuid: typeof nodeAssetUuid === 'string' && prefabPatch.UUID.test(nodeAssetUuid) ? nodeAssetUuid : null }
+                    : null,
+            components });
+        const children = authoringChildren(node);
+        for (let index = children.length - 1; index >= 0; index -= 1)
+            stack.push({ node: children[index], parentPath: nodePath, parentUuid: nodeUuid, depth: item.depth + 1 });
+    }
+    if (!visited.has(selected.node))
+        return { available: false, reason: 'SCENE_PREFAB_INSTANCE_SELECTION_OUTSIDE_ROOT' };
+    const stateSha256 = crypto.createHash('sha256').update(JSON.stringify(nodes), 'utf8').digest('hex');
+    return { available: true, linked: true, sceneName: selected.state.sceneName, sceneUuid: params.sceneUuid,
+        selectedNodeUuid: params.nodeUuid, selectedNodePath: selected.state.nodePath,
+        prefabRootUuid: rootUuid, prefabRootPath: locatedRoot.state.nodePath, prefabUuid,
+        prefabSync: ownDataValue(rootInfo, 'sync') === true, nodeCount: nodes.length, nodes,
+        stateSha256, stateHashScope: 'instance-hierarchy-transforms-active-component-public-properties' };
 }
 
 function nodeNameState(params) {
@@ -1624,6 +1703,10 @@ module.exports = {
     nodeState(event, params) {
         try { event.reply(null, nodeState(params || {})); }
         catch (error) { event.reply({ code: 'SCENE_NODE_STATE_FAILED', message: String(error && error.message || error) }); }
+    },
+    prefabInstanceState(event, params) {
+        try { event.reply(null, prefabInstanceState(params || {})); }
+        catch (error) { event.reply(null, { available: false, reason: error && (error.code || error.message) || 'SCENE_PREFAB_INSTANCE_INSPECT_FAILED' }); }
     },
     nodeTransformState(event, params) {
         try { event.reply(null, nodeTransformState(params || {})); }

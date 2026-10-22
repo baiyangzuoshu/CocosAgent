@@ -45,6 +45,22 @@ test('Prefab source patch commands declare plan, approved write, and non-replayi
   assert.equal(validateCommand(reconcile.id, { operationId: inverseOperationId }).ok, true);
 });
 
+test('Prefab instance inspection is read-only and binds exact scene and node UUIDs', () => {
+  const inspect = command('creator.prefab.instance.inspect');
+  assert.equal(inspect.access, 'read');
+  assert.equal(validateCommand(inspect.id, {
+    sceneUuid: '11111111-1111-4111-8111-111111111111',
+    nodeUuid: '22222222-2222-4222-8222-222222222222',
+  }).ok, true);
+  assert.equal(validateCommand(inspect.id, {
+    sceneUuid: '11111111-1111-4111-8111-111111111111', nodeUuid: 'not-a-node',
+  }).ok, false);
+  assert.equal(validateCommand(inspect.id, {
+    sceneUuid: '11111111-1111-4111-8111-111111111111',
+    nodeUuid: '22222222-2222-4222-8222-222222222222', change: true,
+  }).ok, false);
+});
+
 test('Prefab patch validates only explicit supported before/after fields', () => {
   const diff = [
     { path: 'node.name', before: 'Sprite', after: 'Player Sprite' },
