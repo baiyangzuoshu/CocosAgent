@@ -1,15 +1,21 @@
 {
   "schemaVersion": 1,
   "extensionName": "cocos-creator-agent-extension",
-  "extensionVersion": "0.8.1",
-  "installedByCliVersion": "0.12.1",
-  "installedAt": "2026-10-21T14:47:30.260Z",
+  "extensionVersion": "0.8.26",
+  "installedByCliVersion": "0.12.36",
+  "installedAt": "2026-10-22T16:41:32.292Z",
   "files": {
     "approval.cjs": "04d0a24cd2de4034b11e3552f59b7a59c729697da462df4f504291255d8c180b",
-    "command-contract.json": "53b7660e9f68482a250f60997a5fd2aff0479980b68d25680f1b47fc9ce8f1e0",
-    "main.js": "9b3a9016c7777d4f409a29c9b73cbe321bfe82e018ffab2be3a64f064a86cf6f",
-    "package.json": "9f10ca46241021ce740f80ca094e93113afda6bf784ba292715346e5da7bd004",
+    "asset-references.cjs": "35ce4a041792b1e91f0864a4cd875a613d0e92b7ea36af89734df64dfb069f13",
+    "command-contract.json": "d2ff4b44c656775b85e385fd413898510c29c198505272b0c79b4fc7a1542d46",
+    "editor-script-eval.cjs": "28594fb42a3b11a317569e5cd2669d078886fd8890c7eb7d43d5a3a1a62ae84e",
+    "main.js": "e7853ec1464a13f7eeb9cf6d5bccd0c86cd1d54858241bd9507500373ccad031",
+    "package.json": "680acb87868ba5769f492dbda3aa0f5ce746694303d76c68b0787959d3db7e7a",
+    "prefab-instance-operations.cjs": "a59fb06fe6655023d25295756f283afd0389a04b46c73b59814b78c404c024a0",
+    "prefab-patch.cjs": "ba978df910d33efc6fc1137094a33c38e58f4a532db6576ae661e4a831adb570",
+    "prefab-source.cjs": "506482704b26000480783794bdb8697e299b4059ab7a51b4cf914c6ab1b0fd1a",
     "provider-contract.cjs": "4d070471d4b37d02968707b1eca4cc17c7696e5769e612b23f667d5a83017bab",
-    "scene.js": "761fa8fbbd6fda7bff7abc0f2c55cd867bf459efe51e3660844dd83c67525e33"
+    "scene-persistence.cjs": "456855131825363370d252e29b70214918adb20a7c43013811b8e34879539fc8",
+    "scene.js": "93867e9d8e04b79f0ab551d1b5bdd96368760626334ed047723f665f23a4d429"
   }
 }

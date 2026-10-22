@@ -7,6 +7,13 @@ const path = require('path');
 const crypto = require('crypto');
 const extensionPackage = require('./package.json');
 const confirmDialog = require('./approval.cjs');
+const { inspectSceneAssetIdentity, inspectSceneComposition, inspectSavedSceneNode, componentValueForDisk,
+    validComponentDiskValue } = require('./scene-persistence.cjs');
+const { inspectPrefabSource: inspectPrefabSourceData } = require('./prefab-source.cjs');
+const prefabPatch = require('./prefab-patch.cjs');
+const prefabInstanceOperations = require('./prefab-instance-operations.cjs');
+const editorScriptEval = require('./editor-script-eval.cjs');
+const { scanAssetReferences } = require('./asset-references.cjs');
 const contract = require('./command-contract.json');
 const { normalizeProvider, validateArguments, canonical, PROVIDER_ID, COMMAND_ID } = require('./provider-contract.cjs');
 
@@ -19,6 +26,16 @@ const MAX_FILES = 12000;
 const MAX_CODE_SCAN_BYTES = 32 * 1024 * 1024;
 const MAX_SCRIPT_BYTES = 128 * 1024;
 const MAX_WRITE_SOURCE_BYTES = 16 * 1024;
+const MAX_ASSET_IMPORT_BYTES = 32 * 1024 * 1024;
+const MAX_ASSET_TRACKED_BYTES = 128 * 1024 * 1024;
+const MAX_TEXTURE_META_BYTES = 16 * 1024;
+const MAX_SCENE_SERIALIZATION_BYTES = 16 * 1024 * 1024;
+const MAX_SCENE_META_BYTES = 16 * 1024;
+const MAX_SCENE_ASSET_CANDIDATES = 1024;
+const MAX_SCENE_ASSET_SCAN_BYTES = 128 * 1024 * 1024;
+const MAX_PREFAB_SERIALIZATION_BYTES = 8 * 1024 * 1024;
+const MAX_PREFAB_META_BYTES = 16 * 1024;
+const SCENE_SAVE_READBACK_TIMEOUT_MS = 15000;
 const OPERATION_FILE_MAX_BYTES = 512 * 1024;
 const OPERATION_TTL_MS = 15 * 60 * 1000;
 const MAX_PROVIDER_PACKAGES = 16;
@@ -45,6 +62,7 @@ let diagnosticSequence = 0;
 let diagnosticEvents = [];
 let latestCompile = null;
 let diagnosticListeners = [];
+let prefabEditModeApiAvailable = false;
 
 function editorVersion() {
     const candidates = [Editor && Editor.App && Editor.App.version,
@@ -198,6 +216,7 @@ function setupDiagnosticListeners() {
         });
     }
     const ipcEmitter = mainProcessIpcEmitter();
+    addDiagnosticListener(ipcEmitter, 'scene:ready', () => { refreshPrefabEditModeCapability(); });
     addDiagnosticListener(ipcEmitter, 'asset-db:script-import-failed', (...args) => {
         recordIpcDiagnostic('creator-assetdb', 'error', args);
     });
@@ -206,6 +225,18 @@ function setupDiagnosticListeners() {
             recordIpcDiagnostic('creator-console', level === 'failed' ? 'error' : level, args);
         });
     }
+}
+
+async function refreshPrefabEditModeCapability() {
+    prefabEditModeApiAvailable = false;
+    if (!Editor || !Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function'
+        || !Editor.Ipc || typeof Editor.Ipc.sendToAll !== 'function' || typeof Editor.Ipc.on !== 'function') return false;
+    try {
+        const state = await callScene('prefabEditModeState', {}, 10000);
+        prefabEditModeApiAvailable = !!(state && state.available === true && state.saveAvailable === true
+            && state.popAvailable === true && typeof state.modeName === 'string');
+    } catch (_) { prefabEditModeApiAvailable = false; }
+    return prefabEditModeApiAvailable;
 }
 
 function removeDiagnosticListeners() {
@@ -280,6 +311,60 @@ function safeProjectFile(relative, extensionPattern) {
     const real = fs.realpathSync(current);
     if (!real.startsWith(`${assets}${path.sep}`)) throw coded('UNSAFE_PROJECT_PATH');
     return current;
+}
+
+function safeProjectExtensionScript(relative) {
+    if (typeof relative !== 'string' || relative.length > 512 || relative.includes('\\') || relative.includes('\0')
+        || !relative.startsWith('packages/') || !/\.js$/i.test(relative)) throw coded('UNSAFE_EDITOR_SCRIPT_PATH');
+    const parts = relative.split('/');
+    const editorScriptsIndex = parts.indexOf('editor-scripts');
+    if (parts.length < 4 || parts[0] !== 'packages' || editorScriptsIndex < 2
+        || editorScriptsIndex === parts.length - 1
+        || parts.some((part) => !part || part === '.' || part === '..' || part.startsWith('.')))
+        throw coded('UNSAFE_EDITOR_SCRIPT_PATH');
+    const root = projectRoot();
+    const packages = path.join(root, 'packages');
+    const packagesStat = fs.lstatSync(packages);
+    if (!packagesStat.isDirectory() || packagesStat.isSymbolicLink()) throw coded('UNSAFE_EDITOR_SCRIPT_PATH');
+    let current = packages;
+    for (let index = 1; index < parts.length; index += 1) {
+        current = path.join(current, parts[index]);
+        const stat = fs.lstatSync(current);
+        if (stat.isSymbolicLink() || (index < parts.length - 1 ? !stat.isDirectory() : !stat.isFile()))
+            throw coded('UNSAFE_EDITOR_SCRIPT_PATH');
+    }
+    const real = fs.realpathSync(current);
+    if (!real.startsWith(`${packages}${path.sep}`)) throw coded('UNSAFE_EDITOR_SCRIPT_PATH');
+    return current;
+}
+
+function readProjectExtensionScript(relative) {
+    const filename = safeProjectExtensionScript(relative);
+    let fd;
+    try {
+        fd = fs.openSync(filename, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+        const before = fs.fstatSync(fd);
+        if (!before.isFile() || before.size > editorScriptEval.MAX_SOURCE_BYTES)
+            throw coded('EDITOR_SCRIPT_SOURCE_INVALID');
+        const buffer = Buffer.alloc(editorScriptEval.MAX_SOURCE_BYTES + 1);
+        let bytesRead = 0;
+        while (bytesRead < buffer.length) {
+            const count = fs.readSync(fd, buffer, bytesRead, buffer.length - bytesRead, bytesRead);
+            if (!count) break;
+            bytesRead += count;
+        }
+        const after = fs.fstatSync(fd);
+        if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size
+            || before.mtimeMs !== after.mtimeMs || bytesRead !== before.size)
+            throw coded('EDITOR_SCRIPT_SOURCE_CHANGED');
+        if (bytesRead > editorScriptEval.MAX_SOURCE_BYTES) throw coded('EDITOR_SCRIPT_SOURCE_INVALID');
+        const bytes = buffer.subarray(0, bytesRead);
+        const source = bytes.toString('utf8');
+        if (!Buffer.from(source, 'utf8').equals(bytes)) throw coded('EDITOR_SCRIPT_SOURCE_INVALID');
+        return source;
+    } finally {
+        if (fd !== undefined) fs.closeSync(fd);
+    }
 }
 
 function fileHash(bytes) { return crypto.createHash('sha256').update(bytes).digest('hex'); }
@@ -393,6 +478,206 @@ function readScriptRecompileOperation(operationId) {
     return operation;
 }
 
+function readAssetImportOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    if (!operation || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.asset.import' || !plan || typeof plan !== 'object'
+        || plan.operationId !== operationId || plan.operation !== operation.operation
+        || typeof operation.planHash !== 'string' || typeof plan.projectRoot !== 'string'
+        || typeof plan.creatorVersion !== 'string' || typeof plan.extensionVersion !== 'string'
+        || typeof plan.contractFingerprint !== 'string' || typeof plan.creatorInstanceId !== 'string'
+        || typeof plan.sourcePath !== 'string' || typeof plan.sourceRealPath !== 'string'
+        || typeof plan.assetPath !== 'string' || typeof plan.targetUrl !== 'string'
+        || typeof plan.sourceSha256 !== 'string' || !Number.isInteger(plan.sourceBytes)
+        || typeof plan.expiresAt !== 'string'
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'completed',
+            'not-applied', 'needs-reconciliation', 'conflict'].includes(operation.status))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    return operation;
+}
+
+function readAssetMoveOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    const before = plan && plan.expectedBefore;
+    if (!operation || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.asset.move' || !plan || typeof plan !== 'object'
+        || plan.operationId !== operationId || plan.operation !== operation.operation
+        || typeof operation.planHash !== 'string' || typeof plan.projectRoot !== 'string'
+        || typeof plan.creatorVersion !== 'string' || typeof plan.extensionVersion !== 'string'
+        || typeof plan.contractFingerprint !== 'string' || typeof plan.creatorInstanceId !== 'string'
+        || typeof plan.sourceAssetPath !== 'string' || typeof plan.sourceUrl !== 'string'
+        || typeof plan.destinationAssetPath !== 'string' || typeof plan.destinationUrl !== 'string'
+        || !before || typeof before.assetUuid !== 'string' || typeof before.fileSha256 !== 'string'
+        || typeof before.metaSha256 !== 'string' || typeof before.metaImporter !== 'string'
+        || typeof before.assetType !== 'string' || typeof before.assetImporter !== 'string'
+        || typeof plan.expiresAt !== 'string'
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'completed',
+            'not-applied', 'needs-reconciliation', 'conflict'].includes(operation.status))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    return operation;
+}
+
+function readAssetDeleteOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    const before = plan && plan.expectedBefore;
+    if (!operation || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.asset.delete' || !plan || typeof plan !== 'object'
+        || plan.operationId !== operationId || plan.operation !== operation.operation
+        || typeof operation.planHash !== 'string' || typeof plan.projectRoot !== 'string'
+        || typeof plan.creatorVersion !== 'string' || typeof plan.extensionVersion !== 'string'
+        || typeof plan.contractFingerprint !== 'string' || typeof plan.creatorInstanceId !== 'string'
+        || typeof plan.assetPath !== 'string' || typeof plan.assetUrl !== 'string'
+        || !before || typeof before.assetUuid !== 'string' || typeof before.fileSha256 !== 'string'
+        || typeof before.metaSha256 !== 'string' || typeof before.metaImporter !== 'string'
+        || typeof before.assetType !== 'string' || typeof before.assetImporter !== 'string'
+        || !plan.referenceScan || plan.referenceScan.complete !== true || plan.referenceScan.referenceCount !== 0
+        || typeof plan.referenceScan.scannedFiles !== 'number' || typeof plan.referenceScan.textBytes !== 'number'
+        || typeof plan.expiresAt !== 'string'
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'completed',
+            'not-applied', 'needs-reconciliation', 'conflict'].includes(operation.status))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    return operation;
+}
+
+function readTextureImportSettingsOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    if (!operation || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.asset.import-settings' || !plan || typeof plan !== 'object'
+        || plan.operationId !== operationId || plan.operation !== operation.operation
+        || typeof operation.planHash !== 'string' || typeof plan.projectRoot !== 'string'
+        || typeof plan.creatorVersion !== 'string' || typeof plan.extensionVersion !== 'string'
+        || typeof plan.contractFingerprint !== 'string' || typeof plan.creatorInstanceId !== 'string'
+        || typeof plan.assetPath !== 'string' || typeof plan.assetUrl !== 'string'
+        || typeof plan.assetUuid !== 'string' || !plan.expectedBefore || !plan.expectedAfter
+        || typeof plan.expectedBefore.fileSha256 !== 'string' || typeof plan.expectedBefore.metaSha256 !== 'string'
+        || typeof plan.expectedBefore.assetUuid !== 'string' || typeof plan.expectedBefore.assetImporter !== 'string'
+        || typeof plan.expectedBefore.assetType !== 'string' || typeof plan.expectedBefore.metaImporter !== 'string'
+        || !plan.expectedMeta || !plan.expectedMeta.before || !plan.expectedMeta.after
+        || typeof plan.expectedMeta.before !== 'object' || Array.isArray(plan.expectedMeta.before)
+        || typeof plan.expectedMeta.after !== 'object' || Array.isArray(plan.expectedMeta.after)
+        || !plan.expectedAfter.settings || typeof plan.expectedAfter.settings !== 'object'
+        || !plan.changedFields || typeof plan.changedFields !== 'object' || Array.isArray(plan.changedFields)
+        || typeof plan.expiresAt !== 'string'
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'completed',
+            'not-applied', 'needs-reconciliation', 'conflict'].includes(operation.status))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    return operation;
+}
+
+function readPrefabCreateOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    if (!operation || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.prefab.create' || !plan || typeof plan !== 'object'
+        || plan.operationId !== operationId || plan.operation !== operation.operation
+        || typeof operation.planHash !== 'string' || typeof plan.projectRoot !== 'string'
+        || typeof plan.creatorVersion !== 'string' || typeof plan.extensionVersion !== 'string'
+        || typeof plan.contractFingerprint !== 'string' || typeof plan.creatorInstanceId !== 'string'
+        || typeof plan.sceneUuid !== 'string' || typeof plan.sceneName !== 'string'
+        || typeof plan.nodeUuid !== 'string' || typeof plan.nodePath !== 'string'
+        || typeof plan.prefabPath !== 'string' || typeof plan.targetUrl !== 'string'
+        || typeof plan.expiresAt !== 'string'
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'completed',
+            'not-applied', 'needs-reconciliation', 'conflict'].includes(operation.status))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    return operation;
+}
+
+function readPrefabSourcePatchOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    if (!operation || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.prefab.source.patch' || !plan || typeof plan !== 'object'
+        || plan.operationId !== operationId || plan.operation !== operation.operation
+        || typeof operation.planHash !== 'string' || typeof plan.projectRoot !== 'string'
+        || typeof plan.creatorVersion !== 'string' || typeof plan.extensionVersion !== 'string'
+        || typeof plan.contractFingerprint !== 'string' || typeof plan.creatorInstanceId !== 'string'
+        || !prefabPatch.UUID.test(plan.prefabUuid || '') || typeof plan.prefabPath !== 'string'
+        || typeof plan.targetUrl !== 'string' || typeof plan.activeSceneUuid !== 'string'
+        || typeof plan.targetNodePath !== 'string' || !prefabPatch.NODE_ID.test(plan.targetNodeUuid || '')
+        || !['apply', 'compensate', 'replay'].includes(plan.action)
+        || !prefabPatch.SHA256.test(plan.expectedSourceSha256 || '')
+        || !prefabPatch.SHA256.test(plan.expectedMetaSha256 || '')
+        || !prefabPatch.validateDiff(plan.expectedDiff)
+        || !plan.expectedBeforeNode || typeof plan.expectedBeforeNode !== 'object'
+        || plan.expectedBeforeNode.nodeUuid !== plan.targetNodeUuid
+        || plan.expectedBeforeNode.nodePath !== plan.targetNodePath
+        || !prefabPatch.matchesDiff(plan.expectedBeforeNode, plan.expectedDiff, 'before')
+        || (plan.action === 'apply' && plan.sourceOperationId !== null)
+        || (plan.action !== 'apply' && !/^[0-9a-f-]{36}$/i.test(plan.sourceOperationId || ''))
+        || (plan.sourceOperationId !== null && !/^[0-9a-f-]{36}$/i.test(plan.sourceOperationId || ''))
+        || typeof plan.expiresAt !== 'string'
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-started', 'mutation-applied',
+            'save-requested', 'source-saved', 'mode-reopened', 'completed', 'not-applied',
+            'needs-reconciliation', 'conflict'].includes(operation.status))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    return operation;
+}
+
+function readPrefabInstanceOverrideOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    if (!operation || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.prefab.instance.override' || !plan || typeof plan !== 'object'
+        || plan.operationId !== operationId || !prefabInstanceOperations.validPrefabInstanceOverridePlan(plan)
+        || typeof operation.planHash !== 'string' || typeof plan.projectRoot !== 'string'
+        || typeof plan.creatorVersion !== 'string' || typeof plan.extensionVersion !== 'string'
+        || typeof plan.contractFingerprint !== 'string' || typeof plan.creatorInstanceId !== 'string'
+        || typeof plan.sceneUrl !== 'string' || typeof plan.sceneName !== 'string'
+        || typeof plan.selectedNodePath !== 'string' || typeof plan.prefabPath !== 'string'
+        || typeof plan.prefabRootPath !== 'string' || typeof plan.expiresAt !== 'string'
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'mutation-started',
+            'effect-observed', 'not-applied', 'needs-reconciliation', 'conflict'].includes(operation.status))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    return operation;
+}
+
 function readSceneOperation(operationId) {
     const filename = operationPath(operationId);
     let stat;
@@ -411,6 +696,212 @@ function readSceneOperation(operationId) {
         || typeof plan.nodePath !== 'string' || !plan.expectedBefore || !plan.expectedAfter
         || typeof plan.expectedBefore.active !== 'boolean' || typeof plan.expectedAfter.active !== 'boolean'
         || plan.expectedBefore.active === plan.expectedAfter.active || typeof plan.expiresAt !== 'string'
+        || (plan.diskBefore !== undefined && !validSceneNodeDiskBaseline(plan.diskBefore))
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
+            'save-requested', 'completed', 'not-applied', 'save-required', 'conflict'].includes(operation.status))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    return operation;
+}
+
+function readSceneNodeTransformOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    const before = plan && plan.expectedBefore;
+    const after = plan && plan.expectedAfter;
+    const fields = before && typeof before === 'object' && !Array.isArray(before) ? Object.keys(before).sort() : [];
+    const diskTransformFields = ['anchorX', 'anchorY', 'angle', 'height', 'scaleX', 'scaleY', 'width', 'x', 'y', 'z'];
+    const diskBefore = plan && plan.diskBefore;
+    if (!operation || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.scene.node.set-transform' || !plan || plan.operation !== operation.operation
+        || plan.operationId !== operationId || typeof operation.planHash !== 'string'
+        || typeof plan.projectRoot !== 'string' || typeof plan.creatorVersion !== 'string'
+        || typeof plan.extensionVersion !== 'string' || typeof plan.contractFingerprint !== 'string'
+        || typeof plan.creatorInstanceId !== 'string' || typeof plan.sceneUuid !== 'string'
+        || typeof plan.sceneName !== 'string' || typeof plan.nodeUuid !== 'string' || typeof plan.nodePath !== 'string'
+        || !before || !after || fields.length < 1 || fields.length > 10
+        || fields.some((field) => !['x', 'y', 'z', 'scaleX', 'scaleY', 'angle', 'width', 'height', 'anchorX', 'anchorY'].includes(field)
+            || !Number.isFinite(before[field]) || Math.abs(before[field]) > 1000000
+            || !Number.isFinite(after[field]) || Math.abs(after[field]) > 1000000
+            || (['width', 'height'].includes(field) && after[field] < 0) || before[field] === after[field])
+        || Object.keys(after).sort().join(',') !== fields.join(',') || typeof plan.expiresAt !== 'string'
+        || (diskBefore !== undefined && (!diskBefore || typeof diskBefore !== 'object' || Array.isArray(diskBefore)
+            || typeof diskBefore.sceneUrl !== 'string' || !diskBefore.sceneUrl.startsWith('db://assets/')
+            || diskBefore.importer !== 'scene' || !prefabPatch.SHA256.test(diskBefore.sourceSha256 || '')
+            || !prefabPatch.SHA256.test(diskBefore.metaSha256 || '') || typeof diskBefore.active !== 'boolean'
+            || !diskBefore.transform || typeof diskBefore.transform !== 'object' || Array.isArray(diskBefore.transform)
+            || Object.keys(diskBefore.transform).sort().join(',') !== diskTransformFields.join(',')
+            || diskTransformFields.some((field) => !Number.isFinite(diskBefore.transform[field])
+                || Math.abs(diskBefore.transform[field]) > 1000000)))
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
+            'save-requested', 'completed', 'not-applied', 'save-required', 'conflict'].includes(operation.status))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    return operation;
+}
+
+function validButtonEventList(events, { allowUnbound = false } = {}) {
+    return Array.isArray(events) && events.length <= 12 && events.every((event) => event && typeof event === 'object'
+        && !Array.isArray(event) && Object.keys(event).sort().join(',') === 'component,customEventData,handler,targetUuid'
+        && (event.targetUuid === null && allowUnbound || typeof event.targetUuid === 'string'
+            && (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(event.targetUuid)
+                || /^[A-Za-z0-9+/]{22,23}$/.test(event.targetUuid)))
+        && typeof event.component === 'string' && event.component.length <= 120
+        && typeof event.handler === 'string' && event.handler.length <= 64
+        && typeof event.customEventData === 'string' && event.customEventData.length <= 512);
+}
+
+function readSceneButtonEventsOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    if (!operation || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.scene.button-events.set' || !plan || plan.operation !== operation.operation
+        || plan.operationId !== operationId || typeof operation.planHash !== 'string'
+        || typeof plan.projectRoot !== 'string' || typeof plan.creatorVersion !== 'string'
+        || typeof plan.extensionVersion !== 'string' || typeof plan.contractFingerprint !== 'string'
+        || typeof plan.creatorInstanceId !== 'string' || typeof plan.sceneUuid !== 'string'
+        || typeof plan.sceneName !== 'string' || typeof plan.nodeUuid !== 'string' || typeof plan.nodePath !== 'string'
+        || typeof plan.componentInstanceId !== 'string' || !validButtonEventList(plan.expectedBefore, { allowUnbound: true })
+        || !validButtonEventList(plan.expectedAfter) || sceneComponentValuesEqual(plan.expectedBefore, plan.expectedAfter)
+        || (plan.diskBefore !== undefined && (!validSceneNodeDiskBaseline(plan.diskBefore)
+            || !Array.isArray(plan.diskBefore.buttonEvents)))
+        || typeof plan.expiresAt !== 'string'
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
+            'save-requested', 'completed', 'not-applied', 'save-required', 'conflict'].includes(operation.status))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    return operation;
+}
+
+function readSceneNodeDeleteOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    const before = plan && plan.expectedBefore;
+    if (!operation || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.scene.node.delete' || !plan || plan.operation !== operation.operation
+        || plan.operationId !== operationId || typeof operation.planHash !== 'string'
+        || typeof plan.projectRoot !== 'string' || typeof plan.creatorVersion !== 'string'
+        || typeof plan.extensionVersion !== 'string' || typeof plan.contractFingerprint !== 'string'
+        || typeof plan.creatorInstanceId !== 'string' || typeof plan.sceneUuid !== 'string'
+        || typeof plan.sceneName !== 'string' || typeof plan.nodeUuid !== 'string' || !before
+        || typeof before.nodeName !== 'string' || typeof before.nodePath !== 'string'
+        || typeof before.parentUuid !== 'string' || !Number.isInteger(before.childCount) || before.childCount < 0
+        || !Array.isArray(before.subtree) || before.subtree.length < 1 || before.subtree.length > 256
+        || (plan.diskBefore !== undefined && (!validSceneNodeDiskBaseline(plan.diskBefore)
+            || !Array.isArray(plan.diskBefore.subtree)
+            || JSON.stringify(plan.diskBefore.subtree) !== JSON.stringify(before.subtree)))
+        || typeof plan.expiresAt !== 'string'
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
+            'save-requested', 'completed', 'not-applied', 'save-required', 'needs-reconciliation', 'conflict'].includes(operation.status))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    return operation;
+}
+
+function readSceneComponentRemoveOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    if (!operation || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.scene.node.remove-component' || !plan || plan.operation !== operation.operation
+        || plan.operationId !== operationId || typeof operation.planHash !== 'string'
+        || typeof plan.projectRoot !== 'string' || typeof plan.creatorVersion !== 'string'
+        || typeof plan.extensionVersion !== 'string' || typeof plan.contractFingerprint !== 'string'
+        || typeof plan.creatorInstanceId !== 'string' || typeof plan.sceneUuid !== 'string'
+        || typeof plan.sceneName !== 'string' || typeof plan.nodeUuid !== 'string'
+        || typeof plan.nodePath !== 'string' || typeof plan.componentClassName !== 'string'
+        || typeof plan.componentInstanceId !== 'string' || !plan.expectedBefore || plan.expectedBefore.present !== true
+        || !Array.isArray(plan.expectedBefore.dependentComponents) || plan.expectedBefore.dependentComponents.length !== 0
+        || (plan.diskBefore !== undefined && (!validSceneNodeDiskBaseline(plan.diskBefore)
+            || !Array.isArray(plan.diskBefore.components)
+            || typeof plan.serializedClassId !== 'string' || !plan.serializedClassId
+            || !plan.diskBefore.components.some((component) => component.componentInstanceId === plan.componentInstanceId
+                && component.serializedClassId === plan.serializedClassId)))
+        || typeof plan.expiresAt !== 'string'
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
+            'save-requested', 'completed', 'not-applied', 'save-required', 'needs-reconciliation', 'conflict'].includes(operation.status))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    return operation;
+}
+
+function readSceneNodeRenameOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    if (!operation || typeof operation !== 'object' || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.scene.node.rename' || !plan || typeof plan !== 'object'
+        || plan.operationId !== operationId || plan.operation !== operation.operation
+        || typeof operation.planHash !== 'string' || typeof plan.projectRoot !== 'string'
+        || typeof plan.creatorVersion !== 'string' || typeof plan.extensionVersion !== 'string'
+        || typeof plan.contractFingerprint !== 'string' || typeof plan.creatorInstanceId !== 'string'
+        || typeof plan.sceneUuid !== 'string' || typeof plan.sceneName !== 'string'
+        || typeof plan.nodeUuid !== 'string' || typeof plan.nodePath !== 'string'
+        || !plan.expectedBefore || !plan.expectedAfter
+        || typeof plan.expectedBefore.name !== 'string' || typeof plan.expectedBefore.parentUuid !== 'string'
+        || typeof plan.expectedBefore.nodePath !== 'string'
+        || typeof plan.expectedAfter.name !== 'string' || typeof plan.expectedAfter.parentUuid !== 'string'
+        || typeof plan.expectedAfter.nodePath !== 'string'
+        || plan.expectedBefore.name === plan.expectedAfter.name
+        || plan.expectedBefore.parentUuid !== plan.expectedAfter.parentUuid
+        || (plan.diskBefore !== undefined && !validSceneNodeDiskBaseline(plan.diskBefore))
+        || typeof plan.expiresAt !== 'string'
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
+            'save-requested', 'completed', 'not-applied', 'save-required', 'conflict'].includes(operation.status))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    return operation;
+}
+
+function readSceneNodeReparentOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    const before = plan && plan.expectedBefore;
+    const after = plan && plan.expectedAfter;
+    if (!operation || typeof operation !== 'object' || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.scene.node.reparent' || !plan || typeof plan !== 'object'
+        || plan.operationId !== operationId || plan.operation !== operation.operation
+        || typeof operation.planHash !== 'string' || typeof plan.projectRoot !== 'string'
+        || typeof plan.creatorVersion !== 'string' || typeof plan.extensionVersion !== 'string'
+        || typeof plan.contractFingerprint !== 'string' || typeof plan.creatorInstanceId !== 'string'
+        || typeof plan.sceneUuid !== 'string' || typeof plan.sceneName !== 'string'
+        || typeof plan.nodeUuid !== 'string' || !before || !after
+        || ['nodeName', 'nodePath', 'parentUuid', 'parentPath', 'targetParentUuid', 'targetParentPath', 'afterNodePath']
+            .some((key) => typeof before[key] !== 'string' || typeof after[key] !== 'string')
+        || before.nodeName !== after.nodeName || before.parentUuid === after.parentUuid
+        || before.targetParentUuid !== after.targetParentUuid || before.targetParentPath !== after.targetParentPath
+        || before.afterNodePath !== after.afterNodePath || after.nodePath !== after.afterNodePath
+        || after.parentUuid !== after.targetParentUuid || after.parentPath !== after.targetParentPath
+        || (plan.diskBefore !== undefined && !validSceneNodeDiskBaseline(plan.diskBefore))
+        || typeof plan.expiresAt !== 'string'
         || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
             'save-requested', 'completed', 'not-applied', 'save-required', 'conflict'].includes(operation.status))
         throw coded('OPERATION_RECORD_INVALID');
@@ -436,12 +927,77 @@ function readSceneComponentOperation(operationId) {
         || typeof plan.componentClassName !== 'string' || !plan.expectedBefore || !plan.expectedAfter
         || !Number.isInteger(plan.expectedBefore.componentCount) || plan.expectedBefore.componentCount !== 0
         || !Number.isInteger(plan.expectedAfter.componentCount) || plan.expectedAfter.componentCount !== 1
+        || (plan.diskBefore !== undefined && (!validSceneNodeDiskBaseline(plan.diskBefore)
+            || !Array.isArray(plan.diskBefore.components)
+            || typeof plan.serializedClassId !== 'string' || !plan.serializedClassId
+            || plan.diskBefore.components.some((component) => component.serializedClassId === plan.serializedClassId)))
         || typeof plan.expiresAt !== 'string'
         || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
             'save-requested', 'completed', 'not-applied', 'save-required', 'needs-reconciliation', 'conflict'].includes(operation.status))
         throw coded('OPERATION_RECORD_INVALID');
     if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
     return operation;
+}
+
+function validSceneComponentValue(value, depth = 0) {
+    if (depth > 1) return false;
+    if (typeof value === 'string') return Buffer.byteLength(value, 'utf8') <= 1024;
+    if (typeof value === 'boolean') return true;
+    if (typeof value === 'number') return Number.isFinite(value) && Math.abs(value) <= 1000000000;
+    if (!value || typeof value !== 'object' || Array.isArray(value) || typeof value.kind !== 'string') return false;
+    const keys = Object.keys(value).sort().join(',');
+    if (value.kind === 'vec2') return keys === 'kind,x,y'
+        && ['x', 'y'].every((field) => Number.isFinite(value[field]) && Math.abs(value[field]) <= 1000000);
+    if (value.kind === 'vec3') return keys === 'kind,x,y,z'
+        && ['x', 'y', 'z'].every((field) => Number.isFinite(value[field]) && Math.abs(value[field]) <= 1000000);
+    if (value.kind === 'vec4') return keys === 'kind,w,x,y,z'
+        && ['x', 'y', 'z', 'w'].every((field) => Number.isFinite(value[field]) && Math.abs(value[field]) <= 1000000);
+    if (value.kind === 'rect') return keys === 'height,kind,width,x,y'
+        && ['x', 'y', 'width', 'height'].every((field) => Number.isFinite(value[field]) && Math.abs(value[field]) <= 1000000);
+    if (value.kind === 'size') return keys === 'height,kind,width'
+        && ['width', 'height'].every((field) => Number.isFinite(value[field]) && Math.abs(value[field]) <= 1000000);
+    if (value.kind === 'color') return keys === 'a,b,g,kind,r'
+        && ['r', 'g', 'b', 'a'].every((field) => Number.isInteger(value[field]) && value[field] >= 0 && value[field] <= 255);
+    if (value.kind === 'array') return keys === 'items,kind' && Array.isArray(value.items)
+        && value.items.length <= 32 && value.items.every((item) => typeof item === 'string'
+            ? Buffer.byteLength(item, 'utf8') <= 1024 : typeof item === 'boolean'
+              || (typeof item === 'number' && Number.isFinite(item) && Math.abs(item) <= 1000000000)
+              || (validSceneComponentValue(item, depth + 1) && !['array', 'asset'].includes(item.kind)));
+    if (value.kind === 'asset') return (keys === 'assetClass,kind' || keys === 'assetClass,assetUuid,kind')
+        && ['SpriteFrame', 'Texture2D', 'AudioClip', 'Prefab', 'BitmapFont', 'TTFFont'].includes(value.assetClass)
+        && (value.assetUuid === undefined || (typeof value.assetUuid === 'string'
+            && (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value.assetUuid)
+                || /^[A-Za-z0-9+/]{22,23}$/.test(value.assetUuid))));
+    if (value.kind === 'node-ref') return (keys === 'kind' || keys === 'kind,nodeUuid')
+        && (value.nodeUuid === undefined || typeof value.nodeUuid === 'string'
+            && (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value.nodeUuid)
+                || /^[A-Za-z0-9+/]{22,23}$/.test(value.nodeUuid)));
+    if (value.kind === 'component-ref') return (keys === 'componentClassName,kind'
+        || keys === 'componentClassName,componentInstanceId,kind,nodeUuid')
+        && typeof value.componentClassName === 'string' && /^[A-Za-z_$][A-Za-z0-9_$.]{0,119}$/.test(value.componentClassName)
+        && (value.nodeUuid === undefined || typeof value.nodeUuid === 'string'
+            && (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value.nodeUuid)
+                || /^[A-Za-z0-9+/]{22,23}$/.test(value.nodeUuid)))
+        && (value.componentInstanceId === undefined || typeof value.componentInstanceId === 'string'
+            && value.componentInstanceId.length > 0 && value.componentInstanceId.length <= 128);
+    return false;
+}
+
+function sceneComponentValuesEqual(left, right) {
+    if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object') return Object.is(left, right);
+    function normalize(value) {
+        if (Array.isArray(value)) return value.map(normalize);
+        if (!value || typeof value !== 'object') return value;
+        const result = {};
+        for (const key of Object.keys(value).sort()) result[key] = normalize(value[key]);
+        return result;
+    }
+    try { return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right)); }
+    catch (_) { return false; }
+}
+
+function sceneComponentValueKind(value) {
+    return value && typeof value === 'object' && !Array.isArray(value) ? value.kind : typeof value;
 }
 
 function readSceneComponentPropertyOperation(operationId) {
@@ -452,8 +1008,6 @@ function readSceneComponentPropertyOperation(operationId) {
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
     const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
     const plan = operation && operation.plan;
-    const scalar = (value) => typeof value === 'string' || typeof value === 'boolean'
-        || (typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 1000000000);
     if (!operation || typeof operation !== 'object' || operation.schemaVersion !== 1 || operation.operationId !== operationId
         || operation.operation !== 'creator.scene.node.set-component-property' || !plan || typeof plan !== 'object'
         || plan.operationId !== operationId || plan.operation !== operation.operation
@@ -464,9 +1018,18 @@ function readSceneComponentPropertyOperation(operationId) {
         || typeof plan.nodeUuid !== 'string' || typeof plan.nodePath !== 'string'
         || typeof plan.componentClassName !== 'string' || typeof plan.componentInstanceId !== 'string'
         || typeof plan.property !== 'string' || !plan.expectedBefore || !plan.expectedAfter
-        || !scalar(plan.expectedBefore.value) || !scalar(plan.expectedAfter.value)
-        || typeof plan.expectedBefore.value !== typeof plan.expectedAfter.value
-        || Object.is(plan.expectedBefore.value, plan.expectedAfter.value) || typeof plan.expiresAt !== 'string'
+        || typeof plan.propertyKind !== 'string' || !validSceneComponentValue(plan.expectedBefore.value)
+        || !validSceneComponentValue(plan.expectedAfter.value)
+        || sceneComponentValueKind(plan.expectedBefore.value) !== plan.propertyKind
+        || sceneComponentValueKind(plan.expectedAfter.value) !== plan.propertyKind
+        || (plan.propertyKind === 'asset' && plan.expectedBefore.value.assetClass !== plan.expectedAfter.value.assetClass)
+        || sceneComponentValuesEqual(plan.expectedBefore.value, plan.expectedAfter.value)
+        || (plan.diskBefore !== undefined && (!validSceneNodeDiskBaseline(plan.diskBefore)
+            || !validSavedComponentProperty(plan.diskBefore.componentProperty)
+            || plan.diskBefore.componentProperty.componentInstanceId !== plan.componentInstanceId
+            || plan.diskBefore.componentProperty.property !== plan.property
+            || !validComponentDiskValue(plan.expectedAfter.serializedValue)))
+        || typeof plan.expiresAt !== 'string'
         || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
             'save-requested', 'completed', 'not-applied', 'save-required', 'needs-reconciliation', 'conflict'].includes(operation.status))
         throw coded('OPERATION_RECORD_INVALID');
@@ -493,7 +1056,7 @@ function readSceneComposeOperation(operationId) {
         || !Array.isArray(plan.request.buttonEvents) || !Array.isArray(plan.assetIdentities)
         || !plan.expectedState || typeof plan.expiresAt !== 'string'
         || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
-            'save-requested', 'completed', 'not-applied', 'save-required', 'needs-reconciliation', 'conflict'].includes(operation.status))
+            'save-requested', 'save-unconfirmed', 'completed', 'not-applied', 'save-required', 'needs-reconciliation', 'conflict'].includes(operation.status))
         throw coded('OPERATION_RECORD_INVALID');
     if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
     return operation;
@@ -532,6 +1095,1843 @@ function safeNewScriptTarget(relative) {
     if (!Editor.assetdb || typeof Editor.assetdb.exists !== 'function') throw coded('ASSETDB_EXISTS_UNAVAILABLE');
     if (Editor.assetdb.exists(url)) throw coded('SCRIPT_TARGET_ALREADY_EXISTS');
     return { root, filename, url };
+}
+
+function assetTargetPaths(relative) {
+    if (typeof relative !== 'string' || relative.length > 240 || relative.includes('\\') || relative.includes('\0')
+        || !/^(?!\/)(?!.*\/\/)(?!.*(?:^|\/)\.\.?($|\/))(?!.*(?:^|\/)\.)[^\\]+\.[A-Za-z0-9]{1,10}$/.test(relative))
+        throw coded('UNSAFE_PROJECT_PATH');
+    const parts = relative.split('/');
+    if (parts.some((part) => !part || part === '.' || part === '..' || part.startsWith('.')))
+        throw coded('UNSAFE_PROJECT_PATH');
+    const root = projectRoot();
+    const assets = path.join(root, 'assets');
+    const assetsStat = fs.lstatSync(assets);
+    if (!assetsStat.isDirectory() || assetsStat.isSymbolicLink()) throw coded('ASSETS_ROOT_UNSAFE');
+    let current = assets;
+    for (let index = 0; index < parts.length - 1; index += 1) {
+        current = path.join(current, parts[index]);
+        let stat;
+        try { stat = fs.lstatSync(current); }
+        catch (error) { if (error.code === 'ENOENT') throw coded('ASSET_IMPORT_PARENT_DIRECTORY_MISSING'); throw error; }
+        if (!stat.isDirectory() || stat.isSymbolicLink()) throw coded('UNSAFE_PROJECT_PATH');
+    }
+    const filename = path.join(assets, ...parts);
+    const metaFilename = `${filename}.meta`;
+    const url = `db://${['assets', ...parts].join('/')}`;
+    return { root, assets, filename, metaFilename, url, extension: path.extname(relative).toLowerCase() };
+}
+
+function safeNewAssetTarget(relative) {
+    const target = assetTargetPaths(relative);
+    const { filename, metaFilename, url } = target;
+    for (const candidate of [filename, metaFilename]) {
+        try {
+            const stat = fs.lstatSync(candidate);
+            if (stat.isSymbolicLink()) throw coded('UNSAFE_PROJECT_PATH');
+            throw coded(candidate === filename ? 'ASSET_IMPORT_TARGET_ALREADY_EXISTS' : 'ASSET_IMPORT_META_ALREADY_EXISTS');
+        } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    }
+    if (!Editor.assetdb || typeof Editor.assetdb.exists !== 'function') throw coded('ASSETDB_EXISTS_UNAVAILABLE');
+    if (Editor.assetdb.exists(url)) throw coded('ASSET_IMPORT_TARGET_ALREADY_EXISTS');
+    return target;
+}
+
+function inspectImportSource(sourcePath, projectRootPath) {
+    if (typeof sourcePath !== 'string' || sourcePath.length > 4096 || sourcePath.includes('\0')
+        || /[\r\n]/.test(sourcePath) || !path.isAbsolute(sourcePath)) throw coded('ASSET_IMPORT_SOURCE_PATH_INVALID');
+    let initialStat;
+    try { initialStat = fs.lstatSync(sourcePath); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('ASSET_IMPORT_SOURCE_NOT_FOUND'); throw error; }
+    if (!initialStat.isFile() || initialStat.isSymbolicLink()) throw coded('ASSET_IMPORT_SOURCE_UNSAFE');
+    const realPath = fs.realpathSync(sourcePath);
+    if (realPath === projectRootPath || realPath.startsWith(`${projectRootPath}${path.sep}`))
+        throw coded('ASSET_IMPORT_SOURCE_INSIDE_PROJECT');
+    const before = fs.statSync(realPath);
+    if (!before.isFile() || before.size < 1 || before.size > MAX_ASSET_IMPORT_BYTES)
+        throw coded('ASSET_IMPORT_SOURCE_SIZE_INVALID');
+    const bytes = fs.readFileSync(realPath);
+    const after = fs.statSync(realPath);
+    if (bytes.length !== before.size || before.dev !== after.dev || before.ino !== after.ino
+        || before.size !== after.size || before.mtimeMs !== after.mtimeMs)
+        throw coded('ASSET_IMPORT_SOURCE_CHANGED');
+    return { realPath, sourceBytes: bytes.length, sourceSha256: fileHash(bytes), extension: path.extname(realPath).toLowerCase() };
+}
+
+function verifyAssetImportPlan(operation, { requireCurrentContract = true, requireAbsent = true, verifySource = true } = {}) {
+    const plan = operation.plan;
+    if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
+    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+        throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
+    if (requireCurrentContract && (plan.extensionVersion !== extensionPackage.version
+        || plan.contractFingerprint !== CONTRACT_FINGERPRINT)) throw coded('OPERATION_CONTRACT_MISMATCH');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    let source = null;
+    if (verifySource) {
+        source = inspectImportSource(plan.sourcePath, plan.projectRoot);
+        if (source.realPath !== plan.sourceRealPath || source.sourceBytes !== plan.sourceBytes
+            || source.sourceSha256 !== plan.sourceSha256 || source.extension !== plan.extension)
+            throw coded('ASSET_IMPORT_SOURCE_CHANGED');
+    }
+    const target = requireAbsent ? safeNewAssetTarget(plan.assetPath) : assetTargetPaths(plan.assetPath);
+    if (target.root !== plan.projectRoot || target.url !== plan.targetUrl || target.extension !== plan.extension)
+        throw coded('ASSET_IMPORT_TARGET_CHANGED');
+    return { source, target };
+}
+
+async function createAssetImportPlan(input) {
+    if (!Editor.assetdb || typeof Editor.assetdb.create !== 'function'
+        || typeof Editor.assetdb.queryAssets !== 'function') throw coded('ASSETDB_IMPORT_UNAVAILABLE');
+    const root = projectRoot();
+    const version = editorVersion();
+    if (version !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    const target = safeNewAssetTarget(input.assetPath);
+    const source = inspectImportSource(input.sourcePath, root);
+    if (!source.extension || source.extension !== target.extension) throw coded('ASSET_IMPORT_EXTENSION_MISMATCH');
+    const existing = await queryAssetByUrl(target.url);
+    if (existing) throw coded('ASSET_IMPORT_TARGET_ALREADY_EXISTS');
+    if (projectRoot() !== root || editorVersion() !== version) throw coded('CREATOR_IDENTITY_CHANGED');
+    const operationId = uuid();
+    const plan = { operationId, operation: 'creator.asset.import', projectRoot: root, creatorVersion: version,
+        extensionVersion: extensionPackage.version, contractFingerprint: CONTRACT_FINGERPRINT,
+        creatorInstanceId: INSTANCE_ID, sourcePath: input.sourcePath, sourceRealPath: source.realPath,
+        assetPath: input.assetPath, targetUrl: target.url, extension: target.extension,
+        sourceBytes: source.sourceBytes, sourceSha256: source.sourceSha256,
+        expectedBefore: { assetExists: false, fileExists: false, metaExists: false },
+        expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString() };
+    const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
+        planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
+        projectRoot: root, creatorVersion: version, creatorInstanceId: INSTANCE_ID,
+        sourcePath: plan.sourcePath, assetPath: plan.assetPath, targetUrl: plan.targetUrl,
+        sourceBytes: plan.sourceBytes, sourceSha256: plan.sourceSha256, expiresAt: plan.expiresAt,
+        diff: { action: 'import-asset', source: { path: plan.sourcePath, bytes: plan.sourceBytes, sha256: plan.sourceSha256 },
+            target: { url: plan.targetUrl, before: 'absent', after: 'Creator AssetDB import' } },
+        recovery: { operationId, automaticRetry: false, reconcileCommand: 'creator.asset.import.reconcile',
+            metaHandling: 'Creator AssetDB generates and owns the target .meta; the operation never fabricates or replaces it.' } };
+}
+
+function confirmAssetImport(operation) {
+    if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
+    const plan = operation.plan;
+    const detail = [`Project: ${plan.projectRoot}`, `Creator: ${plan.creatorVersion}`,
+        `Source: ${plan.sourcePath}`, `Target: ${plan.targetUrl}`, `Bytes: ${plan.sourceBytes}`,
+        `SHA-256: ${plan.sourceSha256}`, `Operation: ${operation.operationId}`, '',
+        'This imports one file through Creator AssetDB. The target must remain absent; Creator creates and owns its .meta.'].join('\n');
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator asset import',
+        message: `Import ${plan.assetPath}?`, detail, buttons: ['Cancel', 'Import asset'], defaultId: 0, cancelId: 0, noLink: true });
+}
+
+function importedAssetReadback(operation) {
+    const plan = operation.plan;
+    const target = safeProjectFile(plan.assetPath);
+    const metaFile = safeProjectFile(`${plan.assetPath}.meta`);
+    const sourceBytes = fs.readFileSync(target);
+    const metaBytes = fs.readFileSync(metaFile);
+    if (sourceBytes.length !== plan.sourceBytes || fileHash(sourceBytes) !== plan.sourceSha256)
+        throw coded('ASSET_IMPORT_SOURCE_READBACK_MISMATCH');
+    if (metaBytes.length > 16384) throw coded('ASSET_IMPORT_META_TOO_LARGE');
+    let meta;
+    try { meta = JSON.parse(metaBytes.toString('utf8')); }
+    catch (_) { throw coded('ASSET_IMPORT_META_INVALID'); }
+    if (!meta || typeof meta.uuid !== 'string' || !meta.uuid) throw coded('ASSET_IMPORT_META_UUID_MISSING');
+    return { assetPath: plan.assetPath, targetUrl: plan.targetUrl, assetUuid: meta.uuid,
+        sourceBytes: sourceBytes.length, sourceSha256: fileHash(sourceBytes), metaSha256: fileHash(metaBytes) };
+}
+
+function assetImportReceipt(operation, readback) {
+    const plan = operation.plan;
+    const result = readback || operation.assetReadback || null;
+    return { operationId: operation.operationId, status: operation.status, projectRoot: plan.projectRoot,
+        creatorVersion: plan.creatorVersion, sourcePath: plan.sourcePath, assetPath: plan.assetPath,
+        targetUrl: plan.targetUrl, sourceBytes: plan.sourceBytes, sourceSha256: plan.sourceSha256,
+        assetUuid: result && result.assetUuid || operation.assetUuid || null,
+        assetType: operation.assetType || null, importer: operation.importer || null,
+        metaSha256: result && result.metaSha256 || operation.metaSha256 || null,
+        plannedByInstanceId: operation.plannedByInstanceId, appliedByInstanceId: operation.appliedByInstanceId || null,
+        effectObservedAt: operation.effectObservedAt || null,
+        recovery: { automaticRetry: false, reconcileCommand: 'creator.asset.import.reconcile',
+            compensationAvailable: false,
+            compensationCondition: 'Delete only through Creator AssetDB after rechecking URL, UUID, asset SHA-256, and .meta SHA-256.' } };
+}
+
+async function commitAssetImport(input, context) {
+    const operation = readAssetImportOperation(input.operationId);
+    verifyAssetImportPlan(operation);
+    if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (operation.status !== 'planned') throw coded(operation.status === 'applying' || operation.status === 'awaiting-approval'
+        ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    operation.status = 'awaiting-approval';
+    operation.approvalRequestedAt = new Date().toISOString();
+    writeOperation(operation);
+    const approved = await confirmAssetImport(operation);
+    if (!approved) {
+        operation.status = 'cancelled'; operation.cancelledAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('OPERATION_NOT_APPROVED');
+    }
+    try { await authorizeWriteRequest(context && context.requestId); }
+    catch (error) {
+        operation.status = 'abandoned'; operation.abandonedAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error));
+    }
+    try { verifyAssetImportPlan(operation); }
+    catch (error) {
+        operation.status = 'conflict'; operation.conflictAt = new Date().toISOString();
+        operation.reconcileReason = error.code || 'ASSET_IMPORT_PRECONDITION_FAILED'; writeOperation(operation); throw error;
+    }
+    operation.status = 'applying'; operation.approvedAt = new Date().toISOString();
+    operation.approvalSource = 'creator-native-dialog'; operation.appliedByInstanceId = INSTANCE_ID; writeOperation(operation);
+    try {
+        const bytes = fs.readFileSync(operation.plan.sourceRealPath);
+        const createdRows = await createAssetThroughAssetDb(operation.plan.targetUrl, bytes);
+        const asset = await queryAssetByUrl(operation.plan.targetUrl);
+        const readback = importedAssetReadback(operation);
+        if (!asset || typeof asset.uuid !== 'string' || asset.uuid !== readback.assetUuid)
+            throw coded('ASSETDB_READBACK_IDENTITY_MISMATCH');
+        if (createdRows.length && !createdRows.some((row) => row && row.url === operation.plan.targetUrl
+            && (!row.uuid || row.uuid === asset.uuid))) throw coded('ASSETDB_CREATE_IDENTITY_MISMATCH');
+        operation.status = 'completed'; operation.completedAt = new Date().toISOString();
+        operation.completedByInstanceId = INSTANCE_ID; operation.assetUuid = asset.uuid;
+        operation.assetType = typeof asset.type === 'string' ? asset.type : null;
+        operation.importer = typeof asset.importer === 'string' ? asset.importer : null;
+        operation.metaSha256 = readback.metaSha256; operation.assetReadback = readback; writeOperation(operation);
+        return assetImportReceipt(operation, readback);
+    } catch (error) {
+        operation.status = 'needs-reconciliation'; operation.reconcileReason = error.code || 'ASSET_IMPORT_RESULT_UNCERTAIN';
+        operation.failureAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
+    }
+}
+
+async function reconcileAssetImport(input) {
+    const operation = readAssetImportOperation(input.operationId);
+    verifyAssetImportPlan(operation, { requireCurrentContract: false, requireAbsent: false, verifySource: false });
+    if (projectRoot() !== operation.plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
+    let asset = null;
+    let readback = null;
+    let filePresent = false;
+    let metaPresent = false;
+    try {
+        const target = assetTargetPaths(operation.plan.assetPath);
+        for (const [candidate, key] of [[target.filename, 'file'], [target.metaFilename, 'meta']]) {
+            try {
+                const stat = fs.lstatSync(candidate);
+                if (!stat.isFile() || stat.isSymbolicLink()) throw coded('ASSET_IMPORT_TARGET_UNSAFE');
+                if (key === 'file') filePresent = true;
+                else metaPresent = true;
+            } catch (error) { if (error.code !== 'ENOENT') throw error; }
+        }
+        asset = await queryAssetByUrl(operation.plan.targetUrl);
+        if (asset) readback = importedAssetReadback(operation);
+    } catch (error) {
+        operation.status = 'conflict'; operation.reconciledAt = new Date().toISOString();
+        operation.reconcileReason = error.code || 'ASSET_IMPORT_READBACK_FAILED'; writeOperation(operation);
+        return { ...assetImportReceipt(operation, null), observed: null, reason: operation.reconcileReason };
+    }
+    if (!asset && !filePresent && !metaPresent && ['applying', 'needs-reconciliation'].includes(operation.status))
+        operation.status = 'not-applied';
+    else if (!asset && (filePresent || metaPresent)) {
+        operation.status = 'conflict'; operation.reconcileReason = 'ASSET_IMPORT_PARTIAL_TARGET_PRESENT';
+    }
+    else if (asset && readback && asset.uuid === readback.assetUuid
+        && ['applying', 'needs-reconciliation', 'completed'].includes(operation.status)) {
+        operation.status = 'completed'; operation.assetUuid = asset.uuid;
+        operation.assetType = typeof asset.type === 'string' ? asset.type : null;
+        operation.importer = typeof asset.importer === 'string' ? asset.importer : null;
+        operation.metaSha256 = readback.metaSha256; operation.assetReadback = readback;
+        operation.completedAt = operation.completedAt || new Date().toISOString();
+        operation.completedByInstanceId = operation.completedByInstanceId || INSTANCE_ID;
+    } else if (asset || readback || operation.status === 'completed') {
+        operation.status = 'conflict'; operation.reconcileReason = 'ASSET_IMPORT_TARGET_CHANGED';
+    }
+    operation.reconciledAt = new Date().toISOString(); writeOperation(operation);
+    return { ...assetImportReceipt(operation, readback), observed: { assetPresent: !!asset,
+        filePresent, metaPresent, assetUuid: asset && asset.uuid || null, assetReadback: readback },
+        retry: 'Never replay this operation; create a new plan only after reviewing the target.' };
+}
+
+function readAssetFiles(assetPath) {
+    const target = assetTargetPaths(assetPath);
+    let fileStat = null;
+    let metaStat = null;
+    for (const [filename, key] of [[target.filename, 'file'], [target.metaFilename, 'meta']]) {
+        try {
+            const stat = fs.lstatSync(filename);
+            if (!stat.isFile() || stat.isSymbolicLink()) throw coded('ASSET_FILE_UNSAFE');
+            if (key === 'file') fileStat = stat;
+            else metaStat = stat;
+        } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    }
+    if (!fileStat && !metaStat) return null;
+    if (!fileStat || !metaStat || metaStat.size > 16384) throw coded('ASSET_FILE_PAIR_INVALID');
+    if (fileStat.size > MAX_ASSET_TRACKED_BYTES) throw coded('ASSET_FILE_TOO_LARGE');
+    const fileBytes = fs.readFileSync(target.filename);
+    const metaBytes = fs.readFileSync(target.metaFilename);
+    let meta;
+    try { meta = JSON.parse(metaBytes.toString('utf8')); }
+    catch (_) { throw coded('ASSET_META_INVALID'); }
+    if (!meta || typeof meta.uuid !== 'string' || !meta.uuid) throw coded('ASSET_META_UUID_MISSING');
+    return { root: target.root, url: target.url, assetPath, fileBytes: fileBytes.length,
+        fileSha256: fileHash(fileBytes), metaSha256: fileHash(metaBytes), assetUuid: meta.uuid,
+        metaImporter: typeof meta.importer === 'string' ? meta.importer : '' };
+}
+
+async function readAssetLocation(assetPath, url) {
+    const files = readAssetFiles(assetPath);
+    const asset = await queryAssetByUrl(url);
+    if (!files && !asset) return null;
+    if (!files || !asset || typeof asset.uuid !== 'string' || asset.uuid !== files.assetUuid)
+        throw coded('ASSET_LOCATION_IDENTITY_MISMATCH');
+    return { ...files, assetType: typeof asset.type === 'string' ? asset.type : '',
+        assetImporter: typeof asset.importer === 'string' ? asset.importer : '' };
+}
+
+function assetMoveStateMatches(actual, expected) {
+    return !!actual && actual.assetUuid === expected.assetUuid && actual.fileSha256 === expected.fileSha256
+        && actual.metaSha256 === expected.metaSha256 && actual.metaImporter === expected.metaImporter
+        && actual.assetType === expected.assetType && actual.assetImporter === expected.assetImporter;
+}
+
+async function verifyAssetMoveBefore(operation, { requireCurrentContract = true } = {}) {
+    const plan = operation.plan;
+    if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
+    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+        throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
+    if (requireCurrentContract && (plan.extensionVersion !== extensionPackage.version
+        || plan.contractFingerprint !== CONTRACT_FINGERPRINT)) throw coded('OPERATION_CONTRACT_MISMATCH');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    const sourceTarget = assetTargetPaths(plan.sourceAssetPath);
+    const destinationTarget = assetTargetPaths(plan.destinationAssetPath);
+    if (sourceTarget.root !== plan.projectRoot || sourceTarget.url !== plan.sourceUrl
+        || destinationTarget.root !== plan.projectRoot || destinationTarget.url !== plan.destinationUrl
+        || sourceTarget.extension !== destinationTarget.extension) throw coded('ASSET_MOVE_TARGET_CHANGED');
+    const source = await readAssetLocation(plan.sourceAssetPath, plan.sourceUrl);
+    if (!assetMoveStateMatches(source, plan.expectedBefore)) throw coded('ASSET_MOVE_PRECONDITION_FAILED');
+    const destination = await readAssetLocation(plan.destinationAssetPath, plan.destinationUrl);
+    if (destination) throw coded('ASSET_MOVE_DESTINATION_EXISTS');
+    return { sourceTarget, destinationTarget, source };
+}
+
+async function createAssetMovePlan(input) {
+    if (!Editor.assetdb || typeof Editor.assetdb.move !== 'function'
+        || typeof Editor.assetdb.queryAssets !== 'function') throw coded('ASSETDB_MOVE_UNAVAILABLE');
+    const root = projectRoot();
+    const version = editorVersion();
+    if (version !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    const sourceTarget = assetTargetPaths(input.sourceAssetPath);
+    const destinationTarget = assetTargetPaths(input.destinationAssetPath);
+    if (sourceTarget.root !== root || destinationTarget.root !== root) throw coded('OPERATION_PROJECT_MISMATCH');
+    if (sourceTarget.url === destinationTarget.url) throw coded('ASSET_MOVE_NO_CHANGE');
+    if (sourceTarget.extension !== destinationTarget.extension) throw coded('ASSET_MOVE_EXTENSION_MISMATCH');
+    const source = await readAssetLocation(input.sourceAssetPath, sourceTarget.url);
+    if (!source) throw coded('ASSET_MOVE_SOURCE_NOT_FOUND');
+    if (source.assetType === 'folder' || (typeof Editor.assetdb.isSubAsset === 'function'
+        && Editor.assetdb.isSubAsset(sourceTarget.url))) throw coded('ASSET_MOVE_SUB_ASSET_UNSUPPORTED');
+    const destination = await readAssetLocation(input.destinationAssetPath, destinationTarget.url);
+    if (destination) throw coded('ASSET_MOVE_DESTINATION_EXISTS');
+    if (projectRoot() !== root || editorVersion() !== version) throw coded('CREATOR_IDENTITY_CHANGED');
+    const operationId = uuid();
+    const expectedBefore = { assetUuid: source.assetUuid, fileSha256: source.fileSha256,
+        metaSha256: source.metaSha256, metaImporter: source.metaImporter,
+        assetType: source.assetType, assetImporter: source.assetImporter };
+    const plan = { operationId, operation: 'creator.asset.move', projectRoot: root,
+        creatorVersion: version, extensionVersion: extensionPackage.version,
+        contractFingerprint: CONTRACT_FINGERPRINT, creatorInstanceId: INSTANCE_ID,
+        sourceAssetPath: input.sourceAssetPath, sourceUrl: sourceTarget.url,
+        destinationAssetPath: input.destinationAssetPath, destinationUrl: destinationTarget.url,
+        expectedBefore, expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString() };
+    const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
+        planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
+        projectRoot: root, creatorVersion: version, creatorInstanceId: INSTANCE_ID,
+        sourceAssetPath: plan.sourceAssetPath, sourceUrl: plan.sourceUrl,
+        destinationAssetPath: plan.destinationAssetPath, destinationUrl: plan.destinationUrl,
+        expectedBefore, expectedAfter: { ...expectedBefore, assetPath: plan.destinationAssetPath, url: plan.destinationUrl },
+        expiresAt: plan.expiresAt,
+        diff: { action: 'move-or-rename-asset', assetUuid: expectedBefore.assetUuid,
+            before: { path: plan.sourceAssetPath, url: plan.sourceUrl },
+            after: { path: plan.destinationAssetPath, url: plan.destinationUrl },
+            fileSha256: expectedBefore.fileSha256, metaSha256: expectedBefore.metaSha256 },
+        recovery: { operationId, automaticRetry: false, reconcileCommand: 'creator.asset.move.reconcile',
+            identityPreservedBy: 'Creator AssetDB move; .meta and UUID read back after the operation.' } };
+}
+
+function confirmAssetMove(operation) {
+    if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
+    const plan = operation.plan;
+    const detail = [`Project: ${plan.projectRoot}`, `Creator: ${plan.creatorVersion}`,
+        `Asset UUID: ${plan.expectedBefore.assetUuid}`, `Source: ${plan.sourceUrl}`,
+        `Destination: ${plan.destinationUrl}`, `File SHA-256: ${plan.expectedBefore.fileSha256}`,
+        `Meta SHA-256: ${plan.expectedBefore.metaSha256}`, `Operation: ${operation.operationId}`, '',
+        'This moves or renames one existing file asset through Creator AssetDB. Creator owns both file and .meta movement; the operation verifies the UUID and hashes at the destination.'].join('\n');
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator asset move',
+        message: `Move ${plan.sourceAssetPath} to ${plan.destinationAssetPath}?`, detail,
+        buttons: ['Cancel', 'Move asset'], defaultId: 0, cancelId: 0, noLink: true });
+}
+
+function moveAssetThroughAssetDb(sourceUrl, destinationUrl) {
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const timeout = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            reject(coded('ASSETDB_MOVE_TIMEOUT'));
+        }, 60000);
+        const finish = (error, rows) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (error) { reject(coded('ASSETDB_MOVE_FAILED', String(error.message || error))); return; }
+            if (rows !== undefined && !Array.isArray(rows)) { reject(coded('ASSETDB_MOVE_RESULT_INVALID')); return; }
+            resolve(rows || []);
+        };
+        try {
+            const result = Editor.assetdb.move(sourceUrl, destinationUrl, finish);
+            if (result && typeof result.then === 'function') result.then((rows) => finish(null, rows), finish);
+        } catch (error) {
+            clearTimeout(timeout);
+            reject(coded('ASSETDB_MOVE_FAILED', String(error.message || error)));
+        }
+    });
+}
+
+function assetMoveReceipt(operation, state) {
+    const plan = operation.plan;
+    const after = state || operation.assetReadback || null;
+    return { operationId: operation.operationId, status: operation.status, projectRoot: plan.projectRoot,
+        creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        assetUuid: plan.expectedBefore.assetUuid,
+        before: { assetPath: plan.sourceAssetPath, url: plan.sourceUrl, ...plan.expectedBefore },
+        after: after ? { assetPath: plan.destinationAssetPath, url: plan.destinationUrl,
+            fileSha256: after.fileSha256, metaSha256: after.metaSha256, metaImporter: after.metaImporter,
+            assetType: after.assetType, assetImporter: after.assetImporter, assetUuid: after.assetUuid } : null,
+        plannedByInstanceId: operation.plannedByInstanceId, appliedByInstanceId: operation.appliedByInstanceId || null,
+        completedAt: operation.completedAt || null,
+        recovery: { automaticRetry: false, reconcileCommand: 'creator.asset.move.reconcile',
+            note: 'Reconciliation observes both AssetDB paths and file/.meta identities; it never repeats the move.' } };
+}
+
+async function commitAssetMove(input, context) {
+    const operation = readAssetMoveOperation(input.operationId);
+    await verifyAssetMoveBefore(operation);
+    if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (operation.status !== 'planned') throw coded(['applying', 'awaiting-approval', 'needs-reconciliation'].includes(operation.status)
+        ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    operation.status = 'awaiting-approval'; operation.approvalRequestedAt = new Date().toISOString(); writeOperation(operation);
+    const approved = await confirmAssetMove(operation);
+    if (!approved) {
+        operation.status = 'cancelled'; operation.cancelledAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('OPERATION_NOT_APPROVED');
+    }
+    try { await authorizeWriteRequest(context && context.requestId); }
+    catch (error) {
+        operation.status = 'abandoned'; operation.abandonedAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error));
+    }
+    try { await verifyAssetMoveBefore(operation); }
+    catch (error) {
+        operation.status = 'conflict'; operation.conflictAt = new Date().toISOString();
+        operation.reconcileReason = error.code || 'ASSET_MOVE_PRECONDITION_FAILED'; writeOperation(operation); throw error;
+    }
+    operation.status = 'applying'; operation.approvedAt = new Date().toISOString();
+    operation.approvalSource = 'creator-native-dialog'; operation.appliedByInstanceId = INSTANCE_ID; writeOperation(operation);
+    try {
+        await moveAssetThroughAssetDb(operation.plan.sourceUrl, operation.plan.destinationUrl);
+        const source = await readAssetLocation(operation.plan.sourceAssetPath, operation.plan.sourceUrl);
+        const destination = await readAssetLocation(operation.plan.destinationAssetPath, operation.plan.destinationUrl);
+        if (source || !assetMoveStateMatches(destination, operation.plan.expectedBefore))
+            throw coded('ASSET_MOVE_READBACK_MISMATCH');
+        operation.status = 'completed'; operation.completedAt = new Date().toISOString();
+        operation.completedByInstanceId = INSTANCE_ID; operation.assetReadback = destination; writeOperation(operation);
+        return assetMoveReceipt(operation, destination);
+    } catch (error) {
+        operation.status = 'needs-reconciliation'; operation.reconcileReason = error.code || 'ASSET_MOVE_RESULT_UNCERTAIN';
+        operation.failureAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
+    }
+}
+
+async function reconcileAssetMove(input) {
+    const operation = readAssetMoveOperation(input.operationId);
+    const plan = operation.plan;
+    if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
+    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+        throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    let source = null;
+    let destination = null;
+    try {
+        source = await readAssetLocation(plan.sourceAssetPath, plan.sourceUrl);
+        destination = await readAssetLocation(plan.destinationAssetPath, plan.destinationUrl);
+    } catch (error) {
+        operation.status = 'conflict'; operation.reconcileReason = error.code || 'ASSET_MOVE_READBACK_FAILED';
+    }
+    if (!operation.reconcileReason) {
+        if (assetMoveStateMatches(source, plan.expectedBefore) && !destination) {
+            if (['applying', 'needs-reconciliation'].includes(operation.status)) operation.status = 'not-applied';
+        } else if (!source && assetMoveStateMatches(destination, plan.expectedBefore)
+            && ['applying', 'needs-reconciliation', 'completed'].includes(operation.status)) {
+            operation.status = 'completed'; operation.assetReadback = destination;
+            operation.completedAt = operation.completedAt || new Date().toISOString();
+            operation.completedByInstanceId = operation.completedByInstanceId || INSTANCE_ID;
+        } else {
+            operation.status = 'conflict'; operation.reconcileReason = 'ASSET_MOVE_STATE_AMBIGUOUS';
+        }
+    }
+    operation.reconciledAt = new Date().toISOString(); writeOperation(operation);
+    return { ...assetMoveReceipt(operation, destination && !source ? destination : null),
+        observed: { sourcePresent: !!source, destinationPresent: !!destination,
+            sourceAssetUuid: source && source.assetUuid || null,
+            destinationAssetUuid: destination && destination.assetUuid || null },
+        ...(operation.reconcileReason ? { reason: operation.reconcileReason } : {}),
+        retry: 'Never replay this move; create a new plan only after reviewing both paths.' };
+}
+
+function scanAssetDeleteReferences(root, assetPath, assetUuid) {
+    const scan = scanAssetReferences(path.join(root, 'assets'), assetUuid,
+        { ignorePaths: [assetPath, `${assetPath}.meta`] });
+    if (!scan.complete) throw coded('ASSET_DELETE_REFERENCE_SCAN_INCOMPLETE',
+        `Scanned ${scan.scannedFiles} files and ${scan.textBytes} text bytes; delete is refused unless the scan is complete.`);
+    if (scan.references.length) throw coded('ASSET_DELETE_HAS_REFERENCES',
+        scan.references.slice(0, 12).map((item) => `${item.assetPath} (${item.occurrences})`).join(', '));
+    return scan;
+}
+
+async function verifyAssetDeleteBefore(operation, { requireCurrentContract = true } = {}) {
+    const plan = operation.plan;
+    if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
+    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+        throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
+    if (requireCurrentContract && (plan.extensionVersion !== extensionPackage.version
+        || plan.contractFingerprint !== CONTRACT_FINGERPRINT)) throw coded('OPERATION_CONTRACT_MISMATCH');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    const target = assetTargetPaths(plan.assetPath);
+    if (target.root !== plan.projectRoot || target.url !== plan.assetUrl) throw coded('ASSET_DELETE_TARGET_CHANGED');
+    if (!Editor.assetdb || typeof Editor.assetdb.delete !== 'function'
+        || typeof Editor.assetdb.isSubAsset !== 'function' || typeof Editor.assetdb.containsSubAssets !== 'function')
+        throw coded('ASSETDB_DELETE_UNAVAILABLE');
+    if (Editor.assetdb.isSubAsset(plan.assetUrl)) throw coded('ASSET_DELETE_SUB_ASSET_UNSUPPORTED');
+    if (Editor.assetdb.containsSubAssets(plan.assetUrl)) throw coded('ASSET_DELETE_HAS_SUB_ASSETS');
+    const source = await readAssetLocation(plan.assetPath, plan.assetUrl);
+    if (!assetMoveStateMatches(source, plan.expectedBefore)) throw coded('ASSET_DELETE_PRECONDITION_FAILED');
+    if (source.assetType === 'folder') throw coded('ASSET_DELETE_FILE_ONLY');
+    const referenceScan = scanAssetDeleteReferences(plan.projectRoot, plan.assetPath, source.assetUuid);
+    return { target, source, referenceScan };
+}
+
+async function createAssetDeletePlan(input) {
+    if (!Editor.assetdb || typeof Editor.assetdb.queryAssets !== 'function'
+        || typeof Editor.assetdb.delete !== 'function' || typeof Editor.assetdb.isSubAsset !== 'function'
+        || typeof Editor.assetdb.containsSubAssets !== 'function') throw coded('ASSETDB_DELETE_UNAVAILABLE');
+    const root = projectRoot();
+    const version = editorVersion();
+    if (version !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    const asset = await queryAssetByUuid(input.assetUuid);
+    if (!asset) throw coded('ASSET_UUID_NOT_FOUND');
+    if (asset.isSubAsset === true || Editor.assetdb.isSubAsset(asset.url)) throw coded('ASSET_DELETE_SUB_ASSET_UNSUPPORTED');
+    if (Editor.assetdb.containsSubAssets(asset.url)) throw coded('ASSET_DELETE_HAS_SUB_ASSETS');
+    if (typeof asset.url !== 'string' || !asset.url.startsWith('db://assets/')) throw coded('ASSET_DELETE_URL_UNSUPPORTED');
+    const assetPath = asset.url.slice('db://assets/'.length);
+    const source = await readAssetLocation(assetPath, asset.url);
+    if (!source || source.assetUuid !== input.assetUuid) throw coded('ASSET_DELETE_SOURCE_IDENTITY_MISMATCH');
+    if (source.assetType === 'folder') throw coded('ASSET_DELETE_FILE_ONLY');
+    const referenceScan = scanAssetDeleteReferences(root, assetPath, input.assetUuid);
+    if (projectRoot() !== root || editorVersion() !== version) throw coded('CREATOR_IDENTITY_CHANGED');
+    const expectedBefore = { assetUuid: source.assetUuid, fileBytes: source.fileBytes,
+        fileSha256: source.fileSha256, metaSha256: source.metaSha256, metaImporter: source.metaImporter,
+        assetType: source.assetType, assetImporter: source.assetImporter };
+    const operationId = uuid();
+    const plan = { operationId, operation: 'creator.asset.delete', projectRoot: root,
+        creatorVersion: version, extensionVersion: extensionPackage.version,
+        contractFingerprint: CONTRACT_FINGERPRINT, creatorInstanceId: INSTANCE_ID,
+        assetPath, assetUrl: asset.url, expectedBefore,
+        referenceScan: { complete: true, referenceCount: 0, scannedFiles: referenceScan.scannedFiles,
+            textBytes: referenceScan.textBytes, binaryFiles: referenceScan.binaryFiles },
+        expectedAfter: { filePresent: false, metaPresent: false, assetPresent: false },
+        expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString() };
+    const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
+        planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
+        projectRoot: root, creatorVersion: version, creatorInstanceId: INSTANCE_ID,
+        assetPath, assetUrl: plan.assetUrl, expectedBefore, referenceScan: plan.referenceScan,
+        expiresAt: plan.expiresAt,
+        diff: { action: 'delete-asset', irreversible: true, assetUuid: expectedBefore.assetUuid,
+            before: { assetPath, assetUrl: plan.assetUrl, fileSha256: expectedBefore.fileSha256,
+                metaSha256: expectedBefore.metaSha256 }, after: 'asset and .meta absent',
+            inboundReferences: 0, skippedBinaryFiles: referenceScan.binaryFiles },
+        recovery: { operationId, automaticRetry: false, reconcileCommand: 'creator.asset.delete.reconcile',
+            note: 'Deletion uses Creator AssetDB. The operation refuses incomplete reference scans, incoming text-file UUID matches, sub-assets, and assets with sub-assets.' } };
+}
+
+function confirmAssetDelete(operation) {
+    if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
+    const plan = operation.plan;
+    const detail = [`Project: ${plan.projectRoot}`, `Creator: ${plan.creatorVersion}`,
+        `Asset UUID: ${plan.expectedBefore.assetUuid}`, `Asset: ${plan.assetUrl}`,
+        `File SHA-256: ${plan.expectedBefore.fileSha256}`, `Meta SHA-256: ${plan.expectedBefore.metaSha256}`,
+        `Text reference scan: complete, ${plan.referenceScan.scannedFiles} files`, `Operation: ${operation.operationId}`, '',
+        'This permanently removes one file asset and its .meta through Creator AssetDB. The scan ignores the asset’s own file and .meta, skips binary files, and is repeated after approval. The CLI does not create a backup.'].join('\n');
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator asset deletion',
+        message: `Delete ${plan.assetPath}?`, detail,
+        buttons: ['Cancel', 'Delete asset'], defaultId: 0, cancelId: 0, noLink: true });
+}
+
+function deleteAssetThroughAssetDb(url) {
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const timeout = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            reject(coded('ASSETDB_DELETE_TIMEOUT'));
+        }, 60000);
+        const finish = (error, rows) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (error) { reject(coded('ASSETDB_DELETE_FAILED', String(error.message || error))); return; }
+            if (rows !== undefined && !Array.isArray(rows)) { reject(coded('ASSETDB_DELETE_RESULT_INVALID')); return; }
+            resolve(rows || []);
+        };
+        try {
+            const result = Editor.assetdb.delete([url], finish);
+            if (result && typeof result.then === 'function') result.then((rows) => finish(null, rows), finish);
+        } catch (error) {
+            clearTimeout(timeout);
+            reject(coded('ASSETDB_DELETE_FAILED', String(error.message || error)));
+        }
+    });
+}
+
+function assetDeleteReceipt(operation, observed = null) {
+    const plan = operation.plan;
+    return { operationId: operation.operationId, status: operation.status, projectRoot: plan.projectRoot,
+        creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        assetPath: plan.assetPath, assetUrl: plan.assetUrl, assetUuid: plan.expectedBefore.assetUuid,
+        expectedBefore: plan.expectedBefore, observed,
+        plannedByInstanceId: operation.plannedByInstanceId, appliedByInstanceId: operation.appliedByInstanceId || null,
+        completedAt: operation.completedAt || null,
+        recovery: { automaticRetry: false, reconcileCommand: 'creator.asset.delete.reconcile',
+            note: 'Reconciliation observes AssetDB, file, and .meta state and never repeats deletion.' } };
+}
+
+async function commitAssetDelete(input, context) {
+    const operation = readAssetDeleteOperation(input.operationId);
+    await verifyAssetDeleteBefore(operation);
+    if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (operation.status !== 'planned') throw coded(['applying', 'awaiting-approval', 'needs-reconciliation'].includes(operation.status)
+        ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    operation.status = 'awaiting-approval'; operation.approvalRequestedAt = new Date().toISOString(); writeOperation(operation);
+    const approved = await confirmAssetDelete(operation);
+    if (!approved) {
+        operation.status = 'cancelled'; operation.cancelledAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('OPERATION_NOT_APPROVED');
+    }
+    try { await authorizeWriteRequest(context && context.requestId); }
+    catch (error) {
+        operation.status = 'abandoned'; operation.abandonedAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error));
+    }
+    try { await verifyAssetDeleteBefore(operation); }
+    catch (error) {
+        operation.status = 'conflict'; operation.conflictAt = new Date().toISOString();
+        operation.reconcileReason = error.code || 'ASSET_DELETE_PRECONDITION_FAILED'; writeOperation(operation); throw error;
+    }
+    operation.status = 'applying'; operation.approvedAt = new Date().toISOString();
+    operation.approvalSource = 'creator-native-dialog'; operation.appliedByInstanceId = INSTANCE_ID; writeOperation(operation);
+    try {
+        await deleteAssetThroughAssetDb(operation.plan.assetUrl);
+        const files = readAssetFiles(operation.plan.assetPath);
+        const asset = await queryAssetByUrl(operation.plan.assetUrl);
+        if (files || asset) throw coded('ASSET_DELETE_READBACK_MISMATCH');
+        operation.status = 'completed'; operation.completedAt = new Date().toISOString();
+        operation.completedByInstanceId = INSTANCE_ID; operation.deletedAssetUuid = operation.plan.expectedBefore.assetUuid;
+        writeOperation(operation);
+        return assetDeleteReceipt(operation, { filePresent: false, metaPresent: false, assetPresent: false });
+    } catch (error) {
+        operation.status = 'needs-reconciliation'; operation.reconcileReason = error.code || 'ASSET_DELETE_RESULT_UNCERTAIN';
+        operation.failureAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
+    }
+}
+
+async function reconcileAssetDelete(input) {
+    const operation = readAssetDeleteOperation(input.operationId);
+    const plan = operation.plan;
+    if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
+    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+        throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    let files = null;
+    let asset = null;
+    try {
+        files = readAssetFiles(plan.assetPath);
+        asset = await queryAssetByUrl(plan.assetUrl);
+    } catch (error) {
+        operation.status = 'conflict'; operation.reconcileReason = error.code || 'ASSET_DELETE_READBACK_FAILED';
+    }
+    let observed = { filePresent: !!files, metaPresent: !!files, assetPresent: !!asset,
+        assetUuid: asset && asset.uuid || files && files.assetUuid || null };
+    if (!operation.reconcileReason) {
+        if (!files && !asset && ['applying', 'needs-reconciliation', 'completed'].includes(operation.status)) {
+            operation.status = 'completed'; operation.deletedAssetUuid = plan.expectedBefore.assetUuid;
+            operation.completedAt = operation.completedAt || new Date().toISOString();
+            operation.completedByInstanceId = operation.completedByInstanceId || INSTANCE_ID;
+        } else if (files && asset && assetMoveStateMatches({ ...files,
+            assetType: typeof asset.type === 'string' ? asset.type : '',
+            assetImporter: typeof asset.importer === 'string' ? asset.importer : '' }, plan.expectedBefore)
+            && ['applying', 'needs-reconciliation'].includes(operation.status)) {
+            operation.status = 'not-applied';
+        } else {
+            operation.status = 'conflict'; operation.reconcileReason = 'ASSET_DELETE_STATE_AMBIGUOUS';
+        }
+    }
+    operation.reconciledAt = new Date().toISOString(); writeOperation(operation);
+    return { ...assetDeleteReceipt(operation, observed),
+        ...(operation.reconcileReason ? { reason: operation.reconcileReason } : {}),
+        retry: 'Never replay this deletion; review both AssetDB and disk state before creating a new plan.' };
+}
+
+const TEXTURE_IMPORT_SETTING_VALUES = {
+    wrapMode: new Set(['clamp', 'repeat']),
+    filterMode: new Set(['point', 'bilinear', 'trilinear']),
+};
+const TEXTURE_IMPORT_BOOLEAN_SETTINGS = new Set(['premultiplyAlpha', 'genMipmaps', 'packable']);
+
+function validateTextureImportSettings(settings) {
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings)) throw coded('ASSET_TEXTURE_SETTINGS_INVALID');
+    const fields = Object.keys(settings);
+    if (!fields.length || fields.length > 5) throw coded('ASSET_TEXTURE_SETTINGS_INVALID');
+    for (const field of fields) {
+        if (TEXTURE_IMPORT_SETTING_VALUES[field]) {
+            if (typeof settings[field] !== 'string' || !TEXTURE_IMPORT_SETTING_VALUES[field].has(settings[field]))
+                throw coded('ASSET_TEXTURE_SETTING_VALUE_INVALID', field);
+        } else if (TEXTURE_IMPORT_BOOLEAN_SETTINGS.has(field)) {
+            if (typeof settings[field] !== 'boolean') throw coded('ASSET_TEXTURE_SETTING_VALUE_INVALID', field);
+        } else throw coded('ASSET_TEXTURE_SETTING_UNSUPPORTED', field);
+    }
+    return fields;
+}
+
+async function readTextureImportState(assetPath, assetUrl, assetUuid) {
+    const target = assetTargetPaths(assetPath);
+    if (target.url !== assetUrl || !['.png', '.jpg', '.jpeg'].includes(target.extension))
+        throw coded('ASSET_TEXTURE_TARGET_UNSUPPORTED');
+    if (!Editor.assetdb || typeof Editor.assetdb.isSubAsset !== 'function' || Editor.assetdb.isSubAsset(assetUrl))
+        throw coded('ASSET_TEXTURE_SUB_ASSET_UNSUPPORTED');
+    const location = await readAssetLocation(assetPath, assetUrl);
+    if (!location || location.assetUuid !== assetUuid || location.metaImporter !== 'texture'
+        || location.assetImporter !== 'texture') throw coded('ASSET_TEXTURE_IDENTITY_MISMATCH');
+    const metaPath = `${target.filename}.meta`;
+    const metaStat = fs.lstatSync(metaPath);
+    if (!metaStat.isFile() || metaStat.isSymbolicLink() || metaStat.size > MAX_TEXTURE_META_BYTES)
+        throw coded('ASSET_TEXTURE_META_UNSAFE');
+    const metaBytes = fs.readFileSync(metaPath);
+    let meta;
+    try { meta = JSON.parse(metaBytes.toString('utf8')); }
+    catch (_) { throw coded('ASSET_TEXTURE_META_INVALID'); }
+    if (!meta || typeof meta !== 'object' || Array.isArray(meta)
+        || meta.uuid !== assetUuid || meta.importer !== 'texture') throw coded('ASSET_TEXTURE_META_IDENTITY_MISMATCH');
+    for (const [field, values] of Object.entries(TEXTURE_IMPORT_SETTING_VALUES)) {
+        if (typeof meta[field] !== 'string' || !values.has(meta[field]))
+            throw coded('ASSET_TEXTURE_SETTING_SCHEMA_UNSUPPORTED', field);
+    }
+    for (const field of TEXTURE_IMPORT_BOOLEAN_SETTINGS) {
+        if (typeof meta[field] !== 'boolean') throw coded('ASSET_TEXTURE_SETTING_SCHEMA_UNSUPPORTED', field);
+    }
+    return { assetPath, assetUrl, assetUuid, fileSha256: location.fileSha256,
+        metaSha256: location.metaSha256, metaImporter: location.metaImporter,
+        assetType: location.assetType, assetImporter: location.assetImporter, meta };
+}
+
+async function createTextureImportSettingsPlan(input) {
+    if (!Editor.assetdb || typeof Editor.assetdb.queryAssets !== 'function'
+        || typeof Editor.assetdb.isSubAsset !== 'function') throw coded('ASSETDB_QUERY_UNAVAILABLE');
+    const fields = validateTextureImportSettings(input.settings);
+    const root = projectRoot();
+    const version = editorVersion();
+    if (version !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    const asset = await queryAssetByUuid(input.assetUuid);
+    if (!asset || typeof asset.url !== 'string' || !asset.url.startsWith('db://assets/')) throw coded('ASSET_UUID_NOT_FOUND');
+    const assetPath = asset.url.slice('db://assets/'.length);
+    const state = await readTextureImportState(assetPath, asset.url, input.assetUuid);
+    const beforeSettings = {};
+    const afterSettings = {};
+    const changedFields = {};
+    const afterMeta = JSON.parse(JSON.stringify(state.meta));
+    for (const field of fields) {
+        if (Object.is(state.meta[field], input.settings[field])) continue;
+        beforeSettings[field] = state.meta[field];
+        afterSettings[field] = input.settings[field];
+        afterMeta[field] = input.settings[field];
+        changedFields[field] = { before: state.meta[field], after: input.settings[field] };
+    }
+    if (!Object.keys(changedFields).length) throw coded('ASSET_TEXTURE_SETTINGS_NO_CHANGE');
+    if (projectRoot() !== root || editorVersion() !== version) throw coded('CREATOR_IDENTITY_CHANGED');
+    const operationId = uuid();
+    const plan = { operationId, operation: 'creator.asset.import-settings', projectRoot: root,
+        creatorVersion: version, extensionVersion: extensionPackage.version,
+        contractFingerprint: CONTRACT_FINGERPRINT, creatorInstanceId: INSTANCE_ID,
+        assetPath, assetUrl: asset.url, assetUuid: input.assetUuid,
+        expectedBefore: { assetUuid: state.assetUuid, fileSha256: state.fileSha256,
+            metaSha256: state.metaSha256, metaImporter: state.metaImporter,
+            assetType: state.assetType, assetImporter: state.assetImporter, settings: beforeSettings },
+        expectedAfter: { settings: afterSettings },
+        expectedMeta: { before: state.meta, after: afterMeta },
+        changedFields,
+        expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString() };
+    const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
+        planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
+        projectRoot: root, creatorVersion: version, creatorInstanceId: INSTANCE_ID,
+        assetPath, assetUrl: plan.assetUrl, assetUuid: plan.assetUuid,
+        expectedBefore: plan.expectedBefore, expectedAfter: plan.expectedAfter,
+        changedFields: plan.changedFields, expiresAt: plan.expiresAt,
+        diff: { action: 'change-texture-import-settings', assetUuid: plan.assetUuid,
+            assetUrl: plan.assetUrl, fields: plan.changedFields,
+            preservedMetaFields: Object.keys(state.meta).length - fields.length },
+        recovery: { operationId, automaticRetry: false,
+            reconcileCommand: 'creator.asset.import-settings.reconcile',
+            note: 'The operation saves only allowlisted top-level texture importer fields through Creator AssetDB and verifies the full .meta readback.' } };
+}
+
+async function verifyTextureImportSettingsBefore(operation, { requireCurrentContract = true } = {}) {
+    const plan = operation.plan;
+    if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
+    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+        throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
+    if (requireCurrentContract && (plan.extensionVersion !== extensionPackage.version
+        || plan.contractFingerprint !== CONTRACT_FINGERPRINT)) throw coded('OPERATION_CONTRACT_MISMATCH');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    const target = assetTargetPaths(plan.assetPath);
+    if (target.root !== plan.projectRoot || target.url !== plan.assetUrl) throw coded('ASSET_TEXTURE_TARGET_CHANGED');
+    const state = await readTextureImportState(plan.assetPath, plan.assetUrl, plan.assetUuid);
+    if (state.assetUuid !== plan.expectedBefore.assetUuid || state.fileSha256 !== plan.expectedBefore.fileSha256
+        || state.metaSha256 !== plan.expectedBefore.metaSha256 || state.metaImporter !== plan.expectedBefore.metaImporter
+        || state.assetType !== plan.expectedBefore.assetType || state.assetImporter !== plan.expectedBefore.assetImporter
+        || canonical(state.meta) !== canonical(plan.expectedMeta.before)) throw coded('ASSET_TEXTURE_SETTINGS_PRECONDITION_FAILED');
+    return state;
+}
+
+function confirmTextureImportSettings(operation) {
+    if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
+    const plan = operation.plan;
+    const details = Object.entries(plan.changedFields).map(([field, change]) =>
+        `${field}: ${JSON.stringify(change.before)} → ${JSON.stringify(change.after)}`);
+    const detail = [`Project: ${plan.projectRoot}`, `Creator: ${plan.creatorVersion}`,
+        `Asset: ${plan.assetUrl} (${plan.assetUuid})`, `Meta SHA-256: ${plan.expectedBefore.metaSha256}`,
+        ...details, `Operation: ${operation.operationId}`, '',
+        'This updates allowlisted Creator 2.4 texture importer settings through AssetDB. Creator may reimport the texture. Other .meta fields and the asset source must remain unchanged.'].join('\n');
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator texture import settings',
+        message: `Update texture import settings for ${plan.assetPath}?`, detail,
+        buttons: ['Cancel', 'Update settings'], defaultId: 0, cancelId: 0, noLink: true });
+}
+
+function textureImportSettingsReceipt(operation, state = null) {
+    const plan = operation.plan;
+    const current = state && state.meta || operation.afterMeta || null;
+    return { operationId: operation.operationId, status: operation.status, projectRoot: plan.projectRoot,
+        creatorVersion: plan.creatorVersion, assetPath: plan.assetPath, assetUrl: plan.assetUrl,
+        assetUuid: plan.assetUuid, changedFields: plan.changedFields,
+        beforeMetaSha256: plan.expectedBefore.metaSha256, afterMetaSha256: state && state.metaSha256 || operation.afterMetaSha256 || null,
+        currentSettings: current ? Object.fromEntries(Object.keys(plan.changedFields).map((field) => [field, current[field]])) : null,
+        appliedByInstanceId: operation.appliedByInstanceId || null, completedAt: operation.completedAt || null,
+        recovery: { automaticRetry: false, reconcileCommand: 'creator.asset.import-settings.reconcile',
+            note: 'Reconciliation checks the exact texture UUID, source hash, full metadata object, and settings; it never calls saveMeta again.' } };
+}
+
+function saveTextureMetaThroughAssetDb(assetUuid, jsonString) {
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const timeout = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            reject(coded('ASSETDB_SAVE_META_TIMEOUT'));
+        }, 45000);
+        const finish = (error, meta) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (error) { reject(coded('ASSETDB_SAVE_META_FAILED', String(error.message || error))); return; }
+            resolve(meta || null);
+        };
+        try {
+            const result = Editor.assetdb.saveMeta(assetUuid, jsonString, finish);
+            if (result && typeof result.then === 'function') result.then((meta) => finish(null, meta), finish);
+        } catch (error) {
+            clearTimeout(timeout);
+            reject(coded('ASSETDB_SAVE_META_FAILED', String(error.message || error)));
+        }
+    });
+}
+
+function textureImportSettingsAfterMatches(state, plan) {
+    return !!state && state.assetUuid === plan.assetUuid
+        && state.fileSha256 === plan.expectedBefore.fileSha256
+        && state.assetType === plan.expectedBefore.assetType
+        && state.assetImporter === plan.expectedBefore.assetImporter
+        && state.metaImporter === plan.expectedBefore.metaImporter
+        && canonical(state.meta) === canonical(plan.expectedMeta.after);
+}
+
+async function commitTextureImportSettings(input, context) {
+    const operation = readTextureImportSettingsOperation(input.operationId);
+    await verifyTextureImportSettingsBefore(operation);
+    if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (operation.status !== 'planned') throw coded(['applying', 'awaiting-approval', 'needs-reconciliation'].includes(operation.status)
+        ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    operation.status = 'awaiting-approval'; operation.approvalRequestedAt = new Date().toISOString(); writeOperation(operation);
+    const approved = await confirmTextureImportSettings(operation);
+    if (!approved) {
+        operation.status = 'cancelled'; operation.cancelledAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('OPERATION_NOT_APPROVED');
+    }
+    try { await authorizeWriteRequest(context && context.requestId); }
+    catch (error) {
+        operation.status = 'abandoned'; operation.abandonedAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error));
+    }
+    try { await verifyTextureImportSettingsBefore(operation); }
+    catch (error) {
+        operation.status = 'conflict'; operation.conflictAt = new Date().toISOString();
+        operation.reconcileReason = error.code || 'ASSET_TEXTURE_SETTINGS_PRECONDITION_FAILED'; writeOperation(operation); throw error;
+    }
+    operation.status = 'applying'; operation.approvedAt = new Date().toISOString();
+    operation.approvalSource = 'creator-native-dialog'; operation.appliedByInstanceId = INSTANCE_ID; writeOperation(operation);
+    try {
+        await saveTextureMetaThroughAssetDb(operation.plan.assetUuid, JSON.stringify(operation.plan.expectedMeta.after, null, 2));
+        const state = await readTextureImportState(operation.plan.assetPath, operation.plan.assetUrl, operation.plan.assetUuid);
+        if (!textureImportSettingsAfterMatches(state, operation.plan)) throw coded('ASSET_TEXTURE_SETTINGS_READBACK_MISMATCH');
+        operation.status = 'completed'; operation.completedAt = new Date().toISOString();
+        operation.completedByInstanceId = INSTANCE_ID; operation.afterMetaSha256 = state.metaSha256;
+        operation.afterMeta = state.meta; writeOperation(operation);
+        return textureImportSettingsReceipt(operation, state);
+    } catch (error) {
+        operation.status = 'needs-reconciliation'; operation.reconcileReason = error.code || 'ASSET_TEXTURE_SETTINGS_RESULT_UNCERTAIN';
+        operation.failureAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
+    }
+}
+
+async function reconcileTextureImportSettings(input) {
+    const operation = readTextureImportSettingsOperation(input.operationId);
+    const plan = operation.plan;
+    if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
+    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+        throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    operation.reconcileReason = null;
+    let state = null;
+    try { state = await readTextureImportState(plan.assetPath, plan.assetUrl, plan.assetUuid); }
+    catch (error) {
+        operation.status = 'conflict'; operation.reconcileReason = error.code || 'ASSET_TEXTURE_SETTINGS_READBACK_FAILED';
+    }
+    if (!operation.reconcileReason && state) {
+        const beforeMatches = state.assetUuid === plan.expectedBefore.assetUuid
+            && state.fileSha256 === plan.expectedBefore.fileSha256
+            && state.metaSha256 === plan.expectedBefore.metaSha256
+            && canonical(state.meta) === canonical(plan.expectedMeta.before);
+        if (beforeMatches && ['planned', 'awaiting-approval', 'applying', 'needs-reconciliation'].includes(operation.status)) {
+            operation.status = 'not-applied';
+        } else if (textureImportSettingsAfterMatches(state, plan)
+            && ['applying', 'needs-reconciliation', 'completed'].includes(operation.status)) {
+            operation.status = 'completed'; operation.afterMeta = state.meta; operation.afterMetaSha256 = state.metaSha256;
+            operation.completedAt = operation.completedAt || new Date().toISOString();
+            operation.completedByInstanceId = operation.completedByInstanceId || INSTANCE_ID;
+        } else {
+            operation.status = 'conflict'; operation.reconcileReason = 'ASSET_TEXTURE_SETTINGS_STATE_AMBIGUOUS';
+        }
+    }
+    operation.reconciledAt = new Date().toISOString(); writeOperation(operation);
+    return { ...textureImportSettingsReceipt(operation, state),
+        ...(operation.reconcileReason ? { reason: operation.reconcileReason } : {}),
+        retry: 'Never replay saveMeta; review the exact .meta state before creating a new plan.' };
+}
+
+async function prefabNodeState(sceneUuid, nodeUuid) {
+    const state = await callScene('nodeState', { sceneUuid, nodeUuid }, 20000);
+    if (!state || state.available !== true || state.sceneUuid !== sceneUuid || state.nodeUuid !== nodeUuid
+        || typeof state.nodePath !== 'string') throw coded(state && state.reason || 'PREFAB_SOURCE_NODE_UNAVAILABLE');
+    return state;
+}
+
+function validatePrefabTarget(prefabPath, requireAbsent) {
+    if (path.extname(prefabPath).toLowerCase() !== '.prefab') throw coded('PREFAB_TARGET_EXTENSION_INVALID');
+    const target = requireAbsent ? safeNewAssetTarget(prefabPath) : assetTargetPaths(prefabPath);
+    if (!requireAbsent && target.root !== projectRoot()) throw coded('OPERATION_PROJECT_MISMATCH');
+    return target;
+}
+
+async function verifyPrefabCreatePlan(operation, { requireCurrentContract = true, requireAbsent = true, verifySourceNode = true } = {}) {
+    const plan = operation.plan;
+    if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
+    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+        throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
+    if (requireCurrentContract && (plan.extensionVersion !== extensionPackage.version
+        || plan.contractFingerprint !== CONTRACT_FINGERPRINT)) throw coded('OPERATION_CONTRACT_MISMATCH');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    const target = validatePrefabTarget(plan.prefabPath, requireAbsent);
+    if (target.root !== plan.projectRoot || target.url !== plan.targetUrl) throw coded('PREFAB_TARGET_CHANGED');
+    if (!verifySourceNode) return { target, node: null };
+    const node = await prefabNodeState(plan.sceneUuid, plan.nodeUuid);
+    if (node.sceneName !== plan.sceneName || node.nodePath !== plan.nodePath)
+        throw coded('PREFAB_SOURCE_NODE_CHANGED');
+    return { target, node };
+}
+
+async function createPrefabPlan(input) {
+    if (!Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function'
+        || !Editor.Ipc || typeof Editor.Ipc.sendToPanel !== 'function'
+        || !Editor.assetdb || typeof Editor.assetdb.exists !== 'function'
+        || typeof Editor.assetdb.queryAssets !== 'function') throw coded('PREFAB_API_UNAVAILABLE');
+    const currentRoot = projectRoot();
+    const currentVersion = editorVersion();
+    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    const node = await prefabNodeState(input.sceneUuid, input.nodeUuid);
+    const target = validatePrefabTarget(input.prefabPath, true);
+    if (target.root !== currentRoot) throw coded('OPERATION_PROJECT_MISMATCH');
+    if (await queryAssetByUrl(target.url)) throw coded('PREFAB_TARGET_ALREADY_EXISTS');
+    if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
+    const operationId = uuid();
+    const plan = { operationId, operation: 'creator.prefab.create', projectRoot: currentRoot,
+        creatorVersion: currentVersion, extensionVersion: extensionPackage.version,
+        contractFingerprint: CONTRACT_FINGERPRINT, creatorInstanceId: INSTANCE_ID,
+        sceneUuid: node.sceneUuid, sceneName: node.sceneName, nodeUuid: node.nodeUuid,
+        nodePath: node.nodePath, prefabPath: input.prefabPath, targetUrl: target.url,
+        expectedBefore: { assetExists: false }, expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString() };
+    const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
+        planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
+        projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodeUuid: plan.nodeUuid, nodePath: plan.nodePath,
+        prefabPath: plan.prefabPath, targetUrl: plan.targetUrl, expiresAt: plan.expiresAt,
+        diff: { action: 'create-prefab', source: { sceneUuid: plan.sceneUuid, nodeUuid: plan.nodeUuid, nodePath: plan.nodePath },
+            target: { url: plan.targetUrl, before: 'absent', after: 'Creator-authored Prefab asset' } },
+        recovery: { operationId, automaticRetry: false, reconcileCommand: 'creator.prefab.create.reconcile',
+            editorAuthored: true, note: 'Creation uses the Creator Scene panel IPC; no serialized Prefab source is fabricated or patched.' } };
+}
+
+async function inspectPrefabSourceCommand(input) {
+    if (!Editor.Project || !Editor.Project.path || !Editor.assetdb
+        || typeof Editor.assetdb.queryAssets !== 'function') throw coded('PREFAB_SOURCE_INSPECT_UNAVAILABLE');
+    if (editorVersion() !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (typeof input.prefabUuid !== 'string'
+        || !/^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$/.test(input.prefabUuid))
+        throw coded('PREFAB_UUID_INVALID');
+    const currentRoot = projectRoot();
+    const row = await queryAssetByUuid(input.prefabUuid);
+    if (!row || !row.url.startsWith('db://assets/') || !/\.prefab$/i.test(row.url)
+        || (row.importer && row.importer !== 'prefab')) throw coded('PREFAB_ASSET_IDENTITY_MISMATCH');
+    const prefabPath = row.url.slice('db://assets/'.length);
+    const prefabFile = safeProjectFile(prefabPath, /\.prefab$/i);
+    const metaFile = safeProjectFile(`${prefabPath}.meta`);
+    const prefabBytes = readStableProjectFile(prefabFile, MAX_PREFAB_SERIALIZATION_BYTES, 'PREFAB_SERIALIZATION_FILE_UNSAFE');
+    const metaBytes = readStableProjectFile(metaFile, MAX_PREFAB_META_BYTES, 'PREFAB_META_FILE_UNSAFE');
+    const state = inspectPrefabSourceData({ prefabBytes, metaBytes, prefabUuid: input.prefabUuid,
+        maxComponentsPerNode: input.nodeUuid !== undefined ? 64 : 8 });
+    if (!state.available) throw coded(state.reason || 'PREFAB_SOURCE_INSPECT_FAILED');
+    let nodes = state.nodes;
+    let truncated = nodes.length > 100;
+    if (input.nodeUuid !== undefined) {
+        if (typeof input.nodeUuid !== 'string') throw coded('PREFAB_NODE_UUID_INVALID');
+        nodes = nodes.filter((node) => node.nodeUuid === input.nodeUuid);
+        if (nodes.length !== 1) throw coded('PREFAB_NODE_NOT_FOUND');
+        truncated = false;
+    } else nodes = nodes.slice(0, 100);
+    const freshRow = await queryAssetByUuid(input.prefabUuid);
+    if (!freshRow || freshRow.url !== row.url || freshRow.uuid !== row.uuid
+        || projectRoot() !== currentRoot || editorVersion() !== EXPECTED_CREATOR_VERSION)
+        throw coded('PREFAB_ASSET_IDENTITY_CHANGED');
+    const freshPrefabBytes = readStableProjectFile(prefabFile, MAX_PREFAB_SERIALIZATION_BYTES, 'PREFAB_SERIALIZATION_FILE_UNSAFE');
+    const freshMetaBytes = readStableProjectFile(metaFile, MAX_PREFAB_META_BYTES, 'PREFAB_META_FILE_UNSAFE');
+    if (fileHash(freshPrefabBytes) !== fileHash(prefabBytes) || fileHash(freshMetaBytes) !== fileHash(metaBytes))
+        throw coded('PREFAB_SOURCE_CHANGED_DURING_INSPECT');
+    return { ...state, nodes, truncated, projectRoot: currentRoot, creatorVersion: editorVersion(), prefabPath,
+        targetUrl: row.url, importer: typeof row.importer === 'string' ? row.importer : null,
+        assetType: typeof row.type === 'string' ? row.type : null,
+        sourceSha256: fileHash(prefabBytes), metaSha256: fileHash(metaBytes), sourceScope: 'saved-disk-only' };
+}
+
+async function inspectPrefabInstanceCommand(input) {
+    if (editorVersion() !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!input || typeof input.sceneUuid !== 'string' || typeof input.nodeUuid !== 'string')
+        throw coded('PREFAB_INSTANCE_INPUT_INVALID');
+    const live = await callScene('prefabInstanceState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);
+    if (!live || live.available !== true) throw coded(live && live.reason || 'PREFAB_INSTANCE_INSPECT_FAILED');
+    const result = { ...live, projectRoot: projectRoot(), creatorVersion: editorVersion(), liveStateScope: 'active-editor-memory' };
+    if (!live.linked) return result;
+    const prefab = await inspectPrefabSourceCommand({ prefabUuid: live.prefabUuid });
+    result.prefabAsset = { uuid: prefab.prefabUuid, url: prefab.targetUrl, path: prefab.prefabPath,
+        sourceSha256: prefab.sourceSha256, metaSha256: prefab.metaSha256,
+        nodeCount: prefab.nodeCount, sourceScope: prefab.sourceScope };
+    try {
+        const savedScene = await sceneNodeDiskState(input.sceneUuid, live.prefabRootUuid,
+            { includeComponents: true, includeSubtree: true });
+        result.savedScene = { sceneUuid: input.sceneUuid, url: savedScene.sceneUrl || null,
+            sourceSha256: savedScene.sourceSha256, metaSha256: savedScene.metaSha256,
+            subtreeNodeCount: savedScene.subtree && savedScene.subtree.length || null,
+            verified: true, scope: 'assetdb-disk-readback' };
+    } catch (error) {
+        result.savedScene = { verified: false, reason: error && error.code || 'SCENE_DISK_READBACK_UNAVAILABLE',
+            scope: 'assetdb-disk-readback' };
+    }
+    return result;
+}
+
+function singlePrefabNode(source, nodeUuid) {
+    const nodes = source && Array.isArray(source.nodes) ? source.nodes : [];
+    const matches = nodes.filter((node) => node && node.nodeUuid === nodeUuid);
+    if (matches.length !== 1) throw coded('PREFAB_NODE_NOT_FOUND_OR_AMBIGUOUS');
+    return matches[0];
+}
+
+async function currentPrefabEditMode() {
+    const state = await callScene('prefabEditModeState', {}, 10000);
+    if (!state || state.available !== true || state.saveAvailable !== true || state.popAvailable !== true
+        || typeof state.modeName !== 'string') throw coded('PREFAB_EDIT_MODE_API_UNAVAILABLE');
+    prefabEditModeApiAvailable = true;
+    return state;
+}
+
+async function createPrefabSourcePatchPlan(input) {
+    if (!prefabPatch.validInput(input)) throw coded('PREFAB_SOURCE_PATCH_INPUT_INVALID');
+    if (editorVersion() !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    const mode = await currentPrefabEditMode();
+    if (mode.modeName !== 'scene' || typeof mode.sceneUuid !== 'string') throw coded('EDITOR_BUSY');
+    const source = await inspectPrefabSourceCommand({ prefabUuid: input.prefabUuid, nodeUuid: input.targetNodeUuid });
+    let expectedDiff = input.expectedDiff;
+    let sourceOperationId = null;
+    if (input.action === 'apply') {
+        if (input.expectedSourceSha256 !== source.sourceSha256) throw coded('PREFAB_SOURCE_STALE');
+    } else {
+        sourceOperationId = input.sourceOperationId;
+        const sourceOperation = readPrefabSourcePatchOperation(sourceOperationId);
+        const sourcePlan = sourceOperation.plan;
+        const allowedSourceAction = input.action === 'compensate'
+            ? ['apply', 'replay'].includes(sourcePlan.action) : sourcePlan.action === 'compensate';
+        const sourceAfterPath = prefabPatch.targetPathAt(sourcePlan.targetNodePath, sourcePlan.expectedDiff, 'after');
+        if (sourceOperation.status !== 'completed' || sourcePlan.projectRoot !== projectRoot()
+            || sourcePlan.creatorVersion !== EXPECTED_CREATOR_VERSION || sourcePlan.prefabUuid !== input.prefabUuid
+            || sourcePlan.targetNodeUuid !== input.targetNodeUuid || !allowedSourceAction
+            || sourceOperation.afterSourceSha256 !== source.sourceSha256 || sourceAfterPath !== input.targetNodePath)
+            throw coded('PREFAB_SOURCE_OPERATION_MISMATCH');
+        expectedDiff = prefabPatch.invertDiff(sourcePlan.expectedDiff);
+        if (input.expectedSourceSha256 !== undefined && input.expectedSourceSha256 !== source.sourceSha256)
+            throw coded('PREFAB_SOURCE_STALE');
+    }
+    const node = singlePrefabNode(source, input.targetNodeUuid);
+    if (node.nodePath !== input.targetNodePath || !prefabPatch.matchesDiff(node, expectedDiff, 'before'))
+        throw coded('PREFAB_EXPECTED_STATE_MISMATCH');
+    const operationId = uuid();
+    const plan = { operationId, operation: 'creator.prefab.source.patch', projectRoot: projectRoot(),
+        creatorVersion: editorVersion(), extensionVersion: extensionPackage.version,
+        contractFingerprint: CONTRACT_FINGERPRINT, creatorInstanceId: INSTANCE_ID,
+        prefabUuid: input.prefabUuid, prefabPath: source.prefabPath, targetUrl: source.targetUrl,
+        activeSceneUuid: mode.sceneUuid, targetNodePath: input.targetNodePath, targetNodeUuid: input.targetNodeUuid,
+        action: input.action, sourceOperationId, expectedSourceSha256: source.sourceSha256,
+        expectedMetaSha256: source.metaSha256, expectedDiff,
+        expectedBeforeNode: node, expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString() };
+    const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
+        planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
+        projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        prefabUuid: plan.prefabUuid, prefabPath: plan.prefabPath, targetUrl: plan.targetUrl,
+        activeSceneUuid: plan.activeSceneUuid, targetNodePath: plan.targetNodePath, targetNodeUuid: plan.targetNodeUuid,
+        action: plan.action, sourceOperationId, sourceSha256: plan.expectedSourceSha256,
+        diff: plan.expectedDiff, expiresAt: plan.expiresAt,
+        recovery: { operationId, automaticRetry: false, reconcileCommand: 'creator.prefab.source.patch.reconcile',
+            note: 'Writes are made only in Creator Prefab edit mode and require save, exit, reopen, and disk readback.' } };
+}
+
+async function verifyPrefabSourcePatchPlan(operation, { requireCurrentContract = true } = {}) {
+    const plan = operation.plan;
+    if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
+    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+        throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
+    if (requireCurrentContract && (plan.extensionVersion !== extensionPackage.version
+        || plan.contractFingerprint !== CONTRACT_FINGERPRINT)) throw coded('OPERATION_CONTRACT_MISMATCH');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    const source = await inspectPrefabSourceCommand({ prefabUuid: plan.prefabUuid, nodeUuid: plan.targetNodeUuid });
+    const node = singlePrefabNode(source, plan.targetNodeUuid);
+    if (source.prefabPath !== plan.prefabPath || source.targetUrl !== plan.targetUrl
+        || source.metaSha256 !== plan.expectedMetaSha256 || source.sourceSha256 !== plan.expectedSourceSha256
+        || node.nodePath !== plan.targetNodePath || !prefabPatch.matchesDiff(node, plan.expectedDiff, 'before'))
+        throw coded('PREFAB_SOURCE_STALE');
+    const mode = await currentPrefabEditMode();
+    if (mode.modeName !== 'scene' || mode.sceneUuid !== plan.activeSceneUuid) throw coded('EDITOR_BUSY');
+    return { source, node, mode };
+}
+
+function confirmPrefabSourcePatch(operation) {
+    if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
+    const plan = operation.plan;
+    const detail = [`Project: ${plan.projectRoot}`, `Creator: ${plan.creatorVersion}`,
+        `Prefab: ${plan.targetUrl} (${plan.prefabUuid})`, `Node: ${plan.targetNodePath} (${plan.targetNodeUuid})`,
+        `Action: ${plan.action}`, `Operation: ${operation.operationId}`, '',
+        `Field changes:\n${plan.expectedDiff.map((item) => `- ${item.path}: ${JSON.stringify(item.before)} → ${JSON.stringify(item.after)}`).join('\n')}`,
+        '', 'Creator will enter Prefab edit mode, apply these exact fields, save, exit, reopen, and verify the saved Prefab.'].join('\n');
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator Prefab source edit',
+        message: `Edit ${plan.targetNodePath} in the Prefab source?`, detail,
+        buttons: ['Cancel', 'Edit Prefab source'], defaultId: 0, cancelId: 0, noLink: true });
+}
+
+function prefabSourcePatchReceipt(operation) {
+    const plan = operation.plan;
+    return { operationId: operation.operationId, operation: operation.operation, status: operation.status,
+        action: plan.action, sourceOperationId: plan.sourceOperationId, projectRoot: plan.projectRoot,
+        creatorVersion: plan.creatorVersion, prefabUuid: plan.prefabUuid, prefabPath: plan.prefabPath,
+        targetUrl: plan.targetUrl, targetNodePath: plan.targetNodePath, targetNodeUuid: plan.targetNodeUuid,
+        expectedDiff: plan.expectedDiff, beforeSourceSha256: plan.expectedSourceSha256,
+        afterSourceSha256: operation.afterSourceSha256 || null,
+        saveCallbackConfirmed: operation.saveCallbackConfirmed === true,
+        sceneSavedEventConfirmed: operation.sceneSavedEventConfirmed === true,
+        editorExitedToScene: operation.editorExitedToScene === true,
+        editorReopened: operation.editorReopened === true,
+        editorExitedAfterReopen: operation.editorExitedAfterReopen === true,
+        diskReadback: operation.diskReadback || null,
+        plannedByInstanceId: operation.plannedByInstanceId, appliedByInstanceId: operation.appliedByInstanceId || null,
+        completedAt: operation.completedAt || null,
+        recovery: { automaticRetry: false, reconcileCommand: 'creator.prefab.source.patch.reconcile',
+            note: operation.status === 'completed' ? 'Creator save, exit, reopen, live readback, and saved-file readback all matched.'
+                : 'Do not resend the write. Reconcile this operation and inspect the current Prefab edit mode before continuing.' } };
+}
+
+async function waitForPrefabSourcePatchDisk(operation, timeoutMs = SCENE_SAVE_READBACK_TIMEOUT_MS) {
+    const plan = operation.plan;
+    const deadline = Date.now() + timeoutMs;
+    let lastReason = 'PREFAB_DISK_READBACK_PENDING';
+    do {
+        try {
+            const source = await inspectPrefabSourceCommand({ prefabUuid: plan.prefabUuid, nodeUuid: plan.targetNodeUuid });
+            const node = singlePrefabNode(source, plan.targetNodeUuid);
+            const afterPath = prefabPatch.targetPathAt(plan.targetNodePath, plan.expectedDiff, 'after');
+            if (source.prefabPath !== plan.prefabPath || source.targetUrl !== plan.targetUrl
+                || source.metaSha256 !== plan.expectedMetaSha256) throw coded('PREFAB_ASSET_IDENTITY_CHANGED');
+            if (source.sourceSha256 !== plan.expectedSourceSha256 && node.nodePath === afterPath
+                && prefabPatch.matchesDiff(node, plan.expectedDiff, 'after'))
+                return { source, node, verifiedAt: new Date().toISOString() };
+            lastReason = source.sourceSha256 === plan.expectedSourceSha256
+                ? 'PREFAB_DISK_READBACK_PENDING' : 'PREFAB_DISK_READBACK_MISMATCH';
+        } catch (error) {
+            lastReason = error.code || 'PREFAB_DISK_READBACK_FAILED';
+            if (['PREFAB_ASSET_IDENTITY_MISMATCH', 'PREFAB_ASSET_IDENTITY_CHANGED', 'UNSAFE_PROJECT_PATH',
+                'PREFAB_META_IDENTITY_MISMATCH'].includes(error.code)) throw error;
+        }
+        if (Date.now() >= deadline) break;
+        await new Promise((resolve) => setTimeout(resolve, 250));
+    } while (Date.now() <= deadline);
+    throw coded(lastReason);
+}
+
+async function commitPrefabSourcePatch(input, context) {
+    const operation = readPrefabSourcePatchOperation(input.operationId);
+    if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (operation.status !== 'planned') throw coded(['applying', 'mutation-started', 'mutation-applied', 'save-requested',
+        'source-saved', 'mode-reopened', 'needs-reconciliation'].includes(operation.status)
+        ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    await verifyPrefabSourcePatchPlan(operation);
+    operation.status = 'awaiting-approval';
+    operation.approvalRequestedAt = new Date().toISOString();
+    writeOperation(operation);
+    const approved = await confirmPrefabSourcePatch(operation);
+    if (!approved) {
+        operation.status = 'cancelled'; operation.cancelledAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('OPERATION_NOT_APPROVED');
+    }
+    try { await authorizeWriteRequest(context && context.requestId); }
+    catch (error) {
+        operation.status = 'abandoned'; operation.abandonedAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error));
+    }
+    try { await verifyPrefabSourcePatchPlan(operation); }
+    catch (error) {
+        operation.status = 'conflict'; operation.conflictAt = new Date().toISOString();
+        operation.reconcileReason = error.code || 'PREFAB_SOURCE_PRECONDITION_FAILED'; writeOperation(operation); throw error;
+    }
+    operation.status = 'applying'; operation.approvedAt = new Date().toISOString();
+    operation.approvalSource = 'creator-native-dialog'; operation.appliedByInstanceId = INSTANCE_ID; writeOperation(operation);
+    let mutationStarted = false;
+    try {
+        await enterPrefabSourceMode(operation.plan.prefabUuid, operation.plan.activeSceneUuid);
+        const params = { prefabUuid: operation.plan.prefabUuid, targetNodePath: operation.plan.targetNodePath,
+            targetNodeUuid: operation.plan.targetNodeUuid, action: operation.plan.action, expectedDiff: operation.plan.expectedDiff };
+        const preflight = await callScene('prefabSourcePatchPreflight', params, 20000);
+        if (!preflight || preflight.available !== true || preflight.prefabUuid !== operation.plan.prefabUuid
+            || !preflight.node || preflight.node.nodeUuid !== operation.plan.targetNodeUuid
+            || !prefabPatch.matchesDiff(preflight.node, operation.plan.expectedDiff, 'before')) {
+            operation.status = 'conflict'; operation.reconcileReason = preflight && preflight.reason || 'PREFAB_EDITOR_PREFLIGHT_FAILED';
+            writeOperation(operation);
+            await exitPrefabSourceMode(operation.plan.prefabUuid, operation.plan.activeSceneUuid);
+            throw coded(operation.reconcileReason);
+        }
+        operation.status = 'mutation-started'; operation.mutationStartedAt = new Date().toISOString(); writeOperation(operation);
+        mutationStarted = true;
+        const changed = await callScene('prefabSourcePatchMutate', params, 30000);
+        if (!changed || changed.available !== true || changed.prefabUuid !== operation.plan.prefabUuid
+            || !changed.node || changed.node.nodeUuid !== operation.plan.targetNodeUuid
+            || !prefabPatch.matchesDiff(changed.node, operation.plan.expectedDiff, 'after')) {
+            if (changed && changed.mutationStarted === false) {
+                operation.status = 'not-applied'; operation.reconcileReason = changed.reason || 'PREFAB_EDITOR_MUTATION_NOT_STARTED';
+                mutationStarted = false;
+                writeOperation(operation);
+                await exitPrefabSourceMode(operation.plan.prefabUuid, operation.plan.activeSceneUuid);
+                throw coded(operation.reconcileReason);
+            }
+            throw coded(changed && changed.reason || 'PREFAB_EDITOR_MUTATION_UNCERTAIN');
+        }
+        operation.status = 'mutation-applied'; operation.mutationReadback = changed.node;
+        operation.mutationAppliedAt = new Date().toISOString(); writeOperation(operation);
+        operation.status = 'save-requested'; operation.saveRequestedAt = new Date().toISOString(); writeOperation(operation);
+        const save = await savePrefabSourceMode(operation.plan.prefabUuid);
+        operation.saveCallbackConfirmed = true; operation.sceneSavedEventConfirmed = save.eventConfirmed;
+        operation.status = 'source-saved'; operation.sourceSavedAt = new Date().toISOString(); writeOperation(operation);
+        const disk = await waitForPrefabSourcePatchDisk(operation);
+        operation.afterSourceSha256 = disk.source.sourceSha256;
+        operation.diskReadback = { verified: true, prefabUuid: operation.plan.prefabUuid,
+            targetNodePath: disk.node.nodePath, targetNodeUuid: disk.node.nodeUuid,
+            sourceSha256: disk.source.sourceSha256, metaSha256: disk.source.metaSha256,
+            verifiedAt: disk.verifiedAt };
+        writeOperation(operation);
+        await exitPrefabSourceMode(operation.plan.prefabUuid, operation.plan.activeSceneUuid);
+        operation.editorExitedToScene = true;
+        operation.firstExitAt = new Date().toISOString(); writeOperation(operation);
+        await enterPrefabSourceMode(operation.plan.prefabUuid, operation.plan.activeSceneUuid);
+        const reopened = await callScene('prefabSourcePatchSnapshot', { ...params, side: 'after' }, 20000);
+        if (!reopened || reopened.available !== true || reopened.prefabUuid !== operation.plan.prefabUuid
+            || reopened.verifiedSide !== 'after' || !reopened.node
+            || reopened.node.nodeUuid !== operation.plan.targetNodeUuid
+            || !prefabPatch.matchesDiff(reopened.node, operation.plan.expectedDiff, 'after'))
+            throw coded(reopened && reopened.reason || 'PREFAB_REOPEN_READBACK_MISMATCH');
+        operation.editorReopened = true; operation.reopenedNode = reopened.node;
+        operation.status = 'mode-reopened'; operation.modeReopenedAt = new Date().toISOString(); writeOperation(operation);
+        await exitPrefabSourceMode(operation.plan.prefabUuid, operation.plan.activeSceneUuid);
+        operation.editorExitedAfterReopen = true;
+        operation.finalExitAt = new Date().toISOString(); writeOperation(operation);
+        const finalDisk = await inspectPrefabSourceCommand({ prefabUuid: operation.plan.prefabUuid,
+            nodeUuid: operation.plan.targetNodeUuid });
+        const finalNode = singlePrefabNode(finalDisk, operation.plan.targetNodeUuid);
+        if (finalDisk.sourceSha256 !== operation.afterSourceSha256 || finalDisk.metaSha256 !== operation.plan.expectedMetaSha256
+            || finalNode.nodePath !== prefabPatch.targetPathAt(operation.plan.targetNodePath, operation.plan.expectedDiff, 'after')
+            || !prefabPatch.matchesDiff(finalNode, operation.plan.expectedDiff, 'after')) throw coded('PREFAB_FINAL_DISK_READBACK_MISMATCH');
+        operation.status = 'completed'; operation.completedAt = new Date().toISOString();
+        operation.completedByInstanceId = INSTANCE_ID; writeOperation(operation);
+        return prefabSourcePatchReceipt(operation);
+    } catch (error) {
+        if (!['conflict', 'not-applied'].includes(operation.status)) {
+            operation.status = mutationStarted ? 'needs-reconciliation' : 'conflict';
+            operation.reconcileReason = error.code || 'PREFAB_SOURCE_PATCH_FAILED';
+            operation.failureAt = new Date().toISOString(); writeOperation(operation);
+        }
+        if (mutationStarted) throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason || String(error.message || error));
+        throw error;
+    }
+}
+
+async function reconcilePrefabSourcePatch(input) {
+    const operation = readPrefabSourcePatchOperation(input.operationId);
+    const plan = operation.plan;
+    if (projectRoot() !== plan.projectRoot || editorVersion() !== plan.creatorVersion) throw coded('OPERATION_TARGET_MISMATCH');
+    let source;
+    try { source = await inspectPrefabSourceCommand({ prefabUuid: plan.prefabUuid, nodeUuid: plan.targetNodeUuid }); }
+    catch (error) {
+        operation.status = 'conflict'; operation.reconcileReason = error.code || 'PREFAB_DISK_READBACK_FAILED';
+        operation.reconciledAt = new Date().toISOString(); writeOperation(operation); throw error;
+    }
+    const node = singlePrefabNode(source, plan.targetNodeUuid);
+    const afterPath = prefabPatch.targetPathAt(plan.targetNodePath, plan.expectedDiff, 'after');
+    const beforeMatches = source.sourceSha256 === plan.expectedSourceSha256 && source.metaSha256 === plan.expectedMetaSha256
+        && node.nodePath === plan.targetNodePath
+        && prefabPatch.matchesDiff(node, plan.expectedDiff, 'before');
+    const afterMatches = source.sourceSha256 !== plan.expectedSourceSha256 && node.nodePath === afterPath
+        && prefabPatch.matchesDiff(node, plan.expectedDiff, 'after') && source.metaSha256 === plan.expectedMetaSha256;
+    if (afterMatches) {
+        operation.afterSourceSha256 = source.sourceSha256;
+        operation.diskReadback = { verified: true, prefabUuid: plan.prefabUuid, targetNodePath: node.nodePath,
+            targetNodeUuid: node.nodeUuid, sourceSha256: source.sourceSha256, metaSha256: source.metaSha256,
+            verifiedAt: new Date().toISOString() };
+        if (operation.editorReopened === true && operation.editorExitedAfterReopen !== true) {
+            try {
+                const mode = await currentPrefabEditMode();
+                operation.editorExitedAfterReopen = mode.modeName === 'scene' && mode.sceneUuid === plan.activeSceneUuid;
+            } catch (_) {}
+        }
+        const editorFlowComplete = operation.editorExitedToScene === true && operation.editorReopened === true
+            && operation.editorExitedAfterReopen === true;
+        operation.status = editorFlowComplete ? 'completed' : 'needs-reconciliation';
+        operation.reconcileReason = editorFlowComplete ? null : 'PREFAB_EDITOR_EXIT_REOPEN_READBACK_REQUIRED';
+    } else if (beforeMatches) {
+        let unsavedAfter = false;
+        try {
+            const mode = await currentPrefabEditMode();
+            if (mode.modeName === 'prefab' && mode.prefabUuid === plan.prefabUuid) {
+                const live = await callScene('prefabSourcePatchSnapshot', { prefabUuid: plan.prefabUuid,
+                    targetNodePath: plan.targetNodePath, targetNodeUuid: plan.targetNodeUuid,
+                    expectedDiff: plan.expectedDiff, side: 'after' }, 20000);
+                unsavedAfter = !!(live && live.available === true);
+            }
+        } catch (_) { unsavedAfter = true; }
+        operation.status = unsavedAfter ? 'needs-reconciliation' : 'not-applied';
+        operation.reconcileReason = unsavedAfter ? 'PREFAB_HAS_UNSAVED_OR_UNCERTAIN_EDITOR_STATE' : null;
+    } else {
+        operation.status = 'conflict'; operation.reconcileReason = 'PREFAB_SOURCE_STATE_CONFLICT';
+    }
+    operation.reconciledAt = new Date().toISOString();
+    if (operation.status === 'completed') operation.completedAt = operation.completedAt || operation.reconciledAt;
+    writeOperation(operation);
+    return { ...prefabSourcePatchReceipt(operation), observed: { sourceSha256: source.sourceSha256,
+        metaSha256: source.metaSha256, targetNodePath: node.nodePath, targetNodeUuid: node.nodeUuid,
+        diskMatchesBefore: beforeMatches, diskMatchesAfter: afterMatches } };
+}
+
+async function capturePrefabInstanceOverrideSnapshot(sceneUuid, selectedNodeUuid) {
+    const instance = await inspectPrefabInstanceCommand({ sceneUuid, nodeUuid: selectedNodeUuid });
+    if (!instance || instance.available !== true || instance.linked !== true)
+        throw coded(instance && instance.reason || 'PREFAB_INSTANCE_NOT_LINKED');
+    if (!instance.savedScene || instance.savedScene.verified !== true)
+        throw coded(instance.savedScene && instance.savedScene.reason || 'PREFAB_INSTANCE_SCENE_NOT_SAVED');
+    if (!instance.prefabAsset || typeof instance.prefabAsset.path !== 'string'
+        || !prefabPatch.SHA256.test(instance.prefabAsset.sourceSha256 || '')
+        || !prefabPatch.SHA256.test(instance.prefabAsset.metaSha256 || '')
+        || !prefabPatch.SHA256.test(instance.savedScene.sourceSha256 || '')
+        || !prefabPatch.SHA256.test(instance.savedScene.metaSha256 || '')
+        || !prefabPatch.SHA256.test(instance.stateSha256 || '')
+        || !Array.isArray(instance.nodes) || !instance.nodes.length)
+        throw coded('PREFAB_INSTANCE_SNAPSHOT_INVALID');
+    return {
+        sceneUuid: instance.sceneUuid,
+        sceneName: instance.sceneName,
+        sceneUrl: instance.savedScene.url,
+        sceneSourceSha256: instance.savedScene.sourceSha256,
+        sceneMetaSha256: instance.savedScene.metaSha256,
+        selectedNodeUuid: instance.selectedNodeUuid,
+        selectedNodePath: instance.selectedNodePath,
+        prefabRootUuid: instance.prefabRootUuid,
+        prefabRootPath: instance.prefabRootPath,
+        prefabUuid: instance.prefabUuid,
+        prefabPath: instance.prefabAsset.path,
+        targetUrl: instance.prefabAsset.url,
+        prefabSourceSha256: instance.prefabAsset.sourceSha256,
+        prefabMetaSha256: instance.prefabAsset.metaSha256,
+        instanceStateSha256: instance.stateSha256,
+        nodeCount: instance.nodeCount,
+        liveStateScope: instance.liveStateScope,
+    };
+}
+
+function prefabInstanceOverrideReceipt(operation, observed = null) {
+    const plan = operation.plan;
+    return {
+        operationId: operation.operationId,
+        operation: operation.operation,
+        action: plan.action,
+        status: operation.status,
+        projectRoot: plan.projectRoot,
+        creatorVersion: plan.creatorVersion,
+        sceneUuid: plan.sceneUuid,
+        sceneName: plan.sceneName,
+        selectedNodeUuid: plan.selectedNodeUuid,
+        selectedNodePath: plan.selectedNodePath,
+        prefabRootUuid: plan.prefabRootUuid,
+        prefabRootPath: plan.prefabRootPath,
+        prefabUuid: plan.prefabUuid,
+        prefabPath: plan.prefabPath,
+        targetUrl: plan.targetUrl,
+        expectedBefore: plan.expectedBefore,
+        creatorIpcAcknowledgementConfirmed: false,
+        effectObserved: operation.status === 'effect-observed',
+        observed,
+        semanticOverrideValuesVerified: false,
+        plannedByInstanceId: operation.plannedByInstanceId,
+        appliedByInstanceId: operation.appliedByInstanceId || null,
+        completedAt: operation.completedAt || null,
+        recovery: {
+            automaticRetry: false,
+            reconcileCommand: 'creator.prefab.instance.override.reconcile',
+            note: operation.status === 'effect-observed'
+                ? 'Creator changed the expected saved asset and the change was read back. Inspect the resulting Prefab or instance values in Creator; this command does not decode every possible component override.'
+                : 'Do not resend the native action. Reconcile its observed hashes and inspect the exact Prefab instance in Creator before creating a new plan.',
+        },
+    };
+}
+
+async function createPrefabInstanceOverridePlan(input) {
+    if (!input || typeof input.sceneUuid !== 'string' || typeof input.nodeUuid !== 'string'
+        || !['apply', 'revert'].includes(input.action)) throw coded('PREFAB_INSTANCE_OVERRIDE_INPUT_INVALID');
+    if (editorVersion() !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    const snapshot = await capturePrefabInstanceOverrideSnapshot(input.sceneUuid, input.nodeUuid);
+    const operationId = uuid();
+    const plan = {
+        operationId,
+        operation: 'creator.prefab.instance.override',
+        projectRoot: projectRoot(),
+        creatorVersion: editorVersion(),
+        extensionVersion: extensionPackage.version,
+        contractFingerprint: CONTRACT_FINGERPRINT,
+        creatorInstanceId: INSTANCE_ID,
+        action: input.action,
+        sceneUuid: snapshot.sceneUuid,
+        sceneName: snapshot.sceneName,
+        sceneUrl: snapshot.sceneUrl,
+        selectedNodeUuid: snapshot.selectedNodeUuid,
+        selectedNodePath: snapshot.selectedNodePath,
+        prefabRootUuid: snapshot.prefabRootUuid,
+        prefabRootPath: snapshot.prefabRootPath,
+        prefabUuid: snapshot.prefabUuid,
+        prefabPath: snapshot.prefabPath,
+        targetUrl: snapshot.targetUrl,
+        expectedBefore: {
+            instanceStateSha256: snapshot.instanceStateSha256,
+            sceneSourceSha256: snapshot.sceneSourceSha256,
+            sceneMetaSha256: snapshot.sceneMetaSha256,
+            prefabSourceSha256: snapshot.prefabSourceSha256,
+            prefabMetaSha256: snapshot.prefabMetaSha256,
+        },
+        nodeCount: snapshot.nodeCount,
+        expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString(),
+    };
+    const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
+        planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(),
+        plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { operationId, operation: plan.operation, action: plan.action, status: operation.status,
+        planHash: operation.planHash, projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion,
+        creatorInstanceId: plan.creatorInstanceId, sceneUuid: plan.sceneUuid, sceneName: plan.sceneName,
+        selectedNodeUuid: plan.selectedNodeUuid, selectedNodePath: plan.selectedNodePath,
+        prefabRootUuid: plan.prefabRootUuid, prefabRootPath: plan.prefabRootPath,
+        prefabUuid: plan.prefabUuid, prefabPath: plan.prefabPath, targetUrl: plan.targetUrl,
+        expectedBefore: plan.expectedBefore, nodeCount: plan.nodeCount, expiresAt: plan.expiresAt,
+        recovery: { automaticRetry: false, reconcileCommand: 'creator.prefab.instance.override.reconcile',
+            note: 'Review the exact Prefab instance and source identity, then commit once. Creator IPC does not document a completion acknowledgement; reconciliation relies on saved file and live instance readback.' } };
+}
+
+async function verifyPrefabInstanceOverridePlan(operation, { requireCurrentContract = true } = {}) {
+    const plan = operation.plan;
+    if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
+    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+        throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
+    if (requireCurrentContract && (plan.extensionVersion !== extensionPackage.version
+        || plan.contractFingerprint !== CONTRACT_FINGERPRINT)) throw coded('OPERATION_CONTRACT_MISMATCH');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    const snapshot = await capturePrefabInstanceOverrideSnapshot(plan.sceneUuid, plan.selectedNodeUuid);
+    if (snapshot.sceneUuid !== plan.sceneUuid || snapshot.sceneUrl !== plan.sceneUrl
+        || snapshot.selectedNodePath !== plan.selectedNodePath || snapshot.prefabRootUuid !== plan.prefabRootUuid
+        || snapshot.prefabRootPath !== plan.prefabRootPath || snapshot.prefabUuid !== plan.prefabUuid
+        || snapshot.prefabPath !== plan.prefabPath || snapshot.targetUrl !== plan.targetUrl
+        || snapshot.instanceStateSha256 !== plan.expectedBefore.instanceStateSha256
+        || snapshot.sceneSourceSha256 !== plan.expectedBefore.sceneSourceSha256
+        || snapshot.sceneMetaSha256 !== plan.expectedBefore.sceneMetaSha256
+        || snapshot.prefabSourceSha256 !== plan.expectedBefore.prefabSourceSha256
+        || snapshot.prefabMetaSha256 !== plan.expectedBefore.prefabMetaSha256)
+        throw coded('PREFAB_INSTANCE_OVERRIDE_PRECONDITION_FAILED');
+    return snapshot;
+}
+
+function confirmPrefabInstanceOverride(operation) {
+    if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
+    const plan = operation.plan;
+    const actionText = plan.action === 'apply'
+        ? 'Push this instance’s overrides into the shared Prefab asset. Other instances may inherit the change.'
+        : 'Restore this instance from its linked Prefab source. Creator may preserve node name, active state, position, and rotation.';
+    const detail = [
+        `Project: ${plan.projectRoot}`,
+        `Creator: ${plan.creatorVersion}`,
+        `Scene: ${plan.sceneName} (${plan.sceneUuid})`,
+        `Instance: ${plan.selectedNodePath} (${plan.selectedNodeUuid})`,
+        `Prefab root: ${plan.prefabRootPath} (${plan.prefabRootUuid})`,
+        `Prefab: ${plan.targetUrl} (${plan.prefabUuid})`,
+        `Action: ${plan.action}`,
+        `Affected nodes: ${plan.nodeCount}`,
+        `Operation: ${operation.operationId}`,
+        `Instance state: ${plan.expectedBefore.instanceStateSha256}`,
+        `Scene disk: ${plan.expectedBefore.sceneSourceSha256}`,
+        `Prefab disk: ${plan.expectedBefore.prefabSourceSha256}`,
+        '', actionText,
+        'Creator applies the operation; the CLI verifies saved hashes but does not decode every possible component override.',
+    ].join('\n');
+    return confirmDialog(Editor.Dialog, { type: 'warning',
+        title: plan.action === 'apply' ? 'Apply Prefab instance overrides' : 'Revert Prefab instance overrides',
+        message: `${plan.action === 'apply' ? 'Apply changes from' : 'Restore'} ${plan.selectedNodePath}?`,
+        detail, buttons: ['Cancel', plan.action === 'apply' ? 'Apply to Prefab' : 'Revert instance'],
+        defaultId: 0, cancelId: 0, noLink: true });
+}
+
+async function observePrefabInstanceOverride(operation) {
+    const snapshot = await capturePrefabInstanceOverrideSnapshot(operation.plan.sceneUuid,
+        operation.plan.selectedNodeUuid);
+    const classification = prefabInstanceOperations.classifyPrefabInstanceOverride(operation.plan, snapshot);
+    operation.lastObservation = { ...snapshot, classification, observedAt: new Date().toISOString() };
+    if (classification === 'effect-observed') {
+        operation.status = 'effect-observed';
+        operation.effectObservedAt = operation.effectObservedAt || operation.lastObservation.observedAt;
+    } else if (classification === 'not-applied') operation.status = 'not-applied';
+    else operation.status = classification;
+    operation.reconciledAt = new Date().toISOString();
+    writeOperation(operation);
+    return prefabInstanceOverrideReceipt(operation, operation.lastObservation);
+}
+
+async function commitPrefabInstanceOverride(input, context) {
+    const operation = readPrefabInstanceOverrideOperation(input.operationId);
+    if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (operation.status !== 'planned') throw coded(['mutation-started', 'needs-reconciliation', 'conflict']
+        .includes(operation.status) ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    await verifyPrefabInstanceOverridePlan(operation);
+    operation.status = 'awaiting-approval';
+    operation.approvalRequestedAt = new Date().toISOString();
+    writeOperation(operation);
+    if (!await confirmPrefabInstanceOverride(operation)) {
+        operation.status = 'cancelled'; operation.cancelledAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('OPERATION_NOT_APPROVED');
+    }
+    try { await authorizeWriteRequest(context && context.requestId); }
+    catch (error) {
+        operation.status = 'abandoned'; operation.abandonedAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error));
+    }
+    try { await verifyPrefabInstanceOverridePlan(operation); }
+    catch (error) {
+        operation.status = 'conflict'; operation.conflictAt = new Date().toISOString();
+        operation.reconcileReason = error.code || 'PREFAB_INSTANCE_OVERRIDE_PRECONDITION_FAILED'; writeOperation(operation);
+        throw error;
+    }
+    if (!Editor.Ipc || typeof Editor.Ipc.sendToPanel !== 'function') throw coded('CREATOR_SCENE_IPC_UNAVAILABLE');
+    operation.status = 'mutation-started';
+    operation.mutationStartedAt = new Date().toISOString();
+    operation.approvalSource = 'creator-native-dialog';
+    operation.appliedByInstanceId = INSTANCE_ID;
+    writeOperation(operation);
+    try {
+        const message = operation.plan.action === 'apply' ? 'scene:apply-prefab' : 'scene:revert-prefab';
+        Editor.Ipc.sendToPanel('scene', message, operation.plan.prefabRootUuid);
+        operation.nativeRequestSent = true;
+        operation.nativeRequestSentAt = new Date().toISOString();
+        writeOperation(operation);
+        Editor.Ipc.sendToPanel('scene', 'scene:stash-and-save');
+        operation.sceneSaveRequestSent = true;
+        operation.sceneSaveRequestedAt = new Date().toISOString();
+        writeOperation(operation);
+    } catch (error) {
+        operation.status = 'needs-reconciliation';
+        operation.reconcileReason = error.code || 'PREFAB_INSTANCE_OVERRIDE_IPC_UNCERTAIN';
+        operation.failureAt = new Date().toISOString();
+        writeOperation(operation);
+        throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
+    }
+    const deadline = Date.now() + SCENE_SAVE_READBACK_TIMEOUT_MS;
+    let lastReceipt = null;
+    do {
+        try {
+            lastReceipt = await observePrefabInstanceOverride(operation);
+            if (['effect-observed', 'conflict'].includes(lastReceipt.status)) return lastReceipt;
+        } catch (error) {
+            operation.reconcileReason = error.code || 'PREFAB_INSTANCE_OVERRIDE_READBACK_UNAVAILABLE';
+            operation.lastObservationErrorAt = new Date().toISOString();
+            writeOperation(operation);
+        }
+        if (Date.now() >= deadline) break;
+        await new Promise((resolve) => setTimeout(resolve, 300));
+    } while (Date.now() <= deadline);
+    if (lastReceipt && lastReceipt.status === 'not-applied') return lastReceipt;
+    operation.status = 'needs-reconciliation';
+    operation.reconcileReason = operation.reconcileReason || 'PREFAB_INSTANCE_OVERRIDE_EFFECT_UNCONFIRMED';
+    operation.failureAt = new Date().toISOString();
+    writeOperation(operation);
+    return prefabInstanceOverrideReceipt(operation, lastReceipt && lastReceipt.observed || null);
+}
+
+async function reconcilePrefabInstanceOverride(input) {
+    const operation = readPrefabInstanceOverrideOperation(input.operationId);
+    const plan = operation.plan;
+    if (projectRoot() !== plan.projectRoot || editorVersion() !== plan.creatorVersion)
+        throw coded('OPERATION_TARGET_MISMATCH');
+    try { return await observePrefabInstanceOverride(operation); }
+    catch (error) {
+        operation.status = 'needs-reconciliation';
+        operation.reconcileReason = error.code || 'PREFAB_INSTANCE_OVERRIDE_READBACK_UNAVAILABLE';
+        operation.reconciledAt = new Date().toISOString();
+        writeOperation(operation);
+        return prefabInstanceOverrideReceipt(operation, { verified: false, reason: operation.reconcileReason });
+    }
+}
+
+function confirmPrefabCreate(operation) {
+    if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
+    const plan = operation.plan;
+    const detail = [`Project: ${plan.projectRoot}`, `Creator: ${plan.creatorVersion}`,
+        `Scene: ${plan.sceneName} (${plan.sceneUuid})`, `Source node: ${plan.nodePath} (${plan.nodeUuid})`,
+        `Prefab target: ${plan.targetUrl}`, `Operation: ${operation.operationId}`, '',
+        'Creator will serialize this node as a Prefab asset. Existing assets are not overwritten.'].join('\n');
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator Prefab creation',
+        message: `Create a Prefab from ${plan.nodePath}?`, detail,
+        buttons: ['Cancel', 'Create Prefab'], defaultId: 0, cancelId: 0, noLink: true });
+}
+
+function readPrefabAsset(operation, row) {
+    const plan = operation.plan;
+    const targetPath = safeProjectFile(plan.prefabPath, /\.prefab$/i);
+    const metaPath = safeProjectFile(`${plan.prefabPath}.meta`);
+    const stat = fs.statSync(targetPath);
+    const metaStat = fs.statSync(metaPath);
+    if (stat.size < 1 || stat.size > 8 * 1024 * 1024 || metaStat.size > 16384)
+        throw coded('PREFAB_READBACK_SIZE_INVALID');
+    const prefabBytes = fs.readFileSync(targetPath);
+    const metaBytes = fs.readFileSync(metaPath);
+    let serialized;
+    try { serialized = JSON.parse(prefabBytes.toString('utf8')); }
+    catch (_) { throw coded('PREFAB_SERIALIZATION_INVALID'); }
+    const meta = JSON.parse(metaBytes.toString('utf8'));
+    if (!meta || typeof meta.uuid !== 'string' || !meta.uuid || !row || row.url !== plan.targetUrl
+        || typeof row.uuid !== 'string' || row.uuid !== meta.uuid) throw coded('PREFAB_ASSETDB_IDENTITY_MISMATCH');
+    const objectRecords = Array.isArray(serialized) ? serialized : [serialized];
+    if (objectRecords.length > 20000) throw coded('PREFAB_OBJECT_COUNT_INVALID');
+    const typeCounts = Object.create(null);
+    let nodeCount = 0;
+    for (const item of objectRecords) {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+        const type = typeof item.__type__ === 'string' ? item.__type__.slice(0, 160) : null;
+        if (type) {
+            if (!Object.prototype.hasOwnProperty.call(typeCounts, type) && Object.keys(typeCounts).length >= 256)
+                throw coded('PREFAB_TYPE_COUNT_INVALID');
+            typeCounts[type] = (typeCounts[type] || 0) + 1;
+        }
+        if (type === 'cc.Node') nodeCount += 1;
+    }
+    return { prefabPath: plan.prefabPath, targetUrl: plan.targetUrl, assetUuid: meta.uuid,
+        importer: typeof row.importer === 'string' ? row.importer : null,
+        assetType: typeof row.type === 'string' ? row.type : null,
+        serializedBytes: prefabBytes.length, serializedSha256: fileHash(prefabBytes),
+        metaSha256: fileHash(metaBytes), semanticSummary: { serializedObjectCount: objectRecords.length,
+            nodeCount, typeCounts } };
+}
+
+async function waitForPrefabAsset(operation, timeoutMs = 45000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const row = await queryAssetByUrl(operation.plan.targetUrl);
+        if (row) {
+            try { return { row, readback: readPrefabAsset(operation, row) }; }
+            catch (error) {
+                if (!['UNSAFE_PROJECT_PATH', 'PREFAB_ASSETDB_IDENTITY_MISMATCH'].includes(error.code)) throw error;
+            }
+        }
+        await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    throw coded('PREFAB_READBACK_TIMEOUT');
+}
+
+function prefabCreateReceipt(operation, readback) {
+    const value = readback || operation.prefabReadback || null;
+    return { operationId: operation.operationId, status: operation.status, projectRoot: operation.plan.projectRoot,
+        creatorVersion: operation.plan.creatorVersion, sceneName: operation.plan.sceneName,
+        sceneUuid: operation.plan.sceneUuid, nodeUuid: operation.plan.nodeUuid, nodePath: operation.plan.nodePath,
+        prefabPath: operation.plan.prefabPath, targetUrl: operation.plan.targetUrl,
+        assetUuid: value && value.assetUuid || operation.assetUuid || null,
+        importer: value && value.importer || operation.importer || null,
+        assetType: value && value.assetType || operation.assetType || null,
+        serializedBytes: value && value.serializedBytes || operation.serializedBytes || null,
+        serializedSha256: value && value.serializedSha256 || operation.serializedSha256 || null,
+        metaSha256: value && value.metaSha256 || operation.metaSha256 || null,
+        semanticSummary: value && value.semanticSummary || operation.semanticSummary || null,
+        plannedByInstanceId: operation.plannedByInstanceId, appliedByInstanceId: operation.appliedByInstanceId || null,
+        completedAt: operation.completedAt || null,
+        recovery: { automaticRetry: false, reconcileCommand: 'creator.prefab.create.reconcile',
+            serializedSourceEdited: false, note: 'Prefab data was authored by Creator through its Scene panel.' } };
+}
+
+async function commitPrefabCreate(input, context) {
+    const operation = readPrefabCreateOperation(input.operationId);
+    await verifyPrefabCreatePlan(operation);
+    if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (operation.status !== 'planned') throw coded(operation.status === 'applying' || operation.status === 'awaiting-approval'
+        ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    operation.status = 'awaiting-approval'; operation.approvalRequestedAt = new Date().toISOString(); writeOperation(operation);
+    const approved = await confirmPrefabCreate(operation);
+    if (!approved) {
+        operation.status = 'cancelled'; operation.cancelledAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('OPERATION_NOT_APPROVED');
+    }
+    try { await authorizeWriteRequest(context && context.requestId); }
+    catch (error) {
+        operation.status = 'abandoned'; operation.abandonedAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error));
+    }
+    try { await verifyPrefabCreatePlan(operation); }
+    catch (error) {
+        operation.status = 'conflict'; operation.conflictAt = new Date().toISOString();
+        operation.reconcileReason = error.code || 'PREFAB_PRECONDITION_FAILED'; writeOperation(operation); throw error;
+    }
+    operation.status = 'applying'; operation.approvedAt = new Date().toISOString();
+    operation.approvalSource = 'creator-native-dialog'; operation.appliedByInstanceId = INSTANCE_ID; writeOperation(operation);
+    try {
+        Editor.Ipc.sendToPanel('scene', 'scene:create-prefab', operation.plan.nodeUuid, operation.plan.targetUrl);
+        const { row, readback } = await waitForPrefabAsset(operation);
+        operation.status = 'completed'; operation.completedAt = new Date().toISOString();
+        operation.completedByInstanceId = INSTANCE_ID; operation.assetUuid = row.uuid;
+        operation.importer = readback.importer; operation.assetType = readback.assetType;
+        operation.serializedBytes = readback.serializedBytes; operation.serializedSha256 = readback.serializedSha256;
+        operation.metaSha256 = readback.metaSha256; operation.semanticSummary = readback.semanticSummary;
+        operation.prefabReadback = readback; writeOperation(operation);
+        return prefabCreateReceipt(operation, readback);
+    } catch (error) {
+        operation.status = 'needs-reconciliation'; operation.reconcileReason = error.code || 'PREFAB_CREATE_RESULT_UNCERTAIN';
+        operation.failureAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
+    }
+}
+
+async function reconcilePrefabCreate(input) {
+    const operation = readPrefabCreateOperation(input.operationId);
+    await verifyPrefabCreatePlan(operation, { requireCurrentContract: false, requireAbsent: false, verifySourceNode: false });
+    let row = null;
+    let readback = null;
+    let filePresent = false;
+    let metaPresent = false;
+    try {
+        const target = assetTargetPaths(operation.plan.prefabPath);
+        for (const [candidate, key] of [[target.filename, 'file'], [target.metaFilename, 'meta']]) {
+            try {
+                const stat = fs.lstatSync(candidate);
+                if (!stat.isFile() || stat.isSymbolicLink()) throw coded('PREFAB_TARGET_UNSAFE');
+                if (key === 'file') filePresent = true; else metaPresent = true;
+            } catch (error) { if (error.code !== 'ENOENT') throw error; }
+        }
+        row = await queryAssetByUrl(operation.plan.targetUrl);
+        if (row) readback = readPrefabAsset(operation, row);
+    } catch (error) {
+        operation.status = 'conflict'; operation.reconciledAt = new Date().toISOString();
+        operation.reconcileReason = error.code || 'PREFAB_READBACK_FAILED'; writeOperation(operation);
+        return { ...prefabCreateReceipt(operation, null), observed: null, reason: operation.reconcileReason };
+    }
+    if (!row && !filePresent && !metaPresent && ['applying', 'needs-reconciliation'].includes(operation.status))
+        operation.status = 'not-applied';
+    else if (!row && (filePresent || metaPresent)) {
+        operation.status = 'conflict'; operation.reconcileReason = 'PREFAB_PARTIAL_TARGET_PRESENT';
+    } else if (row && readback && ['applying', 'needs-reconciliation', 'completed'].includes(operation.status)) {
+        operation.status = 'completed'; operation.assetUuid = row.uuid;
+        operation.importer = readback.importer; operation.assetType = readback.assetType;
+        operation.serializedBytes = readback.serializedBytes; operation.serializedSha256 = readback.serializedSha256;
+        operation.metaSha256 = readback.metaSha256; operation.semanticSummary = readback.semanticSummary;
+        operation.prefabReadback = readback; operation.completedAt = operation.completedAt || new Date().toISOString();
+        operation.completedByInstanceId = operation.completedByInstanceId || INSTANCE_ID;
+    } else if (row || readback || operation.status === 'completed') {
+        operation.status = 'conflict'; operation.reconcileReason = 'PREFAB_TARGET_CHANGED';
+    }
+    operation.reconciledAt = new Date().toISOString(); writeOperation(operation);
+    return { ...prefabCreateReceipt(operation, readback), observed: { assetPresent: !!row,
+        filePresent, metaPresent, assetUuid: row && row.uuid || null, prefabReadback: readback },
+        retry: 'Never replay this operation; create a new plan only after reviewing the target.' };
 }
 
 function createScriptPlan(input) {
@@ -1068,6 +3468,9 @@ async function createSceneNodeActivePlan(input) {
         throw coded('SCENE_NODE_STATE_INVALID');
     if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
     if (current.active === input.active) throw coded('SCENE_NODE_ALREADY_IN_REQUESTED_STATE');
+    const diskBefore = await sceneNodeDiskState(input.sceneUuid, input.nodeUuid);
+    if (diskBefore.nodePath !== current.nodePath || diskBefore.active !== current.active)
+        throw coded('SCENE_DISK_STATE_DIFFERS_FROM_EDITOR');
     const createdAt = new Date().toISOString();
     const plan = {
         operationId: uuid(),
@@ -1076,12 +3479,14 @@ async function createSceneNodeActivePlan(input) {
         creatorVersion: currentVersion,
         extensionVersion: extensionPackage.version,
         contractFingerprint: CONTRACT_FINGERPRINT,
+        creatorInstanceId: INSTANCE_ID,
         sceneUuid: current.sceneUuid,
         sceneName: current.sceneName,
         nodeUuid: current.nodeUuid,
         nodePath: current.nodePath,
         expectedBefore: { active: current.active },
         expectedAfter: { active: input.active },
+        diskBefore: sceneNodeDiskBaseline(diskBefore),
         expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString(),
     };
     if (plan.creatorVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
@@ -1097,6 +3502,301 @@ async function createSceneNodeActivePlan(input) {
         recovery: { operationId: operation.operationId, automaticRetry: false,
             reconcileCommand: 'creator.scene.node.set-active.reconcile',
             sceneSaveAcknowledgement: 'Creator 2.4 scene:stash-and-save has no documented completion acknowledgement; receipt distinguishes save-requested from disk persistence.' } };
+}
+
+async function createSceneNodeTransformPlan(input) {
+    if (!Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function') throw coded('SCENE_API_UNAVAILABLE');
+    if (!input.values || typeof input.values !== 'object' || Array.isArray(input.values)) throw coded('SCENE_NODE_TRANSFORM_FIELDS_INVALID');
+    const currentRoot = projectRoot();
+    const currentVersion = editorVersion();
+    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    const current = await callScene('nodeTransformState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid,
+        values: input.values }, 20000);
+    if (!current || current.available !== true) throw coded(current && current.reason || 'SCENE_NODE_TRANSFORM_STATE_UNAVAILABLE');
+    if (current.sceneUuid !== input.sceneUuid || current.nodeUuid !== input.nodeUuid
+        || typeof current.nodePath !== 'string' || !current.transform || typeof current.transform !== 'object')
+        throw coded('SCENE_NODE_TRANSFORM_STATE_INVALID');
+    const diskBefore = await sceneNodeDiskState(input.sceneUuid, input.nodeUuid);
+    if (diskBefore.nodePath !== current.nodePath
+        || !sceneDiskTransformMatches(diskBefore.transform, current.transform))
+        throw coded('SCENE_DISK_STATE_DIFFERS_FROM_EDITOR');
+    const fields = Object.keys(input.values).sort();
+    if (!fields.length || !current.changed) throw coded('SCENE_NODE_TRANSFORM_NO_CHANGE');
+    const expectedBefore = {};
+    const expectedAfter = {};
+    for (const field of fields) {
+        if (!Object.prototype.hasOwnProperty.call(current.transform, field)) throw coded('SCENE_NODE_TRANSFORM_FIELD_UNAVAILABLE', field);
+        expectedBefore[field] = current.transform[field];
+        expectedAfter[field] = input.values[field];
+    }
+    if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
+    const operationId = uuid();
+    const plan = { operationId, operation: 'creator.scene.node.set-transform', projectRoot: currentRoot,
+        creatorVersion: currentVersion, extensionVersion: extensionPackage.version,
+        contractFingerprint: CONTRACT_FINGERPRINT, creatorInstanceId: INSTANCE_ID,
+        sceneUuid: current.sceneUuid, sceneName: current.sceneName, nodeUuid: current.nodeUuid,
+        nodePath: current.nodePath, expectedBefore, expectedAfter,
+        diskBefore: sceneNodeDiskBaseline(diskBefore),
+        expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString() };
+    const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
+        planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
+        projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
+        expectedBefore, expectedAfter, expiresAt: plan.expiresAt,
+        savedSceneBaseline: { sourceSha256: plan.diskBefore.sourceSha256, metaSha256: plan.diskBefore.metaSha256 },
+        diff: { action: 'set-node-transform', scene: plan.sceneName, node: plan.nodePath,
+            changes: fields.map((field) => ({ field, before: expectedBefore[field], after: expectedAfter[field] })) },
+        recovery: { operationId, automaticRetry: false, reconcileCommand: 'creator.scene.node.set-transform.reconcile',
+            sameCreatorSessionRequired: true,
+            note: 'The plan binds the saved .fire/.meta baseline; completion requires matching serialized .fire readback after the scene save request. Creator still provides no documented save IPC acknowledgement.' } };
+}
+
+async function createSceneButtonEventsPlan(input) {
+    if (!Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function') throw coded('SCENE_API_UNAVAILABLE');
+    const currentRoot = projectRoot();
+    const currentVersion = editorVersion();
+    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    const node = await callScene('nodeState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);
+    if (!node || node.available !== true) throw coded(node && node.reason || 'SCENE_NODE_STATE_UNAVAILABLE');
+    if (node.sceneUuid !== input.sceneUuid || node.nodeUuid !== input.nodeUuid || typeof node.nodePath !== 'string'
+        || !node.components.some((item) => item.componentClassName === 'cc.Button'
+            && item.componentInstanceId === input.componentInstanceId)) throw coded('SCENE_BUTTON_INSTANCE_NOT_FOUND');
+    const current = await callScene('buttonEventsState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid,
+        nodePath: node.nodePath, componentInstanceId: input.componentInstanceId, events: input.events }, 30000);
+    if (!current || current.available !== true) throw coded(current && current.reason || 'SCENE_BUTTON_EVENTS_STATE_UNAVAILABLE');
+    if (current.sceneUuid !== input.sceneUuid || current.nodeUuid !== input.nodeUuid
+        || current.nodePath !== node.nodePath || current.componentInstanceId !== input.componentInstanceId
+        || !Array.isArray(current.events) || !Array.isArray(current.requestedEvents)) throw coded('SCENE_BUTTON_EVENTS_STATE_INVALID');
+    if (!current.changed) throw coded('SCENE_BUTTON_EVENTS_NO_CHANGE');
+    const diskBefore = await sceneNodeDiskState(input.sceneUuid, input.nodeUuid);
+    if (diskBefore.buttonComponentCount !== 1) throw coded('SCENE_DISK_BUTTON_COMPONENT_AMBIGUOUS');
+    if (!Array.isArray(diskBefore.buttonEvents)) throw coded('SCENE_DISK_BUTTON_EVENTS_UNREADABLE');
+    if (!buttonEventListMatches(diskBefore.buttonEvents, current.events))
+        throw coded('SCENE_DISK_STATE_DIFFERS_FROM_EDITOR');
+    if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
+    const operationId = uuid();
+    const plan = { operationId, operation: 'creator.scene.button-events.set', projectRoot: currentRoot,
+        creatorVersion: currentVersion, extensionVersion: extensionPackage.version,
+        contractFingerprint: CONTRACT_FINGERPRINT, creatorInstanceId: INSTANCE_ID,
+        sceneUuid: current.sceneUuid, sceneName: current.sceneName, nodeUuid: current.nodeUuid,
+        nodePath: current.nodePath, componentInstanceId: current.componentInstanceId,
+        expectedBefore: current.events, expectedAfter: current.requestedEvents,
+        diskBefore: sceneNodeDiskBaseline(diskBefore, { includeButtonEvents: true }),
+        expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString() };
+    const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
+        planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
+        projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
+        componentInstanceId: plan.componentInstanceId, expectedBefore: plan.expectedBefore,
+        expectedAfter: plan.expectedAfter, expiresAt: plan.expiresAt,
+        savedSceneBaseline: { sourceSha256: plan.diskBefore.sourceSha256,
+            metaSha256: plan.diskBefore.metaSha256, buttonEvents: plan.diskBefore.buttonEvents },
+        diff: { action: 'set-button-click-events', scene: plan.sceneName, node: plan.nodePath,
+            componentInstanceId: plan.componentInstanceId, before: plan.expectedBefore, after: plan.expectedAfter },
+        recovery: { operationId, automaticRetry: false, reconcileCommand: 'creator.scene.button-events.set.reconcile',
+            sameCreatorSessionRequired: true,
+            note: 'The plan binds the exact saved .fire/.meta and click-event list. Reconcile compares live and disk state; save manually if it reports save-required. Creator 2.4 has no documented scene-save IPC completion acknowledgement.' } };
+}
+
+async function createSceneNodeRenamePlan(input) {
+    if (!Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function') throw coded('SCENE_API_UNAVAILABLE');
+    const currentRoot = projectRoot();
+    const currentVersion = editorVersion();
+    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    const current = await callScene('nodeNameState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid,
+        newName: input.newName }, 20000);
+    if (!current || current.available !== true) throw coded(current && current.reason || 'SCENE_NODE_NAME_STATE_UNAVAILABLE');
+    if (current.sceneUuid !== input.sceneUuid || current.nodeUuid !== input.nodeUuid
+        || typeof current.nodePath !== 'string' || typeof current.nodeName !== 'string'
+        || typeof current.parentUuid !== 'string' || current.nameAvailable !== true)
+        throw coded('SCENE_NODE_NAME_STATE_INVALID');
+    if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
+    const diskBefore = await sceneNodeDiskState(input.sceneUuid, input.nodeUuid);
+    if (diskBefore.nodePath !== current.nodePath || diskBefore.nodeName !== current.nodeName
+        || diskBefore.parentUuid !== current.parentUuid) throw coded('SCENE_DISK_STATE_DIFFERS_FROM_EDITOR');
+    const operationId = uuid();
+    const prefix = current.nodePath.slice(0, current.nodePath.lastIndexOf('/') + 1);
+    const plan = {
+        operationId,
+        operation: 'creator.scene.node.rename',
+        projectRoot: currentRoot,
+        creatorVersion: currentVersion,
+        extensionVersion: extensionPackage.version,
+        contractFingerprint: CONTRACT_FINGERPRINT,
+        creatorInstanceId: INSTANCE_ID,
+        sceneUuid: current.sceneUuid,
+        sceneName: current.sceneName,
+        nodeUuid: current.nodeUuid,
+        nodePath: current.nodePath,
+        expectedBefore: { name: current.nodeName, parentUuid: current.parentUuid, nodePath: current.nodePath },
+        expectedAfter: { name: input.newName, parentUuid: current.parentUuid, nodePath: `${prefix}${input.newName}` },
+        diskBefore: sceneNodeDiskBaseline(diskBefore),
+        expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString(),
+    };
+    const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
+        planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
+        projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
+        expectedBefore: plan.expectedBefore, expectedAfter: plan.expectedAfter, expiresAt: plan.expiresAt,
+        diff: { action: 'rename-node', scene: plan.sceneName, nodeUuid: plan.nodeUuid,
+            before: { path: plan.expectedBefore.nodePath, name: plan.expectedBefore.name },
+            after: { path: plan.expectedAfter.nodePath, name: plan.expectedAfter.name } },
+        recovery: { operationId, automaticRetry: false, reconcileCommand: 'creator.scene.node.rename.reconcile',
+            sceneSaveAcknowledgement: 'Creator 2.4 scene:stash-and-save has no documented completion acknowledgement; reconciliation compares live and saved state and may report save-required.' } };
+}
+
+async function createSceneNodeDeletePlan(input) {
+    if (!Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function') throw coded('SCENE_API_UNAVAILABLE');
+    const currentRoot = projectRoot();
+    const currentVersion = editorVersion();
+    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    const current = await callScene('nodeDeleteState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);
+    if (!current || current.available !== true) throw coded(current && current.reason || 'SCENE_NODE_DELETE_STATE_UNAVAILABLE');
+    if (current.sceneUuid !== input.sceneUuid || current.nodeUuid !== input.nodeUuid
+        || typeof current.nodeName !== 'string' || typeof current.nodePath !== 'string'
+        || typeof current.parentUuid !== 'string' || !Number.isInteger(current.childCount)
+        || !Array.isArray(current.subtree) || current.subtree.length < 1 || current.subtree.length > 256)
+        throw coded('SCENE_NODE_DELETE_STATE_INVALID');
+    if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
+    const diskBefore = await sceneNodeDiskState(input.sceneUuid, input.nodeUuid, { includeSubtree: true });
+    if (diskBefore.nodePath !== current.nodePath || diskBefore.nodeName !== current.nodeName
+        || diskBefore.parentUuid !== current.parentUuid
+        || JSON.stringify(diskBefore.subtree) !== JSON.stringify(current.subtree))
+        throw coded('SCENE_DISK_STATE_DIFFERS_FROM_EDITOR');
+    const operationId = uuid();
+    const plan = { operationId, operation: 'creator.scene.node.delete', projectRoot: currentRoot,
+        creatorVersion: currentVersion, extensionVersion: extensionPackage.version,
+        contractFingerprint: CONTRACT_FINGERPRINT, creatorInstanceId: INSTANCE_ID,
+        sceneUuid: current.sceneUuid, sceneName: current.sceneName, nodeUuid: current.nodeUuid,
+        expectedBefore: { nodeName: current.nodeName, nodePath: current.nodePath,
+            parentUuid: current.parentUuid, childCount: current.childCount, subtree: current.subtree },
+        diskBefore: sceneNodeDiskBaseline(diskBefore),
+        expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString() };
+    const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
+        planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
+        projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodeUuid: plan.nodeUuid,
+        expectedBefore: plan.expectedBefore, expiresAt: plan.expiresAt,
+        diff: { action: 'delete-node-subtree', scene: plan.sceneName, nodeUuid: plan.nodeUuid,
+            path: plan.expectedBefore.nodePath, directChildren: plan.expectedBefore.childCount,
+            subtreeNodeCount: plan.expectedBefore.subtree.length },
+        recovery: { operationId, automaticRetry: false, reconcileCommand: 'creator.scene.node.delete.reconcile',
+            note: 'Node destruction is deferred by Creator. Completion requires every subtree UUID to be absent from the exact saved .fire; reconciliation observes editor and disk state and never repeats deletion.' } };
+}
+
+async function createSceneComponentRemovePlan(input) {
+    if (!Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function') throw coded('SCENE_API_UNAVAILABLE');
+    const currentRoot = projectRoot();
+    const currentVersion = editorVersion();
+    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    const node = await callScene('nodeState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);
+    if (!node || node.available !== true) throw coded(node && node.reason || 'SCENE_NODE_STATE_UNAVAILABLE');
+    const current = await callScene('componentRemoveState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid,
+        nodePath: node.nodePath, componentClassName: input.componentClassName,
+        componentInstanceId: input.componentInstanceId }, 20000);
+    if (!current || current.available !== true) throw coded(current && current.reason || 'SCENE_COMPONENT_REMOVE_STATE_UNAVAILABLE');
+    if (current.sceneUuid !== input.sceneUuid || current.nodeUuid !== input.nodeUuid
+        || current.nodePath !== node.nodePath || current.componentClassName !== input.componentClassName
+        || current.componentInstanceId !== input.componentInstanceId || current.present !== true
+        || !Array.isArray(current.dependentComponents) || typeof current.serializedClassId !== 'string'
+        || !current.serializedClassId || current.serializedClassId.length > 128)
+        throw coded('SCENE_COMPONENT_REMOVE_STATE_INVALID');
+    if (current.dependentComponents.length) throw coded('SCENE_COMPONENT_REQUIRED_BY_OTHER_COMPONENT');
+    if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
+    const diskBefore = await sceneNodeDiskState(input.sceneUuid, input.nodeUuid, { includeComponents: true });
+    if (diskBefore.nodePath !== current.nodePath
+        || !diskBefore.components.some((component) => component.componentInstanceId === current.componentInstanceId
+            && component.serializedClassId === current.serializedClassId))
+        throw coded('SCENE_DISK_STATE_DIFFERS_FROM_EDITOR');
+    const operationId = uuid();
+    const plan = { operationId, operation: 'creator.scene.node.remove-component', projectRoot: currentRoot,
+        creatorVersion: currentVersion, extensionVersion: extensionPackage.version,
+        contractFingerprint: CONTRACT_FINGERPRINT, creatorInstanceId: INSTANCE_ID,
+        sceneUuid: current.sceneUuid, sceneName: current.sceneName, nodeUuid: current.nodeUuid,
+        nodePath: current.nodePath, componentClassName: current.componentClassName,
+        componentInstanceId: current.componentInstanceId, serializedClassId: current.serializedClassId,
+        expectedBefore: { present: true, dependentComponents: [] },
+        diskBefore: sceneNodeDiskBaseline(diskBefore),
+        expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString() };
+    const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
+        planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
+        projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
+        componentClassName: plan.componentClassName, componentInstanceId: plan.componentInstanceId,
+        expectedBefore: plan.expectedBefore, expiresAt: plan.expiresAt,
+        diff: { action: 'remove-component', scene: plan.sceneName, node: plan.nodePath,
+            componentClassName: plan.componentClassName, componentInstanceId: plan.componentInstanceId },
+        recovery: { operationId, automaticRetry: false,
+            reconcileCommand: 'creator.scene.node.remove-component.reconcile',
+            note: 'Creator defers object destruction. The operation observes exact component instance identity and never repeats removal.' } };
+}
+
+async function createSceneNodeReparentPlan(input) {
+    if (!Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function') throw coded('SCENE_API_UNAVAILABLE');
+    const currentRoot = projectRoot();
+    const currentVersion = editorVersion();
+    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    const current = await callScene('nodeReparentState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid,
+        targetParentUuid: input.targetParentUuid }, 20000);
+    if (!current || current.available !== true) throw coded(current && current.reason || 'SCENE_NODE_REPARENT_STATE_UNAVAILABLE');
+    for (const field of ['sceneUuid', 'nodeUuid', 'nodeName', 'nodePath', 'parentUuid', 'parentPath',
+        'targetParentUuid', 'targetParentPath', 'afterNodePath']) {
+        if (typeof current[field] !== 'string') throw coded('SCENE_NODE_REPARENT_STATE_INVALID');
+    }
+    if (current.sceneUuid !== input.sceneUuid || current.nodeUuid !== input.nodeUuid
+        || current.targetParentUuid !== input.targetParentUuid || current.localTransformPreserved !== true
+        || current.worldTransformPreserved !== false)
+        throw coded('SCENE_NODE_REPARENT_STATE_INVALID');
+    if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
+    const diskBefore = await sceneNodeDiskState(input.sceneUuid, input.nodeUuid);
+    if (diskBefore.nodePath !== current.nodePath || diskBefore.nodeName !== current.nodeName
+        || diskBefore.parentUuid !== current.parentUuid) throw coded('SCENE_DISK_STATE_DIFFERS_FROM_EDITOR');
+    const operationId = uuid();
+    const expectedBefore = { nodeName: current.nodeName, nodePath: current.nodePath,
+        parentUuid: current.parentUuid, parentPath: current.parentPath,
+        targetParentUuid: current.targetParentUuid, targetParentPath: current.targetParentPath,
+        afterNodePath: current.afterNodePath };
+    const expectedAfter = { ...expectedBefore, nodePath: current.afterNodePath,
+        parentUuid: current.targetParentUuid, parentPath: current.targetParentPath };
+    const plan = {
+        operationId,
+        operation: 'creator.scene.node.reparent',
+        projectRoot: currentRoot,
+        creatorVersion: currentVersion,
+        extensionVersion: extensionPackage.version,
+        contractFingerprint: CONTRACT_FINGERPRINT,
+        creatorInstanceId: INSTANCE_ID,
+        sceneUuid: current.sceneUuid,
+        sceneName: current.sceneName,
+        nodeUuid: current.nodeUuid,
+        expectedBefore,
+        expectedAfter,
+        diskBefore: sceneNodeDiskBaseline(diskBefore),
+        expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString(),
+    };
+    const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
+        planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
+        projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodeUuid: plan.nodeUuid,
+        expectedBefore, expectedAfter, expiresAt: plan.expiresAt,
+        localTransformPreserved: true, worldTransformPreserved: false,
+        diff: { action: 'reparent-node', scene: plan.sceneName, nodeUuid: plan.nodeUuid,
+            before: { path: expectedBefore.nodePath, parentUuid: expectedBefore.parentUuid, parentPath: expectedBefore.parentPath },
+            after: { path: expectedAfter.nodePath, parentUuid: expectedAfter.parentUuid, parentPath: expectedAfter.parentPath } },
+        recovery: { operationId, automaticRetry: false, reconcileCommand: 'creator.scene.node.reparent.reconcile',
+            sceneSaveAcknowledgement: 'Creator 2.4 scene:stash-and-save has no documented completion acknowledgement; reconciliation compares live and saved state and may report save-required.' } };
 }
 
 async function createSceneComponentAddPlan(input) {
@@ -1116,7 +3816,13 @@ async function createSceneComponentAddPlan(input) {
         throw coded('SCENE_COMPONENT_STATE_INVALID');
     if (current.componentCount !== 0) throw coded('SCENE_COMPONENT_ALREADY_PRESENT');
     if (current.requiresComponent || current.canAdd !== true) throw coded('SCENE_COMPONENT_HAS_UNAPPROVED_REQUIREMENT');
+    if (typeof current.serializedClassId !== 'string' || !current.serializedClassId || current.serializedClassId.length > 128)
+        throw coded('SCENE_COMPONENT_SERIALIZED_CLASS_ID_UNAVAILABLE');
     if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
+    const diskBefore = await sceneNodeDiskState(input.sceneUuid, input.nodeUuid, { includeComponents: true });
+    if (diskBefore.nodePath !== node.nodePath || diskBefore.components.some((component) =>
+        component.serializedClassId === current.serializedClassId))
+        throw coded('SCENE_DISK_STATE_DIFFERS_FROM_EDITOR');
     const operationId = uuid();
     const plan = {
         operationId,
@@ -1130,8 +3836,10 @@ async function createSceneComponentAddPlan(input) {
         nodeUuid: current.nodeUuid,
         nodePath: current.nodePath,
         componentClassName: current.componentClassName,
+        serializedClassId: current.serializedClassId,
         expectedBefore: { componentCount: current.componentCount },
         expectedAfter: { componentCount: current.componentCount + 1 },
+        diskBefore: sceneNodeDiskBaseline(diskBefore),
         expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString(),
     };
     const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
@@ -1140,17 +3848,23 @@ async function createSceneComponentAddPlan(input) {
     return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
         projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, sceneName: plan.sceneName,
         sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
-        componentClassName: plan.componentClassName, expectedBefore: plan.expectedBefore,
+        componentClassName: plan.componentClassName, serializedClassId: plan.serializedClassId,
+        expectedBefore: plan.expectedBefore,
         expectedAfter: plan.expectedAfter, expiresAt: plan.expiresAt,
         diff: { action: 'add-component', scene: plan.sceneName, node: plan.nodePath,
             componentClassName: plan.componentClassName, before: 'absent', after: 'one component instance' },
         recovery: { operationId, automaticRetry: false,
             reconcileCommand: 'creator.scene.node.add-component.reconcile',
-            sceneSaveAcknowledgement: 'Creator 2.4 scene:stash-and-save has no documented completion acknowledgement; reconcile requires a same-session component instance identity.' } };
+            sceneSaveAcknowledgement: 'Creator 2.4 scene:stash-and-save has no documented completion acknowledgement. Completion requires the added component ID and serialized class to match on disk.' } };
 }
 
 async function composeAssetIdentities(request) {
     const refs = new Map();
+    for (const node of request.nodes) if (node.prefabUuid) {
+        const previous = refs.get(node.prefabUuid);
+        if (previous && previous.assetClass !== 'Prefab') throw coded('SCENE_COMPOSE_ASSET_CLASS_CONFLICT');
+        refs.set(node.prefabUuid, { assetUuid: node.prefabUuid, assetClass: 'Prefab' });
+    }
     for (const component of request.components) for (const property of component.properties) {
         const value = property.value;
         if (value && typeof value === 'object' && typeof value.assetUuid === 'string') {
@@ -1164,8 +3878,29 @@ async function composeAssetIdentities(request) {
         const row = await queryAssetByUuid(ref.assetUuid);
         if (!row || typeof row.url !== 'string' || typeof row.uuid !== 'string' || row.uuid !== ref.assetUuid)
             throw coded('SCENE_COMPOSE_ASSET_NOT_FOUND');
-        output.push({ ...ref, url: row.url, type: typeof row.type === 'string' ? row.type : null,
-            importer: typeof row.importer === 'string' ? row.importer : null });
+        const identity = { ...ref, url: row.url, type: typeof row.type === 'string' ? row.type : null,
+            importer: typeof row.importer === 'string' ? row.importer : null };
+        if (ref.assetClass === 'Prefab') {
+            if (!row.url.startsWith('db://assets/') || !/\.prefab$/i.test(row.url))
+                throw coded('SCENE_COMPOSE_PREFAB_ASSET_TYPE_MISMATCH');
+            const relative = row.url.slice('db://assets/'.length);
+            const prefabFile = safeProjectFile(relative, /\.prefab$/i);
+            const metaFile = safeProjectFile(`${relative}.meta`);
+            const prefabBytes = readStableProjectFile(prefabFile, MAX_PREFAB_SERIALIZATION_BYTES, 'SCENE_COMPOSE_PREFAB_FILE_UNSAFE');
+            const metaBytes = readStableProjectFile(metaFile, MAX_PREFAB_META_BYTES, 'SCENE_COMPOSE_PREFAB_META_UNSAFE');
+            let meta;
+            try { meta = JSON.parse(metaBytes.toString('utf8')); JSON.parse(prefabBytes.toString('utf8')); }
+            catch (_) { throw coded('SCENE_COMPOSE_PREFAB_SERIALIZATION_INVALID'); }
+            if (!meta || meta.uuid !== ref.assetUuid || meta.importer !== 'prefab')
+                throw coded('SCENE_COMPOSE_PREFAB_META_IDENTITY_MISMATCH');
+            const state = await callScene('prefabAssetState', { prefabUuid: ref.assetUuid }, 30000);
+            if (!state || state.available !== true || state.prefabUuid !== ref.assetUuid
+                || state.assetClassName !== 'cc.Prefab') throw coded(state && state.reason || 'SCENE_COMPOSE_PREFAB_LOAD_FAILED');
+            identity.prefabSha256 = fileHash(prefabBytes);
+            identity.prefabMetaSha256 = fileHash(metaBytes);
+            identity.prefabRootName = state.rootName;
+        }
+        output.push(identity);
     }
     output.sort((left, right) => left.assetUuid.localeCompare(right.assetUuid));
     return output;
@@ -1183,33 +3918,37 @@ async function createSceneComposePlan(input) {
     if (expectedState.sceneUuid !== input.sceneUuid || !Array.isArray(expectedState.existingNodes)
         || expectedState.createdNodes.length !== request.nodes.length) throw coded('SCENE_COMPOSE_PREFLIGHT_INVALID');
     const assetIdentities = await composeAssetIdentities(request);
+    const activeSceneAsset = await sceneAssetIdentity(expectedState.sceneUuid);
     if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
     const plan = { operationId, operation: 'creator.scene.compose', projectRoot: currentRoot,
         creatorVersion: currentVersion, extensionVersion: extensionPackage.version,
         contractFingerprint: CONTRACT_FINGERPRINT, creatorInstanceId: INSTANCE_ID,
         sceneUuid: expectedState.sceneUuid, sceneName: expectedState.sceneName,
-        request, expectedState, assetIdentities,
+        sceneAssetIdentity: activeSceneAsset, request, expectedState, assetIdentities,
         expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString() };
     const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
         planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
     writeOperation(operation);
     return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
         projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
-        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, createdNodes: expectedState.createdNodes,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, sceneAssetIdentity: plan.sceneAssetIdentity,
+        createdNodes: expectedState.createdNodes,
         components: request.components.map((item) => ({ id: item.id, nodeRef: item.nodeRef, className: item.className,
             properties: item.properties.map((property) => ({ name: property.name,
                 value: property.value && typeof property.value === 'object' ? { assetUuid: property.value.assetUuid,
                     assetClass: property.value.assetClass } : property.value })) })),
         buttonEvents: request.buttonEvents, assetIdentities, expiresAt: plan.expiresAt,
         diff: { action: 'compose-scene', scene: plan.sceneName,
-            create: expectedState.createdNodes.map((item) => ({ uuid: item.uuid, name: item.name, parentUuid: item.parentUuid, transform: item.transform })),
+            sceneAsset: { uuid: plan.sceneAssetIdentity.uuid, url: plan.sceneAssetIdentity.url },
+            create: expectedState.createdNodes.map((item) => ({ uuid: item.uuid, name: item.name, parentUuid: item.parentUuid,
+                transform: item.transform, ...(item.prefabUuid ? { prefabUuid: item.prefabUuid } : {}) })),
             addComponents: request.components.map((item) => ({ nodeRef: item.nodeRef, className: item.className })),
             bindButtonEvents: request.buttonEvents.map((item) => ({ buttonRef: item.buttonRef,
                 handlerRef: item.handlerRef, component: item.handlerComponentClassName, handler: item.handler })),
             resourceReferences: assetIdentities.map((item) => ({ assetUuid: item.assetUuid, url: item.url, type: item.type })) },
         recovery: { operationId, automaticRetry: false, reconcileCommand: 'creator.scene.compose.reconcile',
             sceneSaveCompletionConfirmed: false,
-            note: 'Creator scene save is requested through scene:stash-and-save; this command records same-session Scene Script readback, not disk persistence confirmation.' } };
+            note: 'Creator does not document a scene-save IPC acknowledgement. Commit checks the exact AssetDB .fire and .meta files and only reports completed after semantic disk readback matches the plan.' } };
 }
 
 async function createSceneComponentPropertyPlan(input) {
@@ -1223,15 +3962,30 @@ async function createSceneComponentPropertyPlan(input) {
         throw coded('SCENE_NODE_STATE_INVALID');
     const state = await callScene('componentPropertyState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid,
         nodePath: node.nodePath, componentClassName: input.componentClassName,
-        componentInstanceId: input.componentInstanceId, property: input.property }, 20000);
+        componentInstanceId: input.componentInstanceId, property: input.property, requestedValue: input.value }, 20000);
     if (!state || state.available !== true) throw coded(state && state.reason || 'SCENE_COMPONENT_PROPERTY_STATE_UNAVAILABLE');
     if (state.sceneUuid !== input.sceneUuid || state.nodeUuid !== input.nodeUuid || state.nodePath !== node.nodePath
         || state.componentClassName !== input.componentClassName || state.componentInstanceId !== input.componentInstanceId
-        || state.property !== input.property || !['string', 'number', 'boolean'].includes(state.valueType))
+        || state.property !== input.property || typeof state.propertyKind !== 'string')
         throw coded('SCENE_COMPONENT_PROPERTY_STATE_INVALID');
-    if (typeof state.value !== typeof input.value) throw coded('SCENE_COMPONENT_PROPERTY_TYPE_MISMATCH');
-    if (typeof state.value === 'string' && Buffer.byteLength(input.value, 'utf8') > 1024) throw coded('SCENE_COMPONENT_PROPERTY_VALUE_TOO_LARGE');
-    if (Object.is(state.value, input.value)) throw coded('SCENE_COMPONENT_PROPERTY_NO_CHANGE');
+    if (!validSceneComponentValue(input.value) || !validSceneComponentValue(state.value))
+        throw coded('SCENE_COMPONENT_PROPERTY_VALUE_INVALID');
+    const inputKind = input.value && typeof input.value === 'object' ? input.value.kind : typeof input.value;
+    if (inputKind !== state.propertyKind) throw coded('SCENE_COMPONENT_PROPERTY_TYPE_MISMATCH');
+    if (inputKind === 'asset' && (!state.value || input.value.assetClass !== state.value.assetClass))
+        throw coded('SCENE_COMPONENT_PROPERTY_TYPE_MISMATCH');
+    if (sceneComponentValuesEqual(state.value, input.value)) throw coded('SCENE_COMPONENT_PROPERTY_NO_CHANGE');
+    if (typeof state.serializedClassId !== 'string' || !state.serializedClassId || state.serializedClassId.length > 128)
+        throw coded('SCENE_COMPONENT_SERIALIZED_CLASS_ID_UNAVAILABLE');
+    const referenceClasses = Array.isArray(state.referenceClasses) ? state.referenceClasses : [];
+    const serializedBefore = componentValueForDisk(state.value, referenceClasses);
+    const serializedAfter = componentValueForDisk(input.value, referenceClasses);
+    if (!serializedBefore.verified || !serializedAfter.verified) throw coded('SCENE_COMPONENT_SERIALIZED_VALUE_UNAVAILABLE');
+    const diskBefore = await sceneNodeDiskState(input.sceneUuid, input.nodeUuid, { componentProperty: {
+        serializedClassId: state.serializedClassId, componentInstanceId: state.componentInstanceId, property: state.property } });
+    if (diskBefore.nodePath !== state.nodePath
+        || !sceneComponentValuesEqual(diskBefore.componentProperty.value, serializedBefore.value))
+        throw coded('SCENE_DISK_STATE_DIFFERS_FROM_EDITOR');
     if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
     const operationId = uuid();
     const plan = {
@@ -1249,8 +4003,10 @@ async function createSceneComponentPropertyPlan(input) {
         componentClassName: state.componentClassName,
         componentInstanceId: state.componentInstanceId,
         property: state.property,
+        propertyKind: state.propertyKind,
         expectedBefore: { value: state.value },
-        expectedAfter: { value: input.value },
+        expectedAfter: { value: input.value, serializedValue: serializedAfter.value },
+        diskBefore: sceneNodeDiskBaseline(diskBefore),
         expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString(),
     };
     const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
@@ -1261,14 +4017,16 @@ async function createSceneComponentPropertyPlan(input) {
         sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
         componentClassName: plan.componentClassName, componentInstanceId: plan.componentInstanceId,
         property: plan.property, expectedBefore: plan.expectedBefore, expectedAfter: plan.expectedAfter,
-        valueType: typeof plan.expectedBefore.value, expiresAt: plan.expiresAt,
+        propertyKind: plan.propertyKind, expiresAt: plan.expiresAt,
+        savedSceneBaseline: { sourceSha256: plan.diskBefore.sourceSha256, metaSha256: plan.diskBefore.metaSha256,
+            componentProperty: plan.diskBefore.componentProperty },
         diff: { action: 'set-component-property', scene: plan.sceneName, node: plan.nodePath,
             componentClassName: plan.componentClassName, componentInstanceId: plan.componentInstanceId,
             property: plan.property, before: plan.expectedBefore.value, after: plan.expectedAfter.value },
         recovery: { operationId, automaticRetry: false,
             reconcileCommand: 'creator.scene.node.set-component-property.reconcile',
             sameCreatorSessionRequired: true,
-            sceneSaveAcknowledgement: 'Creator 2.4 scene:stash-and-save has no documented completion acknowledgement; readback is in-memory only.' } };
+            sceneSaveAcknowledgement: 'Creator 2.4 scene:stash-and-save has no documented completion acknowledgement. Completion requires the exact serialized component identity and property to match on disk.' } };
 }
 
 function verifySceneOperationIdentity(operation, { requireCurrentContract = true } = {}) {
@@ -1289,6 +4047,36 @@ async function readPlannedSceneNode(plan) {
     return state;
 }
 
+async function readPlannedSceneNodeRename(plan) {
+    const state = await callScene('nodeNameState', { sceneUuid: plan.sceneUuid, nodeUuid: plan.nodeUuid }, 20000);
+    if (!state || state.available !== true) throw coded(state && state.reason || 'SCENE_NODE_NAME_STATE_UNAVAILABLE');
+    if (state.sceneUuid !== plan.sceneUuid || state.nodeUuid !== plan.nodeUuid)
+        throw coded('OPERATION_TARGET_MISMATCH');
+    return state;
+}
+
+async function readPlannedSceneNodeReparent(plan) {
+    const state = await callScene('nodeReparentState', { sceneUuid: plan.sceneUuid,
+        nodeUuid: plan.nodeUuid, targetParentUuid: plan.expectedBefore.targetParentUuid,
+        allowCurrentTarget: true }, 20000);
+    if (!state || state.available !== true) throw coded(state && state.reason || 'SCENE_NODE_REPARENT_STATE_UNAVAILABLE');
+    if (state.sceneUuid !== plan.sceneUuid || state.nodeUuid !== plan.nodeUuid
+        || state.targetParentUuid !== plan.expectedBefore.targetParentUuid) throw coded('OPERATION_TARGET_MISMATCH');
+    return state;
+}
+
+function renameStateMatches(state, expected) {
+    return state && state.available === true && state.nodeName === expected.name
+        && state.parentUuid === expected.parentUuid && state.nodePath === expected.nodePath;
+}
+
+function reparentStateMatches(state, expected) {
+    return state && state.available === true && state.nodeName === expected.nodeName
+        && state.nodePath === expected.nodePath && state.parentUuid === expected.parentUuid
+        && state.parentPath === expected.parentPath && state.targetParentUuid === expected.targetParentUuid
+        && state.targetParentPath === expected.targetParentPath && state.afterNodePath === expected.afterNodePath;
+}
+
 function confirmSceneNodeActive(operation) {
     if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
     const plan = operation.plan;
@@ -1300,7 +4088,7 @@ function confirmSceneNodeActive(operation) {
         `Active: ${plan.expectedBefore.active} → ${plan.expectedAfter.active}`,
         `Operation: ${operation.operationId}`,
         '',
-        'This changes one existing node active property and requests save of the current scene. Scene Script readback confirms in-memory state; Creator does not document a save completion acknowledgement here.',
+        'This changes one existing node active property and requests save of the current scene. Completion requires the serialized .fire node state to match the requested state on disk; Creator does not document a save completion acknowledgement here.',
     ].join('\n');
     return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator scene change',
                 message: `Set ${plan.nodePath}.active to ${plan.expectedAfter.active}?`, detail,
@@ -1313,14 +4101,16 @@ function sceneNodeActiveReceipt(operation, state) {
         creatorVersion: plan.creatorVersion, sceneName: plan.sceneName, sceneUuid: plan.sceneUuid,
         nodePath: plan.nodePath, nodeUuid: plan.nodeUuid, beforeActive: plan.expectedBefore.active,
         active: state.active, sceneSaveRequestSent: !!operation.sceneSaveRequestSent,
-        sceneSaveCompletionConfirmed: false, plannedByInstanceId: operation.plannedByInstanceId,
+        sceneSaveCompletionConfirmed: false,
+        scenePersistenceConfirmed: !!(operation.diskReadback && operation.diskReadback.verified === true),
+        diskReadback: operation.diskReadback || null, plannedByInstanceId: operation.plannedByInstanceId,
         appliedByInstanceId: operation.appliedByInstanceId || null,
         completedByInstanceId: operation.completedByInstanceId || null,
         approvedAt: operation.approvedAt || null, completedAt: operation.completedAt || null,
         reconciledAt: operation.reconciledAt || null,
         recovery: { automaticRetry: false, reconcileCommand: 'creator.scene.node.set-active.reconcile',
             manualSaveMayBeRequired: operation.status === 'save-required',
-            note: 'The Creator 2.4 scene save IPC has no documented completion acknowledgement; scene readback is an in-memory Creator Scene Script observation.' } };
+            note: 'Creator 2.4 has no documented scene-save IPC acknowledgement. scenePersistenceConfirmed is true only after the exact AssetDB .fire/.meta and serialized node state read back from disk.' } };
 }
 
 async function commitSceneNodeActive(input, context) {
@@ -1333,6 +4123,7 @@ async function commitSceneNodeActive(input, context) {
     if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
     let before = await readPlannedSceneNode(operation.plan);
     if (before.active !== operation.plan.expectedBefore.active) throw coded('OPERATION_PRECONDITION_FAILED');
+    await verifySceneNodeDiskBefore(operation.plan);
     operation.status = 'awaiting-approval';
     operation.approvalRequestedAt = new Date().toISOString();
     writeOperation(operation);
@@ -1355,6 +4146,7 @@ async function commitSceneNodeActive(input, context) {
     try {
         before = await readPlannedSceneNode(operation.plan);
         if (before.active !== operation.plan.expectedBefore.active) throw coded('OPERATION_PRECONDITION_FAILED');
+        await verifySceneNodeDiskBefore(operation.plan);
     } catch (error) {
         operation.status = 'conflict';
         operation.conflictAt = new Date().toISOString();
@@ -1387,6 +4179,7 @@ async function commitSceneNodeActive(input, context) {
     writeOperation(operation);
     const readback = await readPlannedSceneNode(operation.plan);
     if (readback.active !== operation.plan.expectedAfter.active) throw coded('OPERATION_READBACK_STATE_MISMATCH');
+    await confirmSceneNodeDiskPersistence(operation);
     operation.status = 'completed';
     operation.completedAt = new Date().toISOString();
     operation.completedByInstanceId = INSTANCE_ID;
@@ -1407,7 +4200,19 @@ async function reconcileSceneNodeActive(input) {
         return { ...sceneNodeActiveReceipt(operation, { active: null }), status: operation.status,
             observed: null, reason: operation.reconcileReason };
     }
-    if (observed.active === operation.plan.expectedBefore.active) {
+    let diskState = null;
+    if (operation.plan.diskBefore) {
+        try { diskState = await reconcileSceneNodeDiskOperation(operation,
+            observed.active === operation.plan.expectedBefore.active,
+            observed.active === operation.plan.expectedAfter.active); }
+        catch (error) {
+            operation.status = 'conflict'; operation.reconciledAt = new Date().toISOString();
+            operation.reconcileReason = error.code || 'SCENE_DISK_READBACK_FAILED'; writeOperation(operation);
+            return { ...sceneNodeActiveReceipt(operation, observed), observed: { active: observed.active,
+                sceneUuid: observed.sceneUuid, nodeUuid: observed.nodeUuid, nodePath: observed.nodePath, disk: null },
+                reason: operation.reconcileReason };
+        }
+    } else if (observed.active === operation.plan.expectedBefore.active) {
         if (['applying', 'awaiting-approval'].includes(operation.status)) operation.status = 'not-applied';
         else if (['mutation-applied', 'save-requested', 'completed'].includes(operation.status)) operation.status = 'conflict';
     } else if (observed.active === operation.plan.expectedAfter.active) {
@@ -1418,8 +4223,832 @@ async function reconcileSceneNodeActive(input) {
     operation.reconciledAt = new Date().toISOString();
     writeOperation(operation);
     return { ...sceneNodeActiveReceipt(operation, observed), observed: { active: observed.active,
-        sceneUuid: observed.sceneUuid, nodeUuid: observed.nodeUuid, nodePath: observed.nodePath },
+        sceneUuid: observed.sceneUuid, nodeUuid: observed.nodeUuid, nodePath: observed.nodePath,
+        ...(diskState ? { disk: { sourceSha256: diskState.disk.sourceSha256, metaSha256: diskState.disk.metaSha256,
+            active: diskState.disk.active, nodePath: diskState.disk.nodePath,
+            matchesBefore: diskState.before, matchesAfter: diskState.after } } : {}) },
         retry: 'Never retry this operation. If the scene remains unchanged, create a new plan; if save-required, save the scene in Creator and inspect the result.' };
+}
+
+function transformMapMatches(transform, expected) {
+    return !!transform && Object.keys(expected).every((field) => transform[field] === expected[field]);
+}
+
+function confirmSceneNodeTransform(operation) {
+    if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
+    const plan = operation.plan;
+    const changes = Object.keys(plan.expectedAfter).map((field) =>
+        `${field}: ${plan.expectedBefore[field]} → ${plan.expectedAfter[field]}`).join('\n');
+    const detail = [`Project: ${plan.projectRoot}`, `Creator: ${plan.creatorVersion}`,
+        `Scene: ${plan.sceneName} (${plan.sceneUuid})`, `Node: ${plan.nodePath} (${plan.nodeUuid})`,
+        changes, `Operation: ${operation.operationId}`, '',
+        'This changes the selected existing node transform fields and requests save of the current scene. Readback confirms in-memory values; Creator does not document a save completion acknowledgement here.'].join('\n');
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator scene change',
+        message: `Change transform on ${plan.nodePath}?`, detail,
+        buttons: ['Cancel', 'Apply transform'], defaultId: 0, cancelId: 0, noLink: true });
+}
+
+function sceneNodeTransformReceipt(operation, state) {
+    const plan = operation.plan;
+    const fields = Object.keys(plan.expectedAfter);
+    return { operationId: operation.operationId, status: operation.status,
+        projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
+        before: plan.expectedBefore, after: state && state.transform
+            ? Object.fromEntries(fields.map((field) => [field, state.transform[field]])) : null,
+        transform: state && state.transform || null, sceneSaveRequestSent: !!operation.sceneSaveRequestSent,
+        sceneSaveCompletionConfirmed: false, scenePersistenceConfirmed: !!(operation.diskReadback && operation.diskReadback.verified === true),
+        diskReadback: operation.diskReadback || null, plannedByInstanceId: operation.plannedByInstanceId,
+        appliedByInstanceId: operation.appliedByInstanceId || null,
+        completedByInstanceId: operation.completedByInstanceId || null,
+        approvedAt: operation.approvedAt || null, completedAt: operation.completedAt || null,
+        reconciledAt: operation.reconciledAt || null,
+        recovery: { automaticRetry: false, reconcileCommand: 'creator.scene.node.set-transform.reconcile',
+            manualSaveMayBeRequired: operation.status === 'save-required',
+            note: 'The scene-save IPC has no documented completion acknowledgement. scenePersistenceConfirmed is true only after the exact AssetDB .fire/.meta and serialized node transform read back from disk.' } };
+}
+
+async function commitSceneNodeTransform(input, context) {
+    const operation = readSceneNodeTransformOperation(input.operationId);
+    verifySceneOperationIdentity(operation);
+    if (operation.plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
+    if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (operation.status !== 'planned') throw coded(operation.status === 'applying' || operation.status === 'awaiting-approval'
+        || operation.status === 'mutation-applied' || operation.status === 'save-requested'
+        ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    let before = await readPlannedSceneNode(operation.plan);
+    if (!transformMapMatches(before.transform, operation.plan.expectedBefore)) throw coded('OPERATION_PRECONDITION_FAILED');
+    await verifySceneNodeDiskBefore(operation.plan);
+    operation.status = 'awaiting-approval';
+    operation.approvalRequestedAt = new Date().toISOString();
+    writeOperation(operation);
+    if (!await confirmSceneNodeTransform(operation)) {
+        operation.status = 'cancelled'; operation.cancelledAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('OPERATION_NOT_APPROVED');
+    }
+    try { await authorizeWriteRequest(context && context.requestId); }
+    catch (error) {
+        operation.status = 'abandoned'; operation.abandonedAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error));
+    }
+    try {
+        verifySceneOperationIdentity(operation);
+        if (operation.plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
+        before = await readPlannedSceneNode(operation.plan);
+        if (!transformMapMatches(before.transform, operation.plan.expectedBefore)) throw coded('OPERATION_PRECONDITION_FAILED');
+        await verifySceneNodeDiskBefore(operation.plan);
+    } catch (error) {
+        operation.status = 'conflict'; operation.conflictAt = new Date().toISOString(); writeOperation(operation); throw error;
+    }
+    operation.status = 'applying'; operation.approvedAt = new Date().toISOString();
+    operation.approvalSource = 'creator-native-dialog'; operation.appliedByInstanceId = INSTANCE_ID; writeOperation(operation);
+    const mutation = await callScene('setNodeTransform', { sceneUuid: operation.plan.sceneUuid,
+        nodeUuid: operation.plan.nodeUuid, nodePath: operation.plan.nodePath,
+        expectedBefore: operation.plan.expectedBefore, values: operation.plan.expectedAfter }, 20000);
+    if (!mutation || mutation.available !== true || !transformMapMatches(mutation.after, operation.plan.expectedAfter)) {
+        operation.status = mutation && mutation.mutationStarted ? 'mutation-applied' : 'conflict';
+        operation.lastErrorCode = mutation && mutation.reason || 'SCENE_NODE_TRANSFORM_WRITE_READBACK_FAILED';
+        writeOperation(operation);
+        throw coded(operation.lastErrorCode);
+    }
+    operation.status = 'mutation-applied'; operation.mutationAppliedAt = new Date().toISOString(); writeOperation(operation);
+    if (!Editor.Ipc || typeof Editor.Ipc.sendToPanel !== 'function') throw coded('CREATOR_SCENE_SAVE_IPC_UNAVAILABLE');
+    try { Editor.Ipc.sendToPanel('scene', 'scene:stash-and-save'); }
+    catch (error) { throw coded('CREATOR_SCENE_SAVE_REQUEST_FAILED', String(error.message || error)); }
+    operation.status = 'save-requested'; operation.sceneSaveRequestSent = true;
+    operation.sceneSaveRequestedAt = new Date().toISOString(); writeOperation(operation);
+    const readback = await readPlannedSceneNode(operation.plan);
+    if (!transformMapMatches(readback.transform, operation.plan.expectedAfter)) throw coded('OPERATION_READBACK_STATE_MISMATCH');
+    let diskReadback;
+    try { diskReadback = await waitForSceneNodeDiskAfter(operation); }
+    catch (error) {
+        operation.status = 'save-required'; operation.reconcileReason = error.code || 'SCENE_DISK_READBACK_UNCONFIRMED';
+        operation.diskReadbackFailureAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('SCENE_DISK_READBACK_UNCONFIRMED', operation.reconcileReason);
+    }
+    operation.diskReadback = { verified: true, sceneUrl: diskReadback.sceneUrl,
+        sceneUuid: diskReadback.sceneUuid, nodePath: diskReadback.nodePath, nodeUuid: diskReadback.nodeUuid,
+        sourceSha256: diskReadback.sourceSha256, metaSha256: diskReadback.metaSha256,
+        transform: diskReadback.transform, active: diskReadback.active, verifiedAt: new Date().toISOString() };
+    operation.status = 'completed'; operation.completedAt = new Date().toISOString();
+    operation.completedByInstanceId = INSTANCE_ID; writeOperation(operation);
+    return sceneNodeTransformReceipt(operation, readback);
+}
+
+async function reconcileSceneNodeTransform(input) {
+    const operation = readSceneNodeTransformOperation(input.operationId);
+    verifySceneOperationIdentity(operation, { requireCurrentContract: false });
+    let observed;
+    try { observed = await readPlannedSceneNode(operation.plan); }
+    catch (error) {
+        operation.status = 'conflict'; operation.reconciledAt = new Date().toISOString();
+        operation.reconcileReason = error.code || 'SCENE_NODE_STATE_UNAVAILABLE'; writeOperation(operation);
+        return { ...sceneNodeTransformReceipt(operation, null), observed: null, reason: operation.reconcileReason };
+    }
+    if (operation.plan.diskBefore) {
+        let disk;
+        try { disk = await sceneNodeDiskState(operation.plan.sceneUuid, operation.plan.nodeUuid); }
+        catch (error) {
+            operation.status = 'conflict'; operation.reconciledAt = new Date().toISOString();
+            operation.reconcileReason = error.code || 'SCENE_DISK_READBACK_FAILED'; writeOperation(operation);
+            return { ...sceneNodeTransformReceipt(operation, observed), observed: { transform: observed.transform,
+                sceneUuid: observed.sceneUuid, nodeUuid: observed.nodeUuid, nodePath: observed.nodePath,
+                disk: null }, reason: operation.reconcileReason };
+        }
+        const liveBefore = transformMapMatches(observed.transform, operation.plan.expectedBefore);
+        const liveAfter = transformMapMatches(observed.transform, operation.plan.expectedAfter);
+        const diskBefore = disk.sourceSha256 === operation.plan.diskBefore.sourceSha256
+            && sceneNodeDiskMatchesPlan(disk, operation.plan, 'before');
+        const diskAfter = disk.sourceSha256 !== operation.plan.diskBefore.sourceSha256
+            && sceneNodeDiskMatchesPlan(disk, operation.plan, 'after');
+        const mutationMayHaveRun = operation.appliedByInstanceId === INSTANCE_ID
+            || ['applying', 'mutation-applied', 'save-requested', 'save-required', 'completed'].includes(operation.status);
+        if (mutationMayHaveRun && liveAfter && diskAfter) {
+            operation.status = 'completed'; operation.reconcileReason = null;
+            operation.diskReadback = { verified: true, sceneUrl: disk.sceneUrl, sceneUuid: disk.sceneUuid,
+                nodePath: disk.nodePath, nodeUuid: disk.nodeUuid, sourceSha256: disk.sourceSha256,
+                metaSha256: disk.metaSha256, transform: disk.transform, active: disk.active,
+                verifiedAt: new Date().toISOString() };
+        } else if (mutationMayHaveRun && liveAfter && diskBefore) {
+            operation.status = 'save-required'; operation.reconcileReason = 'SCENE_MEMORY_UPDATED_BUT_DISK_UNCHANGED';
+        } else if (liveBefore && diskBefore && ['planned', 'awaiting-approval', 'applying', 'not-applied'].includes(operation.status)) {
+            operation.status = 'not-applied'; operation.reconcileReason = null;
+        } else {
+            operation.status = 'conflict'; operation.reconcileReason = 'SCENE_MEMORY_DISK_STATE_MISMATCH';
+        }
+        operation.reconciledAt = new Date().toISOString();
+        if (operation.status === 'completed') operation.completedAt = operation.completedAt || operation.reconciledAt;
+        writeOperation(operation);
+        return { ...sceneNodeTransformReceipt(operation, observed), observed: {
+            transform: Object.fromEntries(Object.keys(operation.plan.expectedAfter).map((field) => [field, observed.transform[field]])),
+            sceneUuid: observed.sceneUuid, nodeUuid: observed.nodeUuid, nodePath: observed.nodePath,
+            disk: { sourceSha256: disk.sourceSha256, metaSha256: disk.metaSha256,
+                nodePath: disk.nodePath, transform: disk.transform, matchesBefore: diskBefore, matchesAfter: diskAfter } },
+            retry: operation.status === 'save-required'
+                ? 'Save the scene in Creator, then reconcile again; do not replay this operation.'
+                : 'Never replay this operation. Create a new plan only after reviewing the observed editor and disk state.' };
+    }
+    if (transformMapMatches(observed.transform, operation.plan.expectedBefore)) {
+        if (['applying', 'awaiting-approval'].includes(operation.status)) operation.status = 'not-applied';
+        else if (['mutation-applied', 'save-requested', 'completed'].includes(operation.status)) operation.status = 'conflict';
+    } else if (transformMapMatches(observed.transform, operation.plan.expectedAfter)) {
+        if (operation.status === 'save-requested' || operation.status === 'completed') operation.status = 'completed';
+        else if (['mutation-applied', 'applying'].includes(operation.status)) operation.status = 'save-required';
+        else operation.status = 'conflict';
+    } else operation.status = 'conflict';
+    operation.reconciledAt = new Date().toISOString(); writeOperation(operation);
+    return { ...sceneNodeTransformReceipt(operation, observed), observed: {
+        transform: Object.fromEntries(Object.keys(operation.plan.expectedAfter).map((field) => [field, observed.transform[field]])),
+        sceneUuid: observed.sceneUuid, nodeUuid: observed.nodeUuid, nodePath: observed.nodePath },
+        retry: 'Never retry this operation. If unchanged, create a new plan; if save-required, save manually in Creator and review before continuing.' };
+}
+
+async function readPlannedSceneButtonEvents(plan) {
+    const state = await callScene('buttonEventsState', { sceneUuid: plan.sceneUuid, nodeUuid: plan.nodeUuid,
+        nodePath: plan.nodePath, componentInstanceId: plan.componentInstanceId }, 20000);
+    if (!state || state.available !== true || state.sceneUuid !== plan.sceneUuid || state.nodeUuid !== plan.nodeUuid
+        || state.nodePath !== plan.nodePath || state.componentInstanceId !== plan.componentInstanceId
+        || !Array.isArray(state.events)) throw coded(state && state.reason || 'SCENE_BUTTON_EVENTS_STATE_UNAVAILABLE');
+    return state;
+}
+
+function buttonEventListMatches(actual, expected) {
+    return Array.isArray(actual) && Array.isArray(expected) && sceneComponentValuesEqual(actual, expected);
+}
+
+function confirmSceneButtonEvents(operation) {
+    if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
+    const plan = operation.plan;
+    const format = (events) => events.map((event, index) => `${index + 1}. ${event.targetUuid || '(missing target)'} → ${event.component}.${event.handler} (${JSON.stringify(event.customEventData)})`).join('\n') || '(none)';
+    const detail = [`Project: ${plan.projectRoot}`, `Creator: ${plan.creatorVersion}`,
+        `Scene: ${plan.sceneName} (${plan.sceneUuid})`, `Button: ${plan.nodePath} (${plan.nodeUuid})`,
+        `Button component instance: ${plan.componentInstanceId}`, `Operation: ${operation.operationId}`,
+        '', `Before:\n${format(plan.expectedBefore)}`, '', `After:\n${format(plan.expectedAfter)}`, '',
+        'This replaces the complete click-event list on the exact existing cc.Button instance. Creator will recheck the exact live and saved before-list after approval, then request scene save. Completion requires the serialized .fire click-event list to match on disk; the 2.4 save IPC has no documented completion acknowledgement.'].join('\n');
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator Button events',
+        message: `Replace ${plan.expectedBefore.length} click event(s) with ${plan.expectedAfter.length}?`, detail,
+        buttons: ['Cancel', 'Apply Button events'], defaultId: 0, cancelId: 0, noLink: true });
+}
+
+function sceneButtonEventsReceipt(operation, state) {
+    const plan = operation.plan;
+    return { operationId: operation.operationId, status: operation.status, projectRoot: plan.projectRoot,
+        creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
+        componentInstanceId: plan.componentInstanceId, before: plan.expectedBefore,
+        events: state && state.events || null, sceneSaveRequestSent: !!operation.sceneSaveRequestSent,
+        sceneSaveCompletionConfirmed: false,
+        scenePersistenceConfirmed: !!(operation.diskReadback && operation.diskReadback.verified === true),
+        diskReadback: operation.diskReadback || null, plannedByInstanceId: operation.plannedByInstanceId,
+        appliedByInstanceId: operation.appliedByInstanceId || null,
+        completedByInstanceId: operation.completedByInstanceId || null,
+        approvedAt: operation.approvedAt || null, completedAt: operation.completedAt || null,
+        reconciledAt: operation.reconciledAt || null,
+        recovery: { automaticRetry: false, reconcileCommand: 'creator.scene.button-events.set.reconcile',
+            manualSaveMayBeRequired: operation.status === 'save-required',
+            note: 'Creator 2.4 has no documented scene-save IPC acknowledgement. scenePersistenceConfirmed requires the exact serialized Button event list to read back from the saved .fire file.' } };
+}
+
+async function commitSceneButtonEvents(input, context) {
+    const operation = readSceneButtonEventsOperation(input.operationId);
+    verifySceneOperationIdentity(operation);
+    if (operation.plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
+    if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (operation.status !== 'planned') throw coded(operation.status === 'applying' || operation.status === 'awaiting-approval'
+        || operation.status === 'mutation-applied' || operation.status === 'save-requested'
+        ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    let before = await readPlannedSceneButtonEvents(operation.plan);
+    if (!buttonEventListMatches(before.events, operation.plan.expectedBefore)) throw coded('OPERATION_PRECONDITION_FAILED');
+    await verifySceneNodeDiskBefore(operation.plan);
+    operation.status = 'awaiting-approval'; operation.approvalRequestedAt = new Date().toISOString(); writeOperation(operation);
+    if (!await confirmSceneButtonEvents(operation)) {
+        operation.status = 'cancelled'; operation.cancelledAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('OPERATION_NOT_APPROVED');
+    }
+    try { await authorizeWriteRequest(context && context.requestId); }
+    catch (error) {
+        operation.status = 'abandoned'; operation.abandonedAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error));
+    }
+    try {
+        verifySceneOperationIdentity(operation);
+        if (operation.plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
+        before = await readPlannedSceneButtonEvents(operation.plan);
+        if (!buttonEventListMatches(before.events, operation.plan.expectedBefore)) throw coded('OPERATION_PRECONDITION_FAILED');
+        await verifySceneNodeDiskBefore(operation.plan);
+    } catch (error) {
+        operation.status = 'conflict'; operation.conflictAt = new Date().toISOString(); writeOperation(operation); throw error;
+    }
+    operation.status = 'applying'; operation.approvedAt = new Date().toISOString();
+    operation.approvalSource = 'creator-native-dialog'; operation.appliedByInstanceId = INSTANCE_ID; writeOperation(operation);
+    const mutation = await callScene('setButtonEvents', { sceneUuid: operation.plan.sceneUuid,
+        nodeUuid: operation.plan.nodeUuid, nodePath: operation.plan.nodePath,
+        componentInstanceId: operation.plan.componentInstanceId, expectedBefore: operation.plan.expectedBefore,
+        events: operation.plan.expectedAfter }, 30000);
+    if (!mutation || mutation.available !== true || !buttonEventListMatches(mutation.events, operation.plan.expectedAfter)) {
+        operation.status = mutation && mutation.mutationStarted ? 'mutation-applied' : 'conflict';
+        operation.lastErrorCode = mutation && mutation.reason || 'SCENE_BUTTON_EVENTS_WRITE_READBACK_FAILED';
+        writeOperation(operation); throw coded(operation.lastErrorCode);
+    }
+    operation.status = 'mutation-applied'; operation.mutationAppliedAt = new Date().toISOString(); writeOperation(operation);
+    if (!Editor.Ipc || typeof Editor.Ipc.sendToPanel !== 'function') throw coded('CREATOR_SCENE_SAVE_IPC_UNAVAILABLE');
+    try { Editor.Ipc.sendToPanel('scene', 'scene:stash-and-save'); }
+    catch (error) { throw coded('CREATOR_SCENE_SAVE_REQUEST_FAILED', String(error.message || error)); }
+    operation.status = 'save-requested'; operation.sceneSaveRequestSent = true;
+    operation.sceneSaveRequestedAt = new Date().toISOString(); writeOperation(operation);
+    const readback = await readPlannedSceneButtonEvents(operation.plan);
+    if (!buttonEventListMatches(readback.events, operation.plan.expectedAfter)) throw coded('OPERATION_READBACK_STATE_MISMATCH');
+    await confirmSceneNodeDiskPersistence(operation);
+    operation.status = 'completed'; operation.completedAt = new Date().toISOString();
+    operation.completedByInstanceId = INSTANCE_ID; writeOperation(operation);
+    return sceneButtonEventsReceipt(operation, readback);
+}
+
+async function reconcileSceneButtonEvents(input) {
+    const operation = readSceneButtonEventsOperation(input.operationId);
+    verifySceneOperationIdentity(operation, { requireCurrentContract: false });
+    let observed;
+    try { observed = await readPlannedSceneButtonEvents(operation.plan); }
+    catch (error) {
+        operation.status = 'conflict'; operation.reconciledAt = new Date().toISOString();
+        operation.reconcileReason = error.code || 'SCENE_BUTTON_EVENTS_STATE_UNAVAILABLE'; writeOperation(operation);
+        return { ...sceneButtonEventsReceipt(operation, null), observed: null, reason: operation.reconcileReason };
+    }
+    let diskState = null;
+    if (operation.plan.diskBefore) {
+        try { diskState = await reconcileSceneNodeDiskOperation(operation,
+            buttonEventListMatches(observed.events, operation.plan.expectedBefore),
+            buttonEventListMatches(observed.events, operation.plan.expectedAfter)); }
+        catch (error) {
+            operation.status = 'conflict'; operation.reconciledAt = new Date().toISOString();
+            operation.reconcileReason = error.code || 'SCENE_DISK_READBACK_FAILED'; writeOperation(operation);
+            return { ...sceneButtonEventsReceipt(operation, observed), observed: { events: observed.events,
+                sceneUuid: observed.sceneUuid, nodeUuid: observed.nodeUuid, nodePath: observed.nodePath, disk: null },
+                reason: operation.reconcileReason };
+        }
+    } else if (buttonEventListMatches(observed.events, operation.plan.expectedBefore)) {
+        if (['applying', 'awaiting-approval'].includes(operation.status)) operation.status = 'not-applied';
+        else if (['mutation-applied', 'save-requested', 'completed'].includes(operation.status)) operation.status = 'conflict';
+    } else if (buttonEventListMatches(observed.events, operation.plan.expectedAfter)) {
+        if (operation.status === 'save-requested' || operation.status === 'completed') operation.status = 'completed';
+        else if (['mutation-applied', 'applying'].includes(operation.status)) operation.status = 'save-required';
+        else operation.status = 'conflict';
+    } else operation.status = 'conflict';
+    operation.reconciledAt = new Date().toISOString(); writeOperation(operation);
+    return { ...sceneButtonEventsReceipt(operation, observed), observed: { events: observed.events,
+        sceneUuid: observed.sceneUuid, nodeUuid: observed.nodeUuid, nodePath: observed.nodePath,
+        ...(diskState ? { disk: { sourceSha256: diskState.disk.sourceSha256, metaSha256: diskState.disk.metaSha256,
+            buttonEvents: diskState.disk.buttonEvents, matchesBefore: diskState.before, matchesAfter: diskState.after } } : {}) },
+        retry: 'Never replay this operation. If unchanged, create a new plan; if save-required, save manually in Creator and review before continuing.' };
+}
+
+function confirmSceneNodeRename(operation) {
+    if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
+    const plan = operation.plan;
+    const detail = [
+        `Project: ${plan.projectRoot}`,
+        `Creator: ${plan.creatorVersion}`,
+        `Scene: ${plan.sceneName} (${plan.sceneUuid})`,
+        `Node: ${plan.nodePath} (${plan.nodeUuid})`,
+        `Parent UUID: ${plan.expectedBefore.parentUuid}`,
+        `Name: ${plan.expectedBefore.name} → ${plan.expectedAfter.name}`,
+        `Operation: ${operation.operationId}`,
+        '',
+        'This renames one existing authoring-scene node. Creator will recheck the node UUID, parent, path, current name, and sibling-name collision before applying, then request a scene save. Completion requires the expected serialized node identity and hierarchy to read back from disk.',
+    ].join('\n');
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator node rename',
+        message: `Rename ${plan.nodePath} to ${plan.expectedAfter.name}?`, detail,
+        buttons: ['Cancel', 'Rename node'], defaultId: 0, cancelId: 0, noLink: true });
+}
+
+function sceneNodeRenameReceipt(operation, state) {
+    const plan = operation.plan;
+    return { operationId: operation.operationId, status: operation.status, projectRoot: plan.projectRoot,
+        creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodeUuid: plan.nodeUuid,
+        before: plan.expectedBefore, after: state && state.available ? {
+            name: state.nodeName, nodePath: state.nodePath, parentUuid: state.parentUuid,
+        } : null,
+        sceneSaveRequestSent: !!operation.sceneSaveRequestSent, sceneSaveCompletionConfirmed: false,
+        scenePersistenceConfirmed: !!(operation.diskReadback && operation.diskReadback.verified === true),
+        diskReadback: operation.diskReadback || null,
+        plannedByInstanceId: operation.plannedByInstanceId, appliedByInstanceId: operation.appliedByInstanceId || null,
+        completedByInstanceId: operation.completedByInstanceId || null,
+        approvedAt: operation.approvedAt || null, completedAt: operation.completedAt || null,
+        reconciledAt: operation.reconciledAt || null,
+        recovery: { automaticRetry: false, reconcileCommand: 'creator.scene.node.rename.reconcile',
+            manualSaveMayBeRequired: operation.status === 'save-required',
+            note: 'Creator 2.4 has no documented scene-save IPC acknowledgement. scenePersistenceConfirmed requires serialized name, parent and path to match the exact saved .fire readback.' } };
+}
+
+async function commitSceneNodeRename(input, context) {
+    const operation = readSceneNodeRenameOperation(input.operationId);
+    verifySceneOperationIdentity(operation);
+    if (operation.plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
+    if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (operation.status !== 'planned') throw coded(['applying', 'awaiting-approval', 'mutation-applied', 'save-requested',
+        'save-required'].includes(operation.status) ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    let before = await readPlannedSceneNodeRename(operation.plan);
+    if (!renameStateMatches(before, operation.plan.expectedBefore)) throw coded('OPERATION_PRECONDITION_FAILED');
+    await verifySceneNodeDiskBefore(operation.plan);
+    operation.status = 'awaiting-approval';
+    operation.approvalRequestedAt = new Date().toISOString();
+    writeOperation(operation);
+    const approved = await confirmSceneNodeRename(operation);
+    if (!approved) {
+        operation.status = 'cancelled';
+        operation.cancelledAt = new Date().toISOString();
+        writeOperation(operation);
+        throw coded('OPERATION_NOT_APPROVED');
+    }
+    try { await authorizeWriteRequest(context && context.requestId); }
+    catch (error) {
+        operation.status = 'abandoned';
+        operation.abandonedAt = new Date().toISOString();
+        writeOperation(operation);
+        throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error));
+    }
+    verifySceneOperationIdentity(operation);
+    if (operation.plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    try {
+        before = await readPlannedSceneNodeRename(operation.plan);
+        if (!renameStateMatches(before, operation.plan.expectedBefore)) throw coded('OPERATION_PRECONDITION_FAILED');
+        await verifySceneNodeDiskBefore(operation.plan);
+    } catch (error) {
+        operation.status = 'conflict';
+        operation.conflictAt = new Date().toISOString();
+        writeOperation(operation);
+        throw error;
+    }
+    operation.status = 'applying';
+    operation.approvedAt = new Date().toISOString();
+    operation.approvalSource = 'creator-native-dialog';
+    operation.appliedByInstanceId = INSTANCE_ID;
+    writeOperation(operation);
+    const mutation = await callScene('renameNode', { sceneUuid: operation.plan.sceneUuid,
+        nodeUuid: operation.plan.nodeUuid, nodePath: operation.plan.expectedBefore.nodePath,
+        expectedName: operation.plan.expectedBefore.name, expectedParentUuid: operation.plan.expectedBefore.parentUuid,
+        newName: operation.plan.expectedAfter.name }, 20000);
+    if (!mutation || mutation.available !== true || !renameStateMatches(mutation, operation.plan.expectedAfter)) {
+        operation.status = 'conflict';
+        operation.conflictAt = new Date().toISOString();
+        writeOperation(operation);
+        throw coded(mutation && mutation.reason || 'SCENE_NODE_NAME_WRITE_READBACK_FAILED');
+    }
+    operation.status = 'mutation-applied';
+    operation.mutationAppliedAt = new Date().toISOString();
+    writeOperation(operation);
+    if (!Editor.Ipc || typeof Editor.Ipc.sendToPanel !== 'function') throw coded('CREATOR_SCENE_SAVE_IPC_UNAVAILABLE');
+    try { Editor.Ipc.sendToPanel('scene', 'scene:stash-and-save'); }
+    catch (error) { throw coded('CREATOR_SCENE_SAVE_REQUEST_FAILED', String(error.message || error)); }
+    operation.status = 'save-requested';
+    operation.sceneSaveRequestSent = true;
+    operation.sceneSaveRequestedAt = new Date().toISOString();
+    writeOperation(operation);
+    const readback = await readPlannedSceneNodeRename(operation.plan);
+    if (!renameStateMatches(readback, operation.plan.expectedAfter)) throw coded('OPERATION_READBACK_STATE_MISMATCH');
+    await confirmSceneNodeDiskPersistence(operation);
+    operation.status = 'completed';
+    operation.completedAt = new Date().toISOString();
+    operation.completedByInstanceId = INSTANCE_ID;
+    writeOperation(operation);
+    return sceneNodeRenameReceipt(operation, readback);
+}
+
+async function reconcileSceneNodeRename(input) {
+    const operation = readSceneNodeRenameOperation(input.operationId);
+    verifySceneOperationIdentity(operation, { requireCurrentContract: false });
+    let observed;
+    try { observed = await readPlannedSceneNodeRename(operation.plan); }
+    catch (error) {
+        operation.status = 'conflict';
+        operation.reconciledAt = new Date().toISOString();
+        operation.reconcileReason = error.code || 'SCENE_NODE_NAME_STATE_UNAVAILABLE';
+        writeOperation(operation);
+        return { ...sceneNodeRenameReceipt(operation, null), status: operation.status,
+            observed: null, reason: operation.reconcileReason };
+    }
+    let diskState = null;
+    if (operation.plan.diskBefore) {
+        try { diskState = await reconcileSceneNodeDiskOperation(operation,
+            renameStateMatches(observed, operation.plan.expectedBefore),
+            renameStateMatches(observed, operation.plan.expectedAfter)); }
+        catch (error) {
+            operation.status = 'conflict'; operation.reconciledAt = new Date().toISOString();
+            operation.reconcileReason = error.code || 'SCENE_DISK_READBACK_FAILED'; writeOperation(operation);
+            return { ...sceneNodeRenameReceipt(operation, observed), observed: { nodeName: observed.nodeName,
+                nodePath: observed.nodePath, parentUuid: observed.parentUuid, sceneUuid: observed.sceneUuid,
+                nodeUuid: observed.nodeUuid, disk: null }, reason: operation.reconcileReason };
+        }
+    } else if (renameStateMatches(observed, operation.plan.expectedBefore)) {
+        if (['planned', 'awaiting-approval', 'applying', 'abandoned', 'needs-reconciliation'].includes(operation.status)) operation.status = 'not-applied';
+        else if (['mutation-applied', 'save-requested', 'completed', 'save-required'].includes(operation.status)) operation.status = 'conflict';
+    } else if (renameStateMatches(observed, operation.plan.expectedAfter)) {
+        if (['save-requested', 'completed'].includes(operation.status)) operation.status = 'completed';
+        else if (['applying', 'mutation-applied', 'save-required', 'needs-reconciliation'].includes(operation.status)) operation.status = 'save-required';
+        else operation.status = 'conflict';
+    } else operation.status = 'conflict';
+    operation.reconciledAt = new Date().toISOString();
+    writeOperation(operation);
+    return { ...sceneNodeRenameReceipt(operation, observed), observed: { nodeName: observed.nodeName,
+        nodePath: observed.nodePath, parentUuid: observed.parentUuid, sceneUuid: observed.sceneUuid, nodeUuid: observed.nodeUuid,
+        ...(diskState ? { disk: { sourceSha256: diskState.disk.sourceSha256, metaSha256: diskState.disk.metaSha256,
+            nodeName: diskState.disk.nodeName, nodePath: diskState.disk.nodePath, parentUuid: diskState.disk.parentUuid,
+            matchesBefore: diskState.before, matchesAfter: diskState.after } } : {}) },
+        retry: 'Never repeat this rename. If the original name remains, create a new plan; if save-required, save the scene in Creator and inspect the result.' };
+}
+
+function confirmSceneNodeReparent(operation) {
+    if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
+    const plan = operation.plan;
+    const detail = [
+        `Project: ${plan.projectRoot}`,
+        `Creator: ${plan.creatorVersion}`,
+        `Scene: ${plan.sceneName} (${plan.sceneUuid})`,
+        `Node: ${plan.expectedBefore.nodePath} (${plan.nodeUuid})`,
+        `Parent: ${plan.expectedBefore.parentPath} (${plan.expectedBefore.parentUuid}) → ${plan.expectedAfter.parentPath} (${plan.expectedAfter.parentUuid})`,
+        `New path: ${plan.expectedAfter.nodePath}`,
+        `Operation: ${operation.operationId}`,
+        '',
+        'This reparents one existing authoring-scene node. Its local transform values remain unchanged, so its world position may change. Changing active hierarchy can invoke component lifecycle callbacks. Creator rechecks both parent identities and the node path/name before moving it, then requests a scene save. Completion requires the expected serialized hierarchy and unchanged node transform to read back from disk.',
+    ].join('\n');
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator node reparent',
+        message: `Move ${plan.expectedBefore.nodePath} under ${plan.expectedAfter.parentPath}?`, detail,
+        buttons: ['Cancel', 'Reparent node'], defaultId: 0, cancelId: 0, noLink: true });
+}
+
+function sceneNodeReparentReceipt(operation, state) {
+    const plan = operation.plan;
+    return { operationId: operation.operationId, status: operation.status, projectRoot: plan.projectRoot,
+        creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodeUuid: plan.nodeUuid,
+        before: plan.expectedBefore, after: state && state.available ? {
+            nodeName: state.nodeName, nodePath: state.nodePath, parentUuid: state.parentUuid, parentPath: state.parentPath,
+        } : null,
+        localTransformPreserved: true, worldTransformPreserved: false,
+        sceneSaveRequestSent: !!operation.sceneSaveRequestSent, sceneSaveCompletionConfirmed: false,
+        scenePersistenceConfirmed: !!(operation.diskReadback && operation.diskReadback.verified === true),
+        diskReadback: operation.diskReadback || null,
+        plannedByInstanceId: operation.plannedByInstanceId, appliedByInstanceId: operation.appliedByInstanceId || null,
+        completedByInstanceId: operation.completedByInstanceId || null,
+        approvedAt: operation.approvedAt || null, completedAt: operation.completedAt || null,
+        reconciledAt: operation.reconciledAt || null,
+        recovery: { automaticRetry: false, reconcileCommand: 'creator.scene.node.reparent.reconcile',
+            manualSaveMayBeRequired: operation.status === 'save-required',
+            note: 'Creator 2.4 has no documented scene-save IPC acknowledgement. scenePersistenceConfirmed requires serialized parent UUID and path to match the exact saved .fire readback.' } };
+}
+
+async function commitSceneNodeReparent(input, context) {
+    const operation = readSceneNodeReparentOperation(input.operationId);
+    verifySceneOperationIdentity(operation);
+    if (operation.plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
+    if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (operation.status !== 'planned') throw coded(['applying', 'awaiting-approval', 'mutation-applied', 'save-requested',
+        'save-required'].includes(operation.status) ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    let before = await readPlannedSceneNodeReparent(operation.plan);
+    if (!reparentStateMatches(before, operation.plan.expectedBefore)) throw coded('OPERATION_PRECONDITION_FAILED');
+    await verifySceneNodeDiskBefore(operation.plan);
+    operation.status = 'awaiting-approval';
+    operation.approvalRequestedAt = new Date().toISOString();
+    writeOperation(operation);
+    const approved = await confirmSceneNodeReparent(operation);
+    if (!approved) {
+        operation.status = 'cancelled';
+        operation.cancelledAt = new Date().toISOString();
+        writeOperation(operation);
+        throw coded('OPERATION_NOT_APPROVED');
+    }
+    try { await authorizeWriteRequest(context && context.requestId); }
+    catch (error) {
+        operation.status = 'abandoned';
+        operation.abandonedAt = new Date().toISOString();
+        writeOperation(operation);
+        throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error));
+    }
+    verifySceneOperationIdentity(operation);
+    if (operation.plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    try {
+        before = await readPlannedSceneNodeReparent(operation.plan);
+        if (!reparentStateMatches(before, operation.plan.expectedBefore)) throw coded('OPERATION_PRECONDITION_FAILED');
+        await verifySceneNodeDiskBefore(operation.plan);
+    } catch (error) {
+        operation.status = 'conflict';
+        operation.conflictAt = new Date().toISOString();
+        writeOperation(operation);
+        throw error;
+    }
+    operation.status = 'applying';
+    operation.approvedAt = new Date().toISOString();
+    operation.approvalSource = 'creator-native-dialog';
+    operation.appliedByInstanceId = INSTANCE_ID;
+    writeOperation(operation);
+    const mutation = await callScene('reparentNode', { sceneUuid: operation.plan.sceneUuid,
+        nodeUuid: operation.plan.nodeUuid, nodePath: operation.plan.expectedBefore.nodePath,
+        expectedName: operation.plan.expectedBefore.nodeName,
+        expectedParentUuid: operation.plan.expectedBefore.parentUuid,
+        expectedParentPath: operation.plan.expectedBefore.parentPath,
+        targetParentUuid: operation.plan.expectedBefore.targetParentUuid,
+        targetParentPath: operation.plan.expectedBefore.targetParentPath,
+        afterNodePath: operation.plan.expectedBefore.afterNodePath }, 20000);
+    if (!mutation || mutation.available !== true || !reparentStateMatches(mutation, operation.plan.expectedAfter)) {
+        operation.status = 'conflict';
+        operation.conflictAt = new Date().toISOString();
+        writeOperation(operation);
+        throw coded(mutation && mutation.reason || 'SCENE_NODE_REPARENT_READBACK_FAILED');
+    }
+    operation.status = 'mutation-applied';
+    operation.mutationAppliedAt = new Date().toISOString();
+    writeOperation(operation);
+    if (!Editor.Ipc || typeof Editor.Ipc.sendToPanel !== 'function') throw coded('CREATOR_SCENE_SAVE_IPC_UNAVAILABLE');
+    try { Editor.Ipc.sendToPanel('scene', 'scene:stash-and-save'); }
+    catch (error) { throw coded('CREATOR_SCENE_SAVE_REQUEST_FAILED', String(error.message || error)); }
+    operation.status = 'save-requested';
+    operation.sceneSaveRequestSent = true;
+    operation.sceneSaveRequestedAt = new Date().toISOString();
+    writeOperation(operation);
+    const readback = await readPlannedSceneNodeReparent(operation.plan);
+    if (!reparentStateMatches(readback, operation.plan.expectedAfter)) throw coded('OPERATION_READBACK_STATE_MISMATCH');
+    await confirmSceneNodeDiskPersistence(operation);
+    operation.status = 'completed';
+    operation.completedAt = new Date().toISOString();
+    operation.completedByInstanceId = INSTANCE_ID;
+    writeOperation(operation);
+    return sceneNodeReparentReceipt(operation, readback);
+}
+
+async function reconcileSceneNodeReparent(input) {
+    const operation = readSceneNodeReparentOperation(input.operationId);
+    verifySceneOperationIdentity(operation, { requireCurrentContract: false });
+    let observed;
+    try { observed = await readPlannedSceneNodeReparent(operation.plan); }
+    catch (error) {
+        operation.status = 'conflict';
+        operation.reconciledAt = new Date().toISOString();
+        operation.reconcileReason = error.code || 'SCENE_NODE_REPARENT_STATE_UNAVAILABLE';
+        writeOperation(operation);
+        return { ...sceneNodeReparentReceipt(operation, null), status: operation.status,
+            observed: null, reason: operation.reconcileReason };
+    }
+    let diskState = null;
+    if (operation.plan.diskBefore) {
+        try { diskState = await reconcileSceneNodeDiskOperation(operation,
+            reparentStateMatches(observed, operation.plan.expectedBefore),
+            reparentStateMatches(observed, operation.plan.expectedAfter)); }
+        catch (error) {
+            operation.status = 'conflict'; operation.reconciledAt = new Date().toISOString();
+            operation.reconcileReason = error.code || 'SCENE_DISK_READBACK_FAILED'; writeOperation(operation);
+            return { ...sceneNodeReparentReceipt(operation, observed), observed: {
+                nodeName: observed.nodeName, nodePath: observed.nodePath, parentUuid: observed.parentUuid,
+                parentPath: observed.parentPath, targetParentUuid: observed.targetParentUuid,
+                targetParentPath: observed.targetParentPath, sceneUuid: observed.sceneUuid,
+                nodeUuid: observed.nodeUuid, disk: null }, reason: operation.reconcileReason };
+        }
+    } else if (reparentStateMatches(observed, operation.plan.expectedBefore)) {
+        if (['planned', 'awaiting-approval', 'applying', 'abandoned', 'needs-reconciliation'].includes(operation.status)) operation.status = 'not-applied';
+        else if (['mutation-applied', 'save-requested', 'completed', 'save-required'].includes(operation.status)) operation.status = 'conflict';
+    } else if (reparentStateMatches(observed, operation.plan.expectedAfter)) {
+        if (['save-requested', 'completed'].includes(operation.status)) operation.status = 'completed';
+        else if (['applying', 'mutation-applied', 'save-required', 'needs-reconciliation'].includes(operation.status)) operation.status = 'save-required';
+        else operation.status = 'conflict';
+    } else operation.status = 'conflict';
+    operation.reconciledAt = new Date().toISOString();
+    writeOperation(operation);
+    return { ...sceneNodeReparentReceipt(operation, observed), observed: {
+        nodeName: observed.nodeName, nodePath: observed.nodePath, parentUuid: observed.parentUuid,
+        parentPath: observed.parentPath, targetParentUuid: observed.targetParentUuid,
+        targetParentPath: observed.targetParentPath, sceneUuid: observed.sceneUuid, nodeUuid: observed.nodeUuid,
+        ...(diskState ? { disk: { sourceSha256: diskState.disk.sourceSha256, metaSha256: diskState.disk.metaSha256,
+            nodeName: diskState.disk.nodeName, nodePath: diskState.disk.nodePath, parentUuid: diskState.disk.parentUuid,
+            matchesBefore: diskState.before, matchesAfter: diskState.after } } : {}),
+    }, retry: 'Never repeat this reparent. If the original parent remains, create a new plan; if save-required, save the scene in Creator and inspect the result.' };
+}
+
+async function readPlannedSceneNodeDelete(plan) {
+    const state = await callScene('nodeDeleteState', { sceneUuid: plan.sceneUuid, nodeUuid: plan.nodeUuid }, 20000);
+    if (state && state.available === false && state.reason === 'SCENE_NODE_NOT_FOUND') return { present: false };
+    if (!state || state.available !== true) throw coded(state && state.reason || 'SCENE_NODE_DELETE_STATE_UNAVAILABLE');
+    if (state.sceneUuid !== plan.sceneUuid || state.nodeUuid !== plan.nodeUuid)
+        throw coded('OPERATION_TARGET_MISMATCH');
+    return { present: true, nodeName: state.nodeName, nodePath: state.nodePath,
+        parentUuid: state.parentUuid, childCount: state.childCount, subtree: state.subtree };
+}
+
+async function readPlannedSceneComponentRemove(plan) {
+    const state = await callScene('componentRemoveState', { sceneUuid: plan.sceneUuid, nodeUuid: plan.nodeUuid,
+        nodePath: plan.nodePath, componentClassName: plan.componentClassName,
+        componentInstanceId: plan.componentInstanceId }, 20000);
+    if (!state || state.available !== true) throw coded(state && state.reason || 'SCENE_COMPONENT_REMOVE_STATE_UNAVAILABLE');
+    if (state.sceneUuid !== plan.sceneUuid || state.nodeUuid !== plan.nodeUuid || state.nodePath !== plan.nodePath
+        || state.componentClassName !== plan.componentClassName || state.componentInstanceId !== plan.componentInstanceId
+        || state.serializedClassId !== plan.serializedClassId
+        || typeof state.present !== 'boolean' || !Array.isArray(state.dependentComponents))
+        throw coded('OPERATION_TARGET_MISMATCH');
+    return state;
+}
+
+function sceneDestructiveStateMatchesBefore(operation, observed) {
+    if (!observed || observed.present !== true) return false;
+    if (operation.operation === 'creator.scene.node.delete') {
+        const before = operation.plan.expectedBefore;
+        return observed.nodeName === before.nodeName && observed.nodePath === before.nodePath
+            && observed.parentUuid === before.parentUuid && observed.childCount === before.childCount
+            && JSON.stringify(observed.subtree) === JSON.stringify(before.subtree);
+    }
+    return observed.dependentComponents.length === 0;
+}
+
+function sceneDestructiveReceipt(operation, observed) {
+    const plan = operation.plan;
+    return { operationId: operation.operationId, status: operation.status, projectRoot: plan.projectRoot,
+        creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodeUuid: plan.nodeUuid,
+        nodePath: plan.expectedBefore.nodePath || plan.nodePath,
+        action: operation.operation === 'creator.scene.node.delete' ? 'delete-node-subtree' : 'remove-component',
+        componentClassName: plan.componentClassName || null, componentInstanceId: plan.componentInstanceId || null,
+        before: plan.expectedBefore, after: observed && observed.present === false ? { present: false } : null,
+        sceneSaveRequestSent: !!operation.sceneSaveRequestSent, sceneSaveCompletionConfirmed: false,
+        scenePersistenceConfirmed: operation.status === 'completed' && !!(operation.diskReadback && operation.diskReadback.verified),
+        diskReadback: operation.diskReadback || null,
+        plannedByInstanceId: operation.plannedByInstanceId, appliedByInstanceId: operation.appliedByInstanceId || null,
+        completedByInstanceId: operation.completedByInstanceId || null,
+        approvedAt: operation.approvedAt || null, completedAt: operation.completedAt || null,
+        reconciledAt: operation.reconciledAt || null,
+        recovery: { automaticRetry: false,
+            reconcileCommand: operation.operation === 'creator.scene.node.delete'
+                ? 'creator.scene.node.delete.reconcile' : 'creator.scene.node.remove-component.reconcile',
+            manualSaveMayBeRequired: operation.status === 'save-required',
+            note: 'Creator 2.4 destroys objects asynchronously and has no documented scene-save completion acknowledgement. Persistence requires the exact saved component set or absence of every deleted subtree UUID.' } };
+}
+
+function confirmSceneDestructiveOperation(operation) {
+    if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
+    const plan = operation.plan;
+    const isNode = operation.operation === 'creator.scene.node.delete';
+    const description = isNode
+        ? `This removes the exact node and its full descendant subtree (${plan.expectedBefore.subtree.length} total node(s), including ${plan.expectedBefore.childCount} direct child node(s)) from the authoring hierarchy, then requests a scene save. Component destruction and lifecycle callbacks may run. Completion requires every planned subtree UUID to be absent from the saved .fire file; the save IPC itself has no completion acknowledgement.`
+        : 'This destroys the exact component instance and requests a scene save. onDestroy and other project code may run. Components that require this instance are rejected. Completion requires the exact saved component identity set to omit this instance; the save IPC itself has no completion acknowledgement.';
+    const detail = [
+        `Project: ${plan.projectRoot}`,
+        `Creator: ${plan.creatorVersion}`,
+        `Scene: ${plan.sceneName} (${plan.sceneUuid})`,
+        `Node: ${plan.expectedBefore.nodePath || plan.nodePath} (${plan.nodeUuid})`,
+        isNode ? `Parent: ${plan.expectedBefore.parentUuid}` : `Component: ${plan.componentClassName} (${plan.componentInstanceId})`,
+        `Operation: ${operation.operationId}`,
+        '', description,
+    ].join('\n');
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: isNode ? 'Approve Cocos Creator node deletion' : 'Approve Cocos Creator component removal',
+        message: isNode ? `Delete ${plan.expectedBefore.nodePath} and its ${plan.expectedBefore.subtree.length - 1} descendant node(s)?`
+            : `Remove ${plan.componentClassName} from ${plan.nodePath}?`, detail,
+        buttons: ['Cancel', isNode ? 'Delete node subtree' : 'Remove component'], defaultId: 0, cancelId: 0, noLink: true });
+}
+
+async function commitSceneDestructiveOperation(operation, input, context) {
+    verifySceneOperationIdentity(operation);
+    if (operation.plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
+    if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (operation.status !== 'planned') throw coded(['applying', 'awaiting-approval', 'mutation-applied', 'save-requested',
+        'needs-reconciliation', 'save-required'].includes(operation.status) ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    if (!operation.plan.diskBefore) throw coded('SCENE_DISK_BASELINE_MISSING');
+    const isNode = operation.operation === 'creator.scene.node.delete';
+    const read = () => isNode ? readPlannedSceneNodeDelete(operation.plan) : readPlannedSceneComponentRemove(operation.plan);
+    let before = await read();
+    if (!sceneDestructiveStateMatchesBefore(operation, before)) throw coded('OPERATION_PRECONDITION_FAILED');
+    operation.status = 'awaiting-approval';
+    operation.approvalRequestedAt = new Date().toISOString();
+    writeOperation(operation);
+    const approved = await confirmSceneDestructiveOperation(operation);
+    if (!approved) {
+        operation.status = 'cancelled'; operation.cancelledAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('OPERATION_NOT_APPROVED');
+    }
+    try { await authorizeWriteRequest(context && context.requestId); }
+    catch (error) {
+        operation.status = 'abandoned'; operation.abandonedAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error));
+    }
+    verifySceneOperationIdentity(operation);
+    if (operation.plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    try {
+        before = await read();
+        if (!sceneDestructiveStateMatchesBefore(operation, before)) throw coded('OPERATION_PRECONDITION_FAILED');
+        await verifySceneNodeDiskBefore(operation.plan);
+    } catch (error) {
+        operation.status = 'conflict'; operation.conflictAt = new Date().toISOString(); writeOperation(operation); throw error;
+    }
+    operation.status = 'applying'; operation.approvedAt = new Date().toISOString();
+    operation.approvalSource = 'creator-native-dialog'; operation.appliedByInstanceId = INSTANCE_ID; writeOperation(operation);
+    let mutation;
+    try {
+        mutation = isNode
+            ? await callScene('deleteNode', { sceneUuid: operation.plan.sceneUuid, nodeUuid: operation.plan.nodeUuid,
+                nodePath: operation.plan.expectedBefore.nodePath, expectedName: operation.plan.expectedBefore.nodeName,
+                expectedParentUuid: operation.plan.expectedBefore.parentUuid,
+                expectedChildCount: operation.plan.expectedBefore.childCount,
+                expectedSubtree: operation.plan.expectedBefore.subtree }, 20000)
+            : await callScene('removeNodeComponent', { sceneUuid: operation.plan.sceneUuid, nodeUuid: operation.plan.nodeUuid,
+                nodePath: operation.plan.nodePath, componentClassName: operation.plan.componentClassName,
+                componentInstanceId: operation.plan.componentInstanceId, expectedPresent: true }, 20000);
+    } catch (error) {
+        operation.status = 'needs-reconciliation'; operation.reconcileReason = error.code || 'SCENE_DESTRUCTIVE_WRITE_UNCERTAIN';
+        writeOperation(operation); throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
+    }
+    if (!mutation || mutation.available !== true || (isNode ? mutation.deleted !== true : mutation.present !== false)) {
+        operation.status = 'needs-reconciliation'; operation.reconcileReason = mutation && mutation.reason || 'SCENE_DESTRUCTIVE_READBACK_FAILED';
+        writeOperation(operation); throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
+    }
+    operation.status = 'mutation-applied'; operation.mutationAppliedAt = new Date().toISOString(); writeOperation(operation);
+    if (!Editor.Ipc || typeof Editor.Ipc.sendToPanel !== 'function') throw coded('CREATOR_SCENE_SAVE_IPC_UNAVAILABLE');
+    try { Editor.Ipc.sendToPanel('scene', 'scene:stash-and-save'); }
+    catch (error) { throw coded('CREATOR_SCENE_SAVE_REQUEST_FAILED', String(error.message || error)); }
+    operation.status = 'save-requested'; operation.sceneSaveRequestSent = true;
+    operation.sceneSaveRequestedAt = new Date().toISOString(); writeOperation(operation);
+    const observed = await read();
+    if (observed.present !== false) throw coded('OPERATION_READBACK_STATE_MISMATCH');
+    if (isNode) await confirmSceneNodeDeletionDiskPersistence(operation);
+    else await confirmSceneNodeDiskPersistence(operation);
+    operation.status = 'completed'; operation.completedAt = new Date().toISOString();
+    operation.completedByInstanceId = INSTANCE_ID; writeOperation(operation);
+    return sceneDestructiveReceipt(operation, observed);
+}
+
+async function reconcileSceneDestructiveOperation(operation) {
+    verifySceneOperationIdentity(operation, { requireCurrentContract: false });
+    const isNode = operation.operation === 'creator.scene.node.delete';
+    let observed;
+    try { observed = isNode ? await readPlannedSceneNodeDelete(operation.plan)
+        : await readPlannedSceneComponentRemove(operation.plan); }
+    catch (error) {
+        operation.status = 'conflict'; operation.reconciledAt = new Date().toISOString();
+        operation.reconcileReason = error.code || 'SCENE_DESTRUCTIVE_STATE_UNAVAILABLE'; writeOperation(operation);
+        return { ...sceneDestructiveReceipt(operation, null), observed: null, reason: operation.reconcileReason };
+    }
+    let diskState = null;
+    try {
+        if (!operation.plan.diskBefore) throw coded('SCENE_DISK_BASELINE_MISSING');
+        const liveBefore = sceneDestructiveStateMatchesBefore(operation, observed);
+        const liveAfter = observed.present === false;
+        diskState = isNode
+            ? await reconcileSceneNodeDeletionDiskOperation(operation, liveBefore, liveAfter)
+            : await reconcileSceneNodeDiskOperation(operation, liveBefore, liveAfter);
+    } catch (error) {
+        operation.status = 'conflict'; operation.reconcileReason = error.code || 'SCENE_DISK_READBACK_FAILED';
+    }
+    operation.reconciledAt = new Date().toISOString(); writeOperation(operation);
+    return { ...sceneDestructiveReceipt(operation, observed), observed: { ...observed,
+        ...(diskState ? { disk: { sourceSha256: diskState.disk.sourceSha256, metaSha256: diskState.disk.metaSha256,
+            nodeAbsent: diskState.disk.nodeAbsent === true,
+            ...(Array.isArray(diskState.disk.absentNodeUuids) ? { absentNodeUuids: diskState.disk.absentNodeUuids } : {}),
+            ...(Array.isArray(diskState.disk.components) ? { components: diskState.disk.components } : {}),
+            matchesBefore: diskState.before, matchesAfter: diskState.after } } : {}) },
+        retry: 'Never replay this operation. If the original object remains, create a fresh plan after inspection; if save-required, save in Creator and inspect the scene.' };
 }
 
 async function readPlannedSceneComponent(plan) {
@@ -1443,7 +5072,7 @@ function confirmSceneComponentAdd(operation) {
         `Existing instances: ${plan.expectedBefore.componentCount}`,
         `Operation: ${operation.operationId}`,
         '',
-        'This adds one registered component class to the current scene node and requests a scene save. Component constructors and lifecycle hooks are project code; approve only if this component is expected for the task. The receipt confirms in-memory readback, not disk persistence.',
+        'This adds one registered component class to the current scene node and requests a scene save. Component constructors and lifecycle hooks are project code; approve only if this component is expected for the task. Completion requires the added component instance ID and serialized class to match in the saved .fire file; the save IPC itself has no completion acknowledgement.',
     ].join('\n');
     return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator component addition',
                 message: `Add ${plan.componentClassName} to ${plan.nodePath}?`, detail,
@@ -1459,13 +5088,15 @@ function sceneComponentAddReceipt(operation, state) {
         componentCount: Number.isInteger(state.componentCount) ? state.componentCount : null,
         componentInstanceId: operation.componentInstanceId || null,
         sceneSaveRequestSent: !!operation.sceneSaveRequestSent, sceneSaveCompletionConfirmed: false,
+        scenePersistenceConfirmed: operation.status === 'completed' && !!(operation.diskReadback && operation.diskReadback.verified),
+        diskReadback: operation.diskReadback || null,
         plannedByInstanceId: operation.plannedByInstanceId, appliedByInstanceId: operation.appliedByInstanceId || null,
         completedByInstanceId: operation.completedByInstanceId || null,
         approvedAt: operation.approvedAt || null, completedAt: operation.completedAt || null,
         reconciledAt: operation.reconciledAt || null,
         recovery: { automaticRetry: false, reconcileCommand: 'creator.scene.node.add-component.reconcile',
             manualSaveMayBeRequired: operation.status === 'save-required',
-            note: 'Creator 2.4 does not document a scene save completion acknowledgement. If reconciliation lacks the original component instance identity, inspect the scene manually; this operation will not be replayed.' } };
+            note: 'Creator 2.4 does not document a scene save completion acknowledgement. Persistence requires the exact added component ID and serialized class on disk; this operation will not be replayed.' } };
 }
 
 async function commitSceneComponentAdd(input, context) {
@@ -1476,9 +5107,11 @@ async function commitSceneComponentAdd(input, context) {
         || operation.status === 'mutation-applied' || operation.status === 'save-requested'
         || operation.status === 'needs-reconciliation' ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
     if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    if (!operation.plan.diskBefore) throw coded('SCENE_DISK_BASELINE_MISSING');
     let before = await readPlannedSceneComponent(operation.plan);
     if (before.componentCount !== operation.plan.expectedBefore.componentCount || !before.canAdd)
         throw coded('OPERATION_PRECONDITION_FAILED');
+    await verifySceneNodeDiskBefore(operation.plan);
     operation.status = 'awaiting-approval';
     operation.approvalRequestedAt = new Date().toISOString();
     writeOperation(operation);
@@ -1502,6 +5135,7 @@ async function commitSceneComponentAdd(input, context) {
         before = await readPlannedSceneComponent(operation.plan);
         if (before.componentCount !== operation.plan.expectedBefore.componentCount || !before.canAdd)
             throw coded('OPERATION_PRECONDITION_FAILED');
+        await verifySceneNodeDiskBefore(operation.plan);
     } catch (error) {
         operation.status = 'conflict';
         operation.conflictAt = new Date().toISOString();
@@ -1532,7 +5166,14 @@ async function commitSceneComponentAdd(input, context) {
         writeOperation(operation);
         throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
     }
-    operation.componentInstanceId = mutation.componentInstanceId || null;
+    operation.componentInstanceId = typeof mutation.componentInstanceId === 'string' && mutation.componentInstanceId
+        ? mutation.componentInstanceId : null;
+    if (!operation.componentInstanceId || mutation.serializedClassId !== operation.plan.serializedClassId) {
+        operation.status = 'needs-reconciliation';
+        operation.reconcileReason = 'SCENE_COMPONENT_SERIALIZED_IDENTITY_UNAVAILABLE';
+        writeOperation(operation);
+        throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
+    }
     operation.status = 'mutation-applied';
     operation.mutationAppliedAt = new Date().toISOString();
     writeOperation(operation);
@@ -1545,8 +5186,9 @@ async function commitSceneComponentAdd(input, context) {
     writeOperation(operation);
     const readback = await readPlannedSceneComponent(operation.plan);
     if (readback.componentCount !== operation.plan.expectedAfter.componentCount
-        || (operation.componentInstanceId && !readback.componentInstanceIds.includes(operation.componentInstanceId)))
+        || !readback.componentInstanceIds.includes(operation.componentInstanceId))
         throw coded('OPERATION_READBACK_STATE_MISMATCH');
+    await confirmSceneNodeDiskPersistence(operation);
     operation.status = 'completed';
     operation.completedAt = new Date().toISOString();
     operation.completedByInstanceId = INSTANCE_ID;
@@ -1567,21 +5209,24 @@ async function reconcileSceneComponentAdd(input) {
         return { ...sceneComponentAddReceipt(operation, { componentCount: null }),
             observed: null, reason: operation.reconcileReason };
     }
-    if (observed.componentCount === operation.plan.expectedBefore.componentCount) {
-        if (['planned', 'awaiting-approval', 'applying', 'needs-reconciliation'].includes(operation.status)) operation.status = 'not-applied';
-        else if (['mutation-applied', 'save-requested', 'completed'].includes(operation.status)) operation.status = 'conflict';
-    } else if (observed.componentCount === operation.plan.expectedAfter.componentCount) {
-        const identityMatches = operation.componentInstanceId
-            && observed.componentInstanceIds.includes(operation.componentInstanceId);
-        if (identityMatches && ['save-requested', 'completed'].includes(operation.status)) operation.status = 'completed';
-        else if (identityMatches && operation.status === 'mutation-applied') operation.status = 'save-required';
-        else operation.status = 'needs-reconciliation';
-    } else operation.status = 'conflict';
+    const liveBefore = observed.componentCount === operation.plan.expectedBefore.componentCount;
+    const identityMatches = !!operation.componentInstanceId && observed.componentInstanceIds.includes(operation.componentInstanceId);
+    const liveAfter = observed.componentCount === operation.plan.expectedAfter.componentCount && identityMatches;
+    let diskState = null;
+    try {
+        if (!operation.plan.diskBefore) throw coded('SCENE_DISK_BASELINE_MISSING');
+        diskState = await reconcileSceneNodeDiskOperation(operation, liveBefore, liveAfter);
+    } catch (error) {
+        operation.status = 'conflict';
+        operation.reconcileReason = error.code || 'SCENE_DISK_READBACK_FAILED';
+    }
     operation.reconciledAt = new Date().toISOString();
     writeOperation(operation);
     return { ...sceneComponentAddReceipt(operation, observed),
         observed: { componentClassName: observed.componentClassName, componentCount: observed.componentCount,
-            componentInstanceIds: observed.componentInstanceIds },
+            componentInstanceIds: observed.componentInstanceIds,
+            ...(diskState ? { disk: { sourceSha256: diskState.disk.sourceSha256, metaSha256: diskState.disk.metaSha256,
+                components: diskState.disk.components, matchesBefore: diskState.before, matchesAfter: diskState.after } } : {}) },
         retry: 'Never retry this operation. If no component exists, create a new plan. If component identity is unavailable, inspect the node and save manually in Creator.' };
 }
 
@@ -1592,7 +5237,9 @@ async function readPlannedSceneComponentProperty(plan) {
     if (!state || state.available !== true) throw coded(state && state.reason || 'SCENE_COMPONENT_PROPERTY_STATE_UNAVAILABLE');
     if (state.sceneUuid !== plan.sceneUuid || state.nodeUuid !== plan.nodeUuid || state.nodePath !== plan.nodePath
         || state.componentClassName !== plan.componentClassName || state.componentInstanceId !== plan.componentInstanceId
-        || state.property !== plan.property) throw coded('OPERATION_TARGET_MISMATCH');
+        || state.property !== plan.property || state.propertyKind !== plan.propertyKind
+        || (plan.diskBefore && state.serializedClassId !== plan.diskBefore.componentProperty.serializedClassId))
+        throw coded('OPERATION_TARGET_MISMATCH');
     return state;
 }
 
@@ -1609,7 +5256,7 @@ function confirmSceneComponentProperty(operation) {
         `Value: ${JSON.stringify(plan.expectedBefore.value)} → ${JSON.stringify(plan.expectedAfter.value)}`,
         `Operation: ${operation.operationId}`,
         '',
-        'This changes one declared public scalar property on the exact component instance and requests a scene save. Property setters are project/engine code and may have side effects. The receipt confirms in-memory readback, not disk persistence.',
+        'This changes one declared public serializable property on the exact component instance and requests a scene save. Supported values include scalars, Vec2/Vec3/Vec4/Size/Rect/Color, bounded arrays of supported primitives and typed references, exact active-scene Node and Component references, and supported AssetDB resources. Arbitrary project objects and asset-reference arrays are refused. Property setters are project/engine code and may have side effects. Creator will recheck the exact saved before-state after approval. Completion requires the serialized component identity and property to match in the saved .fire file.',
     ].join('\n');
     return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator component property change',
                 message: `Set ${plan.componentClassName}.${plan.property}?`, detail,
@@ -1622,16 +5269,18 @@ function sceneComponentPropertyReceipt(operation, state) {
         creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
         sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
         componentClassName: plan.componentClassName, componentInstanceId: plan.componentInstanceId,
-        property: plan.property, beforeValue: plan.expectedBefore.value,
+        property: plan.property, propertyKind: plan.propertyKind, beforeValue: plan.expectedBefore.value,
         value: Object.prototype.hasOwnProperty.call(state, 'value') ? state.value : null,
         sceneSaveRequestSent: !!operation.sceneSaveRequestSent, sceneSaveCompletionConfirmed: false,
+        scenePersistenceConfirmed: operation.status === 'completed' && !!(operation.diskReadback && operation.diskReadback.verified),
+        diskReadback: operation.diskReadback || null,
         plannedByInstanceId: operation.plannedByInstanceId, appliedByInstanceId: operation.appliedByInstanceId || null,
         completedByInstanceId: operation.completedByInstanceId || null,
         approvedAt: operation.approvedAt || null, completedAt: operation.completedAt || null,
         reconciledAt: operation.reconciledAt || null,
         recovery: { automaticRetry: false, reconcileCommand: 'creator.scene.node.set-component-property.reconcile',
             sameCreatorSessionRequired: true, manualSaveMayBeRequired: operation.status === 'save-required',
-            note: 'Creator 2.4 has no documented scene save completion acknowledgement. Property readback is in-memory only; if the component instance ID changed, inspect the scene manually.' } };
+            note: 'Creator 2.4 has no documented scene-save IPC acknowledgement. scenePersistenceConfirmed requires the exact serialized component identity and property on disk. If memory changed but disk did not, save manually and reconcile. A changed Creator session still requires manual review.' } };
 }
 
 async function commitSceneComponentProperty(input, context) {
@@ -1644,7 +5293,8 @@ async function commitSceneComponentProperty(input, context) {
         || operation.status === 'needs-reconciliation' ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
     if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
     let before = await readPlannedSceneComponentProperty(operation.plan);
-    if (!Object.is(before.value, operation.plan.expectedBefore.value)) throw coded('OPERATION_PRECONDITION_FAILED');
+    if (!sceneComponentValuesEqual(before.value, operation.plan.expectedBefore.value)) throw coded('OPERATION_PRECONDITION_FAILED');
+    await verifySceneNodeDiskBefore(operation.plan);
     operation.status = 'awaiting-approval';
     operation.approvalRequestedAt = new Date().toISOString();
     writeOperation(operation);
@@ -1667,7 +5317,8 @@ async function commitSceneComponentProperty(input, context) {
     if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
     try {
         before = await readPlannedSceneComponentProperty(operation.plan);
-        if (!Object.is(before.value, operation.plan.expectedBefore.value)) throw coded('OPERATION_PRECONDITION_FAILED');
+        if (!sceneComponentValuesEqual(before.value, operation.plan.expectedBefore.value)) throw coded('OPERATION_PRECONDITION_FAILED');
+        await verifySceneNodeDiskBefore(operation.plan);
     } catch (error) {
         operation.status = 'conflict';
         operation.conflictAt = new Date().toISOString();
@@ -1692,7 +5343,7 @@ async function commitSceneComponentProperty(input, context) {
         writeOperation(operation);
         throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
     }
-    if (!mutation || mutation.available !== true || !Object.is(mutation.value, operation.plan.expectedAfter.value)) {
+    if (!mutation || mutation.available !== true || !sceneComponentValuesEqual(mutation.value, operation.plan.expectedAfter.value)) {
         operation.status = 'needs-reconciliation';
         operation.reconcileReason = mutation && mutation.reason || 'SCENE_COMPONENT_PROPERTY_READBACK_FAILED';
         writeOperation(operation);
@@ -1709,7 +5360,8 @@ async function commitSceneComponentProperty(input, context) {
     operation.sceneSaveRequestedAt = new Date().toISOString();
     writeOperation(operation);
     const readback = await readPlannedSceneComponentProperty(operation.plan);
-    if (!Object.is(readback.value, operation.plan.expectedAfter.value)) throw coded('OPERATION_READBACK_STATE_MISMATCH');
+    if (!sceneComponentValuesEqual(readback.value, operation.plan.expectedAfter.value)) throw coded('OPERATION_READBACK_STATE_MISMATCH');
+    await confirmSceneNodeDiskPersistence(operation);
     operation.status = 'completed';
     operation.completedAt = new Date().toISOString();
     operation.completedByInstanceId = INSTANCE_ID;
@@ -1729,10 +5381,20 @@ async function reconcileSceneComponentProperty(input) {
         writeOperation(operation);
         return { ...sceneComponentPropertyReceipt(operation, {}), observed: null, reason: operation.reconcileReason };
     }
-    if (Object.is(observed.value, operation.plan.expectedBefore.value)) {
+    let diskState = null;
+    if (operation.plan.diskBefore && operation.plan.creatorInstanceId === INSTANCE_ID) {
+        try { diskState = await reconcileSceneNodeDiskOperation(operation,
+            sceneComponentValuesEqual(observed.value, operation.plan.expectedBefore.value),
+            sceneComponentValuesEqual(observed.value, operation.plan.expectedAfter.value)); }
+        catch (error) {
+            operation.status = 'conflict'; operation.reconciledAt = new Date().toISOString();
+            operation.reconcileReason = error.code || 'SCENE_DISK_READBACK_FAILED'; writeOperation(operation);
+            return { ...sceneComponentPropertyReceipt(operation, observed), observed: null, reason: operation.reconcileReason };
+        }
+    } else if (sceneComponentValuesEqual(observed.value, operation.plan.expectedBefore.value)) {
         if (['planned', 'awaiting-approval', 'applying', 'needs-reconciliation'].includes(operation.status)) operation.status = 'not-applied';
         else if (['mutation-applied', 'save-requested', 'completed'].includes(operation.status)) operation.status = 'conflict';
-    } else if (Object.is(observed.value, operation.plan.expectedAfter.value)) {
+    } else if (sceneComponentValuesEqual(observed.value, operation.plan.expectedAfter.value)) {
         if (operation.plan.creatorInstanceId !== INSTANCE_ID) operation.status = 'needs-reconciliation';
         else if (['save-requested', 'completed'].includes(operation.status)) operation.status = 'completed';
         else if (operation.status === 'mutation-applied') operation.status = 'save-required';
@@ -1742,8 +5404,425 @@ async function reconcileSceneComponentProperty(input) {
     writeOperation(operation);
     return { ...sceneComponentPropertyReceipt(operation, observed),
         observed: { componentClassName: observed.componentClassName, componentInstanceId: observed.componentInstanceId,
-            property: observed.property, value: observed.value },
+            property: observed.property, value: observed.value,
+            ...(diskState ? { disk: { sourceSha256: diskState.disk.sourceSha256, metaSha256: diskState.disk.metaSha256,
+                componentProperty: diskState.disk.componentProperty, matchesBefore: diskState.before, matchesAfter: diskState.after } } : {}) },
         retry: 'Never replay this operation. If the component instance changed after Creator restart, inspect the property manually and create a new plan.' };
+}
+
+async function sceneAssetIdentity(sceneUuid) {
+    if (typeof sceneUuid !== 'string' || !/^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$/.test(sceneUuid))
+        throw coded('SCENE_ASSETDB_IDENTITY_UNAVAILABLE');
+    if (!Editor.assetdb || typeof Editor.assetdb.queryAssets !== 'function') throw coded('ASSETDB_QUERY_UNAVAILABLE');
+    const root = projectRoot();
+    const rows = await new Promise((resolve, reject) => {
+        let settled = false;
+        const timeout = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            reject(coded('ASSETDB_QUERY_TIMEOUT'));
+        }, 20000);
+        try {
+            Editor.assetdb.queryAssets('db://assets/**/*', null, (error, result) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                if (error) { reject(coded('ASSETDB_QUERY_FAILED', String(error.message || error))); return; }
+                if (!Array.isArray(result)) { reject(coded('ASSETDB_RESULT_INVALID')); return; }
+                resolve(result);
+            });
+        } catch (error) {
+            clearTimeout(timeout);
+            reject(coded('ASSETDB_QUERY_FAILED', String(error.message || error)));
+        }
+    });
+    const candidates = rows.filter((row) => row && typeof row.url === 'string'
+        && row.url.startsWith('db://assets/') && /\.fire$/i.test(row.url)
+        && (!row.importer || row.importer === 'scene'))
+        .sort((left, right) => left.url.localeCompare(right.url));
+    if (candidates.length > MAX_SCENE_ASSET_CANDIDATES) throw coded('SCENE_ASSET_SCAN_LIMIT');
+
+    let scannedBytes = 0;
+    const matches = [];
+    for (const row of candidates) {
+        const relative = row.url.slice('db://assets/'.length);
+        const sceneFile = safeProjectFile(relative, /\.fire$/i);
+        const metaFile = safeProjectFile(`${relative}.meta`);
+        const sceneStat = fs.lstatSync(sceneFile);
+        const metaStat = fs.lstatSync(metaFile);
+        if (!sceneStat.isFile() || sceneStat.isSymbolicLink() || !metaStat.isFile() || metaStat.isSymbolicLink())
+            throw coded('SCENE_ASSET_SCAN_UNSAFE');
+        const candidateBytes = sceneStat.size + metaStat.size;
+        if (sceneStat.size < 2 || sceneStat.size > MAX_SCENE_SERIALIZATION_BYTES
+            || metaStat.size < 2 || metaStat.size > MAX_SCENE_META_BYTES
+            || scannedBytes + candidateBytes > MAX_SCENE_ASSET_SCAN_BYTES)
+            throw coded('SCENE_ASSET_SCAN_LIMIT');
+        scannedBytes += candidateBytes;
+        const sceneBytes = readStableProjectFile(sceneFile, MAX_SCENE_SERIALIZATION_BYTES, 'SCENE_SERIALIZATION_FILE_UNSAFE');
+        const metaBytes = readStableProjectFile(metaFile, MAX_SCENE_META_BYTES, 'SCENE_META_FILE_UNSAFE');
+        const inspected = inspectSceneAssetIdentity({ sceneBytes, metaBytes, sceneAssetRow: row });
+        if (!inspected.verified || inspected.sceneUuid !== sceneUuid) continue;
+        matches.push({ uuid: row.uuid, sceneUuid, sceneRootUuid: inspected.sceneRootUuid,
+            url: row.url, importer: 'scene',
+            sceneSha256: fileHash(sceneBytes), metaSha256: fileHash(metaBytes) });
+    }
+    if (projectRoot() !== root) throw coded('CREATOR_IDENTITY_CHANGED');
+    if (matches.length === 0) throw coded('SCENE_ASSETDB_IDENTITY_UNAVAILABLE');
+    if (matches.length !== 1) throw coded('SCENE_ASSETDB_IDENTITY_AMBIGUOUS');
+
+    const identity = matches[0];
+    const currentRow = await queryAssetByUrl(identity.url);
+    if (!currentRow || currentRow.uuid !== identity.uuid || currentRow.url !== identity.url
+        || (currentRow.importer || 'scene') !== identity.importer) throw coded('SCENE_ASSETDB_IDENTITY_CHANGED');
+    const relative = identity.url.slice('db://assets/'.length);
+    const sceneFile = safeProjectFile(relative, /\.fire$/i);
+    const metaFile = safeProjectFile(`${relative}.meta`);
+    const currentSceneBytes = readStableProjectFile(sceneFile, MAX_SCENE_SERIALIZATION_BYTES, 'SCENE_SERIALIZATION_FILE_UNSAFE');
+    const currentMetaBytes = readStableProjectFile(metaFile, MAX_SCENE_META_BYTES, 'SCENE_META_FILE_UNSAFE');
+    const currentInspection = inspectSceneAssetIdentity({ sceneBytes: currentSceneBytes,
+        metaBytes: currentMetaBytes, sceneAssetRow: currentRow });
+    if (!currentInspection.verified || currentInspection.sceneUuid !== sceneUuid
+        || currentInspection.sceneRootUuid !== identity.sceneRootUuid
+        || fileHash(currentSceneBytes) !== identity.sceneSha256 || fileHash(currentMetaBytes) !== identity.metaSha256)
+        throw coded('SCENE_ASSETDB_IDENTITY_CHANGED');
+    return identity;
+}
+
+async function sceneNodeDiskState(sceneUuid, nodeUuid, options = {}) {
+    if (!options || typeof options !== 'object' || Array.isArray(options)) throw coded('SCENE_DISK_SELECTOR_INVALID');
+    const identity = await sceneAssetIdentity(sceneUuid);
+    const row = await queryAssetByUrl(identity.url);
+    if (!row || row.uuid !== identity.uuid || row.url !== identity.url
+        || (row.importer || 'scene') !== identity.importer) throw coded('SCENE_ASSETDB_IDENTITY_MISMATCH');
+    const relative = identity.url.slice('db://assets/'.length);
+    const sceneFile = safeProjectFile(relative, /\.fire$/i);
+    const metaFile = safeProjectFile(`${relative}.meta`);
+    const sceneBytes = readStableProjectFile(sceneFile, MAX_SCENE_SERIALIZATION_BYTES, 'SCENE_SERIALIZATION_FILE_UNSAFE');
+    const metaBytes = readStableProjectFile(metaFile, MAX_SCENE_META_BYTES, 'SCENE_META_FILE_UNSAFE');
+    if (fileHash(sceneBytes) !== identity.sceneSha256 || fileHash(metaBytes) !== identity.metaSha256)
+        throw coded('SCENE_CHANGED_DURING_INSPECT');
+    const state = inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow: row, nodeUuid,
+        componentProperty: options.componentProperty, includeComponents: options.includeComponents === true,
+        includeSubtree: options.includeSubtree === true, absentNodeUuids: options.absentNodeUuids });
+    if (!state.verified) throw coded(state.reason || 'SCENE_DISK_READBACK_FAILED');
+    const freshRow = await queryAssetByUrl(identity.url);
+    const freshSceneBytes = readStableProjectFile(sceneFile, MAX_SCENE_SERIALIZATION_BYTES, 'SCENE_SERIALIZATION_FILE_UNSAFE');
+    const freshMetaBytes = readStableProjectFile(metaFile, MAX_SCENE_META_BYTES, 'SCENE_META_FILE_UNSAFE');
+    if (!freshRow || freshRow.uuid !== identity.uuid || freshRow.url !== identity.url
+        || fileHash(freshSceneBytes) !== fileHash(sceneBytes) || fileHash(freshMetaBytes) !== fileHash(metaBytes))
+        throw coded('SCENE_CHANGED_DURING_INSPECT');
+    return { ...state, sceneAssetUuid: identity.uuid, sourceSha256: fileHash(sceneBytes),
+        metaSha256: fileHash(metaBytes), importer: identity.importer };
+}
+
+function sceneNodeDiskOptionsForPlan(plan) {
+    const options = {};
+    if (plan.diskBefore.componentProperty) options.componentProperty = plan.diskBefore.componentProperty;
+    if (Array.isArray(plan.diskBefore.components)) options.includeComponents = true;
+    if (Array.isArray(plan.diskBefore.subtree)) options.includeSubtree = true;
+    return options;
+}
+
+async function sceneNodeDiskStateForPlan(plan) {
+    return sceneNodeDiskState(plan.sceneUuid, plan.nodeUuid, sceneNodeDiskOptionsForPlan(plan));
+}
+
+function sceneDiskNumberMatches(field, actual, expected) {
+    if (!Number.isFinite(actual) || !Number.isFinite(expected)) return false;
+    if (field !== 'angle') return Math.abs(actual - expected) <= 0.002;
+    const delta = ((actual - expected + 180) % 360 + 360) % 360 - 180;
+    return Math.abs(delta) <= 0.002;
+}
+
+function sceneDiskTransformMatches(actual, expected) {
+    return !!actual && !!expected && Object.keys(expected).every((field) =>
+        sceneDiskNumberMatches(field, actual[field], expected[field]));
+}
+
+function sceneNodeDiskBaseline(disk, { includeButtonEvents = false } = {}) {
+    const baseline = { sceneUrl: disk.sceneUrl, importer: disk.importer, sourceSha256: disk.sourceSha256,
+        metaSha256: disk.metaSha256, active: disk.active, nodeName: disk.nodeName,
+        parentUuid: disk.parentUuid, nodePath: disk.nodePath, transform: disk.transform };
+    if (includeButtonEvents) baseline.buttonEvents = disk.buttonEvents;
+    if (disk.componentProperty) baseline.componentProperty = disk.componentProperty;
+    if (Array.isArray(disk.components)) baseline.components = disk.components;
+    if (Array.isArray(disk.subtree)) baseline.subtree = disk.subtree;
+    return baseline;
+}
+
+function sceneNodeDiskReadback(disk) {
+    const readback = { verified: true, sceneUrl: disk.sceneUrl, sceneUuid: disk.sceneUuid,
+        nodePath: disk.nodePath, nodeName: disk.nodeName, parentUuid: disk.parentUuid, nodeUuid: disk.nodeUuid,
+        sourceSha256: disk.sourceSha256, metaSha256: disk.metaSha256, transform: disk.transform,
+        active: disk.active, verifiedAt: new Date().toISOString() };
+    if (Array.isArray(disk.buttonEvents)) readback.buttonEvents = disk.buttonEvents;
+    if (disk.componentProperty) readback.componentProperty = disk.componentProperty;
+    if (Array.isArray(disk.components)) readback.components = disk.components;
+    if (Array.isArray(disk.subtree)) readback.subtree = disk.subtree;
+    return readback;
+}
+
+function validSavedComponentProperty(property) {
+    return !!property && typeof property === 'object' && !Array.isArray(property)
+        && Object.keys(property).sort().join(',') === 'componentInstanceId,property,serializedClassId,value'
+        && typeof property.componentInstanceId === 'string' && property.componentInstanceId.length > 0
+        && property.componentInstanceId.length <= 128 && typeof property.serializedClassId === 'string'
+        && property.serializedClassId.length > 0 && property.serializedClassId.length <= 128
+        && typeof property.property === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(property.property)
+        && validComponentDiskValue(property.value);
+}
+
+function validSceneNodeDiskBaseline(disk) {
+    const fields = ['anchorX', 'anchorY', 'angle', 'height', 'scaleX', 'scaleY', 'width', 'x', 'y', 'z'];
+    return !!disk && typeof disk === 'object' && !Array.isArray(disk)
+        && typeof disk.sceneUrl === 'string' && disk.sceneUrl.startsWith('db://assets/')
+        && disk.importer === 'scene' && prefabPatch.SHA256.test(disk.sourceSha256 || '')
+        && prefabPatch.SHA256.test(disk.metaSha256 || '') && typeof disk.active === 'boolean'
+        && (disk.nodeName === undefined || typeof disk.nodeName === 'string')
+        && (disk.parentUuid === undefined || typeof disk.parentUuid === 'string')
+        && (disk.nodePath === undefined || typeof disk.nodePath === 'string')
+        && (disk.buttonEvents === undefined || validButtonEventList(disk.buttonEvents))
+        && (disk.componentProperty === undefined || validSavedComponentProperty(disk.componentProperty))
+        && (disk.components === undefined || (Array.isArray(disk.components) && disk.components.length <= 32
+            && disk.components.every((component) => component && typeof component === 'object' && !Array.isArray(component)
+                && Object.keys(component).sort().join(',') === 'componentInstanceId,serializedClassId'
+                && typeof component.componentInstanceId === 'string' && component.componentInstanceId.length > 0
+                && component.componentInstanceId.length <= 128 && typeof component.serializedClassId === 'string'
+                && component.serializedClassId.length > 0 && component.serializedClassId.length <= 128)
+            && new Set(disk.components.map((component) => component.componentInstanceId)).size === disk.components.length))
+        && (disk.subtree === undefined || (Array.isArray(disk.subtree) && disk.subtree.length >= 1
+            && disk.subtree.length <= 256 && disk.subtree.every((node) => node && typeof node === 'object' && !Array.isArray(node)
+                && Object.keys(node).sort().join(',') === 'childCount,nodeName,nodeUuid,parentUuid,siblingIndex'
+                && typeof node.nodeUuid === 'string' && typeof node.nodeName === 'string'
+                && typeof node.parentUuid === 'string' && Number.isInteger(node.siblingIndex) && node.siblingIndex >= 0
+                && Number.isInteger(node.childCount) && node.childCount >= 0)
+            && new Set(disk.subtree.map((node) => node.nodeUuid)).size === disk.subtree.length))
+        && !!disk.transform && typeof disk.transform === 'object' && !Array.isArray(disk.transform)
+        && Object.keys(disk.transform).sort().join(',') === fields.join(',')
+        && fields.every((field) => Number.isFinite(disk.transform[field])
+            && Math.abs(disk.transform[field]) <= 1000000);
+}
+
+function sceneNodeDiskExpected(plan, side, operation) {
+    const expected = { ...plan.diskBefore, transform: { ...plan.diskBefore.transform } };
+    if (side === 'before') return expected;
+    if (plan.operation === 'creator.scene.node.set-transform') {
+        Object.assign(expected.transform, plan.expectedAfter);
+    } else if (plan.operation === 'creator.scene.node.set-active') {
+        expected.active = plan.expectedAfter.active;
+    } else if (plan.operation === 'creator.scene.node.rename') {
+        expected.nodeName = plan.expectedAfter.name;
+        expected.nodePath = plan.expectedAfter.nodePath;
+    } else if (plan.operation === 'creator.scene.node.reparent') {
+        expected.parentUuid = plan.expectedAfter.parentUuid;
+        expected.nodePath = plan.expectedAfter.nodePath;
+    } else if (plan.operation === 'creator.scene.button-events.set') {
+        expected.buttonEvents = plan.expectedAfter;
+    } else if (plan.operation === 'creator.scene.node.set-component-property') {
+        expected.componentProperty = { ...expected.componentProperty, value: plan.expectedAfter.serializedValue };
+    } else if (plan.operation === 'creator.scene.node.add-component') {
+        if (operation && typeof operation.componentInstanceId === 'string')
+            expected.components = [...expected.components, { componentInstanceId: operation.componentInstanceId,
+                serializedClassId: plan.serializedClassId }];
+    } else if (plan.operation === 'creator.scene.node.remove-component') {
+        expected.components = expected.components.filter((component) =>
+            component.componentInstanceId !== plan.componentInstanceId);
+    }
+    return expected;
+}
+
+function sceneNodeDiskMatchesPlan(disk, plan, side, operation) {
+    if (!disk || disk.verified !== true || disk.sceneUuid !== plan.sceneUuid || disk.nodeUuid !== plan.nodeUuid
+        || disk.sceneUrl !== plan.diskBefore.sceneUrl || disk.importer !== plan.diskBefore.importer
+        || disk.metaSha256 !== plan.diskBefore.metaSha256) return false;
+    const expected = sceneNodeDiskExpected(plan, side, operation);
+    if (disk.active !== expected.active || !sceneDiskTransformMatches(disk.transform, expected.transform)) return false;
+    for (const field of ['nodeName', 'parentUuid', 'nodePath']) {
+        if (expected[field] !== undefined && disk[field] !== expected[field]) return false;
+    }
+    if (expected.buttonEvents !== undefined && !buttonEventListMatches(disk.buttonEvents, expected.buttonEvents)) return false;
+    if (expected.componentProperty !== undefined && !sceneComponentValuesEqual(disk.componentProperty, expected.componentProperty)) return false;
+    if (expected.components !== undefined && !sceneComponentValuesEqual(disk.components, expected.components)) return false;
+    if (expected.subtree !== undefined && !sceneComponentValuesEqual(disk.subtree, expected.subtree)) return false;
+    return true;
+}
+
+async function observeSceneNodeDiskForReconcile(operation) {
+    const plan = operation.plan;
+    if (!plan.diskBefore) return null;
+    const disk = await sceneNodeDiskStateForPlan(plan);
+    return { disk,
+        before: disk.sourceSha256 === plan.diskBefore.sourceSha256 && sceneNodeDiskMatchesPlan(disk, plan, 'before'),
+        after: disk.sourceSha256 !== plan.diskBefore.sourceSha256
+            && sceneNodeDiskMatchesPlan(disk, plan, 'after', operation) };
+}
+
+async function reconcileSceneNodeDiskOperation(operation, liveBefore, liveAfter) {
+    const state = await observeSceneNodeDiskForReconcile(operation);
+    if (!state) return null;
+    const mutationMayHaveRun = operation.appliedByInstanceId === INSTANCE_ID
+        || ['applying', 'mutation-applied', 'save-requested', 'save-required', 'completed'].includes(operation.status);
+    if (mutationMayHaveRun && liveAfter && state.after) {
+        operation.status = 'completed'; operation.reconcileReason = null;
+        operation.diskReadback = sceneNodeDiskReadback(state.disk);
+        operation.completedAt = operation.completedAt || new Date().toISOString();
+        operation.completedByInstanceId = operation.completedByInstanceId || operation.appliedByInstanceId || INSTANCE_ID;
+    } else if (mutationMayHaveRun && liveAfter && state.before) {
+        operation.status = 'save-required'; operation.reconcileReason = 'SCENE_MEMORY_UPDATED_BUT_DISK_UNCHANGED';
+    } else if (liveBefore && state.before && operation.status === 'cancelled') {
+        // Preserve an explicit user cancellation when both editor and disk still match the plan.
+    } else if (liveBefore && state.before
+        && ['planned', 'awaiting-approval', 'applying', 'abandoned', 'needs-reconciliation', 'not-applied'].includes(operation.status)) {
+        operation.status = 'not-applied'; operation.reconcileReason = null;
+    } else {
+        operation.status = 'conflict'; operation.reconcileReason = 'SCENE_MEMORY_DISK_STATE_MISMATCH';
+    }
+    return state;
+}
+
+async function verifySceneNodeDiskBefore(plan) {
+    if (!plan.diskBefore) return null;
+    const disk = await sceneNodeDiskStateForPlan(plan);
+    if (disk.sourceSha256 !== plan.diskBefore.sourceSha256 || disk.metaSha256 !== plan.diskBefore.metaSha256
+        || !sceneNodeDiskMatchesPlan(disk, plan, 'before')) throw coded('SCENE_DISK_PRECONDITION_FAILED');
+    return disk;
+}
+
+async function waitForSceneNodeDiskAfter(operation, timeoutMs = SCENE_SAVE_READBACK_TIMEOUT_MS) {
+    const plan = operation.plan;
+    if (!plan.diskBefore) throw coded('SCENE_DISK_BASELINE_MISSING');
+    const deadline = Date.now() + timeoutMs;
+    let lastReason = 'SCENE_DISK_READBACK_PENDING';
+    do {
+        try {
+            const disk = await sceneNodeDiskStateForPlan(plan);
+            if (disk.sceneUrl !== plan.diskBefore.sceneUrl || disk.importer !== plan.diskBefore.importer)
+                throw coded('SCENE_ASSETDB_IDENTITY_CHANGED');
+            if (disk.sourceSha256 !== plan.diskBefore.sourceSha256
+                && sceneNodeDiskMatchesPlan(disk, plan, 'after', operation))
+                return disk;
+            lastReason = disk.sourceSha256 === plan.diskBefore.sourceSha256
+                ? 'SCENE_DISK_READBACK_PENDING' : 'SCENE_DISK_READBACK_MISMATCH';
+        } catch (error) {
+            lastReason = error.code || 'SCENE_DISK_READBACK_FAILED';
+            if (['SCENE_ASSETDB_IDENTITY_CHANGED', 'SCENE_ASSETDB_IDENTITY_MISMATCH',
+                'SCENE_META_IDENTITY_MISMATCH', 'UNSAFE_PROJECT_PATH'].includes(error.code)) throw error;
+        }
+        if (Date.now() >= deadline) break;
+        await new Promise((resolve) => setTimeout(resolve, 250));
+    } while (Date.now() <= deadline);
+    throw coded(lastReason);
+}
+
+async function confirmSceneNodeDiskPersistence(operation) {
+    let disk;
+    try { disk = await waitForSceneNodeDiskAfter(operation); }
+    catch (error) {
+        operation.status = 'save-required';
+        operation.reconcileReason = error.code || 'SCENE_DISK_READBACK_UNCONFIRMED';
+        operation.diskReadbackFailureAt = new Date().toISOString();
+        writeOperation(operation);
+        throw coded('SCENE_DISK_READBACK_UNCONFIRMED', operation.reconcileReason);
+    }
+    operation.diskReadback = sceneNodeDiskReadback(disk);
+    return disk;
+}
+
+function sceneNodeDeletionAbsentUuids(operation) {
+    return operation.plan.expectedBefore.subtree.map((node) => node.nodeUuid);
+}
+
+async function waitForSceneNodeDeletionDiskAfter(operation, timeoutMs = SCENE_SAVE_READBACK_TIMEOUT_MS) {
+    const plan = operation.plan;
+    if (!plan.diskBefore || !Array.isArray(plan.diskBefore.subtree)) throw coded('SCENE_DISK_BASELINE_MISSING');
+    const deadline = Date.now() + timeoutMs;
+    let lastReason = 'SCENE_DISK_READBACK_PENDING';
+    do {
+        try {
+            const disk = await sceneNodeDiskState(plan.sceneUuid, plan.nodeUuid,
+                { absentNodeUuids: sceneNodeDeletionAbsentUuids(operation) });
+            if (disk.metaSha256 !== plan.diskBefore.metaSha256) throw coded('SCENE_META_IDENTITY_CHANGED');
+            if (disk.nodeAbsent && disk.sourceSha256 !== plan.diskBefore.sourceSha256) return disk;
+            lastReason = 'SCENE_DISK_READBACK_PENDING';
+        } catch (error) {
+            if (error.code === 'SCENE_NODE_STILL_PRESENT') {
+                try {
+                    const disk = await sceneNodeDiskStateForPlan(plan);
+                    lastReason = disk.sourceSha256 === plan.diskBefore.sourceSha256
+                        && sceneNodeDiskMatchesPlan(disk, plan, 'before')
+                        ? 'SCENE_DISK_READBACK_PENDING' : 'SCENE_DISK_READBACK_MISMATCH';
+                } catch (stateError) { lastReason = stateError.code || 'SCENE_DISK_READBACK_FAILED'; }
+            } else {
+                lastReason = error.code || 'SCENE_DISK_READBACK_FAILED';
+                if (['SCENE_ASSETDB_IDENTITY_CHANGED', 'SCENE_ASSETDB_IDENTITY_MISMATCH',
+                    'SCENE_META_IDENTITY_MISMATCH', 'SCENE_META_IDENTITY_CHANGED', 'UNSAFE_PROJECT_PATH'].includes(error.code))
+                    throw error;
+            }
+        }
+        if (Date.now() >= deadline) break;
+        await new Promise((resolve) => setTimeout(resolve, 250));
+    } while (Date.now() <= deadline);
+    throw coded(lastReason);
+}
+
+async function confirmSceneNodeDeletionDiskPersistence(operation) {
+    let disk;
+    try { disk = await waitForSceneNodeDeletionDiskAfter(operation); }
+    catch (error) {
+        operation.status = 'save-required';
+        operation.reconcileReason = error.code || 'SCENE_DISK_READBACK_UNCONFIRMED';
+        operation.diskReadbackFailureAt = new Date().toISOString();
+        writeOperation(operation);
+        throw coded('SCENE_DISK_READBACK_UNCONFIRMED', operation.reconcileReason);
+    }
+    operation.diskReadback = { verified: true, sceneUrl: disk.sceneUrl, sceneUuid: disk.sceneUuid,
+        nodeUuid: disk.nodeUuid, nodeAbsent: true, absentNodeUuids: disk.absentNodeUuids,
+        sourceSha256: disk.sourceSha256, metaSha256: disk.metaSha256, verifiedAt: new Date().toISOString() };
+    return disk;
+}
+
+async function reconcileSceneNodeDeletionDiskOperation(operation, liveBefore, liveAfter) {
+    const plan = operation.plan;
+    let disk;
+    let before = false;
+    let after = false;
+    if (liveAfter) {
+        try {
+            disk = await sceneNodeDiskState(plan.sceneUuid, plan.nodeUuid,
+                { absentNodeUuids: sceneNodeDeletionAbsentUuids(operation) });
+            after = disk.metaSha256 === plan.diskBefore.metaSha256
+                && disk.sourceSha256 !== plan.diskBefore.sourceSha256 && disk.nodeAbsent === true;
+        } catch (error) {
+            if (error.code !== 'SCENE_NODE_STILL_PRESENT') throw error;
+            disk = await sceneNodeDiskStateForPlan(plan);
+            before = disk.sourceSha256 === plan.diskBefore.sourceSha256
+                && sceneNodeDiskMatchesPlan(disk, plan, 'before');
+        }
+    } else {
+        disk = await sceneNodeDiskStateForPlan(plan);
+        before = disk.sourceSha256 === plan.diskBefore.sourceSha256
+            && sceneNodeDiskMatchesPlan(disk, plan, 'before');
+    }
+    const mutationMayHaveRun = operation.appliedByInstanceId === INSTANCE_ID
+        || ['applying', 'mutation-applied', 'save-requested', 'save-required', 'completed'].includes(operation.status);
+    if (mutationMayHaveRun && liveAfter && after) {
+        operation.status = 'completed'; operation.reconcileReason = null;
+        operation.diskReadback = { verified: true, sceneUrl: disk.sceneUrl, sceneUuid: disk.sceneUuid,
+            nodeUuid: disk.nodeUuid, nodeAbsent: true, absentNodeUuids: disk.absentNodeUuids,
+            sourceSha256: disk.sourceSha256, metaSha256: disk.metaSha256, verifiedAt: new Date().toISOString() };
+        operation.completedAt = operation.completedAt || new Date().toISOString();
+        operation.completedByInstanceId = operation.completedByInstanceId || operation.appliedByInstanceId || INSTANCE_ID;
+    } else if (mutationMayHaveRun && liveAfter && before) {
+        operation.status = 'save-required'; operation.reconcileReason = 'SCENE_MEMORY_UPDATED_BUT_DISK_UNCHANGED';
+    } else if (liveBefore && before && operation.status === 'cancelled') {
+        // Preserve explicit cancellation when both the editor and saved scene match the plan.
+    } else if (liveBefore && before
+        && ['planned', 'awaiting-approval', 'applying', 'abandoned', 'needs-reconciliation', 'not-applied'].includes(operation.status)) {
+        operation.status = 'not-applied'; operation.reconcileReason = null;
+    } else {
+        operation.status = 'conflict'; operation.reconcileReason = 'SCENE_MEMORY_DISK_STATE_MISMATCH';
+    }
+    return { disk, before, after };
 }
 
 async function validateSceneComposePlan(operation) {
@@ -1753,6 +5832,13 @@ async function validateSceneComposePlan(operation) {
         throw coded(state && state.available === false ? state.reason || 'SCENE_COMPOSE_PREFLIGHT_FAILED' : 'SCENE_COMPOSE_PRECONDITION_FAILED');
     const assets = await composeAssetIdentities(plan.request);
     if (JSON.stringify(assets) !== JSON.stringify(plan.assetIdentities)) throw coded('SCENE_COMPOSE_ASSET_PRECONDITION_FAILED');
+    const expectedSceneAsset = plan.sceneAssetIdentity || await sceneAssetIdentity(plan.sceneUuid);
+    const currentSceneAsset = await sceneAssetIdentity(plan.sceneUuid);
+    if (currentSceneAsset.uuid !== expectedSceneAsset.uuid || currentSceneAsset.url !== expectedSceneAsset.url
+        || currentSceneAsset.importer !== expectedSceneAsset.importer
+        || currentSceneAsset.sceneSha256 !== expectedSceneAsset.sceneSha256
+        || currentSceneAsset.metaSha256 !== expectedSceneAsset.metaSha256)
+        throw coded('SCENE_COMPOSE_SCENE_ASSET_PRECONDITION_FAILED');
     return state;
 }
 
@@ -1763,14 +5849,16 @@ function confirmSceneCompose(operation) {
         `Project: ${plan.projectRoot}`,
         `Creator: ${plan.creatorVersion}`,
         `Scene: ${plan.sceneName} (${plan.sceneUuid})`,
+        `Scene asset: ${plan.sceneAssetIdentity.url} (${plan.sceneAssetIdentity.uuid})`,
         `Operation: ${operation.operationId}`,
         '',
-        `Create nodes:\n${plan.request.nodes.map((node) => `- ${node.name} (${node.uuid}) under ${node.parentRef}; transform ${JSON.stringify(node.transform || {})}`).join('\n')}`,
+        `Create nodes:\n${plan.request.nodes.map((node) => `- ${node.name} (${node.uuid}) under ${node.parentRef}`
+            + `${node.prefabUuid ? `; instantiate Prefab ${node.prefabUuid}` : ''}; transform ${JSON.stringify(node.transform || {})}`).join('\n')}`,
         `\nAdd components:\n${plan.request.components.map((item) => `- ${item.className} on ${item.nodeRef} with ${item.properties.length} properties`).join('\n') || '- none'}`,
         `\nButton handlers:\n${plan.request.buttonEvents.map((item) => `- ${item.buttonRef} → ${item.handlerComponentClassName}.${item.handler} on ${item.handlerRef}`).join('\n') || '- none'}`,
         `\nAsset references:\n${plan.assetIdentities.map((item) => `- ${item.assetClass} ${item.assetUuid} (${item.url})`).join('\n') || '- none'}`,
         '',
-        'Existing scene nodes are read-only parents or handler targets. This composition adds the listed nodes and components, requests scene save, and verifies same-session in-memory readback. Creator 2.4 does not document a completion acknowledgement for scene:stash-and-save.',
+        'Existing scene nodes are read-only parents or handler targets. This composition adds the listed nodes and components, requests scene save, then verifies the exact AssetDB .fire and .meta files semantically. Creator 2.4 does not document a completion acknowledgement for scene:stash-and-save; the receipt keeps that acknowledgement field false.',
     ].join('\n');
     return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Cocos Creator scene composition',
         message: `Create ${plan.request.nodes.length} scene node(s) and apply the listed composition?`, detail,
@@ -1781,17 +5869,22 @@ function sceneComposeReceipt(operation, readback) {
     const plan = operation.plan;
     return { operationId: operation.operationId, status: operation.status, projectRoot: plan.projectRoot,
         creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
-        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, sceneAssetIdentity: plan.sceneAssetIdentity,
         createdNodes: readback && readback.nodes || [], componentCount: plan.request.components.length,
+        prefabInstanceCount: plan.request.nodes.filter((item) => !!item.prefabUuid).length,
         buttonEventCount: plan.request.buttonEvents.length, assetIdentities: plan.assetIdentities,
         sceneSaveRequestSent: !!operation.sceneSaveRequestSent, sceneSaveCompletionConfirmed: false,
+        scenePersistenceConfirmed: !!(operation.scenePersistenceReadback && operation.scenePersistenceReadback.verified),
+        scenePersistenceReadback: operation.scenePersistenceReadback || null,
         plannedByInstanceId: operation.plannedByInstanceId, appliedByInstanceId: operation.appliedByInstanceId || null,
         completedByInstanceId: operation.completedByInstanceId || null,
         approvedAt: operation.approvedAt || null, completedAt: operation.completedAt || null,
         reconciledAt: operation.reconciledAt || null,
         recovery: { automaticRetry: false, reconcileCommand: 'creator.scene.compose.reconcile',
-            manualSaveMayBeRequired: operation.status === 'save-required',
-            note: 'Scene Script readback is in-memory. The save IPC request has no documented completion acknowledgement.' } };
+            manualSaveMayBeRequired: ['save-required', 'save-unconfirmed'].includes(operation.status),
+            note: operation.scenePersistenceReadback && operation.scenePersistenceReadback.verified
+                ? 'The exact Creator scene AssetDB file and .meta were reread and semantically matched the planned nodes, transforms, components, resource references, and Button events.'
+                : 'Disk persistence is not yet confirmed; inspect or save the scene in Creator, then reconcile. The save IPC has no documented acknowledgement.' } };
 }
 
 function sceneComposeReadbackMatches(operation, readback) {
@@ -1802,6 +5895,7 @@ function sceneComposeReadbackMatches(operation, readback) {
         const node = nodesById.get(expectedNode.id);
         if (!node || node.uuid !== expectedNode.uuid || node.name !== expectedNode.name
             || node.parentUuid !== expectedNode.parentUuid || typeof node.nodePath !== 'string') return false;
+        if ((node.prefabUuid || null) !== (expectedNode.prefabUuid || null)) return false;
         for (const key of ['x', 'y', 'z', 'scaleX', 'scaleY', 'angle', 'width', 'height']) {
             if (!Number.isFinite(node.transform && node.transform[key])
                 || Math.abs(node.transform[key] - expectedNode.transform[key]) > 0.001) return false;
@@ -1847,6 +5941,59 @@ function sceneComposeReadbackMatches(operation, readback) {
         }
     }
     return true;
+}
+
+function readStableProjectFile(filename, maxBytes, code) {
+    const before = fs.lstatSync(filename);
+    if (!before.isFile() || before.isSymbolicLink() || before.size < 2 || before.size > maxBytes)
+        throw coded(code);
+    const bytes = fs.readFileSync(filename);
+    const after = fs.lstatSync(filename);
+    if (!after.isFile() || after.isSymbolicLink() || bytes.length !== before.size
+        || before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size
+        || before.mtimeMs !== after.mtimeMs) throw coded(code);
+    return bytes;
+}
+
+async function inspectSceneComposePersistence(operation) {
+    const plan = operation.plan;
+    const identity = plan.sceneAssetIdentity || await sceneAssetIdentity(plan.sceneUuid);
+    const row = await queryAssetByUrl(identity.url);
+    if (!row || row.url !== identity.url || row.uuid !== identity.uuid
+        || (row.importer || 'scene') !== identity.importer)
+        throw coded('SCENE_ASSETDB_IDENTITY_MISMATCH');
+    const relative = identity.url.slice('db://assets/'.length);
+    const sceneFile = safeProjectFile(relative, /\.fire$/i);
+    const metaFile = safeProjectFile(`${relative}.meta`);
+    const sceneBytes = readStableProjectFile(sceneFile, MAX_SCENE_SERIALIZATION_BYTES, 'SCENE_SERIALIZATION_FILE_UNSAFE');
+    const metaBytes = readStableProjectFile(metaFile, MAX_SCENE_META_BYTES, 'SCENE_META_FILE_UNSAFE');
+    const inspection = inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid: plan.sceneUuid,
+        sceneAssetRow: row, operation, readback: operation.sceneReadback });
+    if (!inspection.verified) return { ...inspection, sceneUrl: identity.url };
+    return { verified: true, sceneUuid: plan.sceneUuid, sceneAssetUuid: identity.uuid, sceneUrl: identity.url,
+        scenePath: relative, sceneSha256: fileHash(sceneBytes), metaSha256: fileHash(metaBytes),
+        nodeCount: inspection.nodeCount, componentCount: inspection.componentCount,
+        buttonEventCount: inspection.buttonEventCount, prefabInstanceCount: inspection.prefabInstanceCount,
+        verifiedAt: new Date().toISOString() };
+}
+
+async function waitForSceneComposePersistence(operation, timeoutMs = SCENE_SAVE_READBACK_TIMEOUT_MS) {
+    const deadline = Date.now() + Math.max(0, timeoutMs);
+    let last = { verified: false, reason: 'SCENE_PERSISTENCE_READBACK_PENDING' };
+    do {
+        try {
+            last = await inspectSceneComposePersistence(operation);
+            if (last.verified) return last;
+            if (last.reason === 'SCENE_ASSETDB_IDENTITY_MISMATCH') return last;
+        } catch (error) {
+            last = { verified: false, reason: error.code || 'SCENE_PERSISTENCE_READBACK_FAILED' };
+            if (['UNSAFE_PROJECT_PATH', 'SCENE_ASSETDB_IDENTITY_MISMATCH', 'SCENE_SERIALIZATION_FILE_UNSAFE',
+                'SCENE_META_FILE_UNSAFE'].includes(error.code)) return last;
+        }
+        if (Date.now() >= deadline) break;
+        await new Promise((resolve) => setTimeout(resolve, 250));
+    } while (Date.now() <= deadline);
+    return last;
 }
 
 async function commitSceneCompose(input, context) {
@@ -1935,10 +6082,16 @@ async function commitSceneCompose(input, context) {
         writeOperation(operation);
         throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
     }
-    operation.status = 'completed';
-    operation.completedAt = new Date().toISOString();
-    operation.completedByInstanceId = INSTANCE_ID;
     operation.sceneReadback = readback;
+    operation.scenePersistenceReadback = await waitForSceneComposePersistence(operation);
+    if (operation.scenePersistenceReadback.verified) {
+        operation.status = 'completed';
+        operation.completedAt = new Date().toISOString();
+        operation.completedByInstanceId = INSTANCE_ID;
+    } else {
+        operation.status = 'save-unconfirmed';
+        operation.persistenceReason = operation.scenePersistenceReadback.reason || 'SCENE_PERSISTENCE_READBACK_UNCONFIRMED';
+    }
     writeOperation(operation);
     return sceneComposeReceipt(operation, readback);
 }
@@ -1946,22 +6099,57 @@ async function commitSceneCompose(input, context) {
 async function reconcileSceneCompose(input) {
     const operation = readSceneComposeOperation(input.operationId);
     verifySceneOperationIdentity(operation, { requireCurrentContract: false });
+    if (operation.status === 'cancelled') {
+        let observed;
+        try {
+            await validateSceneComposePlan(operation);
+            observed = { mutationApplied: false, sceneAssetIdentity: operation.plan.sceneAssetIdentity,
+                verifiedBeforeState: true, readOnly: true };
+        } catch (error) {
+            operation.status = 'conflict';
+            operation.reconcileReason = error.code || 'SCENE_COMPOSE_CANCELLATION_STATE_CHANGED';
+            operation.reconciledAt = new Date().toISOString();
+            writeOperation(operation);
+            return { ...sceneComposeReceipt(operation, null), observed: null, reason: operation.reconcileReason,
+                retry: 'Never replay this operation. The scene or its saved asset changed after cancellation; inspect it and create a new plan.' };
+        }
+        operation.reconciledAt = new Date().toISOString();
+        writeOperation(operation);
+        return { ...sceneComposeReceipt(operation, null), observed,
+            retry: 'Never replay this operation. The original plan remains cancelled and the scene before-state is unchanged.' };
+    }
+    try {
+        operation.scenePersistenceReadback = await waitForSceneComposePersistence(operation, 0);
+        if (operation.scenePersistenceReadback.verified) {
+            operation.status = 'completed';
+            operation.completedAt = operation.completedAt || new Date().toISOString();
+            operation.completedByInstanceId = operation.completedByInstanceId || INSTANCE_ID;
+            operation.reconciledAt = new Date().toISOString();
+            writeOperation(operation);
+            return { ...sceneComposeReceipt(operation, operation.sceneReadback || null),
+                observed: operation.scenePersistenceReadback,
+                retry: 'Never replay this operation. Disk persistence has been verified for the original operation.' };
+        }
+    } catch (error) {
+        operation.scenePersistenceReadback = { verified: false, reason: error.code || 'SCENE_PERSISTENCE_READBACK_FAILED' };
+    }
     let readback;
     try { readback = await callScene('compositionReadback', operation.plan.request, 30000); }
     catch (error) {
-        operation.status = 'conflict';
+        operation.status = operation.sceneSaveRequestSent ? 'save-unconfirmed' : 'needs-reconciliation';
         operation.reconciledAt = new Date().toISOString();
         operation.reconcileReason = error.code || 'SCENE_COMPOSE_READBACK_FAILED';
         writeOperation(operation);
         return { ...sceneComposeReceipt(operation, null), observed: null, reason: operation.reconcileReason };
     }
     if (sceneComposeReadbackMatches(operation, readback)) {
-        if (['save-requested', 'completed'].includes(operation.status)) operation.status = 'completed';
+        if (operation.sceneSaveRequestSent) operation.status = 'save-unconfirmed';
         else if (['mutation-applied', 'applying', 'needs-reconciliation'].includes(operation.status)) operation.status = 'save-required';
         else operation.status = 'conflict';
     } else if (!readback || readback.available !== true) {
-        if (['planned', 'awaiting-approval', 'applying', 'needs-reconciliation'].includes(operation.status)) operation.status = 'not-applied';
-        else operation.status = 'conflict';
+        if (operation.sceneSaveRequestSent) operation.status = 'save-unconfirmed';
+        else if (['planned', 'awaiting-approval', 'applying'].includes(operation.status)) operation.status = 'not-applied';
+        else operation.status = 'needs-reconciliation';
     } else operation.status = 'conflict';
     operation.reconciledAt = new Date().toISOString();
     operation.sceneReadback = readback;
@@ -2189,6 +6377,271 @@ function callScene(method, params, timeoutMs) {
     });
 }
 
+function prepareEditorEventWait(eventName, timeoutMs = 20000) {
+    const emitter = mainProcessIpcEmitter();
+    if (!emitter || typeof emitter.on !== 'function') throw coded('CREATOR_IPC_EVENT_UNAVAILABLE');
+    let settled = false;
+    let timerId = null;
+    let resolvePromise;
+    let rejectPromise;
+    const cleanup = () => {
+        if (timerId) clearTimeout(timerId);
+        timerId = null;
+        if (typeof emitter.removeListener === 'function') emitter.removeListener(eventName, listener);
+        else if (typeof emitter.off === 'function') emitter.off(eventName, listener);
+    };
+    const settle = (error, args) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (error) rejectPromise(error); else resolvePromise(args);
+    };
+    const listener = (...args) => settle(null, args);
+    const promise = new Promise((resolve, reject) => { resolvePromise = resolve; rejectPromise = reject; });
+    emitter.on(eventName, listener);
+    timerId = setTimeout(() => settle(coded('CREATOR_EDITOR_EVENT_TIMEOUT', `Timed out waiting for ${eventName}.`)), timeoutMs);
+    return { promise, cancel: (error) => settle(error || coded('CREATOR_EDITOR_EVENT_CANCELLED')) };
+}
+
+async function enterPrefabSourceMode(prefabUuid, expectedSceneUuid) {
+    const before = await currentPrefabEditMode();
+    if (before.modeName !== 'scene' || before.sceneUuid !== expectedSceneUuid) throw coded('EDITOR_BUSY');
+    const ready = prepareEditorEventWait('scene:ready', 30000);
+    try { Editor.Ipc.sendToAll('scene:enter-prefab-edit-mode', prefabUuid); }
+    catch (error) { ready.cancel(error); await ready.promise.catch(() => undefined); throw error; }
+    await ready.promise;
+    const after = await currentPrefabEditMode();
+    if (after.modeName !== 'prefab' || after.prefabUuid !== prefabUuid)
+        throw coded('PREFAB_MODE_TARGET_MISMATCH');
+    return after;
+}
+
+async function exitPrefabSourceMode(prefabUuid, expectedSceneUuid) {
+    const before = await currentPrefabEditMode();
+    if (before.modeName !== 'prefab' || before.prefabUuid !== prefabUuid) throw coded('PREFAB_EXIT_TARGET_MISMATCH');
+    const ready = prepareEditorEventWait('scene:ready', 30000);
+    try {
+        const exit = await callScene('exitPrefabSourceMode', { prefabUuid }, 20000);
+        if (!exit || exit.available !== true || exit.prefabUuid !== prefabUuid || exit.exitRequested !== true)
+            throw coded(exit && exit.reason || 'PREFAB_EXIT_FAILED');
+    } catch (error) { ready.cancel(error); await ready.promise.catch(() => undefined); throw error; }
+    await ready.promise;
+    const after = await currentPrefabEditMode();
+    if (after.modeName !== 'scene' || expectedSceneUuid && after.sceneUuid !== expectedSceneUuid)
+        throw coded('PREFAB_EXIT_UNVERIFIED');
+    return after;
+}
+
+async function savePrefabSourceMode(prefabUuid) {
+    const mode = await currentPrefabEditMode();
+    if (mode.modeName !== 'prefab' || mode.prefabUuid !== prefabUuid) throw coded('PREFAB_SAVE_TARGET_MISMATCH');
+    const saved = prepareEditorEventWait('scene:saved', 30000);
+    let result;
+    try { result = await callScene('savePrefabSource', { prefabUuid }, 20000); }
+    catch (error) { saved.cancel(error); await saved.promise.catch(() => undefined); throw error; }
+    if (!result || result.available !== true || result.prefabUuid !== prefabUuid || result.saved !== true) {
+        const error = coded(result && result.reason || 'PREFAB_SAVE_UNVERIFIED');
+        saved.cancel(error);
+        await saved.promise.catch(() => undefined);
+        throw error;
+    }
+    await saved.promise;
+    const after = await currentPrefabEditMode();
+    if (after.modeName !== 'prefab' || after.prefabUuid !== prefabUuid) throw coded('PREFAB_SAVE_TARGET_MISMATCH');
+    return { mode: after, eventConfirmed: true };
+}
+
+function readEditorEvalOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES)
+        throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    if (!operation || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.editor.eval' || !plan || typeof plan !== 'object'
+        || plan.operation !== operation.operation || plan.operationId !== operationId
+        || !['inline', 'file'].includes(plan.mode) || typeof plan.projectRoot !== 'string'
+        || typeof plan.creatorVersion !== 'string' || typeof plan.extensionVersion !== 'string'
+        || typeof plan.contractFingerprint !== 'string' || typeof plan.creatorInstanceId !== 'string'
+        || typeof plan.source !== 'string' || typeof plan.sourceSha256 !== 'string'
+        || !plan.input || typeof plan.input !== 'object' || Array.isArray(plan.input)
+        || typeof plan.inputSha256 !== 'string' || typeof plan.expiresAt !== 'string'
+        || (plan.mode === 'file' && typeof plan.scriptPath !== 'string')
+        || (plan.mode === 'inline' && plan.scriptPath !== null)
+        || typeof operation.planHash !== 'string'
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'completed',
+            'needs-reconciliation'].includes(operation.status)) throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    const validated = editorScriptEval.validateEditorScript(plan.source, plan.input);
+    if (fileHash(Buffer.from(validated.source, 'utf8')) !== plan.sourceSha256
+        || fileHash(Buffer.from(JSON.stringify(validated.input), 'utf8')) !== plan.inputSha256)
+        throw coded('OPERATION_SOURCE_HASH_MISMATCH');
+    return operation;
+}
+
+function verifyEditorEvalIdentity(operation) {
+    const plan = operation.plan;
+    if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
+    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+        throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
+    if (plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
+    if (plan.extensionVersion !== extensionPackage.version || plan.contractFingerprint !== CONTRACT_FINGERPRINT)
+        throw coded('OPERATION_CONTRACT_MISMATCH');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+}
+
+function editorEvalReceipt(operation) {
+    const plan = operation.plan;
+    return { operationId: operation.operationId, status: operation.status, mode: plan.mode,
+        projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        scriptPath: plan.scriptPath, sourceBytes: Buffer.byteLength(plan.source, 'utf8'),
+        sourceSha256: plan.sourceSha256, inputSha256: plan.inputSha256,
+        startedAt: operation.startedAt || null, completedAt: operation.completedAt || null,
+        result: operation.status === 'completed' ? operation.result : null,
+        errorCode: operation.errorCode || null,
+        sideEffectsVerified: false, automaticRetry: false,
+        manualReviewRequired: ['applying', 'needs-reconciliation'].includes(operation.status),
+        recovery: { automaticRetry: false, reconcileCommand: plan.mode === 'file'
+            ? 'creator.editor.eval-file.reconcile' : 'creator.editor.eval.reconcile',
+        note: 'This command runs trusted script code inside Creator with Editor API access. Its effects and persistence are not verified; reconciliation never reruns it.' } };
+}
+
+async function createEditorEvalPlan(input, mode) {
+    const currentRoot = projectRoot();
+    const currentVersion = editorVersion();
+    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    let source;
+    let scriptPath = null;
+    if (mode === 'inline') source = input.source;
+    else {
+        scriptPath = input.scriptPath;
+        source = readProjectExtensionScript(scriptPath);
+    }
+    const validated = editorScriptEval.validateEditorScript(source, input.input || {});
+    if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
+    const plan = { operationId: uuid(), operation: 'creator.editor.eval', mode,
+        projectRoot: currentRoot, creatorVersion: currentVersion, extensionVersion: extensionPackage.version,
+        contractFingerprint: CONTRACT_FINGERPRINT, creatorInstanceId: INSTANCE_ID,
+        scriptPath, source: validated.source, sourceSha256: fileHash(Buffer.from(validated.source, 'utf8')),
+        input: validated.input, inputSha256: fileHash(Buffer.from(JSON.stringify(validated.input), 'utf8')),
+        expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString() };
+    const operation = { schemaVersion: 1, operationId: plan.operationId, operation: plan.operation,
+        plan, planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(),
+        plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { ...editorEvalReceipt(operation), planHash: operation.planHash, expiresAt: plan.expiresAt,
+        sourcePreview: plan.source, input: plan.input, recovery: { automaticRetry: false,
+            reconcileCommand: mode === 'file' ? 'creator.editor.eval-file.reconcile' : 'creator.editor.eval.reconcile',
+            note: 'The exact script and JSON input are frozen into this plan. Review both before approving.' } };
+}
+
+function confirmEditorEval(operation) {
+    if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
+    const plan = operation.plan;
+    const detail = [
+        `Project: ${plan.projectRoot}`,
+        `Creator: ${plan.creatorVersion}`,
+        `Mode: ${plan.mode}${plan.scriptPath ? ` (${plan.scriptPath})` : ''}`,
+        `Script SHA-256: ${plan.sourceSha256}`,
+        `JSON input SHA-256: ${plan.inputSha256}`,
+        `Operation: ${operation.operationId}`,
+        '',
+        'The script runs with Creator Editor API access and is not sandboxed. It can change project/editor data. Effects and disk persistence are not verified. Time limits are best-effort and do not cancel side effects already started or guarantee an untrusted script will terminate. Only approve code and input you trust.',
+        '',
+        'JSON input:', JSON.stringify(plan.input, null, 2),
+        '',
+        'Exact script source:', plan.source,
+    ].join('\n');
+    return confirmDialog(Editor.Dialog, { type: 'warning', title: 'Approve Creator Editor script execution',
+        message: `Run the planned ${plan.mode === 'file' ? 'Editor script file' : 'inline Editor script'}?`, detail,
+        buttons: ['Cancel', 'Run script'], defaultId: 0, cancelId: 0, noLink: true });
+}
+
+async function commitEditorEval(input, context, requestedMode) {
+    const operation = readEditorEvalOperation(input.operationId);
+    verifyEditorEvalIdentity(operation);
+    const plan = operation.plan;
+    if (requestedMode && plan.mode !== requestedMode) throw coded('OPERATION_MODE_MISMATCH');
+    if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (operation.status !== 'planned') throw coded(['applying', 'awaiting-approval', 'needs-reconciliation'].includes(operation.status)
+        ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+    if (Date.now() > Date.parse(plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    if (plan.mode === 'file') {
+        const source = readProjectExtensionScript(plan.scriptPath);
+        if (fileHash(Buffer.from(source, 'utf8')) !== plan.sourceSha256 || source !== plan.source)
+            throw coded('EDITOR_SCRIPT_SOURCE_CHANGED');
+    }
+    operation.status = 'awaiting-approval';
+    operation.approvalRequestedAt = new Date().toISOString();
+    writeOperation(operation);
+    let approved;
+    try { approved = await confirmEditorEval(operation); }
+    catch (error) {
+        operation.status = 'abandoned';
+        operation.abandonedAt = new Date().toISOString();
+        writeOperation(operation);
+        throw error;
+    }
+    if (!approved) {
+        operation.status = 'cancelled';
+        operation.cancelledAt = new Date().toISOString();
+        writeOperation(operation);
+        throw coded('OPERATION_NOT_APPROVED');
+    }
+    try { await authorizeWriteRequest(context && context.requestId); }
+    catch (error) {
+        operation.status = 'abandoned';
+        operation.abandonedAt = new Date().toISOString();
+        writeOperation(operation);
+        throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error));
+    }
+    try {
+        verifyEditorEvalIdentity(operation);
+        if (Date.now() > Date.parse(plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+        if (plan.mode === 'file') {
+            const source = readProjectExtensionScript(plan.scriptPath);
+            if (fileHash(Buffer.from(source, 'utf8')) !== plan.sourceSha256 || source !== plan.source)
+                throw coded('EDITOR_SCRIPT_SOURCE_CHANGED');
+        }
+    } catch (error) {
+        operation.status = 'abandoned';
+        operation.abandonedAt = new Date().toISOString();
+        writeOperation(operation);
+        throw error;
+    }
+    operation.status = 'applying';
+    operation.startedAt = new Date().toISOString();
+    operation.approvedAt = operation.startedAt;
+    operation.approvalSource = 'creator-native-dialog';
+    operation.appliedByInstanceId = INSTANCE_ID;
+    writeOperation(operation);
+    try {
+        const outcome = await editorScriptEval.runEditorScript({ source: plan.source, input: plan.input, editor: Editor });
+        operation.status = 'completed';
+        operation.result = outcome.result;
+        operation.resultBytes = outcome.resultBytes;
+        operation.completedAt = new Date().toISOString();
+        operation.completedByInstanceId = INSTANCE_ID;
+        writeOperation(operation);
+        return editorEvalReceipt(operation);
+    } catch (error) {
+        operation.status = 'needs-reconciliation';
+        operation.errorCode = error.code || 'EDITOR_SCRIPT_EXECUTION_FAILED';
+        operation.failedAt = new Date().toISOString();
+        writeOperation(operation);
+        throw error;
+    }
+}
+
+function reconcileEditorEval(input, requestedMode) {
+    const operation = readEditorEvalOperation(input.operationId);
+    if (requestedMode && operation.plan.mode !== requestedMode) throw coded('OPERATION_MODE_MISMATCH');
+    return editorEvalReceipt(operation);
+}
+
 function capabilityList() {
     const ready = {
         'creator.extension.commands.list': !!(Editor && Editor.Project && Editor.Project.path
@@ -2206,9 +6659,106 @@ function capabilityList() {
         'creator.project.info': !!(Editor && Editor.Project && Editor.Project.path),
         'creator.project.search': !!(Editor && Editor.Project && Editor.Project.path),
         'creator.asset.search': !!(Editor && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.asset.references': !!(Editor && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.asset.import.plan': !!(Editor && Editor.Project && Editor.Project.path && Editor.assetdb
+            && typeof Editor.assetdb.exists === 'function' && typeof Editor.assetdb.create === 'function'
+            && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.asset.import.commit': !!(Editor && Editor.Project && Editor.Project.path && Editor.assetdb
+            && typeof Editor.assetdb.exists === 'function' && typeof Editor.assetdb.create === 'function'
+            && typeof Editor.assetdb.queryAssets === 'function' && Editor.Dialog
+            && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.asset.import.reconcile': !!(Editor && Editor.Project && Editor.Project.path && Editor.assetdb
+            && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.asset.move.plan': !!(Editor && Editor.Project && Editor.Project.path && Editor.assetdb
+            && typeof Editor.assetdb.move === 'function' && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.asset.move.commit': !!(Editor && Editor.Project && Editor.Project.path && Editor.assetdb
+            && typeof Editor.assetdb.move === 'function' && typeof Editor.assetdb.queryAssets === 'function'
+            && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.asset.move.reconcile': !!(Editor && Editor.Project && Editor.Project.path && Editor.assetdb
+            && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.asset.delete.plan': !!(Editor && Editor.Project && Editor.Project.path && Editor.assetdb
+            && typeof Editor.assetdb.queryAssets === 'function' && typeof Editor.assetdb.delete === 'function'
+            && typeof Editor.assetdb.isSubAsset === 'function'
+            && typeof Editor.assetdb.containsSubAssets === 'function'),
+        'creator.asset.delete.commit': !!(Editor && Editor.Project && Editor.Project.path && Editor.assetdb
+            && typeof Editor.assetdb.queryAssets === 'function' && typeof Editor.assetdb.delete === 'function'
+            && typeof Editor.assetdb.isSubAsset === 'function'
+            && typeof Editor.assetdb.containsSubAssets === 'function' && Editor.Dialog
+            && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.asset.delete.reconcile': !!(Editor && Editor.Project && Editor.Project.path && Editor.assetdb
+            && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.asset.import-settings.plan': !!(Editor && Editor.Project && Editor.Project.path && Editor.assetdb
+            && typeof Editor.assetdb.queryAssets === 'function' && typeof Editor.assetdb.isSubAsset === 'function'),
+        'creator.asset.import-settings.commit': !!(Editor && Editor.Project && Editor.Project.path && Editor.assetdb
+            && typeof Editor.assetdb.queryAssets === 'function' && typeof Editor.assetdb.isSubAsset === 'function'
+            && typeof Editor.assetdb.saveMeta === 'function' && Editor.Dialog
+            && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.asset.import-settings.reconcile': !!(Editor && Editor.Project && Editor.Project.path && Editor.assetdb
+            && typeof Editor.assetdb.queryAssets === 'function' && typeof Editor.assetdb.isSubAsset === 'function'),
+        'creator.prefab.create.plan': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function' && Editor.assetdb
+            && typeof Editor.assetdb.exists === 'function' && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.prefab.create.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function' && Editor.assetdb
+            && typeof Editor.assetdb.exists === 'function' && typeof Editor.assetdb.queryAssets === 'function'
+            && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.prefab.create.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.prefab.source.inspect': !!(Editor && Editor.Project && Editor.Project.path && Editor.assetdb
+            && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.prefab.instance.inspect': !!(Editor && Editor.Project && Editor.Project.path
+            && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.prefab.instance.override.plan': !!(Editor && Editor.Project && Editor.Project.path
+            && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.prefab.instance.override.commit': !!(Editor && Editor.Project && Editor.Project.path
+            && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'
+            && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'
+            && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.prefab.instance.override.reconcile': !!(Editor && Editor.Project && Editor.Project.path
+            && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.prefab.source.patch.plan': prefabEditModeApiAvailable && !!(Editor && Editor.Project && Editor.Project.path
+            && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function' && Editor.assetdb
+            && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.prefab.source.patch.commit': prefabEditModeApiAvailable && !!(Editor && Editor.Project && Editor.Project.path
+            && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function' && Editor.Ipc
+            && typeof Editor.Ipc.sendToAll === 'function' && typeof Editor.Ipc.on === 'function'
+            && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'
+            && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.prefab.source.patch.reconcile': !!(Editor && Editor.Project && Editor.Project.path && Editor.assetdb
+            && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.editor.eval.plan': !!(Editor && Editor.Project && Editor.Project.path),
+        'creator.editor.eval.commit': !!(Editor && Editor.Project && Editor.Project.path
+            && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.editor.eval.reconcile': !!(Editor && Editor.Project && Editor.Project.path),
+        'creator.editor.eval-file.plan': !!(Editor && Editor.Project && Editor.Project.path),
+        'creator.editor.eval-file.commit': !!(Editor && Editor.Project && Editor.Project.path
+            && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.editor.eval-file.reconcile': !!(Editor && Editor.Project && Editor.Project.path),
         'creator.script.read': !!(Editor && Editor.Project && Editor.Project.path),
         'creator.scene.snapshot': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
         'creator.scene.node.read': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.node.rename.plan': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.node.rename.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'
+            && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.scene.node.rename.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.node.delete.plan': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.node.delete.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.scene.node.delete.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.node.remove-component.plan': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.node.remove-component.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.scene.node.remove-component.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.node.reparent.plan': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.node.reparent.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'
+            && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.scene.node.reparent.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
         'creator.scene.compose.plan': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
             && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
         'creator.scene.compose.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
@@ -2220,6 +6770,16 @@ function capabilityList() {
             && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'
             && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
         'creator.scene.node.set-active.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.node.set-transform.plan': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.node.set-transform.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'
+            && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.scene.node.set-transform.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.button-events.set.plan': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.button-events.set.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'
+            && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'),
+        'creator.scene.button-events.set.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
         'creator.scene.node.add-component.plan': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
         'creator.scene.node.add-component.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
             && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'
@@ -2426,6 +6986,30 @@ function queryAssetByUuid(assetUuid) {
             reject(coded('ASSETDB_QUERY_FAILED', String(error.message || error)));
         }
     });
+}
+
+async function readAssetReferences(input) {
+    const asset = await queryAssetByUuid(input.assetUuid);
+    if (!asset) throw coded('ASSET_UUID_NOT_FOUND');
+    const root = projectRoot();
+    const ignoredPaths = [];
+    if (asset.isSubAsset !== true && typeof asset.url === 'string' && asset.url.startsWith('db://assets/')) {
+        const relativePath = asset.url.slice('db://assets/'.length);
+        try {
+            assetTargetPaths(relativePath);
+            ignoredPaths.push(relativePath, `${relativePath}.meta`);
+        } catch (_) {}
+    }
+    const references = scanAssetReferences(path.join(root, 'assets'), input.assetUuid, { ignorePaths: ignoredPaths });
+    return { projectRoot: root, creatorVersion: editorVersion(), asset: {
+        assetUuid: asset.uuid, url: asset.url, type: typeof asset.type === 'string' ? asset.type : null,
+        importer: typeof asset.importer === 'string' ? asset.importer : null,
+        isSubAsset: asset.isSubAsset === true,
+    }, ...references,
+    evidence: { method: 'bounded-text-reference-scan', binaryFilesSkipped: true,
+        complete: references.complete, note: references.complete
+            ? 'Text files under assets/ were scanned within the reported limits; binary file formats were skipped.'
+            : 'The scan reached a symlink, unreadable file, size/file limit, or result cap. Absence of a result does not prove that the asset has no references.' } };
 }
 
 function readScript(input) {
@@ -2644,15 +7228,63 @@ function execute(command, input, context) {
     if (command === 'creator.project.info') return projectInfo();
     if (command === 'creator.project.search') return Promise.resolve(searchProject(input));
     if (command === 'creator.asset.search') return searchAssets(input);
+    if (command === 'creator.asset.references') return readAssetReferences(input);
+    if (command === 'creator.asset.import.plan') return createAssetImportPlan(input);
+    if (command === 'creator.asset.import.commit') return commitAssetImport(input, context);
+    if (command === 'creator.asset.import.reconcile') return reconcileAssetImport(input);
+    if (command === 'creator.asset.move.plan') return createAssetMovePlan(input);
+    if (command === 'creator.asset.move.commit') return commitAssetMove(input, context);
+    if (command === 'creator.asset.move.reconcile') return reconcileAssetMove(input);
+    if (command === 'creator.asset.delete.plan') return createAssetDeletePlan(input);
+    if (command === 'creator.asset.delete.commit') return commitAssetDelete(input, context);
+    if (command === 'creator.asset.delete.reconcile') return reconcileAssetDelete(input);
+    if (command === 'creator.asset.import-settings.plan') return createTextureImportSettingsPlan(input);
+    if (command === 'creator.asset.import-settings.commit') return commitTextureImportSettings(input, context);
+    if (command === 'creator.asset.import-settings.reconcile') return reconcileTextureImportSettings(input);
+    if (command === 'creator.prefab.create.plan') return createPrefabPlan(input);
+    if (command === 'creator.prefab.create.commit') return commitPrefabCreate(input, context);
+    if (command === 'creator.prefab.create.reconcile') return reconcilePrefabCreate(input);
+    if (command === 'creator.prefab.source.inspect') return inspectPrefabSourceCommand(input);
+    if (command === 'creator.prefab.instance.inspect') return inspectPrefabInstanceCommand(input);
+    if (command === 'creator.prefab.instance.override.plan') return createPrefabInstanceOverridePlan(input);
+    if (command === 'creator.prefab.instance.override.commit') return commitPrefabInstanceOverride(input, context);
+    if (command === 'creator.prefab.instance.override.reconcile') return reconcilePrefabInstanceOverride(input);
+    if (command === 'creator.prefab.source.patch.plan') return createPrefabSourcePatchPlan(input);
+    if (command === 'creator.prefab.source.patch.commit') return commitPrefabSourcePatch(input, context);
+    if (command === 'creator.prefab.source.patch.reconcile') return reconcilePrefabSourcePatch(input);
+    if (command === 'creator.editor.eval.plan') return createEditorEvalPlan(input, 'inline');
+    if (command === 'creator.editor.eval.commit') return commitEditorEval(input, context, 'inline');
+    if (command === 'creator.editor.eval.reconcile') return reconcileEditorEval(input, 'inline');
+    if (command === 'creator.editor.eval-file.plan') return createEditorEvalPlan(input, 'file');
+    if (command === 'creator.editor.eval-file.commit') return commitEditorEval(input, context, 'file');
+    if (command === 'creator.editor.eval-file.reconcile') return reconcileEditorEval(input, 'file');
     if (command === 'creator.script.read') return Promise.resolve(readScript(input));
     if (command === 'creator.scene.snapshot') return callScene('snapshot', { maxNodes: 100 });
     if (command === 'creator.scene.node.read') return callScene('nodeState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);
+    if (command === 'creator.scene.node.rename.plan') return createSceneNodeRenamePlan(input);
+    if (command === 'creator.scene.node.rename.commit') return commitSceneNodeRename(input, context);
+    if (command === 'creator.scene.node.rename.reconcile') return reconcileSceneNodeRename(input);
+    if (command === 'creator.scene.node.delete.plan') return createSceneNodeDeletePlan(input);
+    if (command === 'creator.scene.node.delete.commit') return commitSceneDestructiveOperation(readSceneNodeDeleteOperation(input.operationId), input, context);
+    if (command === 'creator.scene.node.delete.reconcile') return reconcileSceneDestructiveOperation(readSceneNodeDeleteOperation(input.operationId));
+    if (command === 'creator.scene.node.remove-component.plan') return createSceneComponentRemovePlan(input);
+    if (command === 'creator.scene.node.remove-component.commit') return commitSceneDestructiveOperation(readSceneComponentRemoveOperation(input.operationId), input, context);
+    if (command === 'creator.scene.node.remove-component.reconcile') return reconcileSceneDestructiveOperation(readSceneComponentRemoveOperation(input.operationId));
+    if (command === 'creator.scene.node.reparent.plan') return createSceneNodeReparentPlan(input);
+    if (command === 'creator.scene.node.reparent.commit') return commitSceneNodeReparent(input, context);
+    if (command === 'creator.scene.node.reparent.reconcile') return reconcileSceneNodeReparent(input);
     if (command === 'creator.scene.compose.plan') return createSceneComposePlan(input);
     if (command === 'creator.scene.compose.commit') return commitSceneCompose(input, context);
     if (command === 'creator.scene.compose.reconcile') return reconcileSceneCompose(input);
     if (command === 'creator.scene.node.set-active.plan') return createSceneNodeActivePlan(input);
     if (command === 'creator.scene.node.set-active.commit') return commitSceneNodeActive(input, context);
     if (command === 'creator.scene.node.set-active.reconcile') return reconcileSceneNodeActive(input);
+    if (command === 'creator.scene.node.set-transform.plan') return createSceneNodeTransformPlan(input);
+    if (command === 'creator.scene.node.set-transform.commit') return commitSceneNodeTransform(input, context);
+    if (command === 'creator.scene.node.set-transform.reconcile') return reconcileSceneNodeTransform(input);
+    if (command === 'creator.scene.button-events.set.plan') return createSceneButtonEventsPlan(input);
+    if (command === 'creator.scene.button-events.set.commit') return commitSceneButtonEvents(input, context);
+    if (command === 'creator.scene.button-events.set.reconcile') return reconcileSceneButtonEvents(input);
     if (command === 'creator.scene.node.add-component.plan') return createSceneComponentAddPlan(input);
     if (command === 'creator.scene.node.add-component.commit') return commitSceneComponentAdd(input, context);
     if (command === 'creator.scene.node.add-component.reconcile') return reconcileSceneComponentAdd(input);
@@ -2688,6 +7320,7 @@ function pollLoop() {
                 const registration = await requestJson(state, 'POST', '/v1/creator/register', {
                     instanceId: INSTANCE_ID, projectRoot: root, creatorVersion: version,
                     extensionVersion: extensionPackage.version, contractFingerprint: CONTRACT_FINGERPRINT,
+                    processId: process.pid,
                     capabilities: capabilityList(), activeScene: lastSceneName,
                 }, 8000);
                 bridgeSession = { bridgeId: state.bridgeId, sessionId: registration.sessionId, projectRoot: root };
@@ -2728,7 +7361,9 @@ module.exports = {
         stopped = false;
         timer = null;
         bridgeSession = null;
+        prefabEditModeApiAvailable = false;
         setupDiagnosticListeners();
+        refreshPrefabEditModeCapability();
         pollLoop();
     },
     unload() {
@@ -2738,6 +7373,7 @@ module.exports = {
         if (activeRequest) activeRequest.destroy(coded('EXTENSION_UNLOADED'));
         activeRequest = null;
         removeDiagnosticListeners();
+        prefabEditModeApiAvailable = false;
         bridgeSession = null;
     },
     messages: {

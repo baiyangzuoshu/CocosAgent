@@ -37,6 +37,245 @@
       }
     },
     {
+      "id": "creator.asset.references",
+      "access": "read",
+      "description": "Find bounded text-file references to one exact AssetDB UUID under assets/. Reports incomplete scans and skips binary formats; an incomplete scan cannot prove that no references exist.",
+      "input": {
+        "type": "object",
+        "required": ["assetUuid"],
+        "properties": {
+          "assetUuid": { "type": "string", "minLength": 22, "maxLength": 36,
+            "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.asset.import.plan",
+      "access": "plan",
+      "description": "Plan importing one user-selected regular file into an existing assets folder through Creator AssetDB. Binds the external source SHA-256 and absent destination; does not write.",
+      "input": { "type": "object", "required": ["sourcePath", "assetPath"], "properties": {
+        "sourcePath": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "assetPath": { "type": "string", "minLength": 1, "maxLength": 240,
+          "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?($|/))(?!.*(?:^|/)\\.)[^\\\\]+\\.[A-Za-z0-9]{1,10}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.asset.import.commit",
+      "access": "write", "approval": true,
+      "description": "After native Creator approval, import the exact planned file bytes through AssetDB, then read back the target SHA-256, generated .meta UUID, importer, and asset type.",
+      "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+        "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.asset.import.reconcile",
+      "access": "plan",
+      "description": "Read and reconcile one interrupted AssetDB import against its source hash, exact target, AssetDB UUID, and generated .meta. Never retries the import.",
+      "input": { "type": "object", "required": ["operationId"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.asset.move.plan",
+      "access": "plan",
+      "description": "Plan moving or renaming one existing file asset through Creator AssetDB. Binds source UUID, file/.meta hashes, importer and type; destination must be absent and retain the source extension.",
+      "input": { "type": "object", "required": ["sourceAssetPath", "destinationAssetPath"], "properties": {
+        "sourceAssetPath": { "type": "string", "minLength": 1, "maxLength": 240,
+          "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?($|/))(?!.*(?:^|/)\\.)[^\\\\]+\\.[A-Za-z0-9]{1,10}$" },
+        "destinationAssetPath": { "type": "string", "minLength": 1, "maxLength": 240,
+          "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?($|/))(?!.*(?:^|/)\\.)[^\\\\]+\\.[A-Za-z0-9]{1,10}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.asset.move.commit",
+      "access": "write", "approval": true,
+      "description": "After native Creator approval, move or rename the exact asset via AssetDB and verify the original path is absent while UUID, bytes, .meta, importer, and type match at the destination.",
+      "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+        "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.asset.move.reconcile",
+      "access": "plan",
+      "description": "Read and classify both paths for an interrupted AssetDB move by UUID and file/.meta hashes. Never repeats the move.",
+      "input": { "type": "object", "required": ["operationId"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.prefab.create.plan",
+      "access": "plan",
+      "description": "Plan creating one Prefab from an exact active-scene node through the Creator Scene panel. Binds the scene and node UUIDs and an absent .prefab target; does not write.",
+      "input": { "type": "object", "required": ["sceneUuid", "nodeUuid", "prefabPath"], "properties": {
+        "sceneUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+        "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+        "prefabPath": { "type": "string", "minLength": 1, "maxLength": 240,
+          "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?($|/))(?!.*(?:^|/)\\.)[^\\\\]+\\.prefab$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.prefab.create.commit",
+      "access": "write", "approval": true,
+      "description": "After native Creator approval, create the exact planned Prefab through the Creator Scene panel, then verify the generated AssetDB UUID, serialized asset, importer, and .meta identity. Never hand-edits Prefab serialization.",
+      "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+        "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.prefab.create.reconcile",
+      "access": "plan",
+      "description": "Read and reconcile one interrupted Creator-authored Prefab creation against its exact target URL, AssetDB UUID, serialized source, and .meta. Never reruns the Scene panel command.",
+      "input": { "type": "object", "required": ["operationId"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.prefab.source.inspect",
+      "access": "read",
+      "description": "Inspect one exact AssetDB Prefab's saved .prefab and .meta identity, bounded node hierarchy, transforms, active flags, and supported Sprite/Label properties. Reports disk state only; it does not inspect unsaved Prefab edit-mode state.",
+      "input": { "type": "object", "required": ["prefabUuid"], "properties": {
+        "prefabUuid": { "type": "string", "minLength": 22, "maxLength": 36,
+          "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+        "nodeUuid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_+/=-]+$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.prefab.instance.inspect",
+      "access": "read",
+      "description": "Inspect one live scene Prefab instance by scene/node UUID, including its exact linked Prefab asset, root identity, bounded descendant links, and saved scene/Prefab hashes. Does not apply, revert, or save overrides.",
+      "input": { "type": "object", "required": ["sceneUuid", "nodeUuid"], "properties": {
+        "sceneUuid": { "type": "string", "minLength": 22, "maxLength": 36,
+          "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+        "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36,
+          "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.prefab.instance.override.plan",
+      "access": "plan",
+      "description": "Plan one Creator-native apply or revert for an exact linked Prefab instance. Binds the live instance state and exact saved scene/Prefab hashes; requires the instance to exist in the saved scene. Does not mutate.",
+      "input": { "type": "object", "required": ["sceneUuid", "nodeUuid", "action"], "properties": {
+        "sceneUuid": { "type": "string", "minLength": 22, "maxLength": 36,
+          "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+        "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36,
+          "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+        "action": { "type": "string", "enum": ["apply", "revert"] }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.prefab.instance.override.commit",
+      "access": "write", "approval": true,
+      "description": "After native Creator approval and a fresh exact-state check, invoke Creator's native Prefab instance Apply or Revert action, request scene save, and observe exact saved scene/Prefab hash transitions plus live instance state. Does not decode every component override or claim semantic field-by-field equivalence. Never automatically retries.",
+      "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+        "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.prefab.instance.override.reconcile",
+      "access": "plan",
+      "description": "Read and classify the exact scene/Prefab hashes and live instance state after an interrupted native Apply or Revert. Never reissues the action.",
+      "input": { "type": "object", "required": ["operationId"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.prefab.source.patch.plan",
+      "access": "plan",
+      "description": "Plan an allowlisted edit to an existing Prefab in Creator Prefab edit mode. Apply binds the inspected source hash and explicit before/after values; compensation and replay derive their inverse from a completed source operation.",
+      "input": { "type": "object", "required": ["prefabUuid", "targetNodePath", "targetNodeUuid", "action"], "properties": {
+        "prefabUuid": { "type": "string", "minLength": 22, "maxLength": 36,
+          "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+        "targetNodePath": { "type": "string", "minLength": 1, "maxLength": 512,
+          "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?($|/))[^\\\\]+$" },
+        "targetNodeUuid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_+/=-]+$" },
+        "action": { "type": "string", "enum": ["apply", "compensate", "replay"] },
+        "expectedSourceSha256": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" },
+        "sourceOperationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+        "expectedDiff": { "type": "array", "minItems": 1, "maxItems": 16, "items": {
+          "type": "object", "required": ["path", "before", "after"], "properties": {
+            "path": { "type": "string", "enum": ["node.name", "node.active", "node.position.x", "node.position.y", "node.scale.x", "node.scale.y", "component.cc.Sprite.enabled", "component.cc.Sprite.spriteFrameUuid", "component.cc.Label.enabled"] },
+            "before": { "type": ["string", "number", "boolean", "null"] },
+            "after": { "type": ["string", "number", "boolean", "null"] }
+          }, "additionalProperties": false
+        } }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.prefab.source.patch.commit",
+      "access": "write", "approval": true,
+      "description": "After native Creator approval, enter the exact Prefab edit mode, apply the allowlisted node changes, save, exit, reopen, verify the live node, and reread the exact Prefab and .meta. Writes are never automatically retried.",
+      "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+        "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.prefab.source.patch.reconcile",
+      "access": "plan",
+      "description": "Observe the saved Prefab and current edit-mode state for one interrupted source patch. Classifies before, after, unsaved, or conflicting state and never repeats the mutation.",
+      "input": { "type": "object", "required": ["operationId"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.editor.eval.plan",
+      "access": "plan",
+      "description": "Freeze bounded inline JavaScript and JSON input for an explicit Creator Editor execution approval. Source runs with Editor privileges, is not sandboxed, and has no automatic persistence verification.",
+      "input": { "type": "object", "required": ["source"], "properties": {
+        "source": { "type": "string", "minLength": 1, "maxLength": 16384 },
+        "input": { "type": "object", "additionalProperties": true }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.editor.eval.commit",
+      "access": "write", "approval": true,
+      "description": "After native Creator approval, execute the exact planned inline script and return its bounded JSON result. Script effects and persistence are not verified; interrupted calls require manual review and are never replayed.",
+      "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+        "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.editor.eval.reconcile",
+      "access": "plan",
+      "description": "Read the recorded state and bounded result of one inline Editor script operation. Never executes or retries the script.",
+      "input": { "type": "object", "required": ["operationId"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.editor.eval-file.plan",
+      "access": "plan",
+      "description": "Freeze a project package editor-scripts JavaScript file and JSON input for an explicit Creator Editor execution approval. Only packages/*/editor-scripts/*.js paths without symlinks are accepted; source runs with Editor privileges and is not sandboxed.",
+      "input": { "type": "object", "required": ["scriptPath"], "properties": {
+        "scriptPath": { "type": "string", "minLength": 1, "maxLength": 512,
+        "pattern": "^packages/(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?($|/))(?!.*(?:^|/)\\.)[^\\\\]+/(?:[^\\\\]+/)*editor-scripts/(?:[^\\\\]+/)*[^\\\\]+\\.js$" },
+        "input": { "type": "object", "additionalProperties": true }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.editor.eval-file.commit",
+      "access": "write", "approval": true,
+      "description": "After native Creator approval, execute the exact planned and hash-checked editor script file and return its bounded JSON result. Script effects and persistence are not verified; interrupted calls require manual review and are never replayed.",
+      "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+        "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.editor.eval-file.reconcile",
+      "access": "plan",
+      "description": "Read the recorded state and bounded result of one editor script file operation. Never executes or retries the file.",
+      "input": { "type": "object", "required": ["operationId"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+      }, "additionalProperties": false }
+    },
+    {
       "id": "creator.script.read",
       "access": "read",
       "description": "Read a project JavaScript or TypeScript source file and its Creator metadata identity.",
@@ -48,6 +287,65 @@
         },
         "additionalProperties": false
       }
+    },
+    {
+      "id": "creator.asset.delete.plan",
+      "access": "plan",
+      "description": "Plan deleting one exact main file asset only when a complete bounded text-reference scan finds no incoming UUID references. Refuses sub-assets, assets with sub-assets, symlinks, and incomplete scans.",
+      "input": { "type": "object", "required": ["assetUuid"], "properties": {
+        "assetUuid": { "type": "string", "minLength": 22, "maxLength": 36,
+          "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.asset.delete.commit",
+      "access": "write", "approval": true,
+      "description": "After native Creator approval, recheck asset identity, file/.meta hashes, sub-asset status, and a complete no-reference scan; delete through AssetDB and verify both files and row are absent.",
+      "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+        "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.asset.delete.reconcile",
+      "access": "plan",
+      "description": "Observe and classify one interrupted AssetDB deletion using the exact asset UUID, file, and .meta. Never repeats deletion.",
+      "input": { "type": "object", "required": ["operationId"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.asset.import-settings.plan",
+      "access": "plan",
+      "description": "Plan changing allowlisted Creator 2.4 texture importer settings for one exact PNG/JPEG AssetDB asset. Preserves other metadata and does not write.",
+      "input": { "type": "object", "required": ["assetUuid", "settings"], "properties": {
+        "assetUuid": { "type": "string", "minLength": 22, "maxLength": 36,
+          "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+        "settings": { "type": "object", "properties": {
+          "wrapMode": { "type": "string", "enum": ["clamp", "repeat"] },
+          "filterMode": { "type": "string", "enum": ["point", "bilinear", "trilinear"] },
+          "premultiplyAlpha": { "type": "boolean" },
+          "genMipmaps": { "type": "boolean" },
+          "packable": { "type": "boolean" }
+        }, "additionalProperties": false }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.asset.import-settings.commit",
+      "access": "write", "approval": true,
+      "description": "After native Creator approval and a second precondition check, save allowlisted texture settings through AssetDB and verify the exact source and full .meta readback.",
+      "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+        "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.asset.import-settings.reconcile",
+      "access": "plan",
+      "description": "Observe the exact texture UUID, source hash, and complete .meta state after an interrupted settings save. Never calls saveMeta again.",
+      "input": { "type": "object", "required": ["operationId"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+      }, "additionalProperties": false }
     },
     {
       "id": "creator.scene.snapshot",
@@ -72,7 +370,7 @@
     {
       "id": "creator.scene.compose.plan",
       "access": "plan",
-      "description": "Plan a bounded Creator 2.4 scene composition of new nodes, transforms, registered components, typed scalar or asset properties, and Button click handlers. Existing scene nodes are read-only parents or event targets.",
+      "description": "Plan a bounded Creator 2.4 scene composition of new nodes, optional AssetDB-backed Prefab instances, transforms, registered components, typed scalar or asset properties, and Button click handlers. Prefab roots are instantiated as authored and cannot receive additional components or Button edits in this operation. Existing scene nodes are read-only parents or event targets.",
       "input": {
         "type": "object",
         "required": ["sceneUuid", "nodes", "components", "buttonEvents"],
@@ -85,6 +383,7 @@
                 "id": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-z][a-z0-9_-]{0,31}$" },
                 "name": { "type": "string", "minLength": 1, "maxLength": 120 },
                 "parentRef": { "type": "string", "minLength": 5, "maxLength": 100, "pattern": "^(?:new:[a-z][a-z0-9_-]{0,31}|uuid:(?:[0-9a-fA-F-]{36}|[A-Za-z0-9+/]{22,23}))$" },
+                "prefabUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
                 "transform": { "type": "object", "properties": {
                   "x": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
                   "y": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
@@ -136,7 +435,7 @@
     {
       "id": "creator.scene.compose.commit",
       "access": "write", "approval": true,
-      "description": "Apply one exact planned composition after Creator approval and fresh precondition checks, request scene save, then read created nodes, transforms, component properties, resource UUIDs, and Button handlers back from the same scene session.",
+      "description": "Apply one exact planned composition after Creator approval and fresh precondition checks, instantiate any listed Prefab assets through cc.instantiate, request scene save, and verify same-session readback plus exact AssetDB .fire/.meta semantics including PrefabInfo links. The receipt keeps sceneSaveCompletionConfirmed false because Creator documents no save IPC acknowledgement.",
       "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
         "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
@@ -145,7 +444,115 @@
     {
       "id": "creator.scene.compose.reconcile",
       "access": "plan",
-      "description": "Read the exact nodes and components from an interrupted scene composition without replaying or saving it.",
+      "description": "Reconcile an interrupted scene composition without replaying or saving it; verifies the original .fire/.meta semantic contents when available and otherwise reports the current in-memory observation.",
+      "input": { "type": "object", "required": ["operationId"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.scene.node.rename.plan",
+      "access": "plan",
+      "description": "Plan renaming one existing authoring-scene node, bound to scene/node UUIDs, parent UUID, current path/name, a collision-free sibling name, and the exact saved .fire/.meta baseline. Does not modify the scene.",
+      "input": { "type": "object", "required": ["sceneUuid", "nodeUuid", "newName"], "properties": {
+        "sceneUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+        "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+        "newName": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[^/\\\\]+$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.scene.node.rename.commit",
+      "access": "write", "approval": true,
+      "description": "After Creator approval, rename the exact planned node if its live and saved scene before-state still matches, request scene save, and confirm completion only after the exact serialized node state reads back from disk.",
+      "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+        "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.scene.node.rename.reconcile",
+      "access": "plan",
+      "description": "Read and reconcile one interrupted node rename against both editor memory and the exact saved .fire/.meta before/after state. Reports save-required if only memory changed; never repeats the rename.",
+      "input": { "type": "object", "required": ["operationId"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.scene.node.delete.plan",
+      "access": "plan",
+      "description": "Plan deleting one exact non-root node and its descendant subtree in the active Creator 2.4 scene. Binds the bounded descendant UUID/name/parent/order snapshot (up to 256 nodes); does not mutate.",
+      "input": { "type": "object", "required": ["sceneUuid", "nodeUuid"], "properties": {
+        "sceneUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+        "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.scene.node.delete.commit",
+      "access": "write", "approval": true,
+      "description": "After native Creator approval and fresh identity checks, detach and destroy the planned node subtree, request scene save, and verify the exact node is absent from the live hierarchy.",
+      "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+        "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.scene.node.delete.reconcile",
+      "access": "plan",
+      "description": "Observe one interrupted scene-node subtree deletion by original operation ID. Never repeats the deletion or claims disk-save completion without an acknowledgement.",
+      "input": { "type": "object", "required": ["operationId"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.scene.node.remove-component.plan",
+      "access": "plan",
+      "description": "Plan removal of one exact component instance by scene/node UUID, class name, and current-session instance ID. Rejects components required by another component.",
+      "input": { "type": "object", "required": ["sceneUuid", "nodeUuid", "componentClassName", "componentInstanceId"], "properties": {
+        "sceneUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+        "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+        "componentClassName": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[A-Za-z_$][A-Za-z0-9_$.]*$" },
+        "componentInstanceId": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.scene.node.remove-component.commit",
+      "access": "write", "approval": true,
+      "description": "After native Creator approval and fresh identity checks, destroy the exact planned component instance, request scene save, and verify its current-session instance ID is no longer valid.",
+      "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+        "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.scene.node.remove-component.reconcile",
+      "access": "plan",
+      "description": "Observe one interrupted exact component removal by original operation ID. Never repeats the removal.",
+      "input": { "type": "object", "required": ["operationId"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.scene.node.reparent.plan",
+      "access": "plan",
+      "description": "Plan moving one existing authoring-scene node under one exact existing parent UUID. Binds live and saved node identity/path/parent state, rejects cycles and sibling-name collisions, and states that local transforms stay while world position may change.",
+      "input": { "type": "object", "required": ["sceneUuid", "nodeUuid", "targetParentUuid"], "properties": {
+        "sceneUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+        "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+        "targetParentUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.scene.node.reparent.commit",
+      "access": "write", "approval": true,
+      "description": "After Creator approval, reparent the exact node if its live and saved before-state still matches; request a scene save and confirm completion only after the exact serialized hierarchy reads back from disk. Reparenting keeps local transforms and may change world position and lifecycle callbacks.",
+      "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+        "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.scene.node.reparent.reconcile",
+      "access": "plan",
+      "description": "Read and reconcile one interrupted node reparent against editor memory and the exact saved .fire/.meta before/after hierarchy. Reports save-required if only memory changed; never repeats the mutation.",
       "input": { "type": "object", "required": ["operationId"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
       }, "additionalProperties": false }
@@ -153,7 +560,7 @@
     {
       "id": "creator.scene.node.set-active.plan",
       "access": "plan",
-      "description": "Plan a single active-state change for one existing node in the active scene, bound to scene/node UUIDs and the observed before-state. Does not modify or save the scene.",
+      "description": "Plan a single active-state change for one existing node in the active scene, bound to scene/node UUIDs, the observed before-state, and the exact saved .fire/.meta baseline. Does not modify or save the scene.",
       "input": {
         "type": "object",
         "required": ["sceneUuid", "nodeUuid", "active"],
@@ -169,7 +576,7 @@
       "id": "creator.scene.node.set-active.commit",
       "access": "write",
       "approval": true,
-      "description": "Apply one planned active-state change after a native Creator confirmation, live scene/node identity and before-state checks, then request scene save and read the node state back from the same Creator scene session.",
+      "description": "Apply one planned active-state change after a native Creator confirmation, live and saved scene identity/before-state checks, then request scene save and confirm completion only after the exact serialized node state reads back from disk.",
       "input": {
         "type": "object",
         "required": ["operationId", "planHash"],
@@ -183,7 +590,7 @@
     {
       "id": "creator.scene.node.set-active.reconcile",
       "access": "plan",
-      "description": "Read and reconcile one planned scene-node active-state operation after interruption; never retries the mutation or claims disk-save completion without a Creator save acknowledgement.",
+      "description": "Read and reconcile one planned scene-node active-state operation against editor memory and the exact saved .fire/.meta before/after state. Reports save-required if only memory changed; never retries the mutation or claims a Creator save acknowledgement.",
       "input": {
         "type": "object",
         "required": ["operationId"],
@@ -192,6 +599,88 @@
         },
         "additionalProperties": false
       }
+    },
+    {
+      "id": "creator.scene.node.set-transform.plan",
+      "access": "plan",
+      "description": "Plan changes to selected transform fields on one existing scene node. The live state must match the exact AssetDB-saved .fire/.meta baseline; values are bound to both before-states and no scene change is made.",
+      "input": {
+        "type": "object",
+        "required": ["sceneUuid", "nodeUuid", "values"],
+        "properties": {
+          "sceneUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+          "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+          "values": { "type": "object", "minProperties": 1, "maxProperties": 10, "properties": {
+            "x": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+            "y": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+            "z": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+            "scaleX": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+            "scaleY": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+            "angle": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+            "width": { "type": "number", "minimum": 0, "maximum": 1000000 },
+            "height": { "type": "number", "minimum": 0, "maximum": 1000000 },
+            "anchorX": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+            "anchorY": { "type": "number", "minimum": -1000000, "maximum": 1000000 }
+          }, "additionalProperties": false }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.node.set-transform.commit",
+      "access": "write",
+      "approval": true,
+      "description": "Apply one planned transform update after native Creator approval and exact live/disk before-state checks, request scene save, and confirm persistence only after the exact serialized AssetDB .fire/.meta node transform reads back from disk.",
+      "input": {
+        "type": "object",
+        "required": ["operationId", "planHash"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.node.set-transform.reconcile",
+      "access": "plan",
+      "description": "Read and reconcile one interrupted transform operation against exact live and saved scene before/after state; reports save-required when memory changed but disk did not, and never repeats the mutation.",
+      "input": { "type": "object", "required": ["operationId"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.scene.button-events.set.plan",
+      "access": "plan",
+      "description": "Plan replacing the bounded click-event list on one exact existing cc.Button instance. Binds the unique serialized Button and exact saved event list from the AssetDB .fire/.meta. Every new target and handler is resolved against the active scene and registered component methods.",
+      "input": { "type": "object", "required": ["sceneUuid", "nodeUuid", "componentInstanceId", "events"], "properties": {
+        "sceneUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+        "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+        "componentInstanceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "events": { "type": "array", "maxItems": 12, "items": { "type": "object", "required": ["targetUuid", "component", "handler", "customEventData"], "properties": {
+          "targetUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+          "component": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[A-Za-z_$][A-Za-z0-9_$.]*$" },
+          "handler": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$" },
+          "customEventData": { "type": "string", "maxLength": 512 }
+        }, "additionalProperties": false } }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.scene.button-events.set.commit",
+      "access": "write", "approval": true,
+      "description": "Replace the exact planned Button click-event list after native Creator approval and a second live and saved before-state check, then request scene save. Completion requires semantic readback of the planned serialized events from the exact AssetDB .fire; reports save-required if only editor memory changed.",
+      "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+        "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.scene.button-events.set.reconcile",
+      "access": "plan",
+      "description": "Observe and reconcile one interrupted Button click-event update by exact scene, node, component instance, and live and serialized before/after lists. Reports save-required when memory changed but disk did not; never retries the mutation.",
+      "input": { "type": "object", "required": ["operationId"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+      }, "additionalProperties": false }
     },
     {
       "id": "creator.scene.node.add-component.plan",
@@ -239,7 +728,7 @@
     {
       "id": "creator.scene.node.set-component-property.plan",
       "access": "plan",
-      "description": "Plan changing one declared public scalar component property (string, number, or boolean) on one exact component instance. Object, array, asset-reference, lifecycle, and internal fields are rejected.",
+      "description": "Plan changing one declared public serializable scalar, supported typed value, bounded typed array, active-scene node reference, component-instance reference, or supported AssetDB resource property on one exact component instance. Binds the saved AssetDB .fire/.meta, component ID, serialized class ID, owning node, and property value. Arbitrary project objects, lifecycle, and internal fields are rejected.",
       "input": {
         "type": "object",
         "required": ["sceneUuid", "nodeUuid", "componentClassName", "componentInstanceId", "property", "value"],
@@ -249,7 +738,135 @@
           "componentClassName": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[A-Za-z_$][A-Za-z0-9_$.]*$" },
           "componentInstanceId": { "type": "string", "minLength": 1, "maxLength": 128 },
           "property": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z][A-Za-z0-9_]*$" },
-          "value": { "type": ["string", "number", "boolean"], "maxLength": 1024, "minimum": -1000000000, "maximum": 1000000000 }
+          "value": { "oneOf": [
+            { "type": "string", "maxLength": 1024 },
+            { "type": "number", "minimum": -1000000000, "maximum": 1000000000 },
+            { "type": "boolean" },
+            { "type": "object", "required": ["kind", "x", "y"], "properties": {
+              "kind": { "type": "string", "enum": ["vec2"] },
+              "x": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+              "y": { "type": "number", "minimum": -1000000, "maximum": 1000000 }
+            }, "additionalProperties": false },
+            { "type": "object", "required": ["kind", "x", "y", "z"], "properties": {
+              "kind": { "type": "string", "enum": ["vec3"] },
+              "x": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+              "y": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+              "z": { "type": "number", "minimum": -1000000, "maximum": 1000000 }
+            }, "additionalProperties": false },
+            { "type": "object", "required": ["kind", "x", "y", "z", "w"], "properties": {
+              "kind": { "type": "string", "enum": ["vec4"] },
+              "x": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+              "y": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+              "z": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+              "w": { "type": "number", "minimum": -1000000, "maximum": 1000000 }
+            }, "additionalProperties": false },
+            { "type": "object", "required": ["kind", "x", "y", "width", "height"], "properties": {
+              "kind": { "type": "string", "enum": ["rect"] },
+              "x": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+              "y": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+              "width": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+              "height": { "type": "number", "minimum": -1000000, "maximum": 1000000 }
+            }, "additionalProperties": false },
+            { "type": "object", "required": ["kind", "width", "height"], "properties": {
+              "kind": { "type": "string", "enum": ["size"] },
+              "width": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+              "height": { "type": "number", "minimum": -1000000, "maximum": 1000000 }
+            }, "additionalProperties": false },
+            { "type": "object", "required": ["kind", "r", "g", "b", "a"], "properties": {
+              "kind": { "type": "string", "enum": ["color"] },
+              "r": { "type": "integer", "minimum": 0, "maximum": 255 },
+              "g": { "type": "integer", "minimum": 0, "maximum": 255 },
+              "b": { "type": "integer", "minimum": 0, "maximum": 255 },
+              "a": { "type": "integer", "minimum": 0, "maximum": 255 }
+            }, "additionalProperties": false },
+            { "type": "object", "required": ["kind", "items"], "properties": {
+              "kind": { "type": "string", "enum": ["array"] },
+              "items": { "type": "array", "maxItems": 32,
+                "items": { "oneOf": [
+                  { "type": ["string", "number", "boolean"], "maxLength": 1024,
+                    "minimum": -1000000000, "maximum": 1000000000 },
+                  { "type": "object", "required": ["kind", "x", "y"], "properties": {
+                    "kind": { "type": "string", "enum": ["vec2"] },
+                    "x": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+                    "y": { "type": "number", "minimum": -1000000, "maximum": 1000000 }
+                  }, "additionalProperties": false },
+                  { "type": "object", "required": ["kind", "x", "y", "z"], "properties": {
+                    "kind": { "type": "string", "enum": ["vec3"] },
+                    "x": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+                    "y": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+                    "z": { "type": "number", "minimum": -1000000, "maximum": 1000000 }
+                  }, "additionalProperties": false },
+                  { "type": "object", "required": ["kind", "x", "y", "z", "w"], "properties": {
+                    "kind": { "type": "string", "enum": ["vec4"] },
+                    "x": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+                    "y": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+                    "z": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+                    "w": { "type": "number", "minimum": -1000000, "maximum": 1000000 }
+                  }, "additionalProperties": false },
+                  { "type": "object", "required": ["kind", "width", "height"], "properties": {
+                    "kind": { "type": "string", "enum": ["size"] },
+                    "width": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+                    "height": { "type": "number", "minimum": -1000000, "maximum": 1000000 }
+                  }, "additionalProperties": false },
+                  { "type": "object", "required": ["kind", "x", "y", "width", "height"], "properties": {
+                    "kind": { "type": "string", "enum": ["rect"] },
+                    "x": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+                    "y": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+                    "width": { "type": "number", "minimum": -1000000, "maximum": 1000000 },
+                    "height": { "type": "number", "minimum": -1000000, "maximum": 1000000 }
+                  }, "additionalProperties": false },
+                  { "type": "object", "required": ["kind", "r", "g", "b", "a"], "properties": {
+                    "kind": { "type": "string", "enum": ["color"] },
+                    "r": { "type": "integer", "minimum": 0, "maximum": 255 },
+                    "g": { "type": "integer", "minimum": 0, "maximum": 255 },
+                    "b": { "type": "integer", "minimum": 0, "maximum": 255 },
+                    "a": { "type": "integer", "minimum": 0, "maximum": 255 }
+                  }, "additionalProperties": false },
+                  { "type": "object", "required": ["kind"], "properties": {
+                    "kind": { "type": "string", "enum": ["node-ref"] },
+                    "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36,
+                      "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" }
+                  }, "additionalProperties": false },
+                  { "oneOf": [
+                    { "type": "object", "required": ["kind", "componentClassName"], "properties": {
+                      "kind": { "type": "string", "enum": ["component-ref"] },
+                      "componentClassName": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[A-Za-z_$][A-Za-z0-9_$.]*$" }
+                    }, "additionalProperties": false },
+                    { "type": "object", "required": ["kind", "componentClassName", "nodeUuid", "componentInstanceId"], "properties": {
+                      "kind": { "type": "string", "enum": ["component-ref"] },
+                      "componentClassName": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[A-Za-z_$][A-Za-z0-9_$.]*$" },
+                      "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36,
+                        "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+                      "componentInstanceId": { "type": "string", "minLength": 1, "maxLength": 128 }
+                    }, "additionalProperties": false }
+                  ] }
+                ] } }
+            }, "additionalProperties": false },
+            { "type": "object", "required": ["kind"], "properties": {
+              "kind": { "type": "string", "enum": ["node-ref"] },
+              "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36,
+                "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" }
+            }, "additionalProperties": false },
+            { "oneOf": [
+              { "type": "object", "required": ["kind", "componentClassName"], "properties": {
+                "kind": { "type": "string", "enum": ["component-ref"] },
+                "componentClassName": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[A-Za-z_$][A-Za-z0-9_$.]*$" }
+              }, "additionalProperties": false },
+              { "type": "object", "required": ["kind", "componentClassName", "nodeUuid", "componentInstanceId"], "properties": {
+                "kind": { "type": "string", "enum": ["component-ref"] },
+                "componentClassName": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[A-Za-z_$][A-Za-z0-9_$.]*$" },
+                "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36,
+                  "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+                "componentInstanceId": { "type": "string", "minLength": 1, "maxLength": 128 }
+              }, "additionalProperties": false }
+            ] },
+            { "type": "object", "required": ["kind", "assetClass"], "properties": {
+              "kind": { "type": "string", "enum": ["asset"] },
+              "assetUuid": { "type": "string", "minLength": 22, "maxLength": 36,
+                "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+              "assetClass": { "type": "string", "enum": ["SpriteFrame", "Texture2D", "AudioClip", "Prefab", "BitmapFont", "TTFFont"] }
+            }, "additionalProperties": false }
+          ] }
         },
         "additionalProperties": false
       }
@@ -258,7 +875,7 @@
       "id": "creator.scene.node.set-component-property.commit",
       "access": "write",
       "approval": true,
-      "description": "Apply the exact planned scalar component-property change after Creator approval and fresh component-instance/property precondition checks, then request scene save and read back in memory.",
+      "description": "Apply the exact planned component-property change after native Creator approval and fresh live and saved before-state checks. Request scene save, then confirm the serialized component identity and property in the exact AssetDB .fire; reports save-required if memory changed but persistence was not verified.",
       "input": {
         "type": "object",
         "required": ["operationId", "planHash"],
@@ -272,7 +889,7 @@
     {
       "id": "creator.scene.node.set-component-property.reconcile",
       "access": "plan",
-      "description": "Observe and reconcile one scalar component-property operation after interruption. Never reapplies the value; if the original component instance cannot be identified, manual review is required.",
+      "description": "Observe one component-property operation against both live state and the exact saved .fire/.meta. Reports save-required when only memory changed and confirms completion after a matching manual save. Never reapplies the value; a changed Creator session or missing original component instance requires manual review.",
       "input": {
         "type": "object",
         "required": ["operationId"],
@@ -454,12 +1071,13 @@
       "id": "creator.preview.interact",
       "access": "control",
       "execution": "bridge",
-      "description": "Apply bounded keyboard or normalized canvas clicks in the same preview session and evaluate declarative runtime assertions.",
+      "description": "Apply bounded keyboard or normalized canvas clicks in the same preview session and evaluate declarative runtime assertions, with optional V8 function and block-range coverage.",
       "input": {
         "type": "object",
         "required": ["previewSessionId", "actions"],
         "properties": {
           "previewSessionId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "coverage": { "type": "boolean" },
           "actions": {
             "type": "array", "minItems": 1, "maxItems": 12,
             "items": {

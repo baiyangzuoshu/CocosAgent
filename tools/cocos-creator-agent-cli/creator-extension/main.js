@@ -7,7 +7,7 @@ const path = require('path');
 const crypto = require('crypto');
 const extensionPackage = require('./package.json');
 const confirmDialog = require('./approval.cjs');
-const { inspectSceneComposition, inspectSavedSceneNode, componentValueForDisk,
+const { inspectSceneAssetIdentity, inspectSceneComposition, inspectSavedSceneNode, componentValueForDisk,
     validComponentDiskValue } = require('./scene-persistence.cjs');
 const { inspectPrefabSource: inspectPrefabSourceData } = require('./prefab-source.cjs');
 const prefabPatch = require('./prefab-patch.cjs');
@@ -31,6 +31,8 @@ const MAX_ASSET_TRACKED_BYTES = 128 * 1024 * 1024;
 const MAX_TEXTURE_META_BYTES = 16 * 1024;
 const MAX_SCENE_SERIALIZATION_BYTES = 16 * 1024 * 1024;
 const MAX_SCENE_META_BYTES = 16 * 1024;
+const MAX_SCENE_ASSET_CANDIDATES = 1024;
+const MAX_SCENE_ASSET_SCAN_BYTES = 128 * 1024 * 1024;
 const MAX_PREFAB_SERIALIZATION_BYTES = 8 * 1024 * 1024;
 const MAX_PREFAB_META_BYTES = 16 * 1024;
 const SCENE_SAVE_READBACK_TIMEOUT_MS = 15000;
@@ -3929,13 +3931,15 @@ async function createSceneComposePlan(input) {
     writeOperation(operation);
     return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
         projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
-        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, createdNodes: expectedState.createdNodes,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, sceneAssetIdentity: plan.sceneAssetIdentity,
+        createdNodes: expectedState.createdNodes,
         components: request.components.map((item) => ({ id: item.id, nodeRef: item.nodeRef, className: item.className,
             properties: item.properties.map((property) => ({ name: property.name,
                 value: property.value && typeof property.value === 'object' ? { assetUuid: property.value.assetUuid,
                     assetClass: property.value.assetClass } : property.value })) })),
         buttonEvents: request.buttonEvents, assetIdentities, expiresAt: plan.expiresAt,
         diff: { action: 'compose-scene', scene: plan.sceneName,
+            sceneAsset: { uuid: plan.sceneAssetIdentity.uuid, url: plan.sceneAssetIdentity.url },
             create: expectedState.createdNodes.map((item) => ({ uuid: item.uuid, name: item.name, parentUuid: item.parentUuid,
                 transform: item.transform, ...(item.prefabUuid ? { prefabUuid: item.prefabUuid } : {}) })),
             addComponents: request.components.map((item) => ({ nodeRef: item.nodeRef, className: item.className })),
@@ -5407,24 +5411,96 @@ async function reconcileSceneComponentProperty(input) {
 }
 
 async function sceneAssetIdentity(sceneUuid) {
-    const row = await queryAssetByUuid(sceneUuid);
-    if (!row || row.uuid !== sceneUuid || typeof row.url !== 'string'
-        || !row.url.startsWith('db://assets/') || !/\.fire$/i.test(row.url)
-        || (row.importer && row.importer !== 'scene')) throw coded('SCENE_ASSETDB_IDENTITY_UNAVAILABLE');
-    return { uuid: row.uuid, url: row.url, importer: row.importer || 'scene' };
+    if (typeof sceneUuid !== 'string' || !/^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$/.test(sceneUuid))
+        throw coded('SCENE_ASSETDB_IDENTITY_UNAVAILABLE');
+    if (!Editor.assetdb || typeof Editor.assetdb.queryAssets !== 'function') throw coded('ASSETDB_QUERY_UNAVAILABLE');
+    const root = projectRoot();
+    const rows = await new Promise((resolve, reject) => {
+        let settled = false;
+        const timeout = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            reject(coded('ASSETDB_QUERY_TIMEOUT'));
+        }, 20000);
+        try {
+            Editor.assetdb.queryAssets('db://assets/**/*', null, (error, result) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                if (error) { reject(coded('ASSETDB_QUERY_FAILED', String(error.message || error))); return; }
+                if (!Array.isArray(result)) { reject(coded('ASSETDB_RESULT_INVALID')); return; }
+                resolve(result);
+            });
+        } catch (error) {
+            clearTimeout(timeout);
+            reject(coded('ASSETDB_QUERY_FAILED', String(error.message || error)));
+        }
+    });
+    const candidates = rows.filter((row) => row && typeof row.url === 'string'
+        && row.url.startsWith('db://assets/') && /\.fire$/i.test(row.url)
+        && (!row.importer || row.importer === 'scene'))
+        .sort((left, right) => left.url.localeCompare(right.url));
+    if (candidates.length > MAX_SCENE_ASSET_CANDIDATES) throw coded('SCENE_ASSET_SCAN_LIMIT');
+
+    let scannedBytes = 0;
+    const matches = [];
+    for (const row of candidates) {
+        const relative = row.url.slice('db://assets/'.length);
+        const sceneFile = safeProjectFile(relative, /\.fire$/i);
+        const metaFile = safeProjectFile(`${relative}.meta`);
+        const sceneStat = fs.lstatSync(sceneFile);
+        const metaStat = fs.lstatSync(metaFile);
+        if (!sceneStat.isFile() || sceneStat.isSymbolicLink() || !metaStat.isFile() || metaStat.isSymbolicLink())
+            throw coded('SCENE_ASSET_SCAN_UNSAFE');
+        const candidateBytes = sceneStat.size + metaStat.size;
+        if (sceneStat.size < 2 || sceneStat.size > MAX_SCENE_SERIALIZATION_BYTES
+            || metaStat.size < 2 || metaStat.size > MAX_SCENE_META_BYTES
+            || scannedBytes + candidateBytes > MAX_SCENE_ASSET_SCAN_BYTES)
+            throw coded('SCENE_ASSET_SCAN_LIMIT');
+        scannedBytes += candidateBytes;
+        const sceneBytes = readStableProjectFile(sceneFile, MAX_SCENE_SERIALIZATION_BYTES, 'SCENE_SERIALIZATION_FILE_UNSAFE');
+        const metaBytes = readStableProjectFile(metaFile, MAX_SCENE_META_BYTES, 'SCENE_META_FILE_UNSAFE');
+        const inspected = inspectSceneAssetIdentity({ sceneBytes, metaBytes, sceneAssetRow: row });
+        if (!inspected.verified || inspected.sceneUuid !== sceneUuid) continue;
+        matches.push({ uuid: row.uuid, sceneUuid, sceneRootUuid: inspected.sceneRootUuid,
+            url: row.url, importer: 'scene',
+            sceneSha256: fileHash(sceneBytes), metaSha256: fileHash(metaBytes) });
+    }
+    if (projectRoot() !== root) throw coded('CREATOR_IDENTITY_CHANGED');
+    if (matches.length === 0) throw coded('SCENE_ASSETDB_IDENTITY_UNAVAILABLE');
+    if (matches.length !== 1) throw coded('SCENE_ASSETDB_IDENTITY_AMBIGUOUS');
+
+    const identity = matches[0];
+    const currentRow = await queryAssetByUrl(identity.url);
+    if (!currentRow || currentRow.uuid !== identity.uuid || currentRow.url !== identity.url
+        || (currentRow.importer || 'scene') !== identity.importer) throw coded('SCENE_ASSETDB_IDENTITY_CHANGED');
+    const relative = identity.url.slice('db://assets/'.length);
+    const sceneFile = safeProjectFile(relative, /\.fire$/i);
+    const metaFile = safeProjectFile(`${relative}.meta`);
+    const currentSceneBytes = readStableProjectFile(sceneFile, MAX_SCENE_SERIALIZATION_BYTES, 'SCENE_SERIALIZATION_FILE_UNSAFE');
+    const currentMetaBytes = readStableProjectFile(metaFile, MAX_SCENE_META_BYTES, 'SCENE_META_FILE_UNSAFE');
+    const currentInspection = inspectSceneAssetIdentity({ sceneBytes: currentSceneBytes,
+        metaBytes: currentMetaBytes, sceneAssetRow: currentRow });
+    if (!currentInspection.verified || currentInspection.sceneUuid !== sceneUuid
+        || currentInspection.sceneRootUuid !== identity.sceneRootUuid
+        || fileHash(currentSceneBytes) !== identity.sceneSha256 || fileHash(currentMetaBytes) !== identity.metaSha256)
+        throw coded('SCENE_ASSETDB_IDENTITY_CHANGED');
+    return identity;
 }
 
 async function sceneNodeDiskState(sceneUuid, nodeUuid, options = {}) {
     if (!options || typeof options !== 'object' || Array.isArray(options)) throw coded('SCENE_DISK_SELECTOR_INVALID');
     const identity = await sceneAssetIdentity(sceneUuid);
     const row = await queryAssetByUrl(identity.url);
-    if (!row || row.uuid !== sceneUuid || row.url !== identity.url
+    if (!row || row.uuid !== identity.uuid || row.url !== identity.url
         || (row.importer || 'scene') !== identity.importer) throw coded('SCENE_ASSETDB_IDENTITY_MISMATCH');
     const relative = identity.url.slice('db://assets/'.length);
     const sceneFile = safeProjectFile(relative, /\.fire$/i);
     const metaFile = safeProjectFile(`${relative}.meta`);
     const sceneBytes = readStableProjectFile(sceneFile, MAX_SCENE_SERIALIZATION_BYTES, 'SCENE_SERIALIZATION_FILE_UNSAFE');
     const metaBytes = readStableProjectFile(metaFile, MAX_SCENE_META_BYTES, 'SCENE_META_FILE_UNSAFE');
+    if (fileHash(sceneBytes) !== identity.sceneSha256 || fileHash(metaBytes) !== identity.metaSha256)
+        throw coded('SCENE_CHANGED_DURING_INSPECT');
     const state = inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow: row, nodeUuid,
         componentProperty: options.componentProperty, includeComponents: options.includeComponents === true,
         includeSubtree: options.includeSubtree === true, absentNodeUuids: options.absentNodeUuids });
@@ -5432,10 +5508,11 @@ async function sceneNodeDiskState(sceneUuid, nodeUuid, options = {}) {
     const freshRow = await queryAssetByUrl(identity.url);
     const freshSceneBytes = readStableProjectFile(sceneFile, MAX_SCENE_SERIALIZATION_BYTES, 'SCENE_SERIALIZATION_FILE_UNSAFE');
     const freshMetaBytes = readStableProjectFile(metaFile, MAX_SCENE_META_BYTES, 'SCENE_META_FILE_UNSAFE');
-    if (!freshRow || freshRow.uuid !== sceneUuid || freshRow.url !== identity.url
+    if (!freshRow || freshRow.uuid !== identity.uuid || freshRow.url !== identity.url
         || fileHash(freshSceneBytes) !== fileHash(sceneBytes) || fileHash(freshMetaBytes) !== fileHash(metaBytes))
         throw coded('SCENE_CHANGED_DURING_INSPECT');
-    return { ...state, sourceSha256: fileHash(sceneBytes), metaSha256: fileHash(metaBytes), importer: identity.importer };
+    return { ...state, sceneAssetUuid: identity.uuid, sourceSha256: fileHash(sceneBytes),
+        metaSha256: fileHash(metaBytes), importer: identity.importer };
 }
 
 function sceneNodeDiskOptionsForPlan(plan) {
@@ -5756,9 +5833,11 @@ async function validateSceneComposePlan(operation) {
     const assets = await composeAssetIdentities(plan.request);
     if (JSON.stringify(assets) !== JSON.stringify(plan.assetIdentities)) throw coded('SCENE_COMPOSE_ASSET_PRECONDITION_FAILED');
     const expectedSceneAsset = plan.sceneAssetIdentity || await sceneAssetIdentity(plan.sceneUuid);
-    const currentSceneAsset = await queryAssetByUrl(expectedSceneAsset.url);
-    if (!currentSceneAsset || currentSceneAsset.uuid !== plan.sceneUuid
-        || (currentSceneAsset.importer || 'scene') !== expectedSceneAsset.importer)
+    const currentSceneAsset = await sceneAssetIdentity(plan.sceneUuid);
+    if (currentSceneAsset.uuid !== expectedSceneAsset.uuid || currentSceneAsset.url !== expectedSceneAsset.url
+        || currentSceneAsset.importer !== expectedSceneAsset.importer
+        || currentSceneAsset.sceneSha256 !== expectedSceneAsset.sceneSha256
+        || currentSceneAsset.metaSha256 !== expectedSceneAsset.metaSha256)
         throw coded('SCENE_COMPOSE_SCENE_ASSET_PRECONDITION_FAILED');
     return state;
 }
@@ -5770,6 +5849,7 @@ function confirmSceneCompose(operation) {
         `Project: ${plan.projectRoot}`,
         `Creator: ${plan.creatorVersion}`,
         `Scene: ${plan.sceneName} (${plan.sceneUuid})`,
+        `Scene asset: ${plan.sceneAssetIdentity.url} (${plan.sceneAssetIdentity.uuid})`,
         `Operation: ${operation.operationId}`,
         '',
         `Create nodes:\n${plan.request.nodes.map((node) => `- ${node.name} (${node.uuid}) under ${node.parentRef}`
@@ -5789,7 +5869,7 @@ function sceneComposeReceipt(operation, readback) {
     const plan = operation.plan;
     return { operationId: operation.operationId, status: operation.status, projectRoot: plan.projectRoot,
         creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
-        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, sceneAssetIdentity: plan.sceneAssetIdentity,
         createdNodes: readback && readback.nodes || [], componentCount: plan.request.components.length,
         prefabInstanceCount: plan.request.nodes.filter((item) => !!item.prefabUuid).length,
         buttonEventCount: plan.request.buttonEvents.length, assetIdentities: plan.assetIdentities,
@@ -5879,7 +5959,7 @@ async function inspectSceneComposePersistence(operation) {
     const plan = operation.plan;
     const identity = plan.sceneAssetIdentity || await sceneAssetIdentity(plan.sceneUuid);
     const row = await queryAssetByUrl(identity.url);
-    if (!row || row.url !== identity.url || row.uuid !== plan.sceneUuid
+    if (!row || row.url !== identity.url || row.uuid !== identity.uuid
         || (row.importer || 'scene') !== identity.importer)
         throw coded('SCENE_ASSETDB_IDENTITY_MISMATCH');
     const relative = identity.url.slice('db://assets/'.length);
@@ -5890,7 +5970,7 @@ async function inspectSceneComposePersistence(operation) {
     const inspection = inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid: plan.sceneUuid,
         sceneAssetRow: row, operation, readback: operation.sceneReadback });
     if (!inspection.verified) return { ...inspection, sceneUrl: identity.url };
-    return { verified: true, sceneUuid: plan.sceneUuid, sceneUrl: identity.url,
+    return { verified: true, sceneUuid: plan.sceneUuid, sceneAssetUuid: identity.uuid, sceneUrl: identity.url,
         scenePath: relative, sceneSha256: fileHash(sceneBytes), metaSha256: fileHash(metaBytes),
         nodeCount: inspection.nodeCount, componentCount: inspection.componentCount,
         buttonEventCount: inspection.buttonEventCount, prefabInstanceCount: inspection.prefabInstanceCount,
@@ -6019,6 +6099,25 @@ async function commitSceneCompose(input, context) {
 async function reconcileSceneCompose(input) {
     const operation = readSceneComposeOperation(input.operationId);
     verifySceneOperationIdentity(operation, { requireCurrentContract: false });
+    if (operation.status === 'cancelled') {
+        let observed;
+        try {
+            await validateSceneComposePlan(operation);
+            observed = { mutationApplied: false, sceneAssetIdentity: operation.plan.sceneAssetIdentity,
+                verifiedBeforeState: true, readOnly: true };
+        } catch (error) {
+            operation.status = 'conflict';
+            operation.reconcileReason = error.code || 'SCENE_COMPOSE_CANCELLATION_STATE_CHANGED';
+            operation.reconciledAt = new Date().toISOString();
+            writeOperation(operation);
+            return { ...sceneComposeReceipt(operation, null), observed: null, reason: operation.reconcileReason,
+                retry: 'Never replay this operation. The scene or its saved asset changed after cancellation; inspect it and create a new plan.' };
+        }
+        operation.reconciledAt = new Date().toISOString();
+        writeOperation(operation);
+        return { ...sceneComposeReceipt(operation, null), observed,
+            retry: 'Never replay this operation. The original plan remains cancelled and the scene before-state is unchanged.' };
+    }
     try {
         operation.scenePersistenceReadback = await waitForSceneComposePersistence(operation, 0);
         if (operation.scenePersistenceReadback.verified) {

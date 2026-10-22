@@ -12,6 +12,7 @@ import { validateCommand } from '../bridge/contracts.mjs';
 const extensionRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../creator-extension');
 const contract = JSON.parse(fs.readFileSync(path.join(extensionRoot, 'command-contract.json'), 'utf8'));
 const sceneClassIds = { 'cc.Button': 'cc.Button', 'game.ButtonState': 'c8f27f4c-3728-4ce7-8db6-8fdc99e9a70a' };
+const sceneRootUuid = '4b02b1e4-d163-47e2-91ad-2da0193a3907';
 
 function normalizedSceneTransform(value = {}) {
   return { x: value.x ?? 0, y: value.y ?? 0, z: value.z ?? 0,
@@ -55,7 +56,7 @@ function mockSceneCompositionReadback(params, sceneUuid) {
 function serializeSceneComposition(params, sceneUuid) {
   const expected = mockSceneCompositionState(params, sceneUuid);
   const records = [{ __type__: 'cc.SceneAsset', scene: { __id__: 1 } },
-    { __type__: 'cc.Scene', _id: sceneUuid, _active: true, _children: [] }];
+    { __type__: 'cc.Scene', _id: sceneRootUuid, _active: true, _children: [] }];
   const nodeIndices = new Map();
   for (const node of params.nodes) {
     const state = expected.createdNodes.find((item) => item.id === node.id);
@@ -125,7 +126,7 @@ function serializeExistingSceneNode({ transform, name = 'Button', active = true,
   sceneUuid, nodeUuid, oldParentUuid, targetParentUuid, withParents = false) {
   const angle = transform.angle * Math.PI / 360;
   const records = [{ __type__: 'cc.SceneAsset', scene: { __id__: 1 } },
-    { __type__: 'cc.Scene', _id: sceneUuid, _name: 'Scene',
+    { __type__: 'cc.Scene', _id: sceneRootUuid, _name: 'Scene',
       _children: withParents ? [{ __id__: 2 }, { __id__: 3 }] : [{ __id__: 2 }] }];
   let parentIndex = 1;
   if (withParents) {
@@ -204,7 +205,8 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
     uuid: meta.uuid, importer: meta.importer, type: 'typescript' }]]);
   const importedAssetUuid = 'a3b51e35-a9f2-4552-b597-4731bbf7b119';
   const prefabAssetUuid = 'dbce40c1-5298-4e0e-9bc3-670d31a650e4';
-  const sceneUuid = '4b02b1e4-d163-47e2-91ad-2da0193a3907';
+  const sceneUuid = '2c12110c-6f11-4a89-bcd4-1941dc757ca4';
+  const sceneAssetUuid = sceneUuid;
   const nodeUuid = 'df1bb94e-c8e6-41ba-b9c9-a04c6e86a581';
   const oldParentUuid = '9303f25a-11c9-44f5-8b4e-2872b7227a88';
   const targetParentUuid = 'ad1632bf-19b1-4976-8f36-930d57113e55';
@@ -250,9 +252,9 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
         { nodeUuid: '952a8e13-eac6-4a0e-9eea-b4e5fe76c991', nodeName: 'Label' },
       ] : [], nodeDeleted: sceneNodeDeleted,
     }, sceneUuid, nodeUuid, oldParentUuid, targetParentUuid, sceneReparent || sceneNodeDelete)));
-    fs.writeFileSync(sceneMetaFile, JSON.stringify({ uuid: sceneUuid, importer: 'scene' }));
+    fs.writeFileSync(sceneMetaFile, JSON.stringify({ uuid: sceneAssetUuid, importer: 'scene' }));
     assetRecords.set('db://assets/Scenes/Main.fire', { url: 'db://assets/Scenes/Main.fire',
-      uuid: sceneUuid, importer: 'scene', type: 'cc.SceneAsset' });
+      uuid: sceneAssetUuid, importer: 'scene', type: 'cc.SceneAsset' });
     assetRecords.set('db://assets/Sprites/Icon.png', { url: 'db://assets/Sprites/Icon.png',
       uuid: spriteUuid, importer: 'image', type: 'cc.SpriteFrame' });
   }
@@ -335,7 +337,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
       sceneSaveCount += 1;
       if (sceneSaveMode === 'write' && currentSceneComposition) {
         fs.writeFileSync(sceneFile, JSON.stringify(serializeSceneComposition(currentSceneComposition, sceneUuid)));
-        fs.writeFileSync(sceneMetaFile, JSON.stringify({ uuid: sceneUuid, importer: 'scene' }));
+        fs.writeFileSync(sceneMetaFile, JSON.stringify({ uuid: sceneAssetUuid, importer: 'scene' }));
       } else if (sceneSaveMode === 'write' && (sceneActive || sceneRename || sceneReparent || sceneNodeDelete
         || sceneComponentRemove || sceneComponentAdd || sceneTransform || sceneButtonEvents || sceneProperty)) {
         fs.writeFileSync(sceneFile, JSON.stringify(serializeExistingSceneNode({ transform: currentTransform,
@@ -351,7 +353,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
             { nodeUuid: '952a8e13-eac6-4a0e-9eea-b4e5fe76c991', nodeName: 'Label' },
           ] : [], nodeDeleted: sceneNodeDeleted,
         }, sceneUuid, nodeUuid, oldParentUuid, targetParentUuid, sceneReparent || sceneNodeDelete)));
-        fs.writeFileSync(sceneMetaFile, JSON.stringify({ uuid: sceneUuid, importer: 'scene' }));
+        fs.writeFileSync(sceneMetaFile, JSON.stringify({ uuid: sceneAssetUuid, importer: 'scene' }));
       }
       return;
     }
@@ -694,7 +696,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
     getSaveCount: () => saveCount, getSceneSaveCount: () => sceneSaveCount,
     getTextureMetaSaveCount: () => textureMetaSaveCount,
     readTextureMeta: () => JSON.parse(fs.readFileSync(`${textureAssetFile}.meta`, 'utf8')),
-    sceneFile, sceneMetaFile, spriteUuid };
+    sceneFile, sceneMetaFile, spriteUuid, sceneAssetUuid };
 }
 
 const sourceHash = (value) => import('node:crypto').then(({ createHash }) =>
@@ -1404,6 +1406,9 @@ test('scene composition reports completion only after the saved .fire and .meta 
       handlerComponentClassName: 'game.ButtonState', handler: 'onClick', customEventData: 'start' }] };
   const plan = await harness.api.createSceneComposePlan(input);
   assert.equal(plan.status, 'planned');
+  assert.equal(plan.sceneAssetIdentity.sceneUuid, harness.sceneUuid);
+  assert.equal(plan.sceneAssetIdentity.uuid, harness.sceneAssetUuid);
+  assert.notEqual(plan.sceneAssetIdentity.sceneRootUuid, plan.sceneAssetIdentity.sceneUuid);
   assert.equal(plan.assetIdentities[0].assetUuid, harness.spriteUuid);
   assert.equal(fs.existsSync(harness.sceneFile), true);
 
@@ -1413,6 +1418,7 @@ test('scene composition reports completion only after the saved .fire and .meta 
   assert.equal(receipt.sceneSaveRequestSent, true);
   assert.equal(receipt.sceneSaveCompletionConfirmed, false);
   assert.equal(receipt.scenePersistenceConfirmed, true);
+  assert.equal(receipt.sceneAssetIdentity.uuid, harness.sceneAssetUuid);
   assert.deepEqual({ nodes: receipt.scenePersistenceReadback.nodeCount,
     components: receipt.scenePersistenceReadback.componentCount,
     events: receipt.scenePersistenceReadback.buttonEventCount }, { nodes: 1, components: 2, events: 1 });
@@ -1421,6 +1427,70 @@ test('scene composition reports completion only after the saved .fire and .meta 
   const reconciled = await harness.api.reconcileSceneCompose({ operationId: plan.operationId });
   assert.equal(reconciled.status, 'completed');
   assert.equal(reconciled.observed.verified, true);
+});
+
+test('scene composition rejects a stale plan before approval after the scene asset changes', async (t) => {
+  let approvals = 0;
+  const harness = makeHarness(t, { sceneCompose: true, ipcMode: 'editor', onApproval() { approvals += 1; } });
+  const input = { sceneUuid: harness.sceneUuid,
+    nodes: [{ id: 'button', name: 'StartButton', parentRef: `uuid:${harness.sceneUuid}` }],
+    components: [{ id: 'button-ui', nodeRef: 'new:button', className: 'cc.Button', properties: [] }],
+    buttonEvents: [] };
+  const first = await harness.api.createSceneComposePlan(input);
+  const stale = await harness.api.createSceneComposePlan(input);
+  const completed = await harness.api.commitSceneCompose({ operationId: first.operationId, planHash: first.planHash },
+    { requestId: 'first-compose-request' });
+  assert.equal(completed.status, 'completed');
+  assert.equal(approvals, 1);
+  await assert.rejects(harness.api.commitSceneCompose({ operationId: stale.operationId, planHash: stale.planHash },
+    { requestId: 'stale-compose-request' }), (error) => error.code === 'SCENE_COMPOSE_SCENE_ASSET_PRECONDITION_FAILED');
+  assert.equal(approvals, 1);
+  assert.equal(harness.getSceneSaveCount(), 1);
+});
+
+test('cancelled scene composition stays cancelled when read-only reconciliation verifies the before-state', async (t) => {
+  let approvals = 0;
+  const harness = makeHarness(t, { sceneCompose: true, ipcMode: 'editor', approved: false,
+    onApproval() { approvals += 1; } });
+  const input = { sceneUuid: harness.sceneUuid,
+    nodes: [{ id: 'button', name: 'StartButton', parentRef: `uuid:${harness.sceneUuid}` }],
+    components: [], buttonEvents: [] };
+  const plan = await harness.api.createSceneComposePlan(input);
+  const sceneBefore = await sourceHash(fs.readFileSync(harness.sceneFile));
+  const metaBefore = await sourceHash(fs.readFileSync(harness.sceneMetaFile));
+  await assert.rejects(harness.api.commitSceneCompose({ operationId: plan.operationId, planHash: plan.planHash },
+    { requestId: 'cancel-compose-request' }), (error) => error.code === 'OPERATION_NOT_APPROVED');
+  assert.equal(approvals, 1);
+  assert.equal(harness.getSceneSaveCount(), 0);
+  const reconciled = await harness.api.reconcileSceneCompose({ operationId: plan.operationId });
+  assert.equal(reconciled.status, 'cancelled');
+  assert.equal(reconciled.observed.mutationApplied, false);
+  assert.equal(reconciled.observed.readOnly, true);
+  assert.match(reconciled.retry, /Never replay/);
+  assert.equal(harness.getSceneSaveCount(), 0);
+  assert.equal(await sourceHash(fs.readFileSync(harness.sceneFile)), sceneBefore);
+  assert.equal(await sourceHash(fs.readFileSync(harness.sceneMetaFile)), metaBefore);
+});
+
+test('uncertain scene save reconciliation reads state without sending a second save or replaying composition', async (t) => {
+  const harness = makeHarness(t, { sceneCompose: true, ipcMode: 'editor', sceneSaveMode: 'skip' });
+  const input = { sceneUuid: harness.sceneUuid,
+    nodes: [{ id: 'button', name: 'StartButton', parentRef: `uuid:${harness.sceneUuid}` }],
+    components: [], buttonEvents: [] };
+  const plan = await harness.api.createSceneComposePlan(input);
+  const sceneBefore = await sourceHash(fs.readFileSync(harness.sceneFile));
+  const metaBefore = await sourceHash(fs.readFileSync(harness.sceneMetaFile));
+  const receipt = await harness.api.commitSceneCompose({ operationId: plan.operationId, planHash: plan.planHash },
+    { requestId: 'uncertain-compose-request' });
+  assert.equal(receipt.status, 'save-unconfirmed');
+  assert.equal(receipt.sceneSaveRequestSent, true);
+  assert.equal(harness.getSceneSaveCount(), 1);
+  const reconciled = await harness.api.reconcileSceneCompose({ operationId: plan.operationId });
+  assert.equal(reconciled.status, 'save-unconfirmed');
+  assert.match(reconciled.retry, /Never replay/);
+  assert.equal(harness.getSceneSaveCount(), 1);
+  assert.equal(await sourceHash(fs.readFileSync(harness.sceneFile)), sceneBefore);
+  assert.equal(await sourceHash(fs.readFileSync(harness.sceneMetaFile)), metaBefore);
 });
 
 test('Prefab creation routes through the Creator Scene panel and reads its AssetDB identity back', async (t) => {

@@ -3,14 +3,16 @@ import test from 'node:test';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { inspectSceneComposition, inspectSavedSceneNode, componentValueForDisk,
+const { inspectSceneAssetIdentity, inspectSceneComposition, inspectSavedSceneNode, componentValueForDisk,
   validComponentDiskValue } = require('../creator-extension/scene-persistence.cjs');
 
-const sceneUuid = '4b02b1e4-d163-47e2-91ad-2da0193a3907';
+const sceneUuid = '2c12110c-6f11-4a89-bcd4-1941dc757ca4';
+const sceneRootUuid = '4b02b1e4-d163-47e2-91ad-2da0193a3907';
+const sceneAssetUuid = sceneUuid;
 const nodeUuid = 'df1bb94e-c8e6-41ba-b9c9-a04c6e86a581';
 const spriteUuid = 'a3b51e35-a9f2-4552-b597-4731bbf7b119';
 const handlerClassId = 'c8f27f4c-3728-4ce7-8db6-8fdc99e9a70a';
-const sceneAssetRow = { url: 'db://assets/Scenes/Main.fire', uuid: sceneUuid, importer: 'scene' };
+const sceneAssetRow = { url: 'db://assets/Scenes/Main.fire', uuid: sceneAssetUuid, importer: 'scene' };
 
 function fixture() {
   const request = {
@@ -36,7 +38,7 @@ function fixture() {
   const operation = { plan: { sceneUuid, request, expectedState }, sceneReadback: readback };
   const records = [
     { __type__: 'cc.SceneAsset', scene: { __id__: 1 } },
-    { __type__: 'cc.Scene', _id: sceneUuid, _children: [{ __id__: 2 }] },
+    { __type__: 'cc.Scene', _id: sceneRootUuid, _children: [{ __id__: 2 }] },
     { __type__: 'cc.Node', _id: nodeUuid, _name: 'StartButton', _parent: { __id__: 1 }, _active: true,
       _trs: { __type__: 'TypedArray', ctor: 'Float64Array', array: [12, 20, 0, 0, 0,
         Math.sin(Math.PI / 12), Math.cos(Math.PI / 12), 1.5, 0.75, 1] },
@@ -50,8 +52,15 @@ function fixture() {
       _componentId: handlerClassId, handler: 'onClick', customEventData: 'toggle' },
   ];
   return { operation, sceneBytes: Buffer.from(JSON.stringify(records)),
-    metaBytes: Buffer.from(JSON.stringify({ uuid: sceneUuid, importer: 'scene' })) };
+    metaBytes: Buffer.from(JSON.stringify({ uuid: sceneAssetUuid, importer: 'scene' })) };
 }
+
+test('scene asset identity keeps the scene root UUID separate from the AssetDB metadata UUID', () => {
+  const source = fixture();
+  assert.deepEqual(inspectSceneAssetIdentity({ ...source, sceneAssetRow }), {
+    verified: true, sceneUuid, sceneAssetUuid, sceneRootUuid, sceneUrl: sceneAssetRow.url,
+  });
+});
 
 test('saved scene node inspection resolves exact UUID, hierarchy, active state, and serialized transform', () => {
   const source = fixture();
@@ -95,6 +104,7 @@ test('saved component properties bind exact instance IDs and decode all supporte
   const cases = [
     [12, 12], ['saved', 'saved'], [false, false], [null, null],
     [{ __uuid__: spriteUuid }, { kind: 'asset', assetUuid: spriteUuid }],
+    [{ __id__: 1 }, { kind: 'node-ref', nodeUuid: sceneUuid }],
     [{ __id__: 2 }, { kind: 'node-ref', nodeUuid }],
     [{ __id__: 3 }, { kind: 'component-ref', nodeUuid, componentInstanceId: 'button-instance', serializedClassId: 'cc.Button' }],
     ...[
@@ -161,7 +171,7 @@ test('saved component identity sets and deletion subtrees are read back by persi
   const childUuid = '585df788-f08e-43c1-bfad-55798ed7c64f';
   const rows = [
     { __type__: 'cc.SceneAsset', scene: { __id__: 1 } },
-    { __type__: 'cc.Scene', _id: sceneUuid, _name: 'Scene', _children: [{ __id__: 2 }] },
+    { __type__: 'cc.Scene', _id: sceneRootUuid, _name: 'Scene', _children: [{ __id__: 2 }] },
     { __type__: 'cc.Node', _id: subtreeUuid, _name: 'Root', _parent: { __id__: 1 }, _children: [{ __id__: 3 }],
       _trs: { __type__: 'TypedArray', ctor: 'Float64Array', array: [0, 0, 0, 0, 0, 0, 1, 1, 1, 1] },
       _contentSize: { __type__: 'cc.Size', width: 1, height: 1 }, _anchorPoint: { __type__: 'cc.Vec2', x: 0.5, y: 0.5 } },
@@ -177,7 +187,7 @@ test('saved component identity sets and deletion subtrees are read back by persi
     { nodeUuid: childUuid, nodeName: 'Child', parentUuid: subtreeUuid, siblingIndex: 0, childCount: 0 },
   ]);
   const deleted = [{ __type__: 'cc.SceneAsset', scene: { __id__: 1 } },
-    { __type__: 'cc.Scene', _id: sceneUuid, _name: 'Scene', _children: [] }];
+    { __type__: 'cc.Scene', _id: sceneRootUuid, _name: 'Scene', _children: [] }];
   const absence = inspectSavedSceneNode({ ...source, sceneBytes: Buffer.from(JSON.stringify(deleted)), sceneUuid,
     sceneAssetRow, nodeUuid: subtreeUuid, componentProperty: undefined, absentNodeUuids: [subtreeUuid, childUuid] });
   assert.equal(absence.verified, true);
@@ -255,6 +265,8 @@ test('persisted scene verification binds the AssetDB scene identity and generate
   const source = fixture();
   assert.equal(inspectSceneComposition({ ...source, sceneUuid, sceneAssetRow: { ...sceneAssetRow, uuid: nodeUuid } }).reason,
     'SCENE_ASSETDB_IDENTITY_MISMATCH');
+  assert.equal(inspectSceneComposition({ ...source, sceneUuid,
+    sceneAssetRow: { ...sceneAssetRow, uuid: 'not-a-uuid' } }).reason, 'SCENE_ASSETDB_IDENTITY_MISMATCH');
   assert.equal(inspectSceneComposition({ ...source, sceneUuid,
     metaBytes: Buffer.from(JSON.stringify({ uuid: nodeUuid, importer: 'scene' })), sceneAssetRow }).reason,
   'SCENE_META_IDENTITY_MISMATCH');
