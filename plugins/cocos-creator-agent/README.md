@@ -4,7 +4,7 @@ This compatibility plugin contains one setup Skill for users who install Cocos t
 
 The standalone Cocos Creator CLI is the product owner for both integrations:
 
-- `cocos-creator-agent mcp configure <codex|claude-code>` registers the CLI-owned stdio MCP server using the client’s native CLI.
+- `cocos-creator-agent mcp configure <codex|claude-code|cursor|vscode>` registers the CLI-owned stdio MCP server using the client's native CLI or JSON configuration format.
 - `cocos-creator-agent skill install <client>` installs the CLI-bundled Creator workflow skills into the client’s native skill directory.
 - `cocos-creator-agent` remains usable directly by people, scripts, and CI without a Host plugin.
 

@@ -29,14 +29,14 @@ Codex / Claude Code
                 └─ 截图证据（写入项目外）
 ```
 
-`mcp configure` 通过 Codex / Claude Code 的原生命令注册 CLI 的 `mcp serve`；MCP server、命令 catalog 与 Creator 调用都由 CLI 包持有。`skill install` 将 CLI 包内路由/专项 Skills 和参考资料装入客户端原生 Skill 目录；可按 Skill 选择、项目/用户作用域安装、预览、刷新和冲突备份。仓库保留的 `plugins/cocos-creator-agent/` 只提供旧式插件安装场景的 CLI 引导 Skill，不承载 MCP server 或 Creator 工作流 Skill 正文。CLI 不依赖 Codex、Claude 或 Creator 原生 CocosAgent，可以单独供人、脚本和 CI 使用。Creator 扩展轮询每用户状态目录以建立会话。Host 必须先列出实例，再把明确的 `instanceId` 传给后续调用；服务不按前台窗口或“最近项目”猜目标。
+`mcp configure` 通过 Codex / Claude Code 原生命令，或 Cursor / VS Code 的标准 JSON 配置，注册 CLI 的 `mcp serve`；MCP server、命令 catalog 与 Creator 调用都由 CLI 包持有。JSON 配置更新保留其他服务、原子写入并拒绝符号链接、无效 JSON 和同名漂移覆盖。`skill install` 将 CLI 包内路由/专项 Skills 和参考资料装入 Codex/Claude 原生 Skill 目录；可按 Skill 选择、项目/用户作用域安装、预览、刷新和冲突备份。仓库保留的 `plugins/cocos-creator-agent/` 只提供旧式插件安装场景的 CLI 引导 Skill，不承载 MCP server 或 Creator 工作流 Skill 正文。CLI 不依赖 Codex、Claude、Cursor、VS Code 或 Creator 原生 CocosAgent，可以单独供人、脚本和 CI 使用。Creator 扩展轮询每用户状态目录以建立会话。Host 必须先列出实例，再把明确的 `instanceId` 传给后续调用；服务不按前台窗口或“最近项目”猜目标。
 
 ## 源码职责
 
 | 文件 | 职责 |
 | --- | --- |
 | `tools/cocos-creator-agent-cli/mcp/server.mjs` | CLI 自带 MCP initialize、tools/list、tools/call 和 stdio 服务 |
-| `tools/cocos-creator-agent-cli/mcp/configure.mjs` | 通过 Codex/Claude 原生命令安装、检查、移除 CLI MCP 配置，并拒绝同名漂移覆盖 |
+| `tools/cocos-creator-agent-cli/mcp/configure.mjs` | 通过 Codex/Claude 原生命令或 Cursor/VS Code JSON 文件安装、检查、移除 CLI MCP 配置，并拒绝同名漂移覆盖 |
 | `tools/cocos-creator-agent-cli/skills.mjs` | 展示、安装、刷新 Creator Skills；检查目标漂移并为强制替换保留备份 |
 | `tools/cocos-creator-agent-cli/skills/` | CLI 发布包内的路由与专项 Creator Skills；唯一维护源 |
 | `tools/cocos-creator-agent-cli/references/2x/` | 随 CLI Skills 分发的 Creator 2.4.x 参考资料 |
@@ -58,12 +58,12 @@ CLI 的职责是提供**独立安装、独立升级、无 Host 依赖**的本机
 
 | 层 | 应负责 | 当前状态 |
 | --- | --- | --- |
-| CLI | 独立安装/升级；内置 MCP server 与 Codex/Claude `mcp configure`；打包 Skills 并提供 `skill install/refresh/show/list`；Creator 扩展安装/更新、桥接运维、终端/CI 自动化、catalog/call | 0.9.0 当前源码 32 项测试、90 项 tarball 文件、SHA-256、隔离安装、0.6.0→0.9.0 本地升级、版本/Skills/命令目录均通过。0.9.0 标签已推送，Actions/Release 资产状态未核实；在线自更新、真实桌面 Host 重载、Creator 实机链路仍待完成 |
+| CLI | 独立安装/升级；内置 MCP server 与 Codex/Claude/Cursor/VS Code `mcp configure`；打包 Skills 并提供 `skill install/refresh/show/list`；Creator 扩展安装/更新、桥接运维、终端/CI 自动化、catalog/call | 0.9.0 当前源码 32 项测试、90 项 tarball 文件、SHA-256、隔离安装、0.6.0→0.9.0 本地升级、版本/Skills/命令目录均通过。0.9.0 标签已推送，Actions/Release 资产状态未核实；在线自更新、真实桌面 Host 重载、Creator 实机链路仍待完成 |
 | 旧式第三方插件 | 只提供 CLI 配置引导 Skill；不提供 MCP server，不维护领域 Skills | 已收缩为 `cocos2-cli` 引导；Codex/Claude 清单移除插件内 MCP 注册 |
 | MCP | Host 握手、工具发现、schema 发布、工具调用和结果封装 | stdio server 随 CLI 发布，由 CLI `mcp serve` 启动并直接读取本包合同；`mcp configure` 调用 Host 原生命令注册 |
 | 共享命令执行层 | 唯一 Creator 命令合同、schema、输入验证、实例身份校验、桥接调用和回执 | 由 CLI 包持有；MCP 从 CLI catalog/call 接口消费 |
 
-CLI 可直接供 shell 使用，也提供 Host MCP 所需的机器接口。Codex / Claude 客户端从 CLI 安装 Creator 工作流 Skills，并由 CLI 配置自己的 MCP server；可选 bootstrap 插件只用于迁移/引导。MCP 与直接 CLI 调用复用 CLI 持有的合同和执行层，不维护不同的命令语义。扩展/桥接生命周期属于 CLI。
+CLI 可直接供 shell 使用，也提供 Host MCP 所需的机器接口。Codex / Claude 客户端从 CLI 安装 Creator 工作流 Skills；Codex、Claude Code、Cursor 与 VS Code 都可由 CLI 配置 MCP server。可选 bootstrap 插件只用于迁移/引导。MCP 与直接 CLI 调用复用 CLI 持有的合同和执行层，不维护不同的命令语义。扩展/桥接生命周期属于 CLI。
 
 **命令描述与输入 schema 已收敛：** `tools/cocos-creator-agent-cli/creator-extension/command-contract.json` 是 Creator 命令描述及输入 schema 的唯一来源。桥接校验和能力目录从它读取；Creator 扩展注册时读取同一文件并以其 SHA-256 做合同指纹；MCP 从 CLI `catalog --format json` 生成工具描述与 `inputSchema`，只叠加 MCP 路由必需的 `instanceId`，保留 Host 工具名到 Creator 命令 ID 的薄映射；调用通过 CLI `call --command ... --input ... --format json` 执行。
 
@@ -71,7 +71,7 @@ CLI 可直接供 shell 使用，也提供 Host MCP 所需的机器接口。Codex
 
 目标是把 CLI 做成**独立安装和升级的本机工具**，按 [Unity CLI 的 MCP/Skill 安装模型](https://docs.unity.com/en-us/unity-cli/replace-mcp-server-unity-cli)提供 `mcp configure`、CLI 内 MCP server、`skill install/refresh/show/list`。Creator Skills 与参考资料随 CLI 版本打包，Skill 安装不依赖 Host 插件市场。CLI 即使没有 Codex、Claude 或 Creator 原生 CocosAgent，也能用于人、脚本和 CI。兼容性引导插件可独立更新，但不能复制 MCP server、Creator Skills 或合同。
 
-CLI 分发包应持有本机桥接运维、Creator 扩展安装/更新、命令合同、Creator 命令执行、stdio MCP server、客户端 MCP 配置适配器和 Creator Skills 源。`skill install` 依客户端原生布局安装用户/项目技能，`mcp configure` 通过 Codex/Claude 原生命令写入服务器配置；`catalog --format json` 和 `call --command <id> --input <json> --format json` 仍是内部稳定机器接口。可选 bootstrap 插件只说明如何安装/升级 CLI、安装 Skills 和配置 MCP。
+CLI 分发包应持有本机桥接运维、Creator 扩展安装/更新、命令合同、Creator 命令执行、stdio MCP server、客户端 MCP 配置适配器和 Creator Skills 源。`skill install` 依 Codex/Claude 原生布局安装用户/项目技能；`mcp configure` 通过 Codex/Claude 命令或 Cursor/VS Code JSON 配置注册 server；`catalog --format json` 和 `call --command <id> --input <json> --format json` 仍是内部稳定机器接口。可选 bootstrap 插件只说明如何安装/升级 CLI、安装 Skills 和配置 MCP。
 
 迁移次序与状态：
 
@@ -152,7 +152,7 @@ MCP 当前源码定义 36 个固定工具（3 个基础、25 个 Creator 命令�
 
 ### 当前基线
 
-- 产品边界：`tools/cocos-creator-agent-cli/` 是独立本机产品，拥有 MCP server、Codex/Claude 原生配置命令、Creator Skills 安装器、Creator 扩展与桥接；`plugins/cocos-creator-agent/` 只保留旧式插件安装的 CLI 引导 Skill。Creator 原生 CocosAgent 已停用并移除，不属于运行依赖。
+- 产品边界：`tools/cocos-creator-agent-cli/` 是独立本机产品，拥有 MCP server、Codex/Claude/Cursor/VS Code 配置适配器、Creator Skills 安装器、Creator 扩展与桥接；`plugins/cocos-creator-agent/` 只保留旧式插件安装的 CLI 引导 Skill。Creator 原生 CocosAgent 已停用并移除，不属于运行依赖。
 - 版本基线：历史候选 CLI `0.10.6` / Creator 扩展 `0.6.2` 已有本地包与预览证据；CLI `0.11.0` / Creator 扩展 `0.7.0` 已打成本地 tarball 并安装到全局 CLI。当前候选包为 98 个条目、179,445 字节，SHA-256 `3dddb3a8abde25b2d1d19d99898c8294260d796802d90cb05c0ff77f7ea004c3`。真实 Creator 已完成 `script.modify` 修改及恢复回读，编译仍未确认。空 tank 的 Creator Builder 明确报告没有启动场景；CLI 现返回结构化 Builder 失败码/原因，并保留后续进程超时状态。GitHub Actions 因账户 billing locked 未运行；公开 Release、线上自更新与回滚仍未完成。Creator 固定命令合同只支持 `2.4.15`，CLI 需要 Node.js 20+；预览证据需要本机 Chromium。
 - Skills：51 项 Creator 工作流 Skills 与 1 项 CLI Skill（共 52 项）及 Creator 2.4.x 参考资料已移入 CLI 包作为唯一维护源；CLI `skill install` 安装到 Codex/Claude 原生目录。5 项厂商 SDK Skills 仍在可选包 `plugins/cocos-creator-agent-sdk/`，后续需决定是否让 CLI 安装器也管理可选 SDK 包。
 - MCP：CLI `mcp serve` 内置 stdio server，`mcp configure/list/status/remove` 负责 Host 注册与检查；无 Provider 时固定目录为 36 项，在线项目别名与 Creator Provider 命令共用总工具数 128 上限。0.10.6 候选包 `initialize`、38 项动态 `tools/list` 和同实例 `cocos_project_info` 实际调用已通过；Codex/Claude 配置均为 `configured`，桌面 Host 会话重载仍待验收。

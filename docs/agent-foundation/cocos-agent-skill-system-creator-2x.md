@@ -11,7 +11,7 @@
 - 原生 CocosAgent 已停用并移除；当前第三方 Skills 通过 CLI 安装到 Codex/Claude 原生 Skill 目录，第三方 Host 不调用原生模型/Provider。
 - MCP server、客户端配置、CLI 与 Creator 桥接统一位于独立包 `tools/cocos-creator-agent-cli/`；合同、写入/运行能力与验收状态见[第三方接入实现](cocos-creator-third-party-integration-mvp-0.1.md)。
 
-独立 CLI 提供 `mcp configure codex|claude-code`、`mcp serve` 与 `skill install/show/list/refresh`；Codex 和 Claude 的本机配置由各自原生命令修改。Creator 引擎参考资料与 Skills 同属 CLI 发布包，按当前任务按需读取；其中源码和运行证据主要针对 2.4.15，不能外推到全部 2.4.x。旧式 bootstrap 插件保留 Host 元数据，仅为已有插件用户提供迁移入口。Codex 的插件打包参考 [OpenAI 插件打包文档](https://developers.openai.com/plugins/build/plugins)；Claude Code 插件结构参考 [Anthropic 官方插件结构](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/plugin-dev/skills/plugin-structure)。
+独立 CLI 提供 `mcp configure codex|claude-code|cursor|vscode`、`mcp serve` 与 `skill install/show/list/refresh`；Codex 和 Claude Code 通过各自 CLI 配置，Cursor 和 VS Code 使用各自 JSON 配置格式。Creator 引擎参考资料与 Skills 同属 CLI 发布包，按当前任务按需读取；其中源码和运行证据主要针对 2.4.15，不能外推到全部 2.4.x。旧式 bootstrap 插件保留 Host 元数据，仅为已有插件用户提供迁移入口。Codex 的插件打包参考 [OpenAI 插件打包文档](https://developers.openai.com/plugins/build/plugins)；Claude Code 插件结构参考 [Anthropic 官方插件结构](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/plugin-dev/skills/plugin-structure)。
 
 ## 路由 Skill
 

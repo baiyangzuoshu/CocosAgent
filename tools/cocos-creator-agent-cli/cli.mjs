@@ -14,7 +14,7 @@ import { loadTestPlan, loadFailedSuiteIds, parseTestShard, runTestPlan, watchTes
 import { runVcsDoctor } from './vcs-integrity.mjs';
 import { runVcsStatus } from './vcs-status.mjs';
 import { runVcsDiff, runVcsObjectBlame, runVcsConflictReport } from './vcs-diff.mjs';
-import { configureMcp, mcpStatus, supportedMcpClients } from './mcp/configure.mjs';
+import { configureMcp, mcpStatus, removeMcp, supportedMcpClients } from './mcp/configure.mjs';
 import { availableSkills, installSkills, listSkillStatus, showSkill } from './skills.mjs';
 import { diffSceneSnapshotFiles } from './semantic-diff.mjs';
 
@@ -30,7 +30,7 @@ const HELP_LINES = [
   '  help [<command> [<subcommand>]] | help search <query>',
   '  catalog [--format json]',
   '  self-update [--check] [--version <version>]',
-  '  mcp configure <codex|claude-code> [--local] [--force] [--dry-run] | list | status <client> | remove <client> | serve',
+  '  mcp configure <codex|claude-code|cursor|vscode> [--local] [--force] [--dry-run] | list | status <client> [--local] | remove <client> [--local] | serve',
   '  skill list [<codex|claude-code>] [--local] | show [<skill-name>|--list] (default: cocos2-cli) | install <client> [--local] [--skill <name>] [--force] | refresh <client> [--local] [--force]',
   '  doctor [--project-root <absolute-path>] [--instance <instance-id>]',
   '  vcs doctor --git-root <absolute-path> --project-root <absolute-path>',
@@ -223,7 +223,7 @@ async function main() {
     }
     if (action === 'status') {
       const client = rest[0];
-      print(mcpStatus(client));
+      print(mcpStatus(client, { local: args.includes('--local') }));
       return;
     }
     if (action === 'configure') {
@@ -233,20 +233,14 @@ async function main() {
     }
     if (action === 'remove') {
       const client = rest[0];
-      const current = mcpStatus(client);
+      const local = args.includes('--local');
+      const current = mcpStatus(client, { local });
       if (current.status === 'not-configured' || current.status === 'client-not-installed') {
         print({ client, server: 'cocos-creator-agent', status: current.status });
         return;
       }
       if (current.status !== 'configured') throw new Error(`MCP_SERVER_CONFLICT: ${client} has a different ${current.server} configuration; remove it through the client after reviewing it.`);
-      const command = client === 'codex' ? 'codex' : client === 'claude-code' ? 'claude' : null;
-      if (!command) throw new Error('CLIENT_UNSUPPORTED: choose codex or claude-code');
-      const { spawnSync } = await import('node:child_process');
-      const removeArgs = client === 'codex' ? ['mcp', 'remove', 'cocos-creator-agent']
-        : ['mcp', 'remove', '--scope', args.includes('--local') ? 'local' : 'user', 'cocos-creator-agent'];
-      const result = spawnSync(command, removeArgs, { encoding: 'utf8', timeout: 30000, windowsHide: true });
-      if (result.status !== 0) throw new Error(`MCP_REMOVE_FAILED: ${(result.stderr || result.stdout || result.error?.message || '').trim()}`);
-      print({ client, server: 'cocos-creator-agent', status: 'removed' });
+      print(removeMcp(client, { local }));
       return;
     }
     throw new Error('Unknown MCP action. Use mcp --help.');
