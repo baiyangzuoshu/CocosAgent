@@ -11,6 +11,7 @@ const { inspectSceneComposition, inspectSavedSceneNode, componentValueForDisk,
     validComponentDiskValue } = require('./scene-persistence.cjs');
 const { inspectPrefabSource: inspectPrefabSourceData } = require('./prefab-source.cjs');
 const prefabPatch = require('./prefab-patch.cjs');
+const prefabInstanceOperations = require('./prefab-instance-operations.cjs');
 const editorScriptEval = require('./editor-script-eval.cjs');
 const { scanAssetReferences } = require('./asset-references.cjs');
 const contract = require('./command-contract.json');
@@ -651,6 +652,30 @@ function readPrefabSourcePatchOperation(operationId) {
     return operation;
 }
 
+function readPrefabInstanceOverrideOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    if (!operation || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.prefab.instance.override' || !plan || typeof plan !== 'object'
+        || plan.operationId !== operationId || !prefabInstanceOperations.validPrefabInstanceOverridePlan(plan)
+        || typeof operation.planHash !== 'string' || typeof plan.projectRoot !== 'string'
+        || typeof plan.creatorVersion !== 'string' || typeof plan.extensionVersion !== 'string'
+        || typeof plan.contractFingerprint !== 'string' || typeof plan.creatorInstanceId !== 'string'
+        || typeof plan.sceneUrl !== 'string' || typeof plan.sceneName !== 'string'
+        || typeof plan.selectedNodePath !== 'string' || typeof plan.prefabPath !== 'string'
+        || typeof plan.prefabRootPath !== 'string' || typeof plan.expiresAt !== 'string'
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'mutation-started',
+            'effect-observed', 'not-applied', 'needs-reconciliation', 'conflict'].includes(operation.status))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    return operation;
+}
+
 function readSceneOperation(operationId) {
     const filename = operationPath(operationId);
     let stat;
@@ -1223,7 +1248,7 @@ function assetImportReceipt(operation, readback) {
         assetType: operation.assetType || null, importer: operation.importer || null,
         metaSha256: result && result.metaSha256 || operation.metaSha256 || null,
         plannedByInstanceId: operation.plannedByInstanceId, appliedByInstanceId: operation.appliedByInstanceId || null,
-        completedAt: operation.completedAt || null,
+        effectObservedAt: operation.effectObservedAt || null,
         recovery: { automaticRetry: false, reconcileCommand: 'creator.asset.import.reconcile',
             compensationAvailable: false,
             compensationCondition: 'Delete only through Creator AssetDB after rechecking URL, UUID, asset SHA-256, and .meta SHA-256.' } };
@@ -2464,6 +2489,278 @@ async function reconcilePrefabSourcePatch(input) {
     return { ...prefabSourcePatchReceipt(operation), observed: { sourceSha256: source.sourceSha256,
         metaSha256: source.metaSha256, targetNodePath: node.nodePath, targetNodeUuid: node.nodeUuid,
         diskMatchesBefore: beforeMatches, diskMatchesAfter: afterMatches } };
+}
+
+async function capturePrefabInstanceOverrideSnapshot(sceneUuid, selectedNodeUuid) {
+    const instance = await inspectPrefabInstanceCommand({ sceneUuid, nodeUuid: selectedNodeUuid });
+    if (!instance || instance.available !== true || instance.linked !== true)
+        throw coded(instance && instance.reason || 'PREFAB_INSTANCE_NOT_LINKED');
+    if (!instance.savedScene || instance.savedScene.verified !== true)
+        throw coded(instance.savedScene && instance.savedScene.reason || 'PREFAB_INSTANCE_SCENE_NOT_SAVED');
+    if (!instance.prefabAsset || typeof instance.prefabAsset.path !== 'string'
+        || !prefabPatch.SHA256.test(instance.prefabAsset.sourceSha256 || '')
+        || !prefabPatch.SHA256.test(instance.prefabAsset.metaSha256 || '')
+        || !prefabPatch.SHA256.test(instance.savedScene.sourceSha256 || '')
+        || !prefabPatch.SHA256.test(instance.savedScene.metaSha256 || '')
+        || !prefabPatch.SHA256.test(instance.stateSha256 || '')
+        || !Array.isArray(instance.nodes) || !instance.nodes.length)
+        throw coded('PREFAB_INSTANCE_SNAPSHOT_INVALID');
+    return {
+        sceneUuid: instance.sceneUuid,
+        sceneName: instance.sceneName,
+        sceneUrl: instance.savedScene.url,
+        sceneSourceSha256: instance.savedScene.sourceSha256,
+        sceneMetaSha256: instance.savedScene.metaSha256,
+        selectedNodeUuid: instance.selectedNodeUuid,
+        selectedNodePath: instance.selectedNodePath,
+        prefabRootUuid: instance.prefabRootUuid,
+        prefabRootPath: instance.prefabRootPath,
+        prefabUuid: instance.prefabUuid,
+        prefabPath: instance.prefabAsset.path,
+        targetUrl: instance.prefabAsset.url,
+        prefabSourceSha256: instance.prefabAsset.sourceSha256,
+        prefabMetaSha256: instance.prefabAsset.metaSha256,
+        instanceStateSha256: instance.stateSha256,
+        nodeCount: instance.nodeCount,
+        liveStateScope: instance.liveStateScope,
+    };
+}
+
+function prefabInstanceOverrideReceipt(operation, observed = null) {
+    const plan = operation.plan;
+    return {
+        operationId: operation.operationId,
+        operation: operation.operation,
+        action: plan.action,
+        status: operation.status,
+        projectRoot: plan.projectRoot,
+        creatorVersion: plan.creatorVersion,
+        sceneUuid: plan.sceneUuid,
+        sceneName: plan.sceneName,
+        selectedNodeUuid: plan.selectedNodeUuid,
+        selectedNodePath: plan.selectedNodePath,
+        prefabRootUuid: plan.prefabRootUuid,
+        prefabRootPath: plan.prefabRootPath,
+        prefabUuid: plan.prefabUuid,
+        prefabPath: plan.prefabPath,
+        targetUrl: plan.targetUrl,
+        expectedBefore: plan.expectedBefore,
+        creatorIpcAcknowledgementConfirmed: false,
+        effectObserved: operation.status === 'effect-observed',
+        observed,
+        semanticOverrideValuesVerified: false,
+        plannedByInstanceId: operation.plannedByInstanceId,
+        appliedByInstanceId: operation.appliedByInstanceId || null,
+        completedAt: operation.completedAt || null,
+        recovery: {
+            automaticRetry: false,
+            reconcileCommand: 'creator.prefab.instance.override.reconcile',
+            note: operation.status === 'effect-observed'
+                ? 'Creator changed the expected saved asset and the change was read back. Inspect the resulting Prefab or instance values in Creator; this command does not decode every possible component override.'
+                : 'Do not resend the native action. Reconcile its observed hashes and inspect the exact Prefab instance in Creator before creating a new plan.',
+        },
+    };
+}
+
+async function createPrefabInstanceOverridePlan(input) {
+    if (!input || typeof input.sceneUuid !== 'string' || typeof input.nodeUuid !== 'string'
+        || !['apply', 'revert'].includes(input.action)) throw coded('PREFAB_INSTANCE_OVERRIDE_INPUT_INVALID');
+    if (editorVersion() !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    const snapshot = await capturePrefabInstanceOverrideSnapshot(input.sceneUuid, input.nodeUuid);
+    const operationId = uuid();
+    const plan = {
+        operationId,
+        operation: 'creator.prefab.instance.override',
+        projectRoot: projectRoot(),
+        creatorVersion: editorVersion(),
+        extensionVersion: extensionPackage.version,
+        contractFingerprint: CONTRACT_FINGERPRINT,
+        creatorInstanceId: INSTANCE_ID,
+        action: input.action,
+        sceneUuid: snapshot.sceneUuid,
+        sceneName: snapshot.sceneName,
+        sceneUrl: snapshot.sceneUrl,
+        selectedNodeUuid: snapshot.selectedNodeUuid,
+        selectedNodePath: snapshot.selectedNodePath,
+        prefabRootUuid: snapshot.prefabRootUuid,
+        prefabRootPath: snapshot.prefabRootPath,
+        prefabUuid: snapshot.prefabUuid,
+        prefabPath: snapshot.prefabPath,
+        targetUrl: snapshot.targetUrl,
+        expectedBefore: {
+            instanceStateSha256: snapshot.instanceStateSha256,
+            sceneSourceSha256: snapshot.sceneSourceSha256,
+            sceneMetaSha256: snapshot.sceneMetaSha256,
+            prefabSourceSha256: snapshot.prefabSourceSha256,
+            prefabMetaSha256: snapshot.prefabMetaSha256,
+        },
+        nodeCount: snapshot.nodeCount,
+        expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString(),
+    };
+    const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
+        planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(),
+        plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { operationId, operation: plan.operation, action: plan.action, status: operation.status,
+        planHash: operation.planHash, projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion,
+        creatorInstanceId: plan.creatorInstanceId, sceneUuid: plan.sceneUuid, sceneName: plan.sceneName,
+        selectedNodeUuid: plan.selectedNodeUuid, selectedNodePath: plan.selectedNodePath,
+        prefabRootUuid: plan.prefabRootUuid, prefabRootPath: plan.prefabRootPath,
+        prefabUuid: plan.prefabUuid, prefabPath: plan.prefabPath, targetUrl: plan.targetUrl,
+        expectedBefore: plan.expectedBefore, nodeCount: plan.nodeCount, expiresAt: plan.expiresAt,
+        recovery: { automaticRetry: false, reconcileCommand: 'creator.prefab.instance.override.reconcile',
+            note: 'Review the exact Prefab instance and source identity, then commit once. Creator IPC does not document a completion acknowledgement; reconciliation relies on saved file and live instance readback.' } };
+}
+
+async function verifyPrefabInstanceOverridePlan(operation, { requireCurrentContract = true } = {}) {
+    const plan = operation.plan;
+    if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
+    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+        throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
+    if (requireCurrentContract && (plan.extensionVersion !== extensionPackage.version
+        || plan.contractFingerprint !== CONTRACT_FINGERPRINT)) throw coded('OPERATION_CONTRACT_MISMATCH');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    const snapshot = await capturePrefabInstanceOverrideSnapshot(plan.sceneUuid, plan.selectedNodeUuid);
+    if (snapshot.sceneUuid !== plan.sceneUuid || snapshot.sceneUrl !== plan.sceneUrl
+        || snapshot.selectedNodePath !== plan.selectedNodePath || snapshot.prefabRootUuid !== plan.prefabRootUuid
+        || snapshot.prefabRootPath !== plan.prefabRootPath || snapshot.prefabUuid !== plan.prefabUuid
+        || snapshot.prefabPath !== plan.prefabPath || snapshot.targetUrl !== plan.targetUrl
+        || snapshot.instanceStateSha256 !== plan.expectedBefore.instanceStateSha256
+        || snapshot.sceneSourceSha256 !== plan.expectedBefore.sceneSourceSha256
+        || snapshot.sceneMetaSha256 !== plan.expectedBefore.sceneMetaSha256
+        || snapshot.prefabSourceSha256 !== plan.expectedBefore.prefabSourceSha256
+        || snapshot.prefabMetaSha256 !== plan.expectedBefore.prefabMetaSha256)
+        throw coded('PREFAB_INSTANCE_OVERRIDE_PRECONDITION_FAILED');
+    return snapshot;
+}
+
+function confirmPrefabInstanceOverride(operation) {
+    if (!Editor.Dialog || typeof Editor.Dialog.messageBox !== 'function') throw coded('CREATOR_APPROVAL_DIALOG_UNAVAILABLE');
+    const plan = operation.plan;
+    const actionText = plan.action === 'apply'
+        ? 'Push this instance’s overrides into the shared Prefab asset. Other instances may inherit the change.'
+        : 'Restore this instance from its linked Prefab source. Creator may preserve node name, active state, position, and rotation.';
+    const detail = [
+        `Project: ${plan.projectRoot}`,
+        `Creator: ${plan.creatorVersion}`,
+        `Scene: ${plan.sceneName} (${plan.sceneUuid})`,
+        `Instance: ${plan.selectedNodePath} (${plan.selectedNodeUuid})`,
+        `Prefab root: ${plan.prefabRootPath} (${plan.prefabRootUuid})`,
+        `Prefab: ${plan.targetUrl} (${plan.prefabUuid})`,
+        `Action: ${plan.action}`,
+        `Affected nodes: ${plan.nodeCount}`,
+        `Operation: ${operation.operationId}`,
+        `Instance state: ${plan.expectedBefore.instanceStateSha256}`,
+        `Scene disk: ${plan.expectedBefore.sceneSourceSha256}`,
+        `Prefab disk: ${plan.expectedBefore.prefabSourceSha256}`,
+        '', actionText,
+        'Creator applies the operation; the CLI verifies saved hashes but does not decode every possible component override.',
+    ].join('\n');
+    return confirmDialog(Editor.Dialog, { type: 'warning',
+        title: plan.action === 'apply' ? 'Apply Prefab instance overrides' : 'Revert Prefab instance overrides',
+        message: `${plan.action === 'apply' ? 'Apply changes from' : 'Restore'} ${plan.selectedNodePath}?`,
+        detail, buttons: ['Cancel', plan.action === 'apply' ? 'Apply to Prefab' : 'Revert instance'],
+        defaultId: 0, cancelId: 0, noLink: true });
+}
+
+async function observePrefabInstanceOverride(operation) {
+    const snapshot = await capturePrefabInstanceOverrideSnapshot(operation.plan.sceneUuid,
+        operation.plan.selectedNodeUuid);
+    const classification = prefabInstanceOperations.classifyPrefabInstanceOverride(operation.plan, snapshot);
+    operation.lastObservation = { ...snapshot, classification, observedAt: new Date().toISOString() };
+    if (classification === 'effect-observed') {
+        operation.status = 'effect-observed';
+        operation.effectObservedAt = operation.effectObservedAt || operation.lastObservation.observedAt;
+    } else if (classification === 'not-applied') operation.status = 'not-applied';
+    else operation.status = classification;
+    operation.reconciledAt = new Date().toISOString();
+    writeOperation(operation);
+    return prefabInstanceOverrideReceipt(operation, operation.lastObservation);
+}
+
+async function commitPrefabInstanceOverride(input, context) {
+    const operation = readPrefabInstanceOverrideOperation(input.operationId);
+    if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (operation.status !== 'planned') throw coded(['mutation-started', 'needs-reconciliation', 'conflict']
+        .includes(operation.status) ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    await verifyPrefabInstanceOverridePlan(operation);
+    operation.status = 'awaiting-approval';
+    operation.approvalRequestedAt = new Date().toISOString();
+    writeOperation(operation);
+    if (!await confirmPrefabInstanceOverride(operation)) {
+        operation.status = 'cancelled'; operation.cancelledAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('OPERATION_NOT_APPROVED');
+    }
+    try { await authorizeWriteRequest(context && context.requestId); }
+    catch (error) {
+        operation.status = 'abandoned'; operation.abandonedAt = new Date().toISOString(); writeOperation(operation);
+        throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error));
+    }
+    try { await verifyPrefabInstanceOverridePlan(operation); }
+    catch (error) {
+        operation.status = 'conflict'; operation.conflictAt = new Date().toISOString();
+        operation.reconcileReason = error.code || 'PREFAB_INSTANCE_OVERRIDE_PRECONDITION_FAILED'; writeOperation(operation);
+        throw error;
+    }
+    if (!Editor.Ipc || typeof Editor.Ipc.sendToPanel !== 'function') throw coded('CREATOR_SCENE_IPC_UNAVAILABLE');
+    operation.status = 'mutation-started';
+    operation.mutationStartedAt = new Date().toISOString();
+    operation.approvalSource = 'creator-native-dialog';
+    operation.appliedByInstanceId = INSTANCE_ID;
+    writeOperation(operation);
+    try {
+        const message = operation.plan.action === 'apply' ? 'scene:apply-prefab' : 'scene:revert-prefab';
+        Editor.Ipc.sendToPanel('scene', message, operation.plan.prefabRootUuid);
+        operation.nativeRequestSent = true;
+        operation.nativeRequestSentAt = new Date().toISOString();
+        writeOperation(operation);
+        Editor.Ipc.sendToPanel('scene', 'scene:stash-and-save');
+        operation.sceneSaveRequestSent = true;
+        operation.sceneSaveRequestedAt = new Date().toISOString();
+        writeOperation(operation);
+    } catch (error) {
+        operation.status = 'needs-reconciliation';
+        operation.reconcileReason = error.code || 'PREFAB_INSTANCE_OVERRIDE_IPC_UNCERTAIN';
+        operation.failureAt = new Date().toISOString();
+        writeOperation(operation);
+        throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
+    }
+    const deadline = Date.now() + SCENE_SAVE_READBACK_TIMEOUT_MS;
+    let lastReceipt = null;
+    do {
+        try {
+            lastReceipt = await observePrefabInstanceOverride(operation);
+            if (['effect-observed', 'conflict'].includes(lastReceipt.status)) return lastReceipt;
+        } catch (error) {
+            operation.reconcileReason = error.code || 'PREFAB_INSTANCE_OVERRIDE_READBACK_UNAVAILABLE';
+            operation.lastObservationErrorAt = new Date().toISOString();
+            writeOperation(operation);
+        }
+        if (Date.now() >= deadline) break;
+        await new Promise((resolve) => setTimeout(resolve, 300));
+    } while (Date.now() <= deadline);
+    if (lastReceipt && lastReceipt.status === 'not-applied') return lastReceipt;
+    operation.status = 'needs-reconciliation';
+    operation.reconcileReason = operation.reconcileReason || 'PREFAB_INSTANCE_OVERRIDE_EFFECT_UNCONFIRMED';
+    operation.failureAt = new Date().toISOString();
+    writeOperation(operation);
+    return prefabInstanceOverrideReceipt(operation, lastReceipt && lastReceipt.observed || null);
+}
+
+async function reconcilePrefabInstanceOverride(input) {
+    const operation = readPrefabInstanceOverrideOperation(input.operationId);
+    const plan = operation.plan;
+    if (projectRoot() !== plan.projectRoot || editorVersion() !== plan.creatorVersion)
+        throw coded('OPERATION_TARGET_MISMATCH');
+    try { return await observePrefabInstanceOverride(operation); }
+    catch (error) {
+        operation.status = 'needs-reconciliation';
+        operation.reconcileReason = error.code || 'PREFAB_INSTANCE_OVERRIDE_READBACK_UNAVAILABLE';
+        operation.reconciledAt = new Date().toISOString();
+        writeOperation(operation);
+        return prefabInstanceOverrideReceipt(operation, { verified: false, reason: operation.reconcileReason });
+    }
 }
 
 function confirmPrefabCreate(operation) {
@@ -6313,6 +6610,17 @@ function capabilityList() {
         'creator.prefab.instance.inspect': !!(Editor && Editor.Project && Editor.Project.path
             && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
             && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.prefab.instance.override.plan': !!(Editor && Editor.Project && Editor.Project.path
+            && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.prefab.instance.override.commit': !!(Editor && Editor.Project && Editor.Project.path
+            && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'
+            && Editor.Dialog && typeof Editor.Dialog.messageBox === 'function'
+            && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.prefab.instance.override.reconcile': !!(Editor && Editor.Project && Editor.Project.path
+            && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
         'creator.prefab.source.patch.plan': prefabEditModeApiAvailable && !!(Editor && Editor.Project && Editor.Project.path
             && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function' && Editor.assetdb
             && typeof Editor.assetdb.queryAssets === 'function'),
@@ -6839,6 +7147,9 @@ function execute(command, input, context) {
     if (command === 'creator.prefab.create.reconcile') return reconcilePrefabCreate(input);
     if (command === 'creator.prefab.source.inspect') return inspectPrefabSourceCommand(input);
     if (command === 'creator.prefab.instance.inspect') return inspectPrefabInstanceCommand(input);
+    if (command === 'creator.prefab.instance.override.plan') return createPrefabInstanceOverridePlan(input);
+    if (command === 'creator.prefab.instance.override.commit') return commitPrefabInstanceOverride(input, context);
+    if (command === 'creator.prefab.instance.override.reconcile') return reconcilePrefabInstanceOverride(input);
     if (command === 'creator.prefab.source.patch.plan') return createPrefabSourcePatchPlan(input);
     if (command === 'creator.prefab.source.patch.commit') return commitPrefabSourcePatch(input, context);
     if (command === 'creator.prefab.source.patch.reconcile') return reconcilePrefabSourcePatch(input);

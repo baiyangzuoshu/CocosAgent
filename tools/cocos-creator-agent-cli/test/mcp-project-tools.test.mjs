@@ -172,7 +172,7 @@ test('MCP discovers a project alias and routes it through CLI to the selected Cr
     result: { projectRoot: canonicalRoot, creatorVersion: '2.4.15', providers: [], commands: [providerCommand], skipped: [] },
   });
   const listing = await listingPromise;
-  assert.equal(listing.tools.length, 83, 'Expected 80 fixed tools, two project aliases, and one live extension command.');
+  assert.equal(listing.tools.length, 86, 'Expected 83 fixed tools, two project aliases, and one live extension command.');
   assert.equal(listing.tools.find((item) => item.name === 'cocos_project_tool_call').annotations.destructiveHint, true,
     'The generic project-alias call can invoke approved writes and must be marked destructive.');
   const componentPlanTool = listing.tools.find((item) => item.name === 'cocos_scene_node_add_component_plan');
@@ -184,6 +184,15 @@ test('MCP discovers a project alias and routes it through CLI to the selected Cr
   assert.deepEqual(componentPlanTool.inputSchema.required, ['instanceId', 'sceneUuid', 'nodeUuid', 'componentClassName']);
   assert.equal(componentCommitTool.annotations.destructiveHint, true);
   assert.deepEqual(componentReconcileTool.inputSchema.required, ['instanceId', 'operationId']);
+  const prefabOverridePlanTool = listing.tools.find((item) => item.name === 'cocos_prefab_instance_override_plan');
+  const prefabOverrideCommitTool = listing.tools.find((item) => item.name === 'cocos_prefab_instance_override_commit');
+  const prefabOverrideReconcileTool = listing.tools.find((item) => item.name === 'cocos_prefab_instance_override_reconcile');
+  assert.ok(prefabOverridePlanTool, 'Prefab instance override plan tool was not discovered from the shared CLI catalog.');
+  assert.ok(prefabOverrideCommitTool, 'Prefab instance override commit tool was not discovered from the shared CLI catalog.');
+  assert.ok(prefabOverrideReconcileTool, 'Prefab instance override reconcile tool was not discovered from the shared CLI catalog.');
+  assert.deepEqual(prefabOverridePlanTool.inputSchema.required, ['instanceId', 'sceneUuid', 'nodeUuid', 'action']);
+  assert.equal(prefabOverrideCommitTool.annotations.destructiveHint, true);
+  assert.deepEqual(prefabOverrideReconcileTool.inputSchema.required, ['instanceId', 'operationId']);
   const reparentPlanTool = listing.tools.find((item) => item.name === 'cocos_scene_node_reparent_plan');
   const reparentCommitTool = listing.tools.find((item) => item.name === 'cocos_scene_node_reparent_commit');
   const reparentReconcileTool = listing.tools.find((item) => item.name === 'cocos_scene_node_reparent_reconcile');

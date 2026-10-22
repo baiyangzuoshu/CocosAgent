@@ -155,6 +155,35 @@
       }, "additionalProperties": false }
     },
     {
+      "id": "creator.prefab.instance.override.plan",
+      "access": "plan",
+      "description": "Plan one Creator-native apply or revert for an exact linked Prefab instance. Binds the live instance state and exact saved scene/Prefab hashes; requires the instance to exist in the saved scene. Does not mutate.",
+      "input": { "type": "object", "required": ["sceneUuid", "nodeUuid", "action"], "properties": {
+        "sceneUuid": { "type": "string", "minLength": 22, "maxLength": 36,
+          "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+        "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36,
+          "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+        "action": { "type": "string", "enum": ["apply", "revert"] }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.prefab.instance.override.commit",
+      "access": "write", "approval": true,
+      "description": "After native Creator approval and a fresh exact-state check, invoke Creator's native Prefab instance Apply or Revert action, request scene save, and observe exact saved scene/Prefab hash transitions plus live instance state. Does not decode every component override or claim semantic field-by-field equivalence. Never automatically retries.",
+      "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+        "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.prefab.instance.override.reconcile",
+      "access": "plan",
+      "description": "Read and classify the exact scene/Prefab hashes and live instance state after an interrupted native Apply or Revert. Never reissues the action.",
+      "input": { "type": "object", "required": ["operationId"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+      }, "additionalProperties": false }
+    },
+    {
       "id": "creator.prefab.source.patch.plan",
       "access": "plan",
       "description": "Plan an allowlisted edit to an existing Prefab in Creator Prefab edit mode. Apply binds the inspected source hash and explicit before/after values; compensation and replay derive their inverse from a completed source operation.",
