@@ -252,6 +252,10 @@ function assetSnapshot(sourceBytes, metaBytes, assetPath) {
   return { assetUuid: meta.uuid, assetType, assetName: prefix, nodes };
 }
 
+export function inspectCreatorSerializedAsset({ sourceBytes, metaBytes, assetPath }) {
+  return assetSnapshot(sourceBytes, metaBytes, assetPath);
+}
+
 function stableJson(value) {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { diffCreatorSerializedAssets } from './creator-asset-diff.mjs';
+import { diffCreatorSerializedAssets, inspectCreatorSerializedAsset } from './creator-asset-diff.mjs';
 
 const MAX_GIT_OUTPUT = 18 * 1024 * 1024;
 const ASSET_PATH = /\.(?:fire|prefab)$/i;
@@ -94,6 +94,13 @@ function readRevisionFile(gitRoot, commit, relative, maxBytes) {
   return object.stdout;
 }
 
+function readRevisionFileIfPresent(gitRoot, commit, relative, maxBytes) {
+  const object = git(gitRoot, ['cat-file', 'blob', `${commit}:${relative}`], { allowFailure: true });
+  if (object.status !== 0) return null;
+  if (object.stdout.length > maxBytes) throw coded('VCS_DIFF_FILE_UNSAFE_OR_TOO_LARGE');
+  return object.stdout;
+}
+
 function sha256(bytes) { return createHash('sha256').update(bytes).digest('hex'); }
 
 export function runVcsDiff({ gitRoot: requestedGitRoot, projectRoot: requestedProjectRoot, assetPath: inputAssetPath,
@@ -138,4 +145,89 @@ export function runVcsDiff({ gitRoot: requestedGitRoot, projectRoot: requestedPr
       commit: toCommit, scope: afterScope,
       sourceSha256: sha256(afterBytes), metaSha256: sha256(afterMetaBytes) },
     diff: semanticDiff };
+}
+
+function revisionAsset(gitRoot, commit, assetPath, metaPath) {
+  const sourceBytes = readRevisionFileIfPresent(gitRoot, commit, assetPath, 16 * 1024 * 1024);
+  const metaBytes = readRevisionFileIfPresent(gitRoot, commit, metaPath, 64 * 1024);
+  if (sourceBytes === null && metaBytes === null) return null;
+  if (sourceBytes === null || metaBytes === null) throw coded('VCS_BLAME_ASSET_PAIR_INCOMPLETE');
+  return { sourceBytes, metaBytes,
+    snapshot: inspectCreatorSerializedAsset({ sourceBytes, metaBytes, assetPath: path.posix.basename(assetPath) }) };
+}
+
+function nodeChange(before, after, nodeUuid, assetPath) {
+  const beforeNode = before?.snapshot.nodes.find((node) => node.uuid === nodeUuid) || null;
+  const afterNode = after?.snapshot.nodes.find((node) => node.uuid === nodeUuid) || null;
+  if (!before && afterNode) return { type: 'added', node: afterNode };
+  if (before && !after && beforeNode) return { type: 'asset-deleted', node: beforeNode };
+  if (!before || !after) return null;
+  const diff = diffCreatorSerializedAssets({ beforeBytes: before.sourceBytes, beforeMetaBytes: before.metaBytes,
+    afterBytes: after.sourceBytes, afterMetaBytes: after.metaBytes, assetPath });
+  const added = diff.added.find((node) => node.uuid === nodeUuid);
+  if (added) return { type: 'added', node: added };
+  const removed = diff.removed.find((node) => node.uuid === nodeUuid);
+  if (removed) return { type: 'removed', node: removed };
+  const changed = diff.changed.find((node) => node.uuid === nodeUuid);
+  return changed ? { type: 'modified', change: changed } : null;
+}
+
+function commitDetails(gitRoot, commit) {
+  const response = git(gitRoot, ['show', '-s', '--format=%H%x00%an%x00%ae%x00%aI%x00%s', commit]);
+  const [hashValue, author, email, authoredAt, ...subject] = response.stdout.toString('utf8').split('\0');
+  return { commit: hashValue, author, email, authoredAt,
+    subject: subject.join('\0').replace(/[\r\n]+$/, '') };
+}
+
+function firstParent(gitRoot, commit) {
+  const response = git(gitRoot, ['rev-list', '--parents', '-n', '1', commit]);
+  const [current, parent] = response.stdout.toString('utf8').trim().split(/\s+/);
+  if (current !== commit) throw coded('VCS_BLAME_HISTORY_INVALID');
+  return parent || null;
+}
+
+export function runVcsObjectBlame({ gitRoot: requestedGitRoot, projectRoot: requestedProjectRoot,
+  assetPath: inputAssetPath, nodeUuid, revision = 'HEAD', maxCommits = 128 } = {}) {
+  const gitRoot = canonicalDirectory(requestedGitRoot, 'GIT_ROOT');
+  const projectRoot = canonicalDirectory(requestedProjectRoot, 'PROJECT_ROOT');
+  ensureProject(gitRoot, projectRoot);
+  const asset = projectAssetPath(projectRoot, inputAssetPath);
+  if (typeof nodeUuid !== 'string' || !nodeUuid || nodeUuid.length > 128 || nodeUuid.includes('\0'))
+    throw coded('VCS_BLAME_NODE_UUID_INVALID');
+  if (!Number.isInteger(maxCommits) || maxCommits < 1 || maxCommits > 256)
+    throw coded('VCS_BLAME_HISTORY_LIMIT_INVALID');
+  if (git(gitRoot, ['rev-parse', '--is-shallow-repository']).stdout.toString('utf8').trim() === 'true')
+    throw coded('VCS_BLAME_SHALLOW_REPOSITORY_UNSUPPORTED');
+  const targetCommit = commitForRevision(gitRoot, revision);
+  const repoPrefix = path.relative(gitRoot, projectRoot).split(path.sep).filter(Boolean).join('/');
+  const repoAssetPath = repoPrefix ? `${repoPrefix}/${asset.relative}` : asset.relative;
+  const repoMetaPath = `${repoAssetPath}.meta`;
+  const targetAsset = revisionAsset(gitRoot, targetCommit, repoAssetPath, repoMetaPath);
+  const targetNode = targetAsset?.snapshot.nodes.find((node) => node.uuid === nodeUuid) || null;
+  const history = git(gitRoot, ['log', '--first-parent', `--max-count=${maxCommits + 1}`, '--format=%H',
+    targetCommit, '--', `:(literal)${repoAssetPath}`, `:(literal)${repoMetaPath}`]);
+  const commits = history.stdout.toString('utf8').split(/\r?\n/).filter(Boolean);
+  const truncated = commits.length > maxCommits;
+  let lastChange = null;
+  let historyScanned = 0;
+  for (const commit of commits.slice(0, maxCommits)) {
+    historyScanned += 1;
+    const parent = firstParent(gitRoot, commit);
+    const before = parent ? revisionAsset(gitRoot, parent, repoAssetPath, repoMetaPath) : null;
+    const after = revisionAsset(gitRoot, commit, repoAssetPath, repoMetaPath);
+    const change = nodeChange(before, after, nodeUuid, asset.relative);
+    if (change) {
+      lastChange = { ...commitDetails(gitRoot, commit), ...change };
+      break;
+    }
+  }
+  return { schemaVersion: 1, readOnly: true, projectRoot, gitRoot, creatorVersion: '2.4.15',
+    asset: { path: asset.relative, uuid: targetAsset?.snapshot.assetUuid || null,
+      type: targetAsset?.snapshot.assetType || path.extname(asset.relative).slice(1) },
+    nodeUuid, revision, revisionCommit: targetCommit, existsAtRevision: Boolean(targetNode),
+    found: Boolean(targetNode || lastChange), lastChange, history: { strategy: 'first-parent-path',
+      scannedCommits: historyScanned, maxCommits, truncated },
+    limitations: { objectIdentity: 'Creator serialized node UUID', componentChanges: 'Reported with the owning node change.',
+      renames: 'The path history does not follow asset renames.',
+      prefabOverrides: 'Scene changes on linked Prefab instances remain attributed to the scene instance node.' } };
 }
