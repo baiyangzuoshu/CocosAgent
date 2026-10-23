@@ -168,7 +168,10 @@ function serializeExistingSceneNode({ transform, name = 'Button', active = true,
     const index = records.length;
     const component = { __type__: componentProperty.serializedClassId, _id: 'sprite-instance', node: { __id__: nodeIndex } };
     records.push(component); records[nodeIndex]._components.push({ __id__: index });
-    component[componentProperty.property] = serializePropertyValue(componentProperty.value, records, nodeIndex, componentProperty.referenceClasses);
+    const serializedProperty = componentProperty.serializedProperty || componentProperty.property;
+    const serializedValue = componentProperty.serializedValue === undefined
+      ? componentProperty.value : componentProperty.serializedValue;
+    component[serializedProperty] = serializePropertyValue(serializedValue, records, nodeIndex, componentProperty.referenceClasses);
   }
   for (const component of components) {
     const index = records.length;
@@ -178,13 +181,16 @@ function serializeExistingSceneNode({ transform, name = 'Button', active = true,
   return records;
 }
 
-function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults, refreshFailure = null,
+function makeHarness(t, { approved = true, beforeCommitAuthorization = () => {}, refreshResults, refreshFailure = null,
   ipcMode = 'electron', assetCreateMode = 'complete', sceneCompose = false, sceneActive = false,
+  liveSceneName = 'Scene',
   sceneRename = false, sceneReparent = false,
   sceneNodeDelete = false, sceneComponentRemove = false, sceneComponentAdd = false,
+  sceneComponentAddClass = 'cc.Sprite', sceneComponentAddAutoSize = false,
   sceneTransform = false, sceneButtonEvents = false,
-  sceneProperty = null,
-  assetMove = false, assetDelete = false, assetDeleteHasSubAssets = false,
+  sceneProperty = null, scenePropertyAutoSize = null,
+  assetMove = false, assetMoveRenamesSubMeta = false, assetDelete = false, assetDeleteHasSubAssets = false,
+  assetDeleteStaleQueriesAfterDelete = 0, assetDeleteCallbackErrorAfterDelete = false,
   assetTexture = false, assetTextureSaveMode = 'complete', sceneSaveMode = 'write', prefabPatch = false } = {}) {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-script-modify-'));
   t.after(() => fs.rmSync(tempRoot, { recursive: true, force: true }));
@@ -203,6 +209,8 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
   fs.writeFileSync(metaFile, JSON.stringify(meta, null, 2));
   const assetRecords = new Map([['db://assets/Scripts/Player.ts', { url: 'db://assets/Scripts/Player.ts',
     uuid: meta.uuid, importer: meta.importer, type: 'typescript' }]]);
+  const delayedAssetDeleteRows = new Map();
+  let staleAssetDeleteQueriesRemaining = 0;
   const importedAssetUuid = 'a3b51e35-a9f2-4552-b597-4731bbf7b119';
   const prefabAssetUuid = 'dbce40c1-5298-4e0e-9bc3-670d31a650e4';
   const sceneUuid = '2c12110c-6f11-4a89-bcd4-1941dc757ca4';
@@ -214,6 +222,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
   const movableAssetPath = 'Sprites/Icon.png';
   const movableAssetFile = path.join(projectRoot, 'assets', movableAssetPath);
   const deletableAssetUuid = 'e55a59bf-0b59-48bb-a2c4-ae31f225ec5d';
+  const deletableSubAssetUuid = '8bcd7c87-4412-44b8-a427-22f7cb8ce2c2';
   const deletableAssetPath = 'Textures/Unused.png';
   const deletableAssetFile = path.join(projectRoot, 'assets', deletableAssetPath);
   const textureAssetUuid = '9c05b7f8-1bd4-4c52-9610-172bfabca890';
@@ -246,7 +255,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
       buttonEvents: sceneButtonEvents ? buttonEvents : null,
       componentProperty: sceneProperty,
       components: sceneComponentRemove ? [{ serializedClassId: 'cc.Sprite', componentInstanceId: 'sprite-instance' }]
-        : sceneComponentAdd && sceneComponentAdded ? [{ serializedClassId: 'cc.Sprite', componentInstanceId: 'added-instance' }] : [],
+        : sceneComponentAdd && sceneComponentAdded ? [{ serializedClassId: sceneComponentAddClass, componentInstanceId: 'added-instance' }] : [],
       nodeSubtree: sceneNodeDelete ? [
         { nodeUuid: 'd65c11a9-260b-44e6-91d5-6ee2d654a8b5', nodeName: 'Icon' },
         { nodeUuid: '952a8e13-eac6-4a0e-9eea-b4e5fe76c991', nodeName: 'Label' },
@@ -274,16 +283,23 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
   if (assetMove) {
     fs.mkdirSync(path.dirname(movableAssetFile), { recursive: true });
     fs.writeFileSync(movableAssetFile, Buffer.from('fixture-image-bytes'));
-    fs.writeFileSync(`${movableAssetFile}.meta`, JSON.stringify({ uuid: movableAssetUuid, importer: 'image' }));
+    const movableMeta = { uuid: movableAssetUuid, importer: assetMoveRenamesSubMeta ? 'texture' : 'image' };
+    if (assetMoveRenamesSubMeta) movableMeta.subMetas = { Icon: { uuid: 'e8db2e34-c8da-4ac4-9d7c-6cbebcf39e16', importer: 'sprite-frame' } };
+    fs.writeFileSync(`${movableAssetFile}.meta`, JSON.stringify(movableMeta, null, 2));
     assetRecords.set('db://assets/Sprites/Icon.png', { url: 'db://assets/Sprites/Icon.png',
       uuid: movableAssetUuid, importer: 'image', type: 'image' });
   }
   if (assetDelete) {
     fs.mkdirSync(path.dirname(deletableAssetFile), { recursive: true });
     fs.writeFileSync(deletableAssetFile, Buffer.from('fixture-unused-image'));
-    fs.writeFileSync(`${deletableAssetFile}.meta`, JSON.stringify({ uuid: deletableAssetUuid, importer: 'image' }));
+    const deleteMeta = { uuid: deletableAssetUuid, importer: assetDeleteHasSubAssets ? 'texture' : 'image' };
+    if (assetDeleteHasSubAssets) deleteMeta.subMetas = { Unused: { uuid: deletableSubAssetUuid, importer: 'sprite-frame' } };
+    fs.writeFileSync(`${deletableAssetFile}.meta`, JSON.stringify(deleteMeta));
     assetRecords.set(`db://assets/${deletableAssetPath}`, { url: `db://assets/${deletableAssetPath}`,
-      uuid: deletableAssetUuid, importer: 'image', type: 'image' });
+      uuid: deletableAssetUuid, importer: deleteMeta.importer, type: assetDeleteHasSubAssets ? 'texture' : 'image' });
+    if (assetDeleteHasSubAssets) assetRecords.set(`db://assets/${deletableAssetPath}/Unused`, {
+      url: `db://assets/${deletableAssetPath}/Unused`, uuid: deletableSubAssetUuid,
+      importer: 'sprite-frame', type: 'sprite-frame', isSubAsset: true });
   }
   const textureMeta = { uuid: textureAssetUuid, importer: 'texture', wrapMode: 'clamp',
     filterMode: 'bilinear', premultiplyAlpha: false, genMipmaps: false, packable: true,
@@ -292,8 +308,10 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
     fs.mkdirSync(path.dirname(textureAssetFile), { recursive: true });
     fs.writeFileSync(textureAssetFile, Buffer.from('fixture-texture-image'));
     fs.writeFileSync(`${textureAssetFile}.meta`, JSON.stringify(textureMeta, null, 2));
+    // Creator 2.4.15 AssetDB queryAssets rows expose the texture type but no
+    // importer; importer identity is available in the paired .meta file.
     assetRecords.set(`db://assets/${textureAssetPath}`, { url: `db://assets/${textureAssetPath}`,
-      uuid: textureAssetUuid, importer: 'texture', type: 'texture' });
+      uuid: textureAssetUuid, importer: null, type: 'texture' });
   }
 
   const fakeHttp = {
@@ -329,7 +347,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
   const electronIpc = new EventEmitter();
   const editorBuilder = new EventEmitter();
   const evalFixture = { value: 0 };
-  editorIpc.sendToPanel = (panel, message, sourceNodeUuid, targetUrl) => {
+  editorIpc.sendToPanel = (panel, message, sourceNodeUuid, targetFolderUrl) => {
     assert.equal(panel, 'scene');
     if (message === 'scene:stash-and-save') {
       assert.ok(sceneCompose || sceneActive || sceneRename || sceneReparent || sceneNodeDelete
@@ -347,7 +365,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
           buttonEvents: sceneButtonEvents ? buttonEvents : null,
           componentProperty: sceneProperty,
           components: sceneComponentRemove ? (sceneComponentRemoved ? [] : [{ serializedClassId: 'cc.Sprite', componentInstanceId: 'sprite-instance' }])
-            : sceneComponentAdd && sceneComponentAdded ? [{ serializedClassId: 'cc.Sprite', componentInstanceId: 'added-instance' }] : [],
+            : sceneComponentAdd && sceneComponentAdded ? [{ serializedClassId: sceneComponentAddClass, componentInstanceId: 'added-instance' }] : [],
           nodeSubtree: sceneNodeDelete ? [
             { nodeUuid: 'd65c11a9-260b-44e6-91d5-6ee2d654a8b5', nodeName: 'Icon' },
             { nodeUuid: '952a8e13-eac6-4a0e-9eea-b4e5fe76c991', nodeName: 'Label' },
@@ -359,6 +377,8 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
     }
     assert.equal(message, 'scene:create-prefab');
     assert.equal(sourceNodeUuid, nodeUuid);
+    assert.equal(targetFolderUrl, 'db://assets/Prefabs');
+    const targetUrl = `${targetFolderUrl}/Button.prefab`;
     const relative = targetUrl.replace(/^db:\/\/assets\//, '');
     const filename = path.join(projectRoot, 'assets', ...relative.split('/'));
     const serialized = [{ __type__: 'cc.Prefab' }, { __type__: 'cc.Node', _name: 'Button' },
@@ -380,8 +400,8 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
       if (method === 'nodeState') {
         assert.equal(params.sceneUuid, sceneUuid);
         assert.equal(params.nodeUuid, nodeUuid);
-        callback(null, { available: true, sceneName: 'Scene', sceneUuid, nodeName: sceneNodeName, nodeUuid,
-          nodePath: `Scene/${sceneNodeName}`, active: sceneNodeActive, children: 0, componentsAvailable: true,
+        callback(null, { available: true, sceneName: liveSceneName, sceneUuid, nodeName: sceneNodeName, nodeUuid,
+          nodePath: `${liveSceneName}/${sceneNodeName}`, active: sceneNodeActive, children: 0, componentsAvailable: true,
           componentCount: sceneButtonEvents ? 2 : 0,
           components: sceneButtonEvents ? [{ componentClassName: 'cc.Button', componentInstanceId: 'button-instance' },
             { componentClassName: 'game.ButtonState', componentInstanceId: 'handler-instance' }] : [],
@@ -410,7 +430,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
           componentInstanceId: 'button-instance', before: params.expectedBefore, events: [...buttonEvents] });
         return;
       }
-      if (method === 'nodeTransformState' && sceneTransform) {
+      if (method === 'nodeTransformState' && (sceneTransform || sceneProperty)) {
         assert.equal(params.sceneUuid, sceneUuid);
         assert.equal(params.nodeUuid, nodeUuid);
         callback(null, { available: true, sceneName: 'Scene', sceneUuid, nodeUuid, nodePath: 'Scene/Button',
@@ -461,12 +481,25 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
         callback(null, { available: true, sceneName: 'Scene', sceneUuid, nodeUuid, nodePath: 'Scene/Button',
           componentClassName: params.componentClassName, componentInstanceId: params.componentInstanceId,
           serializedClassId: sceneProperty.serializedClassId, referenceClasses: sceneProperty.referenceClasses,
-          property: params.property, propertyKind: sceneProperty.propertyKind, value: sceneProperty.value });
+          property: params.property,
+          serializedPropertyCandidates: sceneProperty.serializedPropertyCandidates
+            || [params.property, `_N$${params.property}`, `_${params.property}`],
+          ...(sceneProperty.serializedValue === undefined ? {} : { serializedValue: sceneProperty.serializedValue }),
+          ...(params.requestedValue === undefined || sceneProperty.requestedSerializedValue === undefined ? {} : {
+            requestedSerializedValue: sceneProperty.requestedSerializedValue,
+          }),
+          propertyKind: sceneProperty.propertyKind, value: sceneProperty.value });
         return;
       }
       if (method === 'setComponentProperty' && sceneProperty) {
         assert.deepEqual(JSON.parse(JSON.stringify(params.expectedValue)), sceneProperty.value);
         sceneProperty.value = JSON.parse(JSON.stringify(params.value));
+        if (sceneProperty.requestedSerializedValue !== undefined)
+          sceneProperty.serializedValue = sceneProperty.requestedSerializedValue;
+        if (scenePropertyAutoSize && params.property === scenePropertyAutoSize.property) {
+          currentTransform.width = scenePropertyAutoSize.width;
+          currentTransform.height = scenePropertyAutoSize.height;
+        }
         callback(null, { available: true, sceneUuid, nodeUuid, nodePath: 'Scene/Button',
           componentClassName: params.componentClassName, componentInstanceId: params.componentInstanceId,
           property: params.property, value: sceneProperty.value });
@@ -538,7 +571,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
       }
       if (method === 'componentState' && sceneComponentAdd) {
         callback(null, { available: true, sceneName: 'Scene', sceneUuid, nodeUuid, nodePath: 'Scene/Button',
-          componentClassName: params.componentClassName, serializedClassId: 'cc.Sprite',
+          componentClassName: params.componentClassName, serializedClassId: sceneComponentAddClass,
           componentCount: sceneComponentAdded ? 1 : 0,
           componentInstanceIds: sceneComponentAdded ? ['added-instance'] : [],
           requiresComponent: false, canAdd: !sceneComponentAdded });
@@ -546,8 +579,9 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
       }
       if (method === 'addNodeComponent' && sceneComponentAdd) {
         sceneComponentAdded = true;
+        if (sceneComponentAddAutoSize) { currentTransform.width = 153.38; currentTransform.height = 50.4; }
         callback(null, { available: true, sceneUuid, nodeUuid, nodePath: 'Scene/Button',
-          componentClassName: params.componentClassName, serializedClassId: 'cc.Sprite',
+          componentClassName: params.componentClassName, serializedClassId: sceneComponentAddClass,
           beforeComponentCount: 0, componentCount: 1, componentInstanceId: 'added-instance' });
         return;
       }
@@ -565,6 +599,10 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
     assetdb: {
       queryAssets(url, _types, callback) {
         if (url === 'db://assets/**/*') callback(null, [...assetRecords.values()]);
+        else if (staleAssetDeleteQueriesRemaining > 0 && delayedAssetDeleteRows.has(url)) {
+          staleAssetDeleteQueriesRemaining -= 1;
+          callback(null, [delayedAssetDeleteRows.get(url)]);
+        }
         else callback(null, assetRecords.has(url) ? [assetRecords.get(url)] : []);
       },
       exists(url) { return assetRecords.has(url); },
@@ -574,6 +612,20 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
         const bytes = Buffer.from(data);
         fs.writeFileSync(filename, bytes);
         fs.writeFileSync(`${filename}.meta`, JSON.stringify({ uuid: importedAssetUuid, importer: 'image' }));
+        const row = { command: 'create', url, uuid: importedAssetUuid, importer: 'image', type: 'image' };
+        assetRecords.set(url, row);
+        callback(assetCreateMode === 'callback-error-after-write' ? new Error('injected callback loss') : null, [row]);
+      },
+      import(rawfiles, targetFolderUrl, callback) {
+        assert.equal(rawfiles.length, 1);
+        const sourcePath = rawfiles[0];
+        const filename = path.basename(sourcePath);
+        const url = `${targetFolderUrl.replace(/\/$/, '')}/${filename}`;
+        const relative = url.replace(/^db:\/\/assets\//, '');
+        const target = path.join(projectRoot, 'assets', ...relative.split('/'));
+        const bytes = fs.readFileSync(sourcePath);
+        fs.writeFileSync(target, bytes);
+        fs.writeFileSync(`${target}.meta`, JSON.stringify({ uuid: importedAssetUuid, importer: 'image' }));
         const row = { command: 'create', url, uuid: importedAssetUuid, importer: 'image', type: 'image' };
         assetRecords.set(url, row);
         callback(assetCreateMode === 'callback-error-after-write' ? new Error('injected callback loss') : null, [row]);
@@ -607,12 +659,21 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
         const destination = path.join(projectRoot, 'assets', ...destinationRelative.split('/'));
         fs.renameSync(source, destination);
         fs.renameSync(`${source}.meta`, `${destination}.meta`);
+        if (assetMoveRenamesSubMeta) {
+          const metaFile = `${destination}.meta`;
+          const meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
+          const sourceBase = path.basename(source, path.extname(source));
+          const destinationBase = path.basename(destination, path.extname(destination));
+          meta.subMetas[destinationBase] = meta.subMetas[sourceBase];
+          delete meta.subMetas[sourceBase];
+          fs.writeFileSync(metaFile, JSON.stringify(meta, null, 2));
+        }
         assetRecords.delete(sourceUrl);
         const moved = { ...record, url: destinationUrl };
         assetRecords.set(destinationUrl, moved);
         callback(null, [{ ...moved, command: 'move', sourceUrl, destinationUrl }]);
       },
-      isSubAsset() { return false; },
+      isSubAsset(url) { return !!(assetRecords.get(url) && assetRecords.get(url).isSubAsset); },
       containsSubAssets() { return assetDeleteHasSubAssets; },
       delete(urls, callback) {
         assert.ok(assetDelete, 'unexpected AssetDB deletion');
@@ -623,15 +684,19 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
           fs.rmSync(filename, { force: true });
           fs.rmSync(`${filename}.meta`, { force: true });
           const row = assetRecords.get(url);
-          if (row) removed.push({ ...row, command: 'delete' });
+          if (row) {
+            removed.push({ ...row, command: 'delete' });
+            delayedAssetDeleteRows.set(url, { ...row });
+          }
           assetRecords.delete(url);
+          for (const childUrl of [...assetRecords.keys()]) if (childUrl.startsWith(`${url}/`)) assetRecords.delete(childUrl);
         }
-        callback(null, removed);
+        staleAssetDeleteQueriesRemaining = assetDeleteStaleQueriesAfterDelete;
+        callback(assetDeleteCallbackErrorAfterDelete ? new Error('injected delete callback loss after delete') : null, removed);
       },
     },
     Ipc: ipcMode === 'editor' ? editorIpc : {},
     Builder: editorBuilder,
-    Dialog: { messageBox: () => approved ? 1 : 0 },
   };
   const baseRequire = createRequire(path.join(extensionRoot, 'main.js'));
   const module = { exports: {} };
@@ -639,7 +704,7 @@ function makeHarness(t, { approved = true, onApproval = () => {}, refreshResults
     if (id === 'http') return fakeHttp;
     if (id === 'os') return { ...os, homedir: () => home };
     if (id === 'electron') return { ipcMain: electronIpc };
-    if (id === './approval.cjs') return async () => { onApproval(); return approved; };
+    if (id === './commit-authorization.cjs') return async () => { beforeCommitAuthorization(); return approved; };
     return baseRequire(id);
   };
   // Keep the save-timeout branch deterministic and fast in the mocked editor process.
@@ -766,7 +831,7 @@ test('Editor eval contract bounds source and accepts arbitrary JSON script input
   assert.equal(validateCommand('creator.editor.eval-file.plan', { scriptPath: 'assets/Scripts/a.js' }).ok, false);
 });
 
-test('script modification commands declare approved write and bounded inputs', () => {
+test('script modification commands declare explicit commit write and bounded inputs', () => {
   const plan = command('creator.script.modify.plan');
   const commit = command('creator.script.modify.commit');
   const reconcile = command('creator.script.modify.reconcile');
@@ -934,9 +999,22 @@ test('set-active reports save-required when memory changes but the serialized sc
   assert.equal(reconciled.observed.disk.matchesAfter, false);
 });
 
-test('scene-node reparent stops if the hierarchy changes during approval and does not replay a cancelled plan', async (t) => {
+test('scene persistence accepts a serialized root name that differs from the live scene asset name', async (t) => {
+  const harness = makeHarness(t, { sceneActive: true, liveSceneName: 'CliAcceptanceScene', ipcMode: 'editor' });
+  const plan = await harness.api.createSceneNodeActivePlan({ sceneUuid: harness.sceneUuid,
+    nodeUuid: harness.nodeUuid, active: false });
+  assert.equal(plan.nodePath, 'CliAcceptanceScene/Button');
+  const receipt = await harness.api.commitSceneNodeActive({ operationId: plan.operationId, planHash: plan.planHash },
+    { requestId: 'request-fixture' });
+  assert.equal(receipt.status, 'completed');
+  assert.equal(receipt.scenePersistenceConfirmed, true);
+  assert.equal(receipt.diskReadback.nodePath, 'Scene/Button');
+  assert.equal((await harness.api.reconcileSceneNodeActive({ operationId: plan.operationId })).status, 'completed');
+});
+
+test('scene-node reparent stops if the hierarchy changes during approval and does not replay a denied plan', async (t) => {
   let stale;
-  stale = makeHarness(t, { sceneReparent: true, ipcMode: 'editor', onApproval() {
+  stale = makeHarness(t, { sceneReparent: true, ipcMode: 'editor', beforeCommitAuthorization() {
     stale.setReparentApplied(true);
   } });
   const plan = await stale.api.createSceneNodeReparentPlan({ sceneUuid: stale.sceneUuid,
@@ -997,9 +1075,9 @@ test('existing node transform reports save-required when memory changes but save
   assert.equal(reconciled.observed.disk.matchesAfter, false);
 });
 
-test('existing node transform stops on stale approval state and on user cancellation', async (t) => {
+test('existing node transform stops on stale live state and on simulated commit denial', async (t) => {
   let stale;
-  stale = makeHarness(t, { sceneTransform: true, ipcMode: 'editor', onApproval() {
+  stale = makeHarness(t, { sceneTransform: true, ipcMode: 'editor', beforeCommitAuthorization() {
     stale.currentTransform.x = 99;
   } });
   const stalePlan = await stale.api.createSceneNodeTransformPlan({ sceneUuid: stale.sceneUuid,
@@ -1020,7 +1098,7 @@ test('existing node transform stops on stale approval state and on user cancella
   assert.equal(cancelled.getSceneSaveCount(), 0);
 });
 
-test('existing Button events require an exact plan, native approval, one save request and non-replaying reconcile', async (t) => {
+test('existing Button events require an exact plan, explicit commit, one save request and non-replaying reconcile', async (t) => {
   const harness = makeHarness(t, { sceneButtonEvents: true, ipcMode: 'editor' });
   const events = [{ targetUuid: harness.nodeUuid, component: 'game.ButtonState', handler: 'onClick', customEventData: 'open' }];
   const plan = await harness.api.createSceneButtonEventsPlan({ sceneUuid: harness.sceneUuid,
@@ -1094,9 +1172,31 @@ test('asset move uses AssetDB and preserves file, meta, importer and UUID across
   assert.equal(reconciled.observed.destinationAssetUuid, harness.movableAssetUuid);
 });
 
-test('asset move refuses stale source bytes after approval and cancelled plans leave the source intact', async (t) => {
+test('asset move accepts Creator path-derived subMeta key updates while preserving sub-asset identity', async (t) => {
+  const harness = makeHarness(t, { assetMove: true, assetMoveRenamesSubMeta: true });
+  const plan = await harness.api.createAssetMovePlan({ sourceAssetPath: harness.movableAssetPath,
+    destinationAssetPath: 'Sprites/Renamed.png' });
+  assert.equal(plan.status, 'planned');
+  assert.equal(typeof plan.expectedBefore.metaIdentitySha256, 'string');
+
+  const receipt = await harness.api.commitAssetMove({ operationId: plan.operationId, planHash: plan.planHash },
+    { requestId: 'request-fixture' });
+  assert.equal(receipt.status, 'completed');
+  assert.equal(receipt.after.assetUuid, harness.movableAssetUuid);
+  assert.notEqual(receipt.after.metaSha256, plan.expectedBefore.metaSha256);
+  assert.equal(receipt.after.metaIdentitySha256, plan.expectedBefore.metaIdentitySha256);
+  const destinationMeta = JSON.parse(fs.readFileSync(`${path.join(path.dirname(harness.movableAssetFile), 'Renamed.png')}.meta`, 'utf8'));
+  assert.deepEqual(Object.keys(destinationMeta.subMetas), ['Renamed']);
+  assert.equal(destinationMeta.subMetas.Renamed.uuid, 'e8db2e34-c8da-4ac4-9d7c-6cbebcf39e16');
+
+  const reconciled = await harness.api.reconcileAssetMove({ operationId: plan.operationId });
+  assert.equal(reconciled.status, 'completed');
+  assert.equal(reconciled.observed.destinationAssetUuid, harness.movableAssetUuid);
+});
+
+test('asset move refuses stale source bytes before commit and denied commits leave the source intact', async (t) => {
   let stale;
-  stale = makeHarness(t, { assetMove: true, onApproval() {
+  stale = makeHarness(t, { assetMove: true, beforeCommitAuthorization() {
     fs.writeFileSync(stale.movableAssetFile, Buffer.from('changed-after-plan'));
   } });
   const plan = await stale.api.createAssetMovePlan({ sourceAssetPath: stale.movableAssetPath,
@@ -1117,8 +1217,8 @@ test('asset move refuses stale source bytes after approval and cancelled plans l
   assert.equal(fs.existsSync(path.join(path.dirname(cancelled.movableAssetFile), 'Renamed.png')), false);
 });
 
-test('asset delete requires a complete no-reference scan, uses AssetDB, and reconciles without replay', async (t) => {
-  const harness = makeHarness(t, { assetDelete: true });
+test('asset delete waits for AssetDB readback, requires a complete no-reference scan, and reconciles without replay', async (t) => {
+  const harness = makeHarness(t, { assetDelete: true, assetDeleteStaleQueriesAfterDelete: 2 });
   const beforeBytes = fs.readFileSync(harness.deletableAssetFile);
   const beforeMeta = fs.readFileSync(`${harness.deletableAssetFile}.meta`);
   const plan = await harness.api.createAssetDeletePlan({ assetUuid: harness.deletableAssetUuid });
@@ -1140,7 +1240,22 @@ test('asset delete requires a complete no-reference scan, uses AssetDB, and reco
   assert.equal(reconciled.observed.assetPresent, false);
 });
 
-test('asset delete refuses references, sub-assets, stale post-approval scans, and cancellation', async (t) => {
+test('asset delete reconciliation clears a stale failure when the callback is lost after deletion', async (t) => {
+  const harness = makeHarness(t, { assetDelete: true, assetDeleteCallbackErrorAfterDelete: true });
+  const plan = await harness.api.createAssetDeletePlan({ assetUuid: harness.deletableAssetUuid });
+  await assert.rejects(harness.api.commitAssetDelete({ operationId: plan.operationId, planHash: plan.planHash },
+    { requestId: 'request-fixture' }), { code: 'OPERATION_RECONCILIATION_REQUIRED' });
+  assert.equal(fs.existsSync(harness.deletableAssetFile), false);
+  assert.equal(fs.existsSync(`${harness.deletableAssetFile}.meta`), false);
+  const reconciled = await harness.api.reconcileAssetDelete({ operationId: plan.operationId });
+  assert.equal(reconciled.status, 'completed');
+  assert.deepEqual(JSON.parse(JSON.stringify(reconciled.observed)), {
+    filePresent: false, metaPresent: false, assetPresent: false, assetUuid: null, subAssets: [],
+  });
+  assert.equal(reconciled.reason, undefined);
+});
+
+test('asset delete refuses main or sub-asset references, stale post-approval scans, and cancellation', async (t) => {
   const referenced = makeHarness(t, { assetDelete: true });
   fs.writeFileSync(path.join(referenced.projectRoot, 'assets', 'Scripts', 'UsesTexture.js'),
     `const texture = '${referenced.deletableAssetUuid}';`);
@@ -1149,8 +1264,19 @@ test('asset delete refuses references, sub-assets, stale post-approval scans, an
   assert.equal(fs.existsSync(referenced.deletableAssetFile), true);
 
   const parentAsset = makeHarness(t, { assetDelete: true, assetDeleteHasSubAssets: true });
-  await assert.rejects(parentAsset.api.createAssetDeletePlan({ assetUuid: parentAsset.deletableAssetUuid }),
-    (error) => error.code === 'ASSET_DELETE_HAS_SUB_ASSETS');
+  const parentPlan = await parentAsset.api.createAssetDeletePlan({ assetUuid: parentAsset.deletableAssetUuid });
+  assert.equal(parentPlan.expectedBefore.subAssets.length, 1);
+  assert.equal(parentPlan.referenceScan.assetUuidCount, 2);
+  const parentReceipt = await parentAsset.api.commitAssetDelete({ operationId: parentPlan.operationId,
+    planHash: parentPlan.planHash }, { requestId: 'request-fixture' });
+  assert.equal(parentReceipt.status, 'completed');
+  assert.equal(parentReceipt.observed.subAssets.length, 0);
+
+  const subAssetReferenced = makeHarness(t, { assetDelete: true, assetDeleteHasSubAssets: true });
+  fs.writeFileSync(path.join(subAssetReferenced.projectRoot, 'assets', 'Scripts', 'UsesSpriteFrame.js'),
+    "const spriteFrame = '8bcd7c87-4412-44b8-a427-22f7cb8ce2c2';");
+  await assert.rejects(subAssetReferenced.api.createAssetDeletePlan({ assetUuid: subAssetReferenced.deletableAssetUuid }),
+    (error) => error.code === 'ASSET_DELETE_HAS_REFERENCES');
 
   const incomplete = makeHarness(t, { assetDelete: true });
   fs.writeFileSync(path.join(incomplete.projectRoot, 'assets', 'oversized-text.json'), Buffer.alloc(1024 * 1024 + 1, 0x61));
@@ -1158,7 +1284,7 @@ test('asset delete refuses references, sub-assets, stale post-approval scans, an
     (error) => error.code === 'ASSET_DELETE_REFERENCE_SCAN_INCOMPLETE');
 
   let stale;
-  stale = makeHarness(t, { assetDelete: true, onApproval() {
+  stale = makeHarness(t, { assetDelete: true, beforeCommitAuthorization() {
     fs.writeFileSync(path.join(stale.projectRoot, 'assets', 'Scripts', 'NewReference.ts'),
       `const texture = '${stale.deletableAssetUuid}';`);
   } });
@@ -1203,9 +1329,9 @@ test('texture import settings use AssetDB, preserve unrelated metadata, and reco
   assert.equal(harness.getTextureMetaSaveCount(), 1);
 });
 
-test('texture import settings reject stale or cancelled plans and reconcile an uncertain AssetDB callback without replay', async (t) => {
+test('texture import settings reject stale or denied commits and reconcile an uncertain AssetDB callback without replay', async (t) => {
   let stale;
-  stale = makeHarness(t, { assetTexture: true, onApproval() {
+  stale = makeHarness(t, { assetTexture: true, beforeCommitAuthorization() {
     const changed = stale.readTextureMeta();
     changed.userData.preserve = 'changed during approval';
     fs.writeFileSync(`${stale.textureAssetFile}.meta`, JSON.stringify(changed, null, 2));
@@ -1262,7 +1388,7 @@ test('Creator AssetDB script modification preserves metadata and reconciles with
   assert.equal(fs.readFileSync(harness.metaFile, 'utf8'), JSON.stringify(harness.meta, null, 2));
 });
 
-test('script modification rejects stale preconditions and never writes after approval cancellation', async (t) => {
+test('script modification rejects stale preconditions and never writes before commit cancellation', async (t) => {
   const stale = makeHarness(t);
   await assert.rejects(stale.api.createScriptModifyPlan({ scriptPath: stale.scriptPath,
     expectedSourceSha256: '0'.repeat(64), source: 'const value = 3;\n' }),
@@ -1286,9 +1412,9 @@ test('a source change between planning and commit turns the operation into confl
   assert.equal(fs.readFileSync(harness.scriptFile, 'utf8'), 'const value = 99;\n');
 });
 
-test('a source change while the native approval dialog is open is rechecked before AssetDB write', async (t) => {
+test('a source change while the explicit commit dialog is open is rechecked before AssetDB write', async (t) => {
   let harness;
-  harness = makeHarness(t, { onApproval() { fs.writeFileSync(harness.scriptFile, 'const value = 88;\n'); } });
+  harness = makeHarness(t, { beforeCommitAuthorization() { fs.writeFileSync(harness.scriptFile, 'const value = 88;\n'); } });
   const plan = await harness.api.createScriptModifyPlan({ scriptPath: harness.scriptPath,
     expectedSourceSha256: await sourceHash(harness.beforeSource), source: 'const value = 6;\n' });
   await assert.rejects(harness.api.commitScriptModify({ operationId: plan.operationId, planHash: plan.planHash },
@@ -1362,12 +1488,12 @@ test('asset import uses Creator AssetDB, preserves the selected bytes, and reads
   assert.equal(reconciled.observed.assetUuid, harness.importedAssetUuid);
 });
 
-test('asset import rechecks source identity after approval and never overwrites a target', async (t) => {
+test('asset import rechecks source identity before commit and never overwrites a target', async (t) => {
   let harness;
   const sourcePath = path.join(os.tmpdir(), `cocos-import-${Date.now()}-${Math.random()}.png`);
   fs.writeFileSync(sourcePath, Buffer.from('before'));
   t.after(() => { try { fs.unlinkSync(sourcePath); } catch (_) {} });
-  harness = makeHarness(t, { onApproval() { fs.writeFileSync(sourcePath, Buffer.from('after')); } });
+  harness = makeHarness(t, { beforeCommitAuthorization() { fs.writeFileSync(sourcePath, Buffer.from('after')); } });
   fs.mkdirSync(path.join(harness.projectRoot, 'assets', 'Textures'));
   const plan = await harness.api.createAssetImportPlan({ sourcePath, assetPath: 'Textures/tank.png' });
   await assert.rejects(harness.api.commitAssetImport({ operationId: plan.operationId, planHash: plan.planHash },
@@ -1431,7 +1557,7 @@ test('scene composition reports completion only after the saved .fire and .meta 
 
 test('scene composition rejects a stale plan before approval after the scene asset changes', async (t) => {
   let approvals = 0;
-  const harness = makeHarness(t, { sceneCompose: true, ipcMode: 'editor', onApproval() { approvals += 1; } });
+  const harness = makeHarness(t, { sceneCompose: true, ipcMode: 'editor', beforeCommitAuthorization() { approvals += 1; } });
   const input = { sceneUuid: harness.sceneUuid,
     nodes: [{ id: 'button', name: 'StartButton', parentRef: `uuid:${harness.sceneUuid}` }],
     components: [{ id: 'button-ui', nodeRef: 'new:button', className: 'cc.Button', properties: [] }],
@@ -1448,10 +1574,10 @@ test('scene composition rejects a stale plan before approval after the scene ass
   assert.equal(harness.getSceneSaveCount(), 1);
 });
 
-test('cancelled scene composition stays cancelled when read-only reconciliation verifies the before-state', async (t) => {
+test('denied scene composition stays cancelled when read-only reconciliation verifies the before-state', async (t) => {
   let approvals = 0;
   const harness = makeHarness(t, { sceneCompose: true, ipcMode: 'editor', approved: false,
-    onApproval() { approvals += 1; } });
+    beforeCommitAuthorization() { approvals += 1; } });
   const input = { sceneUuid: harness.sceneUuid,
     nodes: [{ id: 'button', name: 'StartButton', parentRef: `uuid:${harness.sceneUuid}` }],
     components: [], buttonEvents: [] };
@@ -1514,6 +1640,13 @@ test('Prefab creation routes through the Creator Scene panel and reads its Asset
   assert.equal(reconciled.observed.assetUuid, harness.prefabAssetUuid);
 });
 
+test('Prefab creation rejects a filename that Creator will not produce from the source node name', async (t) => {
+  const harness = makeHarness(t, { ipcMode: 'editor' });
+  fs.mkdirSync(path.join(harness.projectRoot, 'assets', 'Prefabs'));
+  await assert.rejects(harness.api.createPrefabPlan({ sceneUuid: harness.sceneUuid,
+    nodeUuid: harness.nodeUuid, prefabPath: 'Prefabs/Other.prefab' }), { code: 'PREFAB_TARGET_NAME_MISMATCH' });
+});
+
 test('scene subtree deletion and component removal require approval, save once, and reconcile without replay', async (t) => {
   const deletion = makeHarness(t, { sceneNodeDelete: true, ipcMode: 'editor' });
   const nodePlan = await deletion.api.createSceneNodeDeletePlan({ sceneUuid: deletion.sceneUuid, nodeUuid: deletion.nodeUuid });
@@ -1552,7 +1685,7 @@ test('scene subtree deletion and component removal require approval, save once, 
 });
 
 test('component addition completes only after the exact serialized component identity is saved', async (t) => {
-  const harness = makeHarness(t, { sceneComponentAdd: true, ipcMode: 'editor' });
+  const harness = makeHarness(t, { sceneComponentAdd: true, sceneTransform: true, ipcMode: 'editor' });
   const plan = await harness.api.createSceneComponentAddPlan({ sceneUuid: harness.sceneUuid,
     nodeUuid: harness.nodeUuid, componentClassName: 'cc.Sprite' });
   assert.equal(plan.expectedBefore.componentCount, 0);
@@ -1571,8 +1704,27 @@ test('component addition completes only after the exact serialized component ide
   assert.equal(harness.getSceneSaveCount(), 1);
 });
 
+test('RichText addition persists its lifecycle-controlled natural node size for restart stability', async (t) => {
+  const harness = makeHarness(t, { sceneComponentAdd: true, sceneTransform: true,
+    sceneComponentAddClass: 'cc.RichText', sceneComponentAddAutoSize: true, ipcMode: 'editor' });
+  const plan = await harness.api.createSceneComponentAddPlan({ sceneUuid: harness.sceneUuid,
+    nodeUuid: harness.nodeUuid, componentClassName: 'cc.RichText' });
+  assert.equal(plan.preserveNodeTransform, false);
+  const receipt = await harness.api.commitSceneComponentAdd({ operationId: plan.operationId, planHash: plan.planHash },
+    { requestId: 'rich-text-add-request' });
+  assert.equal(receipt.status, 'completed');
+  assert.equal(receipt.nodeTransformPreserved, false);
+  assert.deepEqual({ width: receipt.nodeTransformAfter.width, height: receipt.nodeTransformAfter.height },
+    { width: 153.38, height: 50.4 });
+  assert.deepEqual({ width: receipt.diskReadback.transform.width, height: receipt.diskReadback.transform.height },
+    { width: 153.38, height: 50.4 });
+  const reconciled = await harness.api.reconcileSceneComponentAdd({ operationId: plan.operationId });
+  assert.equal(reconciled.status, 'completed');
+  assert.equal(reconciled.observed.disk.matchesAfter, true);
+});
+
 test('component add, removal, and subtree deletion reconcile manual saves without replaying mutations', async (t) => {
-  const addition = makeHarness(t, { sceneComponentAdd: true, sceneSaveMode: 'ignore', ipcMode: 'editor' });
+  const addition = makeHarness(t, { sceneComponentAdd: true, sceneTransform: true, sceneSaveMode: 'ignore', ipcMode: 'editor' });
   const addPlan = await addition.api.createSceneComponentAddPlan({ sceneUuid: addition.sceneUuid,
     nodeUuid: addition.nodeUuid, componentClassName: 'cc.Sprite' });
   await assert.rejects(addition.api.commitSceneComponentAdd({ operationId: addPlan.operationId, planHash: addPlan.planHash },
@@ -1689,7 +1841,79 @@ test('component-property commits verify serialized scalar, typed, array, asset, 
   }
 });
 
-test('component properties require saved before-state and recheck the scene file after approval', async (t) => {
+test('RichText layout property commits record and verify the resulting node size', async (t) => {
+  const harness = makeHarness(t, { ipcMode: 'editor',
+    sceneProperty: { serializedClassId: 'cc.RichText', property: 'maxWidth', propertyKind: 'number', value: 0 },
+    scenePropertyAutoSize: { property: 'maxWidth', width: 240, height: 50.4 } });
+  const plan = await harness.api.createSceneComponentPropertyPlan({ sceneUuid: harness.sceneUuid,
+    nodeUuid: harness.nodeUuid, componentClassName: 'cc.RichText', componentInstanceId: 'sprite-instance',
+    property: 'maxWidth', value: 240 });
+  assert.deepEqual(JSON.parse(JSON.stringify(plan.nodeTransformBefore)), {
+    x: 1, y: 2, z: 0, scaleX: 1, scaleY: 1, angle: 0, width: 50, height: 20, anchorX: 0.5, anchorY: 0.5,
+  });
+  const receipt = await harness.api.commitSceneComponentProperty({ operationId: plan.operationId, planHash: plan.planHash },
+    { requestId: 'request-fixture' });
+  assert.equal(receipt.status, 'completed');
+  assert.equal(receipt.scenePersistenceConfirmed, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(receipt.nodeTransformAfter)), {
+    x: 1, y: 2, z: 0, scaleX: 1, scaleY: 1, angle: 0, width: 240, height: 50.4, anchorX: 0.5, anchorY: 0.5,
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(receipt.diskReadback.transform)),
+    JSON.parse(JSON.stringify(receipt.nodeTransformAfter)));
+  const reconciled = await harness.api.reconcileSceneComponentProperty({ operationId: plan.operationId });
+  assert.equal(reconciled.status, 'completed');
+  assert.equal(reconciled.observed.disk.matchesAfter, true);
+});
+
+test('Widget alignment commits verify the computed align-flags field in the saved scene', async (t) => {
+  const harness = makeHarness(t, { ipcMode: 'editor', sceneProperty: {
+    serializedClassId: 'cc.Widget', property: 'isAlignLeft', serializedProperty: '_alignFlags',
+    serializedPropertyCandidates: ['_alignFlags'], propertyKind: 'boolean', value: false,
+    serializedValue: 37, requestedSerializedValue: 45,
+  } });
+  const plan = await harness.api.createSceneComponentPropertyPlan({ sceneUuid: harness.sceneUuid,
+    nodeUuid: harness.nodeUuid, componentClassName: 'cc.Widget', componentInstanceId: 'sprite-instance',
+    property: 'isAlignLeft', value: true });
+  assert.equal(plan.expectedBefore.value, false);
+  assert.equal(plan.savedSceneBaseline.componentProperty.value, 37);
+  assert.equal(plan.expectedAfter.value, true);
+  assert.equal(plan.expectedAfter.serializedValue, 45);
+
+  const receipt = await harness.api.commitSceneComponentProperty({ operationId: plan.operationId, planHash: plan.planHash },
+    { requestId: 'widget-align-request' });
+  assert.equal(receipt.status, 'completed');
+  assert.equal(receipt.value, true);
+  assert.equal(receipt.scenePersistenceConfirmed, true);
+  assert.equal(receipt.diskReadback.componentProperty.serializedProperty, '_alignFlags');
+  assert.equal(receipt.diskReadback.componentProperty.value, 45);
+  const reconciled = await harness.api.reconcileSceneComponentProperty({ operationId: plan.operationId });
+  assert.equal(reconciled.status, 'completed');
+  assert.equal(reconciled.observed.disk.matchesAfter, true);
+});
+
+test('Layout type commits verify Creator 2.4 layout-type backing fields in the saved scene', async (t) => {
+  const harness = makeHarness(t, { ipcMode: 'editor', sceneProperty: {
+    serializedClassId: 'cc.Layout', property: 'type', serializedProperty: '_N$layoutType',
+    serializedPropertyCandidates: ['_N$layoutType'], propertyKind: 'number', value: 0,
+  } });
+  const plan = await harness.api.createSceneComponentPropertyPlan({ sceneUuid: harness.sceneUuid,
+    nodeUuid: harness.nodeUuid, componentClassName: 'cc.Layout', componentInstanceId: 'sprite-instance',
+    property: 'type', value: 2 });
+  assert.equal(plan.savedSceneBaseline.componentProperty.value, 0);
+  assert.equal(plan.expectedAfter.serializedValue, 2);
+
+  const receipt = await harness.api.commitSceneComponentProperty({ operationId: plan.operationId, planHash: plan.planHash },
+    { requestId: 'layout-type-request' });
+  assert.equal(receipt.status, 'completed');
+  assert.equal(receipt.scenePersistenceConfirmed, true);
+  assert.equal(receipt.diskReadback.componentProperty.serializedProperty, '_N$layoutType');
+  assert.equal(receipt.diskReadback.componentProperty.value, 2);
+  const reconciled = await harness.api.reconcileSceneComponentProperty({ operationId: plan.operationId });
+  assert.equal(reconciled.status, 'completed');
+  assert.equal(reconciled.observed.disk.matchesAfter, true);
+});
+
+test('component properties require saved before-state and recheck the scene file before commit', async (t) => {
   const unsaved = makeHarness(t, { sceneProperty: { property: 'state', propertyKind: 'number', value: 1 } });
   const rows = JSON.parse(fs.readFileSync(unsaved.sceneFile, 'utf8'));
   rows.find((record) => record._id === 'sprite-instance').state = 99;
@@ -1700,7 +1924,7 @@ test('component properties require saved before-state and recheck the scene file
 
   let stale;
   stale = makeHarness(t, { sceneProperty: { property: 'state', propertyKind: 'number', value: 1 },
-    onApproval() { fs.appendFileSync(stale.sceneFile, '\n'); } });
+    beforeCommitAuthorization() { fs.appendFileSync(stale.sceneFile, '\n'); } });
   const plan = await stale.api.createSceneComponentPropertyPlan({ sceneUuid: stale.sceneUuid, nodeUuid: stale.nodeUuid,
     componentClassName: 'cc.Sprite', componentInstanceId: 'sprite-instance', property: 'state', value: 2 });
   await assert.rejects(stale.api.commitSceneComponentProperty({ operationId: plan.operationId, planHash: plan.planHash },

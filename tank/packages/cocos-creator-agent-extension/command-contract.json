@@ -63,7 +63,7 @@
     {
       "id": "creator.asset.import.commit",
       "access": "write", "approval": true,
-      "description": "After native Creator approval, import the exact planned file bytes through AssetDB, then read back the target SHA-256, generated .meta UUID, importer, and asset type.",
+      "description": "On an explicit commit call, import the exact planned file bytes through AssetDB, then read back the target SHA-256, generated .meta UUID, importer, and asset type.",
       "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
         "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
@@ -80,7 +80,7 @@
     {
       "id": "creator.asset.move.plan",
       "access": "plan",
-      "description": "Plan moving or renaming one existing file asset through Creator AssetDB. Binds source UUID, file/.meta hashes, importer and type; destination must be absent and retain the source extension.",
+      "description": "Plan moving or renaming one existing file asset through Creator AssetDB. Binds source UUID, bytes, semantic metadata identity, importer and type; allows Creator to rename the path-derived top-level subMeta key while preserving its contents. Destination must be absent and retain the source extension.",
       "input": { "type": "object", "required": ["sourceAssetPath", "destinationAssetPath"], "properties": {
         "sourceAssetPath": { "type": "string", "minLength": 1, "maxLength": 240,
           "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?($|/))(?!.*(?:^|/)\\.)[^\\\\]+\\.[A-Za-z0-9]{1,10}$" },
@@ -91,7 +91,7 @@
     {
       "id": "creator.asset.move.commit",
       "access": "write", "approval": true,
-      "description": "After native Creator approval, move or rename the exact asset via AssetDB and verify the original path is absent while UUID, bytes, .meta, importer, and type match at the destination.",
+      "description": "On an explicit commit call, move or rename the exact asset via AssetDB and verify the original path is absent while UUID, bytes, semantic .meta identity, importer, and type match at the destination; Creator may rename the path-derived top-level subMeta key.",
       "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
         "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
@@ -100,7 +100,7 @@
     {
       "id": "creator.asset.move.reconcile",
       "access": "plan",
-      "description": "Read and classify both paths for an interrupted AssetDB move by UUID and file/.meta hashes. Never repeats the move.",
+      "description": "Read and classify both paths for an interrupted AssetDB move by UUID, file hash, importer, type, and semantic .meta identity; Creator may rename the path-derived top-level subMeta key. Never repeats the move.",
       "input": { "type": "object", "required": ["operationId"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
       }, "additionalProperties": false }
@@ -119,7 +119,7 @@
     {
       "id": "creator.prefab.create.commit",
       "access": "write", "approval": true,
-      "description": "After native Creator approval, create the exact planned Prefab through the Creator Scene panel, then verify the generated AssetDB UUID, serialized asset, importer, and .meta identity. Never hand-edits Prefab serialization.",
+      "description": "On an explicit commit call, create the exact planned Prefab through the Creator Scene panel, then verify the generated AssetDB UUID, serialized asset, importer, and .meta identity. Never hand-edits Prefab serialization.",
       "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
         "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
@@ -169,7 +169,7 @@
     {
       "id": "creator.prefab.instance.override.commit",
       "access": "write", "approval": true,
-      "description": "After native Creator approval and a fresh exact-state check, invoke Creator's native Prefab instance Apply or Revert action, request scene save, and observe exact saved scene/Prefab hash transitions plus live instance state. Does not decode every component override or claim semantic field-by-field equivalence. Never automatically retries.",
+      "description": "On an explicit commit call and after a fresh exact-state check, invoke Creator's native Prefab instance Apply or Revert action, request scene save, and observe exact saved scene/Prefab hash transitions plus live instance state. Does not decode every component override or claim semantic field-by-field equivalence. Never automatically retries.",
       "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
         "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" }
@@ -208,7 +208,7 @@
     {
       "id": "creator.prefab.source.patch.commit",
       "access": "write", "approval": true,
-      "description": "After native Creator approval, enter the exact Prefab edit mode, apply the allowlisted node changes, save, exit, reopen, verify the live node, and reread the exact Prefab and .meta. Writes are never automatically retried.",
+      "description": "On an explicit commit call, enter the exact Prefab edit mode, apply the allowlisted node changes, save, exit, reopen, verify the live node, and reread the exact Prefab and .meta. Writes are never automatically retried.",
       "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
         "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" }
@@ -225,7 +225,7 @@
     {
       "id": "creator.editor.eval.plan",
       "access": "plan",
-      "description": "Freeze bounded inline JavaScript and JSON input for an explicit Creator Editor execution approval. Source runs with Editor privileges, is not sandboxed, and has no automatic persistence verification.",
+      "description": "Freeze bounded inline JavaScript and JSON input for an explicit Creator Editor execution commit. Source runs with Editor privileges, is not sandboxed, and has no automatic persistence verification.",
       "input": { "type": "object", "required": ["source"], "properties": {
         "source": { "type": "string", "minLength": 1, "maxLength": 16384 },
         "input": { "type": "object", "additionalProperties": true }
@@ -234,7 +234,7 @@
     {
       "id": "creator.editor.eval.commit",
       "access": "write", "approval": true,
-      "description": "After native Creator approval, execute the exact planned inline script and return its bounded JSON result. Script effects and persistence are not verified; interrupted calls require manual review and are never replayed.",
+      "description": "On an explicit commit call, execute the exact planned inline script and return its bounded JSON result. Script effects and persistence are not verified; interrupted calls require manual review and are never replayed.",
       "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
         "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
@@ -251,7 +251,7 @@
     {
       "id": "creator.editor.eval-file.plan",
       "access": "plan",
-      "description": "Freeze a project package editor-scripts JavaScript file and JSON input for an explicit Creator Editor execution approval. Test scripts also receive the bounded CreatorTest harness. Only packages/*/editor-scripts/*.js paths without symlinks are accepted; source runs with Editor privileges and is not sandboxed.",
+      "description": "Freeze a project package editor-scripts JavaScript file and JSON input for an explicit Creator Editor execution commit. Test scripts also receive the bounded CreatorTest harness. Only packages/*/editor-scripts/*.js paths without symlinks are accepted; source runs with Editor privileges and is not sandboxed.",
       "input": { "type": "object", "required": ["scriptPath"], "properties": {
         "scriptPath": { "type": "string", "minLength": 1, "maxLength": 512,
         "pattern": "^packages/(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?($|/))(?!.*(?:^|/)\\.)[^\\\\]+/(?:[^\\\\]+/)*editor-scripts/(?:[^\\\\]+/)*[^\\\\]+\\.js$" },
@@ -261,7 +261,7 @@
     {
       "id": "creator.editor.eval-file.commit",
       "access": "write", "approval": true,
-      "description": "After native Creator approval, execute the exact planned and hash-checked editor script file and return its bounded JSON result. Script effects and persistence are not verified; interrupted calls require manual review and are never replayed.",
+      "description": "On an explicit commit call, execute the exact planned and hash-checked editor script file and return its bounded JSON result. Script effects and persistence are not verified; interrupted calls require manual review and are never replayed.",
       "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
         "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
@@ -291,7 +291,7 @@
     {
       "id": "creator.asset.delete.plan",
       "access": "plan",
-      "description": "Plan deleting one exact main file asset only when a complete bounded text-reference scan finds no incoming UUID references. Refuses sub-assets, assets with sub-assets, symlinks, and incomplete scans.",
+      "description": "Plan deleting one exact main file asset through AssetDB only when complete bounded text-reference scans find no incoming UUID references to the asset or any of its exact .meta/AssetDB sub-assets. Refuses direct sub-asset deletion, identity mismatches, symlinks, and incomplete scans.",
       "input": { "type": "object", "required": ["assetUuid"], "properties": {
         "assetUuid": { "type": "string", "minLength": 22, "maxLength": 36,
           "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" }
@@ -300,7 +300,7 @@
     {
       "id": "creator.asset.delete.commit",
       "access": "write", "approval": true,
-      "description": "After native Creator approval, recheck asset identity, file/.meta hashes, sub-asset status, and a complete no-reference scan; delete through AssetDB and verify both files and row are absent.",
+      "description": "On an explicit commit call, recheck asset identity, file/.meta hashes, the exact sub-asset set, and complete no-reference scans for every UUID; delete the main asset through AssetDB and verify the file, metadata, and all sub-asset rows are absent.",
       "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
         "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
@@ -309,7 +309,7 @@
     {
       "id": "creator.asset.delete.reconcile",
       "access": "plan",
-      "description": "Observe and classify one interrupted AssetDB deletion using the exact asset UUID, file, and .meta. Never repeats deletion.",
+      "description": "Observe and classify one interrupted AssetDB deletion using the exact asset UUID, sub-assets, file, and .meta. Never repeats deletion.",
       "input": { "type": "object", "required": ["operationId"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
       }, "additionalProperties": false }
@@ -333,7 +333,7 @@
     {
       "id": "creator.asset.import-settings.commit",
       "access": "write", "approval": true,
-      "description": "After native Creator approval and a second precondition check, save allowlisted texture settings through AssetDB and verify the exact source and full .meta readback.",
+      "description": "On an explicit commit call and after a second precondition check, save allowlisted texture settings through AssetDB and verify the exact source and full .meta readback.",
       "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
         "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
@@ -357,6 +357,20 @@
       "id": "creator.scene.node.read",
       "access": "read",
       "description": "Read one exact node in the active scene by scene UUID and node UUID, including its full bounded path, active state, component classes, and current-session component instance IDs.",
+      "input": {
+        "type": "object",
+        "required": ["sceneUuid", "nodeUuid"],
+        "properties": {
+          "sceneUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
+          "nodeUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.ui.inspect",
+      "access": "read",
+      "description": "Read bounded public serializable properties and configured event lists for supported built-in Creator 2.4 UI components on one exact active-scene node. Event lists cover Button, Toggle, ToggleContainer, Slider, ScrollView, PageView, and EditBox callbacks. Reports component instance IDs and per-property availability; does not mutate the scene.",
       "input": {
         "type": "object",
         "required": ["sceneUuid", "nodeUuid"],
@@ -410,7 +424,7 @@
                       "value": { "type": ["string", "number", "boolean", "object"], "maxLength": 1024,
                         "properties": {
                           "assetUuid": { "type": "string", "minLength": 22, "maxLength": 36, "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
-                          "assetClass": { "type": "string", "enum": ["SpriteFrame", "Texture2D", "AudioClip", "Prefab", "BitmapFont", "TTFFont"] }
+                          "assetClass": { "type": "string", "enum": ["SpriteFrame", "Texture2D", "AudioClip", "Prefab", "Font", "BitmapFont", "TTFFont"] }
                         }, "required": ["assetUuid", "assetClass"], "additionalProperties": false,
                         "minimum": -1000000000, "maximum": 1000000000 }
                     }, "additionalProperties": false }
@@ -435,7 +449,7 @@
     {
       "id": "creator.scene.compose.commit",
       "access": "write", "approval": true,
-      "description": "Apply one exact planned composition after Creator approval and fresh precondition checks, instantiate any listed Prefab assets through cc.instantiate, request scene save, and verify same-session readback plus exact AssetDB .fire/.meta semantics including PrefabInfo links. The receipt keeps sceneSaveCompletionConfirmed false because Creator documents no save IPC acknowledgement.",
+      "description": "Apply one exact planned composition on an explicit commit call and fresh precondition checks, instantiate any listed Prefab assets through cc.instantiate, request scene save, and verify same-session readback plus exact AssetDB .fire/.meta semantics including PrefabInfo links. The receipt keeps sceneSaveCompletionConfirmed false because Creator documents no save IPC acknowledgement.",
       "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
         "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
@@ -462,7 +476,7 @@
     {
       "id": "creator.scene.node.rename.commit",
       "access": "write", "approval": true,
-      "description": "After Creator approval, rename the exact planned node if its live and saved scene before-state still matches, request scene save, and confirm completion only after the exact serialized node state reads back from disk.",
+      "description": "On an explicit commit call, rename the exact planned node if its live and saved scene before-state still matches, request scene save, and confirm completion only after the exact serialized node state reads back from disk.",
       "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
         "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
@@ -488,7 +502,7 @@
     {
       "id": "creator.scene.node.delete.commit",
       "access": "write", "approval": true,
-      "description": "After native Creator approval and fresh identity checks, detach and destroy the planned node subtree, request scene save, and verify the exact node is absent from the live hierarchy.",
+      "description": "On an explicit commit call and after fresh identity checks, detach and destroy the planned node subtree, request scene save, and verify the exact node is absent from the live hierarchy.",
       "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
         "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
@@ -516,7 +530,7 @@
     {
       "id": "creator.scene.node.remove-component.commit",
       "access": "write", "approval": true,
-      "description": "After native Creator approval and fresh identity checks, destroy the exact planned component instance, request scene save, and verify its current-session instance ID is no longer valid.",
+      "description": "On an explicit commit call and after fresh identity checks, destroy the exact planned component instance, request scene save, and verify its current-session instance ID is no longer valid.",
       "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
         "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
@@ -543,7 +557,7 @@
     {
       "id": "creator.scene.node.reparent.commit",
       "access": "write", "approval": true,
-      "description": "After Creator approval, reparent the exact node if its live and saved before-state still matches; request a scene save and confirm completion only after the exact serialized hierarchy reads back from disk. Reparenting keeps local transforms and may change world position and lifecycle callbacks.",
+      "description": "On an explicit commit call, reparent the exact node if its live and saved before-state still matches; request a scene save and confirm completion only after the exact serialized hierarchy reads back from disk. Reparenting keeps local transforms and may change world position and lifecycle callbacks.",
       "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
         "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
@@ -576,7 +590,7 @@
       "id": "creator.scene.node.set-active.commit",
       "access": "write",
       "approval": true,
-      "description": "Apply one planned active-state change after a native Creator confirmation, live and saved scene identity/before-state checks, then request scene save and confirm completion only after the exact serialized node state reads back from disk.",
+      "description": "On explicit commit invocation, apply one planned active-state change after live and saved scene identity/before-state checks, then request scene save and confirm completion only after the exact serialized node state reads back from disk.",
       "input": {
         "type": "object",
         "required": ["operationId", "planHash"],
@@ -630,7 +644,7 @@
       "id": "creator.scene.node.set-transform.commit",
       "access": "write",
       "approval": true,
-      "description": "Apply one planned transform update after native Creator approval and exact live/disk before-state checks, request scene save, and confirm persistence only after the exact serialized AssetDB .fire/.meta node transform reads back from disk.",
+      "description": "Apply one planned transform update on an explicit commit call and exact live/disk before-state checks, request scene save, and confirm persistence only after the exact serialized AssetDB .fire/.meta node transform reads back from disk.",
       "input": {
         "type": "object",
         "required": ["operationId", "planHash"],
@@ -668,7 +682,7 @@
     {
       "id": "creator.scene.button-events.set.commit",
       "access": "write", "approval": true,
-      "description": "Replace the exact planned Button click-event list after native Creator approval and a second live and saved before-state check, then request scene save. Completion requires semantic readback of the planned serialized events from the exact AssetDB .fire; reports save-required if only editor memory changed.",
+      "description": "Replace the exact planned Button click-event list on an explicit commit call and a second live and saved before-state check, then request scene save. Completion requires semantic readback of the planned serialized events from the exact AssetDB .fire; reports save-required if only editor memory changed.",
       "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
         "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
@@ -701,7 +715,7 @@
       "id": "creator.scene.node.add-component.commit",
       "access": "write",
       "approval": true,
-      "description": "Add the exact planned component class after Creator approval and fresh scene/node/component precondition checks, then request scene save and read the component count back in the same Creator scene session.",
+      "description": "Add the exact planned component class on an explicit commit call and fresh scene/node/component precondition checks, then request scene save and read the component count back in the same Creator scene session.",
       "input": {
         "type": "object",
         "required": ["operationId", "planHash"],
@@ -864,7 +878,7 @@
               "kind": { "type": "string", "enum": ["asset"] },
               "assetUuid": { "type": "string", "minLength": 22, "maxLength": 36,
                 "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
-              "assetClass": { "type": "string", "enum": ["SpriteFrame", "Texture2D", "AudioClip", "Prefab", "BitmapFont", "TTFFont"] }
+              "assetClass": { "type": "string", "enum": ["SpriteFrame", "Texture2D", "AudioClip", "Prefab", "Font", "BitmapFont", "TTFFont"] }
             }, "additionalProperties": false }
           ] }
         },
@@ -875,7 +889,7 @@
       "id": "creator.scene.node.set-component-property.commit",
       "access": "write",
       "approval": true,
-      "description": "Apply the exact planned component-property change after native Creator approval and fresh live and saved before-state checks. Request scene save, then confirm the serialized component identity and property in the exact AssetDB .fire; reports save-required if memory changed but persistence was not verified.",
+      "description": "Apply the exact planned component-property change on an explicit commit call and fresh live and saved before-state checks. Request scene save, then confirm the serialized component identity and property in the exact AssetDB .fire; reports save-required if memory changed but persistence was not verified.",
       "input": {
         "type": "object",
         "required": ["operationId", "planHash"],
@@ -960,7 +974,7 @@
       "id": "creator.script.modify.commit",
       "access": "write",
       "approval": true,
-      "description": "Replace the exact planned script source through Creator AssetDB after native approval and fresh source/UUID/importer/.meta precondition checks. Returns Creator readback and compile-event evidence without claiming compilation succeeded unless observed.",
+      "description": "Replace the exact planned script source through Creator AssetDB on an explicit commit call and fresh source/UUID/importer/.meta precondition checks. Returns Creator readback and compile-event evidence without claiming compilation succeeded unless observed.",
       "input": {
         "type": "object",
         "required": ["operationId", "planHash"],
@@ -996,7 +1010,7 @@
     {
       "id": "creator.script.recompile.commit",
       "access": "control", "approval": true, "execution": "creator",
-      "description": "After native Creator approval, refresh one exact script through AssetDB and return the importer result plus correlated script-import-failed diagnostics. Does not edit source or claim success when AssetDB returns no matching import result.",
+      "description": "On an explicit commit call, refresh one exact script through AssetDB and return the importer result plus correlated script-import-failed diagnostics. Does not edit source or claim success when AssetDB returns no matching import result.",
       "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
         "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
         "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
@@ -1029,7 +1043,7 @@
       "access": "control",
       "execution": "creator",
       "approval": true,
-      "description": "After a native Creator approval, request the active scene Web preview and attach a dedicated local browser session bound to this Creator instance and scene.",
+      "description": "On an explicit commit call, request the active scene Web preview and attach a dedicated local browser session bound to this Creator instance and scene.",
       "input": {
         "type": "object",
         "properties": {
@@ -1071,7 +1085,7 @@
       "id": "creator.preview.interact",
       "access": "control",
       "execution": "bridge",
-      "description": "Apply bounded keyboard or normalized canvas clicks in the same preview session and evaluate declarative runtime assertions, with optional V8 function and block-range coverage.",
+      "description": "Apply bounded keyboard, canvas click/drag, text-entry, or explicit Widget/Layout refresh actions in the same preview session, evaluate declarative runtime assertions, and optionally collect V8 function/block coverage.",
       "input": {
         "type": "object",
         "required": ["previewSessionId", "actions"],
@@ -1080,17 +1094,36 @@
           "coverage": { "type": "boolean" },
           "actions": {
             "type": "array", "minItems": 1, "maxItems": 12,
-            "items": {
-              "type": "object", "required": ["type"],
-              "properties": {
-                "type": { "type": "string", "enum": ["key", "click"] },
+            "items": { "oneOf": [
+              { "type": "object", "required": ["type", "key"], "properties": {
+                "type": { "type": "string", "enum": ["key"] },
                 "key": { "type": "string", "maxLength": 20 },
-                "durationMs": { "type": "integer", "minimum": 1, "maximum": 2000 },
+                "durationMs": { "type": "integer", "minimum": 1, "maximum": 2000 }
+              }, "additionalProperties": false },
+              { "type": "object", "required": ["type", "x", "y"], "properties": {
+                "type": { "type": "string", "enum": ["click"] },
                 "x": { "type": "number", "minimum": 0, "maximum": 1 },
                 "y": { "type": "number", "minimum": 0, "maximum": 1 }
-              },
-              "additionalProperties": false
-            }
+              }, "additionalProperties": false },
+              { "type": "object", "required": ["type", "startX", "startY", "endX", "endY"], "properties": {
+                "type": { "type": "string", "enum": ["drag"] },
+                "startX": { "type": "number", "minimum": 0, "maximum": 1 },
+                "startY": { "type": "number", "minimum": 0, "maximum": 1 },
+                "endX": { "type": "number", "minimum": 0, "maximum": 1 },
+                "endY": { "type": "number", "minimum": 0, "maximum": 1 },
+                "durationMs": { "type": "integer", "minimum": 1, "maximum": 2000 }
+              }, "additionalProperties": false },
+              { "type": "object", "required": ["type", "text"], "properties": {
+                "type": { "type": "string", "enum": ["text"] },
+                "text": { "type": "string", "maxLength": 512 }
+              }, "additionalProperties": false },
+              { "type": "object", "required": ["type", "path", "componentType"], "properties": {
+                "type": { "type": "string", "enum": ["ui-refresh"] },
+                "path": { "type": "string", "minLength": 1, "maxLength": 240,
+                  "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?($|/)).+$" },
+                "componentType": { "type": "string", "enum": ["cc.Widget", "cc.Layout"] }
+              }, "additionalProperties": false }
+            ] }
           },
           "assertions": {
             "type": "array", "minItems": 1, "maxItems": 12,
@@ -1102,7 +1135,7 @@
                 "name": { "type": "string", "maxLength": 120 },
                 "uuid": { "type": "string", "maxLength": 80 },
                 "path": { "type": "string", "maxLength": 240 },
-                "property": { "type": "string", "enum": ["active", "x", "y"] },
+                "property": { "type": "string", "enum": ["active", "x", "y", "width", "height", "anchorX", "anchorY"] },
                 "componentType": { "type": "string", "maxLength": 100 },
                 "componentProperty": { "type": "string", "maxLength": 64, "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$" },
                 "expected": { "type": ["string", "number", "boolean"] },
@@ -1112,6 +1145,29 @@
             }
           },
           "settleMs": { "type": "integer", "minimum": 100, "maximum": 3000 }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.preview.test-script",
+      "access": "control",
+      "execution": "bridge",
+      "description": "Run a bounded project-local JavaScript test suite in the exact attached Creator Preview runtime with the live cc API. Project scripts execute without sandboxing; uncertain or timed-out execution closes the Agent-owned browser and requires manual review.",
+      "input": {
+        "type": "object",
+        "required": ["previewSessionId", "scriptPath", "sourceSha256", "testIds"],
+        "properties": {
+          "previewSessionId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "scriptPath": { "type": "string", "maxLength": 512 },
+          "sourceSha256": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" },
+          "testIds": {
+            "type": "array", "minItems": 1, "maxItems": 64,
+            "items": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" }
+          },
+          "input": { "type": "object", "maxProperties": 64, "additionalProperties": true },
+          "timeoutMs": { "type": "integer", "minimum": 100, "maximum": 25000 },
+          "coverage": { "type": "boolean" }
         },
         "additionalProperties": false
       }
@@ -1182,7 +1238,7 @@
       "access": "write",
       "approval": true,
       "execution": "creator",
-      "description": "Invoke a project extension command declared as a write only after an explicit native Creator approval dialog.",
+      "description": "Invoke a project extension command declared as a write when explicitly invoked as a write/control command.",
       "input": {
         "type": "object", "required": ["providerId", "commandId", "providerFingerprint", "argumentsJson"],
         "properties": {
@@ -1199,7 +1255,7 @@
       "access": "control",
       "approval": true,
       "execution": "creator",
-      "description": "Invoke a project extension command declared as a control action only after an explicit native Creator approval dialog.",
+      "description": "Invoke a project extension command declared as a control action when explicitly invoked as a write/control command.",
       "input": {
         "type": "object", "required": ["providerId", "commandId", "providerFingerprint", "argumentsJson"],
         "properties": {

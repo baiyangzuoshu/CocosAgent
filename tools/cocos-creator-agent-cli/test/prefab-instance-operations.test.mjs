@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { validateCommand } from '../bridge/contracts.mjs';
 
 const require = createRequire(import.meta.url);
-const { classifyPrefabInstanceOverride, validPrefabInstanceOverridePlan } =
+const { classifyPrefabInstanceOverride, classifyPrefabInstanceOverrideAction, validPrefabInstanceOverridePlan } =
   require('../creator-extension/prefab-instance-operations.cjs');
 const uuid = 'e98a93d5-9707-45a6-88f6-50a40a1511f4';
 const hash = (letter) => letter.repeat(64);
@@ -33,7 +33,7 @@ function after() {
     prefabSourceSha256: hash('d'), prefabMetaSha256: hash('e') };
 }
 
-test('Prefab instance override contract exposes a read-only plan, approved write, and non-replaying reconcile', () => {
+test('Prefab instance override contract exposes a read-only plan, explicit commit write, and non-replaying reconcile', () => {
   const request = { sceneUuid: uuid, nodeUuid: uuid, action: 'apply' };
   const planCommand = command('creator.prefab.instance.override.plan');
   const commitCommand = command('creator.prefab.instance.override.commit');
@@ -72,4 +72,20 @@ test('Revert requires both a changed live instance and saved scene while preserv
   assert.equal(classifyPrefabInstanceOverride(p, { ...after(), instanceStateSha256: hash('f') }), 'needs-reconciliation');
   assert.equal(classifyPrefabInstanceOverride(p, { ...after(), prefabSourceSha256: hash('f') }), 'conflict');
   assert.equal(classifyPrefabInstanceOverride(p, { ...after(), prefabRootUuid: 'different' }), 'conflict');
+});
+
+test('native Apply/Revert action is observed before requesting the scene save', () => {
+  const apply = plan('apply');
+  assert.equal(classifyPrefabInstanceOverrideAction(apply, after()), 'pending');
+  assert.equal(classifyPrefabInstanceOverrideAction(apply, { ...after(), prefabSourceSha256: hash('f') }),
+    'action-observed');
+
+  const revert = plan('revert');
+  assert.equal(classifyPrefabInstanceOverrideAction(revert, after()), 'pending');
+  assert.equal(classifyPrefabInstanceOverrideAction(revert, { ...after(), instanceStateSha256: hash('f') }),
+    'action-observed');
+  assert.equal(classifyPrefabInstanceOverrideAction(revert, { ...after(), prefabSourceSha256: hash('f') }),
+    'conflict');
+  assert.equal(classifyPrefabInstanceOverrideAction(revert, { ...after(), sceneMetaSha256: hash('f'),
+    instanceStateSha256: hash('f') }), 'conflict');
 });

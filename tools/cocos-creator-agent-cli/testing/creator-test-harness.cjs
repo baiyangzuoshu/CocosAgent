@@ -1,7 +1,7 @@
 'use strict';
 
 // Optional helper for a project-owned Creator command provider. The provider
-// declares the run command as control + approval:true and owns test cleanup.
+// declares the run command as control + approval:true and owns test cleanup; callers execute it explicitly.
 exports.runTests = async function runTests(cases, options) {
     options = options || {};
     if (!Array.isArray(cases) || !cases.length || cases.length > 1000) throw new Error('TEST_CASES_INVALID');

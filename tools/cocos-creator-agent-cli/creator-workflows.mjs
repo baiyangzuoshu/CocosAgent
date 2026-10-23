@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { callCommand, listInstances } from './bridge/client.mjs';
+import { callCommand, disconnectInstance, listInstances } from './bridge/client.mjs';
 
 const CREATOR_VERSION = '2.4.15';
 const BUILD_PLATFORMS = new Set(['web-mobile', 'web-desktop', 'android', 'ios', 'mac', 'win32']);
@@ -464,15 +464,138 @@ exit 3
     const stderr = String(result?.stderr || '').toLowerCase();
     if (/not authorized|not allowed|assistive|accessibility/.test(stderr))
       throw coded('CREATOR_CLOSE_ACCESSIBILITY_PERMISSION_REQUIRED');
-    if (/CREATOR_CLOSE_FILE_MENU_NOT_FOUND/.test(stderr)) throw coded('CREATOR_CLOSE_FILE_MENU_NOT_FOUND');
-    if (/CREATOR_CLOSE_OPEN_PROJECT_MENU_ITEM_NOT_FOUND/.test(stderr)) throw coded('CREATOR_CLOSE_MENU_ITEM_NOT_FOUND');
+    if (/creator_close_file_menu_not_found/i.test(stderr)) throw coded('CREATOR_CLOSE_FILE_MENU_NOT_FOUND');
+    if (/creator_close_open_project_menu_item_not_found/i.test(stderr)) throw coded('CREATOR_CLOSE_MENU_ITEM_NOT_FOUND');
     throw coded('CREATOR_CLOSE_REQUEST_FAILED', String(result?.stderr || result?.stdout || 'osascript failed'));
   }
   return { requested: true };
 }
 
-export async function closeCreatorProject({ instanceId, timeoutMs = 30000 }, {
+export function inspectCreatorProcess(processId, { platform = process.platform, spawnSyncImpl = spawnSync,
+  processExistsImpl = (pid) => process.kill(pid, 0) } = {}) {
+  if (!['darwin', 'win32'].includes(platform)) throw coded('CREATOR_CLOSE_PLATFORM_UNSUPPORTED');
+  if (!Number.isSafeInteger(processId) || processId < 1 || processId > 2147483647)
+    throw coded('CREATOR_CLOSE_PROCESS_ID_UNAVAILABLE');
+  if (platform === 'darwin') {
+    try { processExistsImpl(processId); }
+    catch (error) {
+      if (error?.code === 'ESRCH') return { running: false, creator: false, executable: null };
+      throw coded('CREATOR_CLOSE_PROCESS_INSPECTION_FAILED', error.message || String(error));
+    }
+  }
+  let result;
+  try {
+    if (platform === 'win32') {
+      const script = `$ErrorActionPreference = 'Stop'; $p = Get-Process -Id ${processId} -ErrorAction SilentlyContinue; if ($null -eq $p) { exit 4 }; if (-not $p.Path) { [Console]::Error.WriteLine('CREATOR_PROCESS_PATH_UNAVAILABLE'); exit 5 }; [Console]::Out.WriteLine($p.Path)`;
+      result = spawnSyncImpl('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+        encoding: 'utf8', timeout: 3000, maxBuffer: 4096, windowsHide: true,
+      });
+    } else {
+      result = spawnSyncImpl('/bin/ps', ['-p', String(processId), '-o', 'comm='], {
+        encoding: 'utf8', timeout: 3000, maxBuffer: 4096, windowsHide: true,
+      });
+    }
+  } catch (error) {
+    if (error?.code === 'ETIMEDOUT') throw coded('CREATOR_CLOSE_PROCESS_INSPECTION_TIMEOUT');
+    throw coded('CREATOR_CLOSE_PROCESS_INSPECTION_FAILED', error.message || String(error));
+  }
+  if (result?.error?.code === 'ETIMEDOUT') throw coded('CREATOR_CLOSE_PROCESS_INSPECTION_TIMEOUT');
+  const executable = String(result?.stdout || '').trim();
+  if (!executable) {
+    if (platform === 'darwin') {
+      try { processExistsImpl(processId); }
+      catch (error) {
+        if (error?.code === 'ESRCH') return { running: false, creator: false, executable: null };
+        throw coded('CREATOR_CLOSE_PROCESS_INSPECTION_FAILED', error.message || String(error));
+      }
+      throw coded('CREATOR_CLOSE_PROCESS_INSPECTION_FAILED',
+        String(result?.stderr || `Process query returned no executable (status ${result?.status})`).slice(0, 1000));
+    }
+    if (platform === 'win32' && result?.status === 4) return { running: false, creator: false, executable: null };
+    if (result?.status !== 0) throw coded('CREATOR_CLOSE_PROCESS_INSPECTION_FAILED',
+      String(result?.stderr || 'Creator process query failed').slice(0, 1000));
+    return { running: false, creator: false, executable: null };
+  }
+  try {
+    const resolved = resolveCreatorExecutable(executable, { platform });
+    return { running: true, creator: true, executable: resolved.executable, creatorVersion: resolved.creatorVersion };
+  } catch (_) {
+    return { running: true, creator: false, executable };
+  }
+}
+
+export function requestCreatorApplicationQuit(processId, { platform = process.platform, spawnSyncImpl = spawnSync } = {}) {
+  if (!['darwin', 'win32'].includes(platform)) throw coded('CREATOR_CLOSE_PLATFORM_UNSUPPORTED');
+  if (!Number.isSafeInteger(processId) || processId < 1 || processId > 2147483647)
+    throw coded('CREATOR_CLOSE_PROCESS_ID_UNAVAILABLE');
+  if (platform === 'win32') {
+    const script = `$ErrorActionPreference = 'Stop'; $p = Get-Process -Id ${processId} -ErrorAction Stop; if (-not $p.CloseMainWindow()) { [Console]::Error.WriteLine('CREATOR_CLOSE_REQUEST_FAILED'); exit 3 }; [Console]::Out.WriteLine('requested')`;
+    let result;
+    try {
+      result = spawnSyncImpl('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+        encoding: 'utf8', timeout: 5000, maxBuffer: 4096, windowsHide: true,
+      });
+    } catch (error) {
+      if (error?.code === 'ETIMEDOUT') throw coded('CREATOR_CLOSE_REQUEST_TIMEOUT');
+      throw coded('CREATOR_CLOSE_REQUEST_FAILED', error.message || String(error));
+    }
+    if (result?.error?.code === 'ETIMEDOUT') throw coded('CREATOR_CLOSE_REQUEST_TIMEOUT');
+    if (result?.status !== 0 || String(result?.stdout || '').trim() !== 'requested')
+      throw coded('CREATOR_CLOSE_REQUEST_FAILED', String(result?.stderr || result?.stdout || 'PowerShell close request failed').slice(0, 1000));
+    return { requested: true };
+  }
+  const script = [
+    'on run argv',
+    '  set targetPid to (item 1 of argv) as integer',
+    '  tell application "System Events"',
+    '    set targetProcess to first process whose unix id is targetPid',
+    '    tell targetProcess',
+    '      set frontmost to true',
+    '      keystroke "q" using {command down}',
+    '    end tell',
+    '  end tell',
+    '  return "requested"',
+    'end run',
+  ].join('\n');
+  let result;
+  try {
+    result = spawnSyncImpl('/usr/bin/osascript', ['-e', script, String(processId)], {
+      encoding: 'utf8', timeout: 5000, maxBuffer: 4096, windowsHide: true,
+    });
+  } catch (error) {
+    if (error?.code === 'ETIMEDOUT') throw coded('CREATOR_CLOSE_REQUEST_TIMEOUT');
+    throw coded('CREATOR_CLOSE_REQUEST_FAILED', error.message || String(error));
+  }
+  const stderr = String(result?.stderr || '').toLowerCase();
+  if (result?.error?.code === 'ETIMEDOUT') throw coded('CREATOR_CLOSE_REQUEST_TIMEOUT');
+  if (result?.status !== 0 || String(result?.stdout || '').trim() !== 'requested') {
+    if (/not authorized|not allowed|assistive|accessibility/.test(stderr))
+      throw coded('CREATOR_CLOSE_ACCESSIBILITY_PERMISSION_REQUIRED');
+    throw coded('CREATOR_CLOSE_REQUEST_FAILED', String(result?.stderr || result?.stdout || 'osascript quit request failed').slice(0, 1000));
+  }
+  return { requested: true };
+}
+
+function validRejectedCreatorInstance(instance, platform) {
+  if (!instance || instance.connected !== false || instance.creatorVersion !== CREATOR_VERSION
+    || typeof instance.extensionVersion !== 'string' || instance.extensionVersion.length > 32
+    || !Number.isSafeInteger(instance.processId) || instance.processId < 1 || instance.processId > 2147483647
+    || !Array.isArray(instance.reasons) || !instance.reasons.length
+    || instance.reasons.some((reason) => !['EXTENSION_VERSION_MISMATCH', 'COMMAND_CONTRACT_MISMATCH'].includes(reason)))
+    return false;
+  const projectRoot = instance.reportedProjectRoot;
+  const isAbsolute = platform === 'win32' ? path.win32.isAbsolute(projectRoot) : path.isAbsolute(projectRoot);
+  if (!isAbsolute) return false;
+  try {
+    const project = canonicalProjectRoot(projectRoot);
+    return sameProjectRoot(projectRoot, project.root);
+  } catch (_) { return false; }
+}
+
+export async function closeCreatorProject({ instanceId, timeoutMs = 60000 }, {
   listInstancesImpl = listInstances, requestCloseImpl = requestCreatorProjectClose,
+  requestQuitImpl = requestCreatorApplicationQuit, inspectProcessImpl = inspectCreatorProcess,
+  disconnectInstanceImpl = disconnectInstance,
   diagnoseModalImpl = diagnoseCreatorModal, platform = process.platform, nowImpl = Date.now,
   sleepImpl = (duration) => new Promise((resolve) => setTimeout(resolve, duration)),
 } = {}) {
@@ -482,24 +605,80 @@ export async function closeCreatorProject({ instanceId, timeoutMs = 30000 }, {
     throw coded('CREATOR_CLOSE_TIMEOUT_INVALID');
   const inventory = await listInstancesImpl({ start: false });
   const instance = inventory.instances?.find((item) => item.instanceId === instanceId);
+  const rejectedInstance = inventory.rejectedInstances?.find((item) => item.instanceId === instanceId);
+  if (!instance && !validRejectedCreatorInstance(rejectedInstance, platform))
+    throw coded('CREATOR_CLOSE_INSTANCE_NOT_CONNECTED');
+  if (rejectedInstance && !instance) {
+    let processInfo = await inspectProcessImpl(rejectedInstance.processId, { platform });
+    if (!processInfo.running) return { operation: 'close', success: true, closed: true, instanceId,
+      projectRoot: rejectedInstance.reportedProjectRoot, creatorVersion: rejectedInstance.creatorVersion,
+      extensionVersion: rejectedInstance.extensionVersion, processId: rejectedInstance.processId,
+      staleExtension: true, closeRoute: 'application.quit', alreadyExited: true };
+    if (processInfo.creator !== true || processInfo.creatorVersion !== CREATOR_VERSION)
+      throw coded('CREATOR_CLOSE_PROCESS_IDENTITY_INVALID');
+    requestQuitImpl(rejectedInstance.processId, { platform });
+    const deadline = nowImpl() + timeoutMs;
+    let lastError = null;
+    while (nowImpl() < deadline) {
+      try {
+        processInfo = await inspectProcessImpl(rejectedInstance.processId, { platform });
+        if (!processInfo.running || processInfo.creator !== true)
+          return { operation: 'close', success: true, closed: true, instanceId,
+            projectRoot: rejectedInstance.reportedProjectRoot, creatorVersion: rejectedInstance.creatorVersion,
+            extensionVersion: rejectedInstance.extensionVersion, processId: rejectedInstance.processId,
+            staleExtension: true, closeRoute: 'application.quit' };
+      } catch (error) { lastError = error; }
+      await sleepImpl(Math.min(400, Math.max(0, deadline - nowImpl())));
+    }
+    const modalDiagnosis = diagnoseModalImpl(rejectedInstance.processId);
+    return { operation: 'close', success: false, closed: false, instanceId,
+      projectRoot: rejectedInstance.reportedProjectRoot, creatorVersion: rejectedInstance.creatorVersion,
+      extensionVersion: rejectedInstance.extensionVersion, processId: rejectedInstance.processId,
+      staleExtension: true, closeRoute: 'application.quit', modalDiagnosis,
+      possibleBlocker: modalDiagnosis?.status === 'detected'
+        ? 'Creator is showing a save or close prompt; resolve it in the Editor.'
+        : 'Creator remains open after a graceful quit request; it may be waiting for a save prompt or a long-running Editor operation.',
+      ...(lastError ? { lastErrorCode: lastError.code || lastError.message || String(lastError) } : {}) };
+  }
   if (!instance || instance.connected !== true) throw coded('CREATOR_CLOSE_INSTANCE_NOT_CONNECTED');
   const isAbsoluteProjectPath = platform === 'win32' ? path.win32.isAbsolute(instance.projectRoot) : path.isAbsolute(instance.projectRoot);
   if (instance.creatorVersion !== CREATOR_VERSION || !isAbsoluteProjectPath)
     throw coded('CREATOR_CLOSE_INSTANCE_IDENTITY_INVALID');
   if (!Number.isSafeInteger(instance.processId) || instance.processId < 1)
     throw coded('CREATOR_CLOSE_PROCESS_ID_UNAVAILABLE');
-  requestCloseImpl(instance.processId, { platform });
-  const closeRoute = 'file.open-project';
+  let closeRoute = 'file.open-project';
+  try { requestCloseImpl(instance.processId, { platform }); }
+  catch (error) {
+    if (!['CREATOR_CLOSE_MENU_ITEM_NOT_FOUND', 'CREATOR_CLOSE_FILE_MENU_NOT_FOUND'].includes(error?.code)) throw error;
+    requestQuitImpl(instance.processId, { platform });
+    closeRoute = 'application.quit-fallback';
+  }
   const deadline = nowImpl() + timeoutMs;
   let lastError = null;
+  let processExited = false;
+  let bridgeConnected = true;
+  let staleSessionCleanupAttempted = false;
   while (nowImpl() < deadline) {
+    if (closeRoute === 'application.quit-fallback') {
+      try {
+        const processInfo = await inspectProcessImpl(instance.processId, { platform });
+        processExited = !processInfo.running;
+        if (processExited && !staleSessionCleanupAttempted) {
+          staleSessionCleanupAttempted = true;
+          try { await disconnectInstanceImpl(instanceId, instance.processId); }
+          catch (error) { lastError = error; }
+        }
+      } catch (error) { lastError = error; }
+    }
     try {
       const current = await listInstancesImpl({ start: false });
       const remaining = current.instances?.find((item) => item.instanceId === instanceId);
-      if (!remaining || remaining.connected !== true)
+      bridgeConnected = !!remaining && remaining.connected === true;
+      if (!bridgeConnected && (closeRoute !== 'application.quit-fallback' || processExited))
         return { operation: 'close', success: true, closed: true, instanceId,
           projectName: instance.projectName, projectRoot: instance.projectRoot,
-          creatorVersion: instance.creatorVersion, processId: instance.processId,
+          creatorVersion: instance.creatorVersion, processId: instance.processId, processExited,
+          bridgeConnected,
           closeRoute };
     } catch (error) { lastError = error; }
     await sleepImpl(Math.min(400, Math.max(0, deadline - nowImpl())));
@@ -508,15 +687,24 @@ export async function closeCreatorProject({ instanceId, timeoutMs = 30000 }, {
   return { operation: 'close', success: false, closed: false, instanceId,
     projectName: instance.projectName, projectRoot: instance.projectRoot,
     creatorVersion: instance.creatorVersion, processId: instance.processId,
-    closeRoute, modalDiagnosis,
-    possibleBlocker: modalDiagnosis?.status === 'detected'
-      ? 'Creator is showing a modal dialog; resolve its save or close prompt in the Editor.'
-      : 'Creator remains connected; close may be waiting for a save prompt or a long-running Editor operation.',
+    closeRoute, modalDiagnosis, processExited, bridgeConnected,
+    possibleBlocker: processExited && bridgeConnected
+      ? 'The Creator process exited, but its bridge session still reports connected after cleanup; inspect the stale instance before reopening.'
+      : modalDiagnosis?.status === 'detected'
+        ? 'Creator is showing a modal dialog; resolve its save or close prompt in the Editor.'
+        : 'Creator remains connected; close may be waiting for a save prompt or a long-running Editor operation.',
     ...(lastError ? { lastErrorCode: lastError.code || lastError.message || String(lastError) } : {}) };
 }
 
-function projectInstances(inventory, projectRoot) {
-  const matching = (inventory.instances || []).filter((instance) => sameProjectRoot(instance.projectRoot, projectRoot));
+function projectInstances(inventory, projectRoot, { inspectProcessImpl = inspectCreatorProcess,
+  platform = process.platform } = {}) {
+  const matching = (inventory.instances || []).filter((instance) => {
+    if (!sameProjectRoot(instance.projectRoot, projectRoot)
+      || !Number.isSafeInteger(instance.processId) || instance.processId < 1) return false;
+    const processInfo = inspectProcessImpl(instance.processId, { platform });
+    return processInfo?.running === true && processInfo.creator === true
+      && processInfo.creatorVersion === CREATOR_VERSION;
+  });
   const rejected = (inventory.rejectedInstances || []).filter((instance) => typeof instance.reportedProjectRoot === 'string'
     && sameProjectRoot(instance.reportedProjectRoot, projectRoot));
   return { matching, rejected };
@@ -542,7 +730,8 @@ function readyResult(receipt, instanceId, project) {
     projectRoot: project.root, creatorVersion: info.creatorVersion, extensionVersion: info.extensionVersion || receipt?.extensionVersion || null };
 }
 
-async function waitForProjectReady(project, { timeoutMs, listInstancesImpl, probeProjectImpl, sleepImpl, nowImpl }) {
+async function waitForProjectReady(project, { timeoutMs, listInstancesImpl, probeProjectImpl, sleepImpl, nowImpl,
+  inspectProcessImpl, platform }) {
   const deadline = nowImpl() + timeoutMs;
   let lastError = null;
   while (nowImpl() < deadline) {
@@ -554,7 +743,7 @@ async function waitForProjectReady(project, { timeoutMs, listInstancesImpl, prob
       continue;
     }
 
-    const { matching, rejected } = projectInstances(inventory, project.root);
+    const { matching, rejected } = projectInstances(inventory, project.root, { inspectProcessImpl, platform });
     if (matching.length > 1) throw coded('CREATOR_PROJECT_INSTANCE_AMBIGUOUS', matching.map((item) => item.instanceId).join(', '));
     if (!matching.length && rejected.length) {
       const rejectedInstance = rejected[0];
@@ -588,6 +777,7 @@ async function waitForProjectReady(project, { timeoutMs, listInstancesImpl, prob
 
 export async function openCreatorProject({ projectRoot, creatorPath, waitReady = false, timeoutMs = 120000 }, {
   spawnImpl = spawn, listInstancesImpl = listInstances, probeProjectImpl = callCommand,
+  inspectProcessImpl = inspectCreatorProcess,
   installationSearchRoots, installationPlatform = process.platform, diagnoseModalImpl = diagnoseCreatorModal, nowImpl = Date.now,
   sleepImpl = (duration) => new Promise((resolve) => setTimeout(resolve, duration)),
 } = {}) {
@@ -600,7 +790,8 @@ export async function openCreatorProject({ projectRoot, creatorPath, waitReady =
   let existingInstance = null;
   if (waitReady) {
     const inventory = await listInstancesImpl();
-    const { matching, rejected } = projectInstances(inventory, project.root);
+    const { matching, rejected } = projectInstances(inventory, project.root,
+      { inspectProcessImpl, platform: installationPlatform });
     if (matching.length > 1) throw coded('CREATOR_PROJECT_INSTANCE_AMBIGUOUS', matching.map((item) => item.instanceId).join(', '));
     if (!matching.length && rejected.length) {
       const rejectedInstance = rejected[0];
@@ -652,7 +843,8 @@ export async function openCreatorProject({ projectRoot, creatorPath, waitReady =
   };
   if (!waitReady) return { ...base, success: true, editorReady: false, readiness: { status: 'not-checked' } };
 
-  const readiness = await waitForProjectReady(project, { timeoutMs, listInstancesImpl, probeProjectImpl, sleepImpl, nowImpl });
+  const readiness = await waitForProjectReady(project, { timeoutMs, listInstancesImpl, probeProjectImpl, sleepImpl, nowImpl,
+    inspectProcessImpl, platform: installationPlatform });
   if (readiness.status !== 'ready') {
     const modalDiagnosis = await diagnoseModalImpl(existingInstance?.processId || child?.pid);
     return {

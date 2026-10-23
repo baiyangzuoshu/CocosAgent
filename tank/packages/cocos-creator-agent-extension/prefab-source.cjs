@@ -1,5 +1,7 @@
 'use strict';
 
+const { rootNodeId } = require('./prefab-patch.cjs');
+
 const MAX_BYTES = 8 * 1024 * 1024;
 const MAX_META_BYTES = 16 * 1024;
 const MAX_OBJECTS = 20000;
@@ -93,7 +95,10 @@ function inspectPrefabSource({ prefabBytes, metaBytes, prefabUuid, maxComponents
 
         const info = prefabInfoFor(record, records);
         const fileId = info && typeof info.fileId === 'string' && info.fileId ? info.fileId : null;
-        const nodeId = typeof record._id === 'string' && record._id ? record._id : fileId;
+        const serializedNodeId = typeof record._id === 'string' && record._id ? record._id : fileId;
+        // Creator 2.4.15 intentionally saves an empty _id/fileId for a Prefab root.
+        // Bind that root to the exact asset rather than inventing serialized data.
+        const nodeId = serializedNodeId || (item.depth === 0 ? rootNodeId(prefabUuid) : null);
         if (nodeId && identities.has(nodeId)) return fail('PREFAB_NODE_ID_DUPLICATE', { nodeId });
         if (nodeId) identities.add(nodeId);
 
@@ -110,6 +115,7 @@ function inspectPrefabSource({ prefabBytes, metaBytes, prefabUuid, maxComponents
         if (allComponents.some((component) => !component)) return fail('PREFAB_COMPONENT_REFERENCE_INVALID', { nodePath });
         const components = allComponents.slice(0, maxComponentsPerNode);
         const node = { nodeUuid: nodeId, fileId, name, nodePath, parentUuid: item.parentId,
+            identityKind: serializedNodeId ? 'serialized-node-id' : item.depth === 0 ? 'prefab-root' : null,
             active: typeof record._active === 'boolean' ? record._active : true,
             transform, components, componentsTruncated: allComponents.length > components.length };
         const children = Array.isArray(record._children) ? record._children : [];

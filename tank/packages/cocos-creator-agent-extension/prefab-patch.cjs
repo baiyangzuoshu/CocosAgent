@@ -3,6 +3,7 @@
 const UUID = /^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$/;
 const NODE_ID = /^[A-Za-z0-9_+/=-]{1,128}$/;
 const SHA256 = /^[a-f0-9]{64}$/;
+function rootNodeId(prefabUuid) { return UUID.test(prefabUuid || '') ? `prefab_root_${prefabUuid}` : null; }
 const PATHS = new Set([
     'node.name', 'node.active', 'node.position.x', 'node.position.y', 'node.scale.x', 'node.scale.y',
     'component.cc.Sprite.enabled', 'component.cc.Sprite.spriteFrameUuid', 'component.cc.Label.enabled',
@@ -93,4 +94,4 @@ function validInput(input) {
         && (input.expectedSourceSha256 === undefined || SHA256.test(input.expectedSourceSha256));
 }
 
-module.exports = { UUID, NODE_ID, SHA256, PATHS, validValue, validateDiff, valueAt, matchesDiff, invertDiff, targetPathAt, validInput };
+module.exports = { UUID, NODE_ID, SHA256, PATHS, rootNodeId, validValue, validateDiff, valueAt, matchesDiff, invertDiff, targetPathAt, validInput };

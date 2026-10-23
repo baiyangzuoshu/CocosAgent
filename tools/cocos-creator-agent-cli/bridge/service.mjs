@@ -219,11 +219,18 @@ function settle(instance, requestId, outcome) {
 function expireInstances() {
   for (const [id, instance] of instances) {
     if (instanceIsLive(instance)) continue;
-    if (instance.pollWaiter) { clearTimeout(instance.pollWaiter.timeout); sendEmpty(instance.pollWaiter.response); }
-    if (instance.inFlight) settle(instance, instance.inFlight.requestId, { error: { code: 'CREATOR_INSTANCE_DISCONNECTED' } });
-    void stopInstancePreviews(instance.instanceId, instance.sessionId);
-    instances.delete(id);
+    removeInstance(id, 'CREATOR_INSTANCE_DISCONNECTED');
   }
+}
+
+function removeInstance(id, reason) {
+  const instance = instances.get(id);
+  if (!instance) return false;
+  if (instance.pollWaiter) { clearTimeout(instance.pollWaiter.timeout); sendEmpty(instance.pollWaiter.response); }
+  if (instance.inFlight) settle(instance, instance.inFlight.requestId, { error: { code: reason } });
+  void stopInstancePreviews(instance.instanceId, instance.sessionId);
+  instances.delete(id);
+  return true;
 }
 
 function resolveInstance(id, response) {
@@ -341,9 +348,13 @@ function sendQueued(instance, response) {
 
 function pollInstance(instance, body, response) {
   if (body.sessionId !== instance.sessionId) { sendFailure(response, 409, 'CREATOR_SESSION_STALE'); return; }
+  if (body.capabilities !== undefined && !validCapabilities(body.capabilities)) {
+    sendFailure(response, 400, 'CAPABILITIES_INVALID'); return;
+  }
+  if (instance.pollWaiter) { sendFailure(response, 409, 'CREATOR_POLL_ALREADY_ACTIVE'); return; }
+  if (body.capabilities !== undefined) instance.capabilities = body.capabilities;
   instance.lastSeenAt = Date.now();
   if (body.activeScene !== undefined) instance.activeScene = typeof body.activeScene === 'string' ? body.activeScene.slice(0, 120) : null;
-  if (instance.pollWaiter) { sendFailure(response, 409, 'CREATOR_POLL_ALREADY_ACTIVE'); return; }
   if (sendQueued(instance, response)) return;
   const waiter = { response, timeout: null };
   waiter.timeout = setTimeout(() => {
@@ -596,6 +607,19 @@ async function route(request, response) {
     for (const [id, record] of rejectedInstances) if (Date.now() - record.seen > INSTANCE_TTL_MS) rejectedInstances.delete(id);
     sendJson(response, 200, { instances: [...instances.values()].map(publicInstance),
       rejectedInstances: [...rejectedInstances.values()].map(({ seen, ...record }) => record) }); return;
+  }
+  const disconnectInstanceMatch = url.pathname.match(/^\/v1\/instances\/([0-9a-f-]{36})\/disconnect$/i);
+  if (request.method === 'POST' && disconnectInstanceMatch) {
+    const body = await readBody(request);
+    if (!Number.isSafeInteger(body.processId) || body.processId < 1 || body.processId > 2147483647) {
+      sendFailure(response, 400, 'PROCESS_ID_INVALID'); return;
+    }
+    const instanceId = disconnectInstanceMatch[1];
+    const instance = instances.get(instanceId);
+    if (!instance) { sendJson(response, 200, { disconnected: true, alreadyDisconnected: true, instanceId }); return; }
+    if (instance.processId !== body.processId) { sendFailure(response, 409, 'CREATOR_INSTANCE_IDENTITY_MISMATCH'); return; }
+    removeInstance(instanceId, 'CREATOR_INSTANCE_DISCONNECTED');
+    sendJson(response, 200, { disconnected: true, instanceId, processId: body.processId }); return;
   }
   const projectToolsMatch = url.pathname.match(/^\/v1\/instances\/([0-9a-f-]{36})\/project-tools$/i);
   if (request.method === 'GET' && projectToolsMatch) {

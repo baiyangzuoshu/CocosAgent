@@ -172,9 +172,9 @@ test('MCP discovers a project alias and routes it through CLI to the selected Cr
     result: { projectRoot: canonicalRoot, creatorVersion: '2.4.15', providers: [], commands: [providerCommand], skipped: [] },
   });
   const listing = await listingPromise;
-  assert.equal(listing.tools.length, 89, 'Expected 86 fixed tools, two project aliases, and one live extension command.');
+  assert.equal(listing.tools.length, 92, 'Expected 89 fixed tools, two project aliases, and one live extension command.');
   assert.equal(listing.tools.find((item) => item.name === 'cocos_project_tool_call').annotations.destructiveHint, true,
-    'The generic project-alias call can invoke approved writes and must be marked destructive.');
+    'The generic project-alias call can invoke project writes and must be marked destructive.');
   const componentPlanTool = listing.tools.find((item) => item.name === 'cocos_scene_node_add_component_plan');
   const componentCommitTool = listing.tools.find((item) => item.name === 'cocos_scene_node_add_component_commit');
   const componentReconcileTool = listing.tools.find((item) => item.name === 'cocos_scene_node_add_component_reconcile');
@@ -245,7 +245,9 @@ test('MCP discovers a project alias and routes it through CLI to the selected Cr
   const recompileCommitTool = listing.tools.find((item) => item.name === 'cocos_script_recompile_commit');
   assert.ok(recompilePlanTool, 'Script recompile plan tool was not discovered from the shared CLI catalog.');
   assert.ok(recompileCommitTool, 'Script recompile commit tool was not discovered from the shared CLI catalog.');
-  assert.equal(recompileCommitTool.annotations.destructiveHint, false);
+  assert.equal(recompileCommitTool.annotations.destructiveHint, true);
+  assert.match(recompileCommitTool.description, /without a Creator approval dialog/);
+  assert.match(recompileCommitTool.description, /Codex should assess the exact effect/);
   assert.deepEqual(recompilePlanTool.inputSchema.required, ['instanceId', 'scriptPath', 'expectedSourceSha256']);
   for (const name of ['cocos_asset_import_plan', 'cocos_asset_import_commit', 'cocos_asset_import_reconcile',
     'cocos_asset_references', 'cocos_asset_delete_plan', 'cocos_asset_delete_commit', 'cocos_asset_delete_reconcile',

@@ -20,7 +20,7 @@ test('project tool aliases inherit canonical schemas, access, approval, and regi
       commandId: 'creator.script.read' },
     { id: 'plan-script', title: 'Plan script creation', description: 'Plan a bounded script creation.',
       commandId: 'creator.script.create.plan' },
-    { id: 'create-script', title: 'Create script', description: 'Create after Creator approval.',
+    { id: 'create-script', title: 'Create script', description: 'Create on explicit invocation.',
       commandId: 'creator.script.create.commit' },
   ] }));
 

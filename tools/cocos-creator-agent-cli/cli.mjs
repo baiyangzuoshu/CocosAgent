@@ -28,7 +28,7 @@ let globalOptionError = null;
 let jsonOutput = false;
 
 const HELP_LINES = [
-  'Cocos Creator Agent CLI (Creator 2.4.15; Creator writes require a Creator-side approval dialog)',
+  'Cocos Creator Agent CLI (Creator 2.4.15; commit commands apply their reviewed plans without a Creator dialog)',
   '  --version | version',
   '  help [<command> [<subcommand>]] | help search <query>',
   '  catalog [--format json]',
@@ -57,7 +57,7 @@ const HELP_LINES = [
   '  capabilities --instance <instance-id>',
   '  creator installations [--search-root <absolute-path>]',
   '  project open --project-root <absolute-path> [--creator <Creator-install-path-or-CocosCreator.exe>] [--timeout-ms N (default 120000)] [--no-wait-ready]',
-  '  project close --instance <instance-id> [--timeout-ms N (default 30000)]',
+  '  project close --instance <instance-id> [--timeout-ms N (default 60000)]',
   '  project list [--search-root <absolute-path> ...] [--max-depth 0-8]',
   '  project clone --project-root <source> --target <new-absolute-path> [--name <project-name>]',
   '  project templates list [--creator <Creator-install-path-or-CocosCreator.exe> | --template-root <absolute-path>]',

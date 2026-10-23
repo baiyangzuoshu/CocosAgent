@@ -54,7 +54,7 @@
           "id": "prefab-source-supported-field-plan",
           "title": "Prepare a supported Prefab source patch plan",
           "purpose": "Positive: use the exact Prefab identity and source hash for an allowlisted field, without pretending to commit.",
-          "userInput": "This is an offline evaluation fixture; no Creator editor or Cocos MCP is connected. Review this captured inspection and tool contract, then write only evaluation.json as raw JSON. Do not edit serialized files or claim a patch ran. Inspection: Creator 2.4.15, project Puzzle24; Prefab UUID `prefab-6e`; sourceSha256 `sha256:prefab-a1`; metaSha256 `sha256:meta-b2`; node UUID `node-3`, path `MainMenu/StartButton`; cc.Sprite.enabled is true. The supplied contract supports `creator.prefab.source.patch.plan` for `cc.Sprite.enabled` and requires the inspected sourceSha256; commit requires Creator native approval. Prepare a review-only plan to set cc.Sprite.enabled to false. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
+          "userInput": "This is an offline evaluation fixture; no Creator editor or Cocos MCP is connected. Review this captured inspection and tool contract, then write only evaluation.json as raw JSON. Do not edit serialized files or claim a patch ran. Inspection: Creator 2.4.15, project Puzzle24; Prefab UUID `prefab-6e`; sourceSha256 `sha256:prefab-a1`; metaSha256 `sha256:meta-b2`; node UUID `node-3`, path `MainMenu/StartButton`; cc.Sprite.enabled is true. The supplied contract supports `creator.prefab.source.patch.plan` for `cc.Sprite.enabled` and requires the inspected sourceSha256; commit executes immediately when explicitly invoked; Codex should explain material Prefab-edit risks before invoking it. Prepare a review-only plan to set cc.Sprite.enabled to false. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
           "successChecklist": [
             "Selects the supported Prefab patch-plan path.",
             "Binds the plan to the exact Prefab UUID, node UUID, and inspected source hash.",
@@ -214,13 +214,13 @@
       "name": "cocos2-scene-node-operations",
       "cases": [
         {
-          "id": "scene-node-plan-awaits-native-approval",
-          "title": "Require Creator approval before committing a node plan",
-          "purpose": "Positive: inspect an exact plan receipt and retain the Creator-side approval gate.",
-          "userInput": "This is an offline evaluation fixture; no Creator editor or Cocos MCP is connected. Review this captured plan receipt only. Project `HarborDemo`, Creator 2.4.15, scene UUID `scene-2`; node UUID `node-7f92`, full path `Canvas/HUD/Score`; `creator.scene.node.set-active.plan` returned operationId `op-204`, planHash `sha256:plan-55`, before active=true, after active=false. The Creator native approval dialog has not been accepted. Is this ready to commit? Write only evaluation.json as raw JSON; do not commit or claim a mutation. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
+          "id": "scene-node-plan-ready-to-commit",
+          "title": "Review a node plan for an explicit commit",
+          "purpose": "Positive: inspect the exact plan and recognize that commit executes without a Creator dialog.",
+          "userInput": "This is an offline evaluation fixture; no Creator editor or Cocos MCP is connected. Review this captured plan receipt only. Project `HarborDemo`, Creator 2.4.15, scene UUID `scene-2`; node UUID `node-7f92`, full path `Canvas/HUD/Score`; `creator.scene.node.set-active.plan` returned operationId `op-204`, planHash `sha256:plan-55`, before active=true, after active=false. No mutation has been requested yet. Is the exact plan ready for an explicit commit? Write only evaluation.json as raw JSON; do not commit or claim a mutation. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
           "successChecklist": [
             "Binds the decision to the exact scene/node, operation ID, plan hash, and before-state.",
-            "States that native Creator approval is still required.",
+            "Recognizes that the explicit commit call executes the planned change without a Creator dialog.",
             "Does not commit or claim persistence."
           ],
           "expected": {
@@ -228,8 +228,8 @@
             "action": "observe",
             "target": "node-7f92",
             "operation": "creator.scene.node.set-active.plan",
-            "status": "awaiting_native_approval",
-            "requiredEvidence": ["op-204", "sha256:plan-55", "native approval", "active", "false"]
+            "status": "ready_to_commit",
+            "requiredEvidence": ["op-204", "sha256:plan-55", "explicit commit", "active", "false"]
           }
         },
         {

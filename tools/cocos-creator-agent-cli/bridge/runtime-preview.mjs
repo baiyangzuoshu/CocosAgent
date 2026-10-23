@@ -513,7 +513,7 @@ export function validatePreviewActions(actions) {
   });
 }
 
-function validateAssertions(assertions) {
+export function validatePreviewAssertions(assertions) {
   if (!Array.isArray(assertions) || assertions.length < 1 || assertions.length > MAX_ASSERTIONS) throw failure('PREVIEW_ASSERTIONS_INVALID');
   return assertions.map((assertion) => {
     if (!assertion || typeof assertion !== 'object') throw failure('PREVIEW_ASSERTION_INVALID');
@@ -553,7 +553,9 @@ function validateAssertions(assertions) {
       if (Object.keys(assertion).some((key) => !['type', 'path', 'componentType', 'componentProperty', 'expected'].includes(key))) throw failure('PREVIEW_ASSERTION_FIELD_INVALID');
       if (typeof assertion.path !== 'string' || !assertion.path || assertion.path.length > 240
         || assertion.path.split('/').some((part) => !part || part === '.' || part === '..')
-        || typeof assertion.componentType !== 'string' || !/^[A-Za-z_$][A-Za-z0-9_$]{0,99}$/.test(assertion.componentType)
+        || typeof assertion.componentType !== 'string'
+        || !/^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*$/.test(assertion.componentType)
+        || assertion.componentType.length > 120
         || typeof assertion.componentProperty !== 'string' || !/^[A-Za-z_$][A-Za-z0-9_$]{0,63}$/.test(assertion.componentProperty)
         || !['string', 'number', 'boolean'].includes(typeof assertion.expected)) throw failure('PREVIEW_ASSERTION_INVALID');
       return { type: assertion.type, path: assertion.path, componentType: assertion.componentType,
@@ -681,7 +683,7 @@ async function performAction(session, action) {
 export async function interactPreview(instance, input) {
   const session = await sessionFor(instance, input.previewSessionId);
   const actions = validatePreviewActions(input.actions);
-  const assertions = validateAssertions(input.assertions || []);
+  const assertions = validatePreviewAssertions(input.assertions || []);
   if (input.coverage !== undefined && typeof input.coverage !== 'boolean') throw failure('PREVIEW_COVERAGE_OPTION_INVALID');
   const collectCoverage = input.coverage === true;
   let coverageStarted = false;

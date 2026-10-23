@@ -22,6 +22,17 @@ function close(actual, expected) {
     return Number.isFinite(actual) && Number.isFinite(expected)
         && Math.abs(actual - expected) <= TRANSFORM_TOLERANCE;
 }
+function sceneDiskNumberMatches(field, actual, expected) {
+    if (!Number.isFinite(actual) || !Number.isFinite(expected)) return false;
+    if (field !== 'angle') return Math.abs(actual - expected) <= TRANSFORM_TOLERANCE;
+    const delta = ((actual - expected + 180) % 360 + 360) % 360 - 180;
+    return Math.abs(delta) <= TRANSFORM_TOLERANCE;
+}
+function sceneDiskTransformMatches(actual, expected, { allowLayoutSizeMismatch = false } = {}) {
+    if (!actual || !expected) return false;
+    return Object.keys(expected).filter((field) => !(allowLayoutSizeMismatch && ['width', 'height'].includes(field)))
+        .every((field) => sceneDiskNumberMatches(field, actual[field], expected[field]));
+}
 function resolveRef(value, records) {
     if (!value || typeof value !== 'object' || !Number.isInteger(value.__id__)
         || value.__id__ < 0 || value.__id__ >= records.length) return null;
@@ -201,16 +212,33 @@ function inspectComponentProperty(nodeRecord, records, sceneRootUuid, sceneUuid,
         || !selector.serializedClassId || selector.serializedClassId.length > 128
         || typeof selector.property !== 'string' || !/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(selector.property))
         return fail('SCENE_COMPONENT_DISK_SELECTOR_INVALID');
+    if (selector.serializedProperty !== undefined && (typeof selector.serializedProperty !== 'string'
+        || !/^[A-Za-z_$][A-Za-z0-9_$]{0,63}$/.test(selector.serializedProperty)))
+        return fail('SCENE_COMPONENT_DISK_SELECTOR_INVALID');
+    if (selector.serializedPropertyCandidates !== undefined && (!Array.isArray(selector.serializedPropertyCandidates)
+        || selector.serializedPropertyCandidates.length < 1 || selector.serializedPropertyCandidates.length > 4
+        || selector.serializedPropertyCandidates.some((property) => typeof property !== 'string'
+            || !/^[A-Za-z_$][A-Za-z0-9_$]{0,63}$/.test(property))))
+        return fail('SCENE_COMPONENT_DISK_SELECTOR_INVALID');
+    if (selector.defaultValue !== undefined && !validComponentDiskValue(selector.defaultValue))
+        return fail('SCENE_COMPONENT_DISK_SELECTOR_INVALID');
     const matches = Array.isArray(nodeRecord._components) ? nodeRecord._components.map((reference) => resolveRef(reference, records))
         .filter((record) => record && record._id === selector.componentInstanceId
             && record.__type__ === selector.serializedClassId) : [];
     if (matches.length !== 1 || records.filter((record) => record._id === selector.componentInstanceId).length !== 1
         || resolveRef(matches[0].node, records) !== nodeRecord) return fail('SCENE_COMPONENT_SERIALIZED_IDENTITY_MISMATCH');
-    if (!own(matches[0], selector.property)) return fail('SCENE_COMPONENT_SERIALIZED_PROPERTY_MISSING');
-    const value = readComponentDiskValue(matches[0][selector.property], records, sceneRootUuid, sceneUuid);
+    const candidates = selector.serializedProperty ? [selector.serializedProperty]
+        : selector.serializedPropertyCandidates || [selector.property];
+    const serializedProperty = candidates.find((property) => own(matches[0], property));
+    if (!serializedProperty && selector.defaultValue === undefined)
+        return fail('SCENE_COMPONENT_SERIALIZED_PROPERTY_MISSING');
+    const value = serializedProperty
+        ? readComponentDiskValue(matches[0][serializedProperty], records, sceneRootUuid, sceneUuid)
+        : selector.defaultValue;
     if (!validComponentDiskValue(value)) return fail('SCENE_COMPONENT_SERIALIZED_VALUE_UNSUPPORTED');
     return { verified: true, componentProperty: { componentInstanceId: selector.componentInstanceId,
-        serializedClassId: selector.serializedClassId, property: selector.property, value } };
+        serializedClassId: selector.serializedClassId, property: selector.property,
+        ...(serializedProperty ? { serializedProperty } : { isDefaultOmitted: true }), value } };
 }
 
 function inspectButtonEvents(nodeRecord, records) {
@@ -444,16 +472,21 @@ function inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid, sceneAssetR
         const found = nodeRows.get(expected.uuid);
         if (!observed || !found || observed.uuid !== expected.uuid || observed.name !== expected.name
             || found.record._name !== expected.name) return fail('SCENE_COMPOSITION_NODE_MISMATCH', { nodeId });
-        const expectedPrefabUuid = expected.prefabUuid || null;
+        const expectedPrefabUuid = expectedState && expectedState.prefabUuid || expected.prefabUuid || null;
         if ((observed.prefabUuid || null) !== expectedPrefabUuid) return fail('SCENE_COMPOSITION_PREFAB_READBACK_MISMATCH', { nodeId });
         if (expectedPrefabUuid) {
             const prefabInfo = resolveRef(found.record._prefab, records);
             const prefabAsset = prefabInfo && prefabInfo.asset;
             const prefabRoot = prefabInfo && resolveRef(prefabInfo.root, records);
+            const expectedPrefabRootUuid = expectedState && expectedState.prefabRootUuid || expected.uuid;
+            const expectedPrefabRoot = nodeRows.get(expectedPrefabRootUuid);
             if (!prefabInfo || prefabInfo.__type__ !== 'cc.PrefabInfo' || !prefabAsset
-                || prefabAsset.__uuid__ !== expectedPrefabUuid || prefabRoot !== found.record)
-                return fail('SCENE_COMPOSITION_PREFAB_LINK_MISMATCH', { nodeId, expectedPrefabUuid });
-            verifiedPrefabInstanceCount += 1;
+                || prefabAsset.__uuid__ !== expectedPrefabUuid || !expectedPrefabRoot || prefabRoot !== expectedPrefabRoot.record)
+                return fail('SCENE_COMPOSITION_PREFAB_LINK_MISMATCH', { nodeId, expectedPrefabUuid,
+                    expectedPrefabRootUuid });
+            const prefabInstanceRoot = expectedState && typeof expectedState.prefabInstanceRoot === 'boolean'
+                ? expectedState.prefabInstanceRoot : expectedPrefabRootUuid === expected.uuid;
+            if (prefabInstanceRoot) verifiedPrefabInstanceCount += 1;
         } else if (own(found.record, '_prefab') && found.record._prefab != null)
             return fail('SCENE_COMPOSITION_UNEXPECTED_PREFAB_LINK', { nodeId });
         const parentRecord = resolveRef(found.record._parent, records);
@@ -463,7 +496,7 @@ function inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid, sceneAssetR
             : expected.parentRef.slice('uuid:'.length);
         if (!parentRecord || parentUuid !== expectedParentUuid || observed.parentUuid !== expectedParentUuid)
             return fail('SCENE_COMPOSITION_PARENT_MISMATCH', { nodeId });
-        if (!expectedPrefabUuid && found.record._active !== true)
+        if ((!expectedPrefabUuid || (expectedState && expectedState.prefabOverride)) && found.record._active !== true)
             return fail('SCENE_COMPOSITION_ACTIVE_STATE_MISMATCH', { nodeId });
 
         const transform = expectedState && expectedState.transform;
@@ -486,7 +519,8 @@ function inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid, sceneAssetR
 
         const expectedComponents = plan.request.components.filter((component) => component.nodeRef === `new:${nodeId}`);
         const componentRefs = found.record._components;
-        if (!Array.isArray(componentRefs) || (!expectedPrefabUuid && componentRefs.length !== expectedComponents.length))
+        if (!Array.isArray(componentRefs) || ((!expectedPrefabUuid || (expectedState && expectedState.prefabOverride))
+            && componentRefs.length !== expectedComponents.length))
             return fail('SCENE_COMPOSITION_COMPONENT_COUNT_MISMATCH', { nodeId });
         const rawComponents = componentRefs.map((reference) => resolveRef(reference, records));
         if (rawComponents.some((component) => !component))
@@ -503,9 +537,18 @@ function inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid, sceneAssetR
                 { componentId: expectedComponent.id, serializedClassId: classId });
             const rawComponent = matches[0];
             for (const property of expectedComponent.properties) {
-                if (!own(rawComponent, property.name)) return fail('SCENE_COMPOSITION_PROPERTY_MISSING',
+                const providedCandidates = observedComponent.serializedPropertyCandidates
+                    && observedComponent.serializedPropertyCandidates[property.name];
+                const candidates = Array.isArray(providedCandidates) ? providedCandidates
+                    : [property.name, `_N$${property.name}`, `_${property.name}`];
+                if (candidates.length < 1 || candidates.length > 4 || candidates.some((candidate) => typeof candidate !== 'string'
+                    || !/^[A-Za-z_$][A-Za-z0-9_$]{0,63}$/.test(candidate)))
+                    return fail('SCENE_COMPOSITION_PROPERTY_SCHEMA_INVALID',
+                        { componentId: expectedComponent.id, property: property.name });
+                const serializedProperty = candidates.find((candidate) => own(rawComponent, candidate));
+                if (!serializedProperty) return fail('SCENE_COMPOSITION_PROPERTY_MISSING',
                     { componentId: expectedComponent.id, property: property.name });
-                const actual = rawComponent[property.name];
+                const actual = rawComponent[serializedProperty];
                 const value = property.value;
                 if (value && typeof value === 'object' && typeof value.assetUuid === 'string') {
                     if (!actual || typeof actual !== 'object' || actual.__uuid__ !== value.assetUuid)
@@ -562,4 +605,4 @@ function inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid, sceneAssetR
 }
 
 module.exports = { inspectSceneAssetIdentity, inspectSceneComposition, inspectSavedSceneNode,
-    componentValueForDisk, validComponentDiskValue };
+    componentValueForDisk, validComponentDiskValue, sceneDiskTransformMatches };

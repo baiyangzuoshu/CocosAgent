@@ -5,8 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import test from 'node:test';
-import { closeCreatorProject, openCreatorProject, requestCreatorProjectClose, resolveCreatorExecutable,
-  runCreatorWorkflow } from '../creator-workflows.mjs';
+import { closeCreatorProject, inspectCreatorProcess, openCreatorProject, requestCreatorApplicationQuit,
+  requestCreatorProjectClose, resolveCreatorExecutable, runCreatorWorkflow } from '../creator-workflows.mjs';
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-creator-workflow-'));
@@ -299,6 +299,83 @@ test('project close invokes the exact live instance menu action and confirms its
   assert.equal(result.closeRoute, 'file.open-project');
 });
 
+test('project close falls back to a graceful exact-PID quit when the project menu is unavailable', async () => {
+  const instanceId = '12345678-1234-4234-8234-123456789012';
+  const processStates = [{ running: true, creator: true }, { running: false, creator: false }];
+  let inventoryReads = 0;
+  let quitPid = null;
+  let disconnectedInstance = null;
+  const result = await closeCreatorProject({ instanceId, timeoutMs: 1000 }, {
+    platform: 'darwin',
+    listInstancesImpl: async () => ({ instances: [{ instanceId, projectName: 'TestProject',
+      projectRoot: '/projects/TestProject', creatorVersion: '2.4.15', processId: 4321, connected: inventoryReads++ === 0 }] }),
+    requestCloseImpl() { throw Object.assign(new Error('menu item unavailable'), { code: 'CREATOR_CLOSE_MENU_ITEM_NOT_FOUND' }); },
+    requestQuitImpl(processId) { quitPid = processId; return { requested: true }; },
+    disconnectInstanceImpl: async (closedInstanceId, processId) => {
+      disconnectedInstance = { instanceId: closedInstanceId, processId };
+      return { disconnected: true };
+    },
+    inspectProcessImpl: async (processId) => {
+      assert.equal(processId, 4321);
+      return processStates.shift() || { running: false, creator: false };
+    },
+    nowImpl: () => 0,
+  });
+  assert.equal(quitPid, 4321);
+  assert.deepEqual(disconnectedInstance, { instanceId, processId: 4321 });
+  assert.equal(result.success, true);
+  assert.equal(result.closed, true);
+  assert.equal(result.closeRoute, 'application.quit-fallback');
+  assert.equal(result.processExited, true);
+  assert.equal(result.bridgeConnected, false);
+});
+
+test('project close does not report success when the process exits but its bridge session remains connected', async () => {
+  const instanceId = '12345678-1234-4234-8234-123456789012';
+  let now = 0;
+  const result = await closeCreatorProject({ instanceId, timeoutMs: 1000 }, {
+    platform: 'darwin',
+    listInstancesImpl: async () => ({ instances: [{ instanceId, projectName: 'TestProject',
+      projectRoot: '/projects/TestProject', creatorVersion: '2.4.15', processId: 4321, connected: true }] }),
+    requestCloseImpl() { throw Object.assign(new Error('menu item unavailable'), { code: 'CREATOR_CLOSE_MENU_ITEM_NOT_FOUND' }); },
+    requestQuitImpl() { return { requested: true }; },
+    disconnectInstanceImpl: async () => ({ disconnected: true }),
+    inspectProcessImpl: async () => ({ running: false, creator: false }),
+    diagnoseModalImpl: () => ({ status: 'unavailable', reason: 'MODAL_DIAGNOSTIC_FAILED' }),
+    nowImpl: () => now,
+    sleepImpl: async (duration) => { now += duration; },
+  });
+  assert.equal(result.success, false);
+  assert.equal(result.closed, false);
+  assert.equal(result.processExited, true);
+  assert.equal(result.bridgeConnected, true);
+  assert.match(result.possibleBlocker, /bridge session still reports connected/);
+});
+
+test('project close only cleans up a bridge instance after its exact Creator process exits', async () => {
+  const instanceId = '12345678-1234-4234-8234-123456789012';
+  let now = 0;
+  let disconnectCalls = 0;
+  const result = await closeCreatorProject({ instanceId, timeoutMs: 1000 }, {
+    platform: 'darwin',
+    listInstancesImpl: async () => ({ instances: [{ instanceId, projectName: 'TestProject',
+      projectRoot: '/projects/TestProject', creatorVersion: '2.4.15', processId: 4321, connected: true }] }),
+    requestCloseImpl() { throw Object.assign(new Error('menu item unavailable'), { code: 'CREATOR_CLOSE_MENU_ITEM_NOT_FOUND' }); },
+    requestQuitImpl() { return { requested: true }; },
+    inspectProcessImpl: async (processId) => {
+      assert.equal(processId, 4321);
+      return { running: true, creator: true };
+    },
+    disconnectInstanceImpl: async () => { disconnectCalls += 1; return { disconnected: true }; },
+    diagnoseModalImpl: () => ({ status: 'unavailable', reason: 'MODAL_DIAGNOSTIC_FAILED' }),
+    nowImpl: () => now,
+    sleepImpl: async (duration) => { now += duration; },
+  });
+  assert.equal(disconnectCalls, 0);
+  assert.equal(result.success, false);
+  assert.equal(result.processExited, false);
+});
+
 test('project close invokes the exact Windows Creator menu command for one PID and confirms disconnect', async () => {
   const instanceId = '12345678-1234-4234-8234-123456789012';
   let inventoryReads = 0;
@@ -338,6 +415,106 @@ test('project close timeout reports the modal prompt and never force-kills Creat
   assert.match(result.possibleBlocker, /save or close prompt/);
 });
 
+test('project close gracefully quits an exact Creator process when its authenticated extension is version-rejected', async () => {
+  const { projectRoot } = fixture();
+  const instanceId = '12345678-1234-4234-8234-123456789012';
+  const rejectedInstance = { instanceId, reportedProjectRoot: projectRoot, creatorVersion: '2.4.15',
+    extensionVersion: '0.8.30', connected: false, processId: 4321,
+    reasons: ['EXTENSION_VERSION_MISMATCH', 'COMMAND_CONTRACT_MISMATCH'] };
+  let inspectCalls = 0;
+  let quitRequest = null;
+  let now = 0;
+  const result = await closeCreatorProject({ instanceId, timeoutMs: 1000 }, {
+    platform: 'darwin', listInstancesImpl: async () => ({ instances: [], rejectedInstances: [rejectedInstance] }),
+    inspectProcessImpl(processId, options) {
+      assert.equal(processId, 4321);
+      assert.equal(options.platform, 'darwin');
+      inspectCalls += 1;
+      return inspectCalls === 1
+        ? { running: true, creator: true, creatorVersion: '2.4.15', executable: '/Applications/CocosCreator.app/Contents/MacOS/CocosCreator' }
+        : { running: false, creator: false, executable: null };
+    },
+    requestQuitImpl(processId, options) { quitRequest = { processId, options }; return { requested: true }; },
+    nowImpl: () => now,
+    sleepImpl: async (duration) => { now += duration; },
+  });
+  assert.deepEqual(quitRequest, { processId: 4321, options: { platform: 'darwin' } });
+  assert.equal(result.success, true);
+  assert.equal(result.closed, true);
+  assert.equal(result.staleExtension, true);
+  assert.equal(result.extensionVersion, '0.8.30');
+  assert.equal(result.closeRoute, 'application.quit');
+});
+
+test('project close treats an already-exited stale Creator process as closed without sending another quit request', async () => {
+  const { projectRoot } = fixture();
+  const instanceId = '12345678-1234-4234-8234-123456789012';
+  const rejectedInstance = { instanceId, reportedProjectRoot: projectRoot, creatorVersion: '2.4.15',
+    extensionVersion: '0.8.30', connected: false, processId: 4321, reasons: ['EXTENSION_VERSION_MISMATCH'] };
+  let quitRequests = 0;
+  const result = await closeCreatorProject({ instanceId }, {
+    platform: 'darwin', listInstancesImpl: async () => ({ instances: [], rejectedInstances: [rejectedInstance] }),
+    inspectProcessImpl: () => ({ running: false, creator: false, executable: null }),
+    requestQuitImpl() { quitRequests += 1; },
+  });
+  assert.equal(result.success, true);
+  assert.equal(result.closed, true);
+  assert.equal(result.alreadyExited, true);
+  assert.equal(result.closeRoute, 'application.quit');
+  assert.equal(quitRequests, 0);
+});
+
+test('project close rejects stale records that do not identify an exact Creator 2.4.15 project process', async () => {
+  const { projectRoot } = fixture();
+  const instanceId = '12345678-1234-4234-8234-123456789012';
+  let quitRequests = 0;
+  for (const rejectedInstance of [
+    { instanceId, reportedProjectRoot: projectRoot, creatorVersion: '3.8.7', extensionVersion: '0.8.30',
+      connected: false, processId: 4321, reasons: ['CREATOR_VERSION_MISMATCH'] },
+    { instanceId, reportedProjectRoot: projectRoot, creatorVersion: '2.4.15', extensionVersion: '0.8.30',
+      connected: false, processId: 4321, reasons: ['CAPABILITIES_INVALID'] },
+    { instanceId, reportedProjectRoot: '/missing/project', creatorVersion: '2.4.15', extensionVersion: '0.8.30',
+      connected: false, processId: 4321, reasons: ['EXTENSION_VERSION_MISMATCH'] },
+  ]) {
+    await assert.rejects(closeCreatorProject({ instanceId }, {
+      platform: 'darwin', listInstancesImpl: async () => ({ instances: [], rejectedInstances: [rejectedInstance] }),
+      inspectProcessImpl: () => ({ running: true, creator: true, creatorVersion: '2.4.15' }),
+      requestQuitImpl() { quitRequests += 1; },
+    }), { code: 'CREATOR_CLOSE_INSTANCE_NOT_CONNECTED' });
+  }
+  const staleInstance = { instanceId, reportedProjectRoot: projectRoot, creatorVersion: '2.4.15',
+    extensionVersion: '0.8.30', connected: false, processId: 4321, reasons: ['EXTENSION_VERSION_MISMATCH'] };
+  await assert.rejects(closeCreatorProject({ instanceId }, {
+    platform: 'darwin', listInstancesImpl: async () => ({ instances: [], rejectedInstances: [staleInstance] }),
+    inspectProcessImpl: () => ({ running: true, creator: false, executable: '/Applications/Other.app/Contents/MacOS/Other' }),
+    requestQuitImpl() { quitRequests += 1; },
+  }), { code: 'CREATOR_CLOSE_PROCESS_IDENTITY_INVALID' });
+  assert.equal(quitRequests, 0);
+});
+
+test('project close leaves a save-blocked stale Creator process open and reports the prompt without force-killing', async () => {
+  const { projectRoot } = fixture();
+  const instanceId = '12345678-1234-4234-8234-123456789012';
+  const rejectedInstance = { instanceId, reportedProjectRoot: projectRoot, creatorVersion: '2.4.15',
+    extensionVersion: '0.8.30', connected: false, processId: 4321, reasons: ['EXTENSION_VERSION_MISMATCH'] };
+  let now = 0;
+  let quitRequests = 0;
+  const result = await closeCreatorProject({ instanceId, timeoutMs: 1000 }, {
+    platform: 'darwin', listInstancesImpl: async () => ({ instances: [], rejectedInstances: [rejectedInstance] }),
+    inspectProcessImpl: () => ({ running: true, creator: true, creatorVersion: '2.4.15' }),
+    requestQuitImpl() { quitRequests += 1; return { requested: true }; },
+    diagnoseModalImpl: (processId) => ({ status: 'detected', dialogCount: processId === 4321 ? 1 : 0 }),
+    nowImpl: () => now,
+    sleepImpl: async (duration) => { now += duration; },
+  });
+  assert.equal(quitRequests, 1);
+  assert.equal(result.success, false);
+  assert.equal(result.closed, false);
+  assert.equal(result.closeRoute, 'application.quit');
+  assert.deepEqual(result.modalDiagnosis, { status: 'detected', dialogCount: 1 });
+  assert.match(result.possibleBlocker, /save or close prompt/);
+});
+
 test('project close refuses unsupported platforms and disconnected instances before menu dispatch', async () => {
   let closeRequests = 0;
   await assert.rejects(closeCreatorProject({ instanceId: '12345678-1234-4234-8234-123456789012' }, {
@@ -368,6 +545,12 @@ test('project close requests only Creator’s normal Open Project menu item for 
   assert.equal(invocation.options.timeout, 5000);
 });
 
+test('macOS project-close menu diagnostics preserve the specific missing-menu error code', () => {
+  assert.throws(() => requestCreatorProjectClose(4321, { platform: 'darwin', spawnSyncImpl() {
+    return { status: 1, stdout: '', stderr: '877:925: execution error: CREATOR_CLOSE_OPEN_PROJECT_MENU_ITEM_NOT_FOUND (-2700)' };
+  } }), { code: 'CREATOR_CLOSE_MENU_ITEM_NOT_FOUND' });
+});
+
 test('project close surfaces missing Accessibility permission without retrying another route', () => {
   let invocationCount = 0;
   assert.throws(() => requestCreatorProjectClose(4321, { platform: 'darwin', spawnSyncImpl() {
@@ -375,6 +558,61 @@ test('project close surfaces missing Accessibility permission without retrying a
     return { status: 1, stdout: '', stderr: 'Not authorized to send Apple events to System Events.' };
   } }), { code: 'CREATOR_CLOSE_ACCESSIBILITY_PERMISSION_REQUIRED' });
   assert.equal(invocationCount, 1);
+});
+
+test('stale-project graceful quit targets only the selected PID and sends the normal macOS quit shortcut', () => {
+  let invocation;
+  const result = requestCreatorApplicationQuit(4321, { platform: 'darwin', spawnSyncImpl(command, args, options) {
+    invocation = { command, args, options };
+    return { status: 0, stdout: 'requested\n', stderr: '' };
+  } });
+  assert.deepEqual(result, { requested: true });
+  assert.equal(invocation.command, '/usr/bin/osascript');
+  assert.equal(invocation.args.at(-1), '4321');
+  assert.match(invocation.args[1], /whose unix id is targetPid/);
+  assert.match(invocation.args[1], /keystroke "q" using \{command down\}/);
+});
+
+test('stale-project graceful quit asks the exact Windows process to close its main window without force-killing', () => {
+  let invocation;
+  const result = requestCreatorApplicationQuit(4321, { platform: 'win32', spawnSyncImpl(command, args, options) {
+    invocation = { command, args, options };
+    return { status: 0, stdout: 'requested\n', stderr: '' };
+  } });
+  assert.deepEqual(result, { requested: true });
+  assert.equal(invocation.command, 'powershell.exe');
+  assert.deepEqual(invocation.args.slice(0, 2), ['-NoProfile', '-NonInteractive']);
+  assert.match(invocation.args[3], /Get-Process -Id 4321/);
+  assert.match(invocation.args[3], /CloseMainWindow\(\)/);
+  assert.doesNotMatch(invocation.args[3], /taskkill|Stop-Process|TerminateProcess/);
+});
+
+test('Creator process inspection resolves an exact 2.4.15 app executable and recognizes an exited PID', () => {
+  const state = fixture();
+  const active = inspectCreatorProcess(4321, { platform: 'darwin', spawnSyncImpl(command, args) {
+    assert.equal(command, '/bin/ps');
+    assert.deepEqual(args, ['-p', '4321', '-o', 'comm=']);
+    return { status: 0, stdout: `${path.join(state.appRoot, 'Contents/MacOS/CocosCreator')}\n`, stderr: '' };
+  }, processExistsImpl() {} });
+  assert.equal(active.running, true);
+  assert.equal(active.creator, true);
+  assert.equal(active.creatorVersion, '2.4.15');
+
+  for (const stderr of ['ps: pid 4321: No such process\n', '']) {
+    let processChecks = 0;
+    const exited = inspectCreatorProcess(4321, { platform: 'darwin', spawnSyncImpl() {
+      return { status: 1, stdout: '', stderr };
+    }, processExistsImpl() {
+      processChecks += 1;
+      if (processChecks === 2) throw Object.assign(new Error('no such process'), { code: 'ESRCH' });
+    } });
+    assert.deepEqual(exited, { running: false, creator: false, executable: null });
+    assert.equal(processChecks, 2);
+  }
+
+  assert.throws(() => inspectCreatorProcess(4321, { platform: 'darwin', spawnSyncImpl() {
+    return { status: 1, stdout: '', stderr: '' };
+  }, processExistsImpl() {} }), { code: 'CREATOR_CLOSE_PROCESS_INSPECTION_FAILED' });
 });
 
 test('Windows project close sends WM_COMMAND only for the exact Open Project menu item', () => {

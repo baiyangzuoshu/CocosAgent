@@ -15,7 +15,7 @@ Configure Cocos Creator 2.4.x Widget, anchors, alignment, and screen-size adapta
 2. Inspect the relevant source, asset, scene or runtime evidence and record exact identities/current state before proposing a change. For a built-in UI node, use `creator.scene.ui.inspect` to read its typed public component fields and exact component instance IDs.
 3. Confirm Canvas design resolution, fit-width/fit-height settings, target orientation, and safe-area requirements.
 4. Inspect parent dimensions, anchor points, Widget targets, and existing responsive patterns.
-5. Apply explicit layout constraints rather than guessed coordinates when the UI must adapt. Use the approved component-property operation for Canvas, Widget, and Layout fields; use node transforms only for intentional offsets/sizes.
+5. Apply explicit layout constraints rather than guessed coordinates when the UI must adapt. Use the component-property plan/commit operation for Canvas, Widget, and Layout fields; use node transforms only for intentional offsets/sizes.
 6. In the attached preview, call `creator.preview.interact` with `{ "type": "ui-refresh", "path": "<exact-node-path>", "componentType": "cc.Widget" | "cc.Layout" }` to invoke only the public `updateAlignment()` or `updateLayout()` method on that exact node. Inspect its before/after geometry receipt, then assert child `x`/`y` and dimensions with `node-property` assertions.
 7. Verify in Creator preview at each requested resolution/orientation; one screenshot at one size does not prove responsive layout.
 

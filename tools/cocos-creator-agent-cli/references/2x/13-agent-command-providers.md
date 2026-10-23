@@ -34,7 +34,7 @@ Declare a bounded command list in the provider package manifest:
 }
 ```
 
-`access` is `read`, `plan`, `write`, or `control`. `write` and `control` declarations must set `"approval": true`; `read` and `plan` commands must not request approval. The schema subset accepts object, array, string, number, integer, and boolean fields, with bounded properties/items, enums and numeric/string limits. It rejects `$ref`, regex, arbitrary JSON, unknown schema keys, prototype-related property names, and open-ended object properties. Runtime arguments are checked against that schema in CLI and again in the Creator Agent extension.
+`access` is `read`, `plan`, `write`, or `control`. `write` and `control` declarations must set `"approval": true` as an explicit side-effect declaration; `read` and `plan` commands must not set it. The flag does not open a Creator dialog. Write/control calls execute immediately, and Codex assesses their declared effects and informs the user about material risks. The schema subset accepts object, array, string, number, integer, and boolean fields, with bounded properties/items, enums and numeric/string limits. It rejects `$ref`, regex, arbitrary JSON, unknown schema keys, prototype-related property names, and open-ended object properties. Runtime arguments are checked against that schema in CLI and again in the Creator Agent extension.
 
 ## Main-process IPC
 
@@ -97,8 +97,8 @@ cocos-creator-agent extension command call --instance <id> --provider sample-ass
   --command inspect-assets --fingerprint <sha256> --input '{"query":"icon"}'
 ```
 
-The MCP server discovers online project providers during `tools/list`, creates project-scoped names, and rechecks the instance path and provider fingerprint before call. Tool descriptions do not import project-provided text. Every `write` or `control` invocation shows a native Creator approval dialog with the provider, declared action, bounded arguments and project identity. The approved action is rechecked after the dialog and is refused if the extension manifest or provider contract changed.
+The MCP server discovers online project providers during `tools/list`, creates project-scoped names, and rechecks the instance path and provider fingerprint before call. Tool descriptions do not import project-provided text. Every `write` or `control` invocation executes immediately without a Creator dialog. Its MCP tool is marked destructive; Codex assesses the declared action and bounded arguments, informs the user about material risks, and invokes it only when authorized by the task. The action is rechecked before execution and refused if the extension manifest or provider contract changed.
 
 Creator extensions execute code in the editor process. This contract does not sandbox a provider or prove its declared `read`/`write` behavior; install and invoke only extensions you trust. Write/control tasks are never automatically replayed. If interrupted, the returned recovery guidance requires manual review unless the provider exposes a separately declared read/reconcile command.
 
-The live Creator 2.4.15 handshake, approval dialog and provider command execution remain pending editor acceptance. Unit tests of the schema validator or MCP adapter do not prove Creator IPC behavior.
+The live Creator 2.4.15 handshake and provider command execution remain pending editor acceptance. Unit tests of the schema validator or MCP adapter do not prove Creator IPC behavior.

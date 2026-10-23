@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { inspectSceneAssetIdentity, inspectSceneComposition, inspectSavedSceneNode, componentValueForDisk,
-  validComponentDiskValue } = require('../creator-extension/scene-persistence.cjs');
+  validComponentDiskValue, sceneDiskTransformMatches } = require('../creator-extension/scene-persistence.cjs');
 
 const sceneUuid = '2c12110c-6f11-4a89-bcd4-1941dc757ca4';
 const sceneRootUuid = '4b02b1e4-d163-47e2-91ad-2da0193a3907';
@@ -60,6 +60,15 @@ test('scene asset identity keeps the scene root UUID separate from the AssetDB m
   assert.deepEqual(inspectSceneAssetIdentity({ ...source, sceneAssetRow }), {
     verified: true, sceneUuid, sceneAssetUuid, sceneRootUuid, sceneUrl: sceneAssetRow.url,
   });
+});
+
+test('layout-sensitive Label edits tolerate Creator-computed size changes but still bind stable transforms', () => {
+  const saved = { x: 0, y: -40, z: 0, angle: 0, scaleX: 1, scaleY: 1,
+    width: 80, height: 30, anchorX: 0.5, anchorY: 0.5 };
+  const live = { ...saved, width: 346.84, height: 50.4 };
+  assert.equal(sceneDiskTransformMatches(live, saved), false);
+  assert.equal(sceneDiskTransformMatches(live, saved, { allowLayoutSizeMismatch: true }), true);
+  assert.equal(sceneDiskTransformMatches({ ...live, x: 1 }, saved, { allowLayoutSizeMismatch: true }), false);
 });
 
 test('saved scene node inspection resolves exact UUID, hierarchy, active state, and serialized transform', () => {
@@ -134,6 +143,84 @@ test('saved component properties bind exact instance IDs and decode all supporte
   duplicates.push({ __type__: handlerClassId, _id: 'another-instance', node: { __id__: 2 }, state: 99 });
   exact.sceneBytes = Buffer.from(JSON.stringify(duplicates));
   assert.equal(inspectSavedSceneNode({ ...exact, sceneUuid, sceneAssetRow, nodeUuid }).componentProperty.value, 10);
+});
+
+test('saved component properties resolve a public field to an exact Creator backing-property alias', () => {
+  const source = fixture();
+  const records = JSON.parse(source.sceneBytes.toString('utf8'));
+  Object.assign(records[3], { _id: 'button-instance', node: { __id__: 2 } });
+  Object.assign(records[4], { _id: 'handler-instance', node: { __id__: 2 }, _N$state: 7 });
+  const aliasedSource = { ...source, sceneBytes: Buffer.from(JSON.stringify(records)) };
+  const inspected = inspectSavedSceneNode({ ...aliasedSource, sceneUuid, sceneAssetRow, nodeUuid,
+    componentProperty: { serializedClassId: handlerClassId, componentInstanceId: 'handler-instance',
+      property: 'state', serializedPropertyCandidates: ['state', '_N$state', '_state'] } });
+  assert.equal(inspected.verified, true);
+  assert.equal(inspected.componentProperty.property, 'state');
+  assert.equal(inspected.componentProperty.serializedProperty, '_N$state');
+  assert.equal(inspected.componentProperty.value, 7);
+
+  const wrong = inspectSavedSceneNode({ ...aliasedSource, sceneUuid, sceneAssetRow, nodeUuid,
+    componentProperty: { serializedClassId: handlerClassId, componentInstanceId: 'handler-instance',
+      property: 'state', serializedProperty: '_state' } });
+  assert.equal(wrong.verified, false);
+  assert.equal(wrong.reason, 'SCENE_COMPONENT_SERIALIZED_PROPERTY_MISSING');
+});
+
+test('saved Widget alignment properties read the exact serialized align-flags bitfield', () => {
+  const source = fixture();
+  const records = JSON.parse(source.sceneBytes.toString('utf8'));
+  records[2]._components = [{ __id__: 3 }];
+  records[3] = { __type__: 'cc.Widget', _id: 'widget-instance', node: { __id__: 2 }, _alignFlags: 45 };
+  source.sceneBytes = Buffer.from(JSON.stringify(records));
+
+  const inspected = inspectSavedSceneNode({ ...source, sceneUuid, sceneAssetRow, nodeUuid,
+    componentProperty: { serializedClassId: 'cc.Widget', componentInstanceId: 'widget-instance',
+      property: 'isAlignLeft', serializedPropertyCandidates: ['_alignFlags'] } });
+  assert.equal(inspected.verified, true);
+  assert.deepEqual(inspected.componentProperty, { componentInstanceId: 'widget-instance',
+    serializedClassId: 'cc.Widget', property: 'isAlignLeft', serializedProperty: '_alignFlags', value: 45 });
+});
+
+test('saved Layout type and resize properties read their exact Creator 2.4 backing fields', () => {
+  const source = fixture();
+  const records = JSON.parse(source.sceneBytes.toString('utf8'));
+  records[2]._components = [{ __id__: 3 }];
+  records[3] = { __type__: 'cc.Layout', _id: 'layout-instance', node: { __id__: 2 },
+    _N$layoutType: 2, _resize: 1 };
+  source.sceneBytes = Buffer.from(JSON.stringify(records));
+
+  const type = inspectSavedSceneNode({ ...source, sceneUuid, sceneAssetRow, nodeUuid,
+    componentProperty: { serializedClassId: 'cc.Layout', componentInstanceId: 'layout-instance',
+      property: 'type', serializedPropertyCandidates: ['_N$layoutType'] } });
+  assert.equal(type.verified, true);
+  assert.deepEqual(type.componentProperty, { componentInstanceId: 'layout-instance',
+    serializedClassId: 'cc.Layout', property: 'type', serializedProperty: '_N$layoutType', value: 2 });
+
+  const resize = inspectSavedSceneNode({ ...source, sceneUuid, sceneAssetRow, nodeUuid,
+    componentProperty: { serializedClassId: 'cc.Layout', componentInstanceId: 'layout-instance',
+      property: 'resizeMode', serializedPropertyCandidates: ['_resize'] } });
+  assert.equal(resize.verified, true);
+  assert.deepEqual(resize.componentProperty, { componentInstanceId: 'layout-instance',
+    serializedClassId: 'cc.Layout', property: 'resizeMode', serializedProperty: '_resize', value: 1 });
+});
+
+test('saved component inspection accepts an omitted field only when its declared default is supplied', () => {
+  const source = propertyFixture(1);
+  const records = JSON.parse(source.sceneBytes.toString('utf8'));
+  delete records[4].state;
+  const omitted = { ...source, sceneBytes: Buffer.from(JSON.stringify(records)) };
+  const selector = { serializedClassId: handlerClassId, componentInstanceId: 'handler-instance',
+    property: 'state', serializedPropertyCandidates: ['state', '_N$state'], defaultValue: { kind: 'array', items: [] } };
+  const inspected = inspectSavedSceneNode({ ...omitted, sceneUuid, sceneAssetRow, nodeUuid, componentProperty: selector });
+  assert.equal(inspected.verified, true);
+  assert.deepEqual(inspected.componentProperty, { componentInstanceId: 'handler-instance',
+    serializedClassId: handlerClassId, property: 'state', isDefaultOmitted: true,
+    value: { kind: 'array', items: [] } });
+
+  const withoutDefault = inspectSavedSceneNode({ ...omitted, sceneUuid, sceneAssetRow, nodeUuid,
+    componentProperty: { ...selector, defaultValue: undefined } });
+  assert.equal(withoutDefault.verified, false);
+  assert.equal(withoutDefault.reason, 'SCENE_COMPONENT_SERIALIZED_PROPERTY_MISSING');
 });
 
 test('saved component properties reject wrong identity, missing fields, unresolved references, and arbitrary objects', () => {
@@ -236,6 +323,64 @@ test('persisted scene verification matches nodes, transforms, resource UUIDs, co
   const result = inspectSceneComposition({ ...source, sceneUuid, sceneAssetRow });
   assert.deepEqual(result, { verified: true, sceneUuid, sceneUrl: sceneAssetRow.url,
     nodeCount: 1, componentCount: 2, buttonEventCount: 1, prefabInstanceCount: 0 });
+});
+
+test('persisted scene composition verifies a new Prefab instance child against its actual Prefab root', () => {
+  const prefabUuid = 'f477dd52-5a0e-46c1-9810-ea8c2b2d7d9e';
+  const prefabRootUuid = '375b8797-7a23-4f6a-95ce-e9b362e5a8c6';
+  const childUuid = 'b9f3f5da-9c25-48d8-b3bb-84bc849c75ee';
+  const transform = { x: 10, y: 15, z: 0, scaleX: 1, scaleY: 1, angle: 0, width: 40, height: 20 };
+  const request = { sceneUuid, nodes: [{ id: 'override', uuid: childUuid, name: 'OverrideChild',
+    parentRef: `uuid:${prefabRootUuid}`, transform }], components: [], buttonEvents: [] };
+  const expectedNode = { id: 'override', uuid: childUuid, parentUuid: prefabRootUuid, name: 'OverrideChild',
+    transform, prefabUuid, prefabRootUuid, prefabInstanceRoot: false, prefabOverride: true };
+  const operation = { plan: { sceneUuid, request, expectedState: { createdNodes: [expectedNode] } },
+    sceneReadback: { available: true, sceneUuid, nodes: [{ id: 'override', uuid: childUuid, name: 'OverrideChild',
+      parentUuid: prefabRootUuid, transform, prefabUuid, prefabRootUuid, components: [] }] } };
+  const rows = [
+    { __type__: 'cc.SceneAsset', scene: { __id__: 1 } },
+    { __type__: 'cc.Scene', _id: sceneRootUuid, _name: 'Scene', _children: [{ __id__: 2 }] },
+    { __type__: 'cc.Node', _id: prefabRootUuid, _name: 'PrefabInstance', _parent: { __id__: 1 },
+      _children: [{ __id__: 3 }], _components: [], _prefab: { __id__: 4 }, _active: true,
+      _trs: { __type__: 'TypedArray', ctor: 'Float64Array', array: [0, 0, 0, 0, 0, 0, 1, 1, 1, 1] },
+      _contentSize: { __type__: 'cc.Size', width: 100, height: 100 },
+      _anchorPoint: { __type__: 'cc.Vec2', x: 0.5, y: 0.5 } },
+    { __type__: 'cc.Node', _id: childUuid, _name: 'OverrideChild', _parent: { __id__: 2 },
+      _children: [], _components: [], _prefab: { __id__: 5 }, _active: true,
+      _trs: { __type__: 'TypedArray', ctor: 'Float64Array', array: [10, 15, 0, 0, 0, 0, 1, 1, 1, 1] },
+      _contentSize: { __type__: 'cc.Size', width: 40, height: 20 },
+      _anchorPoint: { __type__: 'cc.Vec2', x: 0.5, y: 0.5 } },
+    { __type__: 'cc.PrefabInfo', root: { __id__: 2 }, asset: { __uuid__: prefabUuid }, fileId: '', sync: false },
+    { __type__: 'cc.PrefabInfo', root: { __id__: 2 }, asset: { __uuid__: prefabUuid },
+      fileId: 'override-child-file-id', sync: false },
+  ];
+  const source = { operation, sceneBytes: Buffer.from(JSON.stringify(rows)),
+    metaBytes: Buffer.from(JSON.stringify({ uuid: sceneAssetUuid, importer: 'scene' })) };
+  const result = inspectSceneComposition({ ...source, sceneUuid, sceneAssetRow });
+  assert.deepEqual(result, { verified: true, sceneUuid, sceneUrl: sceneAssetRow.url,
+    nodeCount: 1, componentCount: 0, buttonEventCount: 0, prefabInstanceCount: 0 });
+});
+
+test('persisted scene composition resolves Creator backing-property names such as cc.Label.string', () => {
+  const source = fixture();
+  const operation = source.operation;
+  operation.plan.request.components = [{ id: 'label', nodeRef: 'new:button', className: 'cc.Label',
+    properties: [{ name: 'string', value: 'Prefab baseline' }] }];
+  operation.plan.request.buttonEvents = [];
+  operation.sceneReadback.nodes[0].components = [{ id: 'label', componentClassName: 'cc.Label',
+    serializedClassId: 'cc.Label', componentInstanceId: 'label-instance',
+    propertyValues: { string: 'Prefab baseline' }, serializedPropertyCandidates: {
+      string: ['string', '_N$string'],
+    } }];
+  const records = JSON.parse(source.sceneBytes.toString('utf8'));
+  records[2]._components = [{ __id__: 3 }];
+  records[3] = { __type__: 'cc.Label', _N$string: 'Prefab baseline' };
+  source.sceneBytes = Buffer.from(JSON.stringify(records));
+
+  const result = inspectSceneComposition({ ...source, sceneUuid, sceneAssetRow });
+  assert.equal(result.verified, true);
+  assert.equal(result.componentCount, 1);
+  assert.equal(result.buttonEventCount, 0);
 });
 
 test('persisted scene verification rejects stale transforms, wrong resources, and mismatched Button targets', () => {

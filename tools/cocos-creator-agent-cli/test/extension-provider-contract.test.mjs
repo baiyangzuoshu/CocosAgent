@@ -25,7 +25,7 @@ test('extension provider contract normalizes descriptors and validates declared 
     (error) => error.code === 'EXTENSION_COMMAND_INPUT_INVALID');
 });
 
-test('mutating provider commands require Creator approval and explicit object schemas', () => {
+test('mutating provider commands declare write intent and explicit object schemas', () => {
   const write = metadata('write');
   assert.equal(normalizeProvider('sample-assets', write).commands[0].approval, true);
   write.commands[0].approval = false;

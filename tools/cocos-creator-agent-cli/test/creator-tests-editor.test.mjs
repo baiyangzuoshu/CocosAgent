@@ -60,7 +60,7 @@ function editorDependencies(state, { commit } = {}) {
   };
 }
 
-test('Editor suite executes the hash-bound script only after an exact native-approved commit request', async (t) => {
+test('Editor suite executes the hash-bound script on the exact explicit commit request without a Creator dialog', async (t) => {
   const state = fixture(t);
   const mock = editorDependencies(state);
   const report = await runTestPlan({ projectRoot: state.projectRoot, instanceId: mock.instanceId,

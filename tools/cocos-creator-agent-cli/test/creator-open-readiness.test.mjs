@@ -30,6 +30,10 @@ function projectInfoReceipt(projectRoot, instanceId = '11111111-1111-4111-8111-1
     result: { projectRoot, projectName: 'ready-fixture', creatorVersion: '2.4.15', extensionVersion: '0.8.8' } };
 }
 
+function runningCreator() {
+  return { running: true, creator: true, creatorVersion: '2.4.15' };
+}
+
 test('project open reuses an already connected matching instance after a live identity probe', async (t) => {
   const state = fixture();
   t.after(() => fs.rmSync(state.root, { recursive: true, force: true }));
@@ -38,6 +42,10 @@ test('project open reuses an already connected matching instance after a live id
   const result = await openCreatorProject({ projectRoot: state.projectRoot, creatorPath: state.appRoot,
     waitReady: true, timeoutMs: 1000 }, {
     listInstancesImpl: async () => ({ instances: [instance], rejectedInstances: [] }),
+    inspectProcessImpl: (processId) => {
+      assert.equal(processId, instance.processId);
+      return runningCreator();
+    },
     probeProjectImpl: async (instanceId, command, input, options) => {
       probeCalled = true;
       assert.equal(instanceId, instance.instanceId);
@@ -68,6 +76,7 @@ test('project open waits for the launched project to connect and answer', async 
       listCalls += 1;
       return { instances: listCalls === 1 ? [] : [liveInstance(state.projectRoot)], rejectedInstances: [] };
     },
+    inspectProcessImpl: () => runningCreator(),
     probeProjectImpl: async (instanceId, command) => {
       assert.equal(command, 'creator.project.info');
       return projectInfoReceipt(state.projectRoot, instanceId);
@@ -135,7 +144,38 @@ test('project open rejects a live but wrong-project probe instead of reporting r
   await assert.rejects(openCreatorProject({ projectRoot: state.projectRoot, creatorPath: state.appRoot,
     waitReady: true, timeoutMs: 1000 }, {
     listInstancesImpl: async () => ({ instances: [instance], rejectedInstances: [] }),
+    inspectProcessImpl: () => runningCreator(),
     probeProjectImpl: async () => projectInfoReceipt(wrongProject),
     spawnImpl() { throw new Error('must not launch a duplicate editor'); },
   }), (error) => error.code === 'CREATOR_OPEN_TARGET_IDENTITY_MISMATCH');
+});
+
+test('project open ignores stale instance records whose Creator process has exited', async (t) => {
+  const state = fixture();
+  t.after(() => fs.rmSync(state.root, { recursive: true, force: true }));
+  const stale = [
+    liveInstance(state.projectRoot, '11111111-1111-4111-8111-111111111111'),
+    liveInstance(state.projectRoot, '22222222-2222-4222-8222-222222222222'),
+  ].map((instance, index) => ({ ...instance, processId: 5400 + index }));
+  const child = new EventEmitter();
+  child.pid = 1236;
+  child.unref = () => {};
+  let listCalls = 0;
+  let launched = false;
+  const result = await openCreatorProject({ projectRoot: state.projectRoot, creatorPath: state.appRoot,
+    waitReady: true, timeoutMs: 1000 }, {
+    listInstancesImpl: async () => {
+      listCalls += 1;
+      return { instances: listCalls === 1 ? stale : [{ ...liveInstance(state.projectRoot), processId: 1236 }],
+        rejectedInstances: [] };
+    },
+    inspectProcessImpl: (processId) => processId === 1236
+      ? runningCreator() : { running: false, creator: false, executable: null },
+    probeProjectImpl: async (instanceId) => projectInfoReceipt(state.projectRoot, instanceId),
+    spawnImpl() { launched = true; queueMicrotask(() => child.emit('spawn')); return child; },
+  });
+  assert.equal(launched, true);
+  assert.equal(result.launched, true);
+  assert.equal(result.editorReady, true);
+  assert.equal(result.readiness.status, 'ready');
 });

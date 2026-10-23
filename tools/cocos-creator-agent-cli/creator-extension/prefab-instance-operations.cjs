@@ -27,6 +27,20 @@ function classifyPrefabInstanceOverride(plan, after) {
     return 'needs-reconciliation';
 }
 
+function classifyPrefabInstanceOverrideAction(plan, after) {
+    if (!plan || !after || !['apply', 'revert'].includes(plan.action)) return 'conflict';
+    if (after.sceneUuid !== plan.sceneUuid || after.prefabUuid !== plan.prefabUuid
+        || after.prefabRootUuid !== plan.prefabRootUuid || after.targetUrl !== plan.targetUrl
+        || after.prefabMetaSha256 !== plan.expectedBefore.prefabMetaSha256
+        || after.sceneMetaSha256 !== plan.expectedBefore.sceneMetaSha256) return 'conflict';
+
+    const prefabChanged = after.prefabSourceSha256 !== plan.expectedBefore.prefabSourceSha256;
+    const instanceChanged = after.instanceStateSha256 !== plan.expectedBefore.instanceStateSha256;
+    if (plan.action === 'apply') return prefabChanged ? 'action-observed' : 'pending';
+    if (prefabChanged) return 'conflict';
+    return instanceChanged ? 'action-observed' : 'pending';
+}
+
 function validPrefabInstanceOverridePlan(plan) {
     return !!plan && plan.operation === 'creator.prefab.instance.override'
         && ['apply', 'revert'].includes(plan.action)
@@ -40,4 +54,8 @@ function validPrefabInstanceOverridePlan(plan) {
         && SHA256.test(plan.expectedBefore.prefabMetaSha256 || '');
 }
 
-module.exports = { classifyPrefabInstanceOverride, validPrefabInstanceOverridePlan };
+module.exports = {
+    classifyPrefabInstanceOverride,
+    classifyPrefabInstanceOverrideAction,
+    validPrefabInstanceOverridePlan,
+};

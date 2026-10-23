@@ -100,6 +100,7 @@ test('tasks wait returns the next durable progress event and terminal result', a
     instanceId, projectRoot, creatorVersion: contract.creatorVersion,
     extensionVersion: extensionPackage.version,
     contractFingerprint: crypto.createHash('sha256').update(contractBytes).digest('hex'),
+    processId: 4321,
     activeScene: 'Untitled',
     capabilities: contract.commands.map((command) => ({ id: command.id, status: 'available' })),
   });
@@ -125,8 +126,13 @@ test('tasks wait returns the next durable progress event and terminal result', a
 
   const pollResponse = await request(state, 'POST', '/v1/creator/poll', {
     instanceId, sessionId: registration.sessionId, activeScene: 'Untitled',
+    capabilities: [{ id: 'creator.project.info', status: 'available' },
+      { id: 'creator.prefab.source.patch.plan', status: 'unavailable', reason: 'SCENE_LOADING' }],
   });
   assert.equal(pollResponse.command, 'creator.project.info');
+  const capabilitiesWhileLoading = await request(state, 'GET', `/v1/instances/${instanceId}/capabilities`);
+  assert.equal(capabilitiesWhileLoading.commands.find((entry) => entry.id === 'creator.prefab.source.patch.plan').status,
+    'unavailable');
   await request(state, 'POST', '/v1/creator/respond', {
     instanceId, sessionId: registration.sessionId, requestId: pollResponse.requestId,
     ok: true, result: { projectName: 'tasks-wait-test', projectRoot },
@@ -137,4 +143,34 @@ test('tasks wait returns the next durable progress event and terminal result', a
   assert.equal(completed.status, 'completed');
   assert.equal(completed.eventSequence, running.eventSequence + 1);
   assert.deepEqual(completed.result, { projectName: 'tasks-wait-test', projectRoot });
+
+  await assert.rejects(request(state, 'POST', '/v1/creator/poll', {
+    instanceId, sessionId: 'stale-session', capabilities: [],
+  }), /CREATOR_SESSION_STALE/);
+  await assert.rejects(request(state, 'POST', '/v1/creator/poll', {
+    instanceId, sessionId: registration.sessionId, capabilities: [{ id: 'unknown', status: 'available' }],
+  }), /CAPABILITIES_INVALID/);
+  const nextTask = await request(state, 'POST', `/v1/instances/${instanceId}/tasks`, {
+    command: 'creator.project.info', input: {},
+  });
+  const readyPoll = await request(state, 'POST', '/v1/creator/poll', {
+    instanceId, sessionId: registration.sessionId,
+    capabilities: [{ id: 'creator.project.info', status: 'available' },
+      { id: 'creator.prefab.source.patch.plan', status: 'available' }],
+  });
+  const capabilitiesAfterLoading = await request(state, 'GET', `/v1/instances/${instanceId}/capabilities`);
+  assert.equal(capabilitiesAfterLoading.commands.find((entry) => entry.id === 'creator.prefab.source.patch.plan').status,
+    'available');
+  await request(state, 'POST', '/v1/creator/respond', {
+    instanceId, sessionId: registration.sessionId, requestId: readyPoll.requestId,
+    ok: true, result: { projectRoot },
+  });
+  assert.equal((await runCli(['tasks', 'wait', '--id', nextTask.taskId], cliEnv)).status, 'completed');
+
+  await assert.rejects(request(state, 'POST', `/v1/instances/${instanceId}/disconnect`, { processId: 4322 }),
+    /CREATOR_INSTANCE_IDENTITY_MISMATCH/);
+  const disconnected = await request(state, 'POST', `/v1/instances/${instanceId}/disconnect`, { processId: 4321 });
+  assert.deepEqual(disconnected, { disconnected: true, instanceId, processId: 4321 });
+  const inventoryAfterDisconnect = await request(state, 'GET', '/v1/instances');
+  assert.equal(inventoryAfterDisconnect.instances.some((item) => item.instanceId === instanceId), false);
 });

@@ -81,6 +81,7 @@ test('component-add command contract is plan/approved-write/reconcile and reject
   assert.ok(COMMANDS.has('creator.script.modify.reconcile'));
 
   assert.equal(validateCommand(plan.id, { sceneUuid, nodeUuid, componentClassName: 'cc.Sprite' }).ok, true);
+  assert.equal(validateCommand(plan.id, { sceneUuid, nodeUuid, componentClassName: 'cc.Label' }).ok, true);
   assert.equal(validateCommand(plan.id, { sceneUuid, nodeUuid, componentClassName: '../Sprite' }).code, 'INVALID_INPUT_FIELD');
   assert.equal(validateCommand(plan.id, { sceneUuid, nodeUuid, componentClassName: 'cc.Sprite', source: 'unexpected' }).code,
     'UNKNOWN_INPUT_FIELD');
@@ -140,7 +141,7 @@ test('component-property contract accepts bounded scalars and typed Creator prop
   assert.equal(validateCommand(reconcile.id, { operationId: nodeUuid }).ok, true);
 });
 
-test('scene deletion and component removal use exact plan, approved commit, and non-replaying reconcile contracts', () => {
+test('scene deletion and component removal use exact plans, explicit commits, and non-replaying reconcile contracts', () => {
   const nodePlan = COMMANDS.get('creator.scene.node.delete.plan');
   const nodeCommit = COMMANDS.get('creator.scene.node.delete.commit');
   const nodeReconcile = COMMANDS.get('creator.scene.node.delete.reconcile');

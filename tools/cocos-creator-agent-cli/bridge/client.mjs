@@ -123,6 +123,12 @@ export async function listInstances({ start = true } = {}) {
   return bridgeRequest('GET', '/v1/instances');
 }
 
+export async function disconnectInstance(instanceId, processId) {
+  if (typeof instanceId !== 'string' || !/^[0-9a-f-]{36}$/i.test(instanceId)) throw new Error('INSTANCE_ID_REQUIRED');
+  if (!Number.isSafeInteger(processId) || processId < 1 || processId > 2147483647) throw new Error('PROCESS_ID_INVALID');
+  return bridgeRequest('POST', `/v1/instances/${encodeURIComponent(instanceId)}/disconnect`, { processId });
+}
+
 export async function getCapabilities(instanceId, { start = true } = {}) {
   if (typeof instanceId !== 'string' || !instanceId) throw new Error('INSTANCE_ID_REQUIRED');
   if (start) await ensureBridge();

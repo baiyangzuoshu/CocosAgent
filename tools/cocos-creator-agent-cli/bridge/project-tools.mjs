@@ -50,9 +50,9 @@ export function readProjectTools(projectRoot) {
       || typeof item.commandId !== 'string') throw coded('PROJECT_TOOL_DECLARATION_INVALID');
     seen.add(item.id);
     const command = COMMANDS.get(item.commandId);
-    // Project registries can alias canonical read/plan operations and explicitly
-    // approved writes or controls. They cannot add callbacks, widen schemas, or
-    // expose an unapproved side effect.
+    // Project registries can alias canonical read/plan operations and declared
+    // writes or controls. They cannot add callbacks, widen schemas, or expose
+    // side effects outside the canonical command contract.
     const safeAccess = command && (command.access === 'read' || command.access === 'plan'
       || (['write', 'control'].includes(command.access) && command.approval === true));
     if (!safeAccess || command.execution === 'bridge')
