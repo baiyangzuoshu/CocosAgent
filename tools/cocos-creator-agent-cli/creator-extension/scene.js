@@ -1743,20 +1743,46 @@ function prefabStableNodeId(sceneUuid, prefabUuid, nodeUuid) {
     return node && typeof node._id === 'string' && node._id ? node._id : null;
 }
 
-function prefabFindLiveNode(sceneUuid, prefabUuid, stableNodeId) {
+function prefabRootInLiveScene(sceneUuid, prefabUuid) {
     const scene = cc && cc.director && cc.director.getScene && cc.director.getScene();
     if (!scene || scene.uuid !== sceneUuid) return { available: false, reason: 'SCENE_IDENTITY_MISMATCH' };
+    const roots = Array.isArray(scene.children) && scene.children.length ? scene.children : [scene];
+    const matches = roots.filter((node) => {
+        const info = node && node._prefab;
+        const asset = info && info.asset;
+        return info && info.root === node && asset && (asset._uuid || asset.uuid) === prefabUuid;
+    });
+    return matches.length === 1 ? { available: true, root: matches[0], scene }
+        : { available: false, reason: matches.length ? 'PREFAB_ROOT_IDENTITY_AMBIGUOUS' : 'PREFAB_ROOT_NOT_FOUND' };
+}
+
+function prefabStableEventTargetId(sceneUuid, prefabUuid, nodeUuid) {
+    const rootState = prefabRootInLiveScene(sceneUuid, prefabUuid);
+    if (!rootState.available) return null;
+    const located = locateNode(sceneUuid, nodeUuid);
+    if (!located.state.available) return null;
+    let current = located.node;
+    while (current && current !== rootState.root) current = current.parent;
+    if (current !== rootState.root) return null;
+    if (located.node === rootState.root) return prefabPatch.rootNodeId(prefabUuid);
+    const info = located.node._prefab;
+    return typeof located.node._id === 'string' && located.node._id ? located.node._id
+        : info && typeof info.fileId === 'string' && info.fileId ? info.fileId : null;
+}
+
+function prefabFindLiveNode(sceneUuid, prefabUuid, stableNodeId) {
+    const rootState = prefabRootInLiveScene(sceneUuid, prefabUuid);
+    if (!rootState.available) return rootState;
     const matches = [];
-    const stack = [{ node: scene, parentPath: '', depth: 0 }];
+    const stack = [{ node: rootState.root, parentPath: '', depth: 0 }];
     while (stack.length) {
         const item = stack.pop();
         if (!item.node || item.depth > MAX_MUTATION_SCAN_DEPTH) continue;
         const name = String(item.node.name || '').slice(0, MAX_NAME);
         const nodePath = item.parentPath ? `${item.parentPath}/${name}` : name;
         const info = item.node._prefab;
-        const asset = info && info.asset;
-        const nodeId = info && info.root === item.node && asset && (asset._uuid || asset.uuid) === prefabUuid
-            ? prefabPatch.rootNodeId(prefabUuid) : item.node._id || (info && typeof info.fileId === 'string' && info.fileId
+        const nodeId = item.node === rootState.root ? prefabPatch.rootNodeId(prefabUuid)
+            : item.node._id || (info && typeof info.fileId === 'string' && info.fileId
                 ? info.fileId : item.node.uuid);
         if (nodeId === stableNodeId) matches.push({ node: item.node, nodePath });
         for (const child of authoringChildren(item.node)) stack.push({ node: child, parentPath: nodePath, depth: item.depth + 1 });
@@ -1793,6 +1819,20 @@ function prefabLiveComponentValue(value, sceneUuid, prefabUuid) {
     return value;
 }
 
+function prefabStableUiEventList(component, eventProperty, sceneUuid, prefabUuid) {
+    const state = normalizedUiEvents(component, eventProperty);
+    if (!state.available) return state;
+    const items = [];
+    for (const event of state.events) {
+        const targetUuid = event.targetUuid === null ? null
+            : prefabStableEventTargetId(sceneUuid, prefabUuid, event.targetUuid);
+        if (event.targetUuid !== null && !targetUuid)
+            return { available: false, reason: 'PREFAB_UI_EVENT_TARGET_OUTSIDE_PREFAB' };
+        items.push({ ...event, targetUuid });
+    }
+    return { available: true, value: { kind: 'ui-events', items } };
+}
+
 function prefabPatchSnapshot(node, nodePath, params, mode) {
     if (!node || !Array.isArray(node.children) || !Array.isArray(node._components)) return null;
     const components = node._components.map((component) => {
@@ -1805,6 +1845,7 @@ function prefabPatchSnapshot(node, nodePath, params, mode) {
     const position = typeof node.getPosition === 'function' ? node.getPosition() : { x: node.x, y: node.y };
     const componentProperties = {};
     const componentPropertyBindings = {};
+    const componentEventLists = {};
     for (const item of (params && Array.isArray(params.expectedDiff) ? params.expectedDiff : [])
         .filter((entry) => entry && entry.path === 'component.property')) {
         const component = node._components[item.componentIndex];
@@ -1832,10 +1873,23 @@ function prefabPatchSnapshot(node, nodePath, params, mode) {
             inspector: state.inspector,
         };
     }
+    for (const item of (params && Array.isArray(params.expectedDiff) ? params.expectedDiff : [])
+        .filter((entry) => entry && entry.path === 'component.eventList')) {
+        const component = node._components[item.componentIndex];
+        if (!component || classNameOf(component) !== item.componentClassName) continue;
+        const liveComponentInstanceId = component._id == null ? '' : String(component._id);
+        if (!item.componentInstanceId.startsWith('prefab_component_')
+            && liveComponentInstanceId !== item.componentInstanceId) continue;
+        const state = prefabStableUiEventList(component, item.eventProperty, mode.sceneUuid, params.prefabUuid);
+        if (!state.available) continue;
+        componentEventLists[item.componentInstanceId] = componentEventLists[item.componentInstanceId] || {};
+        componentEventLists[item.componentInstanceId][item.eventProperty] = state.value;
+    }
     return { nodeUuid: typeof node.uuid === 'string' ? node.uuid : null, nodePath,
         name: String(node.name || ''), active: node.active !== false,
         transform: { x: Number(position.x), y: Number(position.y), scaleX: Number(node.scaleX), scaleY: Number(node.scaleY) },
-        components, ...(Object.keys(componentProperties).length ? { componentProperties, componentPropertyBindings } : {}) };
+        components, ...(Object.keys(componentProperties).length ? { componentProperties, componentPropertyBindings } : {}),
+        ...(Object.keys(componentEventLists).length ? { componentEventLists } : {}) };
 }
 
 function locatePrefabPatchNode(params, side = 'before') {
@@ -1888,6 +1942,26 @@ function prefabSourcePatchPreflight(params) {
     if (!target.available) return target;
     if (prefabPatchNameConflict(target.node, params.expectedDiff))
         return { available: false, reason: 'PREFAB_NODE_NAME_CONFLICT' };
+    for (const item of params.expectedDiff.filter((entry) => entry.path === 'component.eventList')) {
+        if (typeof cc.Component.EventHandler !== 'function')
+            return { available: false, reason: 'PREFAB_UI_EVENT_HANDLER_UNAVAILABLE' };
+        for (const event of item.after.items) {
+            if (event.targetUuid === null && params.action !== 'compensate')
+                return { available: false, reason: 'PREFAB_UI_EVENT_TARGET_REQUIRED' };
+            const eventTarget = event.targetUuid === null ? null
+                : prefabFindLiveNode(target.mode.sceneUuid, params.prefabUuid, event.targetUuid);
+            if (eventTarget && !eventTarget.available)
+                return { available: false, reason: eventTarget.reason || 'PREFAB_UI_EVENT_TARGET_UNAVAILABLE' };
+            if (event.targetUuid === null) continue;
+            const handlerClass = componentClass(event.component);
+            if (!handlerClass.available) return { available: false, reason: handlerClass.reason || 'PREFAB_UI_EVENT_HANDLER_CLASS_UNAVAILABLE' };
+            const handlerComponents = exactComponentInstances(eventTarget.node, handlerClass.constructor);
+            if (!handlerComponents.available || handlerComponents.components.length !== 1)
+                return { available: false, reason: handlerComponents.reason || 'PREFAB_UI_HANDLER_COMPONENT_AMBIGUOUS' };
+            if (!hasSafeComponentHandler(handlerClass.constructor, event.handler))
+                return { available: false, reason: 'PREFAB_UI_EVENT_HANDLER_NOT_FOUND', handler: event.handler };
+        }
+    }
     return { available: true, prefabUuid: params.prefabUuid, mode: target.mode, node: target.snapshot,
         expectedDiff: params.expectedDiff };
 }
@@ -1928,6 +2002,25 @@ function prefabSourcePatchMutate(params, callback) {
                         componentClassName: item.componentClassName, componentInstanceId: binding.liveComponentInstanceId,
                         property: item.property, expectedValue: beforeValue, value }, loaded);
                     if (!propertyResult.available) throw new Error(propertyResult.reason || 'PREFAB_COMPONENT_PROPERTY_WRITE_FAILED');
+                }
+                else if (field === 'component.eventList') {
+                    const component = node._components[item.componentIndex];
+                    const liveId = component && component._id != null ? String(component._id) : '';
+                    if (!component || classNameOf(component) !== item.componentClassName
+                        || (!item.componentInstanceId.startsWith('prefab_component_') && liveId !== item.componentInstanceId))
+                        throw new Error('PREFAB_UI_EVENT_COMPONENT_IDENTITY_MISMATCH');
+                    const handlers = item.after.items.map((event) => {
+                        const target = event.targetUuid === null ? null
+                            : prefabFindLiveNode(current.mode.sceneUuid, params.prefabUuid, event.targetUuid);
+                        if (target && !target.available) throw new Error(target.reason || 'PREFAB_UI_EVENT_TARGET_UNAVAILABLE');
+                        const handler = new cc.Component.EventHandler();
+                        handler.target = target ? target.node : null;
+                        handler.component = event.component;
+                        handler.handler = event.handler;
+                        handler.customEventData = event.customEventData;
+                        return handler;
+                    });
+                    component[item.eventProperty] = handlers;
                 }
                 else if (field.startsWith('component.')) {
                     const [, className, property] = field.match(/^component\.(cc\.(?:Sprite|Label))\.(enabled|spriteFrameUuid)$/) || [];
@@ -2066,7 +2159,8 @@ function prefabSourceEditableState(params) {
                 value: prefabStableComponentValue(state.value, mode.sceneUuid, params.prefabUuid), inspector: state.inspector });
             else unsupportedProperties.push({ name: property, reason: state.reason || 'PREFAB_COMPONENT_PROPERTY_UNAVAILABLE' });
         }
-        const row = { componentClassName, componentInstanceId, componentIndex, properties, unsupportedProperties,
+        const row = { componentClassName, serializedClassId: serializedClassIdOf(component.constructor),
+            componentInstanceId, componentIndex, properties, unsupportedProperties,
             propertiesTruncated: declaredProperties.length > 64,
             propertySchema: { declaredCount: declared.length,
                 serializableCount: Array.isArray(component.constructor && component.constructor.__values__)
@@ -2078,8 +2172,8 @@ function prefabSourceEditableState(params) {
             row.eventLists = {};
             row.eventListsUnavailable = {};
             for (const property of eventProperties) {
-                const events = normalizedUiEvents(component, property);
-                if (events.available) row.eventLists[property] = events.events;
+                const events = prefabStableUiEventList(component, property, mode.sceneUuid, params.prefabUuid);
+                if (events.available) row.eventLists[property] = events.value.items;
                 else row.eventListsUnavailable[property] = events.reason;
             }
         }

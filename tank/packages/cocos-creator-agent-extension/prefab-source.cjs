@@ -46,6 +46,16 @@ function componentSummary(reference, records, index, nodeId, prefabUuid) {
         row.enabled = typeof component._enabled === 'boolean' ? component._enabled : true;
         if (component.__type__ === 'cc.Sprite') row.spriteFrameUuid = serializedAssetUuid(component._spriteFrame);
     }
+    const eventProperties = prefabPatch.UI_EVENT_PROPERTIES[component.__type__] || [];
+    if (eventProperties.length) {
+        row.eventLists = {};
+        row.eventListsUnavailable = {};
+        for (const property of eventProperties) {
+            const events = serializedUiEvents(component[property], records, prefabUuid);
+            if (events) row.eventLists[property] = events;
+            else row.eventListsUnavailable[property] = 'PREFAB_COMPONENT_EVENT_LIST_UNAVAILABLE';
+        }
+    }
     return row;
 }
 
@@ -58,6 +68,32 @@ function prefabNodeId(record, records, prefabUuid) {
     const info = prefabInfoFor(record, records);
     return info && typeof info.fileId === 'string' && info.fileId
         ? info.fileId : record._parent == null ? rootNodeId(prefabUuid) : null;
+}
+
+function serializedUiEvents(rawEvents, records, prefabUuid) {
+    if (rawEvents === undefined) return [];
+    if (!Array.isArray(rawEvents) || rawEvents.length > 12) return null;
+    const events = [];
+    for (const reference of rawEvents) {
+        const eventIndex = refIndex(reference, records);
+        const event = eventIndex === null ? null : records[eventIndex];
+        if (!event || event.__type__ !== 'cc.ClickEvent'
+            || (event.component != null && typeof event.component !== 'string')
+            || (event.handler != null && typeof event.handler !== 'string')
+            || (event.customEventData != null && typeof event.customEventData !== 'string')) return null;
+        let targetUuid = null;
+        if (event.target != null) {
+            const targetIndex = refIndex(event.target, records);
+            const target = targetIndex === null ? null : records[targetIndex];
+            if (!target || target.__type__ !== 'cc.Node') return null;
+            targetUuid = prefabNodeId(target, records, prefabUuid);
+            if (!targetUuid) return null;
+        }
+        events.push({ targetUuid, component: typeof event.component === 'string' ? event.component : '',
+            handler: typeof event.handler === 'string' ? event.handler : '',
+            customEventData: typeof event.customEventData === 'string' ? event.customEventData : '' });
+    }
+    return events;
 }
 
 function diskPropertyValue(raw, records, prefabUuid, expected, depth = 0, visited = new Set()) {
@@ -132,9 +168,12 @@ function inspectPrefabSource({ prefabBytes, metaBytes, prefabUuid, maxComponents
         return fail('PREFAB_COMPONENT_LIMIT_INVALID');
     if (expectedDiff !== undefined && (!Array.isArray(expectedDiff) || expectedDiff.length < 1 || expectedDiff.length > 16
         || !NODE_ID.test(targetNodeUuid || '')
-        || expectedDiff.some((item) => !item || typeof item !== 'object' || item.path !== 'component.property'
+        || expectedDiff.some((item) => !item || typeof item !== 'object'
+            || !['component.property', 'component.eventList'].includes(item.path)
             || typeof item.componentInstanceId !== 'string' || typeof (item.serializedClassId || item.componentClassName) !== 'string'
-            || typeof item.property !== 'string' || typeof item.before === 'undefined')))
+            || (item.path === 'component.property'
+                ? typeof item.property !== 'string' || typeof item.before === 'undefined'
+                : typeof item.eventProperty !== 'string'))))
         return fail('PREFAB_COMPONENT_PROPERTY_SELECTOR_INVALID');
 
     let meta;
@@ -199,6 +238,7 @@ function inspectPrefabSource({ prefabBytes, metaBytes, prefabUuid, maxComponents
         if (allComponents.some((component) => !component)) return fail('PREFAB_COMPONENT_REFERENCE_INVALID', { nodePath });
         const components = allComponents.slice(0, maxComponentsPerNode);
         const componentProperties = {};
+        const componentEventLists = {};
         if (Array.isArray(expectedDiff) && nodeId === targetNodeUuid) {
             for (const diff of expectedDiff.filter((item) => item && item.path === 'component.property')) {
                 if (!Number.isInteger(diff.componentIndex) || diff.componentIndex < 0
@@ -217,12 +257,32 @@ function inspectPrefabSource({ prefabBytes, metaBytes, prefabUuid, maxComponents
                 componentProperties[diff.componentInstanceId] = componentProperties[diff.componentInstanceId] || {};
                 componentProperties[diff.componentInstanceId][diff.property] = value.value;
             }
+            for (const diff of expectedDiff.filter((item) => item && item.path === 'component.eventList')) {
+                if (!Number.isInteger(diff.componentIndex) || diff.componentIndex < 0
+                    || diff.componentIndex >= componentRefs.length) return fail('PREFAB_COMPONENT_EVENT_LIST_SELECTOR_INVALID');
+                const componentIndex = refIndex(componentRefs[diff.componentIndex], records);
+                const component = componentIndex === null ? null : records[componentIndex];
+                const serializedClassId = diff.serializedClassId || diff.componentClassName;
+                if (!component || component.__type__ !== serializedClassId
+                    || !(prefabPatch.UI_EVENT_PROPERTIES[diff.componentClassName] || []).includes(diff.eventProperty))
+                    return fail('PREFAB_COMPONENT_EVENT_LIST_IDENTITY_MISMATCH');
+                const serializedId = prefabPatch.componentIdFor(prefabUuid, nodeId, diff.componentIndex,
+                    serializedClassId, component._id);
+                if (serializedId !== diff.componentInstanceId) return fail('PREFAB_COMPONENT_EVENT_LIST_IDENTITY_MISMATCH');
+                const events = serializedUiEvents(component[diff.eventProperty], records, prefabUuid);
+                if (!events || !prefabPatch.validUiEventList({ kind: 'ui-events', items: events }, { allowUnbound: true }))
+                    return fail('PREFAB_COMPONENT_EVENT_LIST_UNAVAILABLE', {
+                        componentInstanceId: diff.componentInstanceId, eventProperty: diff.eventProperty });
+                componentEventLists[diff.componentInstanceId] = componentEventLists[diff.componentInstanceId] || {};
+                componentEventLists[diff.componentInstanceId][diff.eventProperty] = events;
+            }
         }
         const node = { nodeUuid: nodeId, fileId, name, nodePath, parentUuid: item.parentId,
             identityKind: serializedNodeId ? 'serialized-node-id' : item.depth === 0 ? 'prefab-root' : null,
             active: typeof record._active === 'boolean' ? record._active : true,
             transform, components, componentsTruncated: allComponents.length > components.length,
-            ...(Object.keys(componentProperties).length ? { componentProperties } : {}) };
+            ...(Object.keys(componentProperties).length ? { componentProperties } : {}),
+            ...(Object.keys(componentEventLists).length ? { componentEventLists } : {}) };
         const children = Array.isArray(record._children) ? record._children : [];
         if (children.length > MAX_NODES) return fail('PREFAB_CHILD_LIMIT', { nodePath });
         const childRows = [];

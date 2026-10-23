@@ -69,8 +69,8 @@
 ## 剩余能力边界
 
 - 这轮覆盖当前支持的编辑入口及代表字段，不等于穷举 Creator 所有面板、每个组件字段或每种交互业务行为。
-- 非 Button 的 UI 事件列表目前可检查，但没有对应的事件列表写入合同。
-- Prefab 源补丁支持公开、可序列化 Inspector 属性，并绑定类型、组件序号/类/身份、序列化键和前后值；通用属性实机验收目前只覆盖 `cc.BlockInputEvents.enabled`。其他组件和值类型仍需代表性实测；Prefab 组件增删、层级改动、UI 事件列表和 live 组件引用仍未覆盖。
+- 非 Button 的 UI 事件列表已有受限写入合同，但尚无 Creator 2.4.15 实机写入证据；目前只实测了 Prefab Button `clickEvents`。
+- Prefab 源补丁支持公开、可序列化 Inspector 属性，并绑定类型、组件序号/类/身份、序列化键和前后值；通用属性实机验收目前覆盖 `cc.BlockInputEvents.enabled`、`cc.Label.fontSize` 与 Button `clickEvents`。其他组件和值类型仍需代表性实测；Prefab 组件增删、层级改动和 live 组件引用仍未覆盖。
 - 项目工具别名注册表未配置；临时 Provider 验收不等于项目已有业务工具已接入。
 - `editor.eval` / Provider 属于 Editor 权限入口；临时测试成功不能证明任意用户代码都安全或已持久化。
 - 当前验收仅针对上述 Creator 2.4.15/macOS 工程，不外推到 Creator 3.8、其他工程或其他平台。
@@ -94,3 +94,14 @@
 - 清理临时资源前由 AssetDB 扫描确认引用数为 0，随后通过 CLI AssetDB 删除操作 `7861f237-86c7-42ab-9cb3-5fd9fd6e82db` 删除 Prefab；文件、`.meta` 和 AssetDB 记录均已确认不存在。
 - 补齐了 reconciliation 对磁盘仍为 before 时的实时状态分类：Prefab 仍打开且 live 值为 after 时保留 `needs-reconciliation`，live 值冲突时标记 `conflict`，仅在场景模式或 live before 时报告 `not-applied`，并在回执中保留原始失败原因。包版本升至 **0.8.56** 后，CLI 执行扩展更新并重开工程，握手确认 Creator 2.4.15 / 扩展 0.8.56，项目路径和活动场景一致。
 - 自动化定向测试 **16/16 通过**；完整 CLI 自动化测试 **329/329 通过，0 失败**。
+
+### 2026-10-24 后续：Prefab UI 事件列表写入
+
+- 工程 `/Users/youjunmao/WORK/Cocos_Engine/tank`；CLI **0.12.55**、Creator **2.4.15**、扩展 **0.8.59**。扩展更新、旧进程关闭、重开及项目身份核对均由 Cocos CLI 完成；没有使用电脑操控工具，也没有直接编辑 `.prefab`、`.fire` 或 `.meta`。
+- 为隔离测试，通过 CLI 组合出临时 Button 节点 `11379331-0b99-4358-90d9-2c978a92f52e`，添加 `cc.Sprite`、`cc.Button` 与现有 `CliAcceptanceButtonState` 脚本，再由 Creator Scene 面板创建 Prefab。创建操作分别为组合 `22575796-b526-4da1-b306-ad98c025571e` 和 Prefab 创建 `1c958cba-a2af-42f5-bdae-ba84aab01176`。Prefab UUID 为 `00b0da27-df78-4b9a-80ee-8dcabf818f78`，根节点稳定身份为 `prefab_root_00b0da27-df78-4b9a-80ee-8dcabf818f78`；Button 组件身份为 `prefab_component_3baaa7f90ce4bfa1fa1eff92`。
+- `creator.prefab.source.editable.inspect` 首次发现自定义脚本的序列化 UUID 与运行时类名被旧身份核对误判。扩展增加 Creator 序列化类 ID 回传后，0.8.59 实机读回成功：磁盘 UUID `06c42enFbFEiYNCYZ2M0Azh` 与 Inspector 运行时类名 `CliAcceptanceButtonState` 正确对应。
+- apply `a4d4b95f-c4d9-4dd6-8afe-548b59403cbf`：在 `cc.Button.clickEvents` 写入一个目标为同一 Prefab 根节点、组件为 `CliAcceptanceButtonState`、handler 为 `onClick` 的事件。Creator 保存回调、退出 Prefab、重新打开同一 Prefab、活动对象读回和磁盘读回均成功；事件新增后源 SHA-256 为 `b5de6cf635914478fcdc811b79ee60647ebc02a2e157f744e627ae52ed82f1e1`。
+- source-linked compensate `76f60c55-2d35-4376-97d4-e175e868664a`：从已完成 apply 派生逆向操作，将事件列表恢复为空。所有保存、退出、重开和磁盘读回再次成功，Prefab 源 SHA-256 精确回到 `b6f9bbea3dd15bea321c85889171636423e2cffecbbae0d6e186bc5c85e630ae`；`.meta` SHA-256 始终为 `7d1537dab2cbfb51cff9e04c207bdf754e4ef62d122924d3ca4d127bdb0b4876`。两份 Prefab 回执中的 `sceneSavedEventConfirmed` 均为 false；Creator 原生保存回调、文件读回和 Prefab 退出/重开字段均为 true。
+- 临时 Prefab 删除前的完整 AssetDB 引用扫描 `complete: true`、`referenceCount: 0`。AssetDB 删除 `47218fed-c5d6-4abf-bf63-422ce9110af9` 后，Prefab 文件、`.meta` 和 AssetDB 记录均不存在；临时场景节点删除 `d33eb480-1225-4983-bed2-d8daa551e21b` 后确认节点 UUID 已从保存场景移除。场景源 SHA-256 回到组合前的 `cd1bd3f3ec214e31335ad1aaf73f71155f6717955586327b5d51ce0f71771f74`，场景 `.meta` 哈希未变。
+- 本验收证明 Button `clickEvents` 可以通过 Prefab patch 写入及补偿，并完成 Creator 与磁盘读回；没有运行游戏并点击此临时按钮，因此不作为运行时点击派发证据。Toggle、Slider、ScrollView、PageView、EditBox 等其他事件字段仍需分别代表性实测。
+- 最终扩展状态为 `matchesBundle: true`、`changedFiles: []`、`reloadRequired: false`；项目身份仍是 Tank / Creator 2.4.15 / 扩展 0.8.59，活动场景 UUID 未变。临时资源与节点均已清理，场景回到 23 个节点。完整 CLI 自动化测试：**332/332 通过，0 失败**。

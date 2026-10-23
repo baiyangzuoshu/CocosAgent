@@ -2430,14 +2430,15 @@ async function inspectPrefabEditableCommand(input) {
             }));
         for (const liveComponent of editableState.components) {
             const savedComponent = node.components[liveComponent.componentIndex];
-            if (!savedComponent || savedComponent.classId !== liveComponent.componentClassName
+            const liveSerializedClassId = liveComponent.serializedClassId || liveComponent.componentClassName;
+            if (!savedComponent || savedComponent.classId !== liveSerializedClassId
                 || (savedComponent.instanceIdSynthetic !== true
                     && savedComponent.instanceId !== liveComponent.componentInstanceId))
                 throw coded('PREFAB_COMPONENT_IDENTITY_MISMATCH', JSON.stringify({
                     nodeUuid: input.nodeUuid, nodePath: node.nodePath,
                     componentIndex: liveComponent.componentIndex,
                     savedComponent: savedComponent && { classId: savedComponent.classId, instanceId: savedComponent.instanceId },
-                    liveComponent: { classId: liveComponent.componentClassName,
+                    liveComponent: { classId: liveSerializedClassId, componentClassName: liveComponent.componentClassName,
                         instanceId: liveComponent.componentInstanceId },
                 }));
             liveComponent.liveComponentInstanceId = liveComponent.componentInstanceId;
@@ -2518,9 +2519,13 @@ async function createPrefabSourcePatchPlan(input) {
         if (input.expectedSourceSha256 !== undefined && input.expectedSourceSha256 !== source.sourceSha256)
             throw coded('PREFAB_SOURCE_STALE');
     }
+    if (input.action !== 'compensate' && expectedDiff.some((item) => item.path === 'component.eventList'
+        && item.after.items.some((event) => event.targetUuid === null)))
+        throw coded('PREFAB_UI_EVENT_TARGET_REQUIRED');
     let node = singlePrefabNode(source, input.targetNodeUuid);
     if (node.nodePath !== input.targetNodePath) throw coded('PREFAB_EXPECTED_STATE_MISMATCH');
-    if (input.action === 'apply' && expectedDiff.some((item) => item.path === 'component.property')) {
+    const hasComponentDiff = expectedDiff.some((item) => ['component.property', 'component.eventList'].includes(item.path));
+    if (input.action === 'apply' && hasComponentDiff) {
         let entered = false;
         try {
             await enterPrefabSourceMode(input.prefabUuid, mode.sceneUuid);
@@ -2555,7 +2560,7 @@ async function createPrefabSourcePatchPlan(input) {
         } finally {
             if (entered) await exitPrefabSourceMode(input.prefabUuid, mode.sceneUuid);
         }
-    } else if (expectedDiff.some((item) => item.path === 'component.property')) {
+    } else if (hasComponentDiff) {
         source = await inspectPrefabSourceCommand({ prefabUuid: input.prefabUuid,
             nodeUuid: input.targetNodeUuid, expectedDiff });
         node = singlePrefabNode(source, input.targetNodeUuid);

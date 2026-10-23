@@ -5,6 +5,15 @@ const crypto = require('crypto');
 const UUID = /^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$/;
 const NODE_ID = /^[A-Za-z0-9_+/=-]{1,128}$/;
 const SHA256 = /^[a-f0-9]{64}$/;
+const UI_EVENT_PROPERTIES = Object.freeze({
+    'cc.Button': ['clickEvents'],
+    'cc.Toggle': ['clickEvents', 'checkEvents'],
+    'cc.ToggleContainer': ['checkEvents'],
+    'cc.Slider': ['slideEvents'],
+    'cc.ScrollView': ['scrollEvents'],
+    'cc.PageView': ['scrollEvents', 'pageEvents'],
+    'cc.EditBox': ['editingDidBegan', 'textChanged', 'editingDidEnded', 'editingReturn'],
+});
 function rootNodeId(prefabUuid) { return UUID.test(prefabUuid || '') ? `prefab_root_${prefabUuid}` : null; }
 function componentIdFor(prefabUuid, nodeUuid, index, classId, serializedId) {
     if (typeof serializedId === 'string' && serializedId) return serializedId;
@@ -82,6 +91,31 @@ function validPropertyDiff(item) {
     return true;
 }
 
+function validUiEventList(value, { allowUnbound = false } = {}) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)
+        || Object.keys(value).sort().join(',') !== 'items,kind' || value.kind !== 'ui-events'
+        || !Array.isArray(value.items) || value.items.length > 12) return false;
+    return value.items.every((event) => event && typeof event === 'object' && !Array.isArray(event)
+        && Object.keys(event).sort().join(',') === 'component,customEventData,handler,targetUuid'
+        && (event.targetUuid === null ? allowUnbound : NODE_ID.test(event.targetUuid || ''))
+        && typeof event.component === 'string' && /^[A-Za-z_$][A-Za-z0-9_$.]{0,119}$/.test(event.component)
+        && typeof event.handler === 'string' && /^[A-Za-z_$][A-Za-z0-9_$]{0,63}$/.test(event.handler)
+        && typeof event.customEventData === 'string' && event.customEventData.length <= 512);
+}
+
+function validEventListDiff(item) {
+    const allowed = ['path', 'before', 'after', 'componentClassName', 'componentInstanceId', 'componentIndex', 'eventProperty'];
+    return !!item && !Object.keys(item).some((key) => !allowed.includes(key))
+        && item.path === 'component.eventList'
+        && typeof item.componentClassName === 'string' && Object.prototype.hasOwnProperty.call(UI_EVENT_PROPERTIES, item.componentClassName)
+        && NODE_ID.test(item.componentInstanceId || '')
+        && Number.isInteger(item.componentIndex) && item.componentIndex >= 0 && item.componentIndex < 64
+        && typeof item.eventProperty === 'string' && UI_EVENT_PROPERTIES[item.componentClassName].includes(item.eventProperty)
+        && validUiEventList(item.before, { allowUnbound: true })
+        && validUiEventList(item.after, { allowUnbound: true })
+        && canonicalValue(item.before) !== canonicalValue(item.after);
+}
+
 function validValue(fieldPath, value) {
     if (fieldPath === 'node.name') return typeof value === 'string' && value.length > 0 && value.length <= 120
         && !/[\/\\\u0000-\u001f\u007f]/.test(value);
@@ -96,13 +130,13 @@ function validateDiff(diff) {
     const paths = new Set();
     return diff.every((item) => {
         if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
-        const key = item.path === 'component.property'
-            ? `${item.componentClassName}\u0000${item.componentInstanceId}\u0000${item.property}` : item.path;
+        const key = ['component.property', 'component.eventList'].includes(item.path)
+            ? `${item.path}\u0000${item.componentClassName}\u0000${item.componentInstanceId}\u0000${item.property || item.eventProperty}` : item.path;
         if (!(PATHS.has(item.path) && Object.keys(item).length === 3
             && Object.keys(item).every((field) => ['path', 'before', 'after'].includes(field))
             && validValue(item.path, item.before) && validValue(item.path, item.after)
             && !Object.is(item.before, item.after))
-            && !validPropertyDiff(item)) return false;
+            && !validPropertyDiff(item) && !validEventListDiff(item)) return false;
         if (paths.has(key)) return false;
         paths.add(key);
         return true;
@@ -118,6 +152,21 @@ function valueAt(node, fieldPath) {
         const properties = node.componentProperties && node.componentProperties[item.componentInstanceId];
         return properties && Object.prototype.hasOwnProperty.call(properties, item.property)
             ? { found: true, value: properties[item.property] } : { found: false };
+    }
+    if (item.path === 'component.eventList') {
+        const liveLists = node.componentEventLists && node.componentEventLists[item.componentInstanceId];
+        if (liveLists && Object.prototype.hasOwnProperty.call(liveLists, item.eventProperty)) {
+            const value = liveLists[item.eventProperty];
+            if (validUiEventList(value, { allowUnbound: true })) return { found: true, value };
+            return Array.isArray(value)
+                ? { found: true, value: { kind: 'ui-events', items: value } } : { found: false };
+        }
+        const matches = (node.components || []).filter((component) => component
+            && component.className === item.componentClassName && component.instanceId === item.componentInstanceId
+            && component.index === item.componentIndex);
+        if (matches.length !== 1 || !matches[0].eventLists
+            || !Object.prototype.hasOwnProperty.call(matches[0].eventLists, item.eventProperty)) return { found: false };
+        return { found: true, value: { kind: 'ui-events', items: matches[0].eventLists[item.eventProperty] } };
     }
     const transform = item.path.match(/^node\.(position|scale)\.(x|y)$/);
     if (transform) {
@@ -183,5 +232,5 @@ function validInput(input) {
         && (input.expectedSourceSha256 === undefined || SHA256.test(input.expectedSourceSha256));
 }
 
-module.exports = { UUID, NODE_ID, SHA256, PATHS, rootNodeId, componentIdFor, validValue,
-    validateDiff, valueAt, matchesDiff, classifyDiffState, invertDiff, targetPathAt, validInput };
+module.exports = { UUID, NODE_ID, SHA256, PATHS, UI_EVENT_PROPERTIES, rootNodeId, componentIdFor,
+    validValue, validUiEventList, validateDiff, valueAt, matchesDiff, classifyDiffState, invertDiff, targetPathAt, validInput };
