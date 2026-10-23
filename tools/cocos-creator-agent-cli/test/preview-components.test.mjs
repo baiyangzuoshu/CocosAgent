@@ -36,6 +36,17 @@ test('preview assertions read Creator 2.4 Label public fields through verified s
   assert.deepEqual(readPreviewComponentProperty(node, 'cc.Label', 'overflow'), { found: true, actual: 1 });
 });
 
+test('preview assertions read Creator 2.4 EditBox string from verified storage without invoking getters', () => {
+  class EditBox {
+    constructor() { this._string = 'CLI EditBox'; }
+    get string() { throw new Error('EditBox getter must not run in an assertion'); }
+  }
+  EditBox.prototype.__classname__ = 'cc.EditBox';
+  const node = { _components: [new EditBox()] };
+  assert.deepEqual(readPreviewComponentProperty(node, 'cc.EditBox', 'string'),
+    { found: true, actual: 'CLI EditBox' });
+});
+
 test('preview assertions read Creator 2.4 PageView direction from its serialized storage field', () => {
   class PageView {
     constructor() { this._N$direction = 0; }

@@ -84,3 +84,13 @@
 - 源哈希由 `189d2ed73c6e021ee48a52fda6bab30c60345cc35bfdbfc3458d062ccb5e9200` 变为 `42ff513d6c358cfe3e493beee4bc0e16db95b661d2572fb50bf7dd23b327760a`，补偿后回到原始哈希；`.meta` 哈希始终为 `ab6b5fa05f91d463f8a612129bc734a188aedd18e4f33ff4afd52f8157643821`。最终只读 Inspector 再次确认 enabled 为 true。
 - 本次修复还让补偿/重放计划重新读取动态组件属性，并允许 Prefab 编辑场景路径在稳定 Prefab 节点路径前带有 Creator 临时根路径。
 - 修复后的 CLI 完整自动化测试：**327/327 通过，0 失败**；第一次沙箱内运行因三个本机回环监听用例遇到 `EPERM`，在获准绑定 `127.0.0.1` 后完整重跑通过。
+
+### 2026-10-24 后续：Label 属性、数组边界与恢复核验
+
+- 工程 `/Users/youjunmao/WORK/Cocos_Engine/tank`；Creator **2.4.15**、CLI **0.12.55**、扩展 **0.8.55**。核对项目身份、打开/关闭 Creator、Prefab 模式读写、重开和检查均通过 Cocos CLI；未使用电脑操控，也未直接改写 `.prefab` 或 `.meta`。
+- 使用 CLI 从场景临时创建 Prefab `CliLabelTest.prefab`（UUID `d41a7239-1569-431c-8960-69a4ae6827ac`），用于隔离测试；源文件/元数据初始 SHA-256 分别为 `615dcb2317cddf78d846ac581099bd90c53b837d4fea79e4ac99c9f390315aba` 和 `50c5d6cd8176561e32519923133a8b9870a8a9ba8a2b34d6c31b91b865d479d8`。
+- `cc.Label.fontSize` 实机往返通过：apply 提交任务 `b3903d81-2afc-4c46-b41e-6cef2d0899c3` 将 `32 → 34`；compensate 提交任务 `52cf0dce-8f15-4aa9-97fa-fb2a4ac1ca96` 将 `34 → 32`。两轮均收到保存回调，退出 Prefab、通过 CLI 重开同一 UUID、读回字段并最终退出；补偿后源 SHA-256 精确恢复为初始值，`.meta` 哈希未变。
+- 数组失败边界：Creator Inspector 报告 `cc.Label.materials` 为 Material 数组。`[Material UUID eca5d2f2-8ef6-41c2-bbe6-f9c79d09c432] → []` 通过 CLI 合同和计划校验，但 commit 后 Creator 组件属性读回报 `SCENE_COMPONENT_PROPERTY_READBACK_FAILED`。通过 reconcile 判定 `not-applied`，磁盘 `.prefab` 与 `.meta` 哈希均保持初始值；CLI 随后关闭并重开工程确认正常。结论只限定于这个空数组写入，不外推所有 Material 数组值。
+- 清理临时资源前由 AssetDB 扫描确认引用数为 0，随后通过 CLI AssetDB 删除操作 `7861f237-86c7-42ab-9cb3-5fd9fd6e82db` 删除 Prefab；文件、`.meta` 和 AssetDB 记录均已确认不存在。
+- 补齐了 reconciliation 对磁盘仍为 before 时的实时状态分类：Prefab 仍打开且 live 值为 after 时保留 `needs-reconciliation`，live 值冲突时标记 `conflict`，仅在场景模式或 live before 时报告 `not-applied`，并在回执中保留原始失败原因。包版本升至 **0.8.56** 后，CLI 执行扩展更新并重开工程，握手确认 Creator 2.4.15 / 扩展 0.8.56，项目路径和活动场景一致。
+- 自动化定向测试 **16/16 通过**；完整 CLI 自动化测试 **329/329 通过，0 失败**。

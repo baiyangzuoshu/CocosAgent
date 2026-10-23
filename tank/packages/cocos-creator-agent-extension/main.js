@@ -2765,6 +2765,8 @@ async function reconcilePrefabSourcePatch(input) {
     const operation = readPrefabSourcePatchOperation(input.operationId);
     const plan = operation.plan;
     if (projectRoot() !== plan.projectRoot || editorVersion() !== plan.creatorVersion) throw coded('OPERATION_TARGET_MISMATCH');
+    const failureReason = ['needs-reconciliation', 'mutation-started', 'mutation-applied', 'save-requested',
+        'source-saved', 'mode-reopened'].includes(operation.status) ? operation.reconcileReason || null : null;
     let source;
     try {
         const propertyDiff = plan.expectedDiff.filter((item) => item.path === 'component.property');
@@ -2798,25 +2800,41 @@ async function reconcilePrefabSourcePatch(input) {
         operation.status = editorFlowComplete ? 'completed' : 'needs-reconciliation';
         operation.reconcileReason = editorFlowComplete ? null : 'PREFAB_EDITOR_EXIT_REOPEN_READBACK_REQUIRED';
     } else if (beforeMatches) {
-        let unsavedAfter = false;
+        let liveState = 'unavailable';
         try {
             const mode = await currentPrefabEditMode();
-            if (mode.modeName === 'prefab' && mode.prefabUuid === plan.prefabUuid) {
-                const live = await callScene('prefabSourcePatchSnapshot', { prefabUuid: plan.prefabUuid,
-                    targetNodePath: plan.targetNodePath, targetNodeUuid: plan.targetNodeUuid,
-                    expectedDiff: plan.expectedDiff, side: 'after' }, 20000);
-                unsavedAfter = !!(live && live.available === true);
-            }
-        } catch (_) { unsavedAfter = true; }
-        operation.status = unsavedAfter ? 'needs-reconciliation' : 'not-applied';
-        operation.reconcileReason = unsavedAfter ? 'PREFAB_HAS_UNSAVED_OR_UNCERTAIN_EDITOR_STATE' : null;
+            if (mode.modeName === 'scene' && mode.sceneUuid === plan.activeSceneUuid) liveState = 'scene';
+            else if (mode.modeName === 'prefab' && mode.prefabUuid === plan.prefabUuid) {
+                const params = { prefabUuid: plan.prefabUuid, targetNodePath: plan.targetNodePath,
+                    targetNodeUuid: plan.targetNodeUuid, expectedDiff: plan.expectedDiff };
+                const before = await callScene('prefabSourcePatchSnapshot', { ...params, side: 'before' }, 20000);
+                if (before && before.available === true && before.prefabUuid === plan.prefabUuid
+                    && before.verifiedSide === 'before' && before.node)
+                    liveState = prefabPatch.classifyDiffState(before.node, plan.expectedDiff);
+                else {
+                    const after = await callScene('prefabSourcePatchSnapshot', { ...params, side: 'after' }, 20000);
+                    liveState = after && after.available === true && after.prefabUuid === plan.prefabUuid
+                        && after.verifiedSide === 'after' && after.node
+                        ? prefabPatch.classifyDiffState(after.node, plan.expectedDiff) : 'conflict';
+                }
+            } else liveState = 'conflict';
+        } catch (_) { liveState = 'unavailable'; }
+        if (liveState === 'scene' || liveState === 'before') {
+            operation.status = 'not-applied'; operation.reconcileReason = null;
+        } else if (liveState === 'after' || liveState === 'unavailable') {
+            operation.status = 'needs-reconciliation';
+            operation.reconcileReason = liveState === 'after'
+                ? 'PREFAB_HAS_UNSAVED_OR_UNCERTAIN_EDITOR_STATE' : 'PREFAB_LIVE_STATE_UNAVAILABLE';
+        } else {
+            operation.status = 'conflict'; operation.reconcileReason = 'PREFAB_LIVE_STATE_CONFLICT';
+        }
     } else {
         operation.status = 'conflict'; operation.reconcileReason = 'PREFAB_SOURCE_STATE_CONFLICT';
     }
     operation.reconciledAt = new Date().toISOString();
     if (operation.status === 'completed') operation.completedAt = operation.completedAt || operation.reconciledAt;
     writeOperation(operation);
-    return { ...prefabSourcePatchReceipt(operation), observed: { sourceSha256: source.sourceSha256,
+    return { ...prefabSourcePatchReceipt(operation), failureReason, observed: { sourceSha256: source.sourceSha256,
         metaSha256: source.metaSha256, targetNodePath: node.nodePath, targetNodeUuid: node.nodeUuid,
         diskMatchesBefore: beforeMatches, diskMatchesAfter: afterMatches } };
 }

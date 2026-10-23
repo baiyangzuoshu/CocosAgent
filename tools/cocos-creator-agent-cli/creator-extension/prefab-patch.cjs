@@ -142,6 +142,12 @@ function matchesDiff(node, diff, side) {
     });
 }
 
+function classifyDiffState(node, diff) {
+    if (matchesDiff(node, diff, 'before')) return 'before';
+    if (matchesDiff(node, diff, 'after')) return 'after';
+    return 'conflict';
+}
+
 function invertDiff(diff) {
     if (!validateDiff(diff)) throw new TypeError('INVALID_EXPECTED_DIFF');
     return diff.map((item) => ({ ...item, before: item.after, after: item.before }));
@@ -178,4 +184,4 @@ function validInput(input) {
 }
 
 module.exports = { UUID, NODE_ID, SHA256, PATHS, rootNodeId, componentIdFor, validValue,
-    validateDiff, valueAt, matchesDiff, invertDiff, targetPathAt, validInput };
+    validateDiff, valueAt, matchesDiff, classifyDiffState, invertDiff, targetPathAt, validInput };

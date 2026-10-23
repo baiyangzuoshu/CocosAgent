@@ -11,4 +11,10 @@ cc.Class({
         this.clickCount += 1;
         this.lastValue = customEventData || 'clicked';
     },
+
+    onUiEvent: function () {
+        const args = Array.prototype.slice.call(arguments);
+        this.clickCount += 1;
+        this.lastValue = args.length ? args[args.length - 1] : 'clicked';
+    },
 });

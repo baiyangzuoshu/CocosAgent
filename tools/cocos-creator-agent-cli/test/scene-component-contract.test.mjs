@@ -139,6 +139,7 @@ test('component-property contract accepts bounded scalars and typed Creator prop
     { kind: 'array', items: [1, 'two', false] },
     { kind: 'array', items: [{ kind: 'vec2', x: 1, y: 2 }, { kind: 'vec2', x: 3, y: 4 }] },
     { kind: 'array', items: [{ kind: 'node-ref', nodeUuid }, { kind: 'node-ref' }] },
+    { kind: 'array', items: [{ kind: 'asset', assetClass: 'SpriteFrame', assetUuid: nodeUuid }] },
     { kind: 'node-ref', nodeUuid },
     { kind: 'node-ref' },
     { kind: 'component-ref', componentClassName: 'game.Controller' },
@@ -155,6 +156,9 @@ test('component-property contract accepts bounded scalars and typed Creator prop
   assert.equal(validateCommand(plan.id, { ...input, value: { kind: 'array', items: [{ kind: 'node-ref', nodeUuid: '../outside' }] } }).ok, false);
   assert.equal(validateCommand(plan.id, { ...input, value: { kind: 'array', items: [
     { kind: 'component-ref', componentClassName: 'game.Controller', nodeUuid },
+  ] } }).ok, false);
+  assert.equal(validateCommand(plan.id, { ...input, value: { kind: 'array', items: [
+    { kind: 'asset', assetClass: 'SpriteFrame', assetUuid: 'not-a-uuid' },
   ] } }).ok, false);
   assert.equal(validateCommand(plan.id, { ...input, value: { kind: 'component-ref', componentClassName: '../Component' } }).ok, false);
   assert.equal(validateCommand(plan.id, { ...input, value: { kind: 'asset', assetClass: 'SpriteFrame',

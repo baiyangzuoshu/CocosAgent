@@ -43,6 +43,16 @@ test('Prefab source patch commands declare plan, explicit commit write, and non-
   assert.equal(validateCommand(plan.id, { ...input, expectedDiff: [{ path: 'component.property',
     componentClassName: 'cc.Label', componentInstanceId: 'label-instance-1', componentIndex: 0, property: 'string',
     before: 'Before', after: 'After' }] }).ok, true);
+  const assetArrayDiff = [{ path: 'component.property', componentClassName: 'cc.Label',
+    componentInstanceId: 'label-instance-1', componentIndex: 0, property: 'materials',
+    before: { kind: 'array', items: [{ kind: 'asset', assetClass: 'Material',
+      assetUuid: '44444444-4444-4444-8444-444444444444' }] },
+    after: { kind: 'array', items: [] } }];
+  assert.equal(validateCommand(plan.id, { ...input, expectedDiff: assetArrayDiff }).ok, true);
+  assert.equal(prefabPatch.validateDiff(assetArrayDiff), true);
+  assert.equal(prefabPatch.validateDiff([{ ...assetArrayDiff[0], after: { kind: 'array', items: [
+    { kind: 'asset', assetClass: 'Material', assetUuid: 'not-a-uuid' },
+  ] } }]), false);
   assert.equal(validateCommand(plan.id, { ...input, expectedDiff: [{ path: 'node.position.z', before: 0, after: 1 }] }).ok, false);
   assert.equal(commit.access, 'write');
   assert.equal(commit.approval, true);
@@ -107,6 +117,14 @@ test('Prefab patch rejects duplicate, unsupported, malformed, and ambiguous chan
     componentInstanceId: 'label-1', componentIndex: 0, property: 'color', before: { kind: 'color', r: 1, g: 2, b: 3, a: 255 },
     after: { kind: 'color', r: 4, g: 5, b: 6, a: 255 } }], 'before'), true);
   assert.deepEqual(prefabPatch.invertDiff([property]), [{ ...property, before: 'B', after: 'A' }]);
+});
+
+test('Prefab patch reconciliation classifies exact before, after, and divergent live state', () => {
+  const diff = [{ path: 'node.active', before: true, after: false }];
+  assert.equal(prefabPatch.classifyDiffState({ ...node, active: true }, diff), 'before');
+  assert.equal(prefabPatch.classifyDiffState({ ...node, active: false }, diff), 'after');
+  assert.equal(prefabPatch.classifyDiffState({ ...node, active: null }, diff), 'conflict');
+  assert.equal(prefabPatch.classifyDiffState(null, diff), 'conflict');
 });
 
 test('Prefab patch distinguishes apply from source-linked compensation and replay', () => {
