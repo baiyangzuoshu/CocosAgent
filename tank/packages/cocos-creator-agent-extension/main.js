@@ -43,6 +43,11 @@ const OPERATION_TTL_MS = 15 * 60 * 1000;
 const MAX_PROVIDER_PACKAGES = 16;
 const MAX_PROVIDER_COMMANDS = 128;
 const PROVIDER_IPC_TIMEOUT_MS = 800;
+const UI_EVENT_PROPERTIES = Object.freeze({
+    'cc.Button': ['clickEvents'], 'cc.Toggle': ['clickEvents', 'checkEvents'], 'cc.ToggleContainer': ['checkEvents'],
+    'cc.Slider': ['slideEvents'], 'cc.ScrollView': ['scrollEvents'], 'cc.PageView': ['scrollEvents', 'pageEvents'],
+    'cc.EditBox': ['editingDidBegan', 'textChanged', 'editingDidEnded', 'editingReturn'],
+});
 function uuid() {
     if (crypto.randomUUID) return crypto.randomUUID();
     const bytes = crypto.randomBytes(16);
@@ -805,6 +810,41 @@ function readSceneButtonEventsOperation(operationId) {
     return operation;
 }
 
+function readSceneUiEventsOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    const componentEvents = plan && plan.diskBefore && plan.diskBefore.componentEvents;
+    if (!operation || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.scene.ui-events.set' || !plan || plan.operation !== operation.operation
+        || plan.operationId !== operationId || typeof operation.planHash !== 'string'
+        || typeof plan.projectRoot !== 'string' || typeof plan.creatorVersion !== 'string'
+        || typeof plan.extensionVersion !== 'string' || typeof plan.contractFingerprint !== 'string'
+        || typeof plan.creatorInstanceId !== 'string' || typeof plan.sceneUuid !== 'string'
+        || typeof plan.sceneName !== 'string' || typeof plan.nodeUuid !== 'string' || typeof plan.nodePath !== 'string'
+        || typeof plan.componentClassName !== 'string'
+        || !(UI_EVENT_PROPERTIES[plan.componentClassName] || []).includes(plan.eventProperty)
+        || typeof plan.serializedClassId !== 'string' || typeof plan.componentInstanceId !== 'string'
+        || !validButtonEventList(plan.expectedBefore, { allowUnbound: true })
+        || !validButtonEventList(plan.expectedAfter) || sceneComponentValuesEqual(plan.expectedBefore, plan.expectedAfter)
+        || !componentEvents || componentEvents.componentInstanceId !== plan.componentInstanceId
+        || componentEvents.serializedClassId !== plan.serializedClassId || componentEvents.eventProperty !== plan.eventProperty
+        || !validButtonEventList(componentEvents.events, { allowUnbound: true })
+        || !validSceneNodeDiskBaseline(plan.diskBefore)
+        || typeof plan.expiresAt !== 'string'
+        || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
+            'save-requested', 'completed', 'not-applied', 'save-required', 'conflict'].includes(operation.status))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (!sceneComponentValuesEqual(componentEvents.events, plan.expectedBefore))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    return operation;
+}
+
 function readSceneNodeDeleteOperation(operationId) {
     const filename = operationPath(operationId);
     let stat;
@@ -984,9 +1024,9 @@ function validSceneComponentValue(value, depth = 0) {
         && value.items.length <= 32 && value.items.every((item) => typeof item === 'string'
             ? Buffer.byteLength(item, 'utf8') <= 1024 : typeof item === 'boolean'
               || (typeof item === 'number' && Number.isFinite(item) && Math.abs(item) <= 1000000000)
-              || (validSceneComponentValue(item, depth + 1) && !['array', 'asset'].includes(item.kind)));
+              || (validSceneComponentValue(item, depth + 1) && item.kind !== 'array'));
     if (value.kind === 'asset') return (keys === 'assetClass,kind' || keys === 'assetClass,assetUuid,kind')
-        && ['SpriteFrame', 'Texture2D', 'AudioClip', 'Prefab', 'Font', 'BitmapFont', 'TTFFont'].includes(value.assetClass)
+        && typeof value.assetClass === 'string' && /^[A-Za-z_$][A-Za-z0-9_$.]{0,119}$/.test(value.assetClass)
         && (value.assetUuid === undefined || (typeof value.assetUuid === 'string'
             && (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value.assetUuid)
                 || /^[A-Za-z0-9+/]{22,23}$/.test(value.assetUuid))));
@@ -1024,6 +1064,14 @@ function sceneNodePathsMatch(left, right) {
     const rightParts = right.split('/');
     return leftParts.length === rightParts.length
         && leftParts.slice(1).every((part, index) => part === rightParts[index + 1]);
+}
+
+function prefabNodePathsMatch(actual, expected) {
+    if (typeof actual !== 'string' || typeof expected !== 'string') return false;
+    const actualParts = actual.split('/');
+    const expectedParts = expected.split('/');
+    return actualParts.length >= expectedParts.length
+        && expectedParts.every((part, index) => actualParts[actualParts.length - expectedParts.length + index] === part);
 }
 
 function sceneComponentValueKind(value) {
@@ -2320,7 +2368,9 @@ async function inspectPrefabSourceCommand(input) {
     const prefabBytes = readStableProjectFile(prefabFile, MAX_PREFAB_SERIALIZATION_BYTES, 'PREFAB_SERIALIZATION_FILE_UNSAFE');
     const metaBytes = readStableProjectFile(metaFile, MAX_PREFAB_META_BYTES, 'PREFAB_META_FILE_UNSAFE');
     const state = inspectPrefabSourceData({ prefabBytes, metaBytes, prefabUuid: input.prefabUuid,
-        maxComponentsPerNode: input.nodeUuid !== undefined ? 64 : 8 });
+        maxComponentsPerNode: input.nodeUuid !== undefined ? 64 : 8,
+        ...(input.nodeUuid !== undefined ? { targetNodeUuid: input.nodeUuid } : {}),
+        ...(input.expectedDiff !== undefined ? { expectedDiff: input.expectedDiff } : {}) });
     if (!state.available) throw coded(state.reason || 'PREFAB_SOURCE_INSPECT_FAILED');
     let nodes = state.nodes;
     let truncated = nodes.length > 100;
@@ -2342,6 +2392,63 @@ async function inspectPrefabSourceCommand(input) {
         targetUrl: row.url, importer: typeof row.importer === 'string' ? row.importer : null,
         assetType: typeof row.type === 'string' ? row.type : null,
         sourceSha256: fileHash(prefabBytes), metaSha256: fileHash(metaBytes), sourceScope: 'saved-disk-only' };
+}
+
+async function inspectPrefabEditableCommand(input) {
+    const saved = await inspectPrefabSourceCommand({ prefabUuid: input.prefabUuid, nodeUuid: input.nodeUuid });
+    const node = singlePrefabNode(saved, input.nodeUuid);
+    const mode = await currentPrefabEditMode();
+    if (mode.modeName !== 'scene' || typeof mode.sceneUuid !== 'string') throw coded('EDITOR_BUSY');
+    let entered = false;
+    try {
+        await enterPrefabSourceMode(input.prefabUuid, mode.sceneUuid);
+        entered = true;
+        const editableState = await callScene('prefabSourceEditableState', { prefabUuid: input.prefabUuid,
+            targetNodeUuid: input.nodeUuid, targetNodePath: node.nodePath }, 30000);
+        if (!editableState || editableState.available !== true)
+            throw coded(editableState && editableState.reason || 'PREFAB_EDITABLE_INSPECT_FAILED');
+        if (editableState.prefabUuid !== input.prefabUuid)
+            throw coded('PREFAB_EDITABLE_ASSET_IDENTITY_MISMATCH', JSON.stringify({
+                expectedPrefabUuid: input.prefabUuid, actualPrefabUuid: editableState.prefabUuid,
+            }));
+        if (editableState.nodeUuid !== input.nodeUuid)
+            throw coded('PREFAB_EDITABLE_NODE_IDENTITY_MISMATCH', JSON.stringify({
+                expectedNodeUuid: input.nodeUuid, actualNodeUuid: editableState.nodeUuid,
+                liveNodeUuid: editableState.liveNodeUuid,
+            }));
+        if (!prefabNodePathsMatch(editableState.nodePath, node.nodePath))
+            throw coded('PREFAB_EDITABLE_NODE_PATH_MISMATCH', JSON.stringify({
+                expectedNodePath: node.nodePath, actualNodePath: editableState.nodePath,
+            }));
+        if (!Array.isArray(editableState.components) || editableState.components.length !== node.components.length)
+            throw coded('PREFAB_COMPONENT_IDENTITY_MISMATCH', JSON.stringify({
+                nodeUuid: input.nodeUuid, nodePath: node.nodePath,
+                savedComponentCount: node.components.length,
+                liveComponentCount: Array.isArray(editableState.components) ? editableState.components.length : null,
+                liveComponents: Array.isArray(editableState.components)
+                    ? editableState.components.map((component) => component && component.componentClassName) : null,
+            }));
+        for (const liveComponent of editableState.components) {
+            const savedComponent = node.components[liveComponent.componentIndex];
+            if (!savedComponent || savedComponent.classId !== liveComponent.componentClassName
+                || (savedComponent.instanceIdSynthetic !== true
+                    && savedComponent.instanceId !== liveComponent.componentInstanceId))
+                throw coded('PREFAB_COMPONENT_IDENTITY_MISMATCH', JSON.stringify({
+                    nodeUuid: input.nodeUuid, nodePath: node.nodePath,
+                    componentIndex: liveComponent.componentIndex,
+                    savedComponent: savedComponent && { classId: savedComponent.classId, instanceId: savedComponent.instanceId },
+                    liveComponent: { classId: liveComponent.componentClassName,
+                        instanceId: liveComponent.componentInstanceId },
+                }));
+            liveComponent.liveComponentInstanceId = liveComponent.componentInstanceId;
+            liveComponent.componentInstanceId = savedComponent.instanceId;
+            liveComponent.componentInstanceIdSynthetic = savedComponent.instanceIdSynthetic === true;
+            liveComponent.serializedClassId = savedComponent.classId;
+        }
+        return { ...saved, editableState, editableStateScope: 'creator-prefab-edit-mode-read-only' };
+    } finally {
+        if (entered) await exitPrefabSourceMode(input.prefabUuid, mode.sceneUuid);
+    }
 }
 
 async function inspectPrefabInstanceCommand(input) {
@@ -2390,7 +2497,7 @@ async function createPrefabSourcePatchPlan(input) {
     if (editorVersion() !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
     const mode = await currentPrefabEditMode();
     if (mode.modeName !== 'scene' || typeof mode.sceneUuid !== 'string') throw coded('EDITOR_BUSY');
-    const source = await inspectPrefabSourceCommand({ prefabUuid: input.prefabUuid, nodeUuid: input.targetNodeUuid });
+    let source = await inspectPrefabSourceCommand({ prefabUuid: input.prefabUuid, nodeUuid: input.targetNodeUuid });
     let expectedDiff = input.expectedDiff;
     let sourceOperationId = null;
     if (input.action === 'apply') {
@@ -2411,9 +2518,49 @@ async function createPrefabSourcePatchPlan(input) {
         if (input.expectedSourceSha256 !== undefined && input.expectedSourceSha256 !== source.sourceSha256)
             throw coded('PREFAB_SOURCE_STALE');
     }
-    const node = singlePrefabNode(source, input.targetNodeUuid);
-    if (node.nodePath !== input.targetNodePath || !prefabPatch.matchesDiff(node, expectedDiff, 'before'))
-        throw coded('PREFAB_EXPECTED_STATE_MISMATCH');
+    let node = singlePrefabNode(source, input.targetNodeUuid);
+    if (node.nodePath !== input.targetNodePath) throw coded('PREFAB_EXPECTED_STATE_MISMATCH');
+    if (input.action === 'apply' && expectedDiff.some((item) => item.path === 'component.property')) {
+        let entered = false;
+        try {
+            await enterPrefabSourceMode(input.prefabUuid, mode.sceneUuid);
+            entered = true;
+            const live = await callScene('prefabSourcePatchPreflight', { prefabUuid: input.prefabUuid,
+                targetNodePath: input.targetNodePath, targetNodeUuid: input.targetNodeUuid,
+                action: input.action, expectedDiff }, 20000);
+            if (!live || live.available !== true || !live.node
+                || !prefabPatch.matchesDiff(live.node, expectedDiff, 'before'))
+                throw coded(live && live.reason || 'PREFAB_EXPECTED_STATE_MISMATCH');
+            expectedDiff = expectedDiff.map((item) => {
+                if (item.path !== 'component.property') return item;
+                const binding = live.node.componentPropertyBindings
+                    && live.node.componentPropertyBindings[item.componentInstanceId]
+                    && live.node.componentPropertyBindings[item.componentInstanceId][item.property];
+                if (!binding || !binding.serializedProperty || !Array.isArray(binding.serializedPropertyCandidates))
+                    throw coded('PREFAB_COMPONENT_PROPERTY_BINDING_UNAVAILABLE');
+                const component = node.components.find((entry) => entry.instanceId === item.componentInstanceId
+                    && entry.index === item.componentIndex);
+                if (!component || component.serializedPropertiesTruncated)
+                    throw coded('PREFAB_COMPONENT_PROPERTY_IDENTITY_MISMATCH');
+                const omitted = !component.serializedProperties.includes(binding.serializedProperty);
+                return { ...item, serializedProperty: binding.serializedProperty,
+                    serializedClassId: component.classId,
+                    serializedPropertyCandidates: binding.serializedPropertyCandidates,
+                    serializedWasOmitted: omitted,
+                    ...(omitted ? { serializedDefaultValue: item.before } : {}) };
+            });
+            source = await inspectPrefabSourceCommand({ prefabUuid: input.prefabUuid,
+                nodeUuid: input.targetNodeUuid, expectedDiff });
+            node = singlePrefabNode(source, input.targetNodeUuid);
+        } finally {
+            if (entered) await exitPrefabSourceMode(input.prefabUuid, mode.sceneUuid);
+        }
+    } else if (expectedDiff.some((item) => item.path === 'component.property')) {
+        source = await inspectPrefabSourceCommand({ prefabUuid: input.prefabUuid,
+            nodeUuid: input.targetNodeUuid, expectedDiff });
+        node = singlePrefabNode(source, input.targetNodeUuid);
+    }
+    if (!prefabPatch.matchesDiff(node, expectedDiff, 'before')) throw coded('PREFAB_SOURCE_STALE');
     const operationId = uuid();
     const plan = { operationId, operation: 'creator.prefab.source.patch', projectRoot: projectRoot(),
         creatorVersion: editorVersion(), extensionVersion: extensionPackage.version,
@@ -2444,7 +2591,9 @@ async function verifyPrefabSourcePatchPlan(operation, { requireCurrentContract =
     if (requireCurrentContract && (plan.extensionVersion !== extensionPackage.version
         || plan.contractFingerprint !== CONTRACT_FINGERPRINT)) throw coded('OPERATION_CONTRACT_MISMATCH');
     if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
-    const source = await inspectPrefabSourceCommand({ prefabUuid: plan.prefabUuid, nodeUuid: plan.targetNodeUuid });
+    const propertyDiff = plan.expectedDiff.filter((item) => item.path === 'component.property');
+    const source = await inspectPrefabSourceCommand({ prefabUuid: plan.prefabUuid, nodeUuid: plan.targetNodeUuid,
+        ...(propertyDiff.length ? { expectedDiff: propertyDiff } : {}) });
     const node = singlePrefabNode(source, plan.targetNodeUuid);
     if (source.prefabPath !== plan.prefabPath || source.targetUrl !== plan.targetUrl
         || source.metaSha256 !== plan.expectedMetaSha256 || source.sourceSha256 !== plan.expectedSourceSha256
@@ -2483,7 +2632,9 @@ async function waitForPrefabSourcePatchDisk(operation, timeoutMs = SCENE_SAVE_RE
     let lastReason = 'PREFAB_DISK_READBACK_PENDING';
     do {
         try {
-            const source = await inspectPrefabSourceCommand({ prefabUuid: plan.prefabUuid, nodeUuid: plan.targetNodeUuid });
+            const propertyDiff = plan.expectedDiff.filter((item) => item.path === 'component.property');
+            const source = await inspectPrefabSourceCommand({ prefabUuid: plan.prefabUuid, nodeUuid: plan.targetNodeUuid,
+                ...(propertyDiff.length ? { expectedDiff: propertyDiff } : {}) });
             const node = singlePrefabNode(source, plan.targetNodeUuid);
             const afterPath = prefabPatch.targetPathAt(plan.targetNodePath, plan.expectedDiff, 'after');
             if (source.prefabPath !== plan.prefabPath || source.targetUrl !== plan.targetUrl
@@ -2589,8 +2740,9 @@ async function commitPrefabSourcePatch(input, context) {
         await exitPrefabSourceMode(operation.plan.prefabUuid, operation.plan.activeSceneUuid);
         operation.editorExitedAfterReopen = true;
         operation.finalExitAt = new Date().toISOString(); writeOperation(operation);
+        const propertyDiff = operation.plan.expectedDiff.filter((item) => item.path === 'component.property');
         const finalDisk = await inspectPrefabSourceCommand({ prefabUuid: operation.plan.prefabUuid,
-            nodeUuid: operation.plan.targetNodeUuid });
+            nodeUuid: operation.plan.targetNodeUuid, ...(propertyDiff.length ? { expectedDiff: propertyDiff } : {}) });
         const finalNode = singlePrefabNode(finalDisk, operation.plan.targetNodeUuid);
         if (finalDisk.sourceSha256 !== operation.afterSourceSha256 || finalDisk.metaSha256 !== operation.plan.expectedMetaSha256
             || finalNode.nodePath !== prefabPatch.targetPathAt(operation.plan.targetNodePath, operation.plan.expectedDiff, 'after')
@@ -2614,7 +2766,11 @@ async function reconcilePrefabSourcePatch(input) {
     const plan = operation.plan;
     if (projectRoot() !== plan.projectRoot || editorVersion() !== plan.creatorVersion) throw coded('OPERATION_TARGET_MISMATCH');
     let source;
-    try { source = await inspectPrefabSourceCommand({ prefabUuid: plan.prefabUuid, nodeUuid: plan.targetNodeUuid }); }
+    try {
+        const propertyDiff = plan.expectedDiff.filter((item) => item.path === 'component.property');
+        source = await inspectPrefabSourceCommand({ prefabUuid: plan.prefabUuid, nodeUuid: plan.targetNodeUuid,
+            ...(propertyDiff.length ? { expectedDiff: propertyDiff } : {}) });
+    }
     catch (error) {
         operation.status = 'conflict'; operation.reconcileReason = error.code || 'PREFAB_DISK_READBACK_FAILED';
         operation.reconciledAt = new Date().toISOString(); writeOperation(operation); throw error;
@@ -4680,6 +4836,174 @@ async function reconcileSceneButtonEvents(input) {
 }
 
 
+async function createSceneUiEventsPlan(input) {
+    if (!Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function') throw coded('SCENE_API_UNAVAILABLE');
+    if (!(UI_EVENT_PROPERTIES[input.componentClassName] || []).includes(input.eventProperty))
+        throw coded('SCENE_UI_EVENT_PROPERTY_UNSUPPORTED');
+    const currentRoot = projectRoot();
+    const currentVersion = editorVersion();
+    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    const node = await callScene('nodeState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);
+    if (!node || node.available !== true) throw coded(node && node.reason || 'SCENE_NODE_STATE_UNAVAILABLE');
+    if (node.sceneUuid !== input.sceneUuid || node.nodeUuid !== input.nodeUuid || typeof node.nodePath !== 'string')
+        throw coded('SCENE_NODE_STATE_INVALID');
+    const component = node.components.find((item) => item.componentClassName === input.componentClassName
+        && item.componentInstanceId === input.componentInstanceId);
+    if (!component) throw coded('SCENE_UI_COMPONENT_INSTANCE_NOT_FOUND');
+    const current = await callScene('uiEventsState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid,
+        nodePath: node.nodePath, componentClassName: input.componentClassName,
+        eventProperty: input.eventProperty, componentInstanceId: input.componentInstanceId,
+        events: input.events }, 30000);
+    if (!current || current.available !== true) throw coded(current && current.reason || 'SCENE_UI_EVENTS_STATE_UNAVAILABLE');
+    if (current.sceneUuid !== input.sceneUuid || current.nodeUuid !== input.nodeUuid
+        || current.nodePath !== node.nodePath || current.componentClassName !== input.componentClassName
+        || current.eventProperty !== input.eventProperty || current.componentInstanceId !== input.componentInstanceId
+        || typeof current.serializedClassId !== 'string' || !Array.isArray(current.events)
+        || !Array.isArray(current.requestedEvents)) throw coded('SCENE_UI_EVENTS_STATE_INVALID');
+    if (!current.changed) throw coded('SCENE_UI_EVENTS_NO_CHANGE');
+    const selector = { componentInstanceId: current.componentInstanceId,
+        serializedClassId: current.serializedClassId, eventProperty: current.eventProperty };
+    const diskBefore = await sceneNodeDiskState(input.sceneUuid, input.nodeUuid, { componentEvents: selector });
+    if (!sceneNodePathsMatch(diskBefore.nodePath, current.nodePath)
+        || !sceneComponentValuesEqual(diskBefore.componentEvents, { ...selector, events: current.events }))
+        throw coded('SCENE_DISK_STATE_DIFFERS_FROM_EDITOR');
+    if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
+    const operationId = uuid();
+    const plan = { operationId, operation: 'creator.scene.ui-events.set', projectRoot: currentRoot,
+        creatorVersion: currentVersion, extensionVersion: extensionPackage.version,
+        contractFingerprint: CONTRACT_FINGERPRINT, creatorInstanceId: INSTANCE_ID,
+        sceneUuid: current.sceneUuid, sceneName: current.sceneName, nodeUuid: current.nodeUuid,
+        nodePath: current.nodePath, componentClassName: current.componentClassName,
+        serializedClassId: current.serializedClassId, eventProperty: current.eventProperty,
+        componentInstanceId: current.componentInstanceId, expectedBefore: current.events,
+        expectedAfter: current.requestedEvents,
+        diskBefore: sceneNodeDiskBaseline(diskBefore, { includeComponentEvents: true }),
+        expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString() };
+    const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
+        planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
+        projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
+        componentClassName: plan.componentClassName, eventProperty: plan.eventProperty,
+        componentInstanceId: plan.componentInstanceId, expectedBefore: plan.expectedBefore,
+        expectedAfter: plan.expectedAfter, expiresAt: plan.expiresAt,
+        savedSceneBaseline: { sourceSha256: plan.diskBefore.sourceSha256,
+            metaSha256: plan.diskBefore.metaSha256, componentEvents: plan.diskBefore.componentEvents },
+        diff: { action: 'set-ui-event-list', componentClassName: plan.componentClassName,
+            eventProperty: plan.eventProperty, scene: plan.sceneName, node: plan.nodePath,
+            componentInstanceId: plan.componentInstanceId, before: plan.expectedBefore, after: plan.expectedAfter },
+        recovery: { operationId, automaticRetry: false, reconcileCommand: 'creator.scene.ui-events.set.reconcile',
+            sameCreatorSessionRequired: true,
+            note: 'The plan binds the exact component event list and saved .fire/.meta. Reconcile only observes live and disk state; save manually if it reports save-required.' } };
+}
+
+async function readPlannedSceneUiEvents(plan) {
+    const state = await callScene('uiEventsState', { sceneUuid: plan.sceneUuid, nodeUuid: plan.nodeUuid,
+        nodePath: plan.nodePath, componentClassName: plan.componentClassName,
+        eventProperty: plan.eventProperty, componentInstanceId: plan.componentInstanceId }, 20000);
+    if (!state || state.available !== true || state.sceneUuid !== plan.sceneUuid || state.nodeUuid !== plan.nodeUuid
+        || state.nodePath !== plan.nodePath || state.componentClassName !== plan.componentClassName
+        || state.serializedClassId !== plan.serializedClassId || state.eventProperty !== plan.eventProperty
+        || state.componentInstanceId !== plan.componentInstanceId || !Array.isArray(state.events))
+        throw coded(state && state.reason || 'SCENE_UI_EVENTS_STATE_UNAVAILABLE');
+    return state;
+}
+
+function sceneUiEventsReceipt(operation, state) {
+    const plan = operation.plan;
+    return { operationId: operation.operationId, status: operation.status, projectRoot: plan.projectRoot,
+        creatorVersion: plan.creatorVersion, creatorInstanceId: plan.creatorInstanceId,
+        sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, nodePath: plan.nodePath, nodeUuid: plan.nodeUuid,
+        componentClassName: plan.componentClassName, eventProperty: plan.eventProperty,
+        componentInstanceId: plan.componentInstanceId, before: plan.expectedBefore,
+        events: state && state.events || null, sceneSaveRequestSent: !!operation.sceneSaveRequestSent,
+        sceneSaveCompletionConfirmed: false,
+        scenePersistenceConfirmed: !!(operation.diskReadback && operation.diskReadback.verified === true),
+        diskReadback: operation.diskReadback || null, plannedByInstanceId: operation.plannedByInstanceId,
+        appliedByInstanceId: operation.appliedByInstanceId || null,
+        completedByInstanceId: operation.completedByInstanceId || null,
+        approvedAt: operation.approvedAt || null, completedAt: operation.completedAt || null,
+        reconciledAt: operation.reconciledAt || null,
+        recovery: { automaticRetry: false, reconcileCommand: 'creator.scene.ui-events.set.reconcile',
+            manualSaveMayBeRequired: operation.status === 'save-required',
+            note: 'Persistence is confirmed only when the exact serialized event list is read back from the saved .fire.' } };
+}
+
+async function commitSceneUiEvents(input) {
+    const operation = readSceneUiEventsOperation(input.operationId);
+    verifySceneOperationIdentity(operation);
+    if (operation.plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
+    if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    if (operation.status !== 'planned') throw coded(['applying', 'awaiting-approval', 'mutation-applied',
+        'save-requested', 'save-required'].includes(operation.status)
+        ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+    if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+    let before;
+    try {
+        before = await readPlannedSceneUiEvents(operation.plan);
+        if (!buttonEventListMatches(before.events, operation.plan.expectedBefore)) throw coded('OPERATION_PRECONDITION_FAILED');
+        await verifySceneNodeDiskBefore(operation.plan);
+    } catch (error) {
+        operation.status = 'conflict'; operation.conflictAt = new Date().toISOString(); writeOperation(operation); throw error;
+    }
+    operation.status = 'applying'; operation.approvedAt = new Date().toISOString();
+    operation.approvalSource = 'commit-tool-call'; operation.appliedByInstanceId = INSTANCE_ID; writeOperation(operation);
+    const mutation = await callScene('setUiEvents', { sceneUuid: operation.plan.sceneUuid,
+        nodeUuid: operation.plan.nodeUuid, nodePath: operation.plan.nodePath,
+        componentClassName: operation.plan.componentClassName, eventProperty: operation.plan.eventProperty,
+        componentInstanceId: operation.plan.componentInstanceId, expectedBefore: operation.plan.expectedBefore,
+        events: operation.plan.expectedAfter }, 30000);
+    if (!mutation || mutation.available !== true || !buttonEventListMatches(mutation.events, operation.plan.expectedAfter)) {
+        operation.status = mutation && mutation.mutationStarted ? 'mutation-applied' : 'conflict';
+        operation.lastErrorCode = mutation && mutation.reason || 'SCENE_UI_EVENTS_WRITE_READBACK_FAILED';
+        writeOperation(operation); throw coded(operation.lastErrorCode);
+    }
+    operation.status = 'mutation-applied'; operation.mutationAppliedAt = new Date().toISOString(); writeOperation(operation);
+    if (!Editor.Ipc || typeof Editor.Ipc.sendToPanel !== 'function') throw coded('CREATOR_SCENE_SAVE_IPC_UNAVAILABLE');
+    try { Editor.Ipc.sendToPanel('scene', 'scene:stash-and-save'); }
+    catch (error) { throw coded('CREATOR_SCENE_SAVE_REQUEST_FAILED', String(error.message || error)); }
+    operation.status = 'save-requested'; operation.sceneSaveRequestSent = true;
+    operation.sceneSaveRequestedAt = new Date().toISOString(); writeOperation(operation);
+    const readback = await readPlannedSceneUiEvents(operation.plan);
+    if (!buttonEventListMatches(readback.events, operation.plan.expectedAfter)) throw coded('OPERATION_READBACK_STATE_MISMATCH');
+    await confirmSceneNodeDiskPersistence(operation);
+    operation.status = 'completed'; operation.completedAt = new Date().toISOString();
+    operation.completedByInstanceId = INSTANCE_ID; writeOperation(operation);
+    return sceneUiEventsReceipt(operation, readback);
+}
+
+async function reconcileSceneUiEvents(input) {
+    const operation = readSceneUiEventsOperation(input.operationId);
+    verifySceneOperationIdentity(operation, { requireCurrentContract: false });
+    let observed;
+    try { observed = await readPlannedSceneUiEvents(operation.plan); }
+    catch (error) {
+        operation.status = 'conflict'; operation.reconciledAt = new Date().toISOString();
+        operation.reconcileReason = error.code || 'SCENE_UI_EVENTS_STATE_UNAVAILABLE'; writeOperation(operation);
+        return { ...sceneUiEventsReceipt(operation, null), observed: null, reason: operation.reconcileReason };
+    }
+    let diskState = null;
+    try { diskState = await reconcileSceneNodeDiskOperation(operation,
+        buttonEventListMatches(observed.events, operation.plan.expectedBefore),
+        buttonEventListMatches(observed.events, operation.plan.expectedAfter)); }
+    catch (error) {
+        operation.status = 'conflict'; operation.reconciledAt = new Date().toISOString();
+        operation.reconcileReason = error.code || 'SCENE_DISK_READBACK_FAILED'; writeOperation(operation);
+        return { ...sceneUiEventsReceipt(operation, observed), observed: { events: observed.events,
+            sceneUuid: observed.sceneUuid, nodeUuid: observed.nodeUuid, nodePath: observed.nodePath, disk: null },
+            reason: operation.reconcileReason };
+    }
+    operation.reconciledAt = new Date().toISOString(); writeOperation(operation);
+    return { ...sceneUiEventsReceipt(operation, observed), observed: { events: observed.events,
+        sceneUuid: observed.sceneUuid, nodeUuid: observed.nodeUuid, nodePath: observed.nodePath,
+        ...(diskState ? { disk: { sourceSha256: diskState.disk.sourceSha256,
+            metaSha256: diskState.disk.metaSha256, componentEvents: diskState.disk.componentEvents,
+            matchesBefore: diskState.before, matchesAfter: diskState.after } } : {}) },
+        retry: 'Never replay this operation. Create a new plan after reviewing live and saved state.' };
+}
+
+
 function sceneNodeRenameReceipt(operation, state) {
     const plan = operation.plan;
     return { operationId: operation.operationId, status: operation.status, projectRoot: plan.projectRoot,
@@ -5598,7 +5922,8 @@ async function sceneNodeDiskState(sceneUuid, nodeUuid, options = {}) {
         throw coded('SCENE_CHANGED_DURING_INSPECT');
     const state = inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow: row, nodeUuid,
         componentProperty: options.componentProperty, includeComponents: options.includeComponents === true,
-        includeSubtree: options.includeSubtree === true, absentNodeUuids: options.absentNodeUuids });
+        componentEvents: options.componentEvents, includeSubtree: options.includeSubtree === true,
+        absentNodeUuids: options.absentNodeUuids });
     if (!state.verified) throw coded(state.reason || 'SCENE_DISK_READBACK_FAILED');
     const freshRow = await queryAssetByUrl(identity.url);
     const freshSceneBytes = readStableProjectFile(sceneFile, MAX_SCENE_SERIALIZATION_BYTES, 'SCENE_SERIALIZATION_FILE_UNSAFE');
@@ -5617,6 +5942,11 @@ function sceneNodeDiskOptionsForPlan(plan) {
             ...(plan.diskBefore.componentProperty.isDefaultOmitted
                 ? { defaultValue: plan.diskBefore.componentProperty.value } : {}) };
     }
+    if (plan.diskBefore.componentEvents) options.componentEvents = {
+        componentInstanceId: plan.diskBefore.componentEvents.componentInstanceId,
+        serializedClassId: plan.diskBefore.componentEvents.serializedClassId,
+        eventProperty: plan.diskBefore.componentEvents.eventProperty,
+    };
     if (Array.isArray(plan.diskBefore.components)) options.includeComponents = true;
     if (Array.isArray(plan.diskBefore.subtree)) options.includeSubtree = true;
     return options;
@@ -5646,11 +5976,12 @@ async function readSceneComponentPropertyTransform(plan, { afterMutation = false
     return Object.fromEntries(fields.map((field) => [field, state.transform[field]]));
 }
 
-function sceneNodeDiskBaseline(disk, { includeButtonEvents = false } = {}) {
+function sceneNodeDiskBaseline(disk, { includeButtonEvents = false, includeComponentEvents = false } = {}) {
     const baseline = { sceneUrl: disk.sceneUrl, importer: disk.importer, sourceSha256: disk.sourceSha256,
         metaSha256: disk.metaSha256, active: disk.active, nodeName: disk.nodeName,
         parentUuid: disk.parentUuid, nodePath: disk.nodePath, transform: disk.transform };
     if (includeButtonEvents) baseline.buttonEvents = disk.buttonEvents;
+    if (includeComponentEvents) baseline.componentEvents = disk.componentEvents;
     if (disk.componentProperty) baseline.componentProperty = disk.componentProperty;
     if (Array.isArray(disk.components)) baseline.components = disk.components;
     if (Array.isArray(disk.subtree)) baseline.subtree = disk.subtree;
@@ -5663,6 +5994,7 @@ function sceneNodeDiskReadback(disk) {
         sourceSha256: disk.sourceSha256, metaSha256: disk.metaSha256, transform: disk.transform,
         active: disk.active, verifiedAt: new Date().toISOString() };
     if (Array.isArray(disk.buttonEvents)) readback.buttonEvents = disk.buttonEvents;
+    if (disk.componentEvents) readback.componentEvents = disk.componentEvents;
     if (disk.componentProperty) readback.componentProperty = disk.componentProperty;
     if (Array.isArray(disk.components)) readback.components = disk.components;
     if (Array.isArray(disk.subtree)) readback.subtree = disk.subtree;
@@ -5696,6 +6028,15 @@ function validSceneNodeDiskBaseline(disk) {
         && (disk.parentUuid === undefined || typeof disk.parentUuid === 'string')
         && (disk.nodePath === undefined || typeof disk.nodePath === 'string')
         && (disk.buttonEvents === undefined || validButtonEventList(disk.buttonEvents))
+        && (disk.componentEvents === undefined || (disk.componentEvents && typeof disk.componentEvents === 'object'
+            && !Array.isArray(disk.componentEvents)
+            && Object.keys(disk.componentEvents).sort().join(',') === 'componentInstanceId,eventProperty,events,serializedClassId'
+            && typeof disk.componentEvents.componentInstanceId === 'string'
+            && disk.componentEvents.componentInstanceId.length > 0 && disk.componentEvents.componentInstanceId.length <= 128
+            && typeof disk.componentEvents.serializedClassId === 'string'
+            && typeof disk.componentEvents.eventProperty === 'string'
+            && (UI_EVENT_PROPERTIES[disk.componentEvents.serializedClassId] || []).includes(disk.componentEvents.eventProperty)
+            && validButtonEventList(disk.componentEvents.events, { allowUnbound: true })))
         && (disk.componentProperty === undefined || validSavedComponentProperty(disk.componentProperty))
         && (disk.components === undefined || (Array.isArray(disk.components) && disk.components.length <= 32
             && disk.components.every((component) => component && typeof component === 'object' && !Array.isArray(component)
@@ -5732,6 +6073,8 @@ function sceneNodeDiskExpected(plan, side, operation) {
         expected.nodePath = plan.expectedAfter.nodePath;
     } else if (plan.operation === 'creator.scene.button-events.set') {
         expected.buttonEvents = plan.expectedAfter;
+    } else if (plan.operation === 'creator.scene.ui-events.set') {
+        expected.componentEvents = { ...expected.componentEvents, events: plan.expectedAfter };
     } else if (plan.operation === 'creator.scene.node.set-component-property') {
         expected.componentProperty = { ...expected.componentProperty, value: plan.expectedAfter.serializedValue };
         if (operation && operation.nodeTransformAfter)
@@ -5764,6 +6107,8 @@ function sceneNodeDiskMatchesPlan(disk, plan, side, operation) {
             ? !sceneNodePathsMatch(disk[field], expected[field]) : disk[field] !== expected[field])) return false;
     }
     if (expected.buttonEvents !== undefined && !buttonEventListMatches(disk.buttonEvents, expected.buttonEvents)) return false;
+    if (expected.componentEvents !== undefined
+        && !sceneComponentValuesEqual(disk.componentEvents, expected.componentEvents)) return false;
     if (expected.componentProperty !== undefined && !sceneComponentValuesEqual(disk.componentProperty, expected.componentProperty)) return false;
     if (expected.components !== undefined && !sceneComponentValuesEqual(disk.components, expected.components)) return false;
     if (expected.subtree !== undefined && !sceneComponentValuesEqual(disk.subtree, expected.subtree)) return false;
@@ -6747,6 +7092,10 @@ function capabilityList() {
             && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
         'creator.prefab.source.inspect': !!(Editor && Editor.Project && Editor.Project.path && Editor.assetdb
             && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.prefab.source.editable.inspect': prefabEditModeApiAvailable && !!(Editor && Editor.Project
+            && Editor.Project.path && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.Ipc && typeof Editor.Ipc.sendToAll === 'function' && Editor.assetdb
+            && typeof Editor.assetdb.queryAssets === 'function'),
         'creator.prefab.instance.inspect': !!(Editor && Editor.Project && Editor.Project.path
             && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
             && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
@@ -6810,6 +7159,10 @@ function capabilityList() {
         'creator.scene.button-events.set.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
             && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'),
         'creator.scene.button-events.set.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.ui-events.set.plan': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.ui-events.set.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'),
+        'creator.scene.ui-events.set.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
         'creator.scene.node.add-component.plan': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
         'creator.scene.node.add-component.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
             && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'),
@@ -7250,6 +7603,7 @@ function execute(command, input, context) {
     if (command === 'creator.prefab.create.commit') return commitPrefabCreate(input, context);
     if (command === 'creator.prefab.create.reconcile') return reconcilePrefabCreate(input);
     if (command === 'creator.prefab.source.inspect') return inspectPrefabSourceCommand(input);
+    if (command === 'creator.prefab.source.editable.inspect') return inspectPrefabEditableCommand(input);
     if (command === 'creator.prefab.instance.inspect') return inspectPrefabInstanceCommand(input);
     if (command === 'creator.prefab.instance.override.plan') return createPrefabInstanceOverridePlan(input);
     if (command === 'creator.prefab.instance.override.commit') return commitPrefabInstanceOverride(input, context);
@@ -7292,6 +7646,9 @@ function execute(command, input, context) {
     if (command === 'creator.scene.button-events.set.plan') return createSceneButtonEventsPlan(input);
     if (command === 'creator.scene.button-events.set.commit') return commitSceneButtonEvents(input, context);
     if (command === 'creator.scene.button-events.set.reconcile') return reconcileSceneButtonEvents(input);
+    if (command === 'creator.scene.ui-events.set.plan') return createSceneUiEventsPlan(input);
+    if (command === 'creator.scene.ui-events.set.commit') return commitSceneUiEvents(input, context);
+    if (command === 'creator.scene.ui-events.set.reconcile') return reconcileSceneUiEvents(input);
     if (command === 'creator.scene.node.add-component.plan') return createSceneComponentAddPlan(input);
     if (command === 'creator.scene.node.add-component.commit') return commitSceneComponentAdd(input, context);
     if (command === 'creator.scene.node.add-component.reconcile') return reconcileSceneComponentAdd(input);

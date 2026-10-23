@@ -18,7 +18,8 @@ export function readPreviewComponentProperty(node, componentType, componentPrope
     const backingField = componentType === 'cc.Label'
       ? componentProperty === 'string' ? '_string'
         : componentProperty === 'overflow' ? '_N$overflow' : null
-      : componentType === 'cc.PageView' && componentProperty === 'direction' ? '_N$direction' : null;
+      : componentType === 'cc.PageView' && componentProperty === 'direction' ? '_N$direction'
+        : componentType === 'cc.Toggle' && componentProperty === 'isChecked' ? '_N$isChecked' : null;
     descriptor = backingField ? Object.getOwnPropertyDescriptor(component, backingField) : null;
     found = !!descriptor && Object.prototype.hasOwnProperty.call(descriptor, 'value');
     actual = found ? descriptor.value : null;

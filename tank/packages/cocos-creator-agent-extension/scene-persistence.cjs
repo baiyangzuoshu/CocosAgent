@@ -14,6 +14,11 @@ const VALUE_TYPES = {
     rect: { type: 'cc.Rect', fields: ['x', 'y', 'width', 'height'] },
     color: { type: 'cc.Color', fields: ['r', 'g', 'b', 'a'] },
 };
+const UI_EVENT_PROPERTIES = Object.freeze({
+    'cc.Button': ['clickEvents'], 'cc.Toggle': ['clickEvents', 'checkEvents'], 'cc.ToggleContainer': ['checkEvents'],
+    'cc.Slider': ['slideEvents'], 'cc.ScrollView': ['scrollEvents'], 'cc.PageView': ['scrollEvents', 'pageEvents'],
+    'cc.EditBox': ['editingDidBegan', 'textChanged', 'editingDidEnded', 'editingReturn'],
+});
 const UUID = /^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$/;
 
 function fail(reason, details = {}) { return { verified: false, reason, ...details }; }
@@ -126,7 +131,7 @@ function validComponentDiskValue(value, depth = 0) {
             : Number.isFinite(value[field]) && Math.abs(value[field]) <= 1000000);
     if (value.kind === 'array') return depth === 0 && keys === 'items,kind' && Array.isArray(value.items)
         && value.items.length <= 32 && value.items.every((item) => validComponentDiskValue(item, depth + 1)
-            && !(item && typeof item === 'object' && item.kind === 'asset'));
+            && !(item && typeof item === 'object' && item.kind === 'array'));
     if (value.kind === 'asset') return keys === 'assetUuid,kind' && UUID.test(value.assetUuid || '');
     if (value.kind === 'node-ref') return keys === 'kind,nodeUuid' && UUID.test(value.nodeUuid || '');
     return value.kind === 'component-ref' && keys === 'componentInstanceId,kind,nodeUuid,serializedClassId'
@@ -264,6 +269,38 @@ function inspectButtonEvents(nodeRecord, records) {
     return { buttonComponentCount: buttons.length, buttonEvents: events };
 }
 
+function inspectSerializedUiEvents(nodeRecord, records, sceneRootUuid, selector) {
+    if (!selector || typeof selector.componentInstanceId !== 'string' || !selector.componentInstanceId
+        || selector.componentInstanceId.length > 128 || typeof selector.serializedClassId !== 'string'
+        || typeof selector.eventProperty !== 'string'
+        || !(UI_EVENT_PROPERTIES[selector.serializedClassId] || []).includes(selector.eventProperty))
+        return fail('SCENE_UI_EVENT_DISK_SELECTOR_INVALID');
+    const matches = Array.isArray(nodeRecord._components) ? nodeRecord._components.map((reference) => resolveRef(reference, records))
+        .filter((component) => component && component._id === selector.componentInstanceId
+            && component.__type__ === selector.serializedClassId) : [];
+    if (matches.length !== 1 || records.filter((record) => record._id === selector.componentInstanceId).length !== 1
+        || resolveRef(matches[0].node, records) !== nodeRecord)
+        return fail('SCENE_COMPONENT_SERIALIZED_IDENTITY_MISMATCH');
+    const rawEvents = matches[0][selector.eventProperty] === undefined ? [] : matches[0][selector.eventProperty];
+    if (!Array.isArray(rawEvents) || rawEvents.length > 12) return fail('SCENE_UI_EVENT_SERIALIZED_LIST_INVALID');
+    const events = [];
+    for (const reference of rawEvents) {
+        const event = resolveRef(reference, records);
+        const target = event && event.target == null ? null : event && resolveRef(event.target, records);
+        if (!event || event.__type__ !== 'cc.ClickEvent'
+            || (event.target != null && (!target || target.__type__ !== 'cc.Node'
+                || !UUID.test(target._id || '') || !isNodeInScene(target, records, sceneRootUuid)))
+            || (event.component !== undefined && typeof event.component !== 'string')
+            || (event.handler !== undefined && typeof event.handler !== 'string')
+            || (event.customEventData !== undefined && typeof event.customEventData !== 'string'))
+            return fail('SCENE_UI_EVENT_SERIALIZED_ENTRY_INVALID');
+        events.push({ targetUuid: target ? target._id : null, component: event.component || '',
+            handler: event.handler || '', customEventData: event.customEventData || '' });
+    }
+    return { verified: true, componentEvents: { componentInstanceId: selector.componentInstanceId,
+        serializedClassId: selector.serializedClassId, eventProperty: selector.eventProperty, events } };
+}
+
 function inspectSceneAssetIdentity({ sceneBytes, metaBytes, sceneAssetRow }) {
     if (!Buffer.isBuffer(sceneBytes) || sceneBytes.length < 2 || sceneBytes.length > MAX_SCENE_BYTES)
         return fail('SCENE_SERIALIZATION_SIZE_INVALID');
@@ -297,7 +334,7 @@ function inspectSceneAssetIdentity({ sceneBytes, metaBytes, sceneAssetRow }) {
         sceneRootUuid: scenes[0]._id, sceneUrl: sceneAssetRow.url };
 }
 
-function inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow, nodeUuid, componentProperty,
+function inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow, nodeUuid, componentProperty, componentEvents,
     includeComponents = false, includeSubtree = false, absentNodeUuids }) {
     if (!Buffer.isBuffer(sceneBytes) || sceneBytes.length < 2 || sceneBytes.length > MAX_SCENE_BYTES)
         return fail('SCENE_SERIALIZATION_SIZE_INVALID');
@@ -386,6 +423,9 @@ function inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow
     const propertyState = componentProperty === undefined ? null
         : inspectComponentProperty(record, records, root._id, sceneUuid, componentProperty);
     if (propertyState && !propertyState.verified) return propertyState;
+    const eventState = componentEvents === undefined ? null
+        : inspectSerializedUiEvents(record, records, root._id, componentEvents);
+    if (eventState && !eventState.verified) return eventState;
     const buttonState = inspectButtonEvents(record, records);
     const trs = record._trs && record._trs.array;
     const size = record._contentSize;
@@ -402,6 +442,7 @@ function inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow
         active: typeof record._active === 'boolean' ? record._active : true,
         ...buttonState,
         ...(componentState ? { components: componentState.components } : {}),
+        ...(eventState ? { componentEvents: eventState.componentEvents } : {}),
         ...(subtreeState ? { subtree: subtreeState.subtree } : {}),
         ...(propertyState ? { componentProperty: propertyState.componentProperty } : {}),
         transform: { x: trs[0], y: trs[1], z: trs[2], angle, scaleX: trs[7], scaleY: trs[8],

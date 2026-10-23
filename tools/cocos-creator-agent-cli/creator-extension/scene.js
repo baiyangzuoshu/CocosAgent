@@ -18,11 +18,11 @@ const UI_COMPONENT_CLASS_NAMES = new Set([
 ]);
 const UI_EVENT_PROPERTIES = Object.freeze({
     'cc.Button': ['clickEvents'],
-    'cc.Toggle': ['checkEvents'],
+    'cc.Toggle': ['clickEvents', 'checkEvents'],
     'cc.ToggleContainer': ['checkEvents'],
     'cc.Slider': ['slideEvents'],
     'cc.ScrollView': ['scrollEvents'],
-    'cc.PageView': ['pageEvents'],
+    'cc.PageView': ['scrollEvents', 'pageEvents'],
     'cc.EditBox': ['editingDidBegan', 'textChanged', 'editingDidEnded', 'editingReturn'],
 });
 const WIDGET_ALIGN_FLAG_PROPERTIES = Object.freeze({
@@ -33,10 +33,22 @@ const WIDGET_ALIGN_FLAG_PROPERTIES = Object.freeze({
     isAlignHorizontalCenter: 1 << 4,
     isAlignRight: 1 << 5,
 });
+const LABEL_STYLE_FLAG_PROPERTIES = Object.freeze({
+    enableBold: 1 << 0,
+    enableItalic: 1 << 1,
+    enableUnderline: 1 << 2,
+});
 const COMPONENT_SERIALIZED_PROPERTY_ALIASES = Object.freeze({
     'cc.Layout': Object.freeze({
         type: '_N$layoutType',
         resizeMode: '_resize',
+    }),
+    'cc.Label': Object.freeze({
+        font: '_N$file',
+        useSystemFont: '_isSystemFontUsed',
+        enableBold: '_styleFlags',
+        enableItalic: '_styleFlags',
+        enableUnderline: '_styleFlags',
     }),
 });
 const MAX_UI_COMPONENTS_PER_NODE = 16;
@@ -269,66 +281,75 @@ function normalizedUiEvents(component, property) {
     return { available: true, events };
 }
 
-function buttonEventsState(params) {
+function uiEventsState(params) {
     if (!params || typeof params.sceneUuid !== 'string' || typeof params.nodeUuid !== 'string'
-        || typeof params.nodePath !== 'string' || typeof params.componentInstanceId !== 'string')
-        return { available: false, reason: 'SCENE_BUTTON_EVENTS_INPUT_INVALID' };
+        || typeof params.nodePath !== 'string' || typeof params.componentClassName !== 'string'
+        || typeof params.eventProperty !== 'string' || typeof params.componentInstanceId !== 'string')
+        return { available: false, reason: 'SCENE_UI_EVENTS_INPUT_INVALID' };
+    if (!(UI_EVENT_PROPERTIES[params.componentClassName] || []).includes(params.eventProperty))
+        return { available: false, reason: 'SCENE_UI_EVENT_PROPERTY_UNSUPPORTED' };
     const located = locateNode(params.sceneUuid, params.nodeUuid);
     if (!located.state.available) return located.state;
     if (located.state.nodePath !== params.nodePath) return { ...located.state, available: false, reason: 'SCENE_NODE_PATH_MISMATCH' };
-    const buttonClass = componentClass('cc.Button');
-    if (!buttonClass.available) return buttonClass;
-    const query = exactComponentInstances(located.node, buttonClass.constructor);
+    const resolvedClass = componentClass(params.componentClassName);
+    if (!resolvedClass.available) return resolvedClass;
+    const query = exactComponentInstances(located.node, resolvedClass.constructor);
     if (!query.available) return query;
-    const button = query.components.find((item) => item && item._id != null
+    const component = query.components.find((item) => item && item._id != null
         && String(item._id) === params.componentInstanceId && cc.isValid(item, true));
-    if (!button) return { ...located.state, available: false, reason: 'SCENE_BUTTON_INSTANCE_NOT_FOUND' };
-    const current = normalizedButtonEvents(button);
+    if (!component) return { ...located.state, available: false, reason: 'SCENE_UI_COMPONENT_INSTANCE_NOT_FOUND' };
+    const current = normalizedUiEvents(component, params.eventProperty);
     if (!current.available) return { ...located.state, ...current };
-    if (params.events === undefined) return { ...located.state, componentClassName: 'cc.Button',
-        componentInstanceId: params.componentInstanceId, events: current.events };
+    const serializedClassId = cc.js && typeof cc.js._getClassId === 'function'
+        ? cc.js._getClassId(resolvedClass.constructor, false) : null;
+    if (params.events === undefined) return { ...located.state, componentClassName: params.componentClassName,
+        serializedClassId,
+        eventProperty: params.eventProperty, componentInstanceId: params.componentInstanceId, events: current.events };
     if (!Array.isArray(params.events) || params.events.length > 12)
-        return { ...located.state, available: false, reason: 'SCENE_BUTTON_EVENT_INPUT_INVALID' };
+        return { ...located.state, available: false, reason: 'SCENE_UI_EVENT_INPUT_INVALID' };
     for (const event of params.events) {
         if (!event || typeof event !== 'object' || Array.isArray(event)
             || Object.keys(event).sort().join(',') !== 'component,customEventData,handler,targetUuid'
             || !validUuid(event.targetUuid) || typeof event.component !== 'string' || event.component.length > MAX_NAME
             || !/^[A-Za-z_$][A-Za-z0-9_$]{0,63}$/.test(event.handler)
             || typeof event.customEventData !== 'string' || event.customEventData.length > 512)
-            return { ...located.state, available: false, reason: 'SCENE_BUTTON_EVENT_INVALID' };
+            return { ...located.state, available: false, reason: 'SCENE_UI_EVENT_INVALID' };
         const target = locateNode(params.sceneUuid, event.targetUuid);
-        if (!target.state.available) return { ...located.state, available: false, reason: 'SCENE_BUTTON_EVENT_TARGET_UNAVAILABLE', targetReason: target.state.reason };
+        if (!target.state.available) return { ...located.state, available: false, reason: 'SCENE_UI_EVENT_TARGET_UNAVAILABLE', targetReason: target.state.reason };
         const handlerClass = componentClass(event.component);
         if (!handlerClass.available) return { ...located.state, available: false, reason: handlerClass.reason };
         const handlerComponents = exactComponentInstances(target.node, handlerClass.constructor);
         if (!handlerComponents.available || handlerComponents.components.length !== 1)
-            return { ...located.state, available: false, reason: handlerComponents.reason || 'SCENE_BUTTON_HANDLER_COMPONENT_AMBIGUOUS' };
+            return { ...located.state, available: false, reason: handlerComponents.reason || 'SCENE_UI_HANDLER_COMPONENT_AMBIGUOUS' };
         if (!hasSafeComponentHandler(handlerClass.constructor, event.handler))
             return { ...located.state, available: false, reason: 'SCENE_COMPOSE_HANDLER_NOT_FOUND', handler: event.handler };
     }
-    return { ...located.state, componentClassName: 'cc.Button', componentInstanceId: params.componentInstanceId,
+    return { ...located.state, componentClassName: params.componentClassName, serializedClassId,
+        eventProperty: params.eventProperty,
+        componentInstanceId: params.componentInstanceId,
         events: current.events, requestedEvents: params.events,
         changed: !sameValue(current.events, params.events) };
 }
 
-function setButtonEvents(params) {
+function setUiEvents(params) {
     if (!params || !Array.isArray(params.expectedBefore) || !Array.isArray(params.events))
-        return { available: false, reason: 'SCENE_BUTTON_EVENTS_INPUT_INVALID' };
-    const before = buttonEventsState({ sceneUuid: params.sceneUuid, nodeUuid: params.nodeUuid,
-        nodePath: params.nodePath, componentInstanceId: params.componentInstanceId });
+        return { available: false, reason: 'SCENE_UI_EVENTS_INPUT_INVALID' };
+    const selector = { sceneUuid: params.sceneUuid, nodeUuid: params.nodeUuid, nodePath: params.nodePath,
+        componentClassName: params.componentClassName, eventProperty: params.eventProperty,
+        componentInstanceId: params.componentInstanceId };
+    const before = uiEventsState(selector);
     if (!before.available) return before;
     if (!sameValue(before.events, params.expectedBefore))
-        return { ...before, available: false, reason: 'SCENE_BUTTON_EVENTS_PRECONDITION_FAILED' };
+        return { ...before, available: false, reason: 'SCENE_UI_EVENTS_PRECONDITION_FAILED' };
     if (sameValue(before.events, params.events))
-        return { ...before, available: false, reason: 'SCENE_BUTTON_EVENTS_NO_CHANGE' };
-    const validated = buttonEventsState({ sceneUuid: params.sceneUuid, nodeUuid: params.nodeUuid,
-        nodePath: params.nodePath, componentInstanceId: params.componentInstanceId, events: params.events });
+        return { ...before, available: false, reason: 'SCENE_UI_EVENTS_NO_CHANGE' };
+    const validated = uiEventsState({ ...selector, events: params.events });
     if (!validated.available) return validated;
     if (typeof cc.Component.EventHandler !== 'function')
-        return { ...before, available: false, reason: 'SCENE_BUTTON_EVENT_HANDLER_UNAVAILABLE' };
+        return { ...before, available: false, reason: 'SCENE_UI_EVENT_HANDLER_UNAVAILABLE' };
     const located = locateNode(params.sceneUuid, params.nodeUuid);
-    const buttonClass = componentClass('cc.Button');
-    const button = exactComponentInstances(located.node, buttonClass.constructor).components
+    const resolvedClass = componentClass(params.componentClassName);
+    const component = exactComponentInstances(located.node, resolvedClass.constructor).components
         .find((item) => String(item._id) === params.componentInstanceId);
     const eventHandlers = params.events.map((event) => {
         const target = locateNode(params.sceneUuid, event.targetUuid).node;
@@ -342,17 +363,40 @@ function setButtonEvents(params) {
     let mutationStarted = false;
     try {
         mutationStarted = true;
-        button.clickEvents = eventHandlers;
+        component[params.eventProperty] = eventHandlers;
     } catch (error) {
-        return { ...before, available: false, reason: 'SCENE_BUTTON_EVENTS_WRITE_FAILED', mutationStarted,
+        return { ...before, available: false, reason: 'SCENE_UI_EVENTS_WRITE_FAILED', mutationStarted,
             error: String(error && error.message || error) };
     }
-    const after = normalizedButtonEvents(button);
+    const after = normalizedUiEvents(component, params.eventProperty);
     if (!after.available || !sameValue(after.events, params.events))
-        return { ...before, available: false, reason: 'SCENE_BUTTON_EVENTS_READBACK_FAILED', mutationStarted: true,
+        return { ...before, available: false, reason: 'SCENE_UI_EVENTS_READBACK_FAILED', mutationStarted: true,
             observedEvents: after.events || null };
     return { available: true, sceneUuid: params.sceneUuid, nodeUuid: params.nodeUuid, nodePath: params.nodePath,
+        componentClassName: params.componentClassName, serializedClassId: before.serializedClassId,
+        eventProperty: params.eventProperty,
         componentInstanceId: params.componentInstanceId, before: before.events, events: after.events };
+}
+
+function buttonEventsState(params) {
+    const state = uiEventsState({ ...params, componentClassName: 'cc.Button', eventProperty: 'clickEvents' });
+    const reasons = { SCENE_UI_EVENTS_INPUT_INVALID: 'SCENE_BUTTON_EVENTS_INPUT_INVALID',
+        SCENE_UI_EVENT_INPUT_INVALID: 'SCENE_BUTTON_EVENT_INPUT_INVALID',
+        SCENE_UI_EVENT_INVALID: 'SCENE_BUTTON_EVENT_INVALID',
+        SCENE_UI_EVENT_TARGET_UNAVAILABLE: 'SCENE_BUTTON_EVENT_TARGET_UNAVAILABLE',
+        SCENE_UI_COMPONENT_INSTANCE_NOT_FOUND: 'SCENE_BUTTON_INSTANCE_NOT_FOUND' };
+    return reasons[state.reason] ? { ...state, reason: reasons[state.reason] } : state;
+}
+
+function setButtonEvents(params) {
+    const state = setUiEvents({ ...params, componentClassName: 'cc.Button', eventProperty: 'clickEvents' });
+    const reasons = { SCENE_UI_EVENTS_INPUT_INVALID: 'SCENE_BUTTON_EVENTS_INPUT_INVALID',
+        SCENE_UI_EVENTS_PRECONDITION_FAILED: 'SCENE_BUTTON_EVENTS_PRECONDITION_FAILED',
+        SCENE_UI_EVENTS_NO_CHANGE: 'SCENE_BUTTON_EVENTS_NO_CHANGE',
+        SCENE_UI_EVENT_HANDLER_UNAVAILABLE: 'SCENE_BUTTON_EVENT_HANDLER_UNAVAILABLE',
+        SCENE_UI_EVENTS_WRITE_FAILED: 'SCENE_BUTTON_EVENTS_WRITE_FAILED',
+        SCENE_UI_EVENTS_READBACK_FAILED: 'SCENE_BUTTON_EVENTS_READBACK_FAILED' };
+    return reasons[state.reason] ? { ...state, reason: reasons[state.reason] } : state;
 }
 
 function snapshot(maxNodes) {
@@ -876,9 +920,29 @@ function isComponentConstructor(constructor) {
         && !!cc.js && typeof cc.js.isChildClassOf === 'function' && cc.js.isChildClassOf(constructor, cc.Component);
 }
 
+function isAssetConstructor(constructor) {
+    return typeof constructor === 'function' && !!cc && !!cc.Asset && !!cc.js
+        && typeof cc.js.isChildClassOf === 'function' && cc.js.isChildClassOf(constructor, cc.Asset);
+}
+
 function componentClassName(constructor) {
     const name = cc && cc.js && typeof cc.js.getClassName === 'function' ? cc.js.getClassName(constructor) : '';
     return typeof name === 'string' && name.length <= 120 ? name : null;
+}
+
+function assetClassName(constructor) {
+    if (!isAssetConstructor(constructor)) return null;
+    const name = componentClassName(constructor);
+    if (!name) return null;
+    return name.startsWith('cc.') ? name.slice(3) : name;
+}
+
+function resolveAssetClass(name) {
+    if (typeof name !== 'string' || !/^[A-Za-z_$][A-Za-z0-9_$.]{0,119}$/.test(name)
+        || !cc || !cc.js || typeof cc.js.getClassByName !== 'function') return null;
+    const constructor = cc.js.getClassByName(name.startsWith('cc.') ? name : `cc.${name}`)
+        || cc.js.getClassByName(name);
+    return isAssetConstructor(constructor) ? constructor : null;
 }
 
 function typedReferenceValue(value, attrType) {
@@ -921,18 +985,61 @@ function componentPropertyAttributes(constructor, property) {
     return attributes && typeof attributes === 'object' ? attributes : null;
 }
 
+function componentPropertyInspectorMetadata(constructor, property, attributes, attrType, component) {
+    const enumOptions = Array.isArray(attributes && attributes.enumList)
+        ? attributes.enumList.filter((item) => item && typeof item.name === 'string'
+            && item.name.length <= 120 && Number.isFinite(item.value))
+            .slice(0, 64).map((item) => ({ name: item.name, value: item.value })) : [];
+    const range = {};
+    for (const key of ['min', 'max', 'step']) {
+        if (Number.isFinite(attributes && attributes[key])) range[key] = attributes[key];
+    }
+    const elementType = Array.isArray(attrType) ? arrayElementType(attrType) : null;
+    const assetType = isAssetConstructor(attrType) ? assetClassName(attrType) : null;
+    const elementAssetType = isAssetConstructor(elementType) ? assetClassName(elementType) : null;
+    const nodeType = attrType === cc.Node || elementType === cc.Node;
+    const componentType = isComponentConstructor(attrType) ? componentClassName(attrType)
+        : isComponentConstructor(elementType) ? componentClassName(elementType) : null;
+    const resolvedType = attrType === Array || Array.isArray(attrType) ? 'Array'
+        : attrType && typeof attrType === 'function' ? componentClassName(attrType)
+            : primitiveTypeName(attrType) || attrType;
+    const visible = attributes && attributes.visible;
+    return {
+        type: typeof resolvedType === 'string' ? resolvedType : null,
+        ...(assetType ? { assetClass: assetType } : {}),
+        ...(elementAssetType ? { elementAssetClass: elementAssetType } : {}),
+        ...(nodeType ? { referenceKind: 'node' } : componentType ? { referenceKind: 'component', referenceClass: componentType }
+            : assetType || elementAssetType ? { referenceKind: 'asset' } : {}),
+        ...(Object.keys(range).length ? { range } : {}),
+        ...(enumOptions.length ? { enum: enumOptions } : {}),
+        readonly: !!(attributes && attributes.readonly) || !isWritableComponentProperty(component, property),
+        visibility: property === 'enabled' ? 'component-header'
+            : visible === false ? 'hidden' : typeof visible === 'function' ? 'conditional' : 'visible',
+        serializable: true,
+    };
+}
+
 function componentPropertyType(attributes, value) {
-    if (!attributes) return null;
+    attributes = attributes || {};
     let type = attributes.type;
     if (type === 'Object' && typeof attributes.ctor === 'function') type = attributes.ctor;
+    if (Array.isArray(value) && type === Array && attributes.elementType)
+        type = [attributes.elementType];
+    else if (Array.isArray(value) && type && type !== Array && !Array.isArray(type))
+        type = [type];
     if (type == null && value && typeof value === 'object') {
         const knownTypes = [cc && cc.Vec2, cc && cc.Vec3, cc && cc.Vec4, cc && cc.Size,
             cc && cc.Rect, cc && cc.Color, cc && cc.Node,
             ...ASSET_CLASS_NAMES.map((name) => cc && cc[name]).filter((candidate) => typeof candidate === 'function')];
         const inferred = knownTypes.find((candidate) => typeof candidate === 'function' && value instanceof candidate);
         if (inferred) type = inferred;
+        else if (cc && cc.Asset && value instanceof cc.Asset && value.constructor) type = value.constructor;
         else if (cc && cc.Component && value instanceof cc.Component && value.constructor) type = value.constructor;
     }
+    if (type == null && typeof value === 'string') type = String;
+    else if (type == null && typeof value === 'number') type = Number;
+    else if (type == null && typeof value === 'boolean') type = Boolean;
+    else if (type == null && Array.isArray(value)) type = Array;
     return type;
 }
 
@@ -962,22 +1069,56 @@ function widgetAlignFlagsAfterChange(flags, property, enabled) {
     return null;
 }
 
+function labelStyleFlagsAfterChange(flags, property, enabled) {
+    const flag = LABEL_STYLE_FLAG_PROPERTIES[property];
+    if (!flag || !Number.isSafeInteger(flags) || flags < 0 || typeof enabled !== 'boolean') return null;
+    return enabled ? flags | flag : flags & ~flag;
+}
+
+function inspectorSerializedPropertyBinding(constructor, component, property) {
+    const serializable = Array.isArray(constructor && constructor.__values__) ? constructor.__values__ : null;
+    if (!serializable) return { available: false, reason: 'SCENE_COMPONENT_SERIALIZATION_SCHEMA_UNAVAILABLE' };
+    if (classNameOf(component) === 'cc.Widget' && WIDGET_ALIGN_FLAG_PROPERTIES[property]
+        && serializable.includes('_alignFlags'))
+        return { available: true, serializedProperty: '_alignFlags', candidates: ['_alignFlags'] };
+    if (classNameOf(component) === 'cc.Label' && LABEL_STYLE_FLAG_PROPERTIES[property]
+        && serializable.includes('_styleFlags'))
+        return { available: true, serializedProperty: '_styleFlags', candidates: ['_styleFlags'] };
+    const candidates = serializedComponentPropertyCandidates(constructor, property)
+        .filter((candidate) => serializable.includes(candidate));
+    const serializedProperty = candidates.find((candidate) => {
+        const descriptor = Object.getOwnPropertyDescriptor(component, candidate);
+        return descriptor && Object.prototype.hasOwnProperty.call(descriptor, 'value');
+    }) || candidates[0];
+    if (!serializedProperty) return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_NOT_SERIALIZABLE' };
+    return { available: true, serializedProperty,
+        candidates: [serializedProperty, ...candidates.filter((candidate) => candidate !== serializedProperty)].slice(0, 4) };
+}
+
 function publicComponentProperties(constructor, component) {
     const declared = Array.isArray(constructor && constructor.__props__) ? constructor.__props__ : [];
-    const inherited = new Set([
-        ...(Array.isArray(constructor && constructor.$super && constructor.$super.__props__)
-            ? constructor.$super.__props__ : []),
-        ...(Array.isArray(cc.Component && cc.Component.__props__) ? cc.Component.__props__ : []),
-    ]);
+    return declared.filter((property) => {
+        if (typeof property !== 'string' || !/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(property)
+            || property.startsWith('_')
+            || (UI_EVENT_PROPERTIES[classNameOf(component)] || []).includes(property)) return false;
+        const attributes = componentPropertyAttributes(constructor, property);
+        return (property === 'enabled' || !attributes || attributes.visible !== false)
+            && inspectorSerializedPropertyBinding(constructor, component, property).available;
+    });
+}
+
+function declaredPublicComponentProperties(constructor, component) {
+    const declared = Array.isArray(constructor && constructor.__props__) ? constructor.__props__ : [];
     return declared.filter((property) => typeof property === 'string'
         && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(property) && !property.startsWith('_')
-        && !inherited.has(property) && isWritableComponentProperty(component, property));
+        && !(UI_EVENT_PROPERTIES[classNameOf(component)] || []).includes(property));
 }
 
 function primitiveTypeName(attrType) {
     if (attrType === String || attrType === 'String') return 'String';
     if (attrType === Number || attrType === 'Number') return 'Number';
     if (attrType === Boolean || attrType === 'Boolean') return 'Boolean';
+    if (typeof attrType === 'function' && ['String', 'Number', 'Boolean'].includes(attrType.name)) return attrType.name;
     if (typeof attrType === 'string' && ['Integer', 'Float'].includes(attrType)) return attrType;
     if (typeof attrType === 'function' && ['Integer', 'Float'].includes(attrType.name)) return attrType.name;
     return attrType && typeof attrType === 'object'
@@ -1025,6 +1166,14 @@ function componentValueKind(value, attrType) {
     }
     const typedReference = typedReferenceValue(value, attrType);
     if (typedReference) return typedReference;
+    const declaredAssetClass = assetClassName(attrType);
+    if (declaredAssetClass) {
+        if (value == null) return { available: true, value: { kind: 'asset', assetClass: declaredAssetClass }, kind: 'asset' };
+        const assetUuid = value && (value._uuid || value.uuid);
+        if (!(value instanceof attrType) || typeof assetUuid !== 'string')
+            return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_ASSET_TYPE_MISMATCH' };
+        return { available: true, value: { kind: 'asset', assetUuid, assetClass: declaredAssetClass }, kind: 'asset' };
+    }
     const declaredArrayElementType = arrayElementType(attrType);
     if (Array.isArray(value) && declaredArrayElementType !== undefined) {
         if (value.length > 32 || value.some((item) => Array.isArray(item)))
@@ -1045,22 +1194,12 @@ function componentValueKind(value, attrType) {
                 items.push(item);
             } else {
                 const encoded = componentValueKind(item, elementType);
-                if (!encoded.available || encoded.kind === 'asset' || encoded.kind === 'array')
+                if (!encoded.available || encoded.kind === 'array')
                     return { available: false, reason: encoded.reason || 'SCENE_COMPONENT_PROPERTY_TYPE_UNSUPPORTED' };
                 items.push(encoded.value);
             }
         }
         return { available: true, value: { kind: 'array', items }, kind: 'array' };
-    }
-    for (const assetClass of ASSET_CLASS_NAMES) {
-        const constructor = cc && cc[assetClass];
-        if (typeof constructor === 'function' && attrType === constructor) {
-            if (value == null) return { available: true, value: { kind: 'asset', assetClass }, kind: 'asset' };
-            const assetUuid = value && (value._uuid || value.uuid);
-            if (!(value instanceof constructor) || typeof assetUuid !== 'string')
-                return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_ASSET_TYPE_MISMATCH' };
-            return { available: true, value: { kind: 'asset', assetUuid, assetClass }, kind: 'asset' };
-        }
     }
     return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_TYPE_UNSUPPORTED' };
 }
@@ -1083,9 +1222,9 @@ function validComponentValue(value, depth = 0) {
         && ['r', 'g', 'b', 'a'].every((field) => Number.isInteger(value[field]) && value[field] >= 0 && value[field] <= 255);
     if (value.kind === 'array') return Object.keys(value).sort().join(',') === 'items,kind' && Array.isArray(value.items)
         && value.items.length <= 32 && value.items.every((item) => isScalar(item) || validComponentValue(item, depth + 1)
-            && item.kind !== 'array' && item.kind !== 'asset');
+            && item.kind !== 'array');
     if (value.kind === 'asset') return (Object.keys(value).length === 2 || Object.keys(value).length === 3)
-        && ASSET_CLASS_NAMES.includes(value.assetClass)
+        && typeof value.assetClass === 'string' && /^[A-Za-z_$][A-Za-z0-9_$.]{0,119}$/.test(value.assetClass)
         && (value.assetUuid === undefined || (typeof value.assetUuid === 'string'
             && (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value.assetUuid)
                 || /^[A-Za-z0-9+/]{22,23}$/.test(value.assetUuid))));
@@ -1101,7 +1240,7 @@ function validComponentValue(value, depth = 0) {
     return false;
 }
 
-function decodeComponentValue(value, attrType, loadedAsset, sceneUuid) {
+function decodeComponentValue(value, attrType, loadedAssets, sceneUuid) {
     if (isScalar(value)) {
         const typeName = primitiveTypeName(attrType);
         if ((typeName === 'String' && typeof value !== 'string')
@@ -1154,16 +1293,21 @@ function decodeComponentValue(value, attrType, loadedAsset, sceneUuid) {
                 if (!result.available) return result;
                 decoded.push(result.value);
             } else {
-                if (item.kind === 'asset') return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_TYPE_UNSUPPORTED' };
-                const result = decodeComponentValue(item, elementType, null, sceneUuid);
+                const result = decodeComponentValue(item, elementType, loadedAssets, sceneUuid);
                 if (!result.available) return result;
                 decoded.push(result.value);
             }
         }
         return { available: true, value: decoded };
     }
-    if (value.kind === 'asset' && attrType === cc[value.assetClass]) {
+    if (value.kind === 'asset' && isAssetConstructor(attrType)
+        && (() => { const assetType = resolveAssetClass(value.assetClass);
+            return !!assetType && cc.js.isChildClassOf(assetType, attrType); })()) {
         if (value.assetUuid == null) return { available: true, value: null };
+        if (!(loadedAssets instanceof Map) && (!loadedAssets || typeof loadedAssets !== 'object'))
+            return { available: true, value: { kind: 'asset', assetUuid: value.assetUuid, assetClass: value.assetClass } };
+        const loadedAsset = loadedAssets instanceof Map ? loadedAssets.get(value.assetUuid)
+            : loadedAssets && typeof loadedAssets === 'object' ? loadedAssets[value.assetUuid] : null;
         if (!loadedAsset || !(loadedAsset instanceof attrType)
             || (loadedAsset._uuid || loadedAsset.uuid) !== value.assetUuid)
             return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_ASSET_NOT_LOADED' };
@@ -1192,26 +1336,44 @@ function componentPropertyState(params) {
     if (!component) return { available: false, reason: 'SCENE_COMPONENT_INSTANCE_NOT_FOUND' };
     const constructor = component.constructor;
     const declared = Array.isArray(constructor && constructor.__props__) ? constructor.__props__ : [];
-    const inherited = Array.isArray(constructor && constructor.$super && constructor.$super.__props__)
-        ? constructor.$super.__props__ : [];
-    const baseProperties = Array.isArray(cc.Component.__props__) ? cc.Component.__props__ : [];
     if (!declared.includes(params.property))
         return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_NOT_DECLARED' };
-    if (inherited.includes(params.property) || baseProperties.includes(params.property))
-        return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_INHERITED' };
     if (params.property.startsWith('_'))
         return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_INTERNAL' };
     if ((UI_EVENT_PROPERTIES[params.componentClassName] || []).includes(params.property))
         return { available: false, reason: 'SCENE_COMPONENT_EVENT_USE_DEDICATED_TOOL' };
-    if (!isWritableComponentProperty(component, params.property))
-        return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_READ_ONLY' };
     const attributes = componentPropertyAttributes(resolved.constructor, params.property);
+    const binding = params.componentClassName === 'cc.Widget' && WIDGET_ALIGN_FLAG_PROPERTIES[params.property]
+        ? { available: true, serializedProperty: '_alignFlags', candidates: ['_alignFlags'] }
+        : inspectorSerializedPropertyBinding(constructor, component, params.property);
+    if (!binding.available) return { available: false, reason: binding.reason || 'SCENE_COMPONENT_PROPERTY_NOT_SERIALIZABLE' };
+    const writable = isWritableComponentProperty(component, params.property);
+    if (Object.prototype.hasOwnProperty.call(params, 'requestedValue')) {
+        if (attributes && attributes.visible === false && params.property !== 'enabled')
+            return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_HIDDEN_IN_INSPECTOR' };
+        if (attributes && typeof attributes.visible === 'function')
+            return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_VISIBILITY_CONDITIONAL_UNSUPPORTED' };
+        if ((attributes && attributes.readonly) || !writable)
+            return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_READ_ONLY' };
+    }
     let value;
     try { value = component[params.property]; }
     catch (_) { return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_READ_FAILED' }; }
     const attrType = componentPropertyType(attributes, value);
     const serialized = componentValueKind(value, attrType);
     if (!serialized.available) return { available: false, reason: serialized.reason };
+    const enumOptions = Array.isArray(attributes && attributes.enumList) ? attributes.enumList : [];
+    if (Object.prototype.hasOwnProperty.call(params, 'requestedValue')) {
+        const requested = params.requestedValue;
+        if (enumOptions.length && (typeof requested !== 'number'
+            || !enumOptions.some((item) => item && item.value === requested)))
+            return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_ENUM_VALUE_INVALID' };
+        if (typeof requested === 'number' && Number.isFinite(requested)
+            && ((Number.isFinite(attributes && attributes.min) && requested < attributes.min)
+                || (Number.isFinite(attributes && attributes.max) && requested > attributes.max)))
+            return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_OUT_OF_RANGE',
+                minimum: attributes.min, maximum: attributes.max };
+    }
     let declaredDefaultValue;
     if (attributes && Object.prototype.hasOwnProperty.call(attributes, 'default')
         && typeof attributes.default !== 'function') {
@@ -1223,8 +1385,7 @@ function componentPropertyState(params) {
         if (!currentReference.available) return { available: false, reason: currentReference.reason };
     }
     let requestedValue;
-    if (Object.prototype.hasOwnProperty.call(params, 'requestedValue')
-        && !(params.requestedValue && params.requestedValue.kind === 'asset')) {
+    if (Object.prototype.hasOwnProperty.call(params, 'requestedValue')) {
         const decodedRequested = decodeComponentValue(params.requestedValue, attrType, null, params.sceneUuid);
         if (!decodedRequested.available) return { available: false, reason: decodedRequested.reason };
         requestedValue = decodedRequested.value;
@@ -1244,19 +1405,25 @@ function componentPropertyState(params) {
     collectReferenceClasses(params.requestedValue);
     const widgetAlignFlag = params.componentClassName === 'cc.Widget'
         ? WIDGET_ALIGN_FLAG_PROPERTIES[params.property] : undefined;
-    const serializedPropertyCandidates = widgetAlignFlag
-        ? ['_alignFlags'] : serializedComponentPropertyCandidates(constructor, params.property);
-    let widgetAlignSerializedValue;
-    let widgetAlignRequestedSerializedValue;
-    if (widgetAlignFlag) {
-        if (serialized.kind !== 'boolean' || !Number.isSafeInteger(component._alignFlags)
-            || component._alignFlags < 0) return { available: false, reason: 'SCENE_WIDGET_ALIGN_FLAGS_UNAVAILABLE' };
-        widgetAlignSerializedValue = component._alignFlags;
+    const labelStyleFlag = params.componentClassName === 'cc.Label'
+        ? LABEL_STYLE_FLAG_PROPERTIES[params.property] : undefined;
+    const bitfieldStorage = widgetAlignFlag ? '_alignFlags' : labelStyleFlag ? '_styleFlags' : null;
+    const serializedPropertyCandidates = bitfieldStorage ? [bitfieldStorage] : binding.candidates;
+    let virtualSerializedValue;
+    let virtualRequestedSerializedValue;
+    if (bitfieldStorage) {
+        if (serialized.kind !== 'boolean' || !Number.isSafeInteger(component[bitfieldStorage])
+            || component[bitfieldStorage] < 0)
+            return { available: false, reason: widgetAlignFlag
+                ? 'SCENE_WIDGET_ALIGN_FLAGS_UNAVAILABLE' : 'SCENE_LABEL_STYLE_FLAGS_UNAVAILABLE' };
+        virtualSerializedValue = component[bitfieldStorage];
         if (requestedValue !== undefined) {
-            widgetAlignRequestedSerializedValue = widgetAlignFlagsAfterChange(component._alignFlags,
-                params.property, requestedValue);
-            if (!Number.isSafeInteger(widgetAlignRequestedSerializedValue) || widgetAlignRequestedSerializedValue < 0)
-                return { available: false, reason: 'SCENE_WIDGET_ALIGN_FLAGS_UNAVAILABLE' };
+            virtualRequestedSerializedValue = widgetAlignFlag
+                ? widgetAlignFlagsAfterChange(component[bitfieldStorage], params.property, requestedValue)
+                : labelStyleFlagsAfterChange(component[bitfieldStorage], params.property, requestedValue);
+            if (!Number.isSafeInteger(virtualRequestedSerializedValue) || virtualRequestedSerializedValue < 0)
+                return { available: false, reason: widgetAlignFlag
+                    ? 'SCENE_WIDGET_ALIGN_FLAGS_UNAVAILABLE' : 'SCENE_LABEL_STYLE_FLAGS_UNAVAILABLE' };
         }
     }
     return { available: true, sceneName: located.state.sceneName, sceneUuid: located.state.sceneUuid,
@@ -1265,11 +1432,16 @@ function componentPropertyState(params) {
         serializedClassId: classId(constructor), referenceClasses: Array.from(referenceClasses, ([componentClassName, serializedClassId]) =>
             ({ componentClassName, serializedClassId })).sort((left, right) => left.componentClassName.localeCompare(right.componentClassName)),
         property: params.property, serializedPropertyCandidates,
-        ...(widgetAlignFlag ? { serializedValue: widgetAlignSerializedValue,
-            ...(widgetAlignRequestedSerializedValue === undefined ? {} : {
-                requestedSerializedValue: widgetAlignRequestedSerializedValue }) } : {}),
+        ...(bitfieldStorage ? { serializedValue: virtualSerializedValue,
+            ...(virtualRequestedSerializedValue === undefined ? {} : {
+                requestedSerializedValue: virtualRequestedSerializedValue }) } : {}),
         ...(declaredDefaultValue !== undefined ? { declaredDefaultValue } : {}),
-        propertyKind: serialized.kind, value: serialized.value };
+        propertyKind: serialized.kind, value: serialized.value,
+        inspector: { ...componentPropertyInspectorMetadata(constructor, params.property, attributes, attrType, component),
+            editable: writable && !(attributes && attributes.readonly)
+                && (!(attributes && attributes.visible === false) || params.property === 'enabled')
+                && !(attributes && typeof attributes.visible === 'function'),
+            serializedProperty: binding.serializedProperty } };
 }
 
 function uiComponentState(params) {
@@ -1293,14 +1465,16 @@ function uiComponentState(params) {
             return { ...located.state, available: false, reason: 'SCENE_UI_COMPONENT_IDENTITY_INVALID' };
         const constructor = component.constructor;
         const declared = Array.isArray(constructor && constructor.__props__) ? constructor.__props__ : [];
+        const declaredPublicProperties = declaredPublicComponentProperties(constructor, component);
         const publicProperties = publicComponentProperties(constructor, component);
         const properties = [];
         const unsupportedProperties = [];
-        const propertyNames = publicProperties.slice(0, MAX_UI_PROPERTIES_PER_COMPONENT);
+        const propertyNames = declaredPublicProperties.slice(0, MAX_UI_PROPERTIES_PER_COMPONENT);
         for (const property of propertyNames) {
             const state = componentPropertyState({ sceneUuid: params.sceneUuid, nodeUuid: params.nodeUuid,
                 nodePath: located.state.nodePath, componentClassName, componentInstanceId, property });
-            if (state.available) properties.push({ name: property, kind: state.propertyKind, value: state.value });
+            if (state.available) properties.push({ name: property, kind: state.propertyKind, value: state.value,
+                inspector: state.inspector });
             else unsupportedProperties.push({ name: property, reason: state.reason || 'SCENE_UI_PROPERTY_UNAVAILABLE' });
         }
         const row = { componentClassName, componentInstanceId, properties,
@@ -1308,14 +1482,8 @@ function uiComponentState(params) {
         row.propertySchema = {
             declaredCount: Array.isArray(constructor && constructor.__props__) ? constructor.__props__.length : null,
             serializableCount: Array.isArray(constructor && constructor.__values__) ? constructor.__values__.length : null,
-            declaredPublicProperties: declared.filter((property) => typeof property === 'string'
-                && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(property) && !property.startsWith('_'))
-                .slice(0, MAX_UI_PROPERTIES_PER_COMPONENT),
-            serializablePublicProperties: Array.isArray(constructor && constructor.__values__)
-                ? constructor.__values__.filter((property) => typeof property === 'string'
-                    && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(property) && !property.startsWith('_'))
-                    .slice(0, MAX_UI_PROPERTIES_PER_COMPONENT)
-                : null,
+            declaredPublicProperties: declaredPublicProperties.slice(0, MAX_UI_PROPERTIES_PER_COMPONENT),
+            serializablePublicProperties: publicProperties.slice(0, MAX_UI_PROPERTIES_PER_COMPONENT),
         };
         const eventProperties = UI_EVENT_PROPERTIES[componentClassName] || [];
         if (eventProperties.length) {
@@ -1339,7 +1507,7 @@ function uiComponentState(params) {
         componentCount: result.length, componentsTruncated: truncated, components: result };
 }
 
-function setComponentProperty(params, loadedAsset) {
+function setComponentProperty(params, loadedAssets) {
     if (!params || typeof params.sceneUuid !== 'string' || typeof params.nodeUuid !== 'string'
         || typeof params.nodePath !== 'string' || typeof params.componentClassName !== 'string'
         || typeof params.componentInstanceId !== 'string' || typeof params.property !== 'string'
@@ -1347,6 +1515,8 @@ function setComponentProperty(params, loadedAsset) {
         return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_INPUT_INVALID' };
     const before = componentPropertyState(params);
     if (!before.available) return before;
+    if (!before.inspector || before.inspector.editable !== true)
+        return { ...before, available: false, reason: 'SCENE_COMPONENT_PROPERTY_READ_ONLY' };
     if (!sameValue(before.value, params.expectedValue))
         return { ...before, available: false, reason: 'SCENE_COMPONENT_PROPERTY_PRECONDITION_FAILED' };
     if (sameValue(before.value, params.value))
@@ -1360,7 +1530,7 @@ function setComponentProperty(params, loadedAsset) {
     if (!component) return { ...before, available: false, reason: 'SCENE_COMPONENT_INSTANCE_NOT_FOUND' };
     const attributes = componentPropertyAttributes(resolved.constructor, params.property);
     const attrType = componentPropertyType(attributes, component[params.property]);
-    const decoded = decodeComponentValue(params.value, attrType, loadedAsset, params.sceneUuid);
+    const decoded = decodeComponentValue(params.value, attrType, loadedAssets, params.sceneUuid);
     if (!decoded.available) return { ...before, available: false, reason: decoded.reason };
     try { component[params.property] = decoded.value; }
     catch (_) { return { ...before, available: false, reason: 'SCENE_COMPONENT_PROPERTY_WRITE_FAILED' }; }
@@ -1374,6 +1544,54 @@ function setComponentProperty(params, loadedAsset) {
     return { available: true, sceneUuid: params.sceneUuid, nodeUuid: params.nodeUuid, nodePath: params.nodePath,
         componentClassName: params.componentClassName, componentInstanceId: params.componentInstanceId,
         property: params.property, propertyKind: serialized.kind, beforeValue: before.value, value: serialized.value };
+}
+
+function componentPropertyAssetReferences(value) {
+    const references = [];
+    const stack = [value];
+    while (stack.length) {
+        const current = stack.pop();
+        if (!current || typeof current !== 'object') continue;
+        if (current.kind === 'asset') {
+            if (typeof current.assetUuid === 'string') references.push(current);
+        } else if (current.kind === 'array' && Array.isArray(current.items)) {
+            for (let index = current.items.length - 1; index >= 0; index -= 1) stack.push(current.items[index]);
+        }
+    }
+    return references;
+}
+
+function loadComponentPropertyAssets(value, callback) {
+    const references = componentPropertyAssetReferences(value);
+    if (!references.length) { callback(null, new Map()); return; }
+    if (!cc.assetManager || typeof cc.assetManager.loadAny !== 'function') {
+        callback(new Error('SCENE_ASSET_MANAGER_UNAVAILABLE'));
+        return;
+    }
+    const loaded = new Map();
+    let index = 0;
+    const next = () => {
+        if (index >= references.length) { callback(null, loaded); return; }
+        const reference = references[index++];
+        const constructor = resolveAssetClass(reference.assetClass);
+        if (!constructor) { callback(new Error('SCENE_COMPONENT_PROPERTY_ASSET_CLASS_UNAVAILABLE')); return; }
+        const existing = loaded.get(reference.assetUuid);
+        if (existing) {
+            if (!(existing instanceof constructor)) callback(new Error('SCENE_COMPONENT_PROPERTY_ASSET_TYPE_MISMATCH'));
+            else next();
+            return;
+        }
+        cc.assetManager.loadAny(reference.assetUuid, (error, asset) => {
+            if (error || !asset) { callback(new Error('SCENE_COMPONENT_PROPERTY_ASSET_LOAD_FAILED')); return; }
+            if (!(asset instanceof constructor) || (asset._uuid || asset.uuid) !== reference.assetUuid) {
+                callback(new Error('SCENE_COMPONENT_PROPERTY_ASSET_TYPE_MISMATCH'));
+                return;
+            }
+            loaded.set(reference.assetUuid, asset);
+            next();
+        });
+    };
+    next();
 }
 
 function applyNodeTransformValues(node, value) {
@@ -1512,7 +1730,70 @@ function matchesPrefabPath(actualPath, expectedPath) {
     return actual.length >= expected.length && expected.every((part, index) => actual[actual.length - expected.length + index] === part);
 }
 
-function prefabPatchSnapshot(node, nodePath) {
+function prefabStableNodeId(sceneUuid, prefabUuid, nodeUuid) {
+    const located = locateNode(sceneUuid, nodeUuid);
+    if (!located.state.available) return null;
+    const node = located.node;
+    const info = node && node._prefab;
+    const asset = info && info.asset;
+    if (info && info.root === node && asset && (asset._uuid || asset.uuid) === prefabUuid)
+        return prefabPatch.rootNodeId(prefabUuid);
+    if (node && typeof node._id === 'string' && node._id) return node._id;
+    if (info && typeof info.fileId === 'string' && info.fileId) return info.fileId;
+    return node && typeof node._id === 'string' && node._id ? node._id : null;
+}
+
+function prefabFindLiveNode(sceneUuid, prefabUuid, stableNodeId) {
+    const scene = cc && cc.director && cc.director.getScene && cc.director.getScene();
+    if (!scene || scene.uuid !== sceneUuid) return { available: false, reason: 'SCENE_IDENTITY_MISMATCH' };
+    const matches = [];
+    const stack = [{ node: scene, parentPath: '', depth: 0 }];
+    while (stack.length) {
+        const item = stack.pop();
+        if (!item.node || item.depth > MAX_MUTATION_SCAN_DEPTH) continue;
+        const name = String(item.node.name || '').slice(0, MAX_NAME);
+        const nodePath = item.parentPath ? `${item.parentPath}/${name}` : name;
+        const info = item.node._prefab;
+        const asset = info && info.asset;
+        const nodeId = info && info.root === item.node && asset && (asset._uuid || asset.uuid) === prefabUuid
+            ? prefabPatch.rootNodeId(prefabUuid) : item.node._id || (info && typeof info.fileId === 'string' && info.fileId
+                ? info.fileId : item.node.uuid);
+        if (nodeId === stableNodeId) matches.push({ node: item.node, nodePath });
+        for (const child of authoringChildren(item.node)) stack.push({ node: child, parentPath: nodePath, depth: item.depth + 1 });
+    }
+    return matches.length === 1 ? { available: true, ...matches[0] }
+        : { available: false, reason: matches.length ? 'PREFAB_NODE_IDENTITY_AMBIGUOUS' : 'PREFAB_NODE_NOT_FOUND' };
+}
+
+function prefabStableComponentValue(value, sceneUuid, prefabUuid) {
+    if (!value || typeof value !== 'object') return value;
+    if (value.kind === 'node-ref' && value.nodeUuid) {
+        const nodeUuid = prefabStableNodeId(sceneUuid, prefabUuid, value.nodeUuid);
+        return nodeUuid ? { ...value, nodeUuid } : value;
+    }
+    if (value.kind === 'component-ref' && value.nodeUuid) {
+        const nodeUuid = prefabStableNodeId(sceneUuid, prefabUuid, value.nodeUuid);
+        return nodeUuid ? { ...value, nodeUuid } : value;
+    }
+    if (value.kind === 'array') return { ...value, items: value.items.map((item) =>
+        prefabStableComponentValue(item, sceneUuid, prefabUuid)) };
+    return value;
+}
+
+function prefabLiveComponentValue(value, sceneUuid, prefabUuid) {
+    if (!value || typeof value !== 'object') return value;
+    if ((value.kind === 'node-ref' || value.kind === 'component-ref') && value.nodeUuid) {
+        const node = prefabFindLiveNode(sceneUuid, prefabUuid, value.nodeUuid);
+        if (node.available) return { ...value, nodeUuid: node.node.uuid };
+        const direct = locateNode(sceneUuid, value.nodeUuid);
+        return direct.state.available ? { ...value, nodeUuid: direct.node.uuid } : value;
+    }
+    if (value.kind === 'array') return { ...value, items: value.items.map((item) =>
+        prefabLiveComponentValue(item, sceneUuid, prefabUuid)) };
+    return value;
+}
+
+function prefabPatchSnapshot(node, nodePath, params, mode) {
     if (!node || !Array.isArray(node.children) || !Array.isArray(node._components)) return null;
     const components = node._components.map((component) => {
         const className = classNameOf(component);
@@ -1522,10 +1803,39 @@ function prefabPatchSnapshot(node, nodePath) {
             ...(className === 'cc.Sprite' ? { spriteFrameUuid: frame && (frame._uuid || frame.uuid) || null } : {}) };
     }).filter(Boolean);
     const position = typeof node.getPosition === 'function' ? node.getPosition() : { x: node.x, y: node.y };
+    const componentProperties = {};
+    const componentPropertyBindings = {};
+    for (const item of (params && Array.isArray(params.expectedDiff) ? params.expectedDiff : [])
+        .filter((entry) => entry && entry.path === 'component.property')) {
+        const component = node._components[item.componentIndex];
+        if (!component || classNameOf(component) !== item.componentClassName) continue;
+        const liveComponentInstanceId = component._id == null ? '' : String(component._id);
+        if (!item.componentInstanceId.startsWith('prefab_component_')
+            && liveComponentInstanceId !== item.componentInstanceId) continue;
+        const requestedValue = prefabLiveComponentValue(item.after, mode.sceneUuid, params.prefabUuid);
+        const state = componentPropertyState({ sceneUuid: mode.sceneUuid, nodeUuid: node.uuid, nodePath,
+            componentClassName: item.componentClassName, componentInstanceId: liveComponentInstanceId,
+            property: item.property, requestedValue });
+        if (!state.available) continue;
+        componentProperties[item.componentInstanceId] = componentProperties[item.componentInstanceId] || {};
+        componentProperties[item.componentInstanceId][item.property] = prefabStableComponentValue(state.value,
+            mode.sceneUuid, params.prefabUuid);
+        componentPropertyBindings[item.componentInstanceId] = componentPropertyBindings[item.componentInstanceId] || {};
+        componentPropertyBindings[item.componentInstanceId][item.property] = {
+            componentClassName: item.componentClassName, componentInstanceId: item.componentInstanceId,
+            liveComponentInstanceId, componentIndex: item.componentIndex, property: item.property, propertyKind: state.propertyKind,
+            serializedProperty: state.inspector && state.inspector.serializedProperty,
+            serializedPropertyCandidates: state.serializedPropertyCandidates,
+            ...(state.declaredDefaultValue !== undefined ? { declaredDefaultValue: state.declaredDefaultValue } : {}),
+            ...(state.serializedValue !== undefined ? { serializedValue: state.serializedValue } : {}),
+            ...(state.requestedSerializedValue !== undefined ? { requestedSerializedValue: state.requestedSerializedValue } : {}),
+            inspector: state.inspector,
+        };
+    }
     return { nodeUuid: typeof node.uuid === 'string' ? node.uuid : null, nodePath,
         name: String(node.name || ''), active: node.active !== false,
         transform: { x: Number(position.x), y: Number(position.y), scaleX: Number(node.scaleX), scaleY: Number(node.scaleY) },
-        components };
+        components, ...(Object.keys(componentProperties).length ? { componentProperties, componentPropertyBindings } : {}) };
 }
 
 function locatePrefabPatchNode(params, side = 'before') {
@@ -1546,10 +1856,15 @@ function locatePrefabPatchNode(params, side = 'before') {
         if (matches.length !== 1) return { available: false, reason: 'PREFAB_ROOT_IDENTITY_AMBIGUOUS', mode };
         liveNodeUuid = matches[0].uuid;
     }
-    const located = locateNode(mode.sceneUuid, liveNodeUuid);
+    let located = locateNode(mode.sceneUuid, liveNodeUuid);
+    if (!located.state.available && !assetRootIdentity) {
+        const stable = prefabFindLiveNode(mode.sceneUuid, params.prefabUuid, params.targetNodeUuid);
+        if (stable.available) located = { node: stable.node, state: { available: true, nodePath: stable.nodePath,
+            nodeUuid: stable.node.uuid } };
+    }
     if (!located.state.available || !matchesPrefabPath(located.state.nodePath, prefabPatch.targetPathAt(params.targetNodePath,
         params.expectedDiff, side))) return { available: false, reason: 'PREFAB_NODE_IDENTITY_MISMATCH', mode };
-    const snapshot = prefabPatchSnapshot(located.node, located.state.nodePath);
+    const snapshot = prefabPatchSnapshot(located.node, located.state.nodePath, params, mode);
     if (snapshot && assetRootIdentity) {
         snapshot.liveNodeUuid = snapshot.nodeUuid;
         snapshot.nodeUuid = params.targetNodeUuid;
@@ -1600,6 +1915,20 @@ function prefabSourcePatchMutate(params, callback) {
                 else if (field === 'node.position.y') node.setPosition(node.x, item.after);
                 else if (field === 'node.scale.x') node.setScale(item.after, node.scaleY, node.scaleZ);
                 else if (field === 'node.scale.y') node.setScale(node.scaleX, item.after, node.scaleZ);
+                else if (field === 'component.property') {
+                    const beforeValue = prefabLiveComponentValue(item.before, current.mode.sceneUuid, params.prefabUuid);
+                    const value = prefabLiveComponentValue(item.after, current.mode.sceneUuid, params.prefabUuid);
+                    const binding = current.snapshot.componentPropertyBindings
+                        && current.snapshot.componentPropertyBindings[item.componentInstanceId]
+                        && current.snapshot.componentPropertyBindings[item.componentInstanceId][item.property];
+                    if (!binding || typeof binding.liveComponentInstanceId !== 'string')
+                        throw new Error('PREFAB_COMPONENT_PROPERTY_IDENTITY_MISMATCH');
+                    const propertyResult = setComponentProperty({ sceneUuid: current.mode.sceneUuid,
+                        nodeUuid: node.uuid, nodePath: current.snapshot.nodePath,
+                        componentClassName: item.componentClassName, componentInstanceId: binding.liveComponentInstanceId,
+                        property: item.property, expectedValue: beforeValue, value }, loaded);
+                    if (!propertyResult.available) throw new Error(propertyResult.reason || 'PREFAB_COMPONENT_PROPERTY_WRITE_FAILED');
+                }
                 else if (field.startsWith('component.')) {
                     const [, className, property] = field.match(/^component\.(cc\.(?:Sprite|Label))\.(enabled|spriteFrameUuid)$/) || [];
                     const matches = node._components.filter((component) => classNameOf(component) === className);
@@ -1620,7 +1949,17 @@ function prefabSourcePatchMutate(params, callback) {
         callback(null, { available: true, mutationStarted: true, prefabUuid: params.prefabUuid, mode: after.mode,
             node: after.snapshot, expectedDiff: params.expectedDiff });
     };
-    if (!spriteFrames.length) { apply(); return; }
+    const propertyAssetReferences = params.expectedDiff.filter((item) => item.path === 'component.property')
+        .flatMap((item) => componentPropertyAssetReferences(item.after));
+    if (!spriteFrames.length && propertyAssetReferences.length === 0) { apply(); return; }
+    const loadPropertyAssets = (done) => loadComponentPropertyAssets({ kind: 'array', items: propertyAssetReferences }, done);
+    if (!spriteFrames.length) {
+        loadPropertyAssets((error, assets) => {
+            if (error) callback(null, { available: false, reason: error.message || 'PREFAB_COMPONENT_PROPERTY_ASSET_LOAD_FAILED', mutationStarted: false });
+            else { for (const [uuid, asset] of assets) loaded[uuid] = asset; apply(); }
+        });
+        return;
+    }
     if (!cc || !cc.assetManager || typeof cc.assetManager.loadAny !== 'function' || typeof cc.SpriteFrame !== 'function') {
         callback(null, { available: false, reason: 'PREFAB_SPRITE_FRAME_LOAD_UNAVAILABLE', mutationStarted: false });
         return;
@@ -1637,7 +1976,14 @@ function prefabSourcePatchMutate(params, callback) {
             }
             loaded[item.after] = asset;
             remaining -= 1;
-            if (remaining === 0) { settled = true; apply(); }
+            if (remaining === 0) {
+                settled = true;
+                loadPropertyAssets((assetError, assets) => {
+                    if (assetError) callback(null, { available: false,
+                        reason: assetError.message || 'PREFAB_COMPONENT_PROPERTY_ASSET_LOAD_FAILED', mutationStarted: false });
+                    else { for (const [uuid, asset] of assets) loaded[uuid] = asset; apply(); }
+                });
+            }
         });
     }
 }
@@ -1689,6 +2035,60 @@ function prefabSourcePatchSnapshot(params) {
     if (!target.available) return target;
     return { available: true, prefabUuid: params.prefabUuid, mode: target.mode, node: target.snapshot,
         expectedDiff: params.expectedDiff, verifiedSide: params.side };
+}
+
+function prefabSourceEditableState(params) {
+    const mode = prefabEditModeState();
+    if (!params || !prefabPatch.UUID.test(params.prefabUuid || '') || !prefabPatch.NODE_ID.test(params.targetNodeUuid || '')
+        || typeof params.targetNodePath !== 'string' || !mode.available || mode.modeName !== 'prefab'
+        || mode.prefabUuid !== params.prefabUuid)
+        return { available: false, reason: 'PREFAB_MODE_TARGET_MISMATCH', mode };
+    const found = prefabFindLiveNode(mode.sceneUuid, params.prefabUuid, params.targetNodeUuid);
+    if (!found.available || !matchesPrefabPath(found.nodePath, params.targetNodePath))
+        return { available: false, reason: found.reason || 'PREFAB_NODE_IDENTITY_MISMATCH', mode };
+    const components = [];
+    for (let componentIndex = 0; componentIndex < (found.node._components || []).length; componentIndex += 1) {
+        const component = found.node._components[componentIndex];
+        const componentClassName = classNameOf(component);
+        const componentInstanceId = component && component._id != null ? String(component._id) : null;
+        if (!componentClassName || componentInstanceId === null)
+            return { available: false, reason: 'PREFAB_COMPONENT_IDENTITY_INVALID', mode };
+        const declared = Array.isArray(component.constructor && component.constructor.__props__)
+            ? component.constructor.__props__ : [];
+        const declaredProperties = declaredPublicComponentProperties(component.constructor, component);
+        const serializableProperties = publicComponentProperties(component.constructor, component);
+        const properties = [];
+        const unsupportedProperties = [];
+        for (const property of declaredProperties.slice(0, 64)) {
+            const state = componentPropertyState({ sceneUuid: mode.sceneUuid, nodeUuid: found.node.uuid,
+                nodePath: found.nodePath, componentClassName, componentInstanceId, property });
+            if (state.available) properties.push({ name: property, kind: state.propertyKind,
+                value: prefabStableComponentValue(state.value, mode.sceneUuid, params.prefabUuid), inspector: state.inspector });
+            else unsupportedProperties.push({ name: property, reason: state.reason || 'PREFAB_COMPONENT_PROPERTY_UNAVAILABLE' });
+        }
+        const row = { componentClassName, componentInstanceId, componentIndex, properties, unsupportedProperties,
+            propertiesTruncated: declaredProperties.length > 64,
+            propertySchema: { declaredCount: declared.length,
+                serializableCount: Array.isArray(component.constructor && component.constructor.__values__)
+                    ? component.constructor.__values__.length : null,
+                declaredPublicProperties: declaredProperties.slice(0, 64),
+                serializablePublicProperties: serializableProperties.slice(0, 64) } };
+        const eventProperties = UI_EVENT_PROPERTIES[componentClassName] || [];
+        if (eventProperties.length) {
+            row.eventLists = {};
+            row.eventListsUnavailable = {};
+            for (const property of eventProperties) {
+                const events = normalizedUiEvents(component, property);
+                if (events.available) row.eventLists[property] = events.events;
+                else row.eventListsUnavailable[property] = events.reason;
+            }
+        }
+        components.push(row);
+    }
+    return { available: true, scope: 'creator-prefab-edit-mode', prefabUuid: params.prefabUuid,
+        nodeUuid: params.targetNodeUuid, liveNodeUuid: found.node.uuid, nodePath: found.nodePath,
+        nodeName: String(found.node.name || ''), active: found.node.active !== false,
+        transform: transformSummary(found.node), components };
 }
 
 function transformState(node) {
@@ -2081,6 +2481,14 @@ module.exports = {
         try { event.reply(null, setButtonEvents(params || {})); }
         catch (error) { event.reply({ code: 'SCENE_BUTTON_EVENTS_WRITE_FAILED', message: String(error && error.message || error) }); }
     },
+    uiEventsState(event, params) {
+        try { event.reply(null, uiEventsState(params || {})); }
+        catch (error) { event.reply({ code: 'SCENE_UI_EVENTS_STATE_FAILED', message: String(error && error.message || error) }); }
+    },
+    setUiEvents(event, params) {
+        try { event.reply(null, setUiEvents(params || {})); }
+        catch (error) { event.reply({ code: 'SCENE_UI_EVENTS_WRITE_FAILED', message: String(error && error.message || error) }); }
+    },
     nodeNameState(event, params) {
         try { event.reply(null, nodeNameState(params || {})); }
         catch (error) { event.reply({ code: 'SCENE_NODE_NAME_STATE_FAILED', message: String(error && error.message || error) }); }
@@ -2136,29 +2544,18 @@ module.exports = {
     setComponentProperty(event, params) {
         try {
             const input = params || {};
-            const value = input.value;
-            if (value && value.kind === 'asset' && typeof value.assetUuid === 'string') {
-                const constructor = cc && cc[value.assetClass];
-                if (typeof constructor !== 'function' || !cc.assetManager
-                    || typeof cc.assetManager.loadAny !== 'function') {
-                    event.reply(null, { available: false, reason: 'SCENE_ASSET_MANAGER_UNAVAILABLE' });
-                    return;
-                }
-                cc.assetManager.loadAny(value.assetUuid, (error, asset) => {
-                    if (error || !asset) {
-                        event.reply(null, { available: false, reason: 'SCENE_COMPONENT_PROPERTY_ASSET_LOAD_FAILED' });
+            if (componentPropertyAssetReferences(input.value).length) {
+                loadComponentPropertyAssets(input.value, (error, assets) => {
+                    if (error) {
+                        event.reply(null, { available: false, reason: String(error.code || error.message || 'SCENE_COMPONENT_PROPERTY_ASSET_LOAD_FAILED') });
                         return;
                     }
-                    if (!(asset instanceof constructor) || (asset._uuid || asset.uuid) !== value.assetUuid) {
-                        event.reply(null, { available: false, reason: 'SCENE_COMPONENT_PROPERTY_ASSET_TYPE_MISMATCH' });
-                        return;
-                    }
-                    try { event.reply(null, setComponentProperty(input, asset)); }
+                    try { event.reply(null, setComponentProperty(input, assets)); }
                     catch (writeError) { event.reply({ code: 'SCENE_COMPONENT_PROPERTY_WRITE_FAILED', message: String(writeError && writeError.message || writeError) }); }
                 });
                 return;
             }
-            event.reply(null, setComponentProperty(input));
+            event.reply(null, setComponentProperty(input, new Map()));
         }
         catch (error) { event.reply({ code: 'SCENE_COMPONENT_PROPERTY_WRITE_FAILED', message: String(error && error.message || error) }); }
     },
@@ -2193,6 +2590,10 @@ module.exports = {
     prefabSourcePatchSnapshot(event, params) {
         try { event.reply(null, prefabSourcePatchSnapshot(params || {})); }
         catch (error) { event.reply(null, { available: false, reason: error && (error.code || error.message) || 'PREFAB_PATCH_READBACK_FAILED' }); }
+    },
+    prefabSourceEditableState(event, params) {
+        try { event.reply(null, prefabSourceEditableState(params || {})); }
+        catch (error) { event.reply(null, { available: false, reason: error && (error.code || error.message) || 'PREFAB_EDITABLE_STATE_FAILED' }); }
     },
     compositionReadback(event, params) {
         try { event.reply(null, compositionReadback(params || {})); }

@@ -70,7 +70,17 @@
 
 - 这轮覆盖当前支持的编辑入口及代表字段，不等于穷举 Creator 所有面板、每个组件字段或每种交互业务行为。
 - 非 Button 的 UI 事件列表目前可检查，但没有对应的事件列表写入合同。
-- Prefab 源补丁仍受字段允许列表限制；Label 文本、任意字段、组件增删和层级调整不属于该合同。本轮源补丁的实机字段是根节点 x，其他允许字段的合同/自动化测试证据不能替代各自的实机验收。
+- Prefab 源补丁支持公开、可序列化 Inspector 属性，并绑定类型、组件序号/类/身份、序列化键和前后值；通用属性实机验收目前只覆盖 `cc.BlockInputEvents.enabled`。其他组件和值类型仍需代表性实测；Prefab 组件增删、层级改动、UI 事件列表和 live 组件引用仍未覆盖。
 - 项目工具别名注册表未配置；临时 Provider 验收不等于项目已有业务工具已接入。
 - `editor.eval` / Provider 属于 Editor 权限入口；临时测试成功不能证明任意用户代码都安全或已持久化。
 - 当前验收仅针对上述 Creator 2.4.15/macOS 工程，不外推到 Creator 3.8、其他工程或其他平台。
+
+## 2026-10-24 后续：Prefab Inspector 属性编辑
+
+- CLI **0.12.55** / Creator 扩展 **0.8.55**；工程仍为 tank / Creator 2.4.15。打开、关闭、Prefab 进入/退出、属性读取写入均通过 Cocos CLI 完成；没有使用电脑操控工具，也没有直接编辑 `.prefab`/`.meta`。
+- 目标 Prefab：UUID `21119a83-ebeb-4542-bd8b-b477c2b1f2f5`，`CliBlockInputEventsTest.prefab`；根节点使用 `prefab_root_21119a83-ebeb-4542-bd8b-b477c2b1f2f5`，空组件 `_id` 使用稳定合成 ID `prefab_component_758cfd9a1548968e02295ec4`。
+- 只读 Inspector 检查确认 `cc.BlockInputEvents.enabled=true`，可编辑，序列化键为 `_enabled`。
+- apply `f18db245-017d-425e-b2f8-90ff695d6e84`：`true → false`；compensate `87234cb6-4406-4fff-a088-f749676b58da`：`false → true`。两次均确认 `saveCallbackConfirmed`、Prefab 退出、重开、重开后读回及 `diskReadback.verified`。
+- 源哈希由 `189d2ed73c6e021ee48a52fda6bab30c60345cc35bfdbfc3458d062ccb5e9200` 变为 `42ff513d6c358cfe3e493beee4bc0e16db95b661d2572fb50bf7dd23b327760a`，补偿后回到原始哈希；`.meta` 哈希始终为 `ab6b5fa05f91d463f8a612129bc734a188aedd18e4f33ff4afd52f8157643821`。最终只读 Inspector 再次确认 enabled 为 true。
+- 本次修复还让补偿/重放计划重新读取动态组件属性，并允许 Prefab 编辑场景路径在稳定 Prefab 节点路径前带有 Creator 临时根路径。
+- 修复后的 CLI 完整自动化测试：**327/327 通过，0 失败**；第一次沙箱内运行因三个本机回环监听用例遇到 `EPERM`，在获准绑定 `127.0.0.1` 后完整重跑通过。

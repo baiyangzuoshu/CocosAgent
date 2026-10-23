@@ -65,6 +65,30 @@ test('existing Button event commands use a bounded event list and approved recon
   assert.equal(validateCommand(reconcile.id, { operationId: nodeUuid }).ok, true);
 });
 
+test('generic UI event commands constrain supported component-property pairs and transaction lifecycle', () => {
+  const plan = COMMANDS.get('creator.scene.ui-events.set.plan');
+  const commit = COMMANDS.get('creator.scene.ui-events.set.commit');
+  const reconcile = COMMANDS.get('creator.scene.ui-events.set.reconcile');
+  const input = { sceneUuid, nodeUuid, componentClassName: 'cc.Toggle', eventProperty: 'checkEvents',
+    componentInstanceId: 'toggle-component', events: [{ targetUuid: nodeUuid,
+      component: 'game.Controller', handler: 'onToggle', customEventData: 'checked' }] };
+  assert.ok(plan);
+  assert.ok(commit);
+  assert.ok(reconcile);
+  assert.equal(plan.access, 'plan');
+  assert.equal(commit.access, 'write');
+  assert.equal(commit.approval, true);
+  assert.equal(reconcile.access, 'plan');
+  assert.equal(validateCommand(plan.id, input).ok, true);
+  assert.equal(validateCommand(plan.id, { ...input, componentClassName: 'cc.Toggle', eventProperty: 'clickEvents' }).ok, true);
+  assert.equal(validateCommand(plan.id, { ...input, componentClassName: 'cc.PageView', eventProperty: 'scrollEvents' }).ok, true);
+  assert.equal(validateCommand(plan.id, { ...input, componentClassName: 'cc.Sprite' }).ok, false);
+  assert.equal(validateCommand(plan.id, { ...input, eventProperty: 'notAnEvent' }).ok, false);
+  assert.equal(validateCommand(plan.id, { ...input, events: Array(13).fill(input.events[0]) }).ok, false);
+  assert.equal(validateCommand(commit.id, { operationId: nodeUuid, planHash: 'a'.repeat(64) }).ok, true);
+  assert.equal(validateCommand(reconcile.id, { operationId: nodeUuid }).ok, true);
+});
+
 test('component-add command contract is plan/approved-write/reconcile and rejects unsafe input', () => {
   const plan = COMMANDS.get('creator.scene.node.add-component.plan');
   const commit = COMMANDS.get('creator.scene.node.add-component.commit');

@@ -33,18 +33,24 @@ test('Prefab source patch commands declare plan, explicit commit write, and non-
   const plan = command('creator.prefab.source.patch.plan');
   const commit = command('creator.prefab.source.patch.commit');
   const reconcile = command('creator.prefab.source.patch.reconcile');
+  const editableInspect = command('creator.prefab.source.editable.inspect');
   const input = { prefabUuid, targetNodePath: 'Root/Sprite', targetNodeUuid: nodeUuid, action: 'apply',
     expectedSourceSha256: sourceHash, expectedDiff: [{ path: 'node.active', before: true, after: false }] };
   assert.equal(plan.access, 'plan');
   assert.equal(validateCommand(plan.id, input).ok, true);
   assert.equal(validateCommand(plan.id, { ...input,
     expectedDiff: [{ path: 'component.cc.Sprite.spriteFrameUuid', before: null, after: prefabUuid }] }).ok, true);
+  assert.equal(validateCommand(plan.id, { ...input, expectedDiff: [{ path: 'component.property',
+    componentClassName: 'cc.Label', componentInstanceId: 'label-instance-1', componentIndex: 0, property: 'string',
+    before: 'Before', after: 'After' }] }).ok, true);
   assert.equal(validateCommand(plan.id, { ...input, expectedDiff: [{ path: 'node.position.z', before: 0, after: 1 }] }).ok, false);
   assert.equal(commit.access, 'write');
   assert.equal(commit.approval, true);
   assert.equal(validateCommand(commit.id, { operationId: inverseOperationId, planHash: sourceHash }).ok, true);
   assert.equal(reconcile.access, 'plan');
   assert.equal(validateCommand(reconcile.id, { operationId: inverseOperationId }).ok, true);
+  assert.equal(editableInspect.access, 'read');
+  assert.equal(validateCommand(editableInspect.id, { prefabUuid, nodeUuid }).ok, true);
 });
 
 test('Prefab instance inspection is read-only and binds exact scene and node UUIDs', () => {
@@ -88,6 +94,19 @@ test('Prefab patch rejects duplicate, unsupported, malformed, and ambiguous chan
   assert.equal(prefabPatch.matchesDiff({ ...node, components: [{ ...node.components[0] }, { ...node.components[0] }] },
     [{ path: 'component.cc.Sprite.enabled', before: true, after: false }], 'before'), false);
   assert.equal(prefabPatch.targetPathAt('Root/Other', [{ path: 'node.name', before: 'Sprite', after: 'Renamed' }], 'after'), null);
+  const property = { path: 'component.property', componentClassName: 'cc.Label', componentInstanceId: 'label-1',
+    componentIndex: 0, property: 'string', before: 'A', after: 'B' };
+  assert.equal(prefabPatch.validateDiff([property]), true);
+  assert.equal(prefabPatch.validateDiff([property, { ...property, componentInstanceId: 'label-2' }]), true);
+  assert.equal(prefabPatch.validateDiff([property, property]), false);
+  assert.equal(prefabPatch.validateDiff([{ ...property, property: '_string' }]), false);
+  assert.equal(prefabPatch.validateDiff([{ ...property, after: { arbitrary: 'object' } }]), false);
+  assert.equal(prefabPatch.matchesDiff({ ...node, componentProperties: { 'label-1': { string: 'A' } } }, [property], 'before'), true);
+  assert.equal(prefabPatch.matchesDiff({ ...node, componentProperties: { 'label-1': { color: {
+    kind: 'color', r: 1, g: 2, b: 3, a: 255 } } } }, [{ path: 'component.property', componentClassName: 'cc.Label',
+    componentInstanceId: 'label-1', componentIndex: 0, property: 'color', before: { kind: 'color', r: 1, g: 2, b: 3, a: 255 },
+    after: { kind: 'color', r: 4, g: 5, b: 6, a: 255 } }], 'before'), true);
+  assert.deepEqual(prefabPatch.invertDiff([property]), [{ ...property, before: 'B', after: 'A' }]);
 });
 
 test('Prefab patch distinguishes apply from source-linked compensation and replay', () => {
@@ -139,10 +158,98 @@ test('Creator-authored Prefab roots with empty IDs use an asset-bound identity',
     { __type__: 'cc.PrefabInfo', fileId: '', root: { __id__: 1 }, asset: { __id__: 0 } }];
   const source = prefabSource.inspectPrefabSource({ prefabBytes: Buffer.from(JSON.stringify(serialized)),
     metaBytes: Buffer.from(JSON.stringify({ uuid: prefabUuid, importer: 'prefab' })), prefabUuid });
-  assert.equal(source.available, true);
+  assert.equal(source.available, true, JSON.stringify(source));
   assert.equal(source.nodes[0].nodeUuid, prefabPatch.rootNodeId(prefabUuid));
   assert.equal(source.nodes[0].identityKind, 'prefab-root');
   assert.equal(source.nodes[0].fileId, null);
+});
+
+test('Creator-authored Prefab components with empty IDs receive a stable asset-bound identity', () => {
+  const serialized = [{ __type__: 'cc.Prefab', data: { __id__: 1 } },
+    { __type__: 'cc.Node', _name: 'Root', _id: '', _active: true, _parent: null,
+      _children: [], _components: [{ __id__: 2 }], _prefab: { __id__: 3 },
+      _trs: { array: [0, 0, 0, 0, 0, 0, 1, 1, 1] } },
+    { __type__: 'cc.BlockInputEvents', _id: '', node: { __id__: 1 }, _enabled: true },
+    { __type__: 'cc.PrefabInfo', fileId: '', root: { __id__: 1 }, asset: { __id__: 0 } }];
+  const source = prefabSource.inspectPrefabSource({ prefabBytes: Buffer.from(JSON.stringify(serialized)),
+    metaBytes: Buffer.from(JSON.stringify({ uuid: prefabUuid, importer: 'prefab' })), prefabUuid });
+  assert.equal(source.available, true, JSON.stringify(source));
+  const component = source.nodes[0].components[0];
+  assert.equal(component.classId, 'cc.BlockInputEvents');
+  assert.equal(component.instanceIdSynthetic, true);
+  assert.equal(component.instanceId, prefabPatch.componentIdFor(prefabUuid,
+    prefabPatch.rootNodeId(prefabUuid), 0, 'cc.BlockInputEvents', ''));
+});
+
+test('Prefab source inspection reads exact serialized component properties by component ID', () => {
+  const component = { __type__: 'cc.Label', _id: 'label-1', node: { __id__: 1 }, _enabled: true,
+    _string: 'Title', _styleFlags: 1, _N$fontColor: { __type__: 'cc.Color', r: 4, g: 5, b: 6, a: 255 },
+    _N$file: { __uuid__: prefabUuid } };
+  const serialized = [{ __type__: 'cc.Prefab', data: { __id__: 1 } },
+    { __type__: 'cc.Node', _name: 'Root', _id: nodeUuid, _active: true, _parent: null,
+      _children: [], _components: [{ __id__: 2 }], _prefab: { __id__: 3 },
+      _trs: { array: [0, 0, 0, 0, 0, 0, 1, 1, 1] } },
+    component, { __type__: 'cc.PrefabInfo', fileId: 'root-file-id' }];
+  const expectedDiff = [
+    { path: 'component.property', componentClassName: 'cc.Label', componentInstanceId: 'label-1', property: 'string',
+      componentIndex: 0,
+      serializedProperty: '_string', serializedPropertyCandidates: ['_string'], before: 'Title', after: 'Next' },
+    { path: 'component.property', componentClassName: 'cc.Label', componentInstanceId: 'label-1', property: 'enableBold',
+      componentIndex: 0,
+      serializedProperty: '_styleFlags', serializedPropertyCandidates: ['_styleFlags'], before: true, after: false },
+    { path: 'component.property', componentClassName: 'cc.Label', componentInstanceId: 'label-1', property: 'fontColor',
+      componentIndex: 0,
+      serializedProperty: '_N$fontColor', serializedPropertyCandidates: ['_N$fontColor'],
+      before: { kind: 'color', r: 4, g: 5, b: 6, a: 255 }, after: { kind: 'color', r: 7, g: 8, b: 9, a: 255 } },
+    { path: 'component.property', componentClassName: 'cc.Label', componentInstanceId: 'label-1', property: 'font',
+      componentIndex: 0,
+      serializedProperty: '_N$file', serializedPropertyCandidates: ['_N$file'],
+      before: { kind: 'asset', assetClass: 'cc.Font', assetUuid: prefabUuid },
+      after: { kind: 'asset', assetClass: 'cc.Font' } },
+  ];
+  const source = prefabSource.inspectPrefabSource({ prefabBytes: Buffer.from(JSON.stringify(serialized)),
+    metaBytes: Buffer.from(JSON.stringify({ uuid: prefabUuid, importer: 'prefab' })), prefabUuid,
+    targetNodeUuid: nodeUuid, expectedDiff });
+  assert.equal(source.available, true);
+  assert.deepEqual(source.nodes[0].componentProperties['label-1'], {
+    string: 'Title', enableBold: true,
+    fontColor: { kind: 'color', r: 4, g: 5, b: 6, a: 255 },
+    font: { kind: 'asset', assetUuid: prefabUuid, assetClass: 'cc.Font' },
+  });
+  assert.ok(source.nodes[0].components[0].serializedProperties.includes('_string'));
+});
+
+test('Prefab source property readback resolves Prefab-local node and component references to stable IDs', () => {
+  const serialized = [{ __type__: 'cc.Prefab', data: { __id__: 1 } },
+    { __type__: 'cc.Node', _name: 'Root', _id: '', _active: true, _parent: null,
+      _children: [{ __id__: 2 }], _components: [{ __id__: 4 }], _prefab: { __id__: 5 },
+      _trs: { array: [0, 0, 0, 0, 0, 0, 1, 1, 1] } },
+    { __type__: 'cc.Node', _name: 'Child', _id: 'child-id', _active: true, _parent: { __id__: 1 },
+      _children: [], _components: [{ __id__: 3 }], _prefab: { __id__: 6 },
+      _trs: { array: [0, 0, 0, 0, 0, 0, 1, 1, 1] } },
+    { __type__: 'cc.Sprite', _id: 'sprite-id', node: { __id__: 2 }, _enabled: true },
+    { __type__: 'Test.ReferenceHolder', _id: 'holder-id', node: { __id__: 1 },
+      targetNode: { __id__: 2 }, targetComponent: { __id__: 3 } },
+    { __type__: 'cc.PrefabInfo', fileId: '', root: { __id__: 1 }, asset: { __id__: 0 } },
+    { __type__: 'cc.PrefabInfo', fileId: 'child-file-id', root: { __id__: 1 }, asset: { __id__: 0 } }];
+  const expectedDiff = [
+    { path: 'component.property', componentClassName: 'Test.ReferenceHolder', componentInstanceId: 'holder-id',
+      componentIndex: 0, property: 'targetNode', serializedProperty: 'targetNode', serializedPropertyCandidates: ['targetNode'],
+      before: { kind: 'node-ref', nodeUuid: 'child-id' }, after: { kind: 'node-ref' } },
+    { path: 'component.property', componentClassName: 'Test.ReferenceHolder', componentInstanceId: 'holder-id',
+      componentIndex: 0, property: 'targetComponent', serializedProperty: 'targetComponent', serializedPropertyCandidates: ['targetComponent'],
+      before: { kind: 'component-ref', componentClassName: 'cc.Sprite', componentInstanceId: 'sprite-id', nodeUuid: 'child-id' },
+      after: { kind: 'component-ref', componentClassName: 'cc.Sprite' } },
+  ];
+  const source = prefabSource.inspectPrefabSource({ prefabBytes: Buffer.from(JSON.stringify(serialized)),
+    metaBytes: Buffer.from(JSON.stringify({ uuid: prefabUuid, importer: 'prefab' })), prefabUuid,
+    targetNodeUuid: prefabPatch.rootNodeId(prefabUuid), expectedDiff });
+  assert.equal(source.available, true, JSON.stringify(source));
+  assert.deepEqual(source.nodes[0].componentProperties['holder-id'], {
+    targetNode: { kind: 'node-ref', nodeUuid: 'child-id' },
+    targetComponent: { kind: 'component-ref', componentClassName: 'cc.Sprite',
+      componentInstanceId: 'sprite-id', nodeUuid: 'child-id' },
+  });
 });
 
 test('Prefab root patches bind the exact live asset and survive a new editor node UUID', () => {

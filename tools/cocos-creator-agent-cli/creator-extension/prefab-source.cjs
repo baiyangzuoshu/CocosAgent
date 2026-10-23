@@ -1,6 +1,7 @@
 'use strict';
 
-const { rootNodeId } = require('./prefab-patch.cjs');
+const prefabPatch = require('./prefab-patch.cjs');
+const { rootNodeId } = prefabPatch;
 
 const MAX_BYTES = 8 * 1024 * 1024;
 const MAX_META_BYTES = 16 * 1024;
@@ -8,6 +9,7 @@ const MAX_OBJECTS = 20000;
 const MAX_NODES = 10000;
 const MAX_COMPONENTS_PER_NODE = 64;
 const UUID_PATTERN = /^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$/;
+const NODE_ID = /^[A-Za-z0-9_+/=-]{1,128}$/;
 
 function fail(reason, details = {}) { return { available: false, reason, ...details }; }
 
@@ -28,13 +30,17 @@ function prefabInfoFor(node, records) {
     return info && info.__type__ === 'cc.PrefabInfo' ? info : null;
 }
 
-function componentSummary(reference, records, index) {
+function componentSummary(reference, records, index, nodeId, prefabUuid) {
     const componentIndex = refIndex(reference, records);
     const component = componentIndex === null ? null : records[componentIndex];
     if (!component || typeof component.__type__ !== 'string') return null;
-    const row = { index, classId: component.__type__.slice(0, 160) };
-    if (component._id !== undefined && (typeof component._id === 'string' || Number.isInteger(component._id)))
-        row.instanceId = String(component._id).slice(0, 128);
+    const classId = component.__type__.slice(0, 160);
+    const row = { index, classId, className: classId };
+    row.instanceId = prefabPatch.componentIdFor(prefabUuid, nodeId, index, classId, component._id);
+    row.instanceIdSynthetic = !(typeof component._id === 'string' && component._id);
+    const serializedProperties = Object.keys(component).filter((key) => /^[A-Za-z_$][A-Za-z0-9_$]{0,63}$/.test(key));
+    row.serializedProperties = serializedProperties.slice(0, 256);
+    row.serializedPropertiesTruncated = serializedProperties.length > row.serializedProperties.length;
     if (component.__type__ === 'cc.Sprite' || component.__type__ === 'cc.Label') {
         row.className = component.__type__;
         row.enabled = typeof component._enabled === 'boolean' ? component._enabled : true;
@@ -43,7 +49,79 @@ function componentSummary(reference, records, index) {
     return row;
 }
 
-function inspectPrefabSource({ prefabBytes, metaBytes, prefabUuid, maxComponentsPerNode = 8 }) {
+const WIDGET_ALIGN_FLAGS = Object.freeze({ isAlignTop: 1, isAlignVerticalCenter: 2, isAlignBottom: 4,
+    isAlignLeft: 8, isAlignHorizontalCenter: 16, isAlignRight: 32 });
+const LABEL_STYLE_FLAGS = Object.freeze({ enableBold: 1, enableItalic: 2, enableUnderline: 4 });
+
+function prefabNodeId(record, records, prefabUuid) {
+    if (typeof record._id === 'string' && record._id) return record._id;
+    const info = prefabInfoFor(record, records);
+    return info && typeof info.fileId === 'string' && info.fileId
+        ? info.fileId : record._parent == null ? rootNodeId(prefabUuid) : null;
+}
+
+function diskPropertyValue(raw, records, prefabUuid, expected, depth = 0, visited = new Set()) {
+    if (raw === null || typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean') {
+        if (raw === null && expected && expected.kind === 'asset') return { kind: 'asset', assetClass: expected.assetClass };
+        return raw;
+    }
+    if (Array.isArray(raw)) {
+        if (depth !== 0 || raw.length > 32) return undefined;
+        const templates = expected && expected.kind === 'array' ? expected.items : [];
+        return { kind: 'array', items: raw.map((item, index) => diskPropertyValue(item, records, prefabUuid,
+            templates[index], depth + 1, visited)) };
+    }
+    if (!raw || typeof raw !== 'object') return undefined;
+    if (typeof raw.__uuid__ === 'string' && Object.keys(raw).length === 1)
+        return { kind: 'asset', assetUuid: raw.__uuid__,
+            ...(expected && expected.kind === 'asset' && expected.assetClass ? { assetClass: expected.assetClass } : {}) };
+    if (Number.isInteger(raw.__id__) && Object.keys(raw).length === 1) {
+        const record = records[raw.__id__];
+        if (!record || visited.has(record) || visited.size >= 8) return undefined;
+        if (record.__type__ === 'cc.Node') {
+            const nodeUuid = prefabNodeId(record, records, prefabUuid);
+            return nodeUuid ? { kind: 'node-ref', nodeUuid } : undefined;
+        }
+        const owner = Number.isInteger(record.node && record.node.__id__) ? records[record.node.__id__] : null;
+        if (owner && owner.__type__ === 'cc.Node' && typeof record._id === 'string' && record._id) {
+            const nodeUuid = prefabNodeId(owner, records, prefabUuid);
+            return nodeUuid ? { kind: 'component-ref', componentClassName: expected && expected.kind === 'component-ref'
+                ? expected.componentClassName : record.__type__,
+                componentInstanceId: record._id, nodeUuid } : undefined;
+        }
+        const next = new Set(visited); next.add(record);
+        return diskPropertyValue(record, records, prefabUuid, expected, depth, next);
+    }
+    const typed = {
+        'cc.Vec2': ['vec2', ['x', 'y']], 'cc.Vec3': ['vec3', ['x', 'y', 'z']],
+        'cc.Vec4': ['vec4', ['x', 'y', 'z', 'w']], 'cc.Size': ['size', ['width', 'height']],
+        'cc.Rect': ['rect', ['x', 'y', 'width', 'height']], 'cc.Color': ['color', ['r', 'g', 'b', 'a']],
+    }[raw.__type__];
+    if (typed && Object.keys(raw).sort().join(',') === ['__type__', ...typed[1]].sort().join(','))
+        return { kind: typed[0], ...Object.fromEntries(typed[1].map((field) => [field, raw[field]])) };
+    return undefined;
+}
+
+function valueForExpectedProperty(component, records, prefabUuid, diff) {
+    const candidates = diff.serializedProperty ? [diff.serializedProperty] : diff.serializedPropertyCandidates || [];
+    const serializedProperty = candidates.find((property) => Object.prototype.hasOwnProperty.call(component, property));
+    let value;
+    if (serializedProperty) value = diskPropertyValue(component[serializedProperty], records, prefabUuid, diff.before);
+    else if (diff.serializedWasOmitted === true && Object.prototype.hasOwnProperty.call(diff, 'serializedDefaultValue'))
+        value = diff.serializedDefaultValue;
+    else return { found: false };
+    if (value === undefined) return { found: false };
+    if (diff.componentClassName === 'cc.Label' && LABEL_STYLE_FLAGS[diff.property]) {
+        const flags = serializedProperty ? component[serializedProperty] : null;
+        if (Number.isSafeInteger(flags) && flags >= 0) value = (flags & LABEL_STYLE_FLAGS[diff.property]) !== 0;
+    } else if (diff.componentClassName === 'cc.Widget' && WIDGET_ALIGN_FLAGS[diff.property]) {
+        const flags = serializedProperty ? component[serializedProperty] : null;
+        if (Number.isSafeInteger(flags) && flags >= 0) value = (flags & WIDGET_ALIGN_FLAGS[diff.property]) !== 0;
+    }
+    return { found: true, value };
+}
+
+function inspectPrefabSource({ prefabBytes, metaBytes, prefabUuid, maxComponentsPerNode = 8, expectedDiff, targetNodeUuid }) {
     if (!Buffer.isBuffer(prefabBytes) || prefabBytes.length < 2 || prefabBytes.length > MAX_BYTES)
         return fail('PREFAB_SERIALIZATION_SIZE_INVALID');
     if (!Buffer.isBuffer(metaBytes) || metaBytes.length < 2 || metaBytes.length > MAX_META_BYTES)
@@ -52,6 +130,12 @@ function inspectPrefabSource({ prefabBytes, metaBytes, prefabUuid, maxComponents
         return fail('PREFAB_UUID_INVALID');
     if (!Number.isInteger(maxComponentsPerNode) || maxComponentsPerNode < 1 || maxComponentsPerNode > MAX_COMPONENTS_PER_NODE)
         return fail('PREFAB_COMPONENT_LIMIT_INVALID');
+    if (expectedDiff !== undefined && (!Array.isArray(expectedDiff) || expectedDiff.length < 1 || expectedDiff.length > 16
+        || !NODE_ID.test(targetNodeUuid || '')
+        || expectedDiff.some((item) => !item || typeof item !== 'object' || item.path !== 'component.property'
+            || typeof item.componentInstanceId !== 'string' || typeof (item.serializedClassId || item.componentClassName) !== 'string'
+            || typeof item.property !== 'string' || typeof item.before === 'undefined')))
+        return fail('PREFAB_COMPONENT_PROPERTY_SELECTOR_INVALID');
 
     let meta;
     let parsed;
@@ -111,13 +195,34 @@ function inspectPrefabSource({ prefabBytes, metaBytes, prefabUuid, maxComponents
         } : null;
         const componentRefs = Array.isArray(record._components) ? record._components : [];
         if (componentRefs.length > MAX_COMPONENTS_PER_NODE) return fail('PREFAB_COMPONENT_LIMIT', { nodePath });
-        const allComponents = componentRefs.map((reference, index) => componentSummary(reference, records, index));
+        const allComponents = componentRefs.map((reference, index) => componentSummary(reference, records, index, nodeId, prefabUuid));
         if (allComponents.some((component) => !component)) return fail('PREFAB_COMPONENT_REFERENCE_INVALID', { nodePath });
         const components = allComponents.slice(0, maxComponentsPerNode);
+        const componentProperties = {};
+        if (Array.isArray(expectedDiff) && nodeId === targetNodeUuid) {
+            for (const diff of expectedDiff.filter((item) => item && item.path === 'component.property')) {
+                if (!Number.isInteger(diff.componentIndex) || diff.componentIndex < 0
+                    || diff.componentIndex >= componentRefs.length) return fail('PREFAB_COMPONENT_PROPERTY_SELECTOR_INVALID');
+                const componentIndex = refIndex(componentRefs[diff.componentIndex], records);
+                const component = componentIndex === null ? null : records[componentIndex];
+                const serializedClassId = diff.serializedClassId || diff.componentClassName;
+                if (!component || component.__type__ !== serializedClassId)
+                    return fail('PREFAB_COMPONENT_PROPERTY_IDENTITY_MISMATCH');
+                const serializedId = prefabPatch.componentIdFor(prefabUuid, nodeId, diff.componentIndex,
+                    serializedClassId, component._id);
+                if (serializedId !== diff.componentInstanceId) return fail('PREFAB_COMPONENT_PROPERTY_IDENTITY_MISMATCH');
+                const value = valueForExpectedProperty(component, records, prefabUuid, diff);
+                if (!value.found) return fail('PREFAB_COMPONENT_PROPERTY_UNAVAILABLE', {
+                    componentInstanceId: diff.componentInstanceId, property: diff.property });
+                componentProperties[diff.componentInstanceId] = componentProperties[diff.componentInstanceId] || {};
+                componentProperties[diff.componentInstanceId][diff.property] = value.value;
+            }
+        }
         const node = { nodeUuid: nodeId, fileId, name, nodePath, parentUuid: item.parentId,
             identityKind: serializedNodeId ? 'serialized-node-id' : item.depth === 0 ? 'prefab-root' : null,
             active: typeof record._active === 'boolean' ? record._active : true,
-            transform, components, componentsTruncated: allComponents.length > components.length };
+            transform, components, componentsTruncated: allComponents.length > components.length,
+            ...(Object.keys(componentProperties).length ? { componentProperties } : {}) };
         const children = Array.isArray(record._children) ? record._children : [];
         if (children.length > MAX_NODES) return fail('PREFAB_CHILD_LIMIT', { nodePath });
         const childRows = [];

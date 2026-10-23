@@ -100,6 +100,30 @@ test('saved scene node inspection reads an exact serialized Button event list an
   assert.equal(ambiguous.buttonEvents, null);
 });
 
+test('saved UI event inspection binds an exact non-Button component and event property', () => {
+  const source = fixture();
+  const records = JSON.parse(source.sceneBytes.toString('utf8'));
+  records[2]._components = [{ __id__: 3 }];
+  Object.assign(records[3], { __type__: 'cc.Toggle', _id: 'toggle-instance', node: { __id__: 2 },
+    clickEvents: [], checkEvents: [{ __id__: 5 }] });
+  source.sceneBytes = Buffer.from(JSON.stringify(records));
+  const selector = { componentInstanceId: 'toggle-instance', serializedClassId: 'cc.Toggle', eventProperty: 'checkEvents' };
+  const inspected = inspectSavedSceneNode({ ...source, sceneUuid, sceneAssetRow, nodeUuid, componentEvents: selector });
+  assert.equal(inspected.verified, true);
+  assert.deepEqual(inspected.componentEvents, { ...selector, events: [{ targetUuid: nodeUuid,
+    component: 'game.ButtonState', handler: 'onClick', customEventData: 'toggle' }] });
+
+  const inheritedButtonProperty = inspectSavedSceneNode({ ...source, sceneUuid, sceneAssetRow, nodeUuid,
+    componentEvents: { ...selector, eventProperty: 'clickEvents' } });
+  assert.equal(inheritedButtonProperty.verified, true);
+  assert.deepEqual(inheritedButtonProperty.componentEvents.events, []);
+
+  const wrongProperty = inspectSavedSceneNode({ ...source, sceneUuid, sceneAssetRow, nodeUuid,
+    componentEvents: { ...selector, eventProperty: 'notAnEvent' } });
+  assert.equal(wrongProperty.verified, false);
+  assert.equal(wrongProperty.reason, 'SCENE_UI_EVENT_DISK_SELECTOR_INVALID');
+});
+
 function propertyFixture(value) {
   const source = fixture();
   const records = JSON.parse(source.sceneBytes.toString('utf8'));
@@ -121,9 +145,11 @@ test('saved component properties bind exact instance IDs and decode all supporte
       ['vec4', 'cc.Vec4', { x: 1, y: 2, z: 3, w: 4 }], ['size', 'cc.Size', { width: 20, height: 30 }],
       ['rect', 'cc.Rect', { x: 1, y: 2, width: 20, height: 30 }], ['color', 'cc.Color', { r: 1, g: 2, b: 3, a: 255 }],
     ].map(([kind, type, fields]) => [{ __type__: type, ...fields }, { kind, ...fields }]),
-    [[1, 'value', false, { __type__: 'cc.Vec2', x: 1, y: 2 }, { __id__: 2 }, { __id__: 3 }, null],
+    [[1, 'value', false, { __type__: 'cc.Vec2', x: 1, y: 2 }, { __id__: 2 }, { __id__: 3 },
+      { __uuid__: spriteUuid }, null],
       { kind: 'array', items: [1, 'value', false, { kind: 'vec2', x: 1, y: 2 }, { kind: 'node-ref', nodeUuid },
-        { kind: 'component-ref', nodeUuid, componentInstanceId: 'button-instance', serializedClassId: 'cc.Button' }, null] }],
+        { kind: 'component-ref', nodeUuid, componentInstanceId: 'button-instance', serializedClassId: 'cc.Button' },
+        { kind: 'asset', assetUuid: spriteUuid }, null] }],
   ];
   for (const [raw, expected] of cases) {
     const inspected = inspectSavedSceneNode({ ...propertyFixture(raw), sceneUuid, sceneAssetRow, nodeUuid });
@@ -233,7 +259,6 @@ test('saved component properties reject wrong identity, missing fields, unresolv
     [(records) => { records[4].state = { arbitrary: true }; }, 'SCENE_COMPONENT_SERIALIZED_VALUE_UNSUPPORTED'],
     [(records) => { records[4].state = { __id__: 999 }; }, 'SCENE_COMPONENT_SERIALIZED_VALUE_UNSUPPORTED'],
     [(records) => { records[4].state = [[1]]; }, 'SCENE_COMPONENT_SERIALIZED_VALUE_UNSUPPORTED'],
-    [(records) => { records[4].state = [{ __uuid__: spriteUuid }]; }, 'SCENE_COMPONENT_SERIALIZED_VALUE_UNSUPPORTED'],
     [(records) => { records[4].state = { __id__: 6 }; records.push({ __id__: 6 }); }, 'SCENE_COMPONENT_SERIALIZED_VALUE_UNSUPPORTED'],
     [(records) => { records[4].state = { __id__: 6 }; records.push({ __type__: 'cc.Node', _id: spriteUuid, _parent: null }); },
       'SCENE_COMPONENT_SERIALIZED_VALUE_UNSUPPORTED'],

@@ -45,6 +45,9 @@ function fixture() {
   class Rect { constructor(x = 0, y = 0, width = 0, height = 0) { this.x = x; this.y = y; this.width = width; this.height = height; } }
   class Size { constructor(width = 0, height = 0) { this.width = width; this.height = height; } }
   class Color { constructor(r = 0, g = 0, b = 0, a = 255) { this.r = r; this.g = g; this.b = b; this.a = a; } }
+  class Asset {}
+  class Material extends Asset {}
+  class MaterialVariant extends Material { constructor(uuid = 'material-variant') { super(); this._uuid = uuid; } }
   const Integer = { name: 'Integer' };
   class Canvas extends Component { constructor() { super(); this.designResolution = new Size(960, 640); this.fitWidth = false; this.fitHeight = true; } }
   Canvas.prototype.__classname__ = 'cc.Canvas';
@@ -100,17 +103,29 @@ function fixture() {
       this.tint = new Color(1, 2, 3, 255);
       this.thresholds = [1, 'low'];
       this.integerList = [1, 2];
+      this.materials = [new MaterialVariant('66666666-6666-4666-8666-666666666666')];
     }
   }
   Sprite.prototype.__classname__ = 'cc.Sprite';
   Sprite.$super = BaseSprite;
   Sprite.__props__ = ['mode', 'labelText', 'enabled', 'inheritedValue', '_privateValue', 'vector', 'spriteFrame',
-    'position', 'direction', 'size', 'tint', 'thresholds', 'integerList'];
-  class SpriteFrame { constructor(uuid = 'sprite-frame') { this._uuid = uuid; } }
-  class Font { constructor(uuid = 'font') { this._uuid = uuid; } }
+    'position', 'direction', 'size', 'tint', 'thresholds', 'integerList', 'materials'];
+  class SpriteFrame extends Asset { constructor(uuid = 'sprite-frame') { super(); this._uuid = uuid; } }
+  class Font extends Asset { constructor(uuid = 'font') { super(); this._uuid = uuid; } }
   class TTFFont extends Font {}
   class Label extends Component {
-    constructor() { super(); this.font = null; this._string = ''; this.overflow = 0; }
+    constructor() { super(); this._N$file = null; this._isSystemFontUsed = true; this._styleFlags = 0;
+      this._string = ''; this.overflow = 0; }
+    get font() { return this._N$file; }
+    set font(value) { this._N$file = value; this._isSystemFontUsed = !value; }
+    get useSystemFont() { return this._isSystemFontUsed; }
+    set useSystemFont(value) { this._isSystemFontUsed = !!value; }
+    get enableBold() { return !!(this._styleFlags & 1); }
+    set enableBold(value) { this._styleFlags = value ? this._styleFlags | 1 : this._styleFlags & ~1; }
+    get enableItalic() { return !!(this._styleFlags & 2); }
+    set enableItalic(value) { this._styleFlags = value ? this._styleFlags | 2 : this._styleFlags & ~2; }
+    get enableUnderline() { return !!(this._styleFlags & 4); }
+    set enableUnderline(value) { this._styleFlags = value ? this._styleFlags | 4 : this._styleFlags & ~4; }
     get string() { return this._string; }
     set string(value) {
       this._string = value;
@@ -118,13 +133,13 @@ function fixture() {
     }
   }
   Label.prototype.__classname__ = 'cc.Label';
-  Label.__props__ = ['font', 'string', 'overflow'];
+  Label.__props__ = ['font', 'string', 'overflow', 'useSystemFont', 'enableBold', 'enableItalic', 'enableUnderline'];
   class Button extends Component { constructor() { super(); this._id = 'button-component'; this.clickEvents = []; } }
   Button.prototype.__classname__ = 'cc.Button';
   Button.__props__ = ['clickEvents'];
-  class Toggle extends Component { constructor() { super(); this.checkEvents = []; this.isChecked = false; } }
+  class Toggle extends Button { constructor() { super(); this.checkEvents = []; this.isChecked = false; } }
   Toggle.prototype.__classname__ = 'cc.Toggle';
-  Toggle.__props__ = ['checkEvents', 'isChecked'];
+  Toggle.__props__ = ['clickEvents', 'checkEvents', 'isChecked'];
   class ToggleContainer extends Component { constructor() { super(); this.checkEvents = []; } }
   ToggleContainer.prototype.__classname__ = 'cc.ToggleContainer';
   ToggleContainer.__props__ = ['checkEvents'];
@@ -134,9 +149,9 @@ function fixture() {
   class ScrollView extends Component { constructor() { super(); this.scrollEvents = []; } }
   ScrollView.prototype.__classname__ = 'cc.ScrollView';
   ScrollView.__props__ = ['scrollEvents'];
-  class PageView extends Component { constructor() { super(); this.pageEvents = []; } }
+  class PageView extends ScrollView { constructor() { super(); this.pageEvents = []; } }
   PageView.prototype.__classname__ = 'cc.PageView';
-  PageView.__props__ = ['pageEvents'];
+  PageView.__props__ = ['scrollEvents', 'pageEvents'];
   class EditBox extends Component {
     constructor() { super(); this.editingDidBegan = []; this.textChanged = []; this.editingDidEnded = []; this.editingReturn = []; }
   }
@@ -161,6 +176,13 @@ function fixture() {
   AutoSizeOnLoad.prototype.__classname__ = 'sample.AutoSizeOnLoad';
   class NotAComponent {}
 
+  for (const ComponentType of [Component, BaseSprite, Canvas, Widget, Layout, Sprite, Label, Button, Toggle,
+    ToggleContainer, Slider, ScrollView, PageView, EditBox, Controller, ReferenceHolder, DefaultArrayComponent,
+    NeedsOther, AutoSizeOnLoad]) ComponentType.__values__ = (ComponentType.__props__ || []).slice();
+  Widget.__values__ = ['target', '_alignFlags', 'top', 'alignMode'];
+  Layout.__values__ = ['_N$layoutType', '_resize', 'cellSize', 'spacingY'];
+  Label.__values__ = ['_N$file', '_string', 'overflow', '_isSystemFontUsed', '_styleFlags'];
+
   let componentSequence = 0;
   const root = {
     name: 'Scene', uuid: 'scene-uuid', active: true, children: [], _components: [],
@@ -176,19 +198,25 @@ function fixture() {
     },
   };
   const cc = {
-    Component, Node: FakeNode, SpriteFrame, Font, TTFFont, Label, Canvas, Widget, Layout, Button, Toggle,
+    Component, Asset, Material, MaterialVariant, Node: FakeNode, SpriteFrame, Font, TTFFont, Label, Canvas, Widget, Layout, Button, Toggle,
     ToggleContainer, Slider, ScrollView, PageView, EditBox, Vec2, Vec3, Vec4, Rect, Size, Color,
     Class: { attr(type, property) {
       const typeMap = new Map([
         [`Sprite.spriteFrame`, SpriteFrame], [`Sprite.position`, Vec2], [`Sprite.direction`, Vec3],
         [`Sprite.size`, Size], [`Sprite.tint`, Color], [`Sprite.thresholds`, Array],
+        [`Sprite.materials`, Material],
         [`Sprite.integerList`, Integer], [`Label.font`, Font], [`Label.overflow`, 'Number'],
+        [`Label.useSystemFont`, Boolean], [`Label.enableBold`, Boolean], [`Label.enableItalic`, Boolean],
+        [`Label.enableUnderline`, Boolean],
         [`Canvas.designResolution`, Size], [`Widget.target`, FakeNode], [`Layout.cellSize`, Size],
         [`ReferenceHolder.targetNode`, FakeNode], [`ReferenceHolder.targetComponent`, Controller],
         [`ReferenceHolder.nodeList`, FakeNode], [`ReferenceHolder.vectorList`, Vec2],
         [`ReferenceHolder.vector4`, Vec4], [`ReferenceHolder.rect`, Rect],
         [`DefaultArrayComponent.values`, Integer],
       ]);
+      if (type === Sprite && property === 'mode') return { type: 'Number',
+        enumList: [{ name: 'Simple', value: 0 }, { name: 'Sliced', value: 1 }, { name: 'Tiled', value: 2 }] };
+      if (type === Label && property === 'overflow') return { type: 'Number', min: 0, max: 2, step: 1 };
       const className = type === Sprite ? 'Sprite' : type === Label ? 'Label'
         : type === Canvas ? 'Canvas' : type === Widget ? 'Widget' : type === Layout ? 'Layout'
           : type === ReferenceHolder ? 'ReferenceHolder' : '';
@@ -201,13 +229,17 @@ function fixture() {
         ? { type: 'Object', ctor: declaredType } : { type: declaredType };
     } },
     assetManager: { loadAny(uuid, callback) {
-      callback(null, uuid === '55555555-5555-4555-8555-555555555555' ? new TTFFont(uuid) : new SpriteFrame(uuid));
+      callback(null, uuid === '55555555-5555-4555-8555-555555555555' ? new TTFFont(uuid)
+        : ['66666666-6666-4666-8666-666666666666', '77777777-7777-4777-8777-777777777777'].includes(uuid)
+          ? new MaterialVariant(uuid) : new SpriteFrame(uuid));
     } },
     Object: { Flags: { DontSave: 1 << 3, HideInHierarchy: 1 << 10 } },
     isValid(object) { return !!object && object.destroyed !== true; },
     director: { getScene: () => root },
     js: {
-      getClassByName(name) { return ({ 'cc.Component': Component, 'cc.Sprite': Sprite, 'cc.Label': Label,
+      getClassByName(name) { return ({ 'cc.Component': Component, 'cc.Asset': Asset, 'cc.Material': Material,
+        'cc.MaterialVariant': MaterialVariant, 'cc.SpriteFrame': SpriteFrame, 'cc.Font': Font, 'cc.TTFFont': TTFFont,
+        'cc.Sprite': Sprite, 'cc.Label': Label,
         'cc.Canvas': Canvas, 'cc.Widget': Widget, 'cc.Layout': Layout, 'cc.Button': Button, 'cc.Toggle': Toggle,
         'cc.ToggleContainer': ToggleContainer, 'cc.Slider': Slider, 'cc.ScrollView': ScrollView,
         'cc.PageView': PageView, 'cc.EditBox': EditBox,
@@ -215,8 +247,8 @@ function fixture() {
         'sample.DefaultArrayComponent': DefaultArrayComponent,
         'sample.NeedsOther': NeedsOther, 'sample.AutoSizeOnLoad': AutoSizeOnLoad,
         'sample.NotAComponent': NotAComponent })[name]; },
-      getClassName(type) { return type.prototype.__classname__ || ''; },
-      _getClassId(type) { return type.prototype.__classname__ || ''; },
+      getClassName(type) { return type.prototype.__classname__ || (type.name ? `cc.${type.name}` : ''); },
+      _getClassId(type) { return type.prototype.__classname__ || (type.name ? `cc.${type.name}` : ''); },
       isChildClassOf(type, base) { return type === base || type.prototype instanceof base; },
     },
   };
@@ -226,7 +258,7 @@ function fixture() {
     require: createRequire(path.join(packageRoot, 'creator-extension/scene.js')) }, { filename: 'scene.js' });
   return { api: module.exports, root, Sprite, Label, Canvas, Widget, Layout, Button, Toggle, ToggleContainer,
     Slider, ScrollView, PageView, EditBox, Controller, ReferenceHolder, DefaultArrayComponent, Vec2, Vec3, Vec4, Rect,
-    Size, Color, SpriteFrame, Font, TTFFont, Integer, cc, FakeNode };
+    Size, Color, Asset, Material, MaterialVariant, SpriteFrame, Font, TTFFont, Integer, cc, FakeNode };
 }
 
 function invoke(api, method, input) {
@@ -289,7 +321,8 @@ test('UI inspection reads typed declared properties and bounded event lists for 
     serializableCount: Array.isArray(Sprite.__values__) ? Sprite.__values__.length : null,
     declaredPublicProperties: Sprite.__props__.filter((property) => typeof property === 'string'
       && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(property) && !property.startsWith('_')).slice(0, 48),
-    serializablePublicProperties: null,
+    serializablePublicProperties: Sprite.__values__.filter((property) => typeof property === 'string'
+      && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(property) && !property.startsWith('_')).slice(0, 48),
   });
   assert.ok(spriteState.properties.some((property) => property.name === 'position' && property.kind === 'vec2'));
   assert.ok(spriteState.properties.some((property) => property.name === 'spriteFrame'
@@ -319,9 +352,10 @@ test('generic component writes reject UI event arrays and preserve bounded event
   node._id = '11111111-1111-4111-8111-111111111111';
   root.addChild(node);
   const components = [
-    [Button, 'cc.Button', 'clickEvents'], [Toggle, 'cc.Toggle', 'checkEvents'],
+    [Button, 'cc.Button', 'clickEvents'], [Toggle, 'cc.Toggle', 'clickEvents'], [Toggle, 'cc.Toggle', 'checkEvents'],
     [ToggleContainer, 'cc.ToggleContainer', 'checkEvents'], [Slider, 'cc.Slider', 'slideEvents'],
-    [ScrollView, 'cc.ScrollView', 'scrollEvents'], [PageView, 'cc.PageView', 'pageEvents'],
+    [ScrollView, 'cc.ScrollView', 'scrollEvents'], [PageView, 'cc.PageView', 'scrollEvents'],
+    [PageView, 'cc.PageView', 'pageEvents'],
     [EditBox, 'cc.EditBox', 'editingDidBegan'],
   ];
 
@@ -343,8 +377,8 @@ test('generic component writes reject UI event arrays and preserve bounded event
   assert.equal(inspected.available, true);
   const toggle = inspected.components.find((component) => component.componentClassName === 'cc.Toggle');
   assert.deepEqual(Array.from(toggle.eventLists.checkEvents), []);
-  assert.equal(toggle.unsupportedProperties.find((property) => property.name === 'checkEvents').reason,
-    'SCENE_COMPONENT_EVENT_USE_DEDICATED_TOOL');
+  assert.deepEqual(Array.from(toggle.eventLists.clickEvents), []);
+  assert.ok(!toggle.unsupportedProperties.some((property) => property.name === 'checkEvents'));
 });
 
 test('Label font inspection and assignment use the cc.Font base type for derived Creator font assets', () => {
@@ -357,7 +391,9 @@ test('Label font inspection and assignment use the cc.Font base type for derived
   const labelState = inspected.components.find((component) => component.componentClassName === 'cc.Label');
   const font = labelState.properties.find((property) => property.name === 'font');
   assert.deepEqual(JSON.parse(JSON.stringify(font)), { name: 'font', kind: 'asset',
-    value: { kind: 'asset', assetClass: 'Font' } });
+    value: { kind: 'asset', assetClass: 'Font' }, inspector: { type: 'cc.Font', assetClass: 'Font',
+      referenceKind: 'asset', readonly: false, visibility: 'visible',
+      serializable: true, editable: true, serializedProperty: '_N$file' } });
 
   const changed = invoke(api, 'setComponentProperty', { sceneUuid: root.uuid, nodeUuid: node.uuid,
     nodePath: 'Scene/Text', componentClassName: 'cc.Label', componentInstanceId: label._id, property: 'font',
@@ -379,10 +415,70 @@ test('Label public overflow property remains writable and supplies bounded seria
   const before = invoke(api, 'componentPropertyState', base).result;
   assert.equal(before.available, true, JSON.stringify(before));
   assert.equal(before.propertyKind, 'number');
-  assert.deepEqual(Array.from(before.serializedPropertyCandidates), ['overflow', '_N$overflow', '_overflow']);
+  assert.deepEqual(Array.from(before.serializedPropertyCandidates), ['overflow']);
   const changed = invoke(api, 'setComponentProperty', { ...base, expectedValue: before.value, value: 1 }).result;
   assert.equal(changed.available, true, JSON.stringify(changed));
   assert.equal(label.overflow, 1);
+});
+
+test('Label Inspector font source and style toggles map to Creator serialized backing fields', () => {
+  const { api, root, FakeNode, Label } = fixture();
+  const node = new FakeNode('Label');
+  node._id = '11111111-1111-4111-8111-111111111111';
+  root.addChild(node);
+  const label = node.addComponent(Label);
+  label._styleFlags = 1 | 4;
+  const base = { sceneUuid: root.uuid, nodeUuid: node.uuid, nodePath: 'Scene/Label',
+    componentClassName: 'cc.Label', componentInstanceId: label._id };
+
+  const systemFont = invoke(api, 'componentPropertyState', { ...base, property: 'useSystemFont' }).result;
+  assert.equal(systemFont.available, true, JSON.stringify(systemFont));
+  assert.deepEqual(Array.from(systemFont.serializedPropertyCandidates), ['_isSystemFontUsed']);
+  assert.equal(systemFont.value, true);
+  const switchFont = invoke(api, 'setComponentProperty', { ...base, property: 'useSystemFont',
+    expectedValue: true, value: false }).result;
+  assert.equal(switchFont.available, true, JSON.stringify(switchFont));
+  assert.equal(label._isSystemFontUsed, false);
+
+  const bold = invoke(api, 'componentPropertyState', { ...base, property: 'enableBold', requestedValue: false }).result;
+  assert.equal(bold.available, true, JSON.stringify(bold));
+  assert.deepEqual(Array.from(bold.serializedPropertyCandidates), ['_styleFlags']);
+  assert.equal(bold.serializedValue, 5);
+  assert.equal(bold.requestedSerializedValue, 4);
+  const italicWrite = invoke(api, 'setComponentProperty', { ...base, property: 'enableItalic',
+    expectedValue: false, value: true }).result;
+  assert.equal(italicWrite.available, true, JSON.stringify(italicWrite));
+  assert.equal(label._styleFlags, 7);
+  const underlineWrite = invoke(api, 'setComponentProperty', { ...base, property: 'enableUnderline',
+    expectedValue: true, value: false }).result;
+  assert.equal(underlineWrite.available, true, JSON.stringify(underlineWrite));
+  assert.equal(label._styleFlags, 3);
+  assert.equal(invoke(api, 'componentPropertyState', { ...base, property: 'enableUnderline', requestedValue: 1 }).result.reason,
+    'SCENE_COMPONENT_PROPERTY_TYPE_MISMATCH');
+});
+
+test('Inspector metadata exposes enum and numeric range constraints and rejects invalid writes', () => {
+  const { api, root, FakeNode, Sprite, Label } = fixture();
+  const node = new FakeNode('Inspector');
+  node._id = '11111111-1111-4111-8111-111111111111';
+  root.addChild(node);
+  const sprite = node.addComponent(Sprite);
+  const label = node.addComponent(Label);
+  const base = { sceneUuid: root.uuid, nodeUuid: node.uuid, nodePath: 'Scene/Inspector' };
+  const mode = invoke(api, 'componentPropertyState', { ...base, componentClassName: 'cc.Sprite',
+    componentInstanceId: sprite._id, property: 'mode' }).result;
+  assert.deepEqual(JSON.parse(JSON.stringify(mode.inspector.enum)), [
+    { name: 'Simple', value: 0 }, { name: 'Sliced', value: 1 }, { name: 'Tiled', value: 2 },
+  ]);
+  assert.equal(invoke(api, 'componentPropertyState', { ...base, componentClassName: 'cc.Sprite',
+    componentInstanceId: sprite._id, property: 'mode', requestedValue: 3 }).result.reason,
+  'SCENE_COMPONENT_PROPERTY_ENUM_VALUE_INVALID');
+  const overflow = invoke(api, 'componentPropertyState', { ...base, componentClassName: 'cc.Label',
+    componentInstanceId: label._id, property: 'overflow' }).result;
+  assert.deepEqual(JSON.parse(JSON.stringify(overflow.inspector.range)), { min: 0, max: 2, step: 1 });
+  assert.equal(invoke(api, 'componentPropertyState', { ...base, componentClassName: 'cc.Label',
+    componentInstanceId: label._id, property: 'overflow', requestedValue: 3 }).result.reason,
+  'SCENE_COMPONENT_PROPERTY_OUT_OF_RANGE');
 });
 
 test('Canvas, Widget, and Layout UI fields inspect and write typed values and exact Node targets', () => {
@@ -487,7 +583,7 @@ test('Layout type and resize mode bind their public properties to Creator 2.4 se
 
   const typePlan = invoke(api, 'componentPropertyState', { ...base, property: 'type', requestedValue: 2 }).result;
   assert.equal(typePlan.available, true, JSON.stringify(typePlan));
-  assert.deepEqual(Array.from(typePlan.serializedPropertyCandidates), ['_N$layoutType', 'type', '_N$type', '_type']);
+  assert.deepEqual(Array.from(typePlan.serializedPropertyCandidates), ['_N$layoutType']);
   assert.equal(typePlan.serializedValue, undefined);
   assert.equal(typePlan.value, 0);
   const typeWrite = invoke(api, 'setComponentProperty', { ...base, property: 'type', expectedValue: 0, value: 2 }).result;
@@ -642,6 +738,58 @@ test('existing Button click events replace only the exact component after valida
   assert.equal(invalidHandler.available, false);
   assert.equal(invalidHandler.reason, 'SCENE_COMPOSE_HANDLER_NOT_FOUND');
   assert.equal(button.clickEvents.length, 1);
+});
+
+test('generic UI event writes replace inherited Toggle and PageView event properties after resolving targets and handlers', () => {
+  const { api, root, FakeNode, Toggle, PageView, Controller } = fixture();
+  const toggleNode = new FakeNode('Toggle');
+  const targetNode = new FakeNode('Controller');
+  const pageNode = new FakeNode('PageView');
+  toggleNode._id = '11111111-1111-4111-8111-111111111111';
+  targetNode._id = '22222222-2222-4222-8222-222222222222';
+  pageNode._id = '33333333-3333-4333-8333-333333333333';
+  root.addChild(toggleNode);
+  root.addChild(targetNode);
+  root.addChild(pageNode);
+  const toggle = toggleNode.addComponent(Toggle);
+  const pageView = pageNode.addComponent(PageView);
+  targetNode.addComponent(Controller);
+  const events = [{ targetUuid: targetNode.uuid, component: 'sample.Controller', handler: 'onClick', customEventData: 'checked' }];
+  const state = invoke(api, 'uiEventsState', { sceneUuid: root.uuid, nodeUuid: toggleNode.uuid,
+    nodePath: 'Scene/Toggle', componentClassName: 'cc.Toggle', eventProperty: 'checkEvents',
+    componentInstanceId: toggle._id, events }).result;
+  assert.equal(state.available, true);
+  assert.equal(state.serializedClassId, 'cc.Toggle');
+  assert.deepEqual(Array.from(state.events), []);
+  assert.equal(state.changed, true);
+
+  const changed = invoke(api, 'setUiEvents', { sceneUuid: root.uuid, nodeUuid: toggleNode.uuid,
+    nodePath: 'Scene/Toggle', componentClassName: 'cc.Toggle', eventProperty: 'checkEvents',
+    componentInstanceId: toggle._id, expectedBefore: [], events }).result;
+  assert.equal(changed.available, true);
+  assert.deepEqual(Array.from(toggle.checkEvents, (event) => ({ targetUuid: event.target.uuid,
+    component: event.component, handler: event.handler, customEventData: event.customEventData })), events);
+
+  const inheritedClick = invoke(api, 'setUiEvents', { sceneUuid: root.uuid, nodeUuid: toggleNode.uuid,
+    nodePath: 'Scene/Toggle', componentClassName: 'cc.Toggle', eventProperty: 'clickEvents',
+    componentInstanceId: toggle._id, expectedBefore: [], events }).result;
+  assert.equal(inheritedClick.available, true, JSON.stringify(inheritedClick));
+  assert.deepEqual(Array.from(toggle.clickEvents, (event) => event.handler), ['onClick']);
+
+  const inheritedScroll = invoke(api, 'setUiEvents', { sceneUuid: root.uuid, nodeUuid: pageNode.uuid,
+    nodePath: 'Scene/PageView', componentClassName: 'cc.PageView', eventProperty: 'scrollEvents',
+    componentInstanceId: pageView._id, expectedBefore: [], events }).result;
+  assert.equal(inheritedScroll.available, true, JSON.stringify(inheritedScroll));
+  assert.deepEqual(Array.from(pageView.scrollEvents, (event) => event.handler), ['onClick']);
+  const unsupportedPair = invoke(api, 'uiEventsState', { sceneUuid: root.uuid, nodeUuid: pageNode.uuid,
+    nodePath: 'Scene/PageView', componentClassName: 'cc.PageView', eventProperty: 'clickEvents',
+    componentInstanceId: pageView._id }).result;
+  assert.equal(unsupportedPair.available, false);
+  assert.equal(unsupportedPair.reason, 'SCENE_UI_EVENT_PROPERTY_UNSUPPORTED');
+  const stale = invoke(api, 'setUiEvents', { sceneUuid: root.uuid, nodeUuid: toggleNode.uuid,
+    nodePath: 'Scene/Toggle', componentClassName: 'cc.Toggle', eventProperty: 'checkEvents',
+    componentInstanceId: toggle._id, expectedBefore: [], events: [] }).result;
+  assert.equal(stale.reason, 'SCENE_UI_EVENTS_PRECONDITION_FAILED');
 });
 
 test('component addition requires exact before count and refuses implicit dependencies', () => {
@@ -799,6 +947,22 @@ test('component property writes support declared public scalars with exact befor
   assert.equal(root._components[0].mode, 1);
 });
 
+test('component enabled is an editable Inspector header toggle with exact instance identity', () => {
+  const { api, root, Sprite } = fixture();
+  const sprite = root.addComponent(Sprite);
+  const input = { sceneUuid: 'scene-uuid', nodeUuid: 'scene-uuid', nodePath: 'Scene',
+    componentClassName: 'cc.Sprite', componentInstanceId: sprite._id, property: 'enabled' };
+  const before = invoke(api, 'componentPropertyState', input).result;
+  assert.equal(before.available, true);
+  assert.equal(before.value, true);
+  assert.equal(before.inspector.visibility, 'component-header');
+  assert.equal(before.inspector.editable, true);
+  const after = invoke(api, 'setComponentProperty', { ...input, expectedValue: true, value: false }).result;
+  assert.equal(after.available, true);
+  assert.equal(after.value, false);
+  assert.equal(sprite.enabled, false);
+});
+
 test('component property state reports a typed declared default for an omitted serialized array', () => {
   const { api, root, DefaultArrayComponent } = fixture();
   const component = root.addComponent(DefaultArrayComponent);
@@ -953,14 +1117,35 @@ test('component asset properties load exact resources and represent an empty ref
   assert.deepEqual(JSON.parse(JSON.stringify(cleared.value)), { kind: 'asset', assetClass: 'SpriteFrame' });
 });
 
-test('component property writes reject inherited, internal, transient, and object-valued fields', () => {
+test('component asset arrays inspect and assign exact derived AssetDB resources', () => {
+  const { api, root, FakeNode, Sprite, MaterialVariant } = fixture();
+  const node = new FakeNode('Sprite');
+  node._id = '11111111-1111-4111-8111-111111111111';
+  root.addChild(node);
+  const sprite = node.addComponent(Sprite);
+  const input = { sceneUuid: root.uuid, nodeUuid: node.uuid, nodePath: 'Scene/Sprite',
+    componentClassName: 'cc.Sprite', componentInstanceId: sprite._id, property: 'materials' };
+  const before = invoke(api, 'componentPropertyState', input).result;
+  assert.equal(before.available, true, JSON.stringify(before));
+  assert.equal(before.propertyKind, 'array');
+  assert.equal(before.inspector.elementAssetClass, 'Material');
+  const uuid = '77777777-7777-4777-8777-777777777777';
+  const value = { kind: 'array', items: [{ kind: 'asset', assetClass: 'Material', assetUuid: uuid }] };
+  const assigned = invoke(api, 'setComponentProperty', { ...input, expectedValue: before.value, value }).result;
+  assert.equal(assigned.available, true, JSON.stringify(assigned));
+  assert.equal(sprite.materials.length, 1);
+  assert.ok(sprite.materials[0] instanceof MaterialVariant);
+  assert.equal(sprite.materials[0]._uuid, uuid);
+});
+
+test('component property writes expose serializable inherited fields and reject internal, transient, and unknown object values', () => {
   const { api, Sprite } = fixture();
   Sprite.__props__.push('transient');
   invoke(api, 'addNodeComponent', {
     sceneUuid: 'scene-uuid', nodeUuid: 'scene-uuid', nodePath: 'Scene',
     componentClassName: 'cc.Sprite', expectedComponentCount: 0,
   });
-  for (const property of ['enabled', 'inheritedValue', '_privateValue', 'vector', 'transient']) {
+  for (const property of ['_privateValue', 'vector', 'transient']) {
     const state = invoke(api, 'componentPropertyState', {
       sceneUuid: 'scene-uuid', nodeUuid: 'scene-uuid', nodePath: 'Scene',
       componentClassName: 'cc.Sprite', componentInstanceId: 'component-1', property,
@@ -968,9 +1153,16 @@ test('component property writes reject inherited, internal, transient, and objec
     assert.equal(state.result.available, false, property);
     assert.match(state.result.reason, /^SCENE_COMPONENT_PROPERTY_/);
   }
+  for (const property of ['enabled', 'inheritedValue']) {
+    const state = invoke(api, 'componentPropertyState', {
+      sceneUuid: 'scene-uuid', nodeUuid: 'scene-uuid', nodePath: 'Scene',
+      componentClassName: 'cc.Sprite', componentInstanceId: 'component-1', property,
+    });
+    assert.equal(state.result.available, true, `${property}: ${JSON.stringify(state.result)}`);
+  }
   assert.equal(invoke(api, 'componentPropertyState', { sceneUuid: 'scene-uuid', nodeUuid: 'scene-uuid',
     nodePath: 'Scene', componentClassName: 'cc.Sprite', componentInstanceId: 'component-1',
-    property: 'transient' }).result.reason, 'SCENE_COMPONENT_PROPERTY_READ_ONLY');
+    property: 'transient' }).result.reason, 'SCENE_COMPONENT_PROPERTY_NOT_SERIALIZABLE');
 });
 
 test('scene composition creates nodes, sets transforms, attaches resources, and binds Button handlers', async () => {

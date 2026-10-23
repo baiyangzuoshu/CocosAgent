@@ -46,6 +46,18 @@ test('preview assertions read Creator 2.4 PageView direction from its serialized
   assert.deepEqual(readPreviewComponentProperty(node, 'cc.PageView', 'direction'), { found: true, actual: 0 });
 });
 
+test('preview assertions read Creator 2.4 Toggle isChecked from its serialized storage field', () => {
+  class Toggle {
+    constructor() { this._N$isChecked = false; }
+    get isChecked() { throw new Error('Toggle getter must not run in an assertion'); }
+  }
+  Toggle.prototype.__classname__ = 'cc.Toggle';
+  const node = { _components: [new Toggle()] };
+  assert.deepEqual(readPreviewComponentProperty(node, 'cc.Toggle', 'isChecked'), { found: true, actual: false });
+  node._components[0]._N$isChecked = true;
+  assert.deepEqual(readPreviewComponentProperty(node, 'cc.Toggle', 'isChecked'), { found: true, actual: true });
+});
+
 test('preview component assertions accept exact Creator class names from serialized components', () => {
   class Slider { constructor() { this.progress = 0.75; } }
   Slider.prototype.__classname__ = 'cc.Slider';
