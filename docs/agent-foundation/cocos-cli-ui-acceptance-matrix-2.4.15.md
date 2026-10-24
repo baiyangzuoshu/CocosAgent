@@ -9,7 +9,7 @@
 | 组件 | CLI UI 检查 | 属性编辑路径 | 事件/布局路径 | 当前证据 | 后续验收 |
 | --- | --- | --- | --- | --- | --- |
 | `cc.Canvas` | 有 | 通用 Inspector 属性 | 无专用刷新 | 实机基线 | 检查设计分辨率/渲染模式公开字段的写回 |
-| `cc.Sprite` | 有 | 通用属性；专用 enabled/SpriteFrame 字段 | 无 | SpriteFrame AssetDB UUID 写入、重开读回、清空恢复和节点尺寸补偿通过；Creator 2.4.15 Web Preview 截图确认 64×64 四象限色块实际绘制，Console 无新增错误；临时资源经 AssetDB 删除且基线恢复。详见 SpriteFrame 轨迹 | 继续验收其他 Sprite 字段和数组资源引用 |
+| `cc.Sprite` | 有 | 通用属性；专用 enabled/SpriteFrame 字段 | 无 | SpriteFrame AssetDB UUID 写入、重开读回、清空恢复和节点尺寸补偿通过；Creator 2.4.15 Web Preview 截图确认 64×64 四象限色块实际绘制，Console 无新增错误；`materials` Material[] 两项精确 AssetDB 引用写入、关闭/重开核对及补偿通过，最终恢复一项基线引用。详见 SpriteFrame 与 Material 数组轨迹 | 继续验收其他 Sprite 字段和其他资源数组类型 |
 | `cc.Widget` | 有 | 通用 Inspector 属性 | 预览可调用 `updateAlignment()` | 左右双锚父宽 960→1200 时子宽 100→340、x=-420；上下双锚父高 640→800 时子高 100→260、y=0；四边锚父节点 960×640→1200×800 时子节点 880×580→1120×740、中心不变；非对称左右边距 30/70 时父宽 960→1200，子宽 860→1100、x 始终 -20；单边右锚 right=60 时父宽 960→1200、子宽保持 100，x=370→490；Canvas 预览框 960×640→1280×720 后，Canvas 扩宽且左右边距 40 的子节点按新 Canvas 宽度拉伸并保持居中。各项均经预览内恢复、关闭/重开读回、清理和基线哈希核验。详见 Widget 轨迹 | 其他单边偏移组合 |
 | `cc.Layout` | 有 | 通用 Inspector 属性；组合创建和单字段计划均接受 Creator 声明的枚举和值类型 | Preview 脚本可调用 `updateLayout()` | `spacingY`、水平 `type=HORIZONTAL`、`paddingLeft`、`spacingX` 已验收；`ResizeMode.CHILDREN` 下父宽 500→600 时子宽 225→275、位置 ±117.5→±142.5；`ResizeMode.CONTAINER` 下子宽 60→80 时容器宽 210→230、第二子 x 35→45。两项均通过重开读回、预览内恢复、精确删除补偿和 `.fire`/`.meta` 基线恢复。详见 Layout 轨迹 | 子节点缩放系数、网格尺寸模式、右向左布局、非左侧 padding 方向 |
 | `cc.Label` | 有 | 通用属性；专用 enabled | 无 | `fontSize` Prefab apply/compensate 已往返 | 文字、尺寸/对齐、颜色/溢出字段代表项 |
@@ -44,7 +44,7 @@
 | 通用组件属性 | `creator.scene.node.set-component-property.*`、Prefab `source.patch.*` | 依赖 Creator 的公开、可序列化声明属性和 CLI 支持值类型；不接受任意对象/字段 | 属性类型与组件的组合尚未穷举 |
 | UI 事件 | `creator.scene.ui-events.set.*`；Prefab 同源 patch | Button、Toggle、ToggleContainer、Slider、ScrollView、PageView、EditBox 的白名单事件；绑定精确节点/组件/handler | 场景 Button 运行时点击通过；Prefab Button clickEvents 往返通过；其余组件/事件缺实机往返 |
 | UI 几何刷新 | `creator.preview.interact` 的 `ui-refresh`；`creator.preview.test-script` 可执行有界页面内断言 | `ui-refresh` 只对精确节点上的 `cc.Widget.updateAlignment()`、`cc.Layout.updateLayout()`；Preview 脚本运行于 live `cc` 页面且不隔离，必须约束并恢复副作用 | Layout 纵向间距和水平 padding/spacing 几何断言通过；Widget 双轴双锚和四边锚父尺寸变化的数值断言通过；CLI `ui-refresh` 动作自身仍未单独验证 |
-| 资源引用 | 组件属性 AssetDB UUID 值；Sprite 专用字段 | UUID、资源类和目标属性声明类型须匹配 | SpriteFrame 子资源 UUID 写入、重开、清空与 AssetDB 清理通过；数组资源引用未实机往返；`cc.Label.materials` 空数组写入已被 Creator 拒绝，源文件未变 |
+| 资源引用 | 组件属性 AssetDB UUID 值；Sprite 专用字段 | UUID、资源类和目标属性声明类型须匹配 | SpriteFrame 子资源 UUID 写入、重开、清空与 AssetDB 清理通过；`cc.Sprite.materials` 两项 Material 引用数组完成写入、关闭/重开、Inspector 与磁盘读回及补偿；证据仅覆盖该属性和 Material 元素类型。`cc.Label.materials` 空数组写入被 Creator 拒绝，源文件未变 |
 
 既有累计证据见[CLI 编辑验收追踪](traces/cocos-creator-cli-editing-acceptance-20261023.md)。本矩阵在新增逐组件 operation ID、保存/重开/读回/补偿记录后更新状态；只有静态合同或单测时，不把“接口具备”升级为“实机通过”。
 
