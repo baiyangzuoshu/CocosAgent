@@ -10,8 +10,8 @@
 | --- | --- | --- | --- | --- | --- |
 | `cc.Canvas` | 有 | 通用 Inspector 属性 | 无专用刷新 | 实机基线 | 检查设计分辨率/渲染模式公开字段的写回 |
 | `cc.Sprite` | 有 | 通用属性；专用 enabled/SpriteFrame 字段 | 无 | SpriteFrame AssetDB UUID 写入、重开读回、清空恢复和节点尺寸补偿通过；临时资源经 AssetDB 删除 | 检查实际渲染；继续验收其他 Sprite 字段和数组资源引用 |
-| `cc.Widget` | 有 | 通用 Inspector 属性 | 预览 `ui-refresh` 调 `updateAlignment()` | `left` 10→20→10 经关闭/重开读回与补偿通过；预览刷新待验 | 四边锚定和父尺寸变化后位置/尺寸读回 |
-| `cc.Layout` | 有 | 通用 Inspector 属性 | 预览 `ui-refresh` 调 `updateLayout()` | 实机基线；刷新待验 | 横/纵向、间距、padding、Resize Mode 的几何读回 |
+| `cc.Widget` | 有 | 通用 Inspector 属性 | 预览 `ui-refresh` 调 `updateAlignment()` | `left` 10→20→10 经关闭/重开读回与补偿通过；详见 Widget 轨迹 | 四边锚定和父尺寸变化后的预览刷新与位置/尺寸读回 |
+| `cc.Layout` | 有 | 通用 Inspector 属性 | 预览 `ui-refresh` 调 `updateLayout()` | `spacingY` 10→20→10；运行时子节点位置断言、重开读回和基线哈希恢复通过；详见 Layout 轨迹 | 横向布局、padding、Resize Mode、子节点尺寸模式几何读回 |
 | `cc.Label` | 有 | 通用属性；专用 enabled | 无 | `fontSize` Prefab apply/compensate 已往返 | 文字、尺寸/对齐、颜色/溢出字段代表项 |
 | `cc.RichText` | 有 | 通用 Inspector 属性 | 无 | 实机基线 | 文本、图片标签及相关序列化字段代表项 |
 | `cc.LabelOutline` | 无 | 通用属性入口可按实例尝试 | 无 | 接口具备 | 专用检查与挂载/字段实机验证 |
@@ -42,17 +42,16 @@
 | UI 属性检查 | `creator.scene.ui.inspect` | 当前专用名单为上表标“有”的 18 个；逐项读取声明的公开 Inspector 属性，并返回 unsupported 原因 | Label.fontSize、BlockInputEvents.enabled 有 Prefab 字段往返；其余仅按历史代表覆盖记录 |
 | 通用组件属性 | `creator.scene.node.set-component-property.*`、Prefab `source.patch.*` | 依赖 Creator 的公开、可序列化声明属性和 CLI 支持值类型；不接受任意对象/字段 | 属性类型与组件的组合尚未穷举 |
 | UI 事件 | `creator.scene.ui-events.set.*`；Prefab 同源 patch | Button、Toggle、ToggleContainer、Slider、ScrollView、PageView、EditBox 的白名单事件；绑定精确节点/组件/handler | 场景 Button 运行时点击通过；Prefab Button clickEvents 往返通过；其余组件/事件缺实机往返 |
-| UI 几何刷新 | `creator.preview.interact` 的 `ui-refresh` | 只对精确节点上的 `cc.Widget.updateAlignment()`、`cc.Layout.updateLayout()`；预览会话内动作，不写场景文件 | 合同/模拟覆盖；Widget/Layout 实机几何闭环待验 |
+| UI 几何刷新 | `creator.preview.interact` 的 `ui-refresh` | 只对精确节点上的 `cc.Widget.updateAlignment()`、`cc.Layout.updateLayout()`；预览会话内动作，不写场景文件 | Layout 预览中的属性及子节点几何断言通过；显式 refresh 回执 `changed:false`，因为预览启动时布局已生效；Widget refresh 尚待单独验证 |
 | 资源引用 | 组件属性 AssetDB UUID 值；Sprite 专用字段 | UUID、资源类和目标属性声明类型须匹配 | SpriteFrame 子资源 UUID 写入、重开、清空与 AssetDB 清理通过；数组资源引用未实机往返；`cc.Label.materials` 空数组写入已被 Creator 拒绝，源文件未变 |
 
 既有累计证据见[CLI 编辑验收追踪](traces/cocos-creator-cli-editing-acceptance-20261023.md)。本矩阵在新增逐组件 operation ID、保存/重开/读回/补偿记录后更新状态；只有静态合同或单测时，不把“接口具备”升级为“实机通过”。
 
 ## 下一批操作顺序
 
-1. **Widget 与 Layout 几何刷新**：Widget 的 `left` 字段往返已通过，Layout 仍待写入闭环；分别改变一项公开字段，在 CLI 预览中调用对应 `ui-refresh`，对比节点及子节点 x/y/width/height/anchor，关闭/重开后恢复原字段并复验。
-2. **其他组件属性与资源数组**：先从矩阵中事件/布局依赖少的 `ProgressBar`、`Scrollbar`、`Mask` 开始；每次一个字段，验证写回、重开和补偿，再进入 Slider/Toggle/ScrollView/PageView/EditBox。单独验收含 AssetDB UUID 的数组字段往返。
+1. **其他组件属性与资源数组**：从矩阵中事件/布局依赖少的 `ProgressBar`、`Scrollbar`、`Mask` 开始；每次一个字段，验证写回、重开和补偿，再进入 Slider/Toggle/ScrollView/PageView/EditBox。单独验收含 AssetDB UUID 的数组字段往返。
 3. **UI 事件**：保留原事件列表，逐组件增加一个目标明确的事件，预览触发并核对业务状态；关闭重开后检查 `.fire` 事件目标、组件和 handler，再补偿回基线。
 4. **补全专用检查**：对 `LabelOutline`、`LabelShadow`、`ToggleGroup`、`SafeArea`、`SubContextView` 先核对运行时类和 Inspector schema，再决定纳入 UI 专用名单或明确保持通用组件入口；不可只凭类名推断字段。
-5. **Sprite 渲染验收**：SpriteFrame 引用保存/恢复已通过；用 CLI 预览确认目标帧实际渲染，并记录运行时证据。
+5. **布局扩展与 Sprite 渲染验收**：Widget 四边锚定/父尺寸变化及 Layout 横向、padding、Resize Mode 仍待覆盖；SpriteFrame 引用保存/恢复已通过，用 CLI 预览确认目标帧实际渲染。
 
 每个单项均遵循 CLI 计划 → CLI 提交 → 必要时 CLI 关闭/重开 → 同实例核验工程路径和 Creator 版本 → 活动对象及磁盘 `.fire`/`.meta` 读回 → 来源补偿 → 再次关闭/重开及哈希读回。当前范围只推进 Creator 2.4.15；不使用桌面 UI 自动化。

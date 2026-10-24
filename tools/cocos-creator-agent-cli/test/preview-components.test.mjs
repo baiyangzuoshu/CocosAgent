@@ -69,6 +69,18 @@ test('preview assertions read Creator 2.4 Toggle isChecked from its serialized s
   assert.deepEqual(readPreviewComponentProperty(node, 'cc.Toggle', 'isChecked'), { found: true, actual: true });
 });
 
+test('preview assertions read Creator 2.4 Layout fields from serialized storage without invoking getters', () => {
+  class Layout {
+    constructor() { this._N$layoutType = 2; this._N$spacingY = 20; }
+    get type() { throw new Error('Layout type getter must not run in an assertion'); }
+    get spacingY() { throw new Error('Layout spacingY getter must not run in an assertion'); }
+  }
+  Layout.prototype.__classname__ = 'cc.Layout';
+  const node = { _components: [new Layout()] };
+  assert.deepEqual(readPreviewComponentProperty(node, 'cc.Layout', 'type'), { found: true, actual: 2 });
+  assert.deepEqual(readPreviewComponentProperty(node, 'cc.Layout', 'spacingY'), { found: true, actual: 20 });
+});
+
 test('preview component assertions accept exact Creator class names from serialized components', () => {
   class Slider { constructor() { this.progress = 0.75; } }
   Slider.prototype.__classname__ = 'cc.Slider';

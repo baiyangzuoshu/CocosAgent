@@ -20,7 +20,12 @@ export function readPreviewComponentProperty(node, componentType, componentPrope
         : componentProperty === 'overflow' ? '_N$overflow' : null
       : componentType === 'cc.EditBox' && componentProperty === 'string' ? '_string'
         : componentType === 'cc.PageView' && componentProperty === 'direction' ? '_N$direction'
-        : componentType === 'cc.Toggle' && componentProperty === 'isChecked' ? '_N$isChecked' : null;
+        : componentType === 'cc.Toggle' && componentProperty === 'isChecked' ? '_N$isChecked'
+          : componentType === 'cc.Layout' ? ({ type: '_N$layoutType', resizeMode: '_resize', startAxis: '_N$startAxis',
+            paddingLeft: '_N$paddingLeft', paddingRight: '_N$paddingRight', paddingTop: '_N$paddingTop',
+            paddingBottom: '_N$paddingBottom', spacingX: '_N$spacingX', spacingY: '_N$spacingY',
+            verticalDirection: '_N$verticalDirection', horizontalDirection: '_N$horizontalDirection',
+            affectedByScale: '_N$affectedByScale' })[componentProperty] || null : null;
     descriptor = backingField ? Object.getOwnPropertyDescriptor(component, backingField) : null;
     found = !!descriptor && Object.prototype.hasOwnProperty.call(descriptor, 'value');
     actual = found ? descriptor.value : null;
