@@ -214,6 +214,9 @@ function fixture() {
         [`ReferenceHolder.vector4`, Vec4], [`ReferenceHolder.rect`, Rect],
         [`DefaultArrayComponent.values`, Integer],
       ]);
+      if (type === Layout && property === 'type') return { type: { NONE: 0, HORIZONTAL: 1, VERTICAL: 2, GRID: 3 },
+        enumList: [{ name: 'NONE', value: 0 }, { name: 'HORIZONTAL', value: 1 },
+          { name: 'VERTICAL', value: 2 }, { name: 'GRID', value: 3 }] };
       if (type === Sprite && property === 'mode') return { type: 'Number',
         enumList: [{ name: 'Simple', value: 0 }, { name: 'Sliced', value: 1 }, { name: 'Tiled', value: 2 }] };
       if (type === Label && property === 'overflow') return { type: 'Number', min: 0, max: 2, step: 1 };
@@ -1217,6 +1220,39 @@ test('scene composition creates nodes, sets transforms, attaches resources, and 
   assert.deepEqual(JSON.parse(JSON.stringify(created.components.find((item) => item.id === 'button').clickEvents)), [{
     targetUuid: request.nodes[0].uuid, component: 'sample.Controller', handler: 'onClick', customEventData: 'toggle',
   }]);
+  assert.equal(canvas.children.length, 1);
+});
+
+test('scene composition accepts declared enum values on built-in components', async () => {
+  const { api, root, FakeNode, Layout } = fixture();
+  root.uuid = '11111111-1111-4111-8111-111111111111';
+  const canvas = new FakeNode('Canvas');
+  canvas._id = '22222222-2222-4222-8222-222222222222';
+  root.addChild(canvas);
+  const request = {
+    sceneUuid: root.uuid,
+    nodes: [{ id: 'container', uuid: '33333333-3333-4333-8333-333333333333', name: 'HorizontalContainer',
+      parentRef: `uuid:${canvas.uuid}`, transform: { width: 200, height: 100 } }],
+    components: [{ id: 'layout', nodeRef: 'new:container', className: 'cc.Layout',
+      properties: [{ name: 'type', value: 1 }] }],
+    buttonEvents: [],
+  };
+  const planned = invoke(api, 'compositionState', request).result;
+  assert.equal(planned.available, true, JSON.stringify(planned));
+
+  const result = await invokeAsync(api, 'compose', { ...request, expectedState: planned });
+  assert.equal(result.available, true, JSON.stringify(result));
+  const node = canvas.children[0];
+  assert.ok(node.getComponent(Layout));
+  assert.equal(node.getComponent(Layout).type, 1);
+  assert.equal(result.readback.nodes[0].components[0].propertyValues.type, 1);
+
+  const invalid = invoke(api, 'compositionState', { ...request,
+    nodes: [{ ...request.nodes[0], uuid: '44444444-4444-4444-8444-444444444444', name: 'InvalidContainer' }],
+    components: [{ ...request.components[0], properties: [{ name: 'type', value: 9 }] }],
+  }).result;
+  assert.equal(invalid.available, false);
+  assert.equal(invalid.reason, 'SCENE_COMPOSE_PROPERTY_ENUM_VALUE_INVALID');
   assert.equal(canvas.children.length, 1);
 });
 

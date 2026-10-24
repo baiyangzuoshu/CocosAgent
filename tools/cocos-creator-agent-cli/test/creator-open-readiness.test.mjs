@@ -179,3 +179,32 @@ test('project open ignores stale instance records whose Creator process has exit
   assert.equal(result.editorReady, true);
   assert.equal(result.readiness.status, 'ready');
 });
+
+test('project open ignores rejected extension records after their Creator process has exited', async (t) => {
+  const state = fixture();
+  t.after(() => fs.rmSync(state.root, { recursive: true, force: true }));
+  const rejected = { instanceId: '11111111-1111-4111-8111-111111111111',
+    reportedProjectRoot: state.projectRoot, creatorVersion: '2.4.15', extensionVersion: '0.8.73',
+    connected: false, processId: 5400, reasons: ['EXTENSION_VERSION_MISMATCH'] };
+  const child = new EventEmitter();
+  child.pid = 1237;
+  child.unref = () => {};
+  let listCalls = 0;
+  let launched = false;
+  const result = await openCreatorProject({ projectRoot: state.projectRoot, creatorPath: state.appRoot,
+    waitReady: true, timeoutMs: 1000 }, {
+    listInstancesImpl: async () => {
+      listCalls += 1;
+      return listCalls === 1 ? { instances: [], rejectedInstances: [rejected] }
+        : { instances: [{ ...liveInstance(state.projectRoot), processId: 1237 }], rejectedInstances: [] };
+    },
+    inspectProcessImpl: (processId) => processId === 1237
+      ? runningCreator() : { running: false, creator: false, executable: null },
+    probeProjectImpl: async (instanceId) => projectInfoReceipt(state.projectRoot, instanceId),
+    spawnImpl() { launched = true; queueMicrotask(() => child.emit('spawn')); return child; },
+  });
+  assert.equal(launched, true);
+  assert.equal(result.launched, true);
+  assert.equal(result.editorReady, true);
+  assert.equal(result.readiness.status, 'ready');
+});

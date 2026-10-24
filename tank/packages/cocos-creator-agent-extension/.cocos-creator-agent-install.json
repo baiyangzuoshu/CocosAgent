@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "extensionName": "cocos-creator-agent-extension",
-  "extensionVersion": "0.8.73",
+  "extensionVersion": "0.8.74",
   "installedByCliVersion": "0.12.55",
-  "installedAt": "2026-10-24T06:12:12.710Z",
+  "installedAt": "2026-10-24T06:53:26.097Z",
   "files": {
     "asset-import-operations.cjs": "ec5a58fbd613518a1019453dd72a59626c3736a9d5a9faebdbc1e4a68e30e139",
     "asset-references.cjs": "35ce4a041792b1e91f0864a4cd875a613d0e92b7ea36af89734df64dfb069f13",
@@ -11,12 +11,12 @@
     "commit-authorization.cjs": "7e297866deb67ac86d87cf749d77597cac543c9fc03b2e50abe15f4920741e24",
     "editor-script-eval.cjs": "0aa2e6a6a226970132468d698acfd2c3f804112c22f16194996380a6bb47e075",
     "main.js": "7c3c60ec9e90c903d405e31e9915c28c90df0416b749b4c862947499f0457e78",
-    "package.json": "2fc378a19b491b0e1172a6d298834ce72f0955ae1c156fcd06081fca9793e276",
+    "package.json": "4e7e1f6694a64c2951dc975a18f13fdb3e3da49ac3c9bd933082feee31ab734b",
     "prefab-instance-operations.cjs": "164e8773f891d4f7d1c5a629d811bc26506b588ee37b373868cf20c1829a04e2",
     "prefab-patch.cjs": "5d3d49c92450eb7733b5e5242067671b4548d2e2065b3e62d180e3b2d5cdecc0",
     "prefab-source.cjs": "5e570898d4c413672952bf0e065930ddf5ab1e64a3c218b39e086ac49d6b952f",
     "provider-contract.cjs": "4d070471d4b37d02968707b1eca4cc17c7696e5769e612b23f667d5a83017bab",
     "scene-persistence.cjs": "8c224ef46705f9a740e376e83751991a4e2c8a775604e583e1cf2faefc1901d4",
-    "scene.js": "a7157913ebb54555c700b09b178a7bd5917f65ad248299eaf5b554bfeb4a6216"
+    "scene.js": "28565f53ee59f67a0925920e6822461887c96e60fefc0a5d3430e8165e9a76ef"
   }
 }

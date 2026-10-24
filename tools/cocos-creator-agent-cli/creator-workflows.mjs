@@ -705,8 +705,17 @@ function projectInstances(inventory, projectRoot, { inspectProcessImpl = inspect
     return processInfo?.running === true && processInfo.creator === true
       && processInfo.creatorVersion === CREATOR_VERSION;
   });
-  const rejected = (inventory.rejectedInstances || []).filter((instance) => typeof instance.reportedProjectRoot === 'string'
-    && sameProjectRoot(instance.reportedProjectRoot, projectRoot));
+  const rejected = (inventory.rejectedInstances || []).filter((instance) => {
+    if (typeof instance.reportedProjectRoot !== 'string'
+      || !sameProjectRoot(instance.reportedProjectRoot, projectRoot)) return false;
+    if (!Number.isSafeInteger(instance.processId) || instance.processId < 1) return true;
+    try {
+      const processInfo = inspectProcessImpl(instance.processId, { platform });
+      return processInfo?.running !== false;
+    } catch (_) {
+      return true;
+    }
+  });
   return { matching, rejected };
 }
 

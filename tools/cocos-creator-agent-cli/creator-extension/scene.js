@@ -2689,10 +2689,15 @@ function compositionState(params) {
             if (!assetRef && !isScalar(value)) return { available: false, reason: 'SCENE_COMPOSE_PROPERTY_VALUE_INVALID', property: property.name };
             const attributes = componentPropertyAttributes(resolved.constructor, property.name);
             const attrType = componentPropertyType(attributes);
+            const enumOptions = Array.isArray(attributes && attributes.enumList) ? attributes.enumList : [];
             if (assetRef) {
                 const assetClass = cc[value.assetClass];
                 if (!validUuid(value.assetUuid) || typeof assetClass !== 'function' || attrType !== assetClass)
                     return { available: false, reason: 'SCENE_COMPOSE_ASSET_PROPERTY_TYPE_MISMATCH', property: property.name };
+            } else if (enumOptions.length) {
+                if (typeof value !== 'number' || !enumOptions.some((item) => item
+                    && Number.isFinite(item.value) && item.value === value))
+                    return { available: false, reason: 'SCENE_COMPOSE_PROPERTY_ENUM_VALUE_INVALID', property: property.name };
             } else if (attrType === String && typeof value !== 'string') {
                 return { available: false, reason: 'SCENE_COMPOSE_PROPERTY_TYPE_MISMATCH', property: property.name };
             } else if (attrType === Number && typeof value !== 'number') {
