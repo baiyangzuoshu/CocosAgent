@@ -25,6 +25,8 @@ Use this Skill for supported operations on exact existing scene nodes and compon
 
 For a completed component-property write that must be undone, use `creator.scene.node.set-component-property.compensate.plan` with the original `sourceOperationId`, review the source-linked restore value, and commit that exact compensation plan. The command derives the original before-value and refuses duplicate compensation or drift; do not hand-build a substitute restore value. Use the original operation's `reconcile` command for uncertain writes, not compensation.
 
+Property setters may mutate other objects. In Creator 2.4.15, `cc.Slider.handle` repositions the referenced Button node according to the Slider's current progress. Inspect the target node's parent and transform before commit; the property compensation restores the reference field, not setter side effects on the referenced node. Use a dedicated child handle or separately plan and verify any required transform restoration.
+
 ## Capability and safety gate
 
 This Skill is workflow guidance and does not install tools. Inspect the tools available in the current Host and any Creator integration, then use only supported operations and their documented inputs. Use the Host file tools for ordinary code and project text files. For scenes, Prefabs, import settings, or editor state, use a Creator-aware tool when available; if none can safely perform the requested operation, report that exact gap and provide the manual Creator steps. Preserve generated `.meta` files, UUIDs, and asset references. Do not run project scripts or SDK actions merely because a Skill describes them.
