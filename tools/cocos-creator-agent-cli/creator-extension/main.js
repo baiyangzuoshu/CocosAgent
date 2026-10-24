@@ -1117,6 +1117,9 @@ function readSceneComponentPropertyOperation(operationId) {
             || plan.diskBefore.componentProperty.componentInstanceId !== plan.componentInstanceId
             || plan.diskBefore.componentProperty.property !== plan.property
             || !validComponentDiskValue(plan.expectedAfter.serializedValue)))
+        || (plan.compensationFor !== undefined && (!plan.compensationFor || typeof plan.compensationFor !== 'object'
+            || !/^[0-9a-f-]{36}$/i.test(plan.compensationFor.sourceOperationId || '')
+            || !/^[a-f0-9]{64}$/.test(plan.compensationFor.sourcePlanHash || '')))
         || typeof plan.expiresAt !== 'string'
         || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
             'save-requested', 'completed', 'not-applied', 'save-required', 'needs-reconciliation', 'conflict'].includes(operation.status))
@@ -4529,6 +4532,93 @@ async function createSceneComponentPropertyPlan(input) {
             sceneSaveAcknowledgement: 'Creator 2.4 scene:stash-and-save has no documented completion acknowledgement. Completion requires the exact serialized component identity and property to match on disk.' } };
 }
 
+async function createSceneComponentPropertyCompensationPlan(input) {
+    const source = readSceneComponentPropertyOperation(input.sourceOperationId);
+    verifySceneOperationIdentity(source);
+    if (source.status !== 'completed' || !source.diskReadback || source.diskReadback.verified !== true
+        || source.plan.compensationFor || source.compensationOperationId || source.compensatedByOperationId)
+        throw coded('SCENE_COMPONENT_COMPENSATION_SOURCE_NOT_ELIGIBLE');
+    const sourceProperty = source.diskReadback.componentProperty;
+    if (!sourceProperty || sourceProperty.componentInstanceId !== source.plan.componentInstanceId
+        || sourceProperty.serializedClassId !== source.plan.diskBefore.componentProperty.serializedClassId
+        || sourceProperty.property !== source.plan.property
+        || !sceneComponentValuesEqual(sourceProperty.value, source.plan.expectedAfter.serializedValue))
+        throw coded('SCENE_COMPONENT_COMPENSATION_SOURCE_READBACK_MISMATCH');
+    const live = await readPlannedSceneComponentProperty(source.plan);
+    if (!sceneComponentValuesEqual(live.value, source.plan.expectedAfter.value))
+        throw coded('SCENE_COMPONENT_COMPENSATION_SOURCE_STATE_DRIFT');
+    const disk = await sceneNodeDiskState(source.plan.sceneUuid, source.plan.nodeUuid, { componentProperty: {
+        serializedClassId: source.plan.diskBefore.componentProperty.serializedClassId,
+        componentInstanceId: source.plan.componentInstanceId,
+        property: source.plan.property,
+        serializedPropertyCandidates: [source.plan.diskBefore.componentProperty.serializedProperty],
+    } });
+    if (!sceneNodePathsMatch(disk.nodePath, source.plan.nodePath)
+        || !disk.componentProperty || disk.componentProperty.componentInstanceId !== source.plan.componentInstanceId
+        || disk.componentProperty.serializedClassId !== source.plan.diskBefore.componentProperty.serializedClassId
+        || disk.componentProperty.property !== source.plan.property
+        || !sceneComponentValuesEqual(disk.componentProperty.value, source.plan.expectedAfter.serializedValue)
+        || disk.metaSha256 !== source.diskReadback.metaSha256)
+        throw coded('SCENE_COMPONENT_COMPENSATION_SOURCE_DISK_DRIFT');
+    const planned = await createSceneComponentPropertyPlan({ sceneUuid: source.plan.sceneUuid,
+        nodeUuid: source.plan.nodeUuid, componentClassName: source.plan.componentClassName,
+        componentInstanceId: source.plan.componentInstanceId, property: source.plan.property,
+        value: source.plan.expectedBefore.value });
+    const operation = readSceneComponentPropertyOperation(planned.operationId);
+    if (!sceneComponentValuesEqual(operation.plan.expectedBefore.value, source.plan.expectedAfter.value)
+        || !sceneComponentValuesEqual(operation.plan.expectedAfter.value, source.plan.expectedBefore.value))
+        throw coded('SCENE_COMPONENT_COMPENSATION_PLAN_VALUE_MISMATCH');
+    operation.plan.compensationFor = { sourceOperationId: source.operationId, sourcePlanHash: source.planHash };
+    operation.planHash = planFingerprint(operation.plan);
+    operation.compensationFor = { sourceOperationId: source.operationId, sourcePlanHash: source.planHash };
+    writeOperation(operation);
+    source.compensationOperationId = operation.operationId;
+    source.compensationPlanHash = operation.planHash;
+    source.compensationPlannedAt = new Date().toISOString();
+    writeOperation(source);
+    return { ...planned, planHash: operation.planHash, compensationFor: operation.plan.compensationFor,
+        sourceOperationStatus: source.status, sourceDiskSha256: source.diskReadback.sourceSha256,
+        diff: { ...planned.diff, action: 'compensate-component-property',
+            sourceOperationId: source.operationId, sourcePlanHash: source.planHash,
+            before: operation.plan.expectedBefore.value, after: operation.plan.expectedAfter.value } };
+}
+
+function verifySceneComponentPropertyCompensationSource(operation) {
+    const link = operation && operation.plan && operation.plan.compensationFor;
+    if (!link || typeof link.sourceOperationId !== 'string' || typeof link.sourcePlanHash !== 'string')
+        throw coded('SCENE_COMPONENT_COMPENSATION_LINK_INVALID');
+    const source = readSceneComponentPropertyOperation(link.sourceOperationId);
+    verifySceneOperationIdentity(source);
+    if (source.status !== 'completed' || source.planHash !== link.sourcePlanHash
+        || source.compensationOperationId !== operation.operationId
+        || source.compensationPlanHash !== operation.planHash
+        || source.compensatedByOperationId && source.compensatedByOperationId !== operation.operationId
+        || source.plan.projectRoot !== operation.plan.projectRoot
+        || source.plan.creatorVersion !== operation.plan.creatorVersion
+        || source.plan.sceneUuid !== operation.plan.sceneUuid || source.plan.nodeUuid !== operation.plan.nodeUuid
+        || source.plan.nodePath !== operation.plan.nodePath
+        || source.plan.componentClassName !== operation.plan.componentClassName
+        || source.plan.componentInstanceId !== operation.plan.componentInstanceId
+        || source.plan.property !== operation.plan.property
+        || !sceneComponentValuesEqual(operation.plan.expectedBefore.value, source.plan.expectedAfter.value)
+        || !sceneComponentValuesEqual(operation.plan.expectedAfter.value, source.plan.expectedBefore.value)
+        || !source.diskReadback || source.diskReadback.verified !== true
+        || !sceneComponentValuesEqual(source.diskReadback.componentProperty && source.diskReadback.componentProperty.value,
+            source.plan.expectedAfter.serializedValue))
+        throw coded('SCENE_COMPONENT_COMPENSATION_SOURCE_MISMATCH');
+    return source;
+}
+
+function linkCompletedSceneComponentPropertyCompensation(operation) {
+    if (!operation.plan.compensationFor) return null;
+    const source = verifySceneComponentPropertyCompensationSource(operation);
+    source.compensatedByOperationId = operation.operationId;
+    source.compensatedAt = new Date().toISOString();
+    source.compensationDiskReadback = operation.diskReadback || null;
+    writeOperation(source);
+    return source;
+}
+
 function verifySceneOperationIdentity(operation, { requireCurrentContract = true } = {}) {
     const plan = operation.plan;
     if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
@@ -5847,18 +5937,25 @@ function sceneComponentPropertyReceipt(operation, state) {
         sceneSaveRequestSent: !!operation.sceneSaveRequestSent, sceneSaveCompletionConfirmed: false,
         scenePersistenceConfirmed: operation.status === 'completed' && !!(operation.diskReadback && operation.diskReadback.verified),
         diskReadback: operation.diskReadback || null,
+        compensationFor: operation.plan.compensationFor || null,
         plannedByInstanceId: operation.plannedByInstanceId, appliedByInstanceId: operation.appliedByInstanceId || null,
         completedByInstanceId: operation.completedByInstanceId || null,
         approvedAt: operation.approvedAt || null, completedAt: operation.completedAt || null,
         reconciledAt: operation.reconciledAt || null,
-        recovery: { automaticRetry: false, reconcileCommand: 'creator.scene.node.set-component-property.reconcile',
-            sameCreatorSessionRequired: true, manualSaveMayBeRequired: operation.status === 'save-required',
-            note: 'Creator 2.4 has no documented scene-save IPC acknowledgement. scenePersistenceConfirmed requires the exact serialized component identity and property on disk. If memory changed but disk did not, save manually and reconcile. A changed Creator session still requires manual review.' } };
+        recovery: { automaticRetry: false, reconcileCommand: plan.compensationFor
+                ? 'creator.scene.node.set-component-property.compensate.reconcile'
+                : 'creator.scene.node.set-component-property.reconcile',
+            sameCreatorSessionRequired: !plan.compensationFor,
+            manualSaveMayBeRequired: operation.status === 'save-required',
+            note: plan.compensationFor
+                ? 'A source-linked compensation can be reconciled after Creator restart only when the exact component identity is still live and its serialized scene state matches the bound disk baseline.'
+                : 'Creator 2.4 has no documented scene-save IPC acknowledgement. scenePersistenceConfirmed requires the exact serialized component identity and property on disk. If memory changed but disk did not, save manually and reconcile. A changed Creator session still requires manual review.' } };
 }
 
 async function commitSceneComponentProperty(input, context) {
     const operation = readSceneComponentPropertyOperation(input.operationId);
     verifySceneOperationIdentity(operation);
+    if (operation.plan.compensationFor) verifySceneComponentPropertyCompensationSource(operation);
     if (operation.plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
     if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
     if (operation.status !== 'planned') throw coded(operation.status === 'applying' || operation.status === 'awaiting-approval'
@@ -5888,6 +5985,7 @@ async function commitSceneComponentProperty(input, context) {
         throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE', String(error.code || error.message || error));
     }
     verifySceneOperationIdentity(operation);
+    if (operation.plan.compensationFor) verifySceneComponentPropertyCompensationSource(operation);
     if (operation.plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
     if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
     try {
@@ -5951,6 +6049,7 @@ async function commitSceneComponentProperty(input, context) {
     operation.completedAt = new Date().toISOString();
     operation.completedByInstanceId = INSTANCE_ID;
     writeOperation(operation);
+    linkCompletedSceneComponentPropertyCompensation(operation);
     return sceneComponentPropertyReceipt(operation, readback);
 }
 
@@ -5967,7 +6066,12 @@ async function reconcileSceneComponentProperty(input) {
         return { ...sceneComponentPropertyReceipt(operation, {}), observed: null, reason: operation.reconcileReason };
     }
     let diskState = null;
-    if (operation.plan.diskBefore && operation.plan.creatorInstanceId === INSTANCE_ID) {
+    // A source-linked compensation is intentionally planned after reopening the
+    // project, so its persisted disk baseline remains authoritative across the
+    // Creator instance boundary. Ordinary operations still require the original
+    // instance before we classify their disk state.
+    if (operation.plan.diskBefore
+        && (operation.plan.creatorInstanceId === INSTANCE_ID || operation.plan.compensationFor)) {
         try { diskState = await reconcileSceneNodeDiskOperation(operation,
             sceneComponentValuesEqual(observed.value, operation.plan.expectedBefore.value),
             sceneComponentValuesEqual(observed.value, operation.plan.expectedAfter.value)); }
@@ -5987,6 +6091,8 @@ async function reconcileSceneComponentProperty(input) {
     } else operation.status = 'conflict';
     operation.reconciledAt = new Date().toISOString();
     writeOperation(operation);
+    if (operation.status === 'completed' && operation.plan.compensationFor)
+        linkCompletedSceneComponentPropertyCompensation(operation);
     return { ...sceneComponentPropertyReceipt(operation, observed),
         observed: { componentClassName: observed.componentClassName, componentInstanceId: observed.componentInstanceId,
             property: observed.property, value: observed.value,
@@ -7346,6 +7452,10 @@ function capabilityList() {
         'creator.scene.node.set-component-property.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
             && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'),
         'creator.scene.node.set-component-property.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.node.set-component-property.compensate.plan': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.node.set-component-property.compensate.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'),
+        'creator.scene.node.set-component-property.compensate.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
         'creator.script.create.plan': !!(Editor && Editor.assetdb && typeof Editor.assetdb.exists === 'function'
             && typeof Editor.assetdb.create === 'function'),
         'creator.script.create.commit': !!(Editor && Editor.assetdb && typeof Editor.assetdb.exists === 'function'
@@ -7830,6 +7940,9 @@ function execute(command, input, context) {
     if (command === 'creator.scene.node.set-component-property.plan') return createSceneComponentPropertyPlan(input);
     if (command === 'creator.scene.node.set-component-property.commit') return commitSceneComponentProperty(input, context);
     if (command === 'creator.scene.node.set-component-property.reconcile') return reconcileSceneComponentProperty(input);
+    if (command === 'creator.scene.node.set-component-property.compensate.plan') return createSceneComponentPropertyCompensationPlan(input);
+    if (command === 'creator.scene.node.set-component-property.compensate.commit') return commitSceneComponentProperty(input, context);
+    if (command === 'creator.scene.node.set-component-property.compensate.reconcile') return reconcileSceneComponentProperty(input);
     if (command === 'creator.script.create.plan') return Promise.resolve(createScriptPlan(input));
     if (command === 'creator.script.create.commit') return commitScriptCreate(input, context);
     if (command === 'creator.script.create.reconcile') return Promise.resolve(reconcileScriptCreate(input));

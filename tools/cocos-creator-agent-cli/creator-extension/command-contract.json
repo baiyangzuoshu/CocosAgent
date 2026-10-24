@@ -977,6 +977,47 @@
       }
     },
     {
+      "id": "creator.scene.node.set-component-property.compensate.plan",
+      "access": "plan",
+      "description": "Plan a source-linked compensation for one completed, persisted component-property operation. Derives the restore value from that exact source operation and refuses drift, identity changes, or an existing compensation.",
+      "input": {
+        "type": "object",
+        "required": ["sourceOperationId"],
+        "properties": {
+          "sourceOperationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.node.set-component-property.compensate.commit",
+      "access": "write",
+      "approval": true,
+      "description": "Apply the exact compensation plan only while its completed source operation, component identity, live before-state, and saved .fire baseline still match; verify the restored value on disk and link completion back to the source operation.",
+      "input": {
+        "type": "object",
+        "required": ["operationId", "planHash"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+          "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "creator.scene.node.set-component-property.compensate.reconcile",
+      "access": "plan",
+      "description": "Observe one source-linked component-property compensation by its operation ID, including after Creator restart when the exact component identity remains live. Never reapplies the mutation; updates the source link only when exact restored persistence is verified.",
+      "input": {
+        "type": "object",
+        "required": ["operationId"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
       "id": "creator.script.create.plan",
       "access": "plan",
       "description": "Prepare a Creator AssetDB script-creation plan in an existing assets folder, with an absent-target precondition, source hash, operation ID, and recovery conditions. Does not modify project assets or create folders.",

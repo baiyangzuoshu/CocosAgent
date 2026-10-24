@@ -169,6 +169,24 @@ test('component-property contract accepts bounded scalars and typed Creator prop
   assert.equal(validateCommand(reconcile.id, { operationId: nodeUuid }).ok, true);
 });
 
+test('component-property compensation is source-linked and accepts no caller-selected value', () => {
+  const plan = COMMANDS.get('creator.scene.node.set-component-property.compensate.plan');
+  const commit = COMMANDS.get('creator.scene.node.set-component-property.compensate.commit');
+  const reconcile = COMMANDS.get('creator.scene.node.set-component-property.compensate.reconcile');
+  assert.ok(plan);
+  assert.ok(commit);
+  assert.ok(reconcile);
+  assert.equal(plan.access, 'plan');
+  assert.equal(commit.access, 'write');
+  assert.equal(commit.approval, true);
+  assert.equal(reconcile.access, 'plan');
+  assert.equal(validateCommand(plan.id, { sourceOperationId: nodeUuid }).ok, true);
+  assert.equal(validateCommand(plan.id, { sourceOperationId: nodeUuid, value: 0.25 }).code, 'UNKNOWN_INPUT_FIELD');
+  assert.equal(validateCommand(plan.id, { sourceOperationId: '../outside' }).ok, false);
+  assert.equal(validateCommand(commit.id, { operationId: nodeUuid, planHash: 'a'.repeat(64) }).ok, true);
+  assert.equal(validateCommand(reconcile.id, { operationId: nodeUuid }).ok, true);
+});
+
 test('scene deletion and component removal use exact plans, explicit commits, and non-replaying reconcile contracts', () => {
   const nodePlan = COMMANDS.get('creator.scene.node.delete.plan');
   const nodeCommit = COMMANDS.get('creator.scene.node.delete.commit');

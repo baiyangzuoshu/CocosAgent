@@ -172,7 +172,7 @@ test('MCP discovers a project alias and routes it through CLI to the selected Cr
     result: { projectRoot: canonicalRoot, creatorVersion: '2.4.15', providers: [], commands: [providerCommand], skipped: [] },
   });
   const listing = await listingPromise;
-  assert.equal(listing.tools.length, 92, 'Expected 89 fixed tools, two project aliases, and one live extension command.');
+  assert.equal(listing.tools.length, 95, 'Expected 92 fixed tools, two project aliases, and one live extension command.');
   assert.equal(listing.tools.find((item) => item.name === 'cocos_project_tool_call').annotations.destructiveHint, true,
     'The generic project-alias call can invoke project writes and must be marked destructive.');
   const componentPlanTool = listing.tools.find((item) => item.name === 'cocos_scene_node_add_component_plan');
@@ -231,6 +231,15 @@ test('MCP discovers a project alias and routes it through CLI to the selected Cr
     ['instanceId', 'sceneUuid', 'nodeUuid', 'componentClassName', 'componentInstanceId', 'property', 'value']);
   assert.equal(propertyCommitTool.annotations.destructiveHint, true);
   assert.deepEqual(propertyReconcileTool.inputSchema.required, ['instanceId', 'operationId']);
+  const propertyCompensatePlanTool = listing.tools.find((item) => item.name === 'cocos_scene_node_set_component_property_compensate_plan');
+  const propertyCompensateCommitTool = listing.tools.find((item) => item.name === 'cocos_scene_node_set_component_property_compensate_commit');
+  const propertyCompensateReconcileTool = listing.tools.find((item) => item.name === 'cocos_scene_node_set_component_property_compensate_reconcile');
+  assert.ok(propertyCompensatePlanTool, 'Component property compensation plan tool was not discovered from the shared CLI catalog.');
+  assert.ok(propertyCompensateCommitTool, 'Component property compensation commit tool was not discovered from the shared CLI catalog.');
+  assert.ok(propertyCompensateReconcileTool, 'Component property compensation reconcile tool was not discovered from the shared CLI catalog.');
+  assert.deepEqual(propertyCompensatePlanTool.inputSchema.required, ['instanceId', 'sourceOperationId']);
+  assert.equal(propertyCompensateCommitTool.annotations.destructiveHint, true);
+  assert.deepEqual(propertyCompensateReconcileTool.inputSchema.required, ['instanceId', 'operationId']);
   const composePlanTool = listing.tools.find((item) => item.name === 'cocos_scene_compose_plan');
   const composeCommitTool = listing.tools.find((item) => item.name === 'cocos_scene_compose_commit');
   const composeReconcileTool = listing.tools.find((item) => item.name === 'cocos_scene_compose_reconcile');
