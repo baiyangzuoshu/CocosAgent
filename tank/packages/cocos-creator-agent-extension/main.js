@@ -2523,6 +2523,18 @@ async function createPrefabSourcePatchPlan(input) {
                 if (!prefabPatch.validateDiff(expectedDiff)) throw coded('PREFAB_CHILD_CREATE_DIFF_INVALID');
             }
         }
+        const subtreeDiff = expectedDiff.find((item) => item.path === 'node.subtree');
+        if (subtreeDiff) {
+            const change = prefabPatch.subtreeStateChange(subtreeDiff.before, subtreeDiff.after);
+            if (!change || change.kind !== 'insert') throw coded('PREFAB_SUBTREE_CREATE_DIFF_INVALID');
+            const replaceIds = (row) => ({ ...row,
+                nodeUuid: row.nodeUuid === prefabPatch.AUTO_CHILD_NODE_ID ? creatorNodeId() : row.nodeUuid,
+                children: row.children.map(replaceIds) });
+            expectedDiff = expectedDiff.map((item) => item === subtreeDiff ? { ...item,
+                after: { ...item.after, children: item.after.children.map((row) => row === change.subtree
+                    ? replaceIds(row) : row) } } : item);
+            if (!prefabPatch.validateDiff(expectedDiff)) throw coded('PREFAB_SUBTREE_CREATE_DIFF_INVALID');
+        }
         const componentStructureDiff = expectedDiff.find((item) => item.path === 'component.structure');
         if (componentStructureDiff) {
             const change = prefabPatch.componentStateChange(componentStructureDiff.before, componentStructureDiff.after);

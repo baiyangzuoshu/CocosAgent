@@ -1949,12 +1949,27 @@ function prefabPatchSnapshot(node, nodePath, params, mode) {
         componentCount: Array.isArray(child._components) ? child._components.length : -1,
     }));
     if (childRows.some((child) => !child.nodeUuid || child.componentCount < 0)) return null;
+    let subtreeNodeCount = 0;
+    function liveSubtreeRow(child, siblingIndex, depth) {
+        if (depth > prefabPatch.MAX_SUBTREE_DEPTH || ++subtreeNodeCount > prefabPatch.MAX_SUBTREE_NODES
+            || !Array.isArray(child._components) || !Array.isArray(child.children)) return null;
+        const children = authoringChildren(child);
+        if (children.length > prefabPatch.MAX_SUBTREE_NODES) return null;
+        const rows = children.map((entry, index) => liveSubtreeRow(entry, index, depth + 1));
+        const nodeUuid = prefabStableNodeId(mode.sceneUuid, params.prefabUuid, child.uuid);
+        if (!nodeUuid || rows.some((entry) => !entry)) return null;
+        return { nodeUuid, name: String(child.name || ''), siblingIndex, childCount: rows.length,
+            componentCount: child._components.length, children: rows };
+    }
+    const subtreeRows = childNodes.map((child, index) => liveSubtreeRow(child, index, 1));
+    const subtreeState = subtreeRows.some((entry) => !entry) ? null
+        : { childCount: subtreeRows.length, children: subtreeRows };
     const componentState = prefabPatchComponentState(node, mode, params.prefabUuid, params.expectedDiff);
     if (!componentState) return null;
     return { nodeUuid: typeof node.uuid === 'string' ? node.uuid : null, nodePath,
         name: String(node.name || ''), active: node.active !== false, parentUuid, siblingIndex,
         transform: { x: Number(position.x), y: Number(position.y), scaleX: Number(node.scaleX), scaleY: Number(node.scaleY) },
-        childState: { childCount: childRows.length, children: childRows }, componentState,
+        childState: { childCount: childRows.length, children: childRows }, subtreeState, componentState,
         components, ...(Object.keys(componentProperties).length ? { componentProperties, componentPropertyBindings } : {}),
         ...(Object.keys(componentEventLists).length ? { componentEventLists } : {}) };
 }
@@ -2037,6 +2052,28 @@ function prefabSourcePatchPreflight(params) {
                 || !Array.isArray(child.node._components) || child.node._components.length !== 0
                 || typeof target.node.removeChild !== 'function' || typeof child.node.destroy !== 'function')
                 return { available: false, reason: 'PREFAB_CHILD_DELETE_PRECONDITION_FAILED' };
+        }
+    }
+    for (const item of params.expectedDiff.filter((entry) => entry.path === 'node.subtree')) {
+        const change = prefabPatch.subtreeStateChange(item.before, item.after);
+        if (!change || change.subtree.nodeUuid === prefabPatch.AUTO_CHILD_NODE_ID)
+            return { available: false, reason: 'PREFAB_SUBTREE_IDENTITY_INVALID' };
+        if (change.kind === 'insert') {
+            const rows = [];
+            const stack = [change.subtree];
+            while (stack.length) { const row = stack.pop(); rows.push(row); stack.push(...row.children); }
+            const rootState = prefabRootInLiveScene(target.mode.sceneUuid, params.prefabUuid);
+            const existing = rows.map((row) => prefabFindLiveNode(target.mode.sceneUuid, params.prefabUuid, row.nodeUuid));
+            if (!rootState.available || typeof cc.Node !== 'function' || typeof target.node.addChild !== 'function'
+                || !Array.isArray(target.node.children) || authoringChildren(target.node).length !== target.node.children.length
+                || change.index > target.node.children.length
+                || existing.some((entry) => entry.available || entry.reason !== 'PREFAB_NODE_NOT_FOUND'))
+                return { available: false, reason: 'PREFAB_SUBTREE_CREATE_PRECONDITION_FAILED' };
+        } else {
+            const child = prefabFindLiveNode(target.mode.sceneUuid, params.prefabUuid, change.subtree.nodeUuid);
+            if (!child.available || child.node.parent !== target.node || typeof child.node.destroy !== 'function'
+                || typeof target.node.removeChild !== 'function')
+                return { available: false, reason: 'PREFAB_SUBTREE_DELETE_PRECONDITION_FAILED' };
         }
     }
     for (const item of params.expectedDiff.filter((entry) => entry.path === 'component.structure')) {
@@ -2207,6 +2244,38 @@ function prefabSourcePatchMutate(params, callback) {
                             || !Array.isArray(child.node._components) || child.node._components.length !== 0
                             || typeof node.removeChild !== 'function' || typeof child.node.destroy !== 'function')
                             throw new Error('PREFAB_CHILD_DELETE_PRECONDITION_FAILED');
+                        node.removeChild(child.node);
+                        child.node.destroy();
+                    }
+                }
+                else if (field === 'node.subtree') {
+                    const change = prefabPatch.subtreeStateChange(item.before, item.after);
+                    if (!change || change.subtree.nodeUuid === prefabPatch.AUTO_CHILD_NODE_ID)
+                        throw new Error('PREFAB_SUBTREE_IDENTITY_INVALID');
+                    if (change.kind === 'insert') {
+                        const rootState = prefabRootInLiveScene(current.mode.sceneUuid, params.prefabUuid);
+                        const create = (parent, row) => {
+                            const child = new cc.Node(row.name);
+                            parent.addChild(child);
+                            const info = child._prefab;
+                            const asset = info && info.asset;
+                            if (!info || info.root !== rootState.root || !asset
+                                || (asset._uuid || asset.uuid) !== params.prefabUuid || typeof info.fileId !== 'string' || !info.fileId)
+                                throw new Error('PREFAB_SUBTREE_LINK_FAILED');
+                            child._id = row.nodeUuid;
+                            info.fileId = row.nodeUuid;
+                            if (prefabStableNodeId(current.mode.sceneUuid, params.prefabUuid, child.uuid) !== row.nodeUuid)
+                                throw new Error('PREFAB_SUBTREE_IDENTITY_WRITE_FAILED');
+                            row.children.forEach((descendant) => create(child, descendant));
+                            return child;
+                        };
+                        const created = create(node, change.subtree);
+                        if (typeof created.setSiblingIndex !== 'function') throw new Error('PREFAB_SUBTREE_ORDER_API_UNAVAILABLE');
+                        created.setSiblingIndex(change.index);
+                    } else {
+                        const child = prefabFindLiveNode(current.mode.sceneUuid, params.prefabUuid, change.subtree.nodeUuid);
+                        if (!child.available || child.node.parent !== node || typeof node.removeChild !== 'function'
+                            || typeof child.node.destroy !== 'function') throw new Error('PREFAB_SUBTREE_DELETE_PRECONDITION_FAILED');
                         node.removeChild(child.node);
                         child.node.destroy();
                     }

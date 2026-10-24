@@ -228,6 +228,40 @@ test('Prefab component structure appends one exact built-in component and derive
     { path: 'node.active', before: true, after: false }]), false);
 });
 
+test('Prefab subtree patches accept only bounded componentless trees and derive an exact inverse', () => {
+  const before = { childCount: 0, children: [] };
+  const planned = { childCount: 1, children: [{ nodeUuid: 'AUTO', name: 'Panel', siblingIndex: 0,
+    childCount: 1, componentCount: 0, children: [{ nodeUuid: 'AUTO', name: 'Caption', siblingIndex: 0,
+      childCount: 0, componentCount: 0, children: [] }] }] };
+  const invalid = [{ path: 'node.subtree', before, after: planned }];
+  assert.equal(prefabPatch.validateDiff(invalid), true);
+  const created = { childCount: 1, children: [{ ...planned.children[0], nodeUuid: 'panel-id', children: [
+    { ...planned.children[0].children[0], nodeUuid: 'caption-id' },
+  ] }] };
+  const diff = [{ path: 'node.subtree', before, after: created }];
+  assert.equal(prefabPatch.validateDiff(diff), true);
+  assert.equal(prefabPatch.subtreeStateChange(before, created).nodeCount, 2);
+  const target = { subtreeState: before };
+  assert.equal(prefabPatch.matchesDiff(target, diff, 'before'), true);
+  target.subtreeState = created;
+  assert.equal(prefabPatch.matchesDiff(target, diff, 'after'), true);
+  const inverse = prefabPatch.invertDiff(diff);
+  assert.equal(prefabPatch.validateDiff(inverse), true);
+  assert.equal(prefabPatch.subtreeStateChange(inverse[0].before, inverse[0].after).kind, 'remove');
+  assert.equal(prefabPatch.matchesDiff(target, inverse, 'before'), true);
+
+  const withComponent = structuredClone(created);
+  withComponent.children[0].componentCount = 1;
+  assert.equal(prefabPatch.validateDiff([{ path: 'node.subtree', before, after: withComponent }]), false);
+  const tooDeep = { childCount: 1, children: [{ nodeUuid: 'a', name: 'a', siblingIndex: 0,
+    childCount: 1, componentCount: 0, children: [{ nodeUuid: 'b', name: 'b', siblingIndex: 0,
+      childCount: 1, componentCount: 0, children: [{ nodeUuid: 'c', name: 'c', siblingIndex: 0,
+        childCount: 1, componentCount: 0, children: [{ nodeUuid: 'd', name: 'd', siblingIndex: 0,
+          childCount: 1, componentCount: 0, children: [{ nodeUuid: 'e', name: 'e', siblingIndex: 0,
+            childCount: 0, componentCount: 0, children: [] }] }] }] }] }] };
+  assert.equal(prefabPatch.validateDiff([{ path: 'node.subtree', before, after: tooDeep }]), false);
+});
+
 test('Prefab patch rejects duplicate, unsupported, malformed, and ambiguous changes', () => {
   assert.equal(prefabPatch.validateDiff([
     { path: 'node.active', before: true, after: false },
@@ -753,6 +787,26 @@ test('Prefab patch creates and deletes one linked empty leaf child and compensat
   assert.equal(invoke('prefabSourcePatchPreflight', compensate).available, true);
   const deleted = invoke('prefabSourcePatchMutate', compensate);
   assert.equal(deleted.available, true, JSON.stringify(deleted));
+  assert.deepEqual(root.children, [original]);
+
+  const subtreeBefore = { childCount: 1, children: [{ nodeUuid: 'original-child', name: 'Original',
+    siblingIndex: 0, childCount: 0, componentCount: 0, children: [] }] };
+  const subtreeAfter = { childCount: 2, children: [subtreeBefore.children[0], { nodeUuid: 'branch-id', name: 'Branch',
+    siblingIndex: 1, childCount: 1, componentCount: 0, children: [{ nodeUuid: 'caption-id', name: 'Caption',
+      siblingIndex: 0, childCount: 0, componentCount: 0, children: [] }] }] };
+  const subtreeDiff = [{ path: 'node.subtree', before: subtreeBefore, after: subtreeAfter }];
+  const subtreeInput = { ...input, expectedDiff: subtreeDiff };
+  assert.equal(invoke('prefabSourcePatchPreflight', subtreeInput).available, true);
+  const subtreeCreated = invoke('prefabSourcePatchMutate', subtreeInput);
+  assert.equal(subtreeCreated.available, true, JSON.stringify(subtreeCreated));
+  assert.equal(root.children[1].name, 'Branch');
+  assert.equal(root.children[1]._prefab.fileId, 'branch-id');
+  assert.equal(root.children[1].children[0]._prefab.fileId, 'caption-id');
+  const subtreeInverse = prefabPatch.invertDiff(subtreeDiff);
+  const subtreeCompensate = { ...input, action: 'compensate', expectedDiff: subtreeInverse };
+  assert.equal(invoke('prefabSourcePatchPreflight', subtreeCompensate).available, true);
+  const subtreeDeleted = invoke('prefabSourcePatchMutate', subtreeCompensate);
+  assert.equal(subtreeDeleted.available, true, JSON.stringify(subtreeDeleted));
   assert.deepEqual(root.children, [original]);
 });
 

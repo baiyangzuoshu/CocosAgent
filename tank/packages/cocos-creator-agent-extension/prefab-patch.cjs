@@ -21,12 +21,14 @@ function componentIdFor(prefabUuid, nodeUuid, index, classId, serializedId) {
         .update(`${prefabUuid}\0${nodeUuid}\0${index}\0${classId}`).digest('hex').slice(0, 24)}`;
 }
 const PATHS = new Set([
-    'node.name', 'node.active', 'node.parent', 'node.siblingIndex', 'node.child', 'node.position.x', 'node.position.y', 'node.scale.x', 'node.scale.y',
+    'node.name', 'node.active', 'node.parent', 'node.siblingIndex', 'node.child', 'node.subtree', 'node.position.x', 'node.position.y', 'node.scale.x', 'node.scale.y',
     'component.cc.Sprite.enabled', 'component.cc.Sprite.spriteFrameUuid', 'component.cc.Label.enabled',
 ]);
 const MAX_DIRECT_CHILDREN = 128;
 const AUTO_CHILD_NODE_ID = 'AUTO';
 const AUTO_COMPONENT_INSTANCE_ID = 'AUTO';
+const MAX_SUBTREE_NODES = 16;
+const MAX_SUBTREE_DEPTH = 4;
 
 function validPropertyValue(value, depth = 0) {
     if (value === null || typeof value === 'boolean') return true;
@@ -190,6 +192,59 @@ function childStateChange(before, after) {
     return null;
 }
 
+function validSubtreeRow(row, ids, depth, allowAuto) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)
+        || Object.keys(row).sort().join(',') !== 'childCount,children,componentCount,name,nodeUuid,siblingIndex'
+        || !(allowAuto && row.nodeUuid === AUTO_CHILD_NODE_ID || NODE_ID.test(row.nodeUuid || ''))
+        || typeof row.name !== 'string' || !row.name || row.name.length > 120
+        || !Number.isInteger(row.siblingIndex) || row.siblingIndex < 0
+        || !Number.isInteger(row.componentCount) || row.componentCount < 0 || row.componentCount > 64
+        || !Number.isInteger(row.childCount) || row.childCount < 0 || row.childCount > MAX_SUBTREE_NODES
+        || !Array.isArray(row.children) || row.children.length !== row.childCount || depth > MAX_SUBTREE_DEPTH
+        || row.nodeUuid !== AUTO_CHILD_NODE_ID && ids.has(row.nodeUuid)) return false;
+    if (row.nodeUuid !== AUTO_CHILD_NODE_ID) ids.add(row.nodeUuid);
+    return row.children.every((child, index) => child.siblingIndex === index
+        && validSubtreeRow(child, ids, depth + 1, allowAuto));
+}
+
+function validSubtreeState(value, allowAuto = false) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)
+        || Object.keys(value).sort().join(',') !== 'childCount,children'
+        || !Number.isInteger(value.childCount) || value.childCount < 0 || value.childCount > MAX_DIRECT_CHILDREN
+        || !Array.isArray(value.children) || value.children.length !== value.childCount) return false;
+    const ids = new Set();
+    let count = 0;
+    const countRows = (row) => { count += 1; row.children.forEach(countRows); };
+    return value.children.every((row, index) => row.siblingIndex === index
+        && validSubtreeRow(row, ids, 1, allowAuto) && (countRows(row), count <= MAX_SUBTREE_NODES));
+}
+
+function subtreeStateChange(before, after) {
+    if (!validSubtreeState(before) || !validSubtreeState(after, true)) return null;
+    const insertion = after.childCount === before.childCount + 1;
+    const removal = after.childCount === before.childCount - 1;
+    if (!insertion && !removal) return null;
+    const source = insertion ? after.children : before.children;
+    const target = insertion ? before.children : after.children;
+    for (let index = 0; index < source.length; index += 1) {
+        const row = source[index];
+        if (row.nodeUuid === AUTO_CHILD_NODE_ID && (!insertion || index !== source.length - 1)) continue;
+        if (canonicalValue(source.filter((_, i) => i !== index)) !== canonicalValue(target)) continue;
+        const stack = [row];
+        let nodes = 0;
+        let componentCount = 0;
+        while (stack.length) { const item = stack.pop(); nodes += 1; componentCount += item.componentCount; stack.push(...item.children); }
+        if (nodes > MAX_SUBTREE_NODES || componentCount !== 0) return null;
+        return { kind: insertion ? 'insert' : 'remove', index, subtree: row, nodeCount: nodes };
+    }
+    return null;
+}
+
+function validSubtreeDiff(item) {
+    return !!item && Object.keys(item).sort().join(',') === 'after,before,path' && item.path === 'node.subtree'
+        && !!subtreeStateChange(item.before, item.after);
+}
+
 function validChildDiff(item) {
     if (!item || Object.keys(item).sort().join(',') !== 'after,before,path' || item.path !== 'node.child'
         || !validChildState(item.before, { allowAuto: false })
@@ -258,7 +313,7 @@ function validValue(fieldPath, value) {
 
 function validateDiff(diff) {
     if (!Array.isArray(diff) || diff.length < 1 || diff.length > 16) return false;
-    if (diff.some((item) => item && ['node.parent', 'node.child', 'component.structure'].includes(item.path)) && diff.length !== 1) return false;
+    if (diff.some((item) => item && ['node.parent', 'node.child', 'node.subtree', 'component.structure'].includes(item.path)) && diff.length !== 1) return false;
     const paths = new Set();
     return diff.every((item) => {
         if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
@@ -268,7 +323,7 @@ function validateDiff(diff) {
             && Object.keys(item).every((field) => ['path', 'before', 'after'].includes(field))
             && validValue(item.path, item.before) && validValue(item.path, item.after)
             && !Object.is(item.before, item.after))
-            && !validSiblingIndexDiff(item) && !validParentDiff(item) && !validChildDiff(item) && !validComponentStructureDiff(item)
+            && !validSiblingIndexDiff(item) && !validParentDiff(item) && !validChildDiff(item) && !validSubtreeDiff(item) && !validComponentStructureDiff(item)
             && !validPropertyDiff(item) && !validEventListDiff(item)) return false;
         if (paths.has(key)) return false;
         paths.add(key);
@@ -292,6 +347,8 @@ function valueAt(node, fieldPath) {
     }
     if (item.path === 'node.child') return node.childState && validChildState(node.childState)
         ? { found: true, value: node.childState } : { found: false };
+    if (item.path === 'node.subtree') return node.subtreeState && validSubtreeState(node.subtreeState)
+        ? { found: true, value: node.subtreeState } : { found: false };
     if (item.path === 'component.structure') return node.componentState && validComponentState(node.componentState)
         ? { found: true, value: node.componentState } : { found: false };
     if (item.path === 'component.property') {
@@ -385,6 +442,6 @@ function validInput(input) {
 }
 
 module.exports = { UUID, NODE_ID, SHA256, PATHS, UI_EVENT_PROPERTIES, rootNodeId, componentIdFor,
-    MAX_DIRECT_CHILDREN, AUTO_CHILD_NODE_ID, AUTO_COMPONENT_INSTANCE_ID, validValue, validUiEventList,
-    validateDiff, childStateChange, componentStateChange,
+    MAX_DIRECT_CHILDREN, MAX_SUBTREE_NODES, MAX_SUBTREE_DEPTH, AUTO_CHILD_NODE_ID, AUTO_COMPONENT_INSTANCE_ID, validValue, validUiEventList,
+    validateDiff, childStateChange, subtreeStateChange, validSubtreeState, componentStateChange,
     valueAt, matchesDiff, classifyDiffState, invertDiff, targetPathAt, validInput };

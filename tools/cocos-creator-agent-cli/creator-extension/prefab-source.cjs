@@ -332,6 +332,17 @@ function inspectPrefabSource({ prefabBytes, metaBytes, prefabUuid, maxComponents
             childCount: child.childCount, componentCount: child.componentCount,
         })) };
     }
+    const subtreeRows = new Map();
+    for (const node of [...nodes].reverse()) {
+        const children = (childrenByParent.get(node.nodeUuid) || []).sort((a, b) => a.siblingIndex - b.siblingIndex);
+        const rows = children.map((child) => subtreeRows.get(child.nodeUuid));
+        const count = rows.reduce((sum, row) => sum + (row ? row.nodeCount : MAX_NODES), 0);
+        const complete = count <= prefabPatch.MAX_SUBTREE_NODES && rows.every(Boolean);
+        const row = complete ? { nodeUuid: node.nodeUuid, name: node.name, siblingIndex: node.siblingIndex,
+            childCount: rows.length, componentCount: node.componentCount, children: rows.map((child) => child.row) } : null;
+        subtreeRows.set(node.nodeUuid, { row, nodeCount: complete ? count + 1 : MAX_NODES });
+        node.subtreeState = complete ? { childCount: rows.length, children: rows.map((child) => child.row) } : null;
+    }
     return { available: true, prefabUuid, rootName: nodes[0].name, nodeCount: nodes.length, nodes };
 }
 

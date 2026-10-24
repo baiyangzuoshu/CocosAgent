@@ -8,7 +8,7 @@
 
 本能力当前只面向 Creator **2.4.15**。3.8.7 没有新增 Prefab 源编辑命令。
 
-## 当前 CLI 范围（0.12.55 / 扩展 0.8.69）
+## 当前 CLI 范围（0.12.55 / 扩展 0.8.70）
 
 当前 `creator.prefab.source.patch` 除节点名称、激活状态、二维位置/缩放，以及 Sprite/Label 的启用状态和 SpriteFrame 外，还支持通过 Creator Inspector 元数据读取和写入**已声明、公开、可序列化的组件属性**。值类型包括受限标量/枚举、向量、Size、Rect、Color、最多 32 项的声明类型数组、AssetDB 资源，以及有稳定身份的 Prefab 内节点/组件引用；赋值仍由 Creator Prefab 编辑模式执行，并须完成保存、退出、重开和磁盘读回。它不接受任意原始序列化字段或任意 JS 对象。
 
@@ -19,7 +19,7 @@
 - `creator.prefab.source.inspect`：只读解析 `.prefab` 和 `.meta`，以 Prefab UUID 定位唯一资源，返回源 SHA-256、节点路径/UUID、层级、有限组件摘要和受支持字段当前值。
 - `creator.prefab.source.patch.plan/commit/reconcile`：针对一个节点的一组白名单字段执行 `apply`、`compensate` 或 `replay`，并写入持久操作记录。除节点和声明属性外，可编辑受支持组件的 UI 事件列表；事件目标和 handler 都必须解析到当前 Prefab 内的精确身份。
 
-节点字段使用有限白名单，含同一父节点内的 sibling index；该字段还必须绑定父节点 ID，且索引必须落在当前子节点列表范围内。换父级使用 `node.parent`，精确绑定 before/after 父节点 UUID、Prefab 内路径与 siblingIndex；一次只移动一个非根节点，目标必须在同一 Prefab 内且不能构成循环，插入索引不得超出目标父级子节点范围。`node.child` 精确绑定父节点完整的直接子节点列表，一次只插入或移除一个没有组件、没有后代的叶子节点；插入 ID 在计划阶段生成并绑定，不能由提交阶段临时选择。`component.structure` 一次只向一个节点追加一个注册的内置组件，并绑定组件类、索引和计划阶段生成的组件 ID；source-linked compensate 仅删除该源操作新建的精确组件，且要求没有组件依赖。组件字段由 Creator 实时 Inspector 元数据约束，并绑定组件实例、序列化类、属性名和 before/after 值；受支持类型见上面的当前 CLI 范围。UI 事件列表使用单独的事件字段白名单，并绑定组件身份、事件属性、Prefab 内目标节点、目标组件及 handler。非叶子子树编辑、既有组件直接删除、用户脚本组件创建和任意原始序列化字段仍不开放。
+节点字段使用有限白名单，含同一父节点内的 sibling index；该字段还必须绑定父节点 ID，且索引必须落在当前子节点列表范围内。换父级使用 `node.parent`，精确绑定 before/after 父节点 UUID、Prefab 内路径与 siblingIndex；一次只移动一个非根节点，目标必须在同一 Prefab 内且不能构成循环，插入索引不得超出目标父级子节点范围。`node.child` 精确绑定父节点完整的直接子节点列表，一次只插入或移除一个没有组件、没有后代的叶子节点。新增的 `node.subtree` 可一次插入至多 16 个节点、深度至多 4 的无组件子树；各节点 ID 在计划阶段生成，删除仅允许由 source-linked compensate 精确移除本次添加的整棵子树。该路径已通过结构校验、模拟 Creator 节点树以及 Creator 2.4.15 Tank 实机两节点插入/补偿、保存、退出重开和源哈希往返验收。`component.structure` 一次只向一个节点追加一个注册的内置组件，并绑定组件类、索引和计划阶段生成的组件 ID；source-linked compensate 仅删除该源操作新建的精确组件，且要求没有组件依赖。组件字段由 Creator 实时 Inspector 元数据约束，并绑定组件实例、序列化类、属性名和 before/after 值；受支持类型见上面的当前 CLI 范围。UI 事件列表使用单独的事件字段白名单，并绑定组件身份、事件属性、Prefab 内目标节点、目标组件及 handler。既有组件直接删除、用户脚本组件创建和任意原始序列化字段仍不开放。
 
 ## 一轮写入的合同
 

@@ -143,3 +143,10 @@
 - source-linked compensate `4b04438e-18e9-4ca9-a402-6f9f71b1021b` 从上述 apply 派生，只删除该次添加的精确组件。Creator 保存回调、退出/重开与磁盘读回均通过，源 SHA-256 精确恢复至基线，Prefab UUID 与 `.meta` 哈希不变。两次正常回执均 `sceneSavedEventConfirmed: false`，不影响保存回调和磁盘读回证据。
 - 第一次验收发现序列化没有保存运行时 `_id`：磁盘为同一索引/类生成 `prefab_component_c929bfe51effd84eca966b40` 合成身份；计划阶段生成随机 ID 会造成写后读回冲突。另一次补偿遇到组件已在延迟销毁队列时 `destroy()` 返回 `false`。扩展 0.8.69 改为计划时生成与序列化一致的稳定 ID、以 Creator 的延迟销毁状态识别已经排队的删除，并以完成后的读回来确认。第一次不确定写入已通过 CLI reconcile 分类；未重发该写入，后续从已完成操作派生补偿并将 Prefab 恢复基线。完整有效往返由 0.8.69 下的 apply/compensate 回执验证。
 - 定向 Prefab patch 测试 **25/25 通过**。完整 CLI 自动化测试 **342/342 通过，0 失败**。
+
+### 2026-10-24 后续：Prefab 无组件子树插入与补偿删除
+
+- Tank `/Users/youjunmao/WORK/Cocos_Engine/tank`，CLI **0.12.55**、Creator **2.4.15**、扩展 **0.8.70**。通过 Cocos CLI 核对项目名、路径、版本并更新扩展、关闭旧实例、重开工程；全流程使用 Cocos CLI，没有使用电脑操控或直接编辑 Prefab 源文件。
+- 在同一隔离 Prefab `CliPrefabChildAcceptance.prefab`（UUID `45a55c1d-b0ed-4bf2-a454-4eaaa169c0ca`）根节点插入两节点无组件子树 `Branch/Caption`。apply `f415b6f9-7dd0-456a-a425-83aef8427d09` 由计划阶段为两个节点生成稳定身份；Creator 保存回调、退出 Prefab、重开同 UUID、退出、实时对象及磁盘读回全部通过。源 SHA-256 从 `e8da097e8fc1f9fbdb44836f748d56a7775a6268f6b80e0546764b73a7973dff` 变为 `a046c7cdab082df9122355286ef9f49972686fe7e82ebd3bde2fbfae7d00498d`，`.meta` SHA-256 保持 `38ed07c450f014cf1b996622c4a006af6f403c1bd8abfa7dabdaa2de45ac4680`。
+- source-linked compensate `4ff6b199-9c4e-4d22-bf05-1e51e9e1d5ff` 仅移除上述操作新增的整棵子树。保存、退出/重开和读回均通过，源 SHA-256 精确恢复至基线，Prefab UUID 与 `.meta` 哈希不变。正常回执的 `sceneSavedEventConfirmed` 为 false；Creator 保存回调与文件读回通过。
+- `node.subtree` 单次限制为最多 16 个无组件节点、最大深度 4；插入身份在计划阶段生成，移除仅能由已完成的来源操作派生补偿。定向 Prefab patch 测试 **26/26 通过**，完整 CLI 自动化测试 **343/343 通过，0 失败**。沙箱内首次全量测试有 3 项因本机回环监听 `EPERM` 失败，提升权限后全量复测通过。
