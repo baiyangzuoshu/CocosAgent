@@ -17,7 +17,7 @@
 | `cc.LabelOutline` | 无 | 通用属性入口可按实例尝试 | 无 | 接口具备 | 专用检查与挂载/字段实机验证 |
 | `cc.LabelShadow` | 无 | 通用属性入口可按实例尝试 | 无 | 接口具备 | 专用检查与挂载/字段实机验证 |
 | `cc.Button` | 有 | 通用 Inspector 属性 | `clickEvents` | 场景点击业务行为通过；独立 Prefab 子树新增 Button、`zoomScale`、`clickEvents` 均经 CLI 关闭/重开读回和来源补偿通过；场景 `normalColor` Color 写入、关闭/重开读回、补偿及基线恢复通过，现有 clickEvents 保持不变。详见 [Prefab 子树验收](cocos-cli-prefab-subtree-acceptance-20261024.md) 和 [Button 颜色轨迹](traces/cocos-creator-cli-button-color-acceptance-20261024.md) | COLOR transition 下颜色的实际渲染；其他 Sprite 引用字段 |
-| `cc.Toggle` | 有 | 通用 Inspector 属性 | `clickEvents`、`checkEvents` | `checkEvents` 更换 customEventData 后经 CLI 关闭/重开读回；Creator Web Preview 点击使 `isChecked=true` 并触发目标 handler；事件补偿和二次重开恢复通过。详见 [Toggle 事件轨迹](traces/cocos-creator-cli-toggle-event-acceptance-20261024.md) | checkEvents 多目标/清空边界；ToggleContainer 排他切换 |
+| `cc.Toggle` | 有 | 通用 Inspector 属性 | `clickEvents`、`checkEvents` | `isChecked` false→true 经 CLI 关闭/重开读回并补偿；`checkEvents` customEventData 往返后在 Creator Web Preview 触发目标 handler；最终状态和基线恢复。详见 [Toggle 属性](traces/cocos-creator-cli-toggle-checked-acceptance-20261024.md) 与 [事件](traces/cocos-creator-cli-toggle-event-acceptance-20261024.md) 轨迹 | checkEvents 多目标/清空边界；ToggleContainer 排他切换 |
 | `cc.ToggleContainer` | 有 | 通用 Inspector 属性 | `checkEvents` | 实机基线；事件仅接口 | 排他切换与事件往返 |
 | `cc.ToggleGroup` | 无 | 通用属性入口可按实例尝试 | 无 | 接口具备 | UI 检查覆盖、挂载关系和组内行为 |
 | `cc.Slider` | 有 | 通用 Inspector 属性 | `slideEvents` | 实机基线；事件仅接口 | progress、handle、事件和拖动行为 |
