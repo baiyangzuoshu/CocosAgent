@@ -550,16 +550,18 @@ export function validatePreviewAssertions(assertions) {
         tolerance: Number.isFinite(assertion.tolerance) ? Math.max(0, Math.min(assertion.tolerance, 100)) : 0.01 };
     }
     if (assertion.type === 'component-property') {
-      if (Object.keys(assertion).some((key) => !['type', 'path', 'componentType', 'componentProperty', 'expected'].includes(key))) throw failure('PREVIEW_ASSERTION_FIELD_INVALID');
+      if (Object.keys(assertion).some((key) => !['type', 'path', 'componentType', 'componentProperty', 'expected', 'tolerance'].includes(key))) throw failure('PREVIEW_ASSERTION_FIELD_INVALID');
       if (typeof assertion.path !== 'string' || !assertion.path || assertion.path.length > 240
         || assertion.path.split('/').some((part) => !part || part === '.' || part === '..')
         || typeof assertion.componentType !== 'string'
         || !/^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*$/.test(assertion.componentType)
         || assertion.componentType.length > 120
         || typeof assertion.componentProperty !== 'string' || !/^[A-Za-z_$][A-Za-z0-9_$]{0,63}$/.test(assertion.componentProperty)
+        || (assertion.tolerance !== undefined && (typeof assertion.expected !== 'number' || !Number.isFinite(assertion.tolerance) || assertion.tolerance < 0 || assertion.tolerance > 100))
         || !['string', 'number', 'boolean'].includes(typeof assertion.expected)) throw failure('PREVIEW_ASSERTION_INVALID');
       return { type: assertion.type, path: assertion.path, componentType: assertion.componentType,
-        componentProperty: assertion.componentProperty, expected: assertion.expected };
+        componentProperty: assertion.componentProperty, expected: assertion.expected,
+        ...(assertion.tolerance === undefined ? {} : { tolerance: assertion.tolerance }) };
     }
     throw failure('PREVIEW_ASSERTION_TYPE_UNSUPPORTED');
   });
@@ -583,7 +585,9 @@ function assertionExpression(assertion) {
     if (a.type === 'component-property') { const node = find(a.path);
       const readComponentProperty = ${readPreviewComponentProperty.toString()};
       const result = readComponentProperty(node, a.componentType, a.componentProperty);
-      return { actual: result.actual, pass: result.found && result.actual === a.expected }; }
+      const pass = typeof a.expected === 'number' && typeof result.actual === 'number'
+        ? Math.abs(result.actual - a.expected) <= (a.tolerance || 0) : result.actual === a.expected;
+      return { actual: result.actual, pass: result.found && pass }; }
     return { pass: false, actual: null }; })()`;
 }
 

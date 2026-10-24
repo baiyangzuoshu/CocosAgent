@@ -91,6 +91,16 @@ test('preview assertions read Creator 2.4 ProgressBar progress from serialized s
   assert.deepEqual(readPreviewComponentProperty(node, 'cc.ProgressBar', 'progress'), { found: true, actual: 0.75 });
 });
 
+test('preview assertions read Creator 2.4 Slider progress from serialized storage without invoking its getter', () => {
+  class Slider {
+    constructor() { this._N$progress = 0.78; }
+    get progress() { throw new Error('Slider progress getter must not run in an assertion'); }
+  }
+  Slider.prototype.__classname__ = 'cc.Slider';
+  const node = { _components: [new Slider()] };
+  assert.deepEqual(readPreviewComponentProperty(node, 'cc.Slider', 'progress'), { found: true, actual: 0.78 });
+});
+
 test('preview component assertions accept exact Creator class names from serialized components', () => {
   class Slider { constructor() { this.progress = 0.75; } }
   Slider.prototype.__classname__ = 'cc.Slider';
@@ -121,6 +131,11 @@ test('preview component assertions accept namespaced Creator and project compone
   assert.deepEqual(validatePreviewAssertions([{ type: 'component-property', path: 'Scene/Canvas/Button',
     componentType: 'game.ui.ButtonState', componentProperty: 'clickCount', expected: 1 }]), [{ type: 'component-property',
     path: 'Scene/Canvas/Button', componentType: 'game.ui.ButtonState', componentProperty: 'clickCount', expected: 1 }]);
+  assert.deepEqual(validatePreviewAssertions([{ type: 'component-property', path: 'Scene/Canvas/Slider',
+    componentType: 'cc.Slider', componentProperty: 'progress', expected: 0.78, tolerance: 0.03 }]), [{ type: 'component-property',
+    path: 'Scene/Canvas/Slider', componentType: 'cc.Slider', componentProperty: 'progress', expected: 0.78, tolerance: 0.03 }]);
+  assert.throws(() => validatePreviewAssertions([{ type: 'component-property', path: 'Scene/Canvas/Slider',
+    componentType: 'cc.Slider', componentProperty: 'progress', expected: '0.78', tolerance: 0.03 }]), { code: 'PREVIEW_ASSERTION_INVALID' });
   assert.throws(() => validatePreviewAssertions([{ type: 'component-property', path: 'Scene/Canvas/Label',
     componentType: 'cc..Label', componentProperty: 'string', expected: 'Ready' }]), { code: 'PREVIEW_ASSERTION_INVALID' });
 });

@@ -4534,7 +4534,7 @@ async function createSceneComponentPropertyPlan(input) {
 
 async function createSceneComponentPropertyCompensationPlan(input) {
     const source = readSceneComponentPropertyOperation(input.sourceOperationId);
-    verifySceneOperationIdentity(source);
+    verifySceneOperationIdentity(source, { requireCurrentContract: false });
     if (source.status !== 'completed' || !source.diskReadback || source.diskReadback.verified !== true
         || source.plan.compensationFor || source.compensationOperationId || source.compensatedByOperationId)
         throw coded('SCENE_COMPONENT_COMPENSATION_SOURCE_NOT_ELIGIBLE');
@@ -4588,7 +4588,7 @@ function verifySceneComponentPropertyCompensationSource(operation) {
     if (!link || typeof link.sourceOperationId !== 'string' || typeof link.sourcePlanHash !== 'string')
         throw coded('SCENE_COMPONENT_COMPENSATION_LINK_INVALID');
     const source = readSceneComponentPropertyOperation(link.sourceOperationId);
-    verifySceneOperationIdentity(source);
+    verifySceneOperationIdentity(source, { requireCurrentContract: false });
     if (source.status !== 'completed' || source.planHash !== link.sourcePlanHash
         || source.compensationOperationId !== operation.operationId
         || source.compensationPlanHash !== operation.planHash
@@ -5154,6 +5154,98 @@ async function createSceneUiEventsPlan(input) {
             note: 'The plan binds the exact component event list and saved .fire/.meta. Reconcile only observes live and disk state; save manually if it reports save-required.' } };
 }
 
+async function createSceneUiEventsCompensationPlan(input) {
+    const source = readSceneUiEventsOperation(input.sourceOperationId);
+    verifySceneOperationIdentity(source, { requireCurrentContract: false });
+    if (source.status !== 'completed' || !source.diskReadback || source.diskReadback.verified !== true
+        || source.plan.compensationFor || source.compensatedByOperationId)
+        throw coded('SCENE_UI_EVENTS_COMPENSATION_SOURCE_NOT_ELIGIBLE');
+    let supersededCompensation = null;
+    if (source.compensationOperationId) {
+        const previous = readSceneUiEventsOperation(source.compensationOperationId);
+        const previousLink = previous.plan && previous.plan.compensationFor;
+        if (previous.status !== 'not-applied' || !previous.reconciledAt
+            || previous.planHash !== source.compensationPlanHash
+            || !previousLink || previousLink.sourceOperationId !== source.operationId
+            || previousLink.sourcePlanHash !== source.planHash
+            || !sceneComponentValuesEqual(previous.plan.expectedBefore, source.plan.expectedAfter)
+            || !sceneComponentValuesEqual(previous.plan.expectedAfter, source.plan.expectedBefore))
+            throw coded('SCENE_UI_EVENTS_COMPENSATION_ALREADY_RESERVED');
+        supersededCompensation = previous;
+    }
+    const sourceEvents = source.diskReadback.componentEvents;
+    if (!sourceEvents || sourceEvents.componentInstanceId !== source.plan.componentInstanceId
+        || sourceEvents.serializedClassId !== source.plan.serializedClassId
+        || sourceEvents.eventProperty !== source.plan.eventProperty
+        || !sceneComponentValuesEqual(sourceEvents.events, source.plan.expectedAfter))
+        throw coded('SCENE_UI_EVENTS_COMPENSATION_SOURCE_READBACK_MISMATCH');
+    const live = await readPlannedSceneUiEvents(source.plan);
+    if (!sceneComponentValuesEqual(live.events, source.plan.expectedAfter))
+        throw coded('SCENE_UI_EVENTS_COMPENSATION_SOURCE_STATE_DRIFT');
+    const planned = await createSceneUiEventsPlan({ sceneUuid: source.plan.sceneUuid,
+        nodeUuid: source.plan.nodeUuid, componentClassName: source.plan.componentClassName,
+        eventProperty: source.plan.eventProperty, componentInstanceId: source.plan.componentInstanceId,
+        events: source.plan.expectedBefore });
+    const operation = readSceneUiEventsOperation(planned.operationId);
+    operation.plan.compensationFor = { sourceOperationId: source.operationId, sourcePlanHash: source.planHash };
+    operation.planHash = planFingerprint(operation.plan);
+    writeOperation(operation);
+    if (supersededCompensation) {
+        supersededCompensation.status = 'superseded';
+        supersededCompensation.supersededAt = new Date().toISOString();
+        supersededCompensation.supersededByOperationId = operation.operationId;
+        writeOperation(supersededCompensation);
+        source.supersededCompensationOperationIds = [
+            ...(Array.isArray(source.supersededCompensationOperationIds) ? source.supersededCompensationOperationIds : []),
+            supersededCompensation.operationId,
+        ];
+    }
+    source.compensationOperationId = operation.operationId;
+    source.compensationPlanHash = operation.planHash;
+    source.compensationPlannedAt = new Date().toISOString();
+    writeOperation(source);
+    return { ...planned, planHash: operation.planHash, compensationFor: operation.plan.compensationFor,
+        sourceOperationStatus: source.status, sourceDiskSha256: source.diskReadback.sourceSha256,
+        diff: { ...planned.diff, action: 'compensate-ui-event-list',
+            sourceOperationId: source.operationId, sourcePlanHash: source.planHash } };
+}
+
+function verifySceneUiEventsCompensationSource(operation) {
+    const link = operation && operation.plan && operation.plan.compensationFor;
+    if (!link || typeof link.sourceOperationId !== 'string' || typeof link.sourcePlanHash !== 'string')
+        throw coded('SCENE_UI_EVENTS_COMPENSATION_LINK_INVALID');
+    const source = readSceneUiEventsOperation(link.sourceOperationId);
+    verifySceneOperationIdentity(source, { requireCurrentContract: false });
+    if (source.status !== 'completed' || source.planHash !== link.sourcePlanHash
+        || source.compensationOperationId !== operation.operationId
+        || source.compensationPlanHash !== operation.planHash
+        || (source.compensatedByOperationId && source.compensatedByOperationId !== operation.operationId)
+        || source.plan.projectRoot !== operation.plan.projectRoot
+        || source.plan.creatorVersion !== operation.plan.creatorVersion
+        || source.plan.sceneUuid !== operation.plan.sceneUuid || source.plan.nodeUuid !== operation.plan.nodeUuid
+        || source.plan.nodePath !== operation.plan.nodePath
+        || source.plan.componentClassName !== operation.plan.componentClassName
+        || source.plan.componentInstanceId !== operation.plan.componentInstanceId
+        || source.plan.eventProperty !== operation.plan.eventProperty
+        || !sceneComponentValuesEqual(operation.plan.expectedBefore, source.plan.expectedAfter)
+        || !sceneComponentValuesEqual(operation.plan.expectedAfter, source.plan.expectedBefore)
+        || !source.diskReadback || source.diskReadback.verified !== true
+        || !source.diskReadback.componentEvents
+        || !sceneComponentValuesEqual(source.diskReadback.componentEvents.events, source.plan.expectedAfter))
+        throw coded('SCENE_UI_EVENTS_COMPENSATION_SOURCE_MISMATCH');
+    return source;
+}
+
+function linkCompletedSceneUiEventsCompensation(operation) {
+    if (!operation.plan.compensationFor) return null;
+    const source = verifySceneUiEventsCompensationSource(operation);
+    source.compensatedByOperationId = operation.operationId;
+    source.compensatedAt = new Date().toISOString();
+    source.compensationDiskReadback = operation.diskReadback || null;
+    writeOperation(source);
+    return source;
+}
+
 async function readPlannedSceneUiEvents(plan) {
     const state = await callScene('uiEventsState', { sceneUuid: plan.sceneUuid, nodeUuid: plan.nodeUuid,
         nodePath: plan.nodePath, componentClassName: plan.componentClassName,
@@ -5176,19 +5268,25 @@ function sceneUiEventsReceipt(operation, state) {
         events: state && state.events || null, sceneSaveRequestSent: !!operation.sceneSaveRequestSent,
         sceneSaveCompletionConfirmed: false,
         scenePersistenceConfirmed: !!(operation.diskReadback && operation.diskReadback.verified === true),
-        diskReadback: operation.diskReadback || null, plannedByInstanceId: operation.plannedByInstanceId,
+        diskReadback: operation.diskReadback || null, compensationFor: plan.compensationFor || null,
+        plannedByInstanceId: operation.plannedByInstanceId,
         appliedByInstanceId: operation.appliedByInstanceId || null,
         completedByInstanceId: operation.completedByInstanceId || null,
         approvedAt: operation.approvedAt || null, completedAt: operation.completedAt || null,
         reconciledAt: operation.reconciledAt || null,
-        recovery: { automaticRetry: false, reconcileCommand: 'creator.scene.ui-events.set.reconcile',
+        recovery: { automaticRetry: false, reconcileCommand: plan.compensationFor
+                ? 'creator.scene.ui-events.set.compensate.reconcile' : 'creator.scene.ui-events.set.reconcile',
+            sameCreatorSessionRequired: !plan.compensationFor,
             manualSaveMayBeRequired: operation.status === 'save-required',
-            note: 'Persistence is confirmed only when the exact serialized event list is read back from the saved .fire.' } };
+            note: plan.compensationFor
+                ? 'A source-linked event compensation can be reconciled after Creator restart only when the exact component identity and serialized event list match the bound disk state.'
+                : 'Persistence is confirmed only when the exact serialized event list is read back from the saved .fire.' } };
 }
 
 async function commitSceneUiEvents(input) {
     const operation = readSceneUiEventsOperation(input.operationId);
     verifySceneOperationIdentity(operation);
+    if (operation.plan.compensationFor) verifySceneUiEventsCompensationSource(operation);
     if (operation.plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
     if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
     if (operation.status !== 'planned') throw coded(['applying', 'awaiting-approval', 'mutation-applied',
@@ -5205,6 +5303,7 @@ async function commitSceneUiEvents(input) {
     }
     operation.status = 'applying'; operation.approvedAt = new Date().toISOString();
     operation.approvalSource = 'commit-tool-call'; operation.appliedByInstanceId = INSTANCE_ID; writeOperation(operation);
+    if (operation.plan.compensationFor) verifySceneUiEventsCompensationSource(operation);
     const mutation = await callScene('setUiEvents', { sceneUuid: operation.plan.sceneUuid,
         nodeUuid: operation.plan.nodeUuid, nodePath: operation.plan.nodePath,
         componentClassName: operation.plan.componentClassName, eventProperty: operation.plan.eventProperty,
@@ -5226,6 +5325,7 @@ async function commitSceneUiEvents(input) {
     await confirmSceneNodeDiskPersistence(operation);
     operation.status = 'completed'; operation.completedAt = new Date().toISOString();
     operation.completedByInstanceId = INSTANCE_ID; writeOperation(operation);
+    linkCompletedSceneUiEventsCompensation(operation);
     return sceneUiEventsReceipt(operation, readback);
 }
 
@@ -5240,9 +5340,12 @@ async function reconcileSceneUiEvents(input) {
         return { ...sceneUiEventsReceipt(operation, null), observed: null, reason: operation.reconcileReason };
     }
     let diskState = null;
-    try { diskState = await reconcileSceneNodeDiskOperation(operation,
-        buttonEventListMatches(observed.events, operation.plan.expectedBefore),
-        buttonEventListMatches(observed.events, operation.plan.expectedAfter)); }
+    try {
+        if (operation.plan.compensationFor) verifySceneUiEventsCompensationSource(operation);
+        diskState = await reconcileSceneNodeDiskOperation(operation,
+            buttonEventListMatches(observed.events, operation.plan.expectedBefore),
+            buttonEventListMatches(observed.events, operation.plan.expectedAfter));
+    }
     catch (error) {
         operation.status = 'conflict'; operation.reconciledAt = new Date().toISOString();
         operation.reconcileReason = error.code || 'SCENE_DISK_READBACK_FAILED'; writeOperation(operation);
@@ -5251,6 +5354,8 @@ async function reconcileSceneUiEvents(input) {
             reason: operation.reconcileReason };
     }
     operation.reconciledAt = new Date().toISOString(); writeOperation(operation);
+    if (operation.status === 'completed' && operation.plan.compensationFor)
+        linkCompletedSceneUiEventsCompensation(operation);
     return { ...sceneUiEventsReceipt(operation, observed), observed: { events: observed.events,
         sceneUuid: observed.sceneUuid, nodeUuid: observed.nodeUuid, nodePath: observed.nodePath,
         ...(diskState ? { disk: { sourceSha256: diskState.disk.sourceSha256,
@@ -7444,6 +7549,10 @@ function capabilityList() {
         'creator.scene.ui-events.set.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
             && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'),
         'creator.scene.ui-events.set.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.ui-events.set.compensate.plan': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.ui-events.set.compensate.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'),
+        'creator.scene.ui-events.set.compensate.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
         'creator.scene.node.add-component.plan': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
         'creator.scene.node.add-component.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
             && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'),
@@ -7934,6 +8043,9 @@ function execute(command, input, context) {
     if (command === 'creator.scene.ui-events.set.plan') return createSceneUiEventsPlan(input);
     if (command === 'creator.scene.ui-events.set.commit') return commitSceneUiEvents(input, context);
     if (command === 'creator.scene.ui-events.set.reconcile') return reconcileSceneUiEvents(input);
+    if (command === 'creator.scene.ui-events.set.compensate.plan') return createSceneUiEventsCompensationPlan(input);
+    if (command === 'creator.scene.ui-events.set.compensate.commit') return commitSceneUiEvents(input, context);
+    if (command === 'creator.scene.ui-events.set.compensate.reconcile') return reconcileSceneUiEvents(input);
     if (command === 'creator.scene.node.add-component.plan') return createSceneComponentAddPlan(input);
     if (command === 'creator.scene.node.add-component.commit') return commitSceneComponentAdd(input, context);
     if (command === 'creator.scene.node.add-component.reconcile') return reconcileSceneComponentAdd(input);

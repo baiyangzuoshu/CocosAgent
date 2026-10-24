@@ -754,6 +754,31 @@
       }, "additionalProperties": false }
     },
     {
+      "id": "creator.scene.ui-events.set.compensate.plan",
+      "access": "plan",
+      "description": "Plan a source-linked compensation for one completed, persisted UI event-list operation. Derives the prior event list from that exact operation and refuses drift or duplicate compensation.",
+      "input": { "type": "object", "required": ["sourceOperationId"], "properties": {
+        "sourceOperationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.scene.ui-events.set.compensate.commit",
+      "access": "write", "approval": true,
+      "description": "Apply the exact source-derived UI event-list compensation after fresh source, live, and saved-state checks; verify the restored list from the exact AssetDB .fire and link completion to the source operation.",
+      "input": { "type": "object", "required": ["operationId", "planHash"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
+        "planHash": { "type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[a-f0-9]{64}$" }
+      }, "additionalProperties": false }
+    },
+    {
+      "id": "creator.scene.ui-events.set.compensate.reconcile",
+      "access": "plan",
+      "description": "Observe one source-linked UI event-list compensation, including after Creator restart when the exact component identity remains live. Never replays the event-list mutation.",
+      "input": { "type": "object", "required": ["operationId"], "properties": {
+        "operationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" }
+      }, "additionalProperties": false }
+    },
+    {
       "id": "creator.scene.node.add-component.plan",
       "access": "plan",
       "description": "Plan adding one registered Cocos component class to one exact scene node. Rejects missing classes, existing instances, and components with implicit required components; no scene change is made.",
