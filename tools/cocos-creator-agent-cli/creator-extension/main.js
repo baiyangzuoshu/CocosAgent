@@ -6099,10 +6099,19 @@ async function sceneNodeDiskStateForPlan(plan) {
 }
 
 async function readSceneComponentPropertyTransform(plan, { afterMutation = false } = {}) {
+    const widgetAlignmentSensitive = plan.componentClassName === 'cc.Widget'
+        && ['enabled', 'target', 'isAlignTop', 'isAlignVerticalCenter', 'isAlignBottom', 'isAlignLeft',
+            'isAlignHorizontalCenter', 'isAlignRight', 'top', 'bottom', 'left', 'right', 'horizontalCenter',
+            'verticalCenter', 'alignMode'].includes(plan.property);
     const layoutSensitive = plan.componentClassName === 'cc.RichText'
         && ['string', 'fontSize', 'fontFamily', 'font', 'useSystemFont', 'maxWidth', 'lineHeight'].includes(plan.property)
         || plan.componentClassName === 'cc.Label'
-        && ['string', 'fontSize', 'fontFamily', 'font', 'lineHeight', 'overflow', 'enableWrapText', 'spacingX'].includes(plan.property);
+        && ['string', 'fontSize', 'fontFamily', 'font', 'lineHeight', 'overflow', 'enableWrapText', 'spacingX'].includes(plan.property)
+        || widgetAlignmentSensitive
+        || plan.componentClassName === 'cc.Layout'
+        && ['enabled', 'type', 'resizeMode', 'cellSize', 'startAxis', 'paddingLeft', 'paddingRight', 'paddingTop',
+            'paddingBottom', 'spacingX', 'spacingY', 'verticalDirection', 'horizontalDirection', 'affectedByScale']
+            .includes(plan.property);
     if (afterMutation && layoutSensitive) await new Promise((resolve) => setTimeout(resolve, 350));
     const state = await callScene('nodeTransformState', { sceneUuid: plan.sceneUuid, nodeUuid: plan.nodeUuid }, 20000);
     if (!state || state.available !== true) throw coded(state && state.reason || 'SCENE_NODE_TRANSFORM_STATE_UNAVAILABLE');
@@ -6111,7 +6120,7 @@ async function readSceneComponentPropertyTransform(plan, { afterMutation = false
         || !state.transform || typeof state.transform !== 'object' || Array.isArray(state.transform))
         throw coded('SCENE_NODE_TRANSFORM_STATE_INVALID');
     if (!afterMutation && (!plan.diskTransform || !sceneDiskTransformMatches(state.transform, plan.diskTransform,
-        { allowLayoutSizeMismatch: layoutSensitive })))
+        { allowLayoutSizeMismatch: layoutSensitive, allowLayoutPositionMismatch: widgetAlignmentSensitive })))
         throw coded('SCENE_DISK_STATE_DIFFERS_FROM_EDITOR');
     const fields = ['anchorX', 'anchorY', 'angle', 'height', 'scaleX', 'scaleY', 'width', 'x', 'y', 'z'];
     if (fields.some((field) => !Number.isFinite(state.transform[field]))) throw coded('SCENE_NODE_TRANSFORM_STATE_INVALID');

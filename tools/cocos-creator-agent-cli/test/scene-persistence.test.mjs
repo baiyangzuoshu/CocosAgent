@@ -71,6 +71,18 @@ test('layout-sensitive Label edits tolerate Creator-computed size changes but st
   assert.equal(sceneDiskTransformMatches({ ...live, x: 1 }, saved, { allowLayoutSizeMismatch: true }), false);
 });
 
+test('Widget alignment edits tolerate Creator-computed position changes but still bind size and anchor', () => {
+  const saved = { x: -420, y: -120, z: 0, angle: 0, scaleX: 1, scaleY: 1,
+    width: 100, height: 100, anchorX: 0.5, anchorY: 0.5 };
+  const live = { ...saved, x: -410 };
+  assert.equal(sceneDiskTransformMatches(live, saved), false);
+  assert.equal(sceneDiskTransformMatches(live, saved, { allowLayoutPositionMismatch: true }), true);
+  assert.equal(sceneDiskTransformMatches({ ...live, width: 101 }, saved,
+    { allowLayoutPositionMismatch: true }), false);
+  assert.equal(sceneDiskTransformMatches({ ...live, anchorX: 0.25 }, saved,
+    { allowLayoutPositionMismatch: true }), false);
+});
+
 test('saved scene node inspection resolves exact UUID, hierarchy, active state, and serialized transform', () => {
   const source = fixture();
   assert.deepEqual(inspectSavedSceneNode({ ...source, sceneUuid, sceneAssetRow, nodeUuid }), {

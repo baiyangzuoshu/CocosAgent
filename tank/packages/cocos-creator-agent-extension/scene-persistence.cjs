@@ -33,9 +33,11 @@ function sceneDiskNumberMatches(field, actual, expected) {
     const delta = ((actual - expected + 180) % 360 + 360) % 360 - 180;
     return Math.abs(delta) <= TRANSFORM_TOLERANCE;
 }
-function sceneDiskTransformMatches(actual, expected, { allowLayoutSizeMismatch = false } = {}) {
+function sceneDiskTransformMatches(actual, expected, { allowLayoutSizeMismatch = false,
+    allowLayoutPositionMismatch = false } = {}) {
     if (!actual || !expected) return false;
-    return Object.keys(expected).filter((field) => !(allowLayoutSizeMismatch && ['width', 'height'].includes(field)))
+    return Object.keys(expected).filter((field) => !(allowLayoutSizeMismatch && ['width', 'height'].includes(field))
+        && !(allowLayoutPositionMismatch && ['x', 'y'].includes(field)))
         .every((field) => sceneDiskNumberMatches(field, actual[field], expected[field]));
 }
 function resolveRef(value, records) {

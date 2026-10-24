@@ -188,7 +188,7 @@ function makeHarness(t, { approved = true, beforeCommitAuthorization = () => {},
   sceneNodeDelete = false, sceneComponentRemove = false, sceneComponentAdd = false,
   sceneComponentAddClass = 'cc.Sprite', sceneComponentAddAutoSize = false,
   sceneTransform = false, sceneButtonEvents = false,
-  sceneProperty = null, scenePropertyAutoSize = null,
+  sceneProperty = null, scenePropertyAutoSize = null, scenePropertyLiveTransform = null,
   assetMove = false, assetMoveRenamesSubMeta = false, assetDelete = false, assetDeleteHasSubAssets = false,
   assetDeleteStaleQueriesAfterDelete = 0, assetDeleteCallbackErrorAfterDelete = false,
   assetTexture = false, assetTextureSaveMode = 'complete', sceneSaveMode = 'write', prefabPatch = false } = {}) {
@@ -341,8 +341,9 @@ function makeHarness(t, { approved = true, beforeCommitAuthorization = () => {},
   let textureMetaSaveCount = 0;
   let sceneSaveCount = 0;
   let currentSceneComposition = null;
-  const currentTransform = { x: 1, y: 2, z: 0, scaleX: 1, scaleY: 1, angle: 0,
-    width: 50, height: 20, anchorX: 0.5, anchorY: 0.5 };
+  const currentTransform = scenePropertyLiveTransform ? { ...scenePropertyLiveTransform }
+    : { x: 1, y: 2, z: 0, scaleX: 1, scaleY: 1, angle: 0,
+      width: 50, height: 20, anchorX: 0.5, anchorY: 0.5 };
   const editorIpc = new EventEmitter();
   const electronIpc = new EventEmitter();
   const editorBuilder = new EventEmitter();
@@ -1889,6 +1890,20 @@ test('Widget alignment commits verify the computed align-flags field in the save
   const reconciled = await harness.api.reconcileSceneComponentProperty({ operationId: plan.operationId });
   assert.equal(reconciled.status, 'completed');
   assert.equal(reconciled.observed.disk.matchesAfter, true);
+});
+
+test('Widget margin plans tolerate Creator-recomputed position while checking the saved component field', async (t) => {
+  const harness = makeHarness(t, { sceneProperty: { serializedClassId: 'cc.Widget', property: 'left',
+    serializedProperty: '_left', propertyKind: 'number', value: 20 },
+  scenePropertyLiveTransform: { x: 3, y: 4, z: 0, scaleX: 1, scaleY: 1, angle: 0,
+    width: 50, height: 20, anchorX: 0.5, anchorY: 0.5 } });
+  const plan = await harness.api.createSceneComponentPropertyPlan({ sceneUuid: harness.sceneUuid,
+    nodeUuid: harness.nodeUuid, componentClassName: 'cc.Widget', componentInstanceId: 'sprite-instance',
+    property: 'left', value: 21 });
+  assert.equal(plan.status, 'planned');
+  assert.equal(plan.nodeTransformBefore.x, 3);
+  assert.equal(plan.expectedBefore.value, 20);
+  assert.equal(plan.savedSceneBaseline.componentProperty.value, 20);
 });
 
 test('Layout type commits verify Creator 2.4 layout-type backing fields in the saved scene', async (t) => {
