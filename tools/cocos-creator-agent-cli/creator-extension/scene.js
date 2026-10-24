@@ -2217,6 +2217,10 @@ function prefabSourcePatchMutate(params, callback) {
     const spriteFrames = params.expectedDiff.filter((item) => item.path === 'component.cc.Sprite.spriteFrameUuid' && item.after !== null);
     const loaded = Object.create(null);
     let componentRemovalRequested = false;
+    const restoreBeforeWidgetMargins = !!params.restoreTransform && params.action === 'compensate'
+        && params.expectedDiff.some((item) => item && item.path === 'component.property'
+            && item.componentClassName === 'cc.Widget'
+            && ['left', 'right', 'top', 'bottom', 'horizontalCenter', 'verticalCenter'].includes(item.property));
     const apply = () => {
         const current = locatePrefabPatchNode(params, 'before');
         if (!current.available || current.node !== node || prefabPatchNameConflict(node, params.expectedDiff)) {
@@ -2225,6 +2229,15 @@ function prefabSourcePatchMutate(params, callback) {
             return;
         }
         try {
+            // Restoring a Widget-controlled node's geometry can synchronously
+            // recompute its margins. Restore the transform first, then apply
+            // the reviewed margin value against the exact value observed after
+            // our own transform update.
+            if (restoreBeforeWidgetMargins) {
+                node.setPosition(params.restoreTransform.x, params.restoreTransform.y);
+                node.setScale(params.restoreTransform.scaleX, params.restoreTransform.scaleY, node.scaleZ);
+                node.setContentSize(params.restoreTransform.width, params.restoreTransform.height);
+            }
             for (const item of params.expectedDiff) {
                 const field = item.path;
                 if (field === 'node.name') node.name = item.after;
@@ -2381,10 +2394,23 @@ function prefabSourcePatchMutate(params, callback) {
                         && current.snapshot.componentPropertyBindings[item.componentInstanceId][item.property];
                     if (!binding || typeof binding.liveComponentInstanceId !== 'string')
                         throw new Error('PREFAB_COMPONENT_PROPERTY_IDENTITY_MISMATCH');
+                    let expectedValue = beforeValue;
+                    if (restoreBeforeWidgetMargins && item.componentClassName === 'cc.Widget'
+                        && ['left', 'right', 'top', 'bottom', 'horizontalCenter', 'verticalCenter'].includes(item.property)) {
+                        const postTransform = componentPropertyState({ sceneUuid: current.mode.sceneUuid,
+                            nodeUuid: node.uuid, nodePath: current.snapshot.nodePath,
+                            componentClassName: item.componentClassName,
+                            componentInstanceId: binding.liveComponentInstanceId,
+                            property: item.property, targetNode: node });
+                        if (!postTransform.available || typeof postTransform.value !== 'number' || !Number.isFinite(postTransform.value))
+                            throw new Error(postTransform.reason || 'PREFAB_WIDGET_MARGIN_AFTER_TRANSFORM_UNAVAILABLE');
+                        expectedValue = postTransform.value;
+                        if (sameValue(expectedValue, value)) continue;
+                    }
                     const propertyResult = setComponentProperty({ sceneUuid: current.mode.sceneUuid,
                         nodeUuid: node.uuid, nodePath: current.snapshot.nodePath,
                         componentClassName: item.componentClassName, componentInstanceId: binding.liveComponentInstanceId,
-                        property: item.property, expectedValue: beforeValue, value, targetNode: node }, loaded);
+                        property: item.property, expectedValue, value, targetNode: node }, loaded);
                     if (!propertyResult.available) throw new Error(propertyResult.reason || 'PREFAB_COMPONENT_PROPERTY_WRITE_FAILED');
                 }
                 else if (field === 'component.eventList') {
@@ -2414,7 +2440,7 @@ function prefabSourcePatchMutate(params, callback) {
                     else matches[0].spriteFrame = item.after === null ? null : loaded[item.after];
                 }
             }
-            if (params.restoreTransform) {
+            if (params.restoreTransform && !restoreBeforeWidgetMargins) {
                 node.setPosition(params.restoreTransform.x, params.restoreTransform.y);
                 node.setScale(params.restoreTransform.scaleX, params.restoreTransform.scaleY, node.scaleZ);
                 node.setContentSize(params.restoreTransform.width, params.restoreTransform.height);
@@ -2429,7 +2455,7 @@ function prefabSourcePatchMutate(params, callback) {
                 && !prefabPatch.matchesTransformSnapshot(after.snapshot, params.restoreTransform)) {
                 callback(null, { available: false,
                     reason: after.reason || (params.restoreTransform ? 'PREFAB_COMPENSATION_TRANSFORM_READBACK_MISMATCH' : 'PREFAB_PATCH_WRITE_READBACK_FAILED'),
-                    mutationStarted: true, diagnostic: after.snapshot || null });
+                    mutationStarted: true, diagnostic: after.diagnostic || after.snapshot || null });
                 return;
             }
             callback(null, { available: true, mutationStarted: true, prefabUuid: params.prefabUuid, mode: after.mode,

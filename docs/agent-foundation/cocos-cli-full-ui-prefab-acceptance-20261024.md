@@ -57,3 +57,10 @@
 - 对该 apply 的来源补偿在扩展 0.8.80、0.8.81、0.8.82 下均未通过：CLI 报 `OPERATION_RECONCILIATION_REQUIRED`，reconcile 显示 `PREFAB_EXPECTED_STATE_MISMATCH`，没有 operation 自身的保存读回。未重放失败计划。单独创建的恢复 apply operation `36264fd7-1cd9-4621-8954-69a4f2074c07` 把 `left` 写回 40；Creator 将根几何序列化为 `x=480.5,width=879`。随后几何恢复 operation `885dc96b-60ee-4c2c-bd4e-4316b52ef623` 将其写回 `x=480,width=880`。
 - 扩展 0.8.83 收紧来源补偿 reconcile：只有当前文件哈希与该 operation 自己记录的已验证磁盘回执匹配，才确认 after 状态。真实回归 operation `54491d80-7372-4eb1-a2d2-99cd90effe49` 在独立恢复使磁盘最终匹配其 after 值后仍保持 `conflict`，观测到 `diskMatchesAfter=true`、但 operation 自身 `diskReadback=null`。这避免把后来其他操作造成的同值状态误记为原 operation 成功。
 - 最终整工程 CLI 关闭/重开并通过扩展 0.8.83 核对：Prefab SHA-256 回到 `145fe80ab8a84e7161f7721628373a18292b72ba6410d8a391992048b91465dd`，`.meta` 为 `c926c945705ee5f8ef09f855d8b451392d8744cdb1238a3f8783f7098990a29a`，根几何 `x=480,width=880`，Label 与 Status 子节点 UUID 保持不变。Widget.left 来源补偿仍未验收通过。
+
+## 2026-10-24 后续：Widget.left 来源补偿修复与重验
+
+- 干净 apply operation `5618a9c6-2112-4957-9d29-78f4f30dda1a` 将 Widget `left` 从 40 写为 41，源哈希从基线 `145fe80ab8a84e7161f7721628373a18292b72ba6410d8a391992048b91465dd` 变为 `a8d6dbd99c4ffab69c32422492e8b89c2e284cc785ec67247528e4092fabf7d1`。CLI 关闭并重开整个 Tank 工程后，工程路径、Creator 2.4.15、活动场景、Prefab UUID 和源哈希均匹配。
+- 失败诊断显示补偿原先先设 `left=40` 再恢复根节点几何，Creator 因 Widget 对齐把 margin 重算为 39。扩展 0.8.86 改为先恢复补偿几何，再读取该精确 Widget 组件当前值；若几何恢复已经产生目标 margin，则直接以最终状态核验，否则再写入目标值。补偿后的 mismatch 诊断也保留了字段 expected/actual。
+- 来源补偿 operation `0511de54-99e7-457a-b243-3d1f94a3380b`（source operation `5618a9c6-2112-4957-9d29-78f4f30dda1a`）在 Creator 2.4.15 / 扩展 0.8.86 下完成，CLI 回执确认保存、Prefab 模式退出/重开、目标字段和磁盘读回；Prefab 哈希精确回到 `145fe80ab8a84e7161f7721628373a18292b72ba6410d8a391992048b91465dd`，`.meta` 哈希保持 `c926c945705ee5f8ef09f855d8b451392d8744cdb1238a3f8783f7098990a29a`。
+- 再次通过 CLI 关闭并重开整个工程，实例 `8fdc0215-2a47-4441-9c9e-93e3fd38a2b6` 的 `creator.project.info` 确认路径 `/Users/youjunmao/WORK/Cocos_Engine/tank`、Creator 2.4.15 和活动场景 `CliAcceptanceScene`；Prefab CLI 源检查确认 UUID、根几何 `x=480,width=880`、上述源与 `.meta` 哈希均回到基线。自动化 Prefab 定向测试 28/28、CLI 全量测试 353/353 通过。

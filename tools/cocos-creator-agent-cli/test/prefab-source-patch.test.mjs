@@ -641,6 +641,79 @@ test('Prefab root patches bind the exact live asset and survive a new editor nod
   assert.equal(invoke('prefabSourcePatchPreflight', persistLiveLayout).available, true,
     'a geometry apply may persist a Creator-computed after-state that is already live');
   assert.equal(invoke('prefabSourcePatchMutate', persistLiveLayout).node.transform.width, 880);
+
+  const readbackMismatch = { ...input, expectedDiff: [{ path: 'node.position.x', before: 3, after: 5 }] };
+  node.setPosition = function setPosition(x, y) { this.x = Math.min(x, 4); this.y = y; };
+  const rejectedWrite = invoke('prefabSourcePatchMutate', readbackMismatch);
+  assert.equal(rejectedWrite.available, false);
+  assert.equal(rejectedWrite.reason, 'PREFAB_EXPECTED_STATE_MISMATCH');
+  assert.equal(rejectedWrite.diagnostic.fields[0].actual, 4,
+    'a failed after-state readback must expose its actual bounded field value');
+});
+
+test('Widget compensation restores geometry before the explicitly compensated margin', () => {
+  const scenePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../creator-extension/scene.js');
+  class Node {
+    constructor() { this.uuid = 'live-root'; this.name = 'Root'; this.active = true; this.children = [];
+      this._components = []; this.x = 480.5; this.y = 0; this.width = 879; this.height = 60;
+      this.scaleX = 1; this.scaleY = 1; this._objFlags = 0; }
+    getComponents(type) { return type ? this._components.filter((component) => component instanceof type) : this._components; }
+    getPosition() { return { x: this.x, y: this.y }; }
+    setPosition(x, y) { this.x = x; this.y = y; if (x === 480 && this._components[0]) this._components[0]._left = 39; }
+    setScale(x, y) { this.scaleX = x; this.scaleY = y; }
+    setContentSize(width, height) { this.width = width; this.height = height; }
+  }
+  class Component {}
+  class Widget extends Component {
+    constructor(node) { super(); this.node = node; this._id = 'live-widget'; this._left = 41; this._enabled = true; }
+    get left() { return this._left; }
+    set left(value) { this._left = value; }
+  }
+  Widget.prototype.__classname__ = 'cc.Widget';
+  Widget.__props__ = ['left'];
+  Widget.__values__ = ['_left'];
+  const root = new Node();
+  root._prefab = { root, fileId: '', asset: { _uuid: prefabUuid } };
+  const widget = new Widget(root);
+  root._components.push(widget);
+  const scene = { uuid: 'edit-scene', name: 'EditScene', children: [root] };
+  root.parent = scene;
+  const mode = { name: 'prefab', save(callback) { callback(); }, dirty() { return false; } };
+  const classes = { 'cc.Component': Component, 'cc.Widget': Widget };
+  const cc = { Node, Component, director: { getScene: () => scene },
+    Class: { attr: () => ({ type: Number, default: 0 }) },
+    Object: { Flags: { DontSave: 8, HideInHierarchy: 1024 } },
+    isValid(value) { return value && value.destroyed !== true; },
+    js: { getClassByName(name) { return classes[name]; }, getClassName(type) { return type.prototype.__classname__ || type.name; },
+      _getClassId(type) { return type.prototype.__classname__ || type.name; },
+      isChildClassOf(type, base) { return type === base || type.prototype instanceof base; } } };
+  const module = { exports: {} };
+  vm.runInNewContext(fs.readFileSync(scenePath, 'utf8'), { module, exports: module.exports,
+    require: createRequire(scenePath), cc, Editor: { isMainProcess: false,
+      require() { return { curMode: () => mode }; } } }, { filename: 'scene.js' });
+  function invoke(method, input) {
+    let value;
+    module.exports[method]({ reply(error, result) { assert.equal(error, null); value = result; } }, input);
+    return value;
+  }
+  const rootId = prefabPatch.rootNodeId(prefabUuid);
+  const componentInstanceId = prefabPatch.componentIdFor(prefabUuid, rootId, 0, 'cc.Widget', null);
+  const input = { prefabUuid, targetNodeUuid: rootId, targetNodePath: 'Root', action: 'compensate',
+    restoreTransform: { x: 480, y: 0, scaleX: 1, scaleY: 1, width: 880, height: 60 },
+    expectedDiff: [{ path: 'component.property', componentClassName: 'cc.Widget', componentInstanceId,
+      componentIndex: 0, serializedClassId: 'cc.Widget', property: 'left', serializedProperty: '_left',
+      serializedPropertyCandidates: ['_left'], serializedWasOmitted: false, before: 41, after: 40 }] };
+  const changed = invoke('prefabSourcePatchMutate', input);
+  assert.equal(changed.available, true, JSON.stringify(changed));
+  assert.equal(widget.left, 40);
+  assert.deepEqual(JSON.parse(JSON.stringify(changed.node.transform)),
+    { x: 480, y: 0, scaleX: 1, scaleY: 1, width: 880, height: 60 });
+
+  widget._left = 41; root.x = 480.5; root.width = 879;
+  root.setPosition = function setPosition(x, y) { this.x = x; this.y = y; if (x === 480) widget._left = 40; };
+  const alreadyRestored = invoke('prefabSourcePatchMutate', input);
+  assert.equal(alreadyRestored.available, true, JSON.stringify(alreadyRestored));
+  assert.equal(widget.left, 40, 'a transform-induced exact after value is already the successful compensated result');
 });
 
 test('Prefab sibling order changes only the selected child within its exact Prefab parent', () => {
