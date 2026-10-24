@@ -16,7 +16,7 @@
 | `cc.RichText` | 有 | 通用 Inspector 属性 | 无 | 实机基线 | 文本、图片标签及相关序列化字段代表项 |
 | `cc.LabelOutline` | 无 | 通用属性入口可按实例尝试 | 无 | 接口具备 | 专用检查与挂载/字段实机验证 |
 | `cc.LabelShadow` | 无 | 通用属性入口可按实例尝试 | 无 | 接口具备 | 专用检查与挂载/字段实机验证 |
-| `cc.Button` | 有 | 通用 Inspector 属性 | `clickEvents` | 场景点击业务行为通过；独立 Prefab 子树新增 Button、`zoomScale`、`clickEvents` 均经 CLI 关闭/重开读回和来源补偿通过；详见 [Prefab 子树验收](cocos-cli-prefab-subtree-acceptance-20261024.md) | 状态颜色/Sprite 引用字段代表项；Widget/Layout几何与运行效果仍单独验收 |
+| `cc.Button` | 有 | 通用 Inspector 属性 | `clickEvents` | 场景点击业务行为通过；独立 Prefab 子树新增 Button、`zoomScale`、`clickEvents` 均经 CLI 关闭/重开读回和来源补偿通过；场景 `normalColor` Color 写入、关闭/重开读回、补偿及基线恢复通过，现有 clickEvents 保持不变。详见 [Prefab 子树验收](cocos-cli-prefab-subtree-acceptance-20261024.md) 和 [Button 颜色轨迹](traces/cocos-creator-cli-button-color-acceptance-20261024.md) | COLOR transition 下颜色的实际渲染；其他 Sprite 引用字段 |
 | `cc.Toggle` | 有 | 通用 Inspector 属性 | `clickEvents`、`checkEvents` | 实机基线；事件仅接口 | checked 与事件往返及运行时切换 |
 | `cc.ToggleContainer` | 有 | 通用 Inspector 属性 | `checkEvents` | 实机基线；事件仅接口 | 排他切换与事件往返 |
 | `cc.ToggleGroup` | 无 | 通用属性入口可按实例尝试 | 无 | 接口具备 | UI 检查覆盖、挂载关系和组内行为 |
