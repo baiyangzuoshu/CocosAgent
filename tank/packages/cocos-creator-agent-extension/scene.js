@@ -1517,6 +1517,7 @@ function setComponentProperty(params, loadedAssets) {
     if (!params || typeof params.sceneUuid !== 'string' || typeof params.nodeUuid !== 'string'
         || typeof params.nodePath !== 'string' || typeof params.componentClassName !== 'string'
         || typeof params.componentInstanceId !== 'string' || typeof params.property !== 'string'
+        || (params.restoreDefaultOmitted !== undefined && typeof params.restoreDefaultOmitted !== 'boolean')
         || !validComponentValue(params.expectedValue) || !validComponentValue(params.value))
         return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_INPUT_INVALID' };
     const directNode = params.targetNode && typeof params.targetNode === 'object'
@@ -1543,7 +1544,10 @@ function setComponentProperty(params, loadedAssets) {
     const attrType = componentPropertyType(attributes, component[params.property]);
     const decoded = decodeComponentValue(params.value, attrType, loadedAssets, params.sceneUuid);
     if (!decoded.available) return { ...before, available: false, reason: decoded.reason };
-    try { component[params.property] = decoded.value; }
+    if (params.restoreDefaultOmitted === true && (decoded.value !== null
+        || !['node-ref', 'component-ref', 'asset'].includes(params.value.kind)))
+        return { ...before, available: false, reason: 'SCENE_COMPONENT_PROPERTY_OMITTED_DEFAULT_INVALID' };
+    try { component[params.property] = params.restoreDefaultOmitted === true ? undefined : decoded.value; }
     catch (_) { return { ...before, available: false, reason: 'SCENE_COMPONENT_PROPERTY_WRITE_FAILED' }; }
     let value;
     try { value = component[params.property]; }

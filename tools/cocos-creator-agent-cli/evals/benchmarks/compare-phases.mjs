@@ -2,9 +2,11 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { taskSetFingerprint } from './task-set.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const suite = JSON.parse(await fs.readFile(path.join(scriptDir, 'suite.json'), 'utf8'));
+const currentTaskSetFingerprint = taskSetFingerprint(suite);
 const args = process.argv.slice(2);
 function option(name, fallback) {
   const index = args.indexOf(name);
@@ -17,8 +19,19 @@ const beforeStaticPath = option('--before-static', '/private/tmp/cocos-skill-eva
 const afterStaticPath = option('--after-static', '/private/tmp/cocos-skill-benchmark/final-static.json');
 const before = JSON.parse(await fs.readFile(path.join(resultsRoot, 'baseline/graded-results.json'), 'utf8'));
 const after = JSON.parse(await fs.readFile(path.join(resultsRoot, 'after/graded-results.json'), 'utf8'));
+for (const [phase, result] of [['baseline', before], ['after', after]]) {
+  if (result.suiteFingerprint !== currentTaskSetFingerprint) {
+    throw new Error(`${phase} results were graded from a different task set; rerun and regrade before comparing.`);
+  }
+}
 const beforeByCase = new Map(before.results.map((result) => [result.caseId, result]));
 const afterByCase = new Map(after.results.map((result) => [result.caseId, result]));
+const expectedCaseIds = suite.skills.flatMap((skill) => skill.cases.map((testCase) => testCase.id));
+for (const [phase, indexed] of [['baseline', beforeByCase], ['after', afterByCase]]) {
+  if (indexed.size !== expectedCaseIds.length || expectedCaseIds.some((caseId) => !indexed.has(caseId))) {
+    throw new Error(`${phase} results were graded against a different task set; rerun and regrade before comparing.`);
+  }
+}
 
 const staticBefore = JSON.parse(await fs.readFile(beforeStaticPath, 'utf8')).results;
 const staticAfter = JSON.parse(await fs.readFile(afterStaticPath, 'utf8')).results;

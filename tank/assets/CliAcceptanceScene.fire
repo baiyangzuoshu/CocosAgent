@@ -1535,6 +1535,8 @@
     "bounceDuration": 1,
     "scrollEvents": [],
     "cancelInnerEvents": true,
+    "_N$content": null,
+    "content": null,
     "_id": "ccA83T4olHbp1ovdLAxcn7"
   },
   {

@@ -4,12 +4,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { taskSetFingerprint } from './task-set.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const evalRoot = path.resolve(scriptDir, '..');
 const packageRoot = path.resolve(evalRoot, '..');
 const repoRoot = path.resolve(packageRoot, '../..');
 const suite = JSON.parse(await fs.readFile(path.join(scriptDir, 'suite.json'), 'utf8'));
+const currentTaskSetFingerprint = taskSetFingerprint(suite);
 const args = process.argv.slice(2);
 
 function argValue(name) {
@@ -19,7 +21,8 @@ function argValue(name) {
 
 const phase = argValue('--phase');
 const selectedCase = argValue('--case');
-if (!['baseline', 'after'].includes(phase)) throw new Error('Use --phase baseline|after.');
+const resume = args.includes('--resume');
+if (!['baseline', 'after', 'control'].includes(phase)) throw new Error('Use --phase baseline|after|control.');
 if (selectedCase && !suite.skills.some((skill) => skill.cases.some((item) => item.id === selectedCase))) {
   throw new Error(`Unknown case: ${selectedCase}`);
 }
@@ -96,12 +99,44 @@ await fs.mkdir(phaseRoot, { recursive: true });
 const safeAuthSource = await createSafeAuthSource(runRoot);
 const verifyScript = path.join(scriptDir, 'verify-case.mjs');
 const fixtureWorkspace = path.join(scriptDir, 'workspace');
+const controlSkillSource = path.join(scriptDir, 'control-skill');
 const jobs = selectedCase
   ? suite.skills.flatMap((skill) => skill.cases
     .filter((testCase) => testCase.id === selectedCase)
     .map((testCase) => ({ skill, testCases: [testCase] })))
   : suite.skills.map((skill) => ({ skill, testCases: skill.cases }));
 const results = [];
+if (resume && await exists(path.join(phaseRoot, 'summary.json'))) {
+  const previous = JSON.parse(await fs.readFile(path.join(phaseRoot, 'summary.json'), 'utf8'));
+  if (previous.phase !== phase || previous.model !== suite.model || previous.reasoningEffort !== suite.reasoningEffort) {
+    throw new Error(`Cannot resume ${phase}: the saved summary has different phase or model settings.`);
+  }
+  for (const result of previous.results || []) {
+    const skill = suite.skills.find((entry) => entry.name === result.skill);
+    const testCases = selectedCase ? skill?.cases.filter((testCase) => testCase.id === selectedCase) : skill?.cases;
+    if (!testCases?.length || !testCases.every((testCase) => result.caseIds?.includes(testCase.id))) continue;
+    const configPath = path.join(phaseRoot, result.skill, result.caseId, 'benchmark.json');
+    const evaluationPath = path.join(phaseRoot, result.skill, result.caseId, 'evaluation.json');
+    if (await exists(configPath) && await exists(evaluationPath)) {
+      try {
+        const config = JSON.parse(await fs.readFile(configPath, 'utf8'));
+        const expectedPrompt = testCases.length === 1 ? testCases[0].userInput : batchPrompt(testCases);
+        if (config.scenarios?.[0]?.userInput !== expectedPrompt) continue;
+        JSON.parse(await fs.readFile(evaluationPath, 'utf8'));
+        results.push(result);
+      } catch {
+        // Re-run entries without a valid captured answer.
+      }
+    }
+  }
+}
+const pendingJobs = jobs.filter(({ skill, testCases }) => !results.some((result) => result.skill === skill.name
+  && testCases.every((testCase) => result.caseIds?.includes(testCase.id))));
+async function saveSummary() {
+  await fs.writeFile(path.join(phaseRoot, 'summary.json'), `${JSON.stringify({ phase, baselineRef: suite.baselineRef,
+    suiteFingerprint: currentTaskSetFingerprint, model: suite.model, reasoningEffort: suite.reasoningEffort, results }, null, 2)}\n`, 'utf8');
+}
+await saveSummary();
 
 function batchPrompt(testCases) {
   const schema = '{"scope":"in_scope|out_of_scope|partial","action":"plan|observe|no_action|unsupported","target":string|null,"operation":string|null,"status":string,"evidence":string[],"mutations":[],"live_result_claimed":false,"summary":string}';
@@ -115,12 +150,13 @@ function batchPrompt(testCases) {
 }
 
 try {
-  for (const { skill, testCases } of jobs) {
+  for (const { skill, testCases } of pendingJobs) {
     const caseIds = testCases.map((testCase) => testCase.id);
     const caseKey = caseIds.length === 1 ? caseIds[0] : `${skill.name}-task-set`;
-    const skillPath = path.join(runRoot, 'targets', skill.name);
+    const skillPath = path.join(runRoot, 'targets', phase === 'control' ? 'eval-no-op-control' : skill.name);
     if (phase === 'baseline') await copyBaselineSkill(skill.name, skillPath);
-    else await fs.cp(path.join(packageRoot, 'skills', skill.name), skillPath, { recursive: true });
+    else if (phase === 'after') await fs.cp(path.join(packageRoot, 'skills', skill.name), skillPath, { recursive: true });
+    else if (!await exists(skillPath)) await fs.cp(controlSkillSource, skillPath, { recursive: true });
 
     const caseRoot = path.join(phaseRoot, skill.name, caseKey);
     await fs.mkdir(caseRoot, { recursive: true });
@@ -131,7 +167,7 @@ try {
       schemaVersion: 2,
       version: 2,
       targetKind: 'skill',
-      targetName: skill.name,
+      targetName: phase === 'control' ? 'eval-no-op-control' : skill.name,
       runner: {
         type: 'codex-cli',
         model: suite.model,
@@ -169,6 +205,7 @@ try {
     const caseResult = {
       phase,
       skill: skill.name,
+      targetSkill: phase === 'control' ? 'eval-no-op-control' : skill.name,
       caseIds,
       caseId: caseKey,
       benchmarkStatus: scenario.status,
@@ -207,12 +244,11 @@ try {
     }
     delete caseResult.evaluationPath;
     results.push(caseResult);
-    await fs.writeFile(path.join(phaseRoot, 'summary.json'), `${JSON.stringify({ phase, baselineRef: suite.baselineRef,
-      model: suite.model, reasoningEffort: suite.reasoningEffort, results }, null, 2)}\n`, 'utf8');
+    await saveSummary();
     process.stdout.write(`  ${scenario.status}; ${scenario.verifierResults.map((item) => item.status).join(',')}; ${scenario.durationMs} ms\n`);
   }
 } finally {
   await fs.rm(runRoot, { recursive: true, force: true });
 }
 
-process.stdout.write(`Saved ${results.length} case results under ${phaseRoot}\n`);
+process.stdout.write(`Saved ${results.length} skill results under ${phaseRoot}\n`);

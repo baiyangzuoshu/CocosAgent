@@ -24,7 +24,7 @@
             "action": "plan",
             "target": ["Codex MCP registration", "codex"],
             "operation": ["cocos-creator-agent mcp configure codex --dry-run", "Preview MCP registration", "Preview registration"],
-            "status": ["dry_run_ready", "planned_not_executed", "planned_only_not_registered"],
+            "status": ["dry_run_ready", "planned_not_executed", "planned_only_not_registered", "offline_plan_only_registration_not_performed"],
             "requiredEvidence": ["version --format json", "mcp status codex", "mcp list", "--dry-run"]
           }
         },
@@ -41,7 +41,7 @@
           "expected": {
             "scope": "out_of_scope",
             "action": "no_action",
-            "status": ["unrelated_request", "out_of_scope_no_action"],
+            "status": ["unrelated_request", "out_of_scope_no_action", "outside_cocos_creator_cli_scope"],
             "requiredEvidence": ["Unity", "outside"]
           }
         }

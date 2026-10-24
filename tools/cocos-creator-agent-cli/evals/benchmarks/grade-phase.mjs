@@ -4,18 +4,23 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { taskSetFingerprint } from './task-set.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const suite = JSON.parse(await fs.readFile(path.join(scriptDir, 'suite.json'), 'utf8'));
+const currentTaskSetFingerprint = taskSetFingerprint(suite);
 const args = process.argv.slice(2);
 const phaseIndex = args.indexOf('--phase');
 const phase = phaseIndex >= 0 ? args[phaseIndex + 1] : '';
 const outputIndex = args.indexOf('--output-dir');
 const outputRoot = path.resolve(outputIndex >= 0 ? args[outputIndex + 1] : '/private/tmp/cocos-skill-benchmark');
-if (!['baseline', 'after'].includes(phase)) throw new Error('Use --phase baseline|after.');
+if (!['baseline', 'after', 'control'].includes(phase)) throw new Error('Use --phase baseline|after|control.');
 
 const phaseRoot = path.join(outputRoot, phase);
 const runSummary = JSON.parse(await fs.readFile(path.join(phaseRoot, 'summary.json'), 'utf8'));
+if (runSummary.suiteFingerprint !== currentTaskSetFingerprint) {
+  throw new Error(`${phase} results were produced from a different task set; rerun this phase before grading.`);
+}
 const verifier = path.join(scriptDir, 'verify-case.mjs');
 const fixtureReadme = path.join(scriptDir, 'workspace', 'README.md');
 const results = [];
@@ -24,6 +29,11 @@ const bySkill = new Map(runSummary.results.map((result) => [result.skill, result
 for (const skill of suite.skills) {
   const run = bySkill.get(skill.name);
   if (!run) throw new Error(`No ${phase} benchmark run found for ${skill.name}.`);
+  const expectedCaseIds = skill.cases.map((testCase) => testCase.id);
+  if (!Array.isArray(run.caseIds) || run.caseIds.length !== expectedCaseIds.length
+      || expectedCaseIds.some((caseId) => !run.caseIds.includes(caseId))) {
+    throw new Error(`${phase} results for ${skill.name} were produced from a different task set; rerun this phase before grading.`);
+  }
   const evaluationPath = path.join(phaseRoot, skill.name, run.caseId, 'evaluation.json');
   const evaluation = await fs.readFile(evaluationPath, 'utf8');
   for (const testCase of skill.cases) {
@@ -54,6 +64,7 @@ const payload = {
   schemaVersion: 1,
   phase,
   baselineRef: suite.baselineRef,
+  suiteFingerprint: currentTaskSetFingerprint,
   model: suite.model,
   reasoningEffort: suite.reasoningEffort,
   passed,

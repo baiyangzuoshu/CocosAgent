@@ -4444,6 +4444,10 @@ async function createSceneComponentPropertyPlan(input) {
         || state.serializedPropertyCandidates.some((property) => typeof property !== 'string'
             || !/^[A-Za-z_$][A-Za-z0-9_$]{0,63}$/.test(property)))
         throw coded('SCENE_COMPONENT_PROPERTY_STATE_INVALID');
+    const serializedProperty = state.inspector && state.inspector.serializedProperty;
+    if (typeof serializedProperty !== 'string' || !/^[A-Za-z_$][A-Za-z0-9_$]{0,63}$/.test(serializedProperty)
+        || !state.serializedPropertyCandidates.includes(serializedProperty))
+        throw coded('SCENE_COMPONENT_SERIALIZED_PROPERTY_UNAVAILABLE');
     if (!validSceneComponentValue(input.value) || !validSceneComponentValue(state.value))
         throw coded('SCENE_COMPONENT_PROPERTY_VALUE_INVALID');
     if ((state.serializedValue !== undefined && !validSceneComponentValue(state.serializedValue))
@@ -4471,6 +4475,14 @@ async function createSceneComponentPropertyPlan(input) {
         const serializedDefault = componentValueForDisk(state.declaredDefaultValue, referenceClasses);
         if (serializedDefault.verified && sceneComponentValuesEqual(serializedDefault.value, serializedBefore.value))
             omittedDefault = serializedDefault.value;
+    }
+    // Creator omits null object references from .fire (for example cc.ScrollView.content
+    // serialized as _N$content). The live typed Inspector value is the authority for
+    // this default: only accept an omitted disk field when the exact component currently
+    // reports a null node/component/asset reference.
+    if (omittedDefault === undefined && serializedBefore.value === null
+        && ['node-ref', 'component-ref', 'asset'].includes(state.propertyKind)) {
+        omittedDefault = null;
     }
     const diskBefore = await sceneNodeDiskState(input.sceneUuid, input.nodeUuid, { componentProperty: {
         serializedClassId: state.serializedClassId, componentInstanceId: state.componentInstanceId,
@@ -4502,6 +4514,7 @@ async function createSceneComponentPropertyPlan(input) {
         componentClassName: state.componentClassName,
         componentInstanceId: state.componentInstanceId,
         property: state.property,
+        serializedProperty,
         propertyKind: state.propertyKind,
         expectedBefore: { value: state.value },
         expectedAfter: { value: input.value, serializedValue: serializedAfterValue },
@@ -4551,7 +4564,10 @@ async function createSceneComponentPropertyCompensationPlan(input) {
         serializedClassId: source.plan.diskBefore.componentProperty.serializedClassId,
         componentInstanceId: source.plan.componentInstanceId,
         property: source.plan.property,
-        serializedPropertyCandidates: [source.plan.diskBefore.componentProperty.serializedProperty],
+        // A null reference may have been omitted from the source operation's before-state.
+        // The completed after-state has an exact serialized key, which is the correct
+        // identity to use when verifying that the field has not drifted before restore.
+        serializedPropertyCandidates: [source.diskReadback.componentProperty.serializedProperty],
     } });
     if (!sceneNodePathsMatch(disk.nodePath, source.plan.nodePath)
         || !disk.componentProperty || disk.componentProperty.componentInstanceId !== source.plan.componentInstanceId
@@ -4569,6 +4585,9 @@ async function createSceneComponentPropertyCompensationPlan(input) {
         || !sceneComponentValuesEqual(operation.plan.expectedAfter.value, source.plan.expectedBefore.value))
         throw coded('SCENE_COMPONENT_COMPENSATION_PLAN_VALUE_MISMATCH');
     operation.plan.compensationFor = { sourceOperationId: source.operationId, sourcePlanHash: source.planHash };
+    if (source.plan.diskBefore.componentProperty.isDefaultOmitted === true
+        && ['node-ref', 'component-ref', 'asset'].includes(source.plan.propertyKind))
+        operation.plan.restoreSerializedOmission = true;
     operation.planHash = planFingerprint(operation.plan);
     operation.compensationFor = { sourceOperationId: source.operationId, sourcePlanHash: source.planHash };
     writeOperation(operation);
@@ -6116,7 +6135,8 @@ async function commitSceneComponentProperty(input, context) {
             nodeUuid: operation.plan.nodeUuid, nodePath: operation.plan.nodePath,
             componentClassName: operation.plan.componentClassName,
             componentInstanceId: operation.plan.componentInstanceId, property: operation.plan.property,
-            expectedValue: operation.plan.expectedBefore.value, value: operation.plan.expectedAfter.value }, 20000);
+            expectedValue: operation.plan.expectedBefore.value, value: operation.plan.expectedAfter.value,
+            ...(operation.plan.restoreSerializedOmission ? { restoreDefaultOmitted: true } : {}) }, 20000);
     } catch (error) {
         operation.status = 'needs-reconciliation';
         operation.reconcileReason = error.code || 'SCENE_COMPONENT_PROPERTY_WRITE_UNCERTAIN';
@@ -6316,8 +6336,12 @@ function sceneNodeDiskOptionsForPlan(plan) {
     const options = {};
     if (plan.diskBefore.componentProperty) {
         options.componentProperty = { ...plan.diskBefore.componentProperty,
-            ...(plan.diskBefore.componentProperty.isDefaultOmitted
-                ? { defaultValue: plan.diskBefore.componentProperty.value } : {}) };
+            ...(plan.diskBefore.componentProperty.isDefaultOmitted && plan.serializedProperty
+                ? { serializedPropertyCandidates: [plan.serializedProperty] } : {}),
+            ...(plan.restoreSerializedOmission
+                ? { defaultValue: plan.expectedAfter.serializedValue }
+                : plan.diskBefore.componentProperty.isDefaultOmitted
+                    ? { defaultValue: plan.diskBefore.componentProperty.value } : {}) };
     }
     if (plan.diskBefore.componentEvents) options.componentEvents = {
         componentInstanceId: plan.diskBefore.componentEvents.componentInstanceId,
@@ -6465,9 +6489,12 @@ function sceneNodeDiskExpected(plan, side, operation) {
         expected.componentProperty = { ...expected.componentProperty, value: plan.expectedAfter.serializedValue };
         if (operation && operation.nodeTransformAfter)
             expected.transform = { ...operation.nodeTransformAfter };
-        if (expected.componentProperty.isDefaultOmitted) {
+        if (plan.restoreSerializedOmission) {
+            expected.componentProperty.isDefaultOmitted = true;
+            delete expected.componentProperty.serializedProperty;
+        } else if (expected.componentProperty.isDefaultOmitted) {
             delete expected.componentProperty.isDefaultOmitted;
-            expected.componentProperty.serializedProperty = plan.property;
+            expected.componentProperty.serializedProperty = plan.serializedProperty || plan.property;
         }
     } else if (plan.operation === 'creator.scene.node.add-component') {
         if (operation && typeof operation.componentInstanceId === 'string')
