@@ -11,7 +11,7 @@
 | `cc.Canvas` | 有 | 通用 Inspector 属性 | 无专用刷新 | 实机基线 | 检查设计分辨率/渲染模式公开字段的写回 |
 | `cc.Sprite` | 有 | 通用属性；专用 enabled/SpriteFrame 字段 | 无 | SpriteFrame AssetDB UUID 写入、重开读回、清空恢复和节点尺寸补偿通过；临时资源经 AssetDB 删除 | 检查实际渲染；继续验收其他 Sprite 字段和数组资源引用 |
 | `cc.Widget` | 有 | 通用 Inspector 属性 | 预览可调用 `updateAlignment()` | 左右双锚父宽 960→1200 时子宽 100→340、x=-420；上下双锚父高 640→800 时子高 100→260、y=0；四边锚父节点 960×640→1200×800 时子节点 880×580→1120×740、中心不变。三项均经预览内恢复、关闭/重开读回、清理和基线哈希核验。详见 Widget 轨迹 | 不同 Canvas 分辨率、非对称边距和单边偏移组合 |
-| `cc.Layout` | 有 | 通用 Inspector 属性；组合创建和单字段计划均接受 Creator 声明的枚举和值类型 | Preview 脚本可调用 `updateLayout()` | `spacingY`、水平 `type=HORIZONTAL`、`paddingLeft`、`spacingX` 已验收；另有 Creator 2.4.15 实机 CLI 组合创建 `type=1`、关闭重开读回、精确删除补偿及 `.fire`/`.meta` 基线恢复。详见 Layout 轨迹 | Resize Mode/子节点尺寸模式、右向左布局、非左侧 padding 方向 |
+| `cc.Layout` | 有 | 通用 Inspector 属性；组合创建和单字段计划均接受 Creator 声明的枚举和值类型 | Preview 脚本可调用 `updateLayout()` | `spacingY`、水平 `type=HORIZONTAL`、`paddingLeft`、`spacingX` 已验收；另有 `ResizeMode.CHILDREN` 下容器宽 500→600 时两个子宽 225→275、位置 ±117.5→±142.5 的运行时断言，重开读回、精确删除补偿及 `.fire`/`.meta` 基线恢复。详见 Layout 轨迹 | `ResizeMode.CONTAINER`、子节点缩放系数、网格尺寸模式、右向左布局、非左侧 padding 方向 |
 | `cc.Label` | 有 | 通用属性；专用 enabled | 无 | `fontSize` Prefab apply/compensate 已往返 | 文字、尺寸/对齐、颜色/溢出字段代表项 |
 | `cc.RichText` | 有 | 通用 Inspector 属性 | 无 | 实机基线 | 文本、图片标签及相关序列化字段代表项 |
 | `cc.LabelOutline` | 无 | 通用属性入口可按实例尝试 | 无 | 接口具备 | 专用检查与挂载/字段实机验证 |
