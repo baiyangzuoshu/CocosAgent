@@ -20,7 +20,7 @@
 | `cc.Toggle` | 有 | 通用 Inspector 属性 | `clickEvents`、`checkEvents` | `isChecked` false→true 经 CLI 关闭/重开读回并补偿；`checkEvents` customEventData 往返后在 Creator Web Preview 触发目标 handler；最终状态和基线恢复。详见 [Toggle 属性](traces/cocos-creator-cli-toggle-checked-acceptance-20261024.md) 与 [事件](traces/cocos-creator-cli-toggle-event-acceptance-20261024.md) 轨迹 | checkEvents 多目标/清空边界；ToggleContainer 排他切换 |
 | `cc.ToggleContainer` | 有 | 通用 Inspector 属性 | `checkEvents` | 实机基线；事件仅接口 | 排他切换与事件往返 |
 | `cc.ToggleGroup` | 无 | 通用属性入口可按实例尝试 | 无 | 接口具备 | UI 检查覆盖、挂载关系和组内行为 |
-| `cc.Slider` | 有 | 通用 Inspector 属性 | `slideEvents` | 实机基线；事件仅接口 | progress、handle、事件和拖动行为 |
+| `cc.Slider` | 有 | 通用 Inspector 属性 | `slideEvents` | `progress` 0.25→0.6，经 CLI 关闭/重开后 Inspector 与 `.fire` 读回 0.6；再以精确反向属性计划恢复 0.25，第二次整工程 CLI 关闭/重开后 Inspector、`.fire` 和场景基线 SHA 均恢复。夹具 `handle=null`，未验证可视拖动或 `slideEvents`。详见 [Slider progress 轨迹](traces/cocos-creator-cli-slider-progress-acceptance-20261024.md) | handle 组件引用、slideEvents 保存/重开/恢复，以及挂载真实 handle 后的运行时拖动；场景标量属性目前通过新的精确反向计划恢复，尚无单独的来源绑定补偿命令 |
 | `cc.ProgressBar` | 有 | 通用 Inspector 属性 | 无 | `progress` 0.5→0.75→0.5，预览属性断言、关闭重开读回、来源补偿和基线恢复通过；该夹具未挂 `barSprite`，未验收可视填充效果 |
 | `cc.EditBox` | 有 | 通用 Inspector 属性 | 四种编辑事件 | 实机基线；事件仅接口 | text、输入类型、限制和事件的预览验证 |
 | `cc.ScrollView` | 有 | 通用 Inspector 属性 | `scrollEvents` | 实机基线；事件仅接口 | View/Content/惯性字段与滚动/事件验证 |
@@ -50,11 +50,10 @@
 
 ## 下一批操作顺序
 
-1. **当前代表性 Prefab 的结构及补偿边界**：继续定位 Widget.left 补偿的 `PREFAB_EXPECTED_STATE_MISMATCH`，取得 Creator 侧前置状态并修复后重新运行 apply→整工程重开→来源补偿→整工程重开；未通过前按不可逆字段处理。另跟进 Label 自动尺寸补偿及原始 Label.string operation mismatch。普通空节点 `node.size` 往返已完成；已确认混合组件属性与几何写入仍缺实机通过证据。
-2. **其他组件属性与资源数组**：继续从 `Scrollbar`、`Mask` 等事件/布局依赖少的组件开始；每次一个字段，验证写回、重开和补偿，再进入 Slider/Toggle/ScrollView/PageView/EditBox。单独验收含 AssetDB UUID 的数组字段往返。
-3. **Widget/Layout 几何扩展**：补 Widget 不同 Canvas 分辨率、非对称边距及单边偏移；Layout Resize Mode/子节点尺寸模式、右向左布局和其他 padding 方向仍待覆盖。
-4. **UI 事件**：保留原事件列表，逐组件增加一个目标明确的事件，预览触发并核对业务状态；关闭重开后检查 `.fire` 事件目标、组件和 handler，再补偿回基线。
-5. **补全专用检查**：对 `LabelOutline`、`LabelShadow`、`ToggleGroup`、`SafeArea`、`SubContextView` 先核对运行时类和 Inspector schema，再决定纳入 UI 专用名单或明确保持通用组件入口；不可只凭类名推断字段。
-6. **Sprite 渲染验收**：SpriteFrame 引用保存/恢复已通过，用 CLI 预览确认目标帧实际渲染。
+1. **其他组件属性与资源数组**：`Scrollbar.autoHideTime`、`Mask.inverted` 和 `Slider.progress` 已完成单字段写入、整工程重开读回及精确反向计划恢复；下一步验收 Slider.handle 的组件引用和 slideEvents，再按单字段推进 Toggle/ScrollView/PageView/EditBox。另单独验收含 AssetDB UUID 的数组字段往返。真实 Slider 拖动需先给夹具建立真实 handle 结构。
+2. **Widget/Layout 几何扩展**：补 Widget 不同 Canvas 分辨率、非对称边距及单边偏移；Layout Resize Mode/子节点尺寸模式、右向左布局和其他 padding 方向仍待覆盖。
+3. **UI 事件**：保留原事件列表，逐组件增加一个目标明确的事件，预览触发并核对业务状态；关闭重开后检查 `.fire` 事件目标、组件和 handler，再补偿回基线。
+4. **补全专用检查**：对 `LabelOutline`、`LabelShadow`、`ToggleGroup`、`SafeArea`、`SubContextView` 先核对运行时类和 Inspector schema，再决定纳入 UI 专用名单或明确保持通用组件入口；不可只凭类名推断字段。
+5. **Sprite 渲染验收**：SpriteFrame 引用保存/恢复已通过，用 CLI 预览确认目标帧实际渲染。
 
 每个单项均遵循 CLI 计划 → CLI 提交 → 必要时 CLI 关闭/重开 → 同实例核验工程路径和 Creator 版本 → 活动对象及磁盘 `.fire`/`.meta` 读回 → 来源补偿 → 再次关闭/重开及哈希读回。当前范围只推进 Creator 2.4.15；不使用桌面 UI 自动化。
