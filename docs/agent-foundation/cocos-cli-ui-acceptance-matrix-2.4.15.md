@@ -10,7 +10,7 @@
 | --- | --- | --- | --- | --- | --- |
 | `cc.Canvas` | 有 | 通用 Inspector 属性 | 无专用刷新 | 实机基线 | 检查设计分辨率/渲染模式公开字段的写回 |
 | `cc.Sprite` | 有 | 通用属性；专用 enabled/SpriteFrame 字段 | 无 | SpriteFrame AssetDB UUID 写入、重开读回、清空恢复和节点尺寸补偿通过；临时资源经 AssetDB 删除 | 检查实际渲染；继续验收其他 Sprite 字段和数组资源引用 |
-| `cc.Widget` | 有 | 通用 Inspector 属性 | 预览 `ui-refresh` 调 `updateAlignment()` | `left` 10→20→10 经关闭/重开读回与补偿通过；详见 Widget 轨迹 | 四边锚定和父尺寸变化后的预览刷新与位置/尺寸读回 |
+| `cc.Widget` | 有 | 通用 Inspector 属性 | 预览 `ui-refresh` 调 `updateAlignment()` | `left` 10→20→10、`isAlignRight` false→true→false 均经关闭/重开读回、补偿和基线恢复；详见 Widget 轨迹 | 四边锚定和父尺寸变化后的预览刷新与位置/尺寸读回 |
 | `cc.Layout` | 有 | 通用 Inspector 属性 | 预览 `ui-refresh` 调 `updateLayout()` | `spacingY` 10→20→10；运行时子节点位置断言、重开读回和基线哈希恢复通过；详见 Layout 轨迹 | 横向布局、padding、Resize Mode、子节点尺寸模式几何读回 |
 | `cc.Label` | 有 | 通用属性；专用 enabled | 无 | `fontSize` Prefab apply/compensate 已往返 | 文字、尺寸/对齐、颜色/溢出字段代表项 |
 | `cc.RichText` | 有 | 通用 Inspector 属性 | 无 | 实机基线 | 文本、图片标签及相关序列化字段代表项 |
