@@ -24,7 +24,7 @@
 | `cc.ProgressBar` | 有 | 通用 Inspector 属性 | 无 | `progress` 0.5→0.75→0.5，预览属性断言、关闭重开读回、来源补偿和基线恢复通过；该夹具未挂 `barSprite`，未验收可视填充效果 |
 | `cc.EditBox` | 有 | 通用 Inspector 属性 | 四种编辑事件 | 实机基线；事件仅接口 | text、输入类型、限制和事件的预览验证 |
 | `cc.ScrollView` | 有 | 通用 Inspector 属性 | `scrollEvents` | 实机基线；事件仅接口 | View/Content/惯性字段与滚动/事件验证 |
-| `cc.Scrollbar` | 有 | 通用 Inspector 属性 | 无 | 实机基线 | direction、handle、size 和关联 ScrollView |
+| `cc.Scrollbar` | 有 | 通用 Inspector 属性 | 无 | `autoHideTime` 0.5→0.75→0.5，关闭重开读回、来源补偿和基线恢复通过；测试节点无 handle/ScrollView 关联，未验收滚动条行为 |
 | `cc.PageView` | 有 | 通用 Inspector 属性 | `scrollEvents`、`pageEvents` | 实机基线；PageView.direction 有预览读回 | 页面滑动及两类事件往返 |
 | `cc.PageViewIndicator` | 有 | 通用 Inspector 属性 | 无 | 实机基线 | Sprite/分页状态字段和预览行为 |
 | `cc.Mask` | 有 | 通用 Inspector 属性 | 无 | 实机基线 | 类型、反向、SpriteFrame 与裁切预览 |
