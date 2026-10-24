@@ -39,7 +39,7 @@
 | 编辑能力 | CLI 当前入口 | 范围/限制 | 实机证据状态 |
 | --- | --- | --- | --- |
 | 节点与组件挂载 | `creator.scene.compose.*`、`creator.scene.node.add-component.*` | 单次计划受节点数、层级、已注册类和组件依赖约束 | 18 个验收夹具组件的挂载有累计记录；本表不声称组件组合全覆盖 |
-| Prefab UI 子树 | `creator.prefab.source.patch.*` | `node.subtree` 插入最多 16 个无组件节点，随后逐节点追加一个注册内置组件；结构删除只允许按原操作来源补偿；自定义脚本组件创建和已有组件直接删除不支持 | Creator 2.4.15 已对两层子树 + 子 Button + 标量属性 + Button 事件完成保存、整工程 CLI 重开、读回、逐层来源补偿和临时资产清理。另有代表性 UI Prefab 完整流程：Button + 两个 Label，新增 Widget 和 Label 字段，关闭/重开读回，实例化后在 Preview 验证点击、Widget 刷新及文本存在，清理场景实例并核验场景基线哈希。该 fixture 的永久 Prefab 编辑未逐项补偿，故不替代来源补偿验收。详见 [代表性 UI Prefab 闭环](cocos-cli-full-ui-prefab-acceptance-20261024.md) |
+| Prefab UI 子树 | `creator.prefab.source.patch.*` | `node.subtree` 插入最多 16 个无组件节点，随后逐节点追加一个注册内置组件；结构删除只允许按原操作来源补偿；自定义脚本组件创建和已有组件直接删除不支持 | Creator 2.4.15 已对两层子树 + 子 Button + 标量属性 + Button 事件完成保存、整工程 CLI 重开、读回、逐层来源补偿和临时资产清理。普通空节点的宽高 `0×0→100×80→0×0` apply/compensate 及整工程关闭/重开、哈希读回通过；节点删除补偿后 Prefab 恢复基线。Label 自动计算尺寸补偿仍不可靠。另有代表性 UI Prefab 完整流程：Button + 两个 Label，新增 Widget 和 Label 字段，关闭/重开读回，实例化后在 Preview 验证点击、Widget 刷新及文本存在，清理场景实例并核验场景基线哈希。该 fixture 的永久 Prefab 编辑未逐项补偿，故不替代来源补偿验收。详见 [代表性 UI Prefab 闭环](cocos-cli-full-ui-prefab-acceptance-20261024.md) |
 | UI 属性检查 | `creator.scene.ui.inspect` | 当前专用名单为上表标“有”的 18 个；逐项读取声明的公开 Inspector 属性，并返回 unsupported 原因 | Label.fontSize、BlockInputEvents.enabled 有 Prefab 字段往返；其余仅按历史代表覆盖记录 |
 | 通用组件属性 | `creator.scene.node.set-component-property.*`、Prefab `source.patch.*` | 依赖 Creator 的公开、可序列化声明属性和 CLI 支持值类型；不接受任意对象/字段 | 属性类型与组件的组合尚未穷举 |
 | UI 事件 | `creator.scene.ui-events.set.*`；Prefab 同源 patch | Button、Toggle、ToggleContainer、Slider、ScrollView、PageView、EditBox 的白名单事件；绑定精确节点/组件/handler | 场景 Button 运行时点击通过；Prefab Button clickEvents 往返通过；其余组件/事件缺实机往返 |
@@ -50,7 +50,7 @@
 
 ## 下一批操作顺序
 
-1. **当前代表性 Prefab 的结构及补偿边界**：对 Status 子节点、Label 组件、Widget 组件和左右边距字段分别执行来源绑定补偿及 replay，关闭/重开后核对最终 Prefab 哈希；跟进原始 Label.string operation 的 mismatch。对 Creator 自动控制的 Label 尺寸补偿给出可靠拒绝或可逆语义；另用普通空节点完成 `node.size` apply/compensate/reopen 哈希往返。修复或单字段化重试被拒绝的 Widget 多字段组合路径，直到状态能分类为已支持或明确不支持。
+1. **当前代表性 Prefab 的结构及补偿边界**：对 Status 子节点、Label 组件、Widget 组件和左右边距字段分别执行来源绑定补偿及 replay，关闭/重开后核对最终 Prefab 哈希；跟进原始 Label.string operation 的 mismatch。普通空节点 `node.size` 往返已完成；仍需为 Creator 自动控制的 Label 尺寸补偿给出可靠拒绝或可逆语义。修复或单字段化重试被拒绝的 Widget 多字段组合路径，直到状态能分类为已支持或明确不支持。
 2. **其他组件属性与资源数组**：继续从 `Scrollbar`、`Mask` 等事件/布局依赖少的组件开始；每次一个字段，验证写回、重开和补偿，再进入 Slider/Toggle/ScrollView/PageView/EditBox。单独验收含 AssetDB UUID 的数组字段往返。
 3. **Widget/Layout 几何扩展**：补 Widget 不同 Canvas 分辨率、非对称边距及单边偏移；Layout Resize Mode/子节点尺寸模式、右向左布局和其他 padding 方向仍待覆盖。
 4. **UI 事件**：保留原事件列表，逐组件增加一个目标明确的事件，预览触发并核对业务状态；关闭重开后检查 `.fire` 事件目标、组件和 handler，再补偿回基线。

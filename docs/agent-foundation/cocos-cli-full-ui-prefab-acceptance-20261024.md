@@ -42,4 +42,11 @@
 - 为保存态与 Prefab 编辑态不一致的 Label 尺寸添加了 `node.size.width/height` 精确几何补丁。扩展 0.8.76 首次实机提交被 CLI 主进程的重复前置检查错误拒绝：Creator 端允许“磁盘仍为 before、编辑态已为 after”的几何状态，主进程却只允许编辑态等于 before。扩展 0.8.77 将检查统一到同一精确规则；定向 Prefab 测试 27/27、完整 CLI 测试 352/352 通过。
 - Tank / Creator 2.4.15 上的 apply operation `3b112ecc-981a-429f-8d05-668c9c59539e` 将 `Button/Status` 宽度从磁盘 `126.74` 明确写为 Creator 已计算值 `115.63`。Creator 保存回调、Prefab 退出/重开、完整工程 CLI 关闭/重开均确认成功；源哈希为 `145fe80ab8a84e7161f7721628373a18292b72ba6410d8a391992048b91465dd`，`.meta` 哈希保持原值 `c926c945705ee5f8ef09f855d8b451392d8744cdb1238a3f8783f7098990a29a`。重开后的磁盘和 Prefab 编辑态宽度均为 `115.63`，根节点几何也保持 `x=480,width=880`。
 - 对该尺寸操作的来源补偿 operation `f6cbebef-02e8-4144-a574-2429a8f8fa8e` 暴露了 Creator Label 自动尺寸限制：补偿将磁盘值写回 `126.74`，但重开时 Label 又计算为 `115.63`，导致 operation `needs-reconciliation` / `PREFAB_EXPECTED_STATE_MISMATCH`。没有把它记作补偿通过。随后 operation `4b9ea978-b876-41ce-a7ee-2598319f8f83` 再次保存 Creator 的计算值，完整 CLI 关闭/重开后 Prefab 源哈希恢复到记录基线，工作区 `Button.prefab` 与 `.meta` 均无差异。
-- 结论：0.8.77 的几何 after-state 持久化已在此 Label 上实机通过；Label 内容尺寸的来源补偿尚不可靠，不能宣称该类几何写入已完成可逆验收。后续应区分 Creator 自动控制的尺寸和普通节点尺寸，并补偿普通节点尺寸往返；不匹配或不稳定的 Label 尺寸补偿应明确拒绝或另行解决。
+- 结论：0.8.77 的几何 after-state 持久化已在此 Label 上实机通过；Label 内容尺寸的来源补偿尚不可靠，不能宣称该类几何写入已完成可逆验收。普通空叶子节点尺寸已单独完成可逆往返，详见下节。不匹配或不稳定的 Label 尺寸补偿应明确拒绝或另行解决。
+
+## 2026-10-24 后续：普通 Prefab 节点尺寸补偿
+
+- 为隔离 Label 自动排版影响，在 Button Prefab 根节点下临时追加无组件叶子 `SizeProbe`（UUID `2cPfO2KVtJHIcGZJhvnGSb`）。插入 operation `6c70aac8-92d0-42a4-a841-5183a511cce0` 完成后关闭并重开整个 Tank 工程，CLI 仍读到相同 Prefab UUID、叶子身份和 `.meta`。
+- 尺寸 apply operation `57849654-946d-4d01-bbbe-1962108aa9a4` 将 `SizeProbe` 从 `0×0` 写为 `100×80`；Creator 保存回调、Prefab 退出/重开、整个工程关闭/重开后的磁盘与编辑态读回均通过，源 SHA-256 为 `cfbb93a2c94a406495b7066b16196a46c10e84baea6c4ac35534a660b7d79b34`。
+- 来源补偿 operation `32f43e21-c2cd-4a06-b045-e4ee1ada0c2c` 将宽高恢复为 `0×0`，源哈希精确回到插入 `SizeProbe` 后的 `dd257489c081f295456aafd0e34a33e2d2d4bd289ae2b262098ae1d9d1855d41`；整个工程再次关闭/重开，reconcile 为 `completed`，节点宽高、UUID 和 `.meta` 均一致。
+- 最后通过来源补偿 operation `2af7dd07-a306-4ef1-b764-1a88a3d6fabc` 删除精确的临时叶子，整工程 CLI 关闭/重开后子节点恢复原有两个（Label、Status），Prefab SHA-256 回到 `145fe80ab8a84e7161f7721628373a18292b72ba6410d8a391992048b91465dd`，`.meta` 哈希保持 `c926c945705ee5f8ef09f855d8b451392d8744cdb1238a3f8783f7098990a29a`，场景文件无变化。该项证明普通无组件节点 `node.size.width/height` 的 apply/compensate/reopen 往返；不外推到 Label、Widget 或 Layout 自动控制的尺寸。
