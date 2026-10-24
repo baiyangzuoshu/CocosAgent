@@ -10,13 +10,13 @@
 | --- | --- | --- | --- | --- | --- |
 | `cc.Canvas` | 有 | 通用 Inspector 属性 | 无专用刷新 | 实机基线 | 检查设计分辨率/渲染模式公开字段的写回 |
 | `cc.Sprite` | 有 | 通用属性；专用 enabled/SpriteFrame 字段 | 无 | SpriteFrame AssetDB UUID 写入、重开读回、清空恢复和节点尺寸补偿通过；Creator 2.4.15 Web Preview 截图确认 64×64 四象限色块实际绘制，Console 无新增错误；`materials` Material[] 两项精确 AssetDB 引用写入、关闭/重开核对及补偿通过；`type` SIMPLE→SLICED、`fillCenter` Vec2 值均经关闭/重开读回、补偿和二次重开恢复。详见 [SpriteFrame](traces/cocos-creator-cli-spriteframe-acceptance-20261024.md)、[Material 数组](traces/cocos-creator-cli-material-array-acceptance-20261024.md)、[Sprite 枚举](traces/cocos-creator-cli-sprite-enum-acceptance-20261024.md) 与 [Vec2](traces/cocos-creator-cli-sprite-vec2-acceptance-20261024.md) 轨迹 | 继续验收其他 Sprite 字段和其他资源数组类型 |
-| `cc.Widget` | 有 | 通用 Inspector 属性 | 预览可调用 `updateAlignment()` | 左右双锚父宽 960→1200 时子宽 100→340、x=-420；上下双锚父高 640→800 时子高 100→260、y=0；四边锚父节点 960×640→1200×800 时子节点 880×580→1120×740、中心不变；非对称左右边距 30/70 时父宽 960→1200，子宽 860→1100、x 始终 -20；单边右锚 right=60 时父宽 960→1200、子宽保持 100，x=370→490；Canvas 预览框 960×640→1280×720 后，Canvas 扩宽且左右边距 40 的子节点按新 Canvas 宽度拉伸并保持居中。各项均经预览内恢复、关闭/重开读回、清理和基线哈希核验。详见 Widget 轨迹 | 其他单边偏移组合 |
+| `cc.Widget` | 有 | 通用 Inspector 属性 | 预览可调用 `updateAlignment()` | 左右双锚父宽 960→1200 时子宽 100→340、x=-420；上下双锚父高 640→800 时子高 100→260、y=0；四边锚父节点 960×640→1200×800 时子节点 880×580→1120×740、中心不变；非对称左右边距 30/70 时父宽 960→1200，子宽 860→1100、x 始终 -20；单边右锚 right=60 时父宽 960→1200、子宽保持 100，x=370→490；Canvas 预览框 960×640→1280×720 后，Canvas 扩宽且左右边距 40 的子节点按新 Canvas 宽度拉伸并保持居中。各项均经预览内恢复、关闭/重开读回、清理和基线哈希核验。另在代表性 Prefab 中逐字段写入 Widget 左右对齐和边距，关闭/重开读回并于 UI Preview 调用刷新；四字段批量写入被 Creator 拒绝，不计通过。详见 [Widget 轨迹](traces/cocos-creator-cli-widget-acceptance-20261024.md) 与 [代表性 UI Prefab 闭环](cocos-cli-full-ui-prefab-acceptance-20261024.md) | 其他单边偏移组合；逐字段来源补偿和二次重开恢复 |
 | `cc.Layout` | 有 | 通用 Inspector 属性；组合创建和单字段计划均接受 Creator 声明的枚举和值类型 | Preview 脚本可调用 `updateLayout()` | `spacingY`、水平 `type=HORIZONTAL`、`paddingLeft`、`spacingX` 已验收；`ResizeMode.CHILDREN` 下父宽 500→600 时子宽 225→275、位置 ±117.5→±142.5；`ResizeMode.CONTAINER` 下子宽 60→80 时容器宽 210→230、第二子 x 35→45。两项均通过重开读回、预览内恢复、精确删除补偿和 `.fire`/`.meta` 基线恢复。详见 Layout 轨迹 | 子节点缩放系数、网格尺寸模式、右向左布局、非左侧 padding 方向 |
-| `cc.Label` | 有 | 通用属性；专用 enabled | 无 | 场景 `string` 修改后 CLI 关闭/重开读回、来源补偿和二次重开恢复通过；`fontSize` Prefab apply/compensate 已往返。详见 [Label 字符串轨迹](traces/cocos-creator-cli-label-string-acceptance-20261024.md) | 尺寸/对齐、颜色/溢出字段代表项；文本渲染截图 |
+| `cc.Label` | 有 | 通用属性；专用 enabled | 无 | 场景 `string` 修改后 CLI 关闭/重开读回、来源补偿和二次重开恢复通过；`fontSize` Prefab apply/compensate 已往返。另在代表性 Prefab 新增 Status 节点和 Label，写入 `string="Ready"`、y=-70，关闭/重开读回，并在完整 UI Preview 中显示和通过存在性断言；该新 Prefab 字段未逐项来源补偿。详见 [Label 字符串轨迹](traces/cocos-creator-cli-label-string-acceptance-20261024.md) 与 [代表性 UI Prefab 闭环](cocos-cli-full-ui-prefab-acceptance-20261024.md) | 尺寸/对齐、颜色/溢出字段代表项；文本渲染截图和新增字段来源补偿 |
 | `cc.RichText` | 有 | 通用 Inspector 属性 | 无 | 实机基线 | 文本、图片标签及相关序列化字段代表项 |
 | `cc.LabelOutline` | 无 | 通用属性入口可按实例尝试 | 无 | 接口具备 | 专用检查与挂载/字段实机验证 |
 | `cc.LabelShadow` | 无 | 通用属性入口可按实例尝试 | 无 | 接口具备 | 专用检查与挂载/字段实机验证 |
-| `cc.Button` | 有 | 通用 Inspector 属性 | `clickEvents` | 场景点击业务行为通过；独立 Prefab 子树新增 Button、`zoomScale`、`clickEvents` 均经 CLI 关闭/重开读回和来源补偿通过；场景 `normalColor` Color 写入、关闭/重开读回、补偿及基线恢复通过，现有 clickEvents 保持不变。详见 [Prefab 子树验收](cocos-cli-prefab-subtree-acceptance-20261024.md) 和 [Button 颜色轨迹](traces/cocos-creator-cli-button-color-acceptance-20261024.md) | COLOR transition 下颜色的实际渲染；其他 Sprite 引用字段 |
+| `cc.Button` | 有 | 通用 Inspector 属性 | `clickEvents` | 场景点击业务行为通过；独立 Prefab 子树新增 Button、`zoomScale`、`clickEvents` 均经 CLI 关闭/重开读回和来源补偿通过；场景 `normalColor` Color 写入、关闭/重开读回、补偿及基线恢复通过，现有 clickEvents 保持不变。代表性 UI Prefab 保留原 Button clickEvents，在重开后实例化并通过 Preview 点击断言（clickCount 6），临时场景实例清理后场景哈希恢复。详见 [Prefab 子树验收](cocos-cli-prefab-subtree-acceptance-20261024.md)、[Button 颜色轨迹](traces/cocos-creator-cli-button-color-acceptance-20261024.md) 和 [代表性 UI Prefab 闭环](cocos-cli-full-ui-prefab-acceptance-20261024.md) | COLOR transition 下颜色的实际渲染；其他 Sprite 引用字段 |
 | `cc.Toggle` | 有 | 通用 Inspector 属性 | `clickEvents`、`checkEvents` | `isChecked` false→true 经 CLI 关闭/重开读回并补偿；`checkEvents` customEventData 往返后在 Creator Web Preview 触发目标 handler；最终状态和基线恢复。详见 [Toggle 属性](traces/cocos-creator-cli-toggle-checked-acceptance-20261024.md) 与 [事件](traces/cocos-creator-cli-toggle-event-acceptance-20261024.md) 轨迹 | checkEvents 多目标/清空边界；ToggleContainer 排他切换 |
 | `cc.ToggleContainer` | 有 | 通用 Inspector 属性 | `checkEvents` | 实机基线；事件仅接口 | 排他切换与事件往返 |
 | `cc.ToggleGroup` | 无 | 通用属性入口可按实例尝试 | 无 | 接口具备 | UI 检查覆盖、挂载关系和组内行为 |
@@ -39,7 +39,7 @@
 | 编辑能力 | CLI 当前入口 | 范围/限制 | 实机证据状态 |
 | --- | --- | --- | --- |
 | 节点与组件挂载 | `creator.scene.compose.*`、`creator.scene.node.add-component.*` | 单次计划受节点数、层级、已注册类和组件依赖约束 | 18 个验收夹具组件的挂载有累计记录；本表不声称组件组合全覆盖 |
-| Prefab UI 子树 | `creator.prefab.source.patch.*` | `node.subtree` 插入最多 16 个无组件节点，随后逐节点追加一个注册内置组件；结构删除只允许按原操作来源补偿；自定义脚本组件创建和已有组件直接删除不支持 | Creator 2.4.15 已对两层子树 + 子 Button + 标量属性 + Button 事件完成保存、整工程 CLI 重开、读回、逐层来源补偿和临时资产清理 |
+| Prefab UI 子树 | `creator.prefab.source.patch.*` | `node.subtree` 插入最多 16 个无组件节点，随后逐节点追加一个注册内置组件；结构删除只允许按原操作来源补偿；自定义脚本组件创建和已有组件直接删除不支持 | Creator 2.4.15 已对两层子树 + 子 Button + 标量属性 + Button 事件完成保存、整工程 CLI 重开、读回、逐层来源补偿和临时资产清理。另有代表性 UI Prefab 完整流程：Button + 两个 Label，新增 Widget 和 Label 字段，关闭/重开读回，实例化后在 Preview 验证点击、Widget 刷新及文本存在，清理场景实例并核验场景基线哈希。该 fixture 的永久 Prefab 编辑未逐项补偿，故不替代来源补偿验收。详见 [代表性 UI Prefab 闭环](cocos-cli-full-ui-prefab-acceptance-20261024.md) |
 | UI 属性检查 | `creator.scene.ui.inspect` | 当前专用名单为上表标“有”的 18 个；逐项读取声明的公开 Inspector 属性，并返回 unsupported 原因 | Label.fontSize、BlockInputEvents.enabled 有 Prefab 字段往返；其余仅按历史代表覆盖记录 |
 | 通用组件属性 | `creator.scene.node.set-component-property.*`、Prefab `source.patch.*` | 依赖 Creator 的公开、可序列化声明属性和 CLI 支持值类型；不接受任意对象/字段 | 属性类型与组件的组合尚未穷举 |
 | UI 事件 | `creator.scene.ui-events.set.*`；Prefab 同源 patch | Button、Toggle、ToggleContainer、Slider、ScrollView、PageView、EditBox 的白名单事件；绑定精确节点/组件/handler | 场景 Button 运行时点击通过；Prefab Button clickEvents 往返通过；其余组件/事件缺实机往返 |
@@ -50,10 +50,11 @@
 
 ## 下一批操作顺序
 
-1. **其他组件属性与资源数组**：继续从 `Scrollbar`、`Mask` 等事件/布局依赖少的组件开始；每次一个字段，验证写回、重开和补偿，再进入 Slider/Toggle/ScrollView/PageView/EditBox。单独验收含 AssetDB UUID 的数组字段往返。
-2. **Widget/Layout 几何扩展**：补 Widget 不同 Canvas 分辨率、非对称边距及单边偏移；Layout Resize Mode/子节点尺寸模式、右向左布局和其他 padding 方向仍待覆盖。
-3. **UI 事件**：保留原事件列表，逐组件增加一个目标明确的事件，预览触发并核对业务状态；关闭重开后检查 `.fire` 事件目标、组件和 handler，再补偿回基线。
-4. **补全专用检查**：对 `LabelOutline`、`LabelShadow`、`ToggleGroup`、`SafeArea`、`SubContextView` 先核对运行时类和 Inspector schema，再决定纳入 UI 专用名单或明确保持通用组件入口；不可只凭类名推断字段。
-5. **Sprite 渲染验收**：SpriteFrame 引用保存/恢复已通过，用 CLI 预览确认目标帧实际渲染。
+1. **当前代表性 Prefab 的补偿与复验**：为该 fixture 新增的 Status 子节点、Label、Widget 和文本/边距字段分别执行来源绑定补偿及 replay，关闭/重开后核对最终 Prefab 哈希；修复或单字段化重试被拒绝的 Widget 多字段组合路径，直到状态能分类为已支持或明确不支持。
+2. **其他组件属性与资源数组**：继续从 `Scrollbar`、`Mask` 等事件/布局依赖少的组件开始；每次一个字段，验证写回、重开和补偿，再进入 Slider/Toggle/ScrollView/PageView/EditBox。单独验收含 AssetDB UUID 的数组字段往返。
+3. **Widget/Layout 几何扩展**：补 Widget 不同 Canvas 分辨率、非对称边距及单边偏移；Layout Resize Mode/子节点尺寸模式、右向左布局和其他 padding 方向仍待覆盖。
+4. **UI 事件**：保留原事件列表，逐组件增加一个目标明确的事件，预览触发并核对业务状态；关闭重开后检查 `.fire` 事件目标、组件和 handler，再补偿回基线。
+5. **补全专用检查**：对 `LabelOutline`、`LabelShadow`、`ToggleGroup`、`SafeArea`、`SubContextView` 先核对运行时类和 Inspector schema，再决定纳入 UI 专用名单或明确保持通用组件入口；不可只凭类名推断字段。
+6. **Sprite 渲染验收**：SpriteFrame 引用保存/恢复已通过，用 CLI 预览确认目标帧实际渲染。
 
 每个单项均遵循 CLI 计划 → CLI 提交 → 必要时 CLI 关闭/重开 → 同实例核验工程路径和 Creator 版本 → 活动对象及磁盘 `.fire`/`.meta` 读回 → 来源补偿 → 再次关闭/重开及哈希读回。当前范围只推进 Creator 2.4.15；不使用桌面 UI 自动化。
