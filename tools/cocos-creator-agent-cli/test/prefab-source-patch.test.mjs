@@ -189,6 +189,43 @@ test('Prefab child edits bind the full sibling list and only insert or remove em
   ] }, after: { childCount: 0, children: [] } }];
   assert.equal(prefabPatch.validateDiff(nonEmpty), false);
   assert.equal(prefabPatch.validateDiff([...createDiff, { path: 'node.active', before: true, after: false }]), false);
+  assert.equal(prefabPatch.validateDiff([{ path: 'node.child', before: { childCount: 1, children: [
+    { nodeUuid: 'AUTO', name: 'Invalid', siblingIndex: 0, childCount: 0, componentCount: 0 },
+  ] }, after: { childCount: 0, children: [] } }]), false);
+});
+
+test('Prefab component structure appends one exact built-in component and derives its removal inverse', () => {
+  const before = { componentCount: 0, components: [] };
+  const planned = { componentCount: 1, components: [{
+    componentClassName: 'cc.BlockInputEvents', componentIndex: 0,
+    componentInstanceId: prefabPatch.AUTO_COMPONENT_INSTANCE_ID, serializedClassId: 'cc.BlockInputEvents',
+  }] };
+  const plannedDiff = [{ path: 'component.structure', before, after: planned }];
+  assert.equal(prefabPatch.validateDiff(plannedDiff), true);
+  assert.deepEqual(prefabPatch.componentStateChange(before, planned), {
+    kind: 'add', component: planned.components[0],
+  });
+
+  const added = { componentCount: 1, components: [{ ...planned.components[0], componentInstanceId: 'planned-component-id' }] };
+  const addDiff = [{ path: 'component.structure', before, after: added }];
+  assert.equal(prefabPatch.validateDiff(addDiff), true);
+  const target = { componentState: before };
+  assert.equal(prefabPatch.matchesDiff(target, addDiff, 'before'), true);
+  target.componentState = added;
+  assert.equal(prefabPatch.matchesDiff(target, addDiff, 'after'), true);
+
+  const inverse = prefabPatch.invertDiff(addDiff);
+  assert.equal(prefabPatch.validateDiff(inverse), true);
+  assert.equal(prefabPatch.componentStateChange(inverse[0].before, inverse[0].after).kind, 'remove');
+  target.componentState = before;
+  assert.equal(prefabPatch.matchesDiff(target, inverse, 'after'), true);
+
+  const reordered = { componentCount: 2, components: [added.components[0], {
+    componentClassName: 'cc.Sprite', componentIndex: 1, componentInstanceId: 'sprite-id', serializedClassId: 'cc.Sprite',
+  }] };
+  assert.equal(prefabPatch.validateDiff([{ path: 'component.structure', before, after: reordered }]), false);
+  assert.equal(prefabPatch.validateDiff([{ path: 'component.structure', before: added, after: before },
+    { path: 'node.active', before: true, after: false }]), false);
 });
 
 test('Prefab patch rejects duplicate, unsupported, malformed, and ambiguous changes', () => {
@@ -278,6 +315,21 @@ test('single-node Prefab inspection can include a supported component after the 
   assert.equal(focused.nodes[0].componentsTruncated, false);
   assert.deepEqual(prefabPatch.valueAt(focused.nodes[0], 'component.cc.Sprite.spriteFrameUuid'),
     { found: true, value: prefabUuid });
+});
+
+test('Prefab source inspection accepts a validated component structure selector', () => {
+  const serialized = [{ __type__: 'cc.Prefab', data: { __id__: 1 } },
+    { __type__: 'cc.Node', _name: 'Root', _id: nodeUuid, _active: true, _parent: null,
+      _children: [], _components: [], _prefab: { __id__: 2 }, _trs: { array: [0, 0, 0, 0, 0, 0, 1, 1, 1] } },
+    { __type__: 'cc.PrefabInfo', fileId: 'root-file-id' }];
+  const diff = { path: 'component.structure', before: { componentCount: 0, components: [] },
+    after: { componentCount: 1, components: [{ componentClassName: 'cc.BlockInputEvents',
+      componentIndex: 0, componentInstanceId: 'component-id-1', serializedClassId: 'cc.BlockInputEvents' }] } };
+  const source = prefabSource.inspectPrefabSource({ prefabBytes: Buffer.from(JSON.stringify(serialized)),
+    metaBytes: Buffer.from(JSON.stringify({ uuid: prefabUuid, importer: 'prefab' })), prefabUuid,
+    expectedDiff: [diff], targetNodeUuid: nodeUuid });
+  assert.equal(source.available, true, JSON.stringify(source));
+  assert.deepEqual(source.nodes[0].componentState, { componentCount: 0, components: [] });
 });
 
 test('Creator-authored Prefab roots with empty IDs use an asset-bound identity', () => {
@@ -702,6 +754,103 @@ test('Prefab patch creates and deletes one linked empty leaf child and compensat
   const deleted = invoke('prefabSourcePatchMutate', compensate);
   assert.equal(deleted.available, true, JSON.stringify(deleted));
   assert.deepEqual(root.children, [original]);
+});
+
+test('Prefab patch appends one registered built-in component and compensates by removing that exact instance', () => {
+  const scenePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../creator-extension/scene.js');
+  class Component {
+    constructor() { this._id = 'runtime-component-id'; this.node = null; this._objFlags = 0; }
+    destroy() {
+      if (this._objFlags & 4) return false;
+      const index = this.node._components.indexOf(this);
+      if (index >= 0) this.node._components.splice(index, 1);
+      const attached = cc.engine.attachedObjsForEditor;
+      if (attached[this._id] === this) delete attached[this._id];
+      this.destroyed = true;
+      return true;
+    }
+  }
+  class BlockInputEvents extends Component {}
+  BlockInputEvents.prototype.__classname__ = 'cc.BlockInputEvents';
+  class Node {
+    constructor(name, uuid, id) {
+      this.name = name; this.uuid = uuid; this._id = id; this.children = []; this._components = [];
+      this._parent = null; this._objFlags = 0; this.active = true; this.x = 0; this.y = 0; this.z = 0;
+      this.scaleX = 1; this.scaleY = 1; this.angle = 0; this.width = 100; this.height = 100;
+      this.anchorX = 0.5; this.anchorY = 0.5;
+    }
+    get parent() { return this._parent; }
+    set parent(value) { this._parent = value; if (value && !value.children.includes(this)) value.children.push(this); }
+    getComponents(type) { return this._components.filter((component) => component instanceof type); }
+    addComponent(type) {
+      const component = new type(); component.node = this; this._components.push(component);
+      const attached = cc.engine.attachedObjsForEditor;
+      if (this._id in attached) attached[component._id] = component;
+      return component;
+    }
+    getPosition() { return { x: this.x, y: this.y }; }
+    setPosition(x, y, z = this.z) { this.x = x; this.y = y; this.z = z; }
+    setContentSize(width, height) { this.width = width; this.height = height; }
+    setAnchorPoint(x, y) { this.anchorX = x; this.anchorY = y; }
+    getSiblingIndex() { return this.parent ? this.parent.children.indexOf(this) : -1; }
+  }
+  const scene = new Node('EditScene', 'edit-scene', 'scene-id');
+  const root = new Node('Root', 'live-root', 'root-runtime-id');
+  root._prefab = { root, fileId: '', asset: { _uuid: prefabUuid } };
+  scene.addChild = (node) => { node.parent = scene; };
+  scene.addChild(root);
+  const classes = { 'cc.Component': Component, 'cc.BlockInputEvents': BlockInputEvents };
+  const cc = { Node, Component, director: { getScene: () => scene },
+    Object: { Flags: { DontSave: 8, HideInHierarchy: 1024 }, _willDestroy(component) { return !!(component._objFlags & 4); } },
+    engine: { attachedObjsForEditor: { 'root-runtime-id': root } },
+    js: { getClassByName(name) { return classes[name]; },
+      getClassName(type) { return type.prototype.__classname__ || type.name; },
+      _getClassId(type) { return type.prototype.__classname__ || type.name; },
+      isChildClassOf(type, base) { return type === base || type.prototype instanceof base; } } };
+  const mode = { name: 'prefab', save(callback) { callback(); }, dirty() { return false; } };
+  const module = { exports: {} };
+  vm.runInNewContext(fs.readFileSync(scenePath, 'utf8'), { module, exports: module.exports,
+    require: createRequire(scenePath), cc,
+    Editor: { isMainProcess: false, require() { return { curMode: () => mode }; } },
+    setImmediate(callback) {
+      for (const component of [...root._components]) if (cc.Object._willDestroy(component)) {
+        const index = root._components.indexOf(component);
+        if (index >= 0) root._components.splice(index, 1);
+        if (cc.engine.attachedObjsForEditor[component._id] === component) delete cc.engine.attachedObjsForEditor[component._id];
+      }
+      callback();
+    } }, { filename: 'scene.js' });
+  function invoke(method, input) {
+    let value;
+    module.exports[method]({ reply(error, result) { assert.equal(error, null); value = result; } }, input);
+    return value;
+  }
+  const rootId = prefabPatch.rootNodeId(prefabUuid);
+  const before = { componentCount: 0, components: [] };
+  const plannedAfter = { componentCount: 1, components: [{
+    componentClassName: 'cc.BlockInputEvents', componentIndex: 0,
+    componentInstanceId: 'planned-component-id', serializedClassId: 'cc.BlockInputEvents',
+  }] };
+  const diff = [{ path: 'component.structure', before, after: plannedAfter }];
+  const input = { prefabUuid, targetNodeUuid: rootId, targetNodePath: 'Root', action: 'apply', expectedDiff: diff };
+  assert.equal(prefabPatch.validateDiff(diff), true);
+  const preflight = invoke('prefabSourcePatchPreflight', input);
+  assert.equal(preflight.available, true, JSON.stringify(preflight));
+  const added = invoke('prefabSourcePatchMutate', input);
+  assert.equal(added.available, true, JSON.stringify(added));
+  assert.equal(root._components.length, 1);
+  assert.equal(root._components[0]._id, 'planned-component-id');
+  assert.equal(cc.engine.attachedObjsForEditor['planned-component-id'], root._components[0]);
+  assert.equal(added.node.componentState.components[0].componentInstanceId, 'planned-component-id');
+
+  const inverse = prefabPatch.invertDiff(diff);
+  const compensate = { ...input, action: 'compensate', expectedDiff: inverse };
+  assert.equal(invoke('prefabSourcePatchPreflight', compensate).available, true);
+  root._components[0]._objFlags |= 4;
+  const removed = invoke('prefabSourcePatchMutate', compensate);
+  assert.equal(removed.available, true, JSON.stringify(removed));
+  assert.deepEqual(root._components, []);
+  assert.equal(cc.engine.attachedObjsForEditor['planned-component-id'], undefined);
 });
 
 test('Prefab UI event lists use stable in-Prefab targets and reject external target nodes', () => {

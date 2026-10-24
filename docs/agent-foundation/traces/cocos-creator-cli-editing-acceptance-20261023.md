@@ -70,7 +70,7 @@
 
 - 这轮覆盖当前支持的编辑入口及代表字段，不等于穷举 Creator 所有面板、每个组件字段或每种交互业务行为。
 - 非 Button 的 UI 事件列表已有受限写入合同，但尚无 Creator 2.4.15 实机写入证据；目前只实测了 Prefab Button `clickEvents`。
-- Prefab 源补丁支持公开、可序列化 Inspector 属性，并绑定类型、组件序号/类/身份、序列化键和前后值；通用属性实机验收目前覆盖 `cc.BlockInputEvents.enabled`、`cc.Label.fontSize` 与 Button `clickEvents`。其他组件和值类型仍需代表性实测；Prefab 组件增删、层级改动和 live 组件引用仍未覆盖。
+- Prefab 源补丁支持公开、可序列化 Inspector 属性，并绑定类型、组件序号/类/身份、序列化键和前后值；通用属性实机验收目前覆盖 `cc.BlockInputEvents.enabled`、`cc.Label.fontSize` 与 Button `clickEvents`。其他组件和值类型仍需代表性实测；Prefab 单个内置组件追加及其来源绑定补偿删除、受限层级改动已有代表性实机记录；既有组件直接删除、用户脚本组件创建和 live 组件引用仍未覆盖。
 - 项目工具别名注册表未配置；临时 Provider 验收不等于项目已有业务工具已接入。
 - `editor.eval` / Provider 属于 Editor 权限入口；临时测试成功不能证明任意用户代码都安全或已持久化。
 - 当前验收仅针对上述 Creator 2.4.15/macOS 工程，不外推到 Creator 3.8、其他工程或其他平台。
@@ -132,4 +132,14 @@
 - apply `911a6526-0eb4-42ea-a54b-1825ec71703f` 在根节点末尾新增空叶子 `Added`，稳定 ID `e6+OQtw7FA6rml6y12MM+P`。Creator 保存回调确认；退出 Prefab、重开同 UUID、再次退出和精确磁盘读回均通过。保存源 SHA-256 为 `0c06bf8de6e89992959de0c3b37e34a0784828217f59c117dc06b0ea547dd8cd`。回执如实保留 `sceneSavedEventConfirmed: false`，不影响原生保存回调及源文件读回证据。
 - source-linked compensate `d1ca9ba7-5134-48c1-b2fe-c536339c1638` 从已完成 apply 派生逆操作，移除该空叶子。Creator 保存、退出、重开、再退出和磁盘读回均通过；源 SHA-256 精确回到初始值，Prefab UUID 未变，`.meta` 哈希保持不变。
 - 清理临时场景节点 `27e20dc1-aaf1-40f8-9559-b51caf7dad09` 后，场景源 SHA-256 精确恢复为 `cd1bd3f3ec214e31335ad1aaf73f71155f6717955586327b5d51ce0f71771f74`，场景 `.meta` 哈希仍为 `269c764bf220a82d50babe7e47ad58f815765e8c4821c2293d5b304478fd7cba`。Prefab 删除前 AssetDB 文本引用扫描完整（8 个文件，41,485 字节），引用数为 0；删除提交被自动审批拒绝，因此测试 Prefab 文件及 `.meta` 仍留在 Tank `assets/`，不声称已清理。
-- 定向 Prefab patch 测试 **22/22 通过**；完整 CLI 自动化测试 **339/339 通过**。能力范围只覆盖一次增/删一个无组件、无后代的叶子子节点；非叶子子树编辑和 Prefab 组件增删仍未开放。
+- 定向 Prefab patch 测试 **22/22 通过**；完整 CLI 自动化测试 **339/339 通过**。截至扩展 0.8.66，本记录只覆盖一次增/删一个无组件、无后代的叶子子节点；非叶子子树编辑和 Prefab 组件增删当时仍未开放。后续组件能力见本页 0.8.69 验收记录。
+
+
+### 2026-10-24 后续：Prefab 内置组件追加与补偿删除
+
+- 工程 `/Users/youjunmao/WORK/Cocos_Engine/tank`；CLI **0.12.55**、Creator **2.4.15**、扩展 **0.8.69**。通过 Cocos CLI 更新扩展、关闭/重开工程并核对项目名、绝对路径、版本与实例握手；Prefab 检查、计划、提交、退出/重开与读回均通过 CLI 完成，没有使用电脑操控，也没有直接编辑 `.prefab` 或 `.meta`。
+- 使用隔离验收资源 `CliPrefabChildAcceptance.prefab`，UUID `45a55c1d-b0ed-4bf2-a454-4eaaa169c0ca`；目标根稳定身份 `prefab_root_45a55c1d-b0ed-4bf2-a454-4eaaa169c0ca`。基线源 SHA-256 为 `e8da097e8fc1f9fbdb44836f748d56a7775a6268f6b80e0546764b73a7973dff`，`.meta` SHA-256 为 `38ed07c450f014cf1b996622c4a006af6f403c1bd8abfa7dabdaa2de45ac4680`。
+- `component.structure` 一次追加一个 Creator 注册的内置 `cc.*` 组件。实机 apply `857a297f-dea5-4b18-af77-cb508c726747` 在 Prefab 根节点添加 `cc.BlockInputEvents`，计划绑定稳定合成组件 ID `prefab_component_c929bfe51effd84eca966b40`；回执 `completed`，保存回调、退出 Prefab、重开同 UUID、活动对象与磁盘读回全部确认通过，源哈希变为 `6acf6de0f77cdbb1dd866b59d08d745504539cb257136b7e45df07547e85e456`。
+- source-linked compensate `4b04438e-18e9-4ca9-a402-6f9f71b1021b` 从上述 apply 派生，只删除该次添加的精确组件。Creator 保存回调、退出/重开与磁盘读回均通过，源 SHA-256 精确恢复至基线，Prefab UUID 与 `.meta` 哈希不变。两次正常回执均 `sceneSavedEventConfirmed: false`，不影响保存回调和磁盘读回证据。
+- 第一次验收发现序列化没有保存运行时 `_id`：磁盘为同一索引/类生成 `prefab_component_c929bfe51effd84eca966b40` 合成身份；计划阶段生成随机 ID 会造成写后读回冲突。另一次补偿遇到组件已在延迟销毁队列时 `destroy()` 返回 `false`。扩展 0.8.69 改为计划时生成与序列化一致的稳定 ID、以 Creator 的延迟销毁状态识别已经排队的删除，并以完成后的读回来确认。第一次不确定写入已通过 CLI reconcile 分类；未重发该写入，后续从已完成操作派生补偿并将 Prefab 恢复基线。完整有效往返由 0.8.69 下的 apply/compensate 回执验证。
+- 定向 Prefab patch 测试 **25/25 通过**。完整 CLI 自动化测试 **342/342 通过，0 失败**。

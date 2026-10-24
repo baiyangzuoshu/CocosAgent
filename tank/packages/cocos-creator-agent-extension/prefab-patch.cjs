@@ -26,6 +26,7 @@ const PATHS = new Set([
 ]);
 const MAX_DIRECT_CHILDREN = 128;
 const AUTO_CHILD_NODE_ID = 'AUTO';
+const AUTO_COMPONENT_INSTANCE_ID = 'AUTO';
 
 function validPropertyValue(value, depth = 0) {
     if (value === null || typeof value === 'boolean') return true;
@@ -146,7 +147,7 @@ function validParentDiff(item) {
 function validChildRow(value, allowAuto = false) {
     return !!value && typeof value === 'object' && !Array.isArray(value)
         && Object.keys(value).sort().join(',') === 'childCount,componentCount,name,nodeUuid,siblingIndex'
-        && (NODE_ID.test(value.nodeUuid || '') || allowAuto && value.nodeUuid === AUTO_CHILD_NODE_ID)
+        && (value.nodeUuid === AUTO_CHILD_NODE_ID ? allowAuto : NODE_ID.test(value.nodeUuid || ''))
         && typeof value.name === 'string' && value.name.length > 0 && value.name.length <= 120
         && !/[\/\\\u0000-\u001f\u007f]/.test(value.name)
         && Number.isInteger(value.siblingIndex) && value.siblingIndex >= 0 && value.siblingIndex < MAX_DIRECT_CHILDREN
@@ -197,6 +198,55 @@ function validChildDiff(item) {
     return !!change && (change.child.nodeUuid !== AUTO_CHILD_NODE_ID || change.kind === 'insert');
 }
 
+function validComponentRow(value, allowAuto = false) {
+    const serializedClassId = value && value.serializedClassId;
+    return !!value && typeof value === 'object' && !Array.isArray(value)
+        && Object.keys(value).sort().join(',') === 'componentClassName,componentIndex,componentInstanceId,serializedClassId'
+        && typeof value.componentClassName === 'string'
+        && (/^cc\.[A-Za-z_$][A-Za-z0-9_$.]{0,117}$/.test(value.componentClassName) || NODE_ID.test(value.componentClassName))
+        && typeof serializedClassId === 'string' && serializedClassId.length <= 160
+        && value.serializedClassId === value.componentClassName
+        && (value.componentInstanceId === AUTO_COMPONENT_INSTANCE_ID
+            ? allowAuto : NODE_ID.test(value.componentInstanceId || ''))
+        && Number.isInteger(value.componentIndex) && value.componentIndex >= 0 && value.componentIndex < 64;
+}
+
+function validComponentState(value, { allowAuto = false } = {}) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)
+        || Object.keys(value).sort().join(',') !== 'componentCount,components'
+        || !Number.isInteger(value.componentCount) || value.componentCount < 0 || value.componentCount > 64
+        || !Array.isArray(value.components) || value.components.length !== value.componentCount) return false;
+    const ids = new Set();
+    return value.components.every((component, index) => validComponentRow(component, allowAuto)
+        && component.componentIndex === index && !ids.has(component.componentInstanceId)
+        && ids.add(component.componentInstanceId));
+}
+
+function componentStateChange(before, after) {
+    if (!validComponentState(before) || !validComponentState(after, { allowAuto: true })) return null;
+    if (after.componentCount === before.componentCount + 1) {
+        const added = after.components[after.components.length - 1];
+        const existing = after.components.slice(0, -1);
+        if (added.componentIndex === before.componentCount && added.componentInstanceId !== AUTO_COMPONENT_INSTANCE_ID
+            && canonicalValue(existing) === canonicalValue(before.components)) return { kind: 'add', component: added };
+        if (added.componentIndex === before.componentCount && added.componentInstanceId === AUTO_COMPONENT_INSTANCE_ID
+            && canonicalValue(existing) === canonicalValue(before.components)) return { kind: 'add', component: added };
+    }
+    if (after.componentCount === before.componentCount - 1) {
+        const removed = before.components[before.components.length - 1];
+        if (canonicalValue(before.components.slice(0, -1)) === canonicalValue(after.components))
+            return { kind: 'remove', component: removed };
+    }
+    return null;
+}
+
+function validComponentStructureDiff(item) {
+    if (!item || Object.keys(item).sort().join(',') !== 'after,before,path' || item.path !== 'component.structure'
+        || !validComponentState(item.before) || !validComponentState(item.after, { allowAuto: true })) return false;
+    const change = componentStateChange(item.before, item.after);
+    return !!change && (change.component.componentInstanceId !== AUTO_COMPONENT_INSTANCE_ID || change.kind === 'add');
+}
+
 function validValue(fieldPath, value) {
     if (fieldPath === 'node.name') return typeof value === 'string' && value.length > 0 && value.length <= 120
         && !/[\/\\\u0000-\u001f\u007f]/.test(value);
@@ -208,7 +258,7 @@ function validValue(fieldPath, value) {
 
 function validateDiff(diff) {
     if (!Array.isArray(diff) || diff.length < 1 || diff.length > 16) return false;
-    if (diff.some((item) => item && ['node.parent', 'node.child'].includes(item.path)) && diff.length !== 1) return false;
+    if (diff.some((item) => item && ['node.parent', 'node.child', 'component.structure'].includes(item.path)) && diff.length !== 1) return false;
     const paths = new Set();
     return diff.every((item) => {
         if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
@@ -218,7 +268,7 @@ function validateDiff(diff) {
             && Object.keys(item).every((field) => ['path', 'before', 'after'].includes(field))
             && validValue(item.path, item.before) && validValue(item.path, item.after)
             && !Object.is(item.before, item.after))
-            && !validSiblingIndexDiff(item) && !validParentDiff(item) && !validChildDiff(item)
+            && !validSiblingIndexDiff(item) && !validParentDiff(item) && !validChildDiff(item) && !validComponentStructureDiff(item)
             && !validPropertyDiff(item) && !validEventListDiff(item)) return false;
         if (paths.has(key)) return false;
         paths.add(key);
@@ -242,6 +292,8 @@ function valueAt(node, fieldPath) {
     }
     if (item.path === 'node.child') return node.childState && validChildState(node.childState)
         ? { found: true, value: node.childState } : { found: false };
+    if (item.path === 'component.structure') return node.componentState && validComponentState(node.componentState)
+        ? { found: true, value: node.componentState } : { found: false };
     if (item.path === 'component.property') {
         const properties = node.componentProperties && node.componentProperties[item.componentInstanceId];
         return properties && Object.prototype.hasOwnProperty.call(properties, item.property)
@@ -333,5 +385,6 @@ function validInput(input) {
 }
 
 module.exports = { UUID, NODE_ID, SHA256, PATHS, UI_EVENT_PROPERTIES, rootNodeId, componentIdFor,
-    MAX_DIRECT_CHILDREN, AUTO_CHILD_NODE_ID, validValue, validUiEventList, validateDiff, childStateChange,
+    MAX_DIRECT_CHILDREN, AUTO_CHILD_NODE_ID, AUTO_COMPONENT_INSTANCE_ID, validValue, validUiEventList,
+    validateDiff, childStateChange, componentStateChange,
     valueAt, matchesDiff, classifyDiffState, invertDiff, targetPathAt, validInput };

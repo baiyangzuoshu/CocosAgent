@@ -2523,6 +2523,19 @@ async function createPrefabSourcePatchPlan(input) {
                 if (!prefabPatch.validateDiff(expectedDiff)) throw coded('PREFAB_CHILD_CREATE_DIFF_INVALID');
             }
         }
+        const componentStructureDiff = expectedDiff.find((item) => item.path === 'component.structure');
+        if (componentStructureDiff) {
+            const change = prefabPatch.componentStateChange(componentStructureDiff.before, componentStructureDiff.after);
+            if (!change || change.kind !== 'add' || change.component.componentInstanceId !== prefabPatch.AUTO_COMPONENT_INSTANCE_ID
+                || !change.component.componentClassName.startsWith('cc.')
+                || change.component.serializedClassId !== change.component.componentClassName)
+                throw coded('PREFAB_COMPONENT_STRUCTURE_ADD_INVALID');
+            expectedDiff = expectedDiff.map((item) => item === componentStructureDiff ? { ...item,
+                after: { ...item.after, components: item.after.components.map((component) => component === change.component
+                    ? { ...component, componentInstanceId: prefabPatch.componentIdFor(input.prefabUuid, input.targetNodeUuid,
+                        component.componentIndex, component.serializedClassId, null) } : component) } } : item);
+            if (!prefabPatch.validateDiff(expectedDiff)) throw coded('PREFAB_COMPONENT_STRUCTURE_DIFF_INVALID');
+        }
     } else {
         sourceOperationId = input.sourceOperationId;
         const sourceOperation = readPrefabSourcePatchOperation(sourceOperationId);
@@ -2542,6 +2555,13 @@ async function createPrefabSourcePatchPlan(input) {
     if (input.action !== 'compensate' && expectedDiff.some((item) => item.path === 'component.eventList'
         && item.after.items.some((event) => event.targetUuid === null)))
         throw coded('PREFAB_UI_EVENT_TARGET_REQUIRED');
+    for (const item of expectedDiff.filter((entry) => entry.path === 'component.structure')) {
+        const change = prefabPatch.componentStateChange(item.before, item.after);
+        if (!change || (input.action === 'apply' && change.kind !== 'add')
+            || (change.kind === 'add' && (!change.component.componentClassName.startsWith('cc.')
+                || change.component.serializedClassId !== change.component.componentClassName)))
+            throw coded('PREFAB_COMPONENT_STRUCTURE_ACTION_INVALID');
+    }
     let node = singlePrefabNode(source, input.targetNodeUuid);
     if (node.nodePath !== input.targetNodePath) throw coded('PREFAB_EXPECTED_STATE_MISMATCH');
     if (expectedDiff.some((item) => item.path === 'node.parent')) {
@@ -2549,7 +2569,7 @@ async function createPrefabSourcePatchPlan(input) {
         node = singlePrefabNode(source, input.targetNodeUuid);
         if (node.nodePath !== input.targetNodePath) throw coded('PREFAB_EXPECTED_STATE_MISMATCH');
     }
-    const hasComponentDiff = expectedDiff.some((item) => ['component.property', 'component.eventList'].includes(item.path));
+    const hasComponentDiff = expectedDiff.some((item) => ['component.property', 'component.eventList', 'component.structure'].includes(item.path));
     if (input.action === 'apply' && hasComponentDiff) {
         let entered = false;
         try {
@@ -2825,6 +2845,29 @@ async function reconcilePrefabSourcePatch(input) {
         operation.reconciledAt = new Date().toISOString(); writeOperation(operation); throw error;
     }
     const node = singlePrefabNode(source, plan.targetNodeUuid);
+    const structureItem = plan.expectedDiff.find((item) => item.path === 'component.structure');
+    if (structureItem) {
+        const change = prefabPatch.componentStateChange(structureItem.before, structureItem.after);
+        if (change && change.kind === 'add') {
+            const descriptor = change.component;
+            const serializedIdentity = prefabPatch.componentIdFor(plan.prefabUuid, plan.targetNodeUuid,
+                descriptor.componentIndex, descriptor.serializedClassId, null);
+            const observedRows = node.componentState && node.componentState.components;
+            const expectedPrefix = structureItem.before.components;
+            const observedAdded = Array.isArray(observedRows) ? observedRows[descriptor.componentIndex] : null;
+            if (observedAdded && observedAdded.componentIndex === descriptor.componentIndex
+                && observedAdded.componentClassName === descriptor.componentClassName
+                && observedAdded.serializedClassId === descriptor.serializedClassId
+                && observedAdded.componentInstanceId === serializedIdentity
+                && observedRows.length === expectedPrefix.length + 1
+                && expectedPrefix.every((row, index) => prefabPatch.canonicalValue(row) === prefabPatch.canonicalValue(observedRows[index]))) {
+                plan.expectedDiff = plan.expectedDiff.map((item) => item === structureItem ? { ...item,
+                    after: { ...item.after, components: item.after.components.map((row) => row.componentIndex === descriptor.componentIndex
+                        ? { ...row, componentInstanceId: serializedIdentity } : row) } } : item);
+                operation.planHash = planFingerprint(plan);
+            }
+        }
+    }
     const afterPath = prefabPatch.targetPathAt(plan.targetNodePath, plan.expectedDiff, 'after');
     const beforeMatches = source.sourceSha256 === plan.expectedSourceSha256 && source.metaSha256 === plan.expectedMetaSha256
         && node.nodePath === plan.targetNodePath
@@ -2842,10 +2885,32 @@ async function reconcilePrefabSourcePatch(input) {
                 operation.editorExitedAfterReopen = mode.modeName === 'scene' && mode.sceneUuid === plan.activeSceneUuid;
             } catch (_) {}
         }
-        const editorFlowComplete = operation.editorExitedToScene === true && operation.editorReopened === true
+        let editorFlowComplete = operation.editorExitedToScene === true && operation.editorReopened === true
             && operation.editorExitedAfterReopen === true;
+        if (!editorFlowComplete) {
+            try {
+                const mode = await currentPrefabEditMode();
+                if (mode.modeName === 'scene' && mode.sceneUuid === plan.activeSceneUuid) {
+                    const params = { prefabUuid: plan.prefabUuid, targetNodePath: plan.targetNodePath,
+                        targetNodeUuid: plan.targetNodeUuid, expectedDiff: plan.expectedDiff };
+                    await enterPrefabSourceMode(plan.prefabUuid, plan.activeSceneUuid);
+                    operation.editorExitedToScene = true;
+                    const reopened = await callScene('prefabSourcePatchSnapshot', { ...params, side: 'after' }, 20000);
+                    if (!reopened || reopened.available !== true || reopened.prefabUuid !== plan.prefabUuid
+                        || reopened.verifiedSide !== 'after' || !reopened.node
+                        || !prefabPatch.matchesDiff(reopened.node, plan.expectedDiff, 'after'))
+                        throw coded(reopened && reopened.reason || 'PREFAB_REOPEN_READBACK_MISMATCH');
+                    operation.editorReopened = true;
+                    await exitPrefabSourceMode(plan.prefabUuid, plan.activeSceneUuid);
+                    operation.editorExitedAfterReopen = true;
+                    editorFlowComplete = true;
+                }
+            } catch (error) {
+                operation.reconcileReason = error.code || 'PREFAB_EDITOR_EXIT_REOPEN_READBACK_REQUIRED';
+            }
+        }
         operation.status = editorFlowComplete ? 'completed' : 'needs-reconciliation';
-        operation.reconcileReason = editorFlowComplete ? null : 'PREFAB_EDITOR_EXIT_REOPEN_READBACK_REQUIRED';
+        operation.reconcileReason = editorFlowComplete ? null : operation.reconcileReason || 'PREFAB_EDITOR_EXIT_REOPEN_READBACK_REQUIRED';
     } else if (beforeMatches) {
         let liveState = 'unavailable';
         try {

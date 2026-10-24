@@ -1,22 +1,22 @@
 {
   "schemaVersion": 1,
   "extensionName": "cocos-creator-agent-extension",
-  "extensionVersion": "0.8.66",
+  "extensionVersion": "0.8.69",
   "installedByCliVersion": "0.12.55",
-  "installedAt": "2026-10-24T00:49:40.002Z",
+  "installedAt": "2026-10-24T03:52:53.115Z",
   "files": {
     "asset-import-operations.cjs": "ec5a58fbd613518a1019453dd72a59626c3736a9d5a9faebdbc1e4a68e30e139",
     "asset-references.cjs": "35ce4a041792b1e91f0864a4cd875a613d0e92b7ea36af89734df64dfb069f13",
-    "command-contract.json": "dfd327e18bf5d53c2db5501b83a204a0dd8da9b4500a7c5024e9b9e93c429d0e",
+    "command-contract.json": "e56a7d2b3a1e940a18b2f69fe2a676387880c3524177c1adc86d057d7bcd2200",
     "commit-authorization.cjs": "7e297866deb67ac86d87cf749d77597cac543c9fc03b2e50abe15f4920741e24",
     "editor-script-eval.cjs": "0aa2e6a6a226970132468d698acfd2c3f804112c22f16194996380a6bb47e075",
-    "main.js": "af94e5dcbef5fb955f9323c160ab19cc76802caf0a106608e887373233341ee2",
-    "package.json": "46f03c29bcd9cf16494fc080ab4d4f83a6d369f95de183bc11d789b34152f403",
+    "main.js": "0eee94d093c4e7f79f5a80cb0acdb833f25fed4e6f1565a0ff896c4ac1511afe",
+    "package.json": "2225d939050ec55e451885d5a50181e8eb0ca34fcaeea80863f4f276d50f556f",
     "prefab-instance-operations.cjs": "164e8773f891d4f7d1c5a629d811bc26506b588ee37b373868cf20c1829a04e2",
-    "prefab-patch.cjs": "b15c296140b2c4d37740961f40bd297fac001fc4070bd9dd06812950d62f04c3",
-    "prefab-source.cjs": "d661a98f4dff4fbff75d605270ea7079ac2649b96ec46e8c43419907bde28934",
+    "prefab-patch.cjs": "e42a5cbf97e0d52ce81e0fbb091dc25802bb96073a7b7af9cea9eab86ef82d9a",
+    "prefab-source.cjs": "29bb6acda33883705884ee15aae519077f064f00aa05dbe1d9d2c95ec33e1884",
     "provider-contract.cjs": "4d070471d4b37d02968707b1eca4cc17c7696e5769e612b23f667d5a83017bab",
     "scene-persistence.cjs": "43e5703c4e57118c745c4c1724b318d2587ec5231392afffece67b7efc0ec967",
-    "scene.js": "81d567574e69718e02001d8666c50f66b88f681b7c005f7104a5f8de5daef2d5"
+    "scene.js": "e8b5f15996c3703fd5a790e14bdda57197ceecc4269991d82b271c6508c13b82"
   }
 }

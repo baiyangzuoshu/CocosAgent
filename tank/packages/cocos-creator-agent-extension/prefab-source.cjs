@@ -169,11 +169,13 @@ function inspectPrefabSource({ prefabBytes, metaBytes, prefabUuid, maxComponents
     if (expectedDiff !== undefined && (!Array.isArray(expectedDiff) || expectedDiff.length < 1 || expectedDiff.length > 16
         || !NODE_ID.test(targetNodeUuid || '')
         || expectedDiff.some((item) => !item || typeof item !== 'object'
-            || !['component.property', 'component.eventList'].includes(item.path)
-            || typeof item.componentInstanceId !== 'string' || typeof (item.serializedClassId || item.componentClassName) !== 'string'
-            || (item.path === 'component.property'
-                ? typeof item.property !== 'string' || typeof item.before === 'undefined'
-                : typeof item.eventProperty !== 'string'))))
+            || !['component.property', 'component.eventList', 'component.structure'].includes(item.path)
+            || (item.path === 'component.structure'
+                ? !prefabPatch.validateDiff([item])
+                : typeof item.componentInstanceId !== 'string' || typeof (item.serializedClassId || item.componentClassName) !== 'string'
+                    || (item.path === 'component.property'
+                        ? typeof item.property !== 'string' || typeof item.before === 'undefined'
+                        : typeof item.eventProperty !== 'string')))))
         return fail('PREFAB_COMPONENT_PROPERTY_SELECTOR_INVALID');
 
     let meta;
@@ -283,6 +285,10 @@ function inspectPrefabSource({ prefabBytes, metaBytes, prefabUuid, maxComponents
             siblingIndex: item.siblingIndex, siblingCount: item.siblingCount,
             childCount: Array.isArray(record._children) ? record._children.length : 0,
             componentCount: allComponents.length,
+            componentState: { componentCount: allComponents.length, components: allComponents.map((component) => ({
+                componentClassName: component.className, componentIndex: component.index,
+                componentInstanceId: component.instanceId, serializedClassId: component.classId,
+            })) },
             active: typeof record._active === 'boolean' ? record._active : true,
             transform, components, componentsTruncated: allComponents.length > components.length,
             ...(Object.keys(componentProperties).length ? { componentProperties } : {}),

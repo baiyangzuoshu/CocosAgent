@@ -1831,6 +1831,59 @@ function prefabStableUiEventList(component, eventProperty, sceneUuid, prefabUuid
     return { available: true, value: { kind: 'ui-events', items } };
 }
 
+function prefabPatchComponentState(node, mode, prefabUuid, expectedDiff) {
+    if (!node || !Array.isArray(node._components) || node._components.length > 64) return null;
+    const nodeId = prefabStableNodeId(mode.sceneUuid, prefabUuid, node.uuid);
+    if (!nodeId) return null;
+    const structureDiff = Array.isArray(expectedDiff)
+        ? expectedDiff.find((item) => item && item.path === 'component.structure') : null;
+    const expectedRows = structureDiff && [structureDiff.before, structureDiff.after]
+        .filter((state) => state && state.componentCount === node._components.length
+            && Array.isArray(state.components) && state.components.every((row, index) => {
+                const component = node._components[index];
+                const className = classNameOf(component);
+                const classId = serializedClassIdOf(component && component.constructor) || className;
+                return row.componentIndex === index && row.componentClassName === classId
+                    && row.serializedClassId === classId;
+            }))[0];
+    const components = node._components.map((component, componentIndex) => {
+        const className = classNameOf(component);
+        const serializedClassId = serializedClassIdOf(component && component.constructor) || className;
+        if (!component || editorManaged(component) || typeof className !== 'string'
+            || typeof serializedClassId !== 'string' || !serializedClassId) return null;
+        const componentInstanceId = expectedRows
+            ? expectedRows.components[componentIndex].componentInstanceId
+            : component._id != null && String(component._id)
+                ? String(component._id)
+                : prefabPatch.componentIdFor(prefabUuid, nodeId, componentIndex, serializedClassId, null);
+        return { componentClassName: serializedClassId, componentIndex, componentInstanceId, serializedClassId };
+    });
+    if (components.some((component) => !component)) return null;
+    return { componentCount: components.length, components };
+}
+
+function prefabComponentDependents(node, component) {
+    if (!node || !component || !Array.isArray(node._components)) return null;
+    return node._components.filter((candidate) => candidate && candidate !== component && candidate.constructor
+        && typeof candidate.constructor._requireComponent === 'function'
+        && component instanceof candidate.constructor._requireComponent);
+}
+
+function prefabComponentIdExists(sceneUuid, prefabUuid, stableId) {
+    const rootState = prefabRootInLiveScene(sceneUuid, prefabUuid);
+    if (!rootState.available) return rootState;
+    const stack = [rootState.root];
+    while (stack.length) {
+        const node = stack.pop();
+        for (const component of Array.isArray(node._components) ? node._components : []) {
+            if (component && String(component._id || '') === stableId)
+                return { available: false, reason: 'PREFAB_COMPONENT_ID_ALREADY_EXISTS' };
+        }
+        for (const child of authoringChildren(node)) stack.push(child);
+    }
+    return { available: true };
+}
+
 function prefabPatchSnapshot(node, nodePath, params, mode) {
     if (!node || !Array.isArray(node.children) || !Array.isArray(node._components)) return null;
     const components = node._components.map((component) => {
@@ -1896,10 +1949,12 @@ function prefabPatchSnapshot(node, nodePath, params, mode) {
         componentCount: Array.isArray(child._components) ? child._components.length : -1,
     }));
     if (childRows.some((child) => !child.nodeUuid || child.componentCount < 0)) return null;
+    const componentState = prefabPatchComponentState(node, mode, params.prefabUuid, params.expectedDiff);
+    if (!componentState) return null;
     return { nodeUuid: typeof node.uuid === 'string' ? node.uuid : null, nodePath,
         name: String(node.name || ''), active: node.active !== false, parentUuid, siblingIndex,
         transform: { x: Number(position.x), y: Number(position.y), scaleX: Number(node.scaleX), scaleY: Number(node.scaleY) },
-        childState: { childCount: childRows.length, children: childRows },
+        childState: { childCount: childRows.length, children: childRows }, componentState,
         components, ...(Object.keys(componentProperties).length ? { componentProperties, componentPropertyBindings } : {}),
         ...(Object.keys(componentEventLists).length ? { componentEventLists } : {}) };
 }
@@ -1984,6 +2039,45 @@ function prefabSourcePatchPreflight(params) {
                 return { available: false, reason: 'PREFAB_CHILD_DELETE_PRECONDITION_FAILED' };
         }
     }
+    for (const item of params.expectedDiff.filter((entry) => entry.path === 'component.structure')) {
+        const change = prefabPatch.componentStateChange(item.before, item.after);
+        if (!change) return { available: false, reason: 'PREFAB_COMPONENT_STRUCTURE_DIFF_INVALID' };
+        if (change.kind === 'add') {
+            const descriptor = change.component;
+            const resolved = componentClass(descriptor.componentClassName);
+            const classId = resolved.available ? serializedClassIdOf(resolved.constructor) : null;
+            const existing = resolved.available ? exactComponentInstances(target.node, resolved.constructor) : null;
+            const identity = prefabComponentIdExists(target.mode.sceneUuid, params.prefabUuid, descriptor.componentInstanceId);
+            const attached = cc && cc.engine && cc.engine.attachedObjsForEditor;
+            if (params.action === 'compensate' || !descriptor.componentClassName.startsWith('cc.')
+                || !resolved.available || classId !== descriptor.serializedClassId || resolved.requiresComponent
+                || (resolved.disallowMultiple && existing && existing.components && existing.components.length > 0)
+                || !existing || !existing.available || !identity.available
+                || attached && attached[descriptor.componentInstanceId]
+                || typeof target.node.addComponent !== 'function')
+                return { available: false, reason: resolved.available && resolved.requiresComponent
+                    ? 'PREFAB_COMPONENT_HAS_UNAPPROVED_REQUIREMENT'
+                    : resolved.available && resolved.disallowMultiple && existing && existing.components.length > 0
+                        ? 'PREFAB_COMPONENT_ALREADY_PRESENT' : identity.reason || 'PREFAB_COMPONENT_ADD_PRECONDITION_FAILED' };
+        } else {
+            const descriptor = change.component;
+            const component = target.node._components[descriptor.componentIndex];
+            const classId = component && serializedClassIdOf(component.constructor) || classNameOf(component);
+            const dependents = prefabComponentDependents(target.node, component);
+            const stableRow = target.snapshot.componentState.components[descriptor.componentIndex];
+            const liveIdMatches = !!component && String(component._id || '') === descriptor.componentInstanceId;
+            const syntheticIdMatches = descriptor.componentInstanceId.startsWith('prefab_component_')
+                && prefabPatch.componentIdFor(params.prefabUuid, params.targetNodeUuid, descriptor.componentIndex,
+                    descriptor.serializedClassId, null) === descriptor.componentInstanceId;
+            if (params.action !== 'compensate' || descriptor.componentIndex !== target.node._components.length - 1
+                || !component || !stableRow || stableRow.componentInstanceId !== descriptor.componentInstanceId
+                || (!liveIdMatches && !syntheticIdMatches)
+                || classId !== descriptor.serializedClassId || classNameOf(component) !== descriptor.componentClassName
+                || !Array.isArray(dependents) || dependents.length > 0 || typeof component.destroy !== 'function')
+                return { available: false, reason: Array.isArray(dependents) && dependents.length
+                    ? 'PREFAB_COMPONENT_REQUIRED_BY_OTHER_COMPONENT' : 'PREFAB_COMPONENT_REMOVE_PRECONDITION_FAILED' };
+        }
+    }
     for (const item of params.expectedDiff.filter((entry) => entry.path === 'node.parent')) {
         const rootInfo = target.node._prefab;
         const rootAsset = rootInfo && rootInfo.asset;
@@ -2053,6 +2147,7 @@ function prefabSourcePatchMutate(params, callback) {
     const node = located.node;
     const spriteFrames = params.expectedDiff.filter((item) => item.path === 'component.cc.Sprite.spriteFrameUuid' && item.after !== null);
     const loaded = Object.create(null);
+    let componentRemovalRequested = false;
     const apply = () => {
         const current = locatePrefabPatchNode(params, 'before');
         if (!current.available || current.node !== node || prefabPatchNameConflict(node, params.expectedDiff)) {
@@ -2116,6 +2211,60 @@ function prefabSourcePatchMutate(params, callback) {
                         child.node.destroy();
                     }
                 }
+                else if (field === 'component.structure') {
+                    const change = prefabPatch.componentStateChange(item.before, item.after);
+                    if (!change) throw new Error('PREFAB_COMPONENT_STRUCTURE_DIFF_INVALID');
+                    if (change.kind === 'add') {
+                        const descriptor = change.component;
+                        const resolved = componentClass(descriptor.componentClassName);
+                        const classId = resolved.available ? serializedClassIdOf(resolved.constructor) : null;
+                        if (!resolved.available || classId !== descriptor.serializedClassId
+                            || resolved.requiresComponent || params.action === 'compensate')
+                            throw new Error('PREFAB_COMPONENT_ADD_PRECONDITION_FAILED');
+                        const expectedTransform = transformSummary(node);
+                        const canPreserveTransform = ['x', 'y', 'z', 'scaleX', 'scaleY', 'angle', 'width', 'height', 'anchorX', 'anchorY']
+                            .every((key) => Number.isFinite(expectedTransform[key]));
+                        const component = node.addComponent(resolved.constructor);
+                        if (!component) throw new Error('PREFAB_COMPONENT_ADD_REJECTED');
+                        const previousId = component._id == null ? '' : String(component._id);
+                        const attached = cc && cc.engine && cc.engine.attachedObjsForEditor;
+                        if (attached && attached[descriptor.componentInstanceId] && attached[descriptor.componentInstanceId] !== component)
+                            throw new Error('PREFAB_COMPONENT_ID_ALREADY_EXISTS');
+                        if (attached && attached[previousId] && attached[previousId] !== component)
+                            throw new Error('PREFAB_COMPONENT_IDENTITY_WRITE_FAILED');
+                        const wasAttached = !!(attached && attached[previousId] === component);
+                        if (wasAttached) delete attached[previousId];
+                        component._id = descriptor.componentInstanceId;
+                        if (wasAttached) attached[descriptor.componentInstanceId] = component;
+                        if (String(component._id || '') !== descriptor.componentInstanceId)
+                            throw new Error('PREFAB_COMPONENT_IDENTITY_WRITE_FAILED');
+                        if (canPreserveTransform) {
+                            applyNodeTransformValues(node, expectedTransform);
+                            const transformAfter = transformSummary(node);
+                            if (Object.keys(expectedTransform).some((key) => transformAfter[key] !== expectedTransform[key]))
+                                throw new Error('PREFAB_COMPONENT_ADD_TRANSFORM_RESTORE_FAILED');
+                        }
+                    } else {
+                        const descriptor = change.component;
+                        const component = node._components[descriptor.componentIndex];
+                        const stableRow = current.snapshot.componentState.components[descriptor.componentIndex];
+                        const liveIdMatches = !!component && String(component._id || '') === descriptor.componentInstanceId;
+                        const syntheticIdMatches = descriptor.componentInstanceId.startsWith('prefab_component_')
+                            && prefabPatch.componentIdFor(params.prefabUuid, params.targetNodeUuid, descriptor.componentIndex,
+                                descriptor.serializedClassId, null) === descriptor.componentInstanceId;
+                        if (params.action !== 'compensate' || !component || !stableRow
+                            || stableRow.componentInstanceId !== descriptor.componentInstanceId
+                            || (!liveIdMatches && !syntheticIdMatches)
+                            || classNameOf(component) !== descriptor.componentClassName
+                            || typeof component.destroy !== 'function')
+                            throw new Error('PREFAB_COMPONENT_REMOVE_PRECONDITION_FAILED');
+                        const destroyStarted = component.destroy();
+                        const destroyAlreadyPending = !destroyStarted && cc && cc.Object
+                            && typeof cc.Object._willDestroy === 'function' && cc.Object._willDestroy(component);
+                        if (!destroyStarted && !destroyAlreadyPending) throw new Error('PREFAB_COMPONENT_REMOVE_FAILED');
+                        componentRemovalRequested = true;
+                    }
+                }
                 else if (field === 'node.position.x') node.setPosition(item.after, node.y);
                 else if (field === 'node.position.y') node.setPosition(node.x, item.after);
                 else if (field === 'node.scale.x') node.setScale(item.after, node.scaleY, node.scaleZ);
@@ -2165,13 +2314,19 @@ function prefabSourcePatchMutate(params, callback) {
             callback(null, { available: false, reason: error && error.message || 'PREFAB_PATCH_WRITE_FAILED', mutationStarted: true });
             return;
         }
-        const after = locatePrefabPatchNode(params, 'after');
-        if (!after.available || after.node !== node) {
-            callback(null, { available: false, reason: 'PREFAB_PATCH_WRITE_READBACK_FAILED', mutationStarted: true });
-            return;
-        }
-        callback(null, { available: true, mutationStarted: true, prefabUuid: params.prefabUuid, mode: after.mode,
-            node: after.snapshot, expectedDiff: params.expectedDiff });
+        const finish = () => {
+            const after = locatePrefabPatchNode(params, 'after');
+            if (!after.available || after.node !== node) {
+                callback(null, { available: false, reason: 'PREFAB_PATCH_WRITE_READBACK_FAILED', mutationStarted: true });
+                return;
+            }
+            callback(null, { available: true, mutationStarted: true, prefabUuid: params.prefabUuid, mode: after.mode,
+                node: after.snapshot, expectedDiff: params.expectedDiff });
+        };
+        if (componentRemovalRequested) {
+            if (typeof setImmediate === 'function') setImmediate(finish);
+            else setTimeout(finish, 0);
+        } else finish();
     };
     const propertyAssetReferences = params.expectedDiff.filter((item) => item.path === 'component.property')
         .flatMap((item) => componentPropertyAssetReferences(item.after));
