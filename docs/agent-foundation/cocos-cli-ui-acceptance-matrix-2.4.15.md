@@ -17,8 +17,8 @@
 | `cc.LabelOutline` | 无 | 通用属性入口可按实例尝试 | 无 | 接口具备 | 专用检查与挂载/字段实机验证 |
 | `cc.LabelShadow` | 无 | 通用属性入口可按实例尝试 | 无 | 接口具备 | 专用检查与挂载/字段实机验证 |
 | `cc.Button` | 有 | 通用 Inspector 属性 | `clickEvents` | 场景点击业务行为通过；独立 Prefab 子树新增 Button、`zoomScale`、`clickEvents` 均经 CLI 关闭/重开读回和来源补偿通过；场景 `normalColor` Color 写入、关闭/重开读回、补偿及基线恢复通过，现有 clickEvents 保持不变。代表性 UI Prefab 保留原 Button clickEvents，在重开后实例化并通过 Preview 点击断言（clickCount 6），临时场景实例清理后场景哈希恢复。详见 [Prefab 子树验收](cocos-cli-prefab-subtree-acceptance-20261024.md)、[Button 颜色轨迹](traces/cocos-creator-cli-button-color-acceptance-20261024.md) 和 [代表性 UI Prefab 闭环](cocos-cli-full-ui-prefab-acceptance-20261024.md) | COLOR transition 下颜色的实际渲染；其他 Sprite 引用字段 |
-| `cc.Toggle` | 有 | 通用 Inspector 属性 | `clickEvents`、`checkEvents` | `isChecked` false→true 经 CLI 关闭/重开读回并补偿；`checkEvents` customEventData 往返后在 Creator Web Preview 触发目标 handler；最终状态和基线恢复。详见 [Toggle 属性](traces/cocos-creator-cli-toggle-checked-acceptance-20261024.md) 与 [事件](traces/cocos-creator-cli-toggle-event-acceptance-20261024.md) 轨迹 | checkEvents 多目标/清空边界；ToggleContainer 排他切换 |
-| `cc.ToggleContainer` | 有 | 通用 Inspector 属性 | `checkEvents` | 实机基线；事件仅接口 | 排他切换与事件往返 |
+| `cc.Toggle` | 有 | 通用 Inspector 属性 | `clickEvents`、`checkEvents` | `isChecked` false→true 经 CLI 关闭/重开读回并补偿；`checkEvents` customEventData 往返后在 Creator Web Preview 触发目标 handler；最终状态和基线恢复。详见 [Toggle 属性](traces/cocos-creator-cli-toggle-checked-acceptance-20261024.md) 与 [事件](traces/cocos-creator-cli-toggle-event-acceptance-20261024.md) 轨迹 | checkEvents 多目标/清空边界；带可视 Sprite/checkMark 的交互样式 |
+| `cc.ToggleContainer` | 有 | 通用 Inspector 属性 | `checkEvents` | `checkEvents` 经 CLI 写入、关闭/重开读回、Web Preview 点击触发 handler、来源补偿和最终场景哈希恢复通过；两个子 Toggle 的排他切换及 `allowSwitchOff=true` 均通过。夹具无 Sprite/checkMark，不计可视样式验收。详见 [ToggleContainer 轨迹](traces/cocos-creator-cli-toggle-container-acceptance-20261024.md) | 多目标事件/清空边界；带 Sprite 与 checkMark 的可视外观 |
 | `cc.ToggleGroup` | 无 | 通用属性入口可按实例尝试 | 无 | 接口具备 | UI 检查覆盖、挂载关系和组内行为 |
 | `cc.Slider` | 有 | 通用 Inspector 属性 | `slideEvents` | `progress`、`direction` 数值/枚举及 `handle` Button 组件引用均经 CLI 计划、写入、关闭/重开读回和来源补偿；`slideEvents` 现已完成事件写入、关闭/重开、运行时拖动触发目标 handler、运行时 `progress≈0.78` 断言、来源补偿与再次重开核验。最终清除临时 Button 手柄后，场景 `.fire` 与 `.meta` 哈希恢复基线。Creator 的 `handle` setter 会按进度自动定位目标 Button；若引用 Canvas 上无关 Button，会改动该节点位置，必须先核对目标层级/变换。当前运行时夹具没有可视 Sprite，因此只证明拖动/回调和数值行为，不证明可视手柄外观。详见 [progress](traces/cocos-creator-cli-slider-progress-acceptance-20261024.md)、[direction](traces/cocos-creator-cli-slider-direction-acceptance-20261024.md)、[handle](traces/cocos-creator-cli-slider-handle-acceptance-20261024.md)、[slideEvents](traces/cocos-creator-cli-slider-events-acceptance-20261024.md) 与[来源补偿](traces/cocos-creator-cli-scene-property-compensation-acceptance-20261024.md) 记录 | 验收挂载有 Sprite 的可视 handle；其他组件引用/属性类型仍需逐类验收 |
 | `cc.ProgressBar` | 有 | 通用 Inspector 属性 | 无 | `progress` 0.5→0.75→0.5，预览属性断言、关闭重开读回、来源补偿和基线恢复通过；该夹具未挂 `barSprite`，未验收可视填充效果 |
@@ -50,9 +50,9 @@
 
 ## 下一批操作顺序
 
-1. **其他组件属性与资源数组**：`Scrollbar.autoHideTime`、`Mask.inverted`、`Slider.progress`、`Slider.handle` 与 `Slider.slideEvents` 已完成代表字段的写入、整工程重开读回和来源补偿；下一步按单字段推进 ToggleContainer、ScrollView、PageView、EditBox，并单独验收含 AssetDB UUID 的数组字段往返。Slider 可视 handle（带 Sprite）仍待视觉验收。
+1. **其他组件属性与资源数组**：`Scrollbar.autoHideTime`、`Mask.inverted`、`Slider.progress`、`Slider.handle`、`Slider.slideEvents` 和 ToggleContainer `checkEvents` 已完成代表字段写入、整工程重开读回与来源补偿；下一步按单字段推进 ScrollView、PageView、EditBox 事件和属性，并单独验收含 AssetDB UUID 的数组字段往返。Slider 可视 handle（带 Sprite）仍待视觉验收。
 2. **Widget/Layout 几何扩展**：补 Widget 不同 Canvas 分辨率、非对称边距及单边偏移；Layout Resize Mode/子节点尺寸模式、右向左布局和其他 padding 方向仍待覆盖。
-3. **UI 事件**：保留原事件列表，逐组件增加一个目标明确的事件，预览触发并核对业务状态；关闭重开后检查 `.fire` 事件目标、组件和 handler，再补偿回基线。
+3. **UI 事件**：保留原事件列表，逐组件增加一个目标明确的事件，预览触发并核对业务状态；关闭重开后检查 `.fire` 事件目标、组件和 handler，再补偿回基线。Button、Toggle、Slider、ToggleContainer 已有场景事件运行时证据；ScrollView、PageView、EditBox 仍待实测。
 4. **补全专用检查**：对 `LabelOutline`、`LabelShadow`、`ToggleGroup`、`SafeArea`、`SubContextView` 先核对运行时类和 Inspector schema，再决定纳入 UI 专用名单或明确保持通用组件入口；不可只凭类名推断字段。
 5. **Sprite 渲染验收**：SpriteFrame 引用保存/恢复已通过，用 CLI 预览确认目标帧实际渲染。
 
