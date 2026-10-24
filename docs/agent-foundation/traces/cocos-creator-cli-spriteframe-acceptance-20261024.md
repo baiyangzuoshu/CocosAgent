@@ -21,4 +21,16 @@
 
 ## 结果边界
 
-Creator 2.4.15 中 SpriteFrame 子资源 UUID 的写入、AssetDB 类型校验、`.fire` 保存读回、工程重开、清空引用和场景尺寸恢复已通过纯 Cocos CLI。临时图通过 AssetDB 导入和删除，未手写项目 `.meta`。本轮未启动预览，因此 SpriteFrame 的实际渲染效果仍待运行时验收；组件数组中的 AssetDB 引用也未覆盖。
+初次引用往返验收通过 Creator 2.4.15 的 CLI 写入、AssetDB 类型校验、关闭重开读回、清空和尺寸恢复；当时尚未检查实际渲染。后续的“SpriteFrame 实际渲染”记录已补充像素级预览证据。组件数组中的 AssetDB 引用仍未覆盖。
+
+## 2026-10-24 后续：SpriteFrame 实际渲染
+
+- 工程 `/Users/youjunmao/WORK/Cocos_Engine/tank`，CLI 0.12.56、Creator 2.4.15、扩展 0.8.74；场景 UUID `2c12110c-6f11-4a89-bcd4-1941dc757ca4`。现有节点 `CliSpriteTest` UUID `98b06a8e-b138-495f-9a9f-e411b40a6c42`，Sprite 组件 `46UtKj7o1MmYHyjvCPMcWI`；开始时 `spriteFrame=null`、节点 100×100，Widget.left=10。场景/`.meta` 基线 SHA-256 为 `cd1bd3f3ec214e31335ad1aaf73f71155f6717955586327b5d51ce0f71771f74` / `269c764bf220a82d50babe7e47ad58f815765e8c4821c2293d5b304478fd7cba`。
+- 用 Node 在 `/private/tmp/cocos-cli-sprite-render-test.png` 生成 64×64 红/绿/蓝/黄四象限测试 PNG，166 字节，SHA-256 `c9ad61b6de9024c27046639bd9e7165412b77f83e14cb6b892210a662561e1f3`。CLI AssetDB 导入 operation `880a6bb8-604e-4f78-a97b-330c8e35c1eb`，目标 `db://assets/CliSpriteRenderAcceptance.png`；主资源 UUID `36b6b20c-8817-40e1-b6ac-7213bd520825`、SpriteFrame 子资源 UUID `d32db7e8-6757-4f0f-92ad-954940549feb`、生成 `.meta` SHA-256 `3f6c4eb476db315e7e4b4c3f29db4453fc8340ce127b47b453552f93e0125e72`。CLI AssetDB 搜索返回纹理和 SpriteFrame 两条记录。
+- CLI 计划/提交将 SpriteFrame 赋给同一 `cc.Sprite`：operation `37876f7f-4908-4444-a1d5-350f5a5c8cdd`，plan hash `08ddb313a248f2c74f0533eea8960f17bcdd4e57374b695ba74c85a9386b6a4d`。Creator 保存回执确认 `_spriteFrame` UUID、组件 UUID，并因 `sizeMode=TRIMMED` 将节点 100×100 调为 64×64。CLI 关闭实例 `5708ba81-9e92-40b2-acef-6876c6dc3276` 后重开，实例 `698fe6d9-4ca5-4b57-90ac-28b621015dba` 返回 `editorReady=true`；场景快照读回 SpriteFrame UUID 和节点 64×64，AssetDB 搜索仍有准确两个资源记录。
+- 预览前 Creator diagnostics sequence=2，只有两条既存 `CliAcceptanceButtonState` 配置 warning，`latestCompile=null`；没有把这些 warning 当成本次新增错误。CLI Preview session `fa27443f-9479-478b-be9f-b3369427333e` 对应同一工程/场景，启动 `consoleErrorCount=0`。CLI 截图路径 `/Users/youjunmao/.cocos-creator-agent/captures/fa27443f-9479-478b-be9f-b3369427333e/capture-1792828240917-c75622.png`，SHA-256 `10ba14f53229ec108a80e3df760c5aac3b927017743b27347bed9dddc25efc87`；像素中可见 64×64 红、绿、蓝、黄四块，确认 SpriteFrame 实际绘制。相同 session 的 `creator.preview.observe` 从 sequence 4 读取到 `consoleErrorCount=0`、无新增 Console 项。CLI 停止预览。
+- CLI 补偿清空 `spriteFrame`：operation `e7a2c0f5-345c-4994-b47d-50b8ddbb1c1d`，plan hash `16756d00fdae1eb9a06bbe82855888df2d2ed68fca692db9d8aeec73e6ff955f`，磁盘读回为 null。随后将节点尺寸恢复 100×100：operation `e92faf32-0a63-4a44-bf43-0fa2686eeaae`，plan hash `2b1f30bbdb81943406be0d877c4554eabf622ddd79bc082997953f0ede2bf81c`；Creator 的 Widget 尺寸补偿同时恢复 left=10，保存 `.fire` 已回到基线 SHA-256 `cd1bd3f3ec214e31335ad1aaf73f71155f6717955586327b5d51ce0f71771f74`。
+- CLI 对 SpriteFrame UUID 的完整引用扫描确认没有场景入站引用；AssetDB 删除计划 operation `4add6dff-32e1-4cdb-aad9-a4bfe468467a`，plan hash `e5785e94a4c4c04672400dca3451271087f0d63310707a26058708a050759565`，扫描完整、入站引用为 0，绑定 PNG/SpriteFrame UUID、源文件哈希和 `.meta` 哈希。Creator AssetDB 删除提交确认 PNG、`.meta`、主资源和 SpriteFrame 子资源均不存在；外部临时 PNG 也已删除。
+- 最终由 CLI 关闭实例 `698fe6d9-4ca5-4b57-90ac-28b621015dba` 并重开，实例 `25b18686-e9f5-43cb-a1a2-dff955f6a916` 返回 `editorReady=true`。`creator.project.info` 确认 Tank / Creator 2.4.15 / 扩展 0.8.74 / 场景 UUID；场景快照 23 个节点，`CliSpriteTest` 读回 `spriteFrame=null`、100×100、Widget.left=10。AssetDB 搜索无测试资源，PNG 与 `.meta` 均不存在，`.fire` / `.meta` 哈希恢复基线。
+
+本项完成 SpriteFrame 引用写入、关闭重开读回、可视像素确认、来源补偿和 AssetDB 清理。未覆盖 Sprite 其他属性和数组资源引用。
