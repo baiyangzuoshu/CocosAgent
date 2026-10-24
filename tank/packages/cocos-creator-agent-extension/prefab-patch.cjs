@@ -21,7 +21,7 @@ function componentIdFor(prefabUuid, nodeUuid, index, classId, serializedId) {
         .update(`${prefabUuid}\0${nodeUuid}\0${index}\0${classId}`).digest('hex').slice(0, 24)}`;
 }
 const PATHS = new Set([
-    'node.name', 'node.active', 'node.siblingIndex', 'node.position.x', 'node.position.y', 'node.scale.x', 'node.scale.y',
+    'node.name', 'node.active', 'node.parent', 'node.siblingIndex', 'node.position.x', 'node.position.y', 'node.scale.x', 'node.scale.y',
     'component.cc.Sprite.enabled', 'component.cc.Sprite.spriteFrameUuid', 'component.cc.Label.enabled',
 ]);
 
@@ -124,6 +124,23 @@ function validSiblingIndexDiff(item) {
         && item.before !== item.after;
 }
 
+function validParentState(value) {
+    return !!value && typeof value === 'object' && !Array.isArray(value)
+        && Object.keys(value).sort().join(',') === 'parentPath,parentUuid,siblingIndex'
+        && NODE_ID.test(value.parentUuid || '') && typeof value.parentPath === 'string'
+        && value.parentPath.length > 0 && value.parentPath.length <= 512
+        && !value.parentPath.startsWith('/') && !value.parentPath.endsWith('/')
+        && !value.parentPath.includes('//') && !value.parentPath.includes('\\')
+        && value.parentPath.split('/').every((part) => part && part !== '.' && part !== '..')
+        && Number.isInteger(value.siblingIndex) && value.siblingIndex >= 0 && value.siblingIndex < 10000;
+}
+
+function validParentDiff(item) {
+    return !!item && Object.keys(item).sort().join(',') === 'after,before,path'
+        && item.path === 'node.parent' && validParentState(item.before) && validParentState(item.after)
+        && item.before.parentUuid !== item.after.parentUuid;
+}
+
 function validValue(fieldPath, value) {
     if (fieldPath === 'node.name') return typeof value === 'string' && value.length > 0 && value.length <= 120
         && !/[\/\\\u0000-\u001f\u007f]/.test(value);
@@ -135,6 +152,7 @@ function validValue(fieldPath, value) {
 
 function validateDiff(diff) {
     if (!Array.isArray(diff) || diff.length < 1 || diff.length > 16) return false;
+    if (diff.some((item) => item && item.path === 'node.parent') && diff.length !== 1) return false;
     const paths = new Set();
     return diff.every((item) => {
         if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
@@ -144,7 +162,8 @@ function validateDiff(diff) {
             && Object.keys(item).every((field) => ['path', 'before', 'after'].includes(field))
             && validValue(item.path, item.before) && validValue(item.path, item.after)
             && !Object.is(item.before, item.after))
-            && !validSiblingIndexDiff(item) && !validPropertyDiff(item) && !validEventListDiff(item)) return false;
+            && !validSiblingIndexDiff(item) && !validParentDiff(item)
+            && !validPropertyDiff(item) && !validEventListDiff(item)) return false;
         if (paths.has(key)) return false;
         paths.add(key);
         return true;
@@ -158,6 +177,13 @@ function valueAt(node, fieldPath) {
     if (item.path === 'node.active') return { found: true, value: node.active };
     if (item.path === 'node.siblingIndex') return node.parentUuid === item.parentUuid
         && Number.isInteger(node.siblingIndex) ? { found: true, value: node.siblingIndex } : { found: false };
+    if (item.path === 'node.parent') {
+        const parts = typeof node.nodePath === 'string' ? node.nodePath.split('/') : [];
+        if (parts.length < 2 || !NODE_ID.test(node.parentUuid || '') || !Number.isInteger(node.siblingIndex))
+            return { found: false };
+        return { found: true, value: { parentUuid: node.parentUuid,
+            parentPath: parts.slice(0, -1).join('/'), siblingIndex: node.siblingIndex } };
+    }
     if (item.path === 'component.property') {
         const properties = node.componentProperties && node.componentProperties[item.componentInstanceId];
         return properties && Object.prototype.hasOwnProperty.call(properties, item.property)
@@ -215,6 +241,12 @@ function invertDiff(diff) {
 function targetPathAt(nodePath, diff, side) {
     if (typeof nodePath !== 'string' || !['before', 'after'].includes(side) || !validateDiff(diff)) return null;
     const parts = nodePath.split('/');
+    const parent = diff.find((item) => item.path === 'node.parent');
+    if (parent) {
+        const state = parent[side];
+        if (parts.length < 2 || side === 'before' && parts.slice(0, -1).join('/') !== state.parentPath) return null;
+        return `${state.parentPath}/${parts[parts.length - 1]}`;
+    }
     const rename = diff.find((item) => item.path === 'node.name');
     if (rename) {
         if (parts[parts.length - 1] !== rename.before) return null;

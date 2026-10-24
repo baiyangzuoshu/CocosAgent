@@ -1918,15 +1918,20 @@ function locatePrefabPatchNode(params, side = 'before') {
         if (stable.available) located = { node: stable.node, state: { available: true, nodePath: stable.nodePath,
             nodeUuid: stable.node.uuid } };
     }
-    if (!located.state.available || !matchesPrefabPath(located.state.nodePath, prefabPatch.targetPathAt(params.targetNodePath,
-        params.expectedDiff, side))) return { available: false, reason: 'PREFAB_NODE_IDENTITY_MISMATCH', mode };
-    const snapshot = prefabPatchSnapshot(located.node, located.state.nodePath, params, mode);
-    if (!snapshot) return { available: false, reason: 'PREFAB_NODE_IDENTITY_MISMATCH', mode };
-    const liveUuid = snapshot.nodeUuid;
+    const expectedPath = prefabPatch.targetPathAt(params.targetNodePath, params.expectedDiff, side);
+    if (!located.state.available || !matchesPrefabPath(located.state.nodePath, expectedPath))
+        return { available: false, reason: 'PREFAB_NODE_IDENTITY_MISMATCH', mode };
     const stableUuid = assetRootIdentity ? prefabPatch.rootNodeId(params.prefabUuid)
         : prefabStableNodeId(mode.sceneUuid, params.prefabUuid, located.node.uuid);
     if (stableUuid !== params.targetNodeUuid)
         return { available: false, reason: 'PREFAB_NODE_IDENTITY_MISMATCH', mode };
+    const stableLocation = prefabFindLiveNode(mode.sceneUuid, params.prefabUuid, stableUuid);
+    if (!stableLocation.available || stableLocation.node !== located.node
+        || !matchesPrefabPath(stableLocation.nodePath, expectedPath))
+        return { available: false, reason: 'PREFAB_NODE_IDENTITY_MISMATCH', mode };
+    const snapshot = prefabPatchSnapshot(located.node, stableLocation.nodePath, params, mode);
+    if (!snapshot) return { available: false, reason: 'PREFAB_NODE_IDENTITY_MISMATCH', mode };
+    const liveUuid = snapshot.nodeUuid;
     snapshot.liveNodeUuid = liveUuid;
     snapshot.nodeUuid = stableUuid;
     snapshot.identityKind = assetRootIdentity ? 'prefab-root' : 'serialized-node-id';
@@ -1948,6 +1953,31 @@ function prefabSourcePatchPreflight(params) {
     if (!target.available) return target;
     if (prefabPatchNameConflict(target.node, params.expectedDiff))
         return { available: false, reason: 'PREFAB_NODE_NAME_CONFLICT' };
+    for (const item of params.expectedDiff.filter((entry) => entry.path === 'node.parent')) {
+        const rootInfo = target.node._prefab;
+        const rootAsset = rootInfo && rootInfo.asset;
+        const isPrefabRoot = !!(rootInfo && rootInfo.root === target.node && rootAsset
+            && (rootAsset._uuid || rootAsset.uuid) === params.prefabUuid);
+        const destination = prefabFindLiveNode(target.mode.sceneUuid, params.prefabUuid, item.after.parentUuid);
+        const beforeIndex = target.node.parent && typeof target.node.getSiblingIndex === 'function'
+            ? target.node.getSiblingIndex() : -1;
+        const beforeParentPath = target.snapshot.nodePath && target.snapshot.nodePath.includes('/')
+            ? target.snapshot.nodePath.split('/').slice(0, -1).join('/') : null;
+        if (isPrefabRoot || !target.node.parent || !Array.isArray(target.node.parent.children)
+            || !target.node.parent.children.includes(target.node) || typeof target.node.setSiblingIndex !== 'function'
+            || target.snapshot.parentUuid !== item.before.parentUuid || beforeParentPath !== item.before.parentPath
+            || beforeIndex !== item.before.siblingIndex)
+            return { available: false, reason: 'PREFAB_REPARENT_SOURCE_MISMATCH' };
+        if (!destination.available) return { available: false, reason: destination.reason || 'PREFAB_REPARENT_TARGET_NOT_FOUND' };
+        if (destination.node === target.node || !Array.isArray(destination.node.children)
+            || destination.nodePath !== item.after.parentPath || item.after.siblingIndex > destination.node.children.length)
+            return { available: false, reason: 'PREFAB_REPARENT_TARGET_MISMATCH' };
+        let ancestor = destination.node;
+        while (ancestor) {
+            if (ancestor === target.node) return { available: false, reason: 'PREFAB_REPARENT_CYCLE' };
+            ancestor = ancestor.parent;
+        }
+    }
     for (const item of params.expectedDiff.filter((entry) => entry.path === 'node.siblingIndex')) {
         const parent = target.node.parent;
         const children = parent && Array.isArray(parent.children) ? parent.children : [];
@@ -2003,6 +2033,15 @@ function prefabSourcePatchMutate(params, callback) {
                 const field = item.path;
                 if (field === 'node.name') node.name = item.after;
                 else if (field === 'node.active') node.active = item.after;
+                else if (field === 'node.parent') {
+                    const destination = prefabFindLiveNode(current.mode.sceneUuid, params.prefabUuid, item.after.parentUuid);
+                    if (!destination.available || destination.nodePath !== item.after.parentPath
+                        || !Array.isArray(destination.node.children) || item.after.siblingIndex > destination.node.children.length
+                        || typeof node.setSiblingIndex !== 'function')
+                        throw new Error(destination.reason || 'PREFAB_REPARENT_TARGET_CHANGED');
+                    node.parent = destination.node;
+                    node.setSiblingIndex(item.after.siblingIndex);
+                }
                 else if (field === 'node.siblingIndex') {
                     if (!node.parent || prefabStableNodeId(current.mode.sceneUuid, params.prefabUuid,
                         node.parent.uuid) !== item.parentUuid || typeof node.setSiblingIndex !== 'function')

@@ -45,6 +45,9 @@ test('Prefab source patch commands declare plan, explicit commit write, and non-
     before: 'Before', after: 'After' }] }).ok, true);
   assert.equal(validateCommand(plan.id, { ...input, expectedDiff: [{ path: 'node.siblingIndex',
     parentUuid: 'parent-node-id', before: 0, after: 1 }] }).ok, true);
+  assert.equal(validateCommand(plan.id, { ...input, expectedDiff: [{ path: 'node.parent',
+    before: { parentUuid: 'parent-a', parentPath: 'Root/A', siblingIndex: 0 },
+    after: { parentUuid: 'parent-b', parentPath: 'Root/B', siblingIndex: 1 } }] }).ok, true);
   const assetArrayDiff = [{ path: 'component.property', componentClassName: 'cc.Label',
     componentInstanceId: 'label-instance-1', componentIndex: 0, property: 'materials',
     before: { kind: 'array', items: [{ kind: 'asset', assetClass: 'Material',
@@ -123,6 +126,27 @@ test('Prefab sibling-order patch binds the existing parent and exact before/afte
   assert.equal(prefabPatch.validateDiff([{ ...diff[0], before: -1 }]), false);
   assert.equal(prefabPatch.validateDiff([{ ...diff[0], after: 10000 }]), false);
   assert.equal(prefabPatch.validateDiff([{ ...diff[0], after: 0 }]), false);
+});
+
+test('Prefab reparent patch binds exact parent paths and child order and derives an exact inverse', () => {
+  const diff = [{ path: 'node.parent', before: { parentUuid: 'parent-a', parentPath: 'Root/A', siblingIndex: 1 },
+    after: { parentUuid: 'parent-b', parentPath: 'Root/B', siblingIndex: 0 } }];
+  const beforeNode = { ...node, nodePath: 'Root/A/Child', parentUuid: 'parent-a', siblingIndex: 1 };
+  const afterNode = { ...beforeNode, nodePath: 'Root/B/Child', parentUuid: 'parent-b', siblingIndex: 0 };
+  assert.equal(prefabPatch.validateDiff(diff), true);
+  assert.equal(prefabPatch.matchesDiff(beforeNode, diff, 'before'), true);
+  assert.equal(prefabPatch.matchesDiff(afterNode, diff, 'after'), true);
+  assert.equal(prefabPatch.targetPathAt(beforeNode.nodePath, diff, 'before'), beforeNode.nodePath);
+  assert.equal(prefabPatch.targetPathAt(beforeNode.nodePath, diff, 'after'), afterNode.nodePath);
+  const inverse = prefabPatch.invertDiff(diff);
+  assert.deepEqual(inverse, [{ path: 'node.parent', before: diff[0].after, after: diff[0].before }]);
+  assert.equal(prefabPatch.matchesDiff(afterNode, inverse, 'before'), true);
+  assert.equal(prefabPatch.targetPathAt(afterNode.nodePath, inverse, 'after'), beforeNode.nodePath);
+  assert.equal(prefabPatch.validateDiff([{ ...diff[0], after: { ...diff[0].after, parentPath: 'Root/A/Child/Nested' } }]), true);
+  assert.equal(prefabPatch.validateDiff([{ ...diff[0], after: { ...diff[0].after, parentUuid: 'parent-a' } }]), false);
+  assert.equal(prefabPatch.validateDiff([{ ...diff[0], after: { ...diff[0].after, siblingIndex: -1 } }]), false);
+  assert.equal(prefabPatch.validateDiff([diff[0], { path: 'node.active', before: true, after: false }]), false);
+  assert.equal(prefabPatch.targetPathAt('Root/C/Child', diff, 'before'), null);
 });
 
 test('Prefab patch rejects duplicate, unsupported, malformed, and ambiguous changes', () => {
@@ -478,6 +502,84 @@ test('Prefab sibling order changes only the selected child within its exact Pref
   assert.equal(restored.available, true, JSON.stringify(restored));
   assert.deepEqual(root.children, [first, second]);
   assert.equal(restored.node.siblingIndex, 0);
+});
+
+test('Prefab reparent changes one node within the same asset and restores parent plus child order', () => {
+  const scenePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../creator-extension/scene.js');
+  class Node {
+    constructor(name, uuid, id) { this.name = name; this.uuid = uuid; this._id = id; this.children = [];
+      this._components = []; this._parent = null; this._objFlags = 0; this.active = true; this.scaleX = 1; this.scaleY = 1; }
+    get parent() { return this._parent; }
+    set parent(value) {
+      if (this._parent && Array.isArray(this._parent.children)) {
+        const previousIndex = this._parent.children.indexOf(this);
+        if (previousIndex >= 0) this._parent.children.splice(previousIndex, 1);
+      }
+      this._parent = value;
+      if (value && Array.isArray(value.children) && !value.children.includes(this)) value.children.push(this);
+    }
+    getComponents() { return this._components; }
+    getPosition() { return { x: 0, y: 0 }; }
+    getSiblingIndex() { return this.parent ? this.parent.children.indexOf(this) : -1; }
+    setSiblingIndex(index) {
+      const siblings = this.parent.children;
+      siblings.splice(siblings.indexOf(this), 1);
+      siblings.splice(index, 0, this);
+    }
+  }
+  const root = new Node('Root', 'live-root', '');
+  root._prefab = { root, fileId: '', asset: { _uuid: prefabUuid } };
+  const folderA = new Node('A', 'live-a', 'runtime-a'); folderA._prefab = { root, fileId: 'parent-a' };
+  const folderB = new Node('B', 'live-b', 'runtime-b'); folderB._prefab = { root, fileId: 'parent-b' };
+  const mover = new Node('Mover', 'live-mover', 'runtime-mover'); mover._prefab = { root, fileId: 'mover-id' };
+  const siblingA = new Node('SiblingA', 'live-sibling-a', 'runtime-sibling-a'); siblingA._prefab = { root, fileId: 'sibling-a' };
+  const existingB = new Node('ExistingB', 'live-existing-b', 'runtime-existing-b'); existingB._prefab = { root, fileId: 'existing-b' };
+  const nested = new Node('Nested', 'live-nested', 'runtime-nested'); nested._prefab = { root, fileId: 'nested-id' };
+  root.children = [folderA, folderB]; folderA._parent = root; folderB._parent = root;
+  folderA.children = [mover, siblingA]; mover._parent = folderA; siblingA._parent = folderA;
+  folderB.children = [existingB]; existingB._parent = folderB;
+  mover.children = [nested]; nested._parent = mover;
+  const scene = new Node('EditScene', 'edit-scene', 'scene-id'); scene.uuid = 'edit-scene'; scene.children = [root]; root._parent = scene;
+  const mode = { name: 'prefab', save(callback) { callback(); }, dirty() { return false; } };
+  const module = { exports: {} };
+  vm.runInNewContext(fs.readFileSync(scenePath, 'utf8'), { module, exports: module.exports,
+    require: createRequire(scenePath), cc: { Node, director: { getScene: () => scene },
+      Object: { Flags: { DontSave: 8, HideInHierarchy: 1024 } }, js: { getClassName: () => 'cc.Node' } },
+    Editor: { isMainProcess: false, require() { return { curMode: () => mode }; } } }, { filename: 'scene.js' });
+  function invoke(method, input) {
+    let value;
+    module.exports[method]({ reply(error, result) { assert.equal(error, null); value = result; } }, input);
+    return value;
+  }
+  const diff = [{ path: 'node.parent', before: { parentUuid: 'parent-a', parentPath: 'Root/A', siblingIndex: 0 },
+    after: { parentUuid: 'parent-b', parentPath: 'Root/B', siblingIndex: 1 } }];
+  const input = { prefabUuid, targetNodeUuid: 'mover-id', targetNodePath: 'Root/A/Mover', action: 'apply', expectedDiff: diff };
+  const preflight = invoke('prefabSourcePatchPreflight', input);
+  assert.equal(preflight.available, true, JSON.stringify(preflight));
+  const moved = invoke('prefabSourcePatchMutate', input);
+  assert.equal(moved.available, true, JSON.stringify(moved));
+  assert.deepEqual(folderA.children, [siblingA]);
+  assert.deepEqual(folderB.children, [existingB, mover]);
+  assert.equal(moved.node.nodePath, 'Root/B/Mover');
+  assert.equal(moved.node.parentUuid, 'parent-b');
+  assert.equal(moved.node.siblingIndex, 1);
+
+  const inverse = prefabPatch.invertDiff(diff);
+  const compensate = { ...input, targetNodePath: 'Root/B/Mover', action: 'compensate', expectedDiff: inverse };
+  assert.equal(invoke('prefabSourcePatchPreflight', compensate).available, true);
+  const restored = invoke('prefabSourcePatchMutate', compensate);
+  assert.equal(restored.available, true, JSON.stringify(restored));
+  assert.deepEqual(folderA.children, [mover, siblingA]);
+  assert.deepEqual(folderB.children, [existingB]);
+  assert.equal(restored.node.nodePath, 'Root/A/Mover');
+  assert.equal(restored.node.parentUuid, 'parent-a');
+  assert.equal(restored.node.siblingIndex, 0);
+
+  const cycleDiff = [{ path: 'node.parent', before: inverse[0].after,
+    after: { parentUuid: 'nested-id', parentPath: 'Root/A/Mover/Nested', siblingIndex: 0 } }];
+  const cycle = invoke('prefabSourcePatchPreflight', { ...input, expectedDiff: cycleDiff });
+  assert.equal(cycle.available, false);
+  assert.equal(cycle.reason, 'PREFAB_REPARENT_CYCLE');
 });
 
 test('Prefab UI event lists use stable in-Prefab targets and reject external target nodes', () => {

@@ -115,3 +115,12 @@
 - source-linked compensate `06446318-cd36-414f-ac1b-5b7c75058083`：从完成的 apply 派生逆操作，将 `First.siblingIndex` 从 1 恢复为 0。保存、退出、重开、读回均通过，源 SHA-256 精确恢复为 `d1ee6bccb4af94646f06479606ce0cd94929568efcff8227d9be611b15b6af2c`，`.meta` 哈希保持不变。两个回执均如实记录 `sceneSavedEventConfirmed: false`，但 Creator 原生保存回调和磁盘/重开读回确认通过。
 - 清理时通过 CLI 删除测试场景子树 `a99194d9-4e5c-419f-b770-978000bf7c8d`，保存场景哈希回到基线 `cd1bd3f3ec214e31335ad1aaf73f71155f6717955586327b5d51ce0f71771f74`，`.meta` 仍为 `269c764bf220a82d50babe7e47ad58f815765e8c4821c2293d5b304478fd7cba`。删除 Prefab 前 AssetDB 引用扫描完整且为 0；删除操作 `3831cfdd-c789-4188-8e36-95fcd018f636` 后，Prefab 文件、`.meta` 与 AssetDB 记录均不存在。最终 CLI 场景快照为 **23 个节点**，临时资产搜索返回 0 项。
 - 完整 CLI 自动化测试 **335/335 通过，0 失败**；普通沙箱运行的三个本机回环监听测试因 `EPERM` 失败，随后在获准绑定 `127.0.0.1` 的测试环境完整重跑通过。最终扩展状态为 `matchesBundle: true`、`changedFiles: []`、`reloadRequired: false`。
+
+### 2026-10-24 后续：Prefab 节点换父级
+
+- 工程 `/Users/youjunmao/WORK/Cocos_Engine/tank`；CLI **0.12.55**、Creator **2.4.15**、扩展 **0.8.65**。通过 Cocos CLI 核对工程路径、Creator 安装和版本，使用 CLI 更新扩展并关闭/重开工程；握手确认同一 Tank 工程已加载 0.8.65。未使用 CUA，也未直接改写 Prefab、场景或 `.meta` 文件。
+- 使用 CLI 在 `CliAcceptanceScene` 创建临时层级并生成 Prefab `CliReparentAcceptance.prefab`（UUID `1b59bce4-c2f4-4706-a7d3-c3be8d89fa9b`）。初始源 SHA-256 为 `9e46649303ea5f1f8701c72af5119979a559f6a238808b9aafe3e68958a0eea7`，`.meta` SHA-256 为 `60114a647ea3fbb56ba10ed16309af265e15e4556e23ab0301f642fd1c2f0846`。目标 `Mover` 稳定 ID 为 `95FOHn1slBQIGfF8/xsTyA`；原父级 `Source` ID 为 `d22nflpeBBw5plO9xs4PiT`，目标父级 `Target` ID 为 `33EICnzLdBIZA/+8Ng8SOd`。
+- apply 操作 `fc622169-ed74-4942-b155-62bc27e082d6` 将 `Mover` 从 `CliReparentAcceptance/Source` 第 0 位移动到 `CliReparentAcceptance/Target` 第 1 位。Creator 回执确认保存回调、退出 Prefab、重开同一 Prefab、再次退出和磁盘读回；保存后源 SHA-256 为 `2e69aa76b69ecc7c1930db346f0d45a011dddd6945cc416348f921959e07c91a`，同一节点 ID 位于目标路径。
+- source-linked compensate 操作 `6756b599-4288-4204-a2e4-2097f953e95f` 从已完成 apply 派生逆操作。保存、退出、重开和读回再次通过，源 SHA-256 精确恢复为初始值，`.meta` 哈希保持不变。两次 Creator 回执均记录 `sceneSavedEventConfirmed: false`；原生保存回调、Prefab 退出/重开及精确磁盘读回均已确认。
+- 清理时通过 CLI 删除临时场景子树操作 `96c388ba-b25e-4125-ad99-e46d480f3759`；保存场景 SHA-256 恢复到基线 `cd1bd3f3ec214e31335ad1aaf73f71155f6717955586327b5d51ce0f71771f74`，场景 `.meta` 哈希仍为 `269c764bf220a82d50babe7e47ad58f815765e8c4821c2293d5b304478fd7cba`。完整 AssetDB 引用扫描为 0 后，以删除操作 `458b3ab8-4dff-4baa-b99e-42bca2bf2899` 移除临时 Prefab；文件、`.meta` 与 AssetDB 记录均确认不存在。最终场景为 **23 个节点**，资产搜索返回 0 项。
+- 定向 Prefab patch 测试 **20/20 通过**，完整 CLI 自动化测试 **337/337 通过**。

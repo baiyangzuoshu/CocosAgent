@@ -2524,6 +2524,11 @@ async function createPrefabSourcePatchPlan(input) {
         throw coded('PREFAB_UI_EVENT_TARGET_REQUIRED');
     let node = singlePrefabNode(source, input.targetNodeUuid);
     if (node.nodePath !== input.targetNodePath) throw coded('PREFAB_EXPECTED_STATE_MISMATCH');
+    if (expectedDiff.some((item) => item.path === 'node.parent')) {
+        source = await inspectPrefabSourceCommand({ prefabUuid: input.prefabUuid });
+        node = singlePrefabNode(source, input.targetNodeUuid);
+        if (node.nodePath !== input.targetNodePath) throw coded('PREFAB_EXPECTED_STATE_MISMATCH');
+    }
     const hasComponentDiff = expectedDiff.some((item) => ['component.property', 'component.eventList'].includes(item.path));
     if (input.action === 'apply' && hasComponentDiff) {
         let entered = false;
@@ -2566,6 +2571,18 @@ async function createPrefabSourcePatchPlan(input) {
         node = singlePrefabNode(source, input.targetNodeUuid);
     }
     if (!prefabPatch.matchesDiff(node, expectedDiff, 'before')) throw coded('PREFAB_SOURCE_STALE');
+    for (const item of expectedDiff.filter((entry) => entry.path === 'node.parent')) {
+        const beforeParent = source.nodes.find((entry) => entry.nodeUuid === item.before.parentUuid);
+        const afterParent = source.nodes.find((entry) => entry.nodeUuid === item.after.parentUuid);
+        const afterChildCount = source.nodes.filter((entry) => entry.parentUuid === item.after.parentUuid).length;
+        const beforeParentPath = node.nodePath.split('/').slice(0, -1).join('/');
+        if (node.identityKind === 'prefab-root' || !beforeParent || !afterParent
+            || node.parentUuid !== item.before.parentUuid || node.siblingIndex !== item.before.siblingIndex
+            || beforeParent.nodePath !== beforeParentPath || item.before.parentPath !== beforeParent.nodePath
+            || item.after.parentPath !== afterParent.nodePath || afterParent.nodePath === node.nodePath
+            || afterParent.nodePath.startsWith(`${node.nodePath}/`) || item.after.siblingIndex > afterChildCount)
+            throw coded('PREFAB_REPARENT_TARGET_INVALID');
+    }
     for (const item of expectedDiff.filter((entry) => entry.path === 'node.siblingIndex')) {
         if (node.parentUuid !== item.parentUuid || !Number.isInteger(node.siblingCount)
             || item.after >= node.siblingCount)
