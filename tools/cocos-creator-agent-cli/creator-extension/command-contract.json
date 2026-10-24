@@ -197,7 +197,7 @@
     {
       "id": "creator.prefab.source.patch.plan",
       "access": "plan",
-      "description": "Plan edits to an existing Prefab in Creator Prefab edit mode, including node fields, same-parent sibling order, bounded in-Prefab reparenting, declared public Inspector-serializable component properties, and supported UI event lists. Reparenting binds both exact parent paths and sibling positions, rejects cycles and root movement, and appends at an explicit target index. Event targets must be stable nodes inside the same Prefab and their handler component/method must resolve; compensation and replay derive their inverse from a completed source operation.",
+      "description": "Plan edits to an existing Prefab in Creator Prefab edit mode, including node fields, same-parent sibling order, bounded in-Prefab reparenting, one empty leaf child insertion/removal, declared public Inspector-serializable component properties, and supported UI event lists. Child edits bind the exact parent child list and only create or remove componentless leaf nodes; AUTO is accepted only for a planned insertion and replaced with a generated stable ID. Reparenting binds both exact parent paths and sibling positions, rejects cycles and root movement, and appends at an explicit target index. Event targets must be stable nodes inside the same Prefab and their handler component/method must resolve; compensation and replay derive their inverse from a completed source operation.",
       "input": { "type": "object", "required": ["prefabUuid", "targetNodePath", "targetNodeUuid", "action"], "properties": {
         "prefabUuid": { "type": "string", "minLength": 22, "maxLength": 36,
           "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
@@ -209,7 +209,7 @@
         "sourceOperationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
         "expectedDiff": { "type": "array", "minItems": 1, "maxItems": 16, "items": {
           "type": "object", "required": ["path", "before", "after"], "properties": {
-            "path": { "type": "string", "enum": ["node.name", "node.active", "node.parent", "node.siblingIndex", "node.position.x", "node.position.y", "node.scale.x", "node.scale.y", "component.cc.Sprite.enabled", "component.cc.Sprite.spriteFrameUuid", "component.cc.Label.enabled", "component.property", "component.eventList"] },
+            "path": { "type": "string", "enum": ["node.name", "node.active", "node.parent", "node.siblingIndex", "node.child", "node.position.x", "node.position.y", "node.scale.x", "node.scale.y", "component.cc.Sprite.enabled", "component.cc.Sprite.spriteFrameUuid", "component.cc.Label.enabled", "component.property", "component.eventList"] },
             "before": { "type": ["string", "number", "boolean", "null", "object"], "additionalProperties": true },
             "after": { "type": ["string", "number", "boolean", "null", "object"], "additionalProperties": true },
             "componentClassName": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[A-Za-z_$][A-Za-z0-9_$.]*$" },

@@ -149,6 +149,48 @@ test('Prefab reparent patch binds exact parent paths and child order and derives
   assert.equal(prefabPatch.targetPathAt('Root/C/Child', diff, 'before'), null);
 });
 
+test('Prefab child edits bind the full sibling list and only insert or remove empty leaves', () => {
+  const before = { childCount: 2, children: [
+    { nodeUuid: 'first-child', name: 'First', siblingIndex: 0, childCount: 0, componentCount: 0 },
+    { nodeUuid: 'second-child', name: 'Second', siblingIndex: 1, childCount: 0, componentCount: 0 },
+  ] };
+  const planned = { childCount: 3, children: [
+    before.children[0], before.children[1],
+    { nodeUuid: prefabPatch.AUTO_CHILD_NODE_ID, name: 'Added', siblingIndex: 2, childCount: 0, componentCount: 0 },
+  ] };
+  const plannedDiff = [{ path: 'node.child', before, after: planned }];
+  assert.equal(prefabPatch.validateDiff(plannedDiff), true);
+  assert.deepEqual(prefabPatch.childStateChange(before, planned), {
+    kind: 'insert', index: 2, child: planned.children[2],
+  });
+
+  const created = { ...planned, children: [...planned.children.slice(0, 2),
+    { ...planned.children[2], nodeUuid: 'new-child-id' }] };
+  const createDiff = [{ path: 'node.child', before, after: created }];
+  assert.equal(prefabPatch.validateDiff(createDiff), true);
+  const parent = { childState: before };
+  assert.equal(prefabPatch.matchesDiff(parent, createDiff, 'before'), true);
+  parent.childState = created;
+  assert.equal(prefabPatch.matchesDiff(parent, createDiff, 'after'), true);
+
+  const inverse = prefabPatch.invertDiff(createDiff);
+  assert.equal(prefabPatch.validateDiff(inverse), true);
+  assert.equal(prefabPatch.childStateChange(inverse[0].before, inverse[0].after).kind, 'remove');
+  assert.equal(prefabPatch.matchesDiff(parent, inverse, 'before'), true);
+  parent.childState = before;
+  assert.equal(prefabPatch.matchesDiff(parent, inverse, 'after'), true);
+
+  const reordered = { childCount: 3, children: [
+    created.children[1], created.children[0], created.children[2],
+  ] };
+  assert.equal(prefabPatch.validateDiff([{ path: 'node.child', before, after: reordered }]), false);
+  const nonEmpty = [{ path: 'node.child', before: { childCount: 1, children: [
+    { nodeUuid: 'target-child', name: 'Target', siblingIndex: 0, childCount: 1, componentCount: 0 },
+  ] }, after: { childCount: 0, children: [] } }];
+  assert.equal(prefabPatch.validateDiff(nonEmpty), false);
+  assert.equal(prefabPatch.validateDiff([...createDiff, { path: 'node.active', before: true, after: false }]), false);
+});
+
 test('Prefab patch rejects duplicate, unsupported, malformed, and ambiguous changes', () => {
   assert.equal(prefabPatch.validateDiff([
     { path: 'node.active', before: true, after: false },
@@ -272,6 +314,10 @@ test('Prefab source inspection reports serialized sibling order and stable paren
     { nodeUuid: 'first-node', parentUuid: prefabPatch.rootNodeId(prefabUuid), siblingIndex: 0, siblingCount: 2 },
     { nodeUuid: 'second-node', parentUuid: prefabPatch.rootNodeId(prefabUuid), siblingIndex: 1, siblingCount: 2 },
   ]);
+  assert.deepEqual(source.nodes[0].childState, { childCount: 2, children: [
+    { nodeUuid: 'first-node', name: 'First', siblingIndex: 0, childCount: 0, componentCount: 0 },
+    { nodeUuid: 'second-node', name: 'Second', siblingIndex: 1, childCount: 0, componentCount: 0 },
+  ] });
 });
 
 test('Creator-authored Prefab components with empty IDs receive a stable asset-bound identity', () => {
@@ -580,6 +626,82 @@ test('Prefab reparent changes one node within the same asset and restores parent
   const cycle = invoke('prefabSourcePatchPreflight', { ...input, expectedDiff: cycleDiff });
   assert.equal(cycle.available, false);
   assert.equal(cycle.reason, 'PREFAB_REPARENT_CYCLE');
+});
+
+test('Prefab patch creates and deletes one linked empty leaf child and compensates exactly', () => {
+  const scenePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../creator-extension/scene.js');
+  let nextNode = 0;
+  class Node {
+    constructor(name) {
+      this.name = name; this.uuid = `live-node-${++nextNode}`; this._id = `runtime-node-${nextNode}`;
+      this.children = []; this._components = []; this._parent = null; this._objFlags = 0;
+      this.active = true; this.scaleX = 1; this.scaleY = 1; this.scaleZ = 1; this.x = 0; this.y = 0;
+    }
+    get parent() { return this._parent; }
+    set parent(value) {
+      if (this._parent && Array.isArray(this._parent.children)) {
+        const previousIndex = this._parent.children.indexOf(this);
+        if (previousIndex >= 0) this._parent.children.splice(previousIndex, 1);
+      }
+      this._parent = value;
+      if (value && Array.isArray(value.children) && !value.children.includes(this)) value.children.push(this);
+      if (value && value._prefab && !this._prefab) this._prefab = {
+        root: value._prefab.root, fileId: this._id, asset: value._prefab.asset,
+      };
+      if (!value && this._prefab && this._prefab.root !== this) this._prefab = null;
+    }
+    addChild(child) { child.parent = this; }
+    removeChild(child) { if (child.parent === this) child.parent = null; }
+    getComponents() { return this._components; }
+    getPosition() { return { x: this.x, y: this.y }; }
+    getSiblingIndex() { return this.parent ? this.parent.children.indexOf(this) : -1; }
+    setSiblingIndex(index) {
+      const siblings = this.parent.children;
+      siblings.splice(siblings.indexOf(this), 1);
+      siblings.splice(index, 0, this);
+    }
+    destroy() { this.destroyed = true; }
+  }
+  const root = new Node('Root');
+  root._prefab = { root, fileId: '', asset: { _uuid: prefabUuid } };
+  const original = new Node('Original');
+  original._prefab = { root, fileId: 'original-child', asset: root._prefab.asset };
+  root.addChild(original);
+  const scene = new Node('EditScene'); scene.uuid = 'edit-scene'; scene._id = 'scene-id';
+  scene.addChild(root);
+  const mode = { name: 'prefab', save(callback) { callback(); }, dirty() { return false; } };
+  const module = { exports: {} };
+  vm.runInNewContext(fs.readFileSync(scenePath, 'utf8'), { module, exports: module.exports,
+    require: createRequire(scenePath), cc: { Node, director: { getScene: () => scene },
+      Object: { Flags: { DontSave: 8, HideInHierarchy: 1024 } }, js: { getClassName: () => 'cc.Node' } },
+    Editor: { isMainProcess: false, require() { return { curMode: () => mode }; } } }, { filename: 'scene.js' });
+  function invoke(method, input) {
+    let value;
+    module.exports[method]({ reply(error, result) { assert.equal(error, null); value = result; } }, input);
+    return value;
+  }
+  const rootId = prefabPatch.rootNodeId(prefabUuid);
+  const before = { childCount: 1, children: [
+    { nodeUuid: 'original-child', name: 'Original', siblingIndex: 0, childCount: 0, componentCount: 0 },
+  ] };
+  const after = { childCount: 2, children: [before.children[0],
+    { nodeUuid: 'planned-child-id', name: 'Added', siblingIndex: 1, childCount: 0, componentCount: 0 }] };
+  const diff = [{ path: 'node.child', before, after }];
+  const input = { prefabUuid, targetNodeUuid: rootId, targetNodePath: 'Root', action: 'apply', expectedDiff: diff };
+  const preflight = invoke('prefabSourcePatchPreflight', input);
+  assert.equal(preflight.available, true, JSON.stringify(preflight));
+  const created = invoke('prefabSourcePatchMutate', input);
+  assert.equal(created.available, true, JSON.stringify(created));
+  assert.equal(created.node.childState.children[1].nodeUuid, 'planned-child-id');
+  assert.equal(root.children[1]._prefab.root, root);
+  assert.equal(root.children[1]._prefab.fileId, 'planned-child-id');
+
+  const inverse = prefabPatch.invertDiff(diff);
+  const compensate = { ...input, action: 'compensate', expectedDiff: inverse };
+  assert.equal(invoke('prefabSourcePatchPreflight', compensate).available, true);
+  const deleted = invoke('prefabSourcePatchMutate', compensate);
+  assert.equal(deleted.available, true, JSON.stringify(deleted));
+  assert.deepEqual(root.children, [original]);
 });
 
 test('Prefab UI event lists use stable in-Prefab targets and reject external target nodes', () => {

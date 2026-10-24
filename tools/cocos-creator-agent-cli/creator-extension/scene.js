@@ -1887,9 +1887,19 @@ function prefabPatchSnapshot(node, nodePath, params, mode) {
     const parentUuid = parent ? prefabStableNodeId(mode.sceneUuid, params.prefabUuid, parent.uuid) : null;
     const siblingIndex = parent ? (typeof node.getSiblingIndex === 'function'
         ? node.getSiblingIndex() : Array.isArray(parent.children) ? parent.children.indexOf(node) : -1) : null;
+    const childNodes = authoringChildren(node);
+    if (childNodes.length > prefabPatch.MAX_DIRECT_CHILDREN) return null;
+    const childRows = childNodes.map((child, index) => ({
+        nodeUuid: prefabStableNodeId(mode.sceneUuid, params.prefabUuid, child.uuid),
+        name: String(child.name || ''), siblingIndex: index,
+        childCount: authoringChildren(child).length,
+        componentCount: Array.isArray(child._components) ? child._components.length : -1,
+    }));
+    if (childRows.some((child) => !child.nodeUuid || child.componentCount < 0)) return null;
     return { nodeUuid: typeof node.uuid === 'string' ? node.uuid : null, nodePath,
         name: String(node.name || ''), active: node.active !== false, parentUuid, siblingIndex,
         transform: { x: Number(position.x), y: Number(position.y), scaleX: Number(node.scaleX), scaleY: Number(node.scaleY) },
+        childState: { childCount: childRows.length, children: childRows },
         components, ...(Object.keys(componentProperties).length ? { componentProperties, componentPropertyBindings } : {}),
         ...(Object.keys(componentEventLists).length ? { componentEventLists } : {}) };
 }
@@ -1953,6 +1963,27 @@ function prefabSourcePatchPreflight(params) {
     if (!target.available) return target;
     if (prefabPatchNameConflict(target.node, params.expectedDiff))
         return { available: false, reason: 'PREFAB_NODE_NAME_CONFLICT' };
+    for (const item of params.expectedDiff.filter((entry) => entry.path === 'node.child')) {
+        const change = prefabPatch.childStateChange(item.before, item.after);
+        if (!change || change.child.nodeUuid === prefabPatch.AUTO_CHILD_NODE_ID)
+            return { available: false, reason: 'PREFAB_CHILD_IDENTITY_INVALID' };
+        if (change.kind === 'insert') {
+            const existingId = prefabFindLiveNode(target.mode.sceneUuid, params.prefabUuid, change.child.nodeUuid);
+            if (typeof cc.Node !== 'function' || typeof target.node.addChild !== 'function'
+                || !Array.isArray(target.node.children) || authoringChildren(target.node).length !== target.node.children.length
+                || change.index > target.node.children.length
+                || existingId.available || existingId.reason !== 'PREFAB_NODE_NOT_FOUND')
+                return { available: false, reason: 'PREFAB_CHILD_CREATE_PRECONDITION_FAILED' };
+        } else {
+            const child = prefabFindLiveNode(target.mode.sceneUuid, params.prefabUuid, change.child.nodeUuid);
+            if (!child.available || child.node.parent !== target.node || child.node.name !== change.child.name
+                || typeof child.node.getSiblingIndex !== 'function' || child.node.getSiblingIndex() !== change.index
+                || authoringChildren(child.node).length !== 0
+                || !Array.isArray(child.node._components) || child.node._components.length !== 0
+                || typeof target.node.removeChild !== 'function' || typeof child.node.destroy !== 'function')
+                return { available: false, reason: 'PREFAB_CHILD_DELETE_PRECONDITION_FAILED' };
+        }
+    }
     for (const item of params.expectedDiff.filter((entry) => entry.path === 'node.parent')) {
         const rootInfo = target.node._prefab;
         const rootAsset = rootInfo && rootInfo.asset;
@@ -2047,6 +2078,43 @@ function prefabSourcePatchMutate(params, callback) {
                         node.parent.uuid) !== item.parentUuid || typeof node.setSiblingIndex !== 'function')
                         throw new Error('PREFAB_SIBLING_PARENT_CHANGED');
                     node.setSiblingIndex(item.after);
+                }
+                else if (field === 'node.child') {
+                    const change = prefabPatch.childStateChange(item.before, item.after);
+                    if (!change || change.child.nodeUuid === prefabPatch.AUTO_CHILD_NODE_ID)
+                        throw new Error('PREFAB_CHILD_IDENTITY_INVALID');
+                    if (change.kind === 'insert') {
+                        const rootState = prefabRootInLiveScene(current.mode.sceneUuid, params.prefabUuid);
+                        const existingId = prefabFindLiveNode(current.mode.sceneUuid, params.prefabUuid, change.child.nodeUuid);
+                        if (!rootState.available || typeof node.addChild !== 'function'
+                            || !Array.isArray(node.children) || authoringChildren(node).length !== node.children.length
+                            || change.index > node.children.length
+                            || existingId.available || existingId.reason !== 'PREFAB_NODE_NOT_FOUND')
+                            throw new Error('PREFAB_CHILD_CREATE_PRECONDITION_FAILED');
+                        const child = new cc.Node(change.child.name);
+                        node.addChild(child);
+                        const info = child._prefab;
+                        const asset = info && info.asset;
+                        if (!info || info.root !== rootState.root || !asset
+                            || (asset._uuid || asset.uuid) !== params.prefabUuid || typeof info.fileId !== 'string' || !info.fileId)
+                            throw new Error('PREFAB_CHILD_LINK_FAILED');
+                        child._id = change.child.nodeUuid;
+                        info.fileId = change.child.nodeUuid;
+                        if (typeof child.setSiblingIndex !== 'function') throw new Error('PREFAB_CHILD_ORDER_API_UNAVAILABLE');
+                        child.setSiblingIndex(change.index);
+                        if (prefabStableNodeId(current.mode.sceneUuid, params.prefabUuid, child.uuid) !== change.child.nodeUuid)
+                            throw new Error('PREFAB_CHILD_IDENTITY_WRITE_FAILED');
+                    } else {
+                        const child = prefabFindLiveNode(current.mode.sceneUuid, params.prefabUuid, change.child.nodeUuid);
+                        if (!child.available || child.node.parent !== node || child.node.name !== change.child.name
+                            || typeof child.node.getSiblingIndex !== 'function' || child.node.getSiblingIndex() !== change.index
+                            || authoringChildren(child.node).length !== 0
+                            || !Array.isArray(child.node._components) || child.node._components.length !== 0
+                            || typeof node.removeChild !== 'function' || typeof child.node.destroy !== 'function')
+                            throw new Error('PREFAB_CHILD_DELETE_PRECONDITION_FAILED');
+                        node.removeChild(child.node);
+                        child.node.destroy();
+                    }
                 }
                 else if (field === 'node.position.x') node.setPosition(item.after, node.y);
                 else if (field === 'node.position.y') node.setPosition(node.x, item.after);

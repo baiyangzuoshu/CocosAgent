@@ -281,6 +281,8 @@ function inspectPrefabSource({ prefabBytes, metaBytes, prefabUuid, maxComponents
         const node = { nodeUuid: nodeId, fileId, name, nodePath, parentUuid: item.parentId,
             identityKind: serializedNodeId ? 'serialized-node-id' : item.depth === 0 ? 'prefab-root' : null,
             siblingIndex: item.siblingIndex, siblingCount: item.siblingCount,
+            childCount: Array.isArray(record._children) ? record._children.length : 0,
+            componentCount: allComponents.length,
             active: typeof record._active === 'boolean' ? record._active : true,
             transform, components, componentsTruncated: allComponents.length > components.length,
             ...(Object.keys(componentProperties).length ? { componentProperties } : {}),
@@ -309,6 +311,21 @@ function inspectPrefabSource({ prefabBytes, metaBytes, prefabUuid, maxComponents
     if (visited.size !== nodeRows.size) return fail('PREFAB_UNREACHABLE_NODE_RECORDS', {
         reachableNodeCount: visited.size, serializedNodeCount: nodeRows.size,
     });
+    const childrenByParent = new Map();
+    for (const child of nodes) {
+        if (typeof child.parentUuid !== 'string') continue;
+        const siblings = childrenByParent.get(child.parentUuid) || [];
+        siblings.push(child);
+        childrenByParent.set(child.parentUuid, siblings);
+    }
+    for (const node of nodes) {
+        const children = (childrenByParent.get(node.nodeUuid) || []).sort((a, b) => a.siblingIndex - b.siblingIndex);
+        if (children.length !== node.childCount) return fail('PREFAB_PARENT_CHILD_MISMATCH', { nodePath: node.nodePath });
+        node.childState = { childCount: children.length, children: children.map((child) => ({
+            nodeUuid: child.nodeUuid, name: child.name, siblingIndex: child.siblingIndex,
+            childCount: child.childCount, componentCount: child.componentCount,
+        })) };
+    }
     return { available: true, prefabUuid, rootName: nodes[0].name, nodeCount: nodes.length, nodes };
 }
 

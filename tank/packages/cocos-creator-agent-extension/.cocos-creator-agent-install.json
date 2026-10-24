@@ -1,22 +1,22 @@
 {
   "schemaVersion": 1,
   "extensionName": "cocos-creator-agent-extension",
-  "extensionVersion": "0.8.65",
+  "extensionVersion": "0.8.66",
   "installedByCliVersion": "0.12.55",
-  "installedAt": "2026-10-24T00:29:53.312Z",
+  "installedAt": "2026-10-24T00:49:40.002Z",
   "files": {
     "asset-import-operations.cjs": "ec5a58fbd613518a1019453dd72a59626c3736a9d5a9faebdbc1e4a68e30e139",
     "asset-references.cjs": "35ce4a041792b1e91f0864a4cd875a613d0e92b7ea36af89734df64dfb069f13",
-    "command-contract.json": "a18cf8d783360d97cdab20042650954793763699de00c975dd7eb2c05dc4ec45",
+    "command-contract.json": "dfd327e18bf5d53c2db5501b83a204a0dd8da9b4500a7c5024e9b9e93c429d0e",
     "commit-authorization.cjs": "7e297866deb67ac86d87cf749d77597cac543c9fc03b2e50abe15f4920741e24",
     "editor-script-eval.cjs": "0aa2e6a6a226970132468d698acfd2c3f804112c22f16194996380a6bb47e075",
-    "main.js": "884594e529a9ea133a9d737c744a76ddc4cbf125ca1cd12e41b88edeb6919f74",
-    "package.json": "328365173aba57e8d139915d87de242f09776734d90b17114239b44ef7f43514",
+    "main.js": "af94e5dcbef5fb955f9323c160ab19cc76802caf0a106608e887373233341ee2",
+    "package.json": "46f03c29bcd9cf16494fc080ab4d4f83a6d369f95de183bc11d789b34152f403",
     "prefab-instance-operations.cjs": "164e8773f891d4f7d1c5a629d811bc26506b588ee37b373868cf20c1829a04e2",
-    "prefab-patch.cjs": "39111348410f5c6b9dd18bceba224e39daa1b079f3f7cbddd384d4ad5cadc44e",
-    "prefab-source.cjs": "a557c513ad3cb4f60b9847aa8a9868d28cfbca43185a6e392f9a4acea2cef9fe",
+    "prefab-patch.cjs": "b15c296140b2c4d37740961f40bd297fac001fc4070bd9dd06812950d62f04c3",
+    "prefab-source.cjs": "d661a98f4dff4fbff75d605270ea7079ac2649b96ec46e8c43419907bde28934",
     "provider-contract.cjs": "4d070471d4b37d02968707b1eca4cc17c7696e5769e612b23f667d5a83017bab",
     "scene-persistence.cjs": "43e5703c4e57118c745c4c1724b318d2587ec5231392afffece67b7efc0ec967",
-    "scene.js": "a0bff7c93b4d1244cff5ffd6e71da6e5854072b20f05b102f9cb85514f9fb52f"
+    "scene.js": "81d567574e69718e02001d8666c50f66b88f681b7c005f7104a5f8de5daef2d5"
   }
 }

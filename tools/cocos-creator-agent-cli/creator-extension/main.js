@@ -56,6 +56,16 @@ function uuid() {
     const hex = bytes.toString('hex');
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
+function creatorNodeId() {
+    try {
+        const generator = typeof Editor !== 'undefined' && Editor.Utils && Editor.Utils.UuidUtils;
+        if (generator && typeof generator.uuid === 'function') {
+            const value = generator.uuid();
+            if (typeof value === 'string' && /^[A-Za-z0-9_+/=-]{1,128}$/.test(value)) return value;
+        }
+    } catch (_) {}
+    return uuid();
+}
 const INSTANCE_ID = uuid();
 const CONTRACT_FINGERPRINT = crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname, 'command-contract.json'))).digest('hex');
 
@@ -2503,6 +2513,16 @@ async function createPrefabSourcePatchPlan(input) {
     let sourceOperationId = null;
     if (input.action === 'apply') {
         if (input.expectedSourceSha256 !== source.sourceSha256) throw coded('PREFAB_SOURCE_STALE');
+        const childDiff = expectedDiff.find((item) => item.path === 'node.child');
+        if (childDiff) {
+            const change = prefabPatch.childStateChange(childDiff.before, childDiff.after);
+            if (change && change.kind === 'insert' && change.child.nodeUuid === prefabPatch.AUTO_CHILD_NODE_ID) {
+                expectedDiff = expectedDiff.map((item) => item === childDiff ? { ...item,
+                    after: { ...item.after, children: item.after.children.map((child) => child === change.child
+                        ? { ...child, nodeUuid: creatorNodeId() } : child) } } : item);
+                if (!prefabPatch.validateDiff(expectedDiff)) throw coded('PREFAB_CHILD_CREATE_DIFF_INVALID');
+            }
+        }
     } else {
         sourceOperationId = input.sourceOperationId;
         const sourceOperation = readPrefabSourcePatchOperation(sourceOperationId);

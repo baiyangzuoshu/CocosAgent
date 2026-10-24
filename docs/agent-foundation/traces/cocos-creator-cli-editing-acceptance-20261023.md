@@ -124,3 +124,12 @@
 - source-linked compensate 操作 `6756b599-4288-4204-a2e4-2097f953e95f` 从已完成 apply 派生逆操作。保存、退出、重开和读回再次通过，源 SHA-256 精确恢复为初始值，`.meta` 哈希保持不变。两次 Creator 回执均记录 `sceneSavedEventConfirmed: false`；原生保存回调、Prefab 退出/重开及精确磁盘读回均已确认。
 - 清理时通过 CLI 删除临时场景子树操作 `96c388ba-b25e-4125-ad99-e46d480f3759`；保存场景 SHA-256 恢复到基线 `cd1bd3f3ec214e31335ad1aaf73f71155f6717955586327b5d51ce0f71771f74`，场景 `.meta` 哈希仍为 `269c764bf220a82d50babe7e47ad58f815765e8c4821c2293d5b304478fd7cba`。完整 AssetDB 引用扫描为 0 后，以删除操作 `458b3ab8-4dff-4baa-b99e-42bca2bf2899` 移除临时 Prefab；文件、`.meta` 与 AssetDB 记录均确认不存在。最终场景为 **23 个节点**，资产搜索返回 0 项。
 - 定向 Prefab patch 测试 **20/20 通过**，完整 CLI 自动化测试 **337/337 通过**。
+
+### 2026-10-24 后续：Prefab 空叶子子节点增删
+
+- 工程 `/Users/youjunmao/WORK/Cocos_Engine/tank`；CLI **0.12.55**、Creator **2.4.15**、扩展 **0.8.66**。工程路径、Creator 版本和实例身份通过 Cocos CLI 核对；Prefab 模式打开/保存/退出/重开均通过 CLI。没有使用电脑操控工具，也没有直接改写 Prefab、场景或 `.meta` 文件。
+- 测试 Prefab `CliPrefabChildAcceptance.prefab`，UUID `45a55c1d-b0ed-4bf2-a454-4eaaa169c0ca`，根节点 `prefab_root_45a55c1d-b0ed-4bf2-a454-4eaaa169c0ca`。原有空叶子 `Original` 稳定 ID 为 `29gy/clllMCpgoLOsowKdz`。初始源 SHA-256 为 `e8da097e8fc1f9fbdb44836f748d56a7775a6268f6b80e0546764b73a7973dff`，`.meta` SHA-256 为 `38ed07c450f014cf1b996622c4a006af6f403c1bd8abfa7dabdaa2de45ac4680`。
+- apply `911a6526-0eb4-42ea-a54b-1825ec71703f` 在根节点末尾新增空叶子 `Added`，稳定 ID `e6+OQtw7FA6rml6y12MM+P`。Creator 保存回调确认；退出 Prefab、重开同 UUID、再次退出和精确磁盘读回均通过。保存源 SHA-256 为 `0c06bf8de6e89992959de0c3b37e34a0784828217f59c117dc06b0ea547dd8cd`。回执如实保留 `sceneSavedEventConfirmed: false`，不影响原生保存回调及源文件读回证据。
+- source-linked compensate `d1ca9ba7-5134-48c1-b2fe-c536339c1638` 从已完成 apply 派生逆操作，移除该空叶子。Creator 保存、退出、重开、再退出和磁盘读回均通过；源 SHA-256 精确回到初始值，Prefab UUID 未变，`.meta` 哈希保持不变。
+- 清理临时场景节点 `27e20dc1-aaf1-40f8-9559-b51caf7dad09` 后，场景源 SHA-256 精确恢复为 `cd1bd3f3ec214e31335ad1aaf73f71155f6717955586327b5d51ce0f71771f74`，场景 `.meta` 哈希仍为 `269c764bf220a82d50babe7e47ad58f815765e8c4821c2293d5b304478fd7cba`。Prefab 删除前 AssetDB 文本引用扫描完整（8 个文件，41,485 字节），引用数为 0；删除提交被自动审批拒绝，因此测试 Prefab 文件及 `.meta` 仍留在 Tank `assets/`，不声称已清理。
+- 定向 Prefab patch 测试 **22/22 通过**；完整 CLI 自动化测试 **339/339 通过**。能力范围只覆盖一次增/删一个无组件、无后代的叶子子节点；非叶子子树编辑和 Prefab 组件增删仍未开放。

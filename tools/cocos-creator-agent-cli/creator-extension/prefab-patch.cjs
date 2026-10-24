@@ -21,9 +21,11 @@ function componentIdFor(prefabUuid, nodeUuid, index, classId, serializedId) {
         .update(`${prefabUuid}\0${nodeUuid}\0${index}\0${classId}`).digest('hex').slice(0, 24)}`;
 }
 const PATHS = new Set([
-    'node.name', 'node.active', 'node.parent', 'node.siblingIndex', 'node.position.x', 'node.position.y', 'node.scale.x', 'node.scale.y',
+    'node.name', 'node.active', 'node.parent', 'node.siblingIndex', 'node.child', 'node.position.x', 'node.position.y', 'node.scale.x', 'node.scale.y',
     'component.cc.Sprite.enabled', 'component.cc.Sprite.spriteFrameUuid', 'component.cc.Label.enabled',
 ]);
+const MAX_DIRECT_CHILDREN = 128;
+const AUTO_CHILD_NODE_ID = 'AUTO';
 
 function validPropertyValue(value, depth = 0) {
     if (value === null || typeof value === 'boolean') return true;
@@ -141,6 +143,60 @@ function validParentDiff(item) {
         && item.before.parentUuid !== item.after.parentUuid;
 }
 
+function validChildRow(value, allowAuto = false) {
+    return !!value && typeof value === 'object' && !Array.isArray(value)
+        && Object.keys(value).sort().join(',') === 'childCount,componentCount,name,nodeUuid,siblingIndex'
+        && (NODE_ID.test(value.nodeUuid || '') || allowAuto && value.nodeUuid === AUTO_CHILD_NODE_ID)
+        && typeof value.name === 'string' && value.name.length > 0 && value.name.length <= 120
+        && !/[\/\\\u0000-\u001f\u007f]/.test(value.name)
+        && Number.isInteger(value.siblingIndex) && value.siblingIndex >= 0 && value.siblingIndex < MAX_DIRECT_CHILDREN
+        && Number.isInteger(value.childCount) && value.childCount >= 0 && value.childCount <= 10000
+        && Number.isInteger(value.componentCount) && value.componentCount >= 0 && value.componentCount <= 64;
+}
+
+function validChildState(value, { allowAuto = false } = {}) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)
+        || Object.keys(value).sort().join(',') !== 'childCount,children'
+        || !Number.isInteger(value.childCount) || value.childCount < 0 || value.childCount > MAX_DIRECT_CHILDREN
+        || !Array.isArray(value.children) || value.children.length !== value.childCount) return false;
+    const ids = new Set();
+    return value.children.every((child, index) => validChildRow(child, allowAuto)
+        && child.siblingIndex === index && !ids.has(child.nodeUuid) && ids.add(child.nodeUuid));
+}
+
+function childStateChange(before, after) {
+    if (!validChildState(before, { allowAuto: false }) || !validChildState(after, { allowAuto: true })) return null;
+    if (after.childCount === before.childCount + 1) {
+        for (let index = 0; index < after.children.length; index += 1) {
+            const inserted = after.children[index];
+            if (inserted.nodeUuid === AUTO_CHILD_NODE_ID && index !== after.children.length - 1) return null;
+            if (inserted.childCount !== 0 || inserted.componentCount !== 0
+                || before.children.some((child) => child.nodeUuid === inserted.nodeUuid)) continue;
+            const remaining = after.children.filter((_, childIndex) => childIndex !== index);
+            if (canonicalValue(remaining) === canonicalValue(before.children))
+                return { kind: 'insert', index, child: inserted };
+        }
+    }
+    if (after.childCount === before.childCount - 1) {
+        for (let index = 0; index < before.children.length; index += 1) {
+            const removed = before.children[index];
+            if (removed.childCount !== 0 || removed.componentCount !== 0) continue;
+            const remaining = before.children.filter((_, childIndex) => childIndex !== index);
+            if (canonicalValue(remaining) === canonicalValue(after.children))
+                return { kind: 'remove', index, child: removed };
+        }
+    }
+    return null;
+}
+
+function validChildDiff(item) {
+    if (!item || Object.keys(item).sort().join(',') !== 'after,before,path' || item.path !== 'node.child'
+        || !validChildState(item.before, { allowAuto: false })
+        || !validChildState(item.after, { allowAuto: true })) return false;
+    const change = childStateChange(item.before, item.after);
+    return !!change && (change.child.nodeUuid !== AUTO_CHILD_NODE_ID || change.kind === 'insert');
+}
+
 function validValue(fieldPath, value) {
     if (fieldPath === 'node.name') return typeof value === 'string' && value.length > 0 && value.length <= 120
         && !/[\/\\\u0000-\u001f\u007f]/.test(value);
@@ -152,7 +208,7 @@ function validValue(fieldPath, value) {
 
 function validateDiff(diff) {
     if (!Array.isArray(diff) || diff.length < 1 || diff.length > 16) return false;
-    if (diff.some((item) => item && item.path === 'node.parent') && diff.length !== 1) return false;
+    if (diff.some((item) => item && ['node.parent', 'node.child'].includes(item.path)) && diff.length !== 1) return false;
     const paths = new Set();
     return diff.every((item) => {
         if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
@@ -162,7 +218,7 @@ function validateDiff(diff) {
             && Object.keys(item).every((field) => ['path', 'before', 'after'].includes(field))
             && validValue(item.path, item.before) && validValue(item.path, item.after)
             && !Object.is(item.before, item.after))
-            && !validSiblingIndexDiff(item) && !validParentDiff(item)
+            && !validSiblingIndexDiff(item) && !validParentDiff(item) && !validChildDiff(item)
             && !validPropertyDiff(item) && !validEventListDiff(item)) return false;
         if (paths.has(key)) return false;
         paths.add(key);
@@ -184,6 +240,8 @@ function valueAt(node, fieldPath) {
         return { found: true, value: { parentUuid: node.parentUuid,
             parentPath: parts.slice(0, -1).join('/'), siblingIndex: node.siblingIndex } };
     }
+    if (item.path === 'node.child') return node.childState && validChildState(node.childState)
+        ? { found: true, value: node.childState } : { found: false };
     if (item.path === 'component.property') {
         const properties = node.componentProperties && node.componentProperties[item.componentInstanceId];
         return properties && Object.prototype.hasOwnProperty.call(properties, item.property)
@@ -275,4 +333,5 @@ function validInput(input) {
 }
 
 module.exports = { UUID, NODE_ID, SHA256, PATHS, UI_EVENT_PROPERTIES, rootNodeId, componentIdFor,
-    validValue, validUiEventList, validateDiff, valueAt, matchesDiff, classifyDiffState, invertDiff, targetPathAt, validInput };
+    MAX_DIRECT_CHILDREN, AUTO_CHILD_NODE_ID, validValue, validUiEventList, validateDiff, childStateChange,
+    valueAt, matchesDiff, classifyDiffState, invertDiff, targetPathAt, validInput };
