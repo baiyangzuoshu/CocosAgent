@@ -420,6 +420,35 @@ test('persisted scene composition resolves Creator backing-property names such a
   assert.equal(result.buttonEventCount, 0);
 });
 
+test('persisted scene composition verifies Widget alignment booleans against the serialized _alignFlags bitfield', () => {
+  const source = fixture();
+  source.operation.plan.request.components = [{ id: 'widget', nodeRef: 'new:button', className: 'cc.Widget', properties: [
+    { name: 'isAlignLeft', value: true }, { name: 'isAlignRight', value: true },
+    { name: 'left', value: 10 }, { name: 'right', value: 850 },
+  ] }];
+  source.operation.plan.request.buttonEvents = [];
+  source.operation.sceneReadback.nodes[0].components = [{ id: 'widget', componentClassName: 'cc.Widget',
+    serializedClassId: 'cc.Widget', componentInstanceId: 'widget-instance',
+    propertyValues: { isAlignLeft: true, isAlignRight: true, left: 10, right: 850 },
+    serializedPropertyCandidates: { isAlignLeft: ['_alignFlags'], isAlignRight: ['_alignFlags'],
+      left: ['_left'], right: ['_right'] } }];
+  const records = JSON.parse(source.sceneBytes.toString('utf8'));
+  records[2]._components = [{ __id__: 6 }];
+  records.push({ __type__: 'cc.Widget', node: { __id__: 2 }, _id: 'widget-instance',
+    _alignFlags: (1 << 3) | (1 << 5), _left: 10, _right: 850 });
+  source.sceneBytes = Buffer.from(JSON.stringify(records));
+
+  const result = inspectSceneComposition({ ...source, sceneUuid, sceneAssetRow });
+  assert.equal(result.verified, true);
+  assert.equal(result.componentCount, 1);
+
+  records[6]._alignFlags = 1 << 5;
+  source.sceneBytes = Buffer.from(JSON.stringify(records));
+  const mismatch = inspectSceneComposition({ ...source, sceneUuid, sceneAssetRow });
+  assert.equal(mismatch.reason, 'SCENE_COMPOSITION_PROPERTY_MISMATCH');
+  assert.equal(mismatch.property, '_alignFlags');
+});
+
 test('persisted scene verification rejects stale transforms, wrong resources, and mismatched Button targets', () => {
   const staleTransform = fixture();
   const rows = JSON.parse(staleTransform.sceneBytes.toString('utf8'));

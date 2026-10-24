@@ -1047,6 +1047,7 @@ function serializedComponentPropertyCandidates(constructor, property) {
     const attributes = componentPropertyAttributes(constructor, property);
     const formerlySerializedAs = attributes && attributes.formerlySerializedAs;
     const className = componentClassName(constructor);
+    if (className === 'cc.Widget' && WIDGET_ALIGN_FLAG_PROPERTIES[property]) return ['_alignFlags'];
     const alias = COMPONENT_SERIALIZED_PROPERTY_ALIASES[className]
         && COMPONENT_SERIALIZED_PROPERTY_ALIASES[className][property];
     const candidates = [alias, property, formerlySerializedAs, `_N$${property}`, `_${property}`];

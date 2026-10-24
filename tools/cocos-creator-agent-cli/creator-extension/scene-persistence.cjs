@@ -19,6 +19,10 @@ const UI_EVENT_PROPERTIES = Object.freeze({
     'cc.Slider': ['slideEvents'], 'cc.ScrollView': ['scrollEvents'], 'cc.PageView': ['scrollEvents', 'pageEvents'],
     'cc.EditBox': ['editingDidBegan', 'textChanged', 'editingDidEnded', 'editingReturn'],
 });
+const WIDGET_ALIGN_FLAG_PROPERTIES = Object.freeze({
+    isAlignTop: 1 << 0, isAlignVerticalCenter: 1 << 1, isAlignBottom: 1 << 2,
+    isAlignLeft: 1 << 3, isAlignHorizontalCenter: 1 << 4, isAlignRight: 1 << 5,
+});
 const UUID = /^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$/;
 
 function fail(reason, details = {}) { return { verified: false, reason, ...details }; }
@@ -39,6 +43,28 @@ function sceneDiskTransformMatches(actual, expected, { allowLayoutSizeMismatch =
     return Object.keys(expected).filter((field) => !(allowLayoutSizeMismatch && ['width', 'height'].includes(field))
         && !(allowLayoutPositionMismatch && ['x', 'y'].includes(field)))
         .every((field) => sceneDiskNumberMatches(field, actual[field], expected[field]));
+}
+function widgetAlignFlagsAfterProperties(properties) {
+    let flags = 0;
+    for (const property of properties) {
+        const flag = WIDGET_ALIGN_FLAG_PROPERTIES[property.name];
+        if (!flag) continue;
+        if (typeof property.value !== 'boolean') return null;
+        if (!property.value) {
+            flags &= ~flag;
+            continue;
+        }
+        flags |= flag;
+        if (property.name === 'isAlignVerticalCenter')
+            flags &= ~(WIDGET_ALIGN_FLAG_PROPERTIES.isAlignTop | WIDGET_ALIGN_FLAG_PROPERTIES.isAlignBottom);
+        else if (property.name === 'isAlignHorizontalCenter')
+            flags &= ~(WIDGET_ALIGN_FLAG_PROPERTIES.isAlignLeft | WIDGET_ALIGN_FLAG_PROPERTIES.isAlignRight);
+        else if (property.name === 'isAlignTop' || property.name === 'isAlignBottom')
+            flags &= ~WIDGET_ALIGN_FLAG_PROPERTIES.isAlignVerticalCenter;
+        else if (property.name === 'isAlignLeft' || property.name === 'isAlignRight')
+            flags &= ~WIDGET_ALIGN_FLAG_PROPERTIES.isAlignHorizontalCenter;
+    }
+    return flags;
 }
 function resolveRef(value, records) {
     if (!value || typeof value !== 'object' || !Number.isInteger(value.__id__)
@@ -579,7 +605,17 @@ function inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid, sceneAssetR
             if (matches.length !== 1) return fail('SCENE_COMPOSITION_COMPONENT_IDENTITY_MISMATCH',
                 { componentId: expectedComponent.id, serializedClassId: classId });
             const rawComponent = matches[0];
+            const widgetFlagProperties = expectedComponent.className === 'cc.Widget'
+                ? expectedComponent.properties.filter((property) => own(WIDGET_ALIGN_FLAG_PROPERTIES, property.name)) : [];
+            if (widgetFlagProperties.length) {
+                const expectedFlags = widgetAlignFlagsAfterProperties(expectedComponent.properties);
+                const actualFlags = own(rawComponent, '_alignFlags') ? rawComponent._alignFlags : 0;
+                if (expectedFlags === null || !Number.isSafeInteger(actualFlags) || actualFlags !== expectedFlags)
+                    return fail('SCENE_COMPOSITION_PROPERTY_MISMATCH', { componentId: expectedComponent.id,
+                        property: '_alignFlags', expected: expectedFlags, actual: actualFlags });
+            }
             for (const property of expectedComponent.properties) {
+                if (expectedComponent.className === 'cc.Widget' && own(WIDGET_ALIGN_FLAG_PROPERTIES, property.name)) continue;
                 const providedCandidates = observedComponent.serializedPropertyCandidates
                     && observedComponent.serializedPropertyCandidates[property.name];
                 const candidates = Array.isArray(providedCandidates) ? providedCandidates
