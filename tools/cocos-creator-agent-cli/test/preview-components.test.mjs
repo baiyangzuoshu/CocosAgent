@@ -81,6 +81,16 @@ test('preview assertions read Creator 2.4 Layout fields from serialized storage 
   assert.deepEqual(readPreviewComponentProperty(node, 'cc.Layout', 'spacingY'), { found: true, actual: 20 });
 });
 
+test('preview assertions read Creator 2.4 ProgressBar progress from serialized storage without invoking its getter', () => {
+  class ProgressBar {
+    constructor() { this._N$progress = 0.75; }
+    get progress() { throw new Error('ProgressBar progress getter must not run in an assertion'); }
+  }
+  ProgressBar.prototype.__classname__ = 'cc.ProgressBar';
+  const node = { _components: [new ProgressBar()] };
+  assert.deepEqual(readPreviewComponentProperty(node, 'cc.ProgressBar', 'progress'), { found: true, actual: 0.75 });
+});
+
 test('preview component assertions accept exact Creator class names from serialized components', () => {
   class Slider { constructor() { this.progress = 0.75; } }
   Slider.prototype.__classname__ = 'cc.Slider';

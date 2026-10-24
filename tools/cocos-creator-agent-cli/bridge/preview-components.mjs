@@ -21,6 +21,7 @@ export function readPreviewComponentProperty(node, componentType, componentPrope
       : componentType === 'cc.EditBox' && componentProperty === 'string' ? '_string'
         : componentType === 'cc.PageView' && componentProperty === 'direction' ? '_N$direction'
         : componentType === 'cc.Toggle' && componentProperty === 'isChecked' ? '_N$isChecked'
+          : componentType === 'cc.ProgressBar' && componentProperty === 'progress' ? '_N$progress'
           : componentType === 'cc.Layout' ? ({ type: '_N$layoutType', resizeMode: '_resize', startAxis: '_N$startAxis',
             paddingLeft: '_N$paddingLeft', paddingRight: '_N$paddingRight', paddingTop: '_N$paddingTop',
             paddingBottom: '_N$paddingBottom', spacingX: '_N$spacingX', spacingY: '_N$spacingY',
