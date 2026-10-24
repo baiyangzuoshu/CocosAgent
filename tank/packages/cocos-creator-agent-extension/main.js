@@ -2566,6 +2566,11 @@ async function createPrefabSourcePatchPlan(input) {
         node = singlePrefabNode(source, input.targetNodeUuid);
     }
     if (!prefabPatch.matchesDiff(node, expectedDiff, 'before')) throw coded('PREFAB_SOURCE_STALE');
+    for (const item of expectedDiff.filter((entry) => entry.path === 'node.siblingIndex')) {
+        if (node.parentUuid !== item.parentUuid || !Number.isInteger(node.siblingCount)
+            || item.after >= node.siblingCount)
+            throw coded('PREFAB_SIBLING_INDEX_OUT_OF_RANGE');
+    }
     const operationId = uuid();
     const plan = { operationId, operation: 'creator.prefab.source.patch', projectRoot: projectRoot(),
         creatorVersion: editorVersion(), extensionVersion: extensionPackage.version,

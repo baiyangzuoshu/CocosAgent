@@ -105,3 +105,13 @@
 - 临时 Prefab 删除前的完整 AssetDB 引用扫描 `complete: true`、`referenceCount: 0`。AssetDB 删除 `47218fed-c5d6-4abf-bf63-422ce9110af9` 后，Prefab 文件、`.meta` 和 AssetDB 记录均不存在；临时场景节点删除 `d33eb480-1225-4983-bed2-d8daa551e21b` 后确认节点 UUID 已从保存场景移除。场景源 SHA-256 回到组合前的 `cd1bd3f3ec214e31335ad1aaf73f71155f6717955586327b5d51ce0f71771f74`，场景 `.meta` 哈希未变。
 - 本验收证明 Button `clickEvents` 可以通过 Prefab patch 写入及补偿，并完成 Creator 与磁盘读回；没有运行游戏并点击此临时按钮，因此不作为运行时点击派发证据。Toggle、Slider、ScrollView、PageView、EditBox 等其他事件字段仍需分别代表性实测。
 - 最终扩展状态为 `matchesBundle: true`、`changedFiles: []`、`reloadRequired: false`；项目身份仍是 Tank / Creator 2.4.15 / 扩展 0.8.59，活动场景 UUID 未变。临时资源与节点均已清理，场景回到 23 个节点。完整 CLI 自动化测试：**332/332 通过，0 失败**。
+
+### 2026-10-24 后续：Prefab 同父级节点重排
+
+- 工程 `/Users/youjunmao/WORK/Cocos_Engine/tank`；CLI **0.12.55**、Creator **2.4.15**、扩展 **0.8.63**。扩展更新、关闭旧编辑器、重开和工程路径/版本核对均通过 Cocos CLI；未使用电脑操控，也未手工改写 Prefab、场景或 `.meta` 文件。
+- 为隔离验收，使用 CLI 在 `CliAcceptanceScene` 创建三节点测试子树，并由 Creator CLI 创建 Prefab `CliSiblingOrderAcceptance.prefab`（UUID `2dd89c45-b087-4ae4-998e-c45cedd5fe88`）。原始源 SHA-256 为 `d1ee6bccb4af94646f06479606ce0cd94929568efcff8227d9be611b15b6af2c`，`.meta` SHA-256 为 `428b028e82609f340adc86543535ceb6790367cd6425708415fcedc875fdce7d`。子节点 `First` 的稳定 Prefab ID 为 `00CvaywaBJDIgC+Cs8mlOm`，`Second` 为 `9dUwIWcSZMkLUN1GIUe00J`，共同父级为 `prefab_root_2dd89c45-b087-4ae4-998e-c45cedd5fe88`。
+- Prefab 编辑模式只读检查观察到 `First` 的运行时 UUID 与序列化 `fileId` 不同；扩展按稳定 `PrefabInfo.fileId` 定位节点，并在实时快照中分别保留稳定 ID 与运行时 UUID。计划绑定精确 Prefab、节点路径、父级 UUID、原索引 0、新索引 1 和原源哈希。
+- apply `83845930-5046-484c-9ac5-402d32d7e359`：`First.siblingIndex` 从 0 改到 1。Creator 回执为 `completed`，确认 `saveCallbackConfirmed`、`editorExitedToScene`、`editorReopened`、`editorExitedAfterReopen` 和 `diskReadback.verified`；重开后的源 SHA-256 为 `8a18efa04923f07c99a1c7279e4db078987d571b35923b232a145f6edab166d3`。随后 `creator.prefab.source.inspect` 从保存源读回 `Second=0`、`First=1`、兄弟数均为 2。
+- source-linked compensate `06446318-cd36-414f-ac1b-5b7c75058083`：从完成的 apply 派生逆操作，将 `First.siblingIndex` 从 1 恢复为 0。保存、退出、重开、读回均通过，源 SHA-256 精确恢复为 `d1ee6bccb4af94646f06479606ce0cd94929568efcff8227d9be611b15b6af2c`，`.meta` 哈希保持不变。两个回执均如实记录 `sceneSavedEventConfirmed: false`，但 Creator 原生保存回调和磁盘/重开读回确认通过。
+- 清理时通过 CLI 删除测试场景子树 `a99194d9-4e5c-419f-b770-978000bf7c8d`，保存场景哈希回到基线 `cd1bd3f3ec214e31335ad1aaf73f71155f6717955586327b5d51ce0f71771f74`，`.meta` 仍为 `269c764bf220a82d50babe7e47ad58f815765e8c4821c2293d5b304478fd7cba`。删除 Prefab 前 AssetDB 引用扫描完整且为 0；删除操作 `3831cfdd-c789-4188-8e36-95fcd018f636` 后，Prefab 文件、`.meta` 与 AssetDB 记录均不存在。最终 CLI 场景快照为 **23 个节点**，临时资产搜索返回 0 项。
+- 完整 CLI 自动化测试 **335/335 通过，0 失败**；普通沙箱运行的三个本机回环监听测试因 `EPERM` 失败，随后在获准绑定 `127.0.0.1` 的测试环境完整重跑通过。最终扩展状态为 `matchesBundle: true`、`changedFiles: []`、`reloadRequired: false`。

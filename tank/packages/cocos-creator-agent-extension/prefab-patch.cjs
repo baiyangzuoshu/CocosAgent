@@ -21,7 +21,7 @@ function componentIdFor(prefabUuid, nodeUuid, index, classId, serializedId) {
         .update(`${prefabUuid}\0${nodeUuid}\0${index}\0${classId}`).digest('hex').slice(0, 24)}`;
 }
 const PATHS = new Set([
-    'node.name', 'node.active', 'node.position.x', 'node.position.y', 'node.scale.x', 'node.scale.y',
+    'node.name', 'node.active', 'node.siblingIndex', 'node.position.x', 'node.position.y', 'node.scale.x', 'node.scale.y',
     'component.cc.Sprite.enabled', 'component.cc.Sprite.spriteFrameUuid', 'component.cc.Label.enabled',
 ]);
 
@@ -116,6 +116,14 @@ function validEventListDiff(item) {
         && canonicalValue(item.before) !== canonicalValue(item.after);
 }
 
+function validSiblingIndexDiff(item) {
+    return !!item && Object.keys(item).sort().join(',') === 'after,before,parentUuid,path'
+        && item.path === 'node.siblingIndex' && NODE_ID.test(item.parentUuid || '')
+        && Number.isInteger(item.before) && item.before >= 0 && item.before < 10000
+        && Number.isInteger(item.after) && item.after >= 0 && item.after < 10000
+        && item.before !== item.after;
+}
+
 function validValue(fieldPath, value) {
     if (fieldPath === 'node.name') return typeof value === 'string' && value.length > 0 && value.length <= 120
         && !/[\/\\\u0000-\u001f\u007f]/.test(value);
@@ -136,7 +144,7 @@ function validateDiff(diff) {
             && Object.keys(item).every((field) => ['path', 'before', 'after'].includes(field))
             && validValue(item.path, item.before) && validValue(item.path, item.after)
             && !Object.is(item.before, item.after))
-            && !validPropertyDiff(item) && !validEventListDiff(item)) return false;
+            && !validSiblingIndexDiff(item) && !validPropertyDiff(item) && !validEventListDiff(item)) return false;
         if (paths.has(key)) return false;
         paths.add(key);
         return true;
@@ -148,6 +156,8 @@ function valueAt(node, fieldPath) {
     const item = typeof fieldPath === 'string' ? { path: fieldPath } : fieldPath;
     if (item.path === 'node.name') return { found: true, value: node.name };
     if (item.path === 'node.active') return { found: true, value: node.active };
+    if (item.path === 'node.siblingIndex') return node.parentUuid === item.parentUuid
+        && Number.isInteger(node.siblingIndex) ? { found: true, value: node.siblingIndex } : { found: false };
     if (item.path === 'component.property') {
         const properties = node.componentProperties && node.componentProperties[item.componentInstanceId];
         return properties && Object.prototype.hasOwnProperty.call(properties, item.property)

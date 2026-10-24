@@ -8,18 +8,18 @@
 
 本能力当前只面向 Creator **2.4.15**。3.8.7 没有新增 Prefab 源编辑命令。
 
-## 当前 CLI 范围（0.12.55 / 扩展 0.8.59）
+## 当前 CLI 范围（0.12.55 / 扩展 0.8.63）
 
 当前 `creator.prefab.source.patch` 除节点名称、激活状态、二维位置/缩放，以及 Sprite/Label 的启用状态和 SpriteFrame 外，还支持通过 Creator Inspector 元数据读取和写入**已声明、公开、可序列化的组件属性**。值类型包括受限标量/枚举、向量、Size、Rect、Color、最多 32 项的声明类型数组、AssetDB 资源，以及有稳定身份的 Prefab 内节点/组件引用；赋值仍由 Creator Prefab 编辑模式执行，并须完成保存、退出、重开和磁盘读回。它不接受任意原始序列化字段或任意 JS 对象。
 
-目前 Prefab patch 新增受限 UI 事件列表写入：Button、Toggle、ToggleContainer、Slider、ScrollView、PageView 和 EditBox 的白名单事件字段；事件目标必须是同一 Prefab 内具有稳定 ID 的节点，且目标组件与安全 handler 方法必须唯一可解析。Creator 2.4.15 Tank 中 `cc.Button.clickEvents` 已通过 apply 与 source-linked compensate 实机往返，保存、退出/重开、同 UUID 及 `.prefab`/`.meta` 读回均通过；其他 UI 事件属性仍待代表性实机验收。节点新增/删除/重排、改变父子层级、新增/删除组件仍不支持。Creator 2.4.15 Tank 工程已实测 `cc.BlockInputEvents.enabled` 与 `cc.Label.fontSize` 的 apply/compensate 往返；其他组件和值类型仍需代表性实机验收。声明类型数组中的 AssetDB 引用可以通过合同校验并生成计划，但本轮把 `cc.Label.materials` 设为空数组时被 Creator 属性读回拒绝，磁盘源文件未变，不能据此宣称数组资源写入已通过。实机细节见 [2026-10-24 UI 事件列表验收记录](traces/cocos-creator-cli-editing-acceptance-20261023.md#2026-10-24-后续prefab-ui-事件列表写入)。
+目前 Prefab patch 新增受限 UI 事件列表写入：Button、Toggle、ToggleContainer、Slider、ScrollView、PageView 和 EditBox 的白名单事件字段；事件目标必须是同一 Prefab 内具有稳定 ID 的节点，且目标组件与安全 handler 方法必须唯一可解析。Creator 2.4.15 Tank 中 `cc.Button.clickEvents` 已通过 apply 与 source-linked compensate 实机往返，保存、退出/重开、同 UUID 及 `.prefab`/`.meta` 读回均通过；其他 UI 事件属性仍待代表性实机验收。同父节点范围内的 sibling index 编辑也已通过实机 apply/compensate 验收，计划绑定父节点稳定 ID 和前后索引，不允许重挂父级或重排根节点。子节点新增/删除、改变父子层级、新增/删除组件仍不支持。Creator 2.4.15 Tank 工程已实测 `cc.BlockInputEvents.enabled` 与 `cc.Label.fontSize` 的 apply/compensate 往返；其他组件和值类型仍需代表性实机验收。声明类型数组中的 AssetDB 引用可以通过合同校验并生成计划，但本轮把 `cc.Label.materials` 设为空数组时被 Creator 属性读回拒绝，磁盘源文件未变，不能据此宣称数组资源写入已通过。实机细节见 [2026-10-24 Prefab UI 事件列表和同级重排验收记录](traces/cocos-creator-cli-editing-acceptance-20261023.md#2026-10-24-后续prefab-ui-事件列表写入)。
 
 ## 命令
 
 - `creator.prefab.source.inspect`：只读解析 `.prefab` 和 `.meta`，以 Prefab UUID 定位唯一资源，返回源 SHA-256、节点路径/UUID、层级、有限组件摘要和受支持字段当前值。
 - `creator.prefab.source.patch.plan/commit/reconcile`：针对一个节点的一组白名单字段执行 `apply`、`compensate` 或 `replay`，并写入持久操作记录。除节点和声明属性外，可编辑受支持组件的 UI 事件列表；事件目标和 handler 都必须解析到当前 Prefab 内的精确身份。
 
-节点字段使用有限白名单。组件字段由 Creator 实时 Inspector 元数据约束，并绑定组件实例、序列化类、属性名和 before/after 值；受支持类型见上面的当前 CLI 范围。UI 事件列表使用单独的事件字段白名单，并绑定组件身份、事件属性、Prefab 内目标节点、目标组件及 handler。节点/组件结构操作和任意原始序列化字段仍不开放。
+节点字段使用有限白名单，含同一父节点内的 sibling index；该字段还必须绑定父节点 ID，且索引必须落在当前子节点列表范围内。组件字段由 Creator 实时 Inspector 元数据约束，并绑定组件实例、序列化类、属性名和 before/after 值；受支持类型见上面的当前 CLI 范围。UI 事件列表使用单独的事件字段白名单，并绑定组件身份、事件属性、Prefab 内目标节点、目标组件及 handler。子节点增删、父子层级调整、组件增删和任意原始序列化字段仍不开放。
 
 ## 一轮写入的合同
 
@@ -47,7 +47,7 @@
 
 ## 当前验证状态
 
-当前 CLI（0.12.55 / Creator 扩展 0.8.59）已有 Prefab 源编辑合同、Creator 场景进程实现以及受限 UI 事件列表写入。Creator 2.4.15 Tank 的节点字段及 `cc.BlockInputEvents.enabled`、`cc.Label.fontSize` apply/compensate 实机往返是在扩展 0.8.55 下完成；随后 reconciliation 分类修复随扩展 0.8.56 更新并经 CLI 退出/重开确认加载。0.8.59 的 `cc.Button.clickEvents` apply/compensate 已通过 Creator CLI 实机验收；其他支持的 UI 事件属性尚无实机写入证据。组件属性全类型和 Prefab 结构编辑仍未完成。不能把部分实机覆盖写成任意 Prefab 编辑已完成。
+当前 CLI（0.12.55 / Creator 扩展 0.8.63）已有 Prefab 源编辑合同、Creator 场景进程实现、受限 UI 事件列表写入和同父节点顺序变更。Creator 2.4.15 Tank 的节点字段及 `cc.BlockInputEvents.enabled`、`cc.Label.fontSize` apply/compensate 实机往返是在扩展 0.8.55 下完成；随后 reconciliation 分类修复随扩展 0.8.56 更新并经 CLI 退出/重开确认加载。0.8.59 的 `cc.Button.clickEvents` 和 0.8.63 的同父节点 sibling index apply/compensate 已通过 Creator CLI 实机验收；其他支持的 UI 事件属性尚无实机写入证据。组件属性全类型和其他 Prefab 结构编辑仍未完成。不能把部分实机覆盖写成任意 Prefab 编辑已完成。
 
 以下 0.3.x 扩展记录是历史原型验证，不代表 CLI 的当前运行时证据：
 
