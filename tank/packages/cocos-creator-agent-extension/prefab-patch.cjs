@@ -411,6 +411,33 @@ function matchesBeforeOrGeometryAfter(node, diff) {
     });
 }
 
+function sourceInspectionDiff(diff) {
+    if (!Array.isArray(diff)) return [];
+    return diff.filter((item) => item && ['component.property', 'component.eventList'].includes(item.path));
+}
+
+function validTransformSnapshot(transform) {
+    return !!transform && typeof transform === 'object' && !Array.isArray(transform)
+        && Object.keys(transform).sort().join(',') === 'height,scaleX,scaleY,width,x,y'
+        && Object.values(transform).every((value) => Number.isFinite(value) && Math.abs(value) <= 1000000)
+        && transform.width >= 0 && transform.height >= 0;
+}
+
+function matchesTransformSnapshot(node, transform) {
+    if (!validTransformSnapshot(transform) || !node || !node.transform) return false;
+    return ['x', 'y', 'scaleX', 'scaleY', 'width', 'height']
+        .every((key) => canonicalValue(node.transform[key]) === canonicalValue(transform[key]));
+}
+
+function hasMatchingDiskReadback(operation, source) {
+    const readback = operation && operation.diskReadback;
+    return !!(readback && readback.verified === true && source
+        && readback.prefabUuid === operation.plan.prefabUuid
+        && readback.sourceSha256 === source.sourceSha256
+        && readback.metaSha256 === source.metaSha256
+        && operation.afterSourceSha256 === source.sourceSha256);
+}
+
 function classifyDiffState(node, diff) {
     if (matchesDiff(node, diff, 'before')) return 'before';
     if (matchesDiff(node, diff, 'after')) return 'after';
@@ -461,4 +488,6 @@ function validInput(input) {
 module.exports = { UUID, NODE_ID, SHA256, PATHS, UI_EVENT_PROPERTIES, rootNodeId, componentIdFor,
     MAX_DIRECT_CHILDREN, MAX_SUBTREE_NODES, MAX_SUBTREE_DEPTH, AUTO_CHILD_NODE_ID, AUTO_COMPONENT_INSTANCE_ID, validValue, validUiEventList,
     canonicalValue, validateDiff, childStateChange, subtreeStateChange, validSubtreeState, componentStateChange,
-    valueAt, matchesDiff, matchesBeforeOrGeometryAfter, classifyDiffState, invertDiff, targetPathAt, validInput };
+    valueAt, matchesDiff, matchesBeforeOrGeometryAfter, sourceInspectionDiff,
+    validTransformSnapshot, matchesTransformSnapshot, hasMatchingDiskReadback,
+    classifyDiffState, invertDiff, targetPathAt, validInput };

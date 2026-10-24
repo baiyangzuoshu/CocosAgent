@@ -127,6 +127,23 @@ test('Prefab patch validates only explicit supported before/after fields', () =>
     { path: 'node.position.x', before: 480, after: 480.5 }];
   assert.equal(prefabPatch.matchesBeforeOrGeometryAfter({ ...sizedNode,
     transform: { ...sizedNode.transform, width: 879, x: 480.5 } }, mixedGeometryDiff), true);
+  assert.deepEqual(prefabPatch.sourceInspectionDiff([
+    { path: 'component.property', componentInstanceId: 'widget', property: 'left' },
+    { path: 'node.position.x', before: 480, after: 480.5 },
+    { path: 'node.size.width', before: 880, after: 879 },
+  ]), [{ path: 'component.property', componentInstanceId: 'widget', property: 'left' }]);
+  const transform = { x: 480, y: 0, scaleX: 1, scaleY: 1, width: 880, height: 60 };
+  assert.equal(prefabPatch.validTransformSnapshot(transform), true);
+  assert.equal(prefabPatch.matchesTransformSnapshot({ transform }, transform), true);
+  assert.equal(prefabPatch.matchesTransformSnapshot({ transform: { ...transform, width: 879 } }, transform), false);
+  const diskSource = { sourceSha256: 'b'.repeat(64), metaSha256: 'c'.repeat(64) };
+  const readbackOperation = { plan: { prefabUuid }, afterSourceSha256: diskSource.sourceSha256,
+    diskReadback: { verified: true, prefabUuid, sourceSha256: diskSource.sourceSha256,
+      metaSha256: diskSource.metaSha256 } };
+  assert.equal(prefabPatch.hasMatchingDiskReadback(readbackOperation, diskSource), true);
+  assert.equal(prefabPatch.hasMatchingDiskReadback({ ...readbackOperation, diskReadback: null }, diskSource), false);
+  assert.equal(prefabPatch.hasMatchingDiskReadback({ ...readbackOperation,
+    afterSourceSha256: 'd'.repeat(64) }, diskSource), false);
   assert.equal(prefabPatch.validateDiff([{ path: 'node.size.height', before: 60, after: -1 }]), false);
   assert.deepEqual(prefabPatch.invertDiff(sizeDiff), [{ path: 'node.size.width', before: 879, after: 880 }]);
 });

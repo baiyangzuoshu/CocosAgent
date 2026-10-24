@@ -2036,8 +2036,16 @@ function locatePrefabPatchNode(params, side = 'before') {
     const stateMatches = side === 'before' && params.action === 'apply'
         ? prefabPatchLiveBeforeOrGeometryAfter(snapshot, params.expectedDiff)
         : prefabPatch.matchesDiff(snapshot, params.expectedDiff, side);
-    if (!snapshot || !stateMatches)
-        return { available: false, reason: 'PREFAB_EXPECTED_STATE_MISMATCH', mode };
+    if (!snapshot || !stateMatches) {
+        const diagnostic = snapshot ? params.expectedDiff.map((item) => {
+            const actual = prefabPatch.valueAt(snapshot, item);
+            return { path: item.path, ...(item.componentInstanceId ? { componentInstanceId: item.componentInstanceId } : {}),
+                ...(item.property ? { property: item.property } : {}), found: actual.found,
+                expected: item[side], ...(actual.found ? { actual: actual.value } : {}) };
+        }) : [];
+        return { available: false, reason: 'PREFAB_EXPECTED_STATE_MISMATCH', mode,
+            diagnostic: { side, fields: diagnostic } };
+    }
     return { available: true, mode, node: located.node, snapshot };
 }
 
@@ -2050,6 +2058,9 @@ function prefabSourcePatchPreflight(params) {
     if (!params || !prefabPatch.UUID.test(params.prefabUuid || '') || !prefabPatch.NODE_ID.test(params.targetNodeUuid || '')
         || !prefabPatch.validateDiff(params.expectedDiff) || !['apply', 'compensate', 'replay'].includes(params.action))
         return { available: false, reason: 'PREFAB_PATCH_INPUT_INVALID' };
+    if (params.restoreTransform && (params.action !== 'compensate'
+        || !prefabPatch.validTransformSnapshot(params.restoreTransform)))
+        return { available: false, reason: 'PREFAB_COMPENSATION_TRANSFORM_INVALID' };
     const target = locatePrefabPatchNode(params, 'before');
     if (!target.available) return target;
     if (prefabPatchNameConflict(target.node, params.expectedDiff))
@@ -2199,9 +2210,9 @@ function prefabSourcePatchPreflight(params) {
 
 function prefabSourcePatchMutate(params, callback) {
     const before = prefabSourcePatchPreflight(params);
-    if (!before.available) { callback(null, before); return; }
+    if (!before.available) { callback(null, { ...before, mutationStarted: false }); return; }
     const located = locatePrefabPatchNode(params, 'before');
-    if (!located.available) { callback(null, located); return; }
+    if (!located.available) { callback(null, { ...located, mutationStarted: false }); return; }
     const node = located.node;
     const spriteFrames = params.expectedDiff.filter((item) => item.path === 'component.cc.Sprite.spriteFrameUuid' && item.after !== null);
     const loaded = Object.create(null);
@@ -2209,7 +2220,8 @@ function prefabSourcePatchMutate(params, callback) {
     const apply = () => {
         const current = locatePrefabPatchNode(params, 'before');
         if (!current.available || current.node !== node || prefabPatchNameConflict(node, params.expectedDiff)) {
-            callback(null, { available: false, reason: 'PREFAB_PATCH_PRECONDITION_CHANGED', mutationStarted: false });
+            callback(null, { available: false, reason: current.reason || 'PREFAB_PATCH_PRECONDITION_CHANGED',
+                mutationStarted: false, diagnostic: current.diagnostic || null });
             return;
         }
         try {
@@ -2402,14 +2414,22 @@ function prefabSourcePatchMutate(params, callback) {
                     else matches[0].spriteFrame = item.after === null ? null : loaded[item.after];
                 }
             }
+            if (params.restoreTransform) {
+                node.setPosition(params.restoreTransform.x, params.restoreTransform.y);
+                node.setScale(params.restoreTransform.scaleX, params.restoreTransform.scaleY, node.scaleZ);
+                node.setContentSize(params.restoreTransform.width, params.restoreTransform.height);
+            }
         } catch (error) {
             callback(null, { available: false, reason: error && error.message || 'PREFAB_PATCH_WRITE_FAILED', mutationStarted: true });
             return;
         }
         const finish = () => {
             const after = locatePrefabPatchNode(params, 'after');
-            if (!after.available || after.node !== node) {
-                callback(null, { available: false, reason: 'PREFAB_PATCH_WRITE_READBACK_FAILED', mutationStarted: true });
+            if (!after.available || after.node !== node || params.restoreTransform
+                && !prefabPatch.matchesTransformSnapshot(after.snapshot, params.restoreTransform)) {
+                callback(null, { available: false,
+                    reason: after.reason || (params.restoreTransform ? 'PREFAB_COMPENSATION_TRANSFORM_READBACK_MISMATCH' : 'PREFAB_PATCH_WRITE_READBACK_FAILED'),
+                    mutationStarted: true, diagnostic: after.snapshot || null });
                 return;
             }
             callback(null, { available: true, mutationStarted: true, prefabUuid: params.prefabUuid, mode: after.mode,
