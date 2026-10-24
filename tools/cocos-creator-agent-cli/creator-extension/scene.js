@@ -1322,7 +1322,12 @@ function componentPropertyState(params) {
         || typeof params.componentInstanceId !== 'string' || typeof params.property !== 'string'
         || !/^[A-Za-z][A-Za-z0-9_]*$/.test(params.property))
         return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_INPUT_INVALID' };
-    const located = locateNode(params.sceneUuid, params.nodeUuid);
+    const directNode = params.targetNode && typeof params.targetNode === 'object'
+        && params.targetNode.uuid === params.nodeUuid ? params.targetNode : null;
+    const located = directNode
+        ? { node: directNode, state: { available: true, sceneUuid: params.sceneUuid,
+            nodeUuid: params.nodeUuid, nodePath: params.nodePath } }
+        : locateNode(params.sceneUuid, params.nodeUuid);
     if (!located.state.available) return located.state;
     if (located.state.nodePath !== params.nodePath)
         return { available: false, reason: 'SCENE_NODE_PATH_MISMATCH', ...located.state };
@@ -1513,6 +1518,8 @@ function setComponentProperty(params, loadedAssets) {
         || typeof params.componentInstanceId !== 'string' || typeof params.property !== 'string'
         || !validComponentValue(params.expectedValue) || !validComponentValue(params.value))
         return { available: false, reason: 'SCENE_COMPONENT_PROPERTY_INPUT_INVALID' };
+    const directNode = params.targetNode && typeof params.targetNode === 'object'
+        && params.targetNode.uuid === params.nodeUuid ? params.targetNode : null;
     const before = componentPropertyState(params);
     if (!before.available) return before;
     if (!before.inspector || before.inspector.editable !== true)
@@ -1521,7 +1528,10 @@ function setComponentProperty(params, loadedAssets) {
         return { ...before, available: false, reason: 'SCENE_COMPONENT_PROPERTY_PRECONDITION_FAILED' };
     if (sameValue(before.value, params.value))
         return { ...before, available: false, reason: 'SCENE_COMPONENT_PROPERTY_NO_CHANGE' };
-    const located = locateNode(params.sceneUuid, params.nodeUuid);
+    const located = directNode
+        ? { node: directNode, state: { available: true, sceneUuid: params.sceneUuid,
+            nodeUuid: params.nodeUuid, nodePath: params.nodePath } }
+        : locateNode(params.sceneUuid, params.nodeUuid);
     const resolved = componentClass(params.componentClassName);
     if (!resolved.available) return { ...before, available: false, reason: resolved.reason };
     const query = exactComponentInstances(located.node, resolved.constructor);
@@ -1907,7 +1917,7 @@ function prefabPatchSnapshot(node, nodePath, params, mode) {
         const requestedValue = prefabLiveComponentValue(item.after, mode.sceneUuid, params.prefabUuid);
         const state = componentPropertyState({ sceneUuid: mode.sceneUuid, nodeUuid: node.uuid, nodePath,
             componentClassName: item.componentClassName, componentInstanceId: liveComponentInstanceId,
-            property: item.property, requestedValue });
+            property: item.property, requestedValue, targetNode: node });
         if (!state.available) continue;
         componentProperties[item.componentInstanceId] = componentProperties[item.componentInstanceId] || {};
         componentProperties[item.componentInstanceId][item.property] = prefabStableComponentValue(state.value,
@@ -2349,7 +2359,7 @@ function prefabSourcePatchMutate(params, callback) {
                     const propertyResult = setComponentProperty({ sceneUuid: current.mode.sceneUuid,
                         nodeUuid: node.uuid, nodePath: current.snapshot.nodePath,
                         componentClassName: item.componentClassName, componentInstanceId: binding.liveComponentInstanceId,
-                        property: item.property, expectedValue: beforeValue, value }, loaded);
+                        property: item.property, expectedValue: beforeValue, value, targetNode: node }, loaded);
                     if (!propertyResult.available) throw new Error(propertyResult.reason || 'PREFAB_COMPONENT_PROPERTY_WRITE_FAILED');
                 }
                 else if (field === 'component.eventList') {

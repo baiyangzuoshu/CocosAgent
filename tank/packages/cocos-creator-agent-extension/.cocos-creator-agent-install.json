@@ -3,7 +3,7 @@
   "extensionName": "cocos-creator-agent-extension",
   "extensionVersion": "0.8.72",
   "installedByCliVersion": "0.12.55",
-  "installedAt": "2026-10-24T04:58:27.251Z",
+  "installedAt": "2026-10-24T05:43:41.947Z",
   "files": {
     "asset-import-operations.cjs": "ec5a58fbd613518a1019453dd72a59626c3736a9d5a9faebdbc1e4a68e30e139",
     "asset-references.cjs": "35ce4a041792b1e91f0864a4cd875a613d0e92b7ea36af89734df64dfb069f13",
@@ -17,6 +17,6 @@
     "prefab-source.cjs": "5e570898d4c413672952bf0e065930ddf5ab1e64a3c218b39e086ac49d6b952f",
     "provider-contract.cjs": "4d070471d4b37d02968707b1eca4cc17c7696e5769e612b23f667d5a83017bab",
     "scene-persistence.cjs": "1f4680328f90184ba53011826045755b100201ef84c2c5a094e175a453ff8fae",
-    "scene.js": "21932658c5d4b6e8fef3d3b2a1aebb28e2ccf7c5f537b484c7ae3ba4f1e21eff"
+    "scene.js": "d4446efee775658ddbb9682eff21fa68de1ef1da2ea15841b2f1d1aef6fb7942"
   }
 }

@@ -421,6 +421,23 @@ test('Label public overflow property remains writable and supplies bounded seria
   assert.equal(label.overflow, 1);
 });
 
+test('component property reads and writes can target a Creator Prefab edit-mode node directly', () => {
+  const { api, FakeNode, Label } = fixture();
+  const node = new FakeNode('PrefabText');
+  const label = node.addComponent(Label);
+  label.overflow = 0;
+  const input = { sceneUuid: 'prefab-stage-scene', nodeUuid: node.uuid,
+    nodePath: 'PrefabRoot/PrefabText', componentClassName: 'cc.Label',
+    componentInstanceId: label._id, property: 'overflow', targetNode: node };
+
+  const before = invoke(api, 'componentPropertyState', input).result;
+  assert.equal(before.available, true, JSON.stringify(before));
+  assert.equal(before.value, 0);
+  const changed = invoke(api, 'setComponentProperty', { ...input, expectedValue: 0, value: 1 }).result;
+  assert.equal(changed.available, true, JSON.stringify(changed));
+  assert.equal(label.overflow, 1);
+});
+
 test('Label Inspector font source and style toggles map to Creator serialized backing fields', () => {
   const { api, root, FakeNode, Label } = fixture();
   const node = new FakeNode('Label');
