@@ -234,6 +234,8 @@ function inspectPrefabSource({ prefabBytes, metaBytes, prefabUuid, maxComponents
             y: Number.isFinite(trs[1]) ? trs[1] : null,
             scaleX: Number.isFinite(trs[7]) ? trs[7] : null,
             scaleY: Number.isFinite(trs[8]) ? trs[8] : null,
+            width: record._contentSize && Number.isFinite(record._contentSize.width) ? record._contentSize.width : null,
+            height: record._contentSize && Number.isFinite(record._contentSize.height) ? record._contentSize.height : null,
         } : null;
         const componentRefs = Array.isArray(record._components) ? record._components : [];
         if (componentRefs.length > MAX_COMPONENTS_PER_NODE) return fail('PREFAB_COMPONENT_LIMIT', { nodePath });

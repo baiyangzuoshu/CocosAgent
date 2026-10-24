@@ -2770,7 +2770,7 @@ async function commitPrefabSourcePatch(input, context) {
         const preflight = await callScene('prefabSourcePatchPreflight', params, 20000);
         if (!preflight || preflight.available !== true || preflight.prefabUuid !== operation.plan.prefabUuid
             || !preflight.node || preflight.node.nodeUuid !== operation.plan.targetNodeUuid
-            || !prefabPatch.matchesDiff(preflight.node, operation.plan.expectedDiff, 'before')) {
+            || !prefabPatch.matchesBeforeOrGeometryAfter(preflight.node, operation.plan.expectedDiff)) {
             operation.status = 'conflict'; operation.reconcileReason = preflight && preflight.reason || 'PREFAB_EDITOR_PREFLIGHT_FAILED';
             writeOperation(operation);
             await exitPrefabSourceMode(operation.plan.prefabUuid, operation.plan.activeSceneUuid);

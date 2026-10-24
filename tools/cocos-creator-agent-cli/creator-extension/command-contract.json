@@ -209,7 +209,7 @@
         "sourceOperationId": { "type": "string", "minLength": 36, "maxLength": 36, "pattern": "^[0-9a-f-]{36}$" },
         "expectedDiff": { "type": "array", "minItems": 1, "maxItems": 16, "items": {
           "type": "object", "required": ["path", "before", "after"], "properties": {
-            "path": { "type": "string", "enum": ["node.name", "node.active", "node.parent", "node.siblingIndex", "node.child", "node.subtree", "node.position.x", "node.position.y", "node.scale.x", "node.scale.y", "component.cc.Sprite.enabled", "component.cc.Sprite.spriteFrameUuid", "component.cc.Label.enabled", "component.property", "component.eventList", "component.structure"] },
+            "path": { "type": "string", "enum": ["node.name", "node.active", "node.parent", "node.siblingIndex", "node.child", "node.subtree", "node.position.x", "node.position.y", "node.scale.x", "node.scale.y", "node.size.width", "node.size.height", "component.cc.Sprite.enabled", "component.cc.Sprite.spriteFrameUuid", "component.cc.Label.enabled", "component.property", "component.eventList", "component.structure"] },
             "before": { "type": ["string", "number", "boolean", "null", "object"], "additionalProperties": true },
             "after": { "type": ["string", "number", "boolean", "null", "object"], "additionalProperties": true },
             "componentClassName": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[A-Za-z_$][A-Za-z0-9_$.]*$" },

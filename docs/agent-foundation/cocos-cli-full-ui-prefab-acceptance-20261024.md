@@ -36,3 +36,10 @@
 在完整 UI Prefab 闭环后，对同一个精确 Status Label 做了可逆字符串字段验证：CLI 计划并提交 `Ready`→`Ready!`（apply operation `5ff70b0e-e1fe-4376-beb1-5bf8bbebc03d`），Creator 保存回执确认写入并重新打开 Prefab；随后 CLI 计划并提交来源绑定补偿（operation `2987db44-3ffc-4bbe-8ca8-f37ef5072059`，来源 operation 为 `5ff70b0e-e1fe-4376-beb1-5bf8bbebc03d`），将值恢复为 `Ready`。补偿前 SHA-256 `f99ba7be2a8cd748fc65ea4d9842a0560ef9408dd0227c85fbbd7a67e5b4bbfe`，补偿后恢复为 `145fe80ab8a84e7161f7721628373a18292b72ba6410d8a391992048b91465dd`；`.meta` 一直为 `c926c945705ee5f8ef09f855d8b451392d8744cdb1238a3f8783f7098990a29a`。整工程 CLI 关闭、重开后，`creator.project.info` 和补偿 operation reconcile 仍返回正确的工程路径、2.4.15 版本、completed 状态及上述哈希。
 
 尝试补偿最初 `Ready` 字段写入 operation `8b8e4274-0480-47e4-8418-08340072272a` 时，reconcile 显示原 apply 已完成且 after 哈希匹配，但 compensate plan 返回 `PREFAB_SOURCE_OPERATION_MISMATCH`；该计划没有写入。新建的同类 apply→compensate 链通过，所以当前证据支持同一 CLI 会话中来源绑定的 Label.string 往返，不把早期 operation 的失败隐藏或归结为字段不支持。
+
+## 2026-10-24 后续：Creator 计算尺寸回写
+
+- 为保存态与 Prefab 编辑态不一致的 Label 尺寸添加了 `node.size.width/height` 精确几何补丁。扩展 0.8.76 首次实机提交被 CLI 主进程的重复前置检查错误拒绝：Creator 端允许“磁盘仍为 before、编辑态已为 after”的几何状态，主进程却只允许编辑态等于 before。扩展 0.8.77 将检查统一到同一精确规则；定向 Prefab 测试 27/27、完整 CLI 测试 352/352 通过。
+- Tank / Creator 2.4.15 上的 apply operation `3b112ecc-981a-429f-8d05-668c9c59539e` 将 `Button/Status` 宽度从磁盘 `126.74` 明确写为 Creator 已计算值 `115.63`。Creator 保存回调、Prefab 退出/重开、完整工程 CLI 关闭/重开均确认成功；源哈希为 `145fe80ab8a84e7161f7721628373a18292b72ba6410d8a391992048b91465dd`，`.meta` 哈希保持原值 `c926c945705ee5f8ef09f855d8b451392d8744cdb1238a3f8783f7098990a29a`。重开后的磁盘和 Prefab 编辑态宽度均为 `115.63`，根节点几何也保持 `x=480,width=880`。
+- 对该尺寸操作的来源补偿 operation `f6cbebef-02e8-4144-a574-2429a8f8fa8e` 暴露了 Creator Label 自动尺寸限制：补偿将磁盘值写回 `126.74`，但重开时 Label 又计算为 `115.63`，导致 operation `needs-reconciliation` / `PREFAB_EXPECTED_STATE_MISMATCH`。没有把它记作补偿通过。随后 operation `4b9ea978-b876-41ce-a7ee-2598319f8f83` 再次保存 Creator 的计算值，完整 CLI 关闭/重开后 Prefab 源哈希恢复到记录基线，工作区 `Button.prefab` 与 `.meta` 均无差异。
+- 结论：0.8.77 的几何 after-state 持久化已在此 Label 上实机通过；Label 内容尺寸的来源补偿尚不可靠，不能宣称该类几何写入已完成可逆验收。后续应区分 Creator 自动控制的尺寸和普通节点尺寸，并补偿普通节点尺寸往返；不匹配或不稳定的 Label 尺寸补偿应明确拒绝或另行解决。

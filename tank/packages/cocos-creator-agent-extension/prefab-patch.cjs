@@ -21,7 +21,7 @@ function componentIdFor(prefabUuid, nodeUuid, index, classId, serializedId) {
         .update(`${prefabUuid}\0${nodeUuid}\0${index}\0${classId}`).digest('hex').slice(0, 24)}`;
 }
 const PATHS = new Set([
-    'node.name', 'node.active', 'node.parent', 'node.siblingIndex', 'node.child', 'node.subtree', 'node.position.x', 'node.position.y', 'node.scale.x', 'node.scale.y',
+    'node.name', 'node.active', 'node.parent', 'node.siblingIndex', 'node.child', 'node.subtree', 'node.position.x', 'node.position.y', 'node.scale.x', 'node.scale.y', 'node.size.width', 'node.size.height',
     'component.cc.Sprite.enabled', 'component.cc.Sprite.spriteFrameUuid', 'component.cc.Label.enabled',
 ]);
 const MAX_DIRECT_CHILDREN = 128;
@@ -308,6 +308,8 @@ function validValue(fieldPath, value) {
     if (fieldPath === 'node.active' || fieldPath.endsWith('.enabled')) return typeof value === 'boolean';
     if (fieldPath === 'component.cc.Sprite.spriteFrameUuid') return value === null || typeof value === 'string' && UUID.test(value);
     if (fieldPath.endsWith('.x') || fieldPath.endsWith('.y')) return Number.isFinite(value) && Math.abs(value) <= 1000000;
+    if (fieldPath === 'node.size.width' || fieldPath === 'node.size.height')
+        return Number.isFinite(value) && value >= 0 && value <= 1000000;
     return false;
 }
 
@@ -377,6 +379,9 @@ function valueAt(node, fieldPath) {
         return node.transform && Object.prototype.hasOwnProperty.call(node.transform, key)
             ? { found: true, value: node.transform[key] } : { found: false };
     }
+    const size = item.path.match(/^node\.size\.(width|height)$/);
+    if (size) return node.transform && Object.prototype.hasOwnProperty.call(node.transform, size[1])
+        ? { found: true, value: node.transform[size[1]] } : { found: false };
     const component = item.path.match(/^component\.(cc\.(?:Sprite|Label))\.(enabled|spriteFrameUuid)$/);
     if (!component) return { found: false };
     const matches = (node.components || []).filter((item) => item.className === component[1]);
@@ -391,6 +396,18 @@ function matchesDiff(node, diff, side) {
     return diff.every((item) => {
         const actual = valueAt(node, item);
         return actual.found && canonicalValue(actual.value) === canonicalValue(item[side]);
+    });
+}
+
+function matchesBeforeOrGeometryAfter(node, diff) {
+    if (!validateDiff(diff)) return false;
+    const geometryPaths = new Set(['node.position.x', 'node.position.y', 'node.size.width', 'node.size.height']);
+    return diff.every((item) => {
+        const actual = valueAt(node, item);
+        if (!actual.found) return false;
+        const current = canonicalValue(actual.value);
+        return current === canonicalValue(item.before)
+            || geometryPaths.has(item.path) && current === canonicalValue(item.after);
     });
 }
 
@@ -443,5 +460,5 @@ function validInput(input) {
 
 module.exports = { UUID, NODE_ID, SHA256, PATHS, UI_EVENT_PROPERTIES, rootNodeId, componentIdFor,
     MAX_DIRECT_CHILDREN, MAX_SUBTREE_NODES, MAX_SUBTREE_DEPTH, AUTO_CHILD_NODE_ID, AUTO_COMPONENT_INSTANCE_ID, validValue, validUiEventList,
-    validateDiff, childStateChange, subtreeStateChange, validSubtreeState, componentStateChange,
-    valueAt, matchesDiff, classifyDiffState, invertDiff, targetPathAt, validInput };
+    canonicalValue, validateDiff, childStateChange, subtreeStateChange, validSubtreeState, componentStateChange,
+    valueAt, matchesDiff, matchesBeforeOrGeometryAfter, classifyDiffState, invertDiff, targetPathAt, validInput };

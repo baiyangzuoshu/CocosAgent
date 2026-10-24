@@ -63,6 +63,8 @@ test('Prefab source patch commands declare plan, explicit commit write, and non-
     before: { kind: 'ui-events', items: [] }, after: { kind: 'ui-events', items: [{ targetUuid: nodeUuid,
       component: 'game.Controller', handler: 'onClick', customEventData: 'open' }] } }];
   assert.equal(validateCommand(plan.id, { ...input, expectedDiff: eventListDiff }).ok, true);
+  assert.equal(validateCommand(plan.id, { ...input,
+    expectedDiff: [{ path: 'node.size.width', before: 880, after: 879 }] }).ok, true);
   assert.equal(prefabPatch.validateDiff(eventListDiff), true);
   assert.equal(prefabPatch.validateDiff([{ ...eventListDiff[0], eventProperty: 'unknownEvents' }]), false);
   const unboundAfterDiff = [{ ...eventListDiff[0], after: { kind: 'ui-events', items: [{
@@ -110,6 +112,23 @@ test('Prefab patch validates only explicit supported before/after fields', () =>
   assert.deepEqual(prefabPatch.invertDiff(diff), diff.map(({ path, before, after }) => ({ path, before: after, after: before })));
   assert.equal(prefabPatch.targetPathAt('Root/Sprite', diff, 'before'), 'Root/Sprite');
   assert.equal(prefabPatch.targetPathAt('Root/Sprite', diff, 'after'), 'Root/Player Sprite');
+  const sizeDiff = [{ path: 'node.size.width', before: 880, after: 879 }];
+  const sizedNode = { ...node, transform: { ...node.transform, width: 880, height: 60 } };
+  assert.equal(prefabPatch.validateDiff(sizeDiff), true);
+  assert.equal(prefabPatch.matchesDiff(sizedNode, sizeDiff, 'before'), true);
+  assert.equal(prefabPatch.matchesDiff({ ...sizedNode,
+    transform: { ...sizedNode.transform, width: 879 } }, sizeDiff, 'after'), true);
+  assert.equal(prefabPatch.matchesBeforeOrGeometryAfter(sizedNode, sizeDiff), true);
+  assert.equal(prefabPatch.matchesBeforeOrGeometryAfter({ ...sizedNode,
+    transform: { ...sizedNode.transform, width: 879 } }, sizeDiff), true);
+  assert.equal(prefabPatch.matchesBeforeOrGeometryAfter({ ...sizedNode,
+    transform: { ...sizedNode.transform, width: 878 } }, sizeDiff), false);
+  const mixedGeometryDiff = [{ path: 'node.size.width', before: 880, after: 879 },
+    { path: 'node.position.x', before: 480, after: 480.5 }];
+  assert.equal(prefabPatch.matchesBeforeOrGeometryAfter({ ...sizedNode,
+    transform: { ...sizedNode.transform, width: 879, x: 480.5 } }, mixedGeometryDiff), true);
+  assert.equal(prefabPatch.validateDiff([{ path: 'node.size.height', before: 60, after: -1 }]), false);
+  assert.deepEqual(prefabPatch.invertDiff(sizeDiff), [{ path: 'node.size.width', before: 879, after: 880 }]);
 });
 
 test('Prefab sibling-order patch binds the existing parent and exact before/after indexes', () => {
@@ -351,6 +370,20 @@ test('single-node Prefab inspection can include a supported component after the 
     { found: true, value: prefabUuid });
 });
 
+test('Prefab source inspection reports serialized node content size for exact size patches', () => {
+  const serialized = [{ __type__: 'cc.Prefab', data: { __id__: 1 } },
+    { __type__: 'cc.Node', _name: 'Root', _id: nodeUuid, _active: true, _parent: null,
+      _children: [], _components: [], _contentSize: { __type__: 'cc.Size', width: 880, height: 60 },
+      _prefab: { __id__: 2 }, _trs: { array: [480, 0, 0, 0, 0, 0, 1, 1, 1] } },
+    { __type__: 'cc.PrefabInfo', fileId: 'root-file-id' }];
+  const source = prefabSource.inspectPrefabSource({ prefabBytes: Buffer.from(JSON.stringify(serialized)),
+    metaBytes: Buffer.from(JSON.stringify({ uuid: prefabUuid, importer: 'prefab' })), prefabUuid });
+  assert.equal(source.available, true, JSON.stringify(source));
+  assert.equal(source.nodes[0].transform.width, 880);
+  assert.equal(source.nodes[0].transform.height, 60);
+  assert.deepEqual(prefabPatch.valueAt(source.nodes[0], 'node.size.width'), { found: true, value: 880 });
+});
+
 test('Prefab source inspection accepts a validated component structure selector', () => {
   const serialized = [{ __type__: 'cc.Prefab', data: { __id__: 1 } },
     { __type__: 'cc.Node', _name: 'Root', _id: nodeUuid, _active: true, _parent: null,
@@ -529,8 +562,11 @@ test('Prefab source readback parses UI event targets into stable Prefab node ide
 test('Prefab root patches bind the exact live asset and survive a new editor node UUID', () => {
   const scenePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../creator-extension/scene.js');
   const node = { uuid: 'live-root-before', name: 'Root', active: true, children: [], _components: [],
-    x: 1, y: 2, scaleX: 1, scaleY: 1, getPosition() { return { x: this.x, y: this.y }; },
-    setPosition(x, y) { this.x = x; this.y = y; }, getComponents() { return this._components; } };
+    x: 1, y: 2, width: 880, height: 60, scaleX: 1, scaleY: 1,
+    getPosition() { return { x: this.x, y: this.y }; },
+    setPosition(x, y) { this.x = x; this.y = y; },
+    setContentSize(width, height) { this.width = width; this.height = height; },
+    getComponents() { return this._components; } };
   node._prefab = { root: node, asset: { _uuid: prefabUuid } };
   const scene = { uuid: 'edit-scene', name: 'EditScene', children: [node], getComponents() { return []; } };
   node.parent = scene;
@@ -575,6 +611,19 @@ test('Prefab root patches bind the exact live asset and survive a new editor nod
   dirty = false;
   assert.equal(invoke('exitPrefabSourceMode', { prefabUuid }).exitRequested, true);
   assert.equal(popOptions.closeResult, 2);
+
+  const sizeDiff = [{ path: 'node.size.width', before: 880, after: 879 }];
+  const sizeInput = { ...input, expectedDiff: sizeDiff };
+  assert.equal(invoke('prefabSourcePatchPreflight', sizeInput).available, true,
+    JSON.stringify(invoke('prefabSourcePatchPreflight', sizeInput)));
+  assert.equal(invoke('prefabSourcePatchMutate', sizeInput).node.transform.width, 879);
+  const sizeCompensation = { ...sizeInput, action: 'compensate', expectedDiff: prefabPatch.invertDiff(sizeDiff) };
+  assert.equal(invoke('prefabSourcePatchPreflight', sizeCompensation).available, true);
+  assert.equal(invoke('prefabSourcePatchMutate', sizeCompensation).node.transform.width, 880);
+  const persistLiveLayout = { ...input, expectedDiff: [{ path: 'node.size.width', before: 879, after: 880 }] };
+  assert.equal(invoke('prefabSourcePatchPreflight', persistLiveLayout).available, true,
+    'a geometry apply may persist a Creator-computed after-state that is already live');
+  assert.equal(invoke('prefabSourcePatchMutate', persistLiveLayout).node.transform.width, 880);
 });
 
 test('Prefab sibling order changes only the selected child within its exact Prefab parent', () => {

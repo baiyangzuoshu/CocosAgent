@@ -1979,10 +1979,17 @@ function prefabPatchSnapshot(node, nodePath, params, mode) {
     if (!componentState) return null;
     return { nodeUuid: typeof node.uuid === 'string' ? node.uuid : null, nodePath,
         name: String(node.name || ''), active: node.active !== false, parentUuid, siblingIndex,
-        transform: { x: Number(position.x), y: Number(position.y), scaleX: Number(node.scaleX), scaleY: Number(node.scaleY) },
+        transform: { x: Number(position.x), y: Number(position.y), scaleX: Number(node.scaleX), scaleY: Number(node.scaleY),
+            width: Number(node.width), height: Number(node.height) },
         childState: { childCount: childRows.length, children: childRows }, subtreeState, componentState,
         components, ...(Object.keys(componentProperties).length ? { componentProperties, componentPropertyBindings } : {}),
         ...(Object.keys(componentEventLists).length ? { componentEventLists } : {}) };
+}
+
+function prefabPatchLiveBeforeOrGeometryAfter(snapshot, expectedDiff) {
+    // Creator may have already recalculated geometry from Widget/Label setters;
+    // allow saving that exact live after-state while disk still matches before.
+    return prefabPatch.matchesBeforeOrGeometryAfter(snapshot, expectedDiff);
 }
 
 function locatePrefabPatchNode(params, side = 'before') {
@@ -2026,7 +2033,10 @@ function locatePrefabPatchNode(params, side = 'before') {
     snapshot.liveNodeUuid = liveUuid;
     snapshot.nodeUuid = stableUuid;
     snapshot.identityKind = assetRootIdentity ? 'prefab-root' : 'serialized-node-id';
-    if (!snapshot || !prefabPatch.matchesDiff(snapshot, params.expectedDiff, side))
+    const stateMatches = side === 'before' && params.action === 'apply'
+        ? prefabPatchLiveBeforeOrGeometryAfter(snapshot, params.expectedDiff)
+        : prefabPatch.matchesDiff(snapshot, params.expectedDiff, side);
+    if (!snapshot || !stateMatches)
         return { available: false, reason: 'PREFAB_EXPECTED_STATE_MISMATCH', mode };
     return { available: true, mode, node: located.node, snapshot };
 }
@@ -2349,6 +2359,8 @@ function prefabSourcePatchMutate(params, callback) {
                 else if (field === 'node.position.y') node.setPosition(node.x, item.after);
                 else if (field === 'node.scale.x') node.setScale(item.after, node.scaleY, node.scaleZ);
                 else if (field === 'node.scale.y') node.setScale(node.scaleX, item.after, node.scaleZ);
+                else if (field === 'node.size.width') node.setContentSize(item.after, node.height);
+                else if (field === 'node.size.height') node.setContentSize(node.width, item.after);
                 else if (field === 'component.property') {
                     const beforeValue = prefabLiveComponentValue(item.before, current.mode.sceneUuid, params.prefabUuid);
                     const value = prefabLiveComponentValue(item.after, current.mode.sceneUuid, params.prefabUuid);
