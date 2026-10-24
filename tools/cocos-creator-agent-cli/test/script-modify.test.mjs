@@ -171,7 +171,8 @@ function serializeExistingSceneNode({ transform, name = 'Button', active = true,
     const serializedProperty = componentProperty.serializedProperty || componentProperty.property;
     const serializedValue = componentProperty.serializedValue === undefined
       ? componentProperty.value : componentProperty.serializedValue;
-    component[serializedProperty] = serializePropertyValue(serializedValue, records, nodeIndex, componentProperty.referenceClasses);
+    if (!componentProperty.omitSerializedProperty)
+      component[serializedProperty] = serializePropertyValue(serializedValue, records, nodeIndex, componentProperty.referenceClasses);
   }
   for (const component of components) {
     const index = records.length;
@@ -489,12 +490,14 @@ function makeHarness(t, { approved = true, beforeCommitAuthorization = () => {},
           ...(params.requestedValue === undefined || sceneProperty.requestedSerializedValue === undefined ? {} : {
             requestedSerializedValue: sceneProperty.requestedSerializedValue,
           }),
-          propertyKind: sceneProperty.propertyKind, value: sceneProperty.value });
+          propertyKind: sceneProperty.propertyKind, value: sceneProperty.value,
+          inspector: { serializedProperty: sceneProperty.serializedProperty || params.property } });
         return;
       }
       if (method === 'setComponentProperty' && sceneProperty) {
         assert.deepEqual(JSON.parse(JSON.stringify(params.expectedValue)), sceneProperty.value);
         sceneProperty.value = JSON.parse(JSON.stringify(params.value));
+        sceneProperty.omitSerializedProperty = params.restoreDefaultOmitted === true;
         if (sceneProperty.requestedSerializedValue !== undefined)
           sceneProperty.serializedValue = sceneProperty.requestedSerializedValue;
         if (scenePropertyAutoSize && params.property === scenePropertyAutoSize.property) {
@@ -725,7 +728,7 @@ function makeHarness(t, { approved = true, beforeCommitAuthorization = () => {},
     createSceneNodeRenamePlan, commitSceneNodeRename, reconcileSceneNodeRename,
     createSceneNodeReparentPlan, commitSceneNodeReparent, reconcileSceneNodeReparent,
     createSceneNodeDeletePlan, createSceneComponentRemovePlan, createSceneComponentAddPlan, createSceneComponentPropertyPlan,
-    commitSceneComponentProperty, reconcileSceneComponentProperty,
+    createSceneComponentPropertyCompensationPlan, commitSceneComponentProperty, reconcileSceneComponentProperty,
     commitSceneComponentAdd, reconcileSceneComponentAdd,
     commitSceneNodeDelete(input, context) { return commitSceneDestructiveOperation(readSceneNodeDeleteOperation(input.operationId), input, context); },
     reconcileSceneNodeDelete(input) { return reconcileSceneDestructiveOperation(readSceneNodeDeleteOperation(input.operationId)); },
@@ -1809,6 +1812,44 @@ test('component-property plans preserve typed before/after values and reject kin
     property: 'spriteFrame', value: { kind: 'asset', assetClass: 'Texture2D',
       assetUuid: '55555555-5555-4555-8555-555555555555' } }),
   { code: 'SCENE_COMPONENT_PROPERTY_TYPE_MISMATCH' });
+});
+
+test('component-property plans accept Creator-omitted null typed references as the live default', async (t) => {
+  const harness = makeHarness(t, { sceneProperty: { serializedClassId: 'cc.ScrollView', property: 'content',
+    serializedProperty: '_N$content', serializedPropertyCandidates: ['_N$content'], propertyKind: 'node-ref',
+    value: { kind: 'node-ref' }, omitSerializedProperty: true } });
+  const plan = await harness.api.createSceneComponentPropertyPlan({ sceneUuid: harness.sceneUuid,
+    nodeUuid: harness.nodeUuid, componentClassName: 'cc.ScrollView', componentInstanceId: 'sprite-instance',
+    property: 'content', value: { kind: 'node-ref', nodeUuid: harness.nodeUuid } });
+  assert.equal(plan.status, 'planned');
+  assert.equal(plan.savedSceneBaseline.componentProperty.isDefaultOmitted, true);
+  assert.equal(plan.savedSceneBaseline.componentProperty.value, null);
+  assert.deepEqual(plan.expectedBefore.value, { kind: 'node-ref' });
+  assert.deepEqual(plan.expectedAfter.value, { kind: 'node-ref', nodeUuid: harness.nodeUuid });
+});
+
+test('component-property compensation restores a reference whose original null field was omitted', async (t) => {
+  const harness = makeHarness(t, { ipcMode: 'editor', sceneProperty: { serializedClassId: 'cc.ScrollView', property: 'content',
+    serializedProperty: '_N$content', serializedPropertyCandidates: ['_N$content'], propertyKind: 'node-ref',
+    value: { kind: 'node-ref' }, omitSerializedProperty: true } });
+  const baselineSha256 = await sourceHash(fs.readFileSync(harness.sceneFile));
+  const plan = await harness.api.createSceneComponentPropertyPlan({ sceneUuid: harness.sceneUuid,
+    nodeUuid: harness.nodeUuid, componentClassName: 'cc.ScrollView', componentInstanceId: 'sprite-instance',
+    property: 'content', value: { kind: 'node-ref', nodeUuid: harness.nodeUuid } });
+  let applied;
+  applied = await harness.api.commitSceneComponentProperty({ operationId: plan.operationId, planHash: plan.planHash },
+    { requestId: 'scroll-content-apply' });
+  assert.equal(applied.status, 'completed');
+  const compensation = await harness.api.createSceneComponentPropertyCompensationPlan({ sourceOperationId: plan.operationId });
+  assert.equal(compensation.status, 'planned');
+  const restored = await harness.api.commitSceneComponentProperty({ operationId: compensation.operationId,
+    planHash: compensation.planHash }, { requestId: 'scroll-content-restore' });
+  assert.equal(restored.status, 'completed');
+  assert.equal(restored.compensationFor.sourceOperationId, plan.operationId);
+  assert.equal(restored.diskReadback.componentProperty.value, null);
+  assert.equal(restored.diskReadback.componentProperty.isDefaultOmitted, true);
+  assert.equal(await sourceHash(fs.readFileSync(harness.sceneFile)), baselineSha256);
+  assert.equal(harness.getSceneSaveCount(), 2);
 });
 
 test('component-property commits verify serialized scalar, typed, array, asset, node, and exact component references', async (t) => {
