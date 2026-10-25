@@ -30,6 +30,6 @@ flowchart TD
 
 ## Local reference
 
-Read the [startup and frame source trace](../../../../docs/cocos2d-x/01-startup-and-frame.md) and inspect the matching source files under `cocos2d-x-4/cocos/` and `templates/`. The existing trace describes the default macOS desktop path and records both static source evidence and later desktop demo evidence; it does not establish equivalent behavior on other platforms.
+Read the [startup and frame source trace](../../../../docs/cocos2d-x/01-startup-and-frame.md) and inspect the matching source files under `engine/cocos2d-x-4/cocos/` and `templates/`. The existing trace describes the default macOS desktop path and records both static source evidence and later desktop demo evidence; it does not establish equivalent behavior on other platforms.
 
 For a Creator comparison or port, consult the [topic comparison](../../../../docs/comparisons/cocos2d-x-4-vs-creator-2.4/02-startup-and-frame.md). Ordinary Cocos2d-x startup work does not need that cross-engine reference.

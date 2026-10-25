@@ -26,7 +26,8 @@
 
 ## 常用源码入口
 
-- `2.4.15engine/` 与 `2.4.15NewProject/`：Creator 2.4.15 JS 引擎和示例工程。
-- `3.8.7engine/` 与 `3.8,7NewProject/`：Creator 3.8.7 引擎和示例工程；工程目录名中的逗号是实际名称。
-- `cocos2d-x-4/`：Cocos2d-x 4.0 本地源码。
+- `engine/2.4.15engine/`：Creator 2.4.15 JS 引擎源码。
+- `engine/3.8.7engine/`：Creator 3.8.7 引擎源码。
+- `engine/cocos2d-x-4/`：Cocos2d-x 4.0 本地源码。
+- `2.4.15NewProject/` 示例工程已删除；文档中保留的对应路径只用于说明历史观测，不是当前工程入口。
 - 根目录 Git 仓库不包含所有嵌套工程的独立 Git 历史。提交前确认当前仓库根目录及暂存区。

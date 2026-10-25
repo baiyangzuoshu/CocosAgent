@@ -4,7 +4,7 @@
 
 2.4 手册的[创建扩展包](https://docs.cocos.com/creator/2.4/manual/zh/extension/your-first-extension.html)把项目级扩展放在 `packages/`：`package.json` 的 `main` 指向扩展入口，`main-menu` 发消息给入口；[扩展面板](https://docs.cocos.com/creator/2.4/manual/zh/extension/extends-panel.html)还区分主进程与面板进程及 `Editor.Ipc`。 [定制引擎](https://docs.cocos.com/creator/2.4/manual/zh/advanced-topics/engine-customization.html)要求版本匹配，并在项目设置中选择自定义 JS 引擎路径；JS、Cocos2d-x 和适配器是不同修改面。[构建模板和构建插件](https://docs.cocos.com/creator/2.4/manual/zh/publish/custom-project-build-template.html)描述 `build-templates/[platform]` 覆盖与 `Editor.Builder` 的构建事件。
 
-本工作区的 `2.4.15engine/` **不是完整 Creator 编辑器仓库**。`editor/i18n/` 提供引擎相关本地化；`extensions/spine/editor/spine-meta.js` 等文件通过 `Editor.metas['custom-asset']` 和 `Editor.assetdb` 接入编辑器资产系统。这说明仓库有编辑器集成代码，不能由此推断扩展包管理、面板宿主、`Editor.Builder` 或项目设置的内部实现。示例原先的 `packages/` 为空，阶段 12 已新增 `packages/stage12-editor-probe/`；`build-templates/` 仍不存在。
+本工作区的 `engine/2.4.15engine/` **不是完整 Creator 编辑器仓库**。`editor/i18n/` 提供引擎相关本地化；`extensions/spine/editor/spine-meta.js` 等文件通过 `Editor.metas['custom-asset']` 和 `Editor.assetdb` 接入编辑器资产系统。这说明仓库有编辑器集成代码，不能由此推断扩展包管理、面板宿主、`Editor.Builder` 或项目设置的内部实现。示例原先的 `packages/` 为空，阶段 12 已新增 `packages/stage12-editor-probe/`；`build-templates/` 仍不存在。
 
 ## 引擎编译链与构建来源
 

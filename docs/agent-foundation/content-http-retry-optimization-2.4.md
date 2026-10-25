@@ -14,7 +14,7 @@
 
 ## 源码定位和方案取舍
 
-调用链落在 `2.4.15engine/cocos2d/core/asset-manager/download-file.js::downloadFile` 与 `2.4.15engine/cocos2d/core/asset-manager/utilities.js::retry`：XHR 的非 200 响应先包装成普通 `Error`，`retry` 只检查错误是否存在和剩余次数，无法区分永久 HTTP 错误与临时错误。
+调用链落在 `engine/2.4.15engine/cocos2d/core/asset-manager/download-file.js::downloadFile` 与 `engine/2.4.15engine/cocos2d/core/asset-manager/utilities.js::retry`：XHR 的非 200 响应先包装成普通 `Error`，`retry` 只检查错误是否存在和剩余次数，无法区分永久 HTTP 错误与临时错误。
 
 实现分两步：
 
@@ -40,14 +40,14 @@
 
 ```sh
 node docs/agent-foundation/probes/cocos-2x-http-retry.test.cjs
-node --check 2.4.15engine/cocos2d/core/asset-manager/download-file.js
-node --check 2.4.15engine/cocos2d/core/asset-manager/utilities.js
+node --check engine/2.4.15engine/cocos2d/core/asset-manager/download-file.js
+node --check engine/2.4.15engine/cocos2d/core/asset-manager/utilities.js
 node --check docs/agent-foundation/probes/cocos-content-stress-2.4-live.mjs
 ```
 
 ## 构建来源与边界
 
-按 [Creator 2.4 引擎定制流程](https://docs.cocos.com/creator/2.4/manual/zh/advanced-topics/engine-customization.html)，在 `2.4.15engine/` 安装其声明依赖后执行 `./node_modules/.bin/gulp build-dev`，构建成功。生成的忽略目录 `bin/cocos2d-js-for-preview.js` 包含 `error.status = xhr.status` 和永久 4xx 快速终止分支；SHA-256 为 `edcc73bb150874a7f3e6e8b6c60e871d2d8ae1642bee285f5688e8c2a988083a`。2.4.15 Creator 的“项目设置 → 自定义引擎”已保存 JavaScript 引擎路径 `/Users/youjunmao/WORK/Cocos_Engine/2.4.15engine`，记录在被忽略的 `2.4.15NewProject/local/settings.json`。
+按 [Creator 2.4 引擎定制流程](https://docs.cocos.com/creator/2.4/manual/zh/advanced-topics/engine-customization.html)，在 `engine/2.4.15engine/` 安装其声明依赖后执行 `./node_modules/.bin/gulp build-dev`，构建成功。生成的忽略目录 `bin/cocos2d-js-for-preview.js` 包含 `error.status = xhr.status` 和永久 4xx 快速终止分支；SHA-256 为 `edcc73bb150874a7f3e6e8b6c60e871d2d8ae1642bee285f5688e8c2a988083a`。2.4.15 Creator 的“项目设置 → 自定义引擎”已保存 JavaScript 引擎路径 `/Users/youjunmao/WORK/Cocos_Engine/engine/2.4.15engine`，记录在被忽略的 `2.4.15NewProject/local/settings.json`。
 
 Creator 重载该引擎后的运行预览，以及基于该引擎重新生成 Web-Mobile 包的验收仍未完成：保存设置并关闭设置窗口后，桌面自动化通道连续返回 `noWindowsAvailable`/`timeoutReached`，Creator CLI 的只读 `--help` 调用以状态 134 退出。因而已有的 404/503 集成测量仍是对原构建的内存等价补丁试验，不能改述为自定义引擎运行或正式 Web-Mobile 构建结果。源码构建、项目选路、源码级测试和原构建集成对比均有证据；Creator 重载后的运行时接入是剩余验收项。
 

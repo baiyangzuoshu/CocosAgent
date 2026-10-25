@@ -12,4 +12,4 @@ Use when a 3.8.7 game setting is missing or differs by target. Read the [3.8 sou
 3. Record `sys.isNative/isBrowser`, the actual `window.localStorage`, and whether `sys.localStorage` is that object. Use a unique namespaced key and record before/set/after, restart/read, then remove/read. Do not call `clear()`.
 4. If the provider persists the string, inspect caller serialization, initialization order and key choice next. If the provider is the warning fallback, retain the original exception or availability condition. Diagnose each target independently.
 
-The [Mac probe](../../probes/stage11-mac-storage.py) temporarily edits generated scripts and restores exact bytes; only use it for matching example package paths. The existing 3.8 Mac package uses Creator's built-in engine, so its trace cannot validate changes in adjacent `3.8.7engine/`.
+The [Mac probe](../../probes/stage11-mac-storage.py) temporarily edits generated scripts and restores exact bytes; only use it for matching example package paths. The existing 3.8 Mac package uses Creator's built-in engine, so its trace cannot validate changes in adjacent `engine/3.8.7engine/`.

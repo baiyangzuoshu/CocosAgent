@@ -1,6 +1,6 @@
 # 2.4.15 动画与表现：源码图与首轮 Web 验证
 
-研究基线是官网 [2.4 动画系统](https://docs.cocos.com/creator/2.4/manual/zh/animation/index.html)、[脚本控制动画](https://docs.cocos.com/creator/2.4/manual/zh/animation/scripting-animation.html)、[缓动](https://docs.cocos.com/creator/2.4/manual/zh/scripting/tween.html)、[音频播放](https://docs.cocos.com/creator/2.4/manual/zh/audio/audio.html)、[AudioSource 组件](https://docs.cocos.com/creator/2.4/manual/zh/components/audiosource.html)、[2D ParticleSystem](https://docs.cocos.com/creator/2.4/manual/zh/components/particle-system.html)和[3D 粒子](https://docs.cocos.com/creator/2.4/manual/zh/3d/particle-system-3d.html)。动作系统另以[官方动作页](https://docs.cocos.com/creator/2.4/manual/zh/scripting/actions.html)为专题入口；该页本轮访问返回 503，具体公开约束暂不据此推断。以下内部机制来自本地 `2.4.15engine` 静态阅读；缓动已有 Web 固定时钟验证，其余主题仍须分别打点。
+研究基线是官网 [2.4 动画系统](https://docs.cocos.com/creator/2.4/manual/zh/animation/index.html)、[脚本控制动画](https://docs.cocos.com/creator/2.4/manual/zh/animation/scripting-animation.html)、[缓动](https://docs.cocos.com/creator/2.4/manual/zh/scripting/tween.html)、[音频播放](https://docs.cocos.com/creator/2.4/manual/zh/audio/audio.html)、[AudioSource 组件](https://docs.cocos.com/creator/2.4/manual/zh/components/audiosource.html)、[2D ParticleSystem](https://docs.cocos.com/creator/2.4/manual/zh/components/particle-system.html)和[3D 粒子](https://docs.cocos.com/creator/2.4/manual/zh/3d/particle-system-3d.html)。动作系统另以[官方动作页](https://docs.cocos.com/creator/2.4/manual/zh/scripting/actions.html)为专题入口；该页本轮访问返回 503，具体公开约束暂不据此推断。以下内部机制来自本地 `engine/2.4.15engine` 静态阅读；缓动已有 Web 固定时钟验证，其余主题仍须分别打点。
 
 ## 四条独立链
 

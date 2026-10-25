@@ -32,4 +32,4 @@ flowchart LR
 - 两侧 Demo 在 2026-10-17 分别进行两次桌面鼠标点击，均观察到 `Clicks: 2`，Sprite 每次右移 40 设计单位。实现与运行步骤见[Demo 记录](../../cocos2d-x-creator2x-demo.md)。
 - Cocos2d-x 使用 macOS 原生 x86_64 窗口，Creator 使用 Chrome WebGL 预览；素材不同。该验证比较功能结果和事件链，不比较延迟、吞吐或性能。
 - 已验证鼠标路径；触屏、多点触控、事件传播边缘行为与移动平台坐标尚未覆盖。
-- Cocos2d-x 实现见 `cocos2d-x-4/templates/cpp-template-default/Classes/HelloWorldScene.cpp`；Creator 实现见 `2.4.15NewProject/assets/Script/ComparisonInteraction.js`。
+- Cocos2d-x 实现见 `engine/cocos2d-x-4/templates/cpp-template-default/Classes/HelloWorldScene.cpp`；Creator 实现见 `2.4.15NewProject/assets/Script/ComparisonInteraction.js`。

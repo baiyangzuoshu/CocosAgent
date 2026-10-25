@@ -2,7 +2,7 @@
 
 ## 范围与证据状态
 
-本文依据本地 `cocos2d-x-4/` 的 C++ 源码，追踪 Scene/Node 树建立、Node 入场/离场、Component 挂载/更新/移除，以及 `Ref` 与 autorelease 的所有权边界。Creator 2.4.15 一侧已分别有[对象与场景源码分析](../2.x/02-objects-and-scenes.md)、[跨版本对照](../comparisons/02-objects-and-scenes.md)和浏览器预览轨迹；本轮只复用 2.4.15 证据，没有对 Cocos2d-x 做等价运行实验。
+本文依据本地 `engine/cocos2d-x-4/` 的 C++ 源码，追踪 Scene/Node 树建立、Node 入场/离场、Component 挂载/更新/移除，以及 `Ref` 与 autorelease 的所有权边界。Creator 2.4.15 一侧已分别有[对象与场景源码分析](../2.x/02-objects-and-scenes.md)、[跨版本对照](../comparisons/02-objects-and-scenes.md)和浏览器预览轨迹；本轮只复用 2.4.15 证据，没有对 Cocos2d-x 做等价运行实验。
 
 ## Scene graph 构造
 

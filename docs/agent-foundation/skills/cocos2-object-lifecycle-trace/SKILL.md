@@ -5,7 +5,7 @@ description: Diagnose Cocos Creator 2.4.15 prefab instantiation, node parenting 
 
 # Trace 2.4.15 scene objects
 
-Confirm the target is `2.4.15engine/` or `2.4.15NewProject/`. Start with the developer operation and the observed callback or state; identify the first transition that differs from expectation.
+Confirm the source target is `engine/2.4.15engine/` or that the user has supplied a Creator 2.4.15 project for runtime inspection. The former `2.4.15NewProject/` sample was removed. Start with the developer operation and the observed callback or state; identify the first transition that differs from expectation.
 
 Before tracing internals, match the report to the 2.4 manual: [node and component activity](https://docs.cocos.com/creator/2.4/manual/zh/scripting/basic-node-api.html), [prefab asset and instance editing](https://docs.cocos.com/creator/2.4/manual/zh/asset-workflow/prefab.html), [creation and destruction](https://docs.cocos.com/creator/2.4/manual/zh/scripting/create-destroy.html), or [lifecycle callbacks](https://docs.cocos.com/creator/2.4/manual/zh/scripting/life-cycle-callbacks.html). Identify whether the symptom concerns runtime cloning or an editor prefab instance; the in-memory preview trace verifies only the former.
 

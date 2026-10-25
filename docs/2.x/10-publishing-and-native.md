@@ -12,8 +12,8 @@
 
 | 层 | 证据与职责 |
 | --- | --- |
-| 引擎 JavaScript | `2.4.15engine/predefine.js` 的 `CC_JSB` 等构建宏，`cocos2d/core/platform/CCSys.js` 的 `cc.sys` 平台与能力判断，`cocos2d/core/CCGame.js` 的游戏循环。 |
-| 引擎构建 | `2.4.15engine/gulp/util/utils.js::getMacros` 生成压缩时的全局宏；平台目标的选择不能仅凭运行时 `window.jsb` 推断。 |
+| 引擎 JavaScript | `engine/2.4.15engine/predefine.js` 的 `CC_JSB` 等构建宏，`cocos2d/core/platform/CCSys.js` 的 `cc.sys` 平台与能力判断，`cocos2d/core/CCGame.js` 的游戏循环。 |
+| 引擎构建 | `engine/2.4.15engine/gulp/util/utils.js::getMacros` 生成压缩时的全局宏；平台目标的选择不能仅凭运行时 `window.jsb` 推断。 |
 | Creator 生成的项目包 | `2.4.15NewProject/build/jsb-link/main.js` 及 `frameworks/runtime-src/Classes/AppDelegate.cpp` 是当前 Mac 构建快照；`jsb-adapter/jsb-builtin.js`、`jsb-engine.js` 是生成/拷入的适配层。它们不是该引擎目录中的适配器源文件。 |
 | 编辑器构建器与宿主 | 本地没有完整 Creator 编辑器构建器、平台商店或小游戏宿主源码；从构建产物只能核对结果，不能反推出所有构建阶段。 |
 
@@ -21,7 +21,7 @@
 
 `AppDelegate::applicationDidFinishLaunching` 注册 JSB 模块并启动 `se::ScriptEngine`，先 `jsb_run_script("jsb-adapter/jsb-builtin.js")`，再运行 `main.js`。生成的 `main.js` 在 `window.jsb` 分支加载 `settings`、`cocos2d-jsb`、按宏加载物理包、`jsb-engine.js`，然后 `window.boot()`。`boot` 初始化 Asset Manager、加载内置/资源包和脚本、加载 `main` Bundle，再 `cc.game.run(option, onStart)`；`onStart` 加载启动场景并交给 `cc.director.runSceneImmediate`。该构建包的可观测节点已由下面的原生轨迹打点。
 
-项目 `local/builder.json` 记录 Mac 目标、link 模板及发布模式，`settings/builder.json` 记录启动场景、MD5 缓存和 `encryptJs=true`；包内脚本有 `.jsc` 加密产物。两份配置均未给出本次构建的引擎源码路径。`build/jsb-link/main.js` 与发布 `.app` 内同名文件当前 SHA-256 一致，但这只能关联两份生成入口，不能证明使用邻接 `2.4.15engine/`。
+项目 `local/builder.json` 记录 Mac 目标、link 模板及发布模式，`settings/builder.json` 记录启动场景、MD5 缓存和 `encryptJs=true`；包内脚本有 `.jsc` 加密产物。两份配置均未给出本次构建的引擎源码路径。`build/jsb-link/main.js` 与发布 `.app` 内同名文件当前 SHA-256 一致，但这只能关联两份生成入口，不能证明使用邻接 `engine/2.4.15engine/`。
 
 平台判断分两层：`predefine.js` 在构建包中采用注入的 `CC_JSB` 宏，在非构建路径用 `jsb` 全局推断；`CCSys.js` 设置 `sys.isNative = CC_JSB`，而 `sys.isBrowser` 还要求 `window`、`document` 且排除 JSB/Runtime。原生宿主也可提供类 DOM 对象，所以不能以 `window` 存在判断 Web。`CCSys.js` 原生分支还调用宿主提供的 `__getPlatform`、`__getOS` 等函数；这些函数的原生实现不在 2.4 引擎 JavaScript 目录内。
 
@@ -40,7 +40,7 @@
 ## 已验证切口与待验证
 
 1. 已对同一示例源场景记录 Web 预览与 Mac 原生包的系统标志、启动事件和首次绘制回调；若要归因于平台，仍需与正式 Web 发布包在相同构建条件下复测。
-2. 核对当前 Mac 构建产物是否确由本地 `2.4.15engine` 生成；仅凭邻接目录不成立。
+2. 核对当前 Mac 构建产物是否确由本地 `engine/2.4.15engine` 生成；仅凭邻接目录不成立。
 3. 小游戏需目标开发工具/宿主实测；本机无对应发布包与运行轨迹。
 
 [Mac 启动冒烟记录](../agent-foundation/traces/stage10-mac-native-startup-smoke.jsonl)中进程输出 `Cocos Creator v2.4.15`，只证明该已生成包到达引擎启动阶段。

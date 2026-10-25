@@ -21,7 +21,7 @@ flowchart LR
 | 维度 | Cocos2d-x 4.0 | Cocos Creator 2.4.15 |
 | --- | --- | --- |
 | 工程入口 | C++ 模板/游戏工程，含 `Classes/`、`Resources/`、平台 launcher 与 CMake 或 IDE 项目 | Creator 项目由 Editor 管理资源、场景和构建设置，再由 Builder 生成平台目标 |
-| 构建责任 | 开发者选择 CMake/平台工程、编译器与 SDK，处理引擎和外部依赖 | Creator Editor/Builder 管理 Creator 工程资源导入与构建模板；完整 Editor 实现不在本地 `2.4.15engine/` 快照中 |
+| 构建责任 | 开发者选择 CMake/平台工程、编译器与 SDK，处理引擎和外部依赖 | Creator Editor/Builder 管理 Creator 工程资源导入与构建模板；完整 Editor 实现不在本地 `engine/2.4.15engine/` 快照中 |
 | 平台接线 | 各平台有自己的 Application/launcher；桌面模板入口不能代替移动平台路径 | Creator 项目构建目标及 Editor 版本参与构建链，平台产物还需对应 SDK/模板 |
 | 失败定位 | CMake 配置、依赖、C++ 编译/链接、平台 glue 与 SDK 分层检查 | Editor 导入、脚本编译、Builder 配置和平台构建分层检查 |
 

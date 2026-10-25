@@ -1,6 +1,6 @@
 # 3.8.7 动画与表现：源码图与首轮 Web 验证
 
-公开行为以官网 [3.8 动画系统](https://docs.cocos.com/creator/3.8/manual/zh/animation/index.html)、[缓动系统](https://docs.cocos.com/creator/3.8/manual/zh/tween/index.html)、[缓动接口](https://docs.cocos.com/creator/3.8/manual/zh/tween/tween-interface.html)、[AudioSource 组件](https://docs.cocos.com/creator/3.8/manual/zh/audio-system/audiosource.html)、[粒子系统](https://docs.cocos.com/creator/3.8/manual/zh/particle-system/index.html)和[程序式动画（实验性）](https://docs.cocos.com/creator/3.8/manual/zh/animation/marionette/procedural-animation/index.html)为基线。以下内部连接来自本地 `3.8.7engine` 静态阅读。程序式动画须保留官网的“实验性”限定，不能作为普通剪辑动画的默认路径。
+公开行为以官网 [3.8 动画系统](https://docs.cocos.com/creator/3.8/manual/zh/animation/index.html)、[缓动系统](https://docs.cocos.com/creator/3.8/manual/zh/tween/index.html)、[缓动接口](https://docs.cocos.com/creator/3.8/manual/zh/tween/tween-interface.html)、[AudioSource 组件](https://docs.cocos.com/creator/3.8/manual/zh/audio-system/audiosource.html)、[粒子系统](https://docs.cocos.com/creator/3.8/manual/zh/particle-system/index.html)和[程序式动画（实验性）](https://docs.cocos.com/creator/3.8/manual/zh/animation/marionette/procedural-animation/index.html)为基线。以下内部连接来自本地 `engine/3.8.7engine` 静态阅读。程序式动画须保留官网的“实验性”限定，不能作为普通剪辑动画的默认路径。
 
 ## 四条独立链
 

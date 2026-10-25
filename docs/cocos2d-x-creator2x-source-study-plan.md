@@ -2,16 +2,16 @@
 
 ## 目标与边界
 
-以仓库中的 `cocos2d-x-4/`（上游标记为 cocos2d-x 4.0）和 `2.4.15engine/`、`2.4.15NewProject/` 为具体源码样本，比较游戏开发者完成相同行为时两套技术栈的入口、对象模型、资源工作流、平台边界与验证方法。目标是形成可追溯的架构说明与任务型 skill，不是 API 迁移表，也不是对 Cocos2d-x 与 Creator 产品优劣的评分。
+以仓库中的 `engine/cocos2d-x-4/`（上游标记为 cocos2d-x 4.0）和 `engine/2.4.15engine/`、`2.4.15NewProject/` 为具体源码样本，比较游戏开发者完成相同行为时两套技术栈的入口、对象模型、资源工作流、平台边界与验证方法。目标是形成可追溯的架构说明与任务型 skill，不是 API 迁移表，也不是对 Cocos2d-x 与 Creator 产品优劣的评分。
 
-两者范围不同，结论必须把边界说清：Cocos2d-x 仓库提供跨平台 C++ 游戏框架、平台适配和 CMake/模板/测试代码；Creator 2.4.15 还包含编辑器集成、AssetDB、场景/Prefab 编辑和项目构建流程。Creator 编辑器内部未包含在 `2.4.15engine/` 中，因此只依据本仓库源码不能还原编辑器全部实现。
+两者范围不同，结论必须把边界说清：Cocos2d-x 仓库提供跨平台 C++ 游戏框架、平台适配和 CMake/模板/测试代码；Creator 2.4.15 还包含编辑器集成、AssetDB、场景/Prefab 编辑和项目构建流程。Creator 编辑器内部未包含在 `engine/2.4.15engine/` 中，因此只依据本仓库源码不能还原编辑器全部实现。
 
 ## 研究对象
 
 | 对象 | 本地来源 | 版本依据 | 研究范围 |
 | --- | --- | --- | --- |
-| Cocos2d-x | `cocos2d-x-4/` | `README.md`、`CHANGELOG` 标记 4.0；记录具体文件时再核对源码状态 | C++ 核心、Lua bindings、平台层、模板、构建与 tests；不把外部依赖或缺失子模块假定为已检出 |
-| Creator 2.x | `2.4.15engine/`、`2.4.15NewProject/` | 当前 Creator 2.4.15 源码快照及示例工程 | JS 运行时、Creator 工程/资源/场景格式、已在本地的构建和扩展代码；Creator 编辑器闭源/外置部分单列 |
+| Cocos2d-x | `engine/cocos2d-x-4/` | `README.md`、`CHANGELOG` 标记 4.0；记录具体文件时再核对源码状态 | C++ 核心、Lua bindings、平台层、模板、构建与 tests；不把外部依赖或缺失子模块假定为已检出 |
+| Creator 2.x | `engine/2.4.15engine/`、`2.4.15NewProject/` | 当前 Creator 2.4.15 源码快照及示例工程 | JS 运行时、Creator 工程/资源/场景格式、已在本地的构建和扩展代码；Creator 编辑器闭源/外置部分单列 |
 
 上游 Cocos2d-x v4 文档与当前本地快照可能存在版本/文档差异。先读本地 README、CHANGELOG、CMake 配置和 git 历史（若可用），再以源码符号和官方 v4 文档逐项核对；任何不一致都注明证据版本，不用在线 `v4` 分支替代本地快照结论。
 

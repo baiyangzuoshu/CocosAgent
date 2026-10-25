@@ -5,7 +5,7 @@ description: Diagnose Cocos Creator 2.4.15 component onLoad/onEnable/start/updat
 
 # Trace 2.4.15 component timing
 
-Confirm the report concerns `2.4.15engine/` or a Creator 2.4 project. Record the callback, node, component class, frame, activation operation, `component.enabled`, and `node.activeInHierarchy`; separate editor scene execution from browser preview or a published build.
+Confirm the report concerns `engine/2.4.15engine/` or a Creator 2.4 project. Record the callback, node, component class, frame, activation operation, `component.enabled`, and `node.activeInHierarchy`; separate editor scene execution from browser preview or a published build.
 
 Check the matching 2.4 manual pages before internal tracing: [lifecycle](https://docs.cocos.com/creator/2.4/manual/zh/scripting/life-cycle-callbacks.html), [execution order](https://docs.cocos.com/creator/2.4/manual/zh/scripting/execution-order.html), and [timers](https://docs.cocos.com/creator/2.4/manual/zh/scripting/scheduler.html). The public class declaration uses `cc.Class({ extends: cc.Component, editor: { executionOrder } })`; the component is attached through its node.
 

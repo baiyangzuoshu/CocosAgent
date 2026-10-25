@@ -40,7 +40,7 @@
 
 ### 多语言
 
-官网 L10N 是编辑器面板、译文数据、编译、`L10nLabel` 和发布设置组成的工作流。邻接 `3.8.7engine/cocos/`、`editor/`、`exports/`、`native/` 未检出 `L10nLabel` 或 `localization-editor` 实现；本地示例也未启用 L10N。不能把引擎组件元数据中的 `i18n:` 编辑器键当作游戏运行时翻译器。后续若研究 L10N 内部实现，须检查 Creator 编辑器安装包或装有该扩展的实际项目，再以最小双语言场景验证编译与运行。
+官网 L10N 是编辑器面板、译文数据、编译、`L10nLabel` 和发布设置组成的工作流。邻接 `engine/3.8.7engine/cocos/`、`editor/`、`exports/`、`native/` 未检出 `L10nLabel` 或 `localization-editor` 实现；本地示例也未启用 L10N。不能把引擎组件元数据中的 `i18n:` 编辑器键当作游戏运行时翻译器。后续若研究 L10N 内部实现，须检查 Creator 编辑器安装包或装有该扩展的实际项目，再以最小双语言场景验证编译与运行。
 
 ### 原生热更新
 

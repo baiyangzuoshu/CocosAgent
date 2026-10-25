@@ -5,7 +5,7 @@
 ## 核验口径
 
 - 清点 `tools/cocos-creator-agent-cli/skills/**/SKILL.md` 共 51 项：1 个总路由、11 个领域路由、39 个专项工作流。
-- Creator 对外行为以 [Creator 2.4 官方手册](https://docs.cocos.com/creator/2.4/manual/zh/)对应专题为依据；内部实现只按本仓库 `2.4.15engine/` 的静态源码和专题研究记录判断。每篇本地研究记录保留其官网基线、源码路径和证据限制，索引见 [`references/2x/README.md`](../../tools/cocos-creator-agent-cli/references/2x/README.md)。
+- Creator 对外行为以 [Creator 2.4 官方手册](https://docs.cocos.com/creator/2.4/manual/zh/)对应专题为依据；内部实现只按本仓库 `engine/2.4.15engine/` 的静态源码和专题研究记录判断。每篇本地研究记录保留其官网基线、源码路径和证据限制，索引见 [`references/2x/README.md`](../../tools/cocos-creator-agent-cli/references/2x/README.md)。
 - 本地引擎快照是 Creator 2.4.15 的部分源码，不是完整 Creator 编辑器、AssetDB 宿主或所有原生 C++ 绑定。缺失部分不得从邻接版本、相似 API 或官网描述推断内部实现。
 - “核验通过”只表示 Skill 的范围描述和指导边界未与列出的 2.4 手册/2.4.15 源码研究冲突。Skill 本身是流程指引；工具是否存在、字段是否可写、构建是否成功、运行行为如何，仍须由当前 Host、Creator 版本、目标平台和实机证据决定。
 - 第三方插件目前只有 Skills、参考资料和插件元数据；没有随包交付第三方 Creator CLI、MCP 服务或 Creator 工具桥。凡涉及 AssetDB、场景/Prefab、导入器、预览或运行态的步骤均须以当前 Host 的实时工具目录为准。
@@ -57,7 +57,7 @@
 | 41 | `cocos2-sprite-atlas` | [Atlas](https://docs.cocos.com/creator/2.4/manual/zh/asset-workflow/atlas.html)、[Auto Atlas](https://docs.cocos.com/creator/2.4/manual/zh/asset/auto-atlas.html)、[Sprite 组件](https://docs.cocos.com/creator/2.4/manual/zh/components/sprite.html) | [04 资源身份](../../tools/cocos-creator-agent-cli/references/2x/04-assets-and-loading.md)、[06 图形渲染](../../tools/cocos-creator-agent-cli/references/2x/06-graphics-rendering.md) | 源码确认运行时有 `cc.SpriteAtlas`；手册规定 `.pac` Auto Atlas 在构建时打包。已改正术语并把性能提升改为实测条件。 |
 | 42 | `cocos2-task-review-recovery` | 不适用：Host/VCS 审阅和恢复流程，不声明 Creator API | 无通用第三方操作账本；仅按当前 Host 实际回执和 VCS 状态 | 已去除默认存在第三方操作 ID、账本、checkpoint 或补偿操作的暗示；仅在工具返回时据实核对。 |
 | 43 | `cocos2-texture-import-settings` | [贴图资源](https://docs.cocos.com/creator/2.4/manual/zh/asset-workflow/sprite.html)、[压缩纹理](https://docs.cocos.com/creator/2.4/manual/zh/asset-workflow/compress-texture.html) | [06 图形渲染](../../tools/cocos-creator-agent-cli/references/2x/06-graphics-rendering.md)、[04 资源身份](../../tools/cocos-creator-agent-cli/references/2x/04-assets-and-loading.md) | 导入器属性由 Creator/目标平台决定；源码研究不替代编辑器导入器读回。Skill 已保留此工具门槛。 |
-| 44 | `cocos2-tilemap` | [TiledMap 资源](https://docs.cocos.com/creator/2.4/manual/zh/asset-workflow/tiledmap.html)、[TiledMap 组件](https://docs.cocos.com/creator/2.4/manual/zh/components/tiledmap.html) | [06 图形渲染](../../tools/cocos-creator-agent-cli/references/2x/06-graphics-rendering.md)，引擎入口 `2.4.15engine/cocos2d/tilemap/CCTiledMap.js` | `.tmx`、图层和 `TiledMap` 组件得到官网/源码确认。已明确 TiledMap 不等于碰撞或寻路实现。 |
+| 44 | `cocos2-tilemap` | [TiledMap 资源](https://docs.cocos.com/creator/2.4/manual/zh/asset-workflow/tiledmap.html)、[TiledMap 组件](https://docs.cocos.com/creator/2.4/manual/zh/components/tiledmap.html) | [06 图形渲染](../../tools/cocos-creator-agent-cli/references/2x/06-graphics-rendering.md)，引擎入口 `engine/2.4.15engine/cocos2d/tilemap/CCTiledMap.js` | `.tmx`、图层和 `TiledMap` 组件得到官网/源码确认。已明确 TiledMap 不等于碰撞或寻路实现。 |
 | 45 | `cocos2-ui-component-properties` | [UI 组件目录](https://docs.cocos.com/creator/2.4/manual/zh/ui/index.html)、[Button](https://docs.cocos.com/creator/2.4/manual/zh/components/button.html) | [07 UI 系统](../../tools/cocos-creator-agent-cli/references/2x/07-ui-system.md) | 具体组件字段由当前版本和实时 schema 确认；没有通用属性写入承诺。 |
 | 46 | `cocos2-ui-event-binding` | [事件监听](https://docs.cocos.com/creator/2.4/manual/zh/scripting/events.html)、[Button](https://docs.cocos.com/creator/2.4/manual/zh/components/button.html) | [05 输入与事件](../../tools/cocos-creator-agent-cli/references/2x/05-input-and-events.md)、[07 UI 系统](../../tools/cocos-creator-agent-cli/references/2x/07-ui-system.md) | 事件绑定和运行时点击是两个证据阶段；未把脚本编译当成事件执行证明。 |
 | 47 | `cocos2-ui-layout` | [多分辨率适配](https://docs.cocos.com/creator/2.4/manual/zh/ui/multi-resolution.html)、[Widget 对齐](https://docs.cocos.com/creator/2.4/manual/zh/ui/widget-align.html) | [07 UI 系统](../../tools/cocos-creator-agent-cli/references/2x/07-ui-system.md) | Canvas、Widget、锚点和多分辨率验收有手册/源码依据；单张单尺寸截图不等于适配验证。 |
@@ -69,7 +69,7 @@
 ## 已修订的问题
 
 1. 移除 Asset Bundle Skill 中不存在的 release receipt、release ledger 和恢复命令；Creator 手册定义的是 Bundle 配置、构建与加载，不提供通用发布账本。
-2. 把自动图集 `.pac`（构建阶段打包）、导入 Atlas（`.plist`/`.png`）、运行时 `cc.SpriteAtlas` 与 dynamic atlas 分开描述；依据官方 [Atlas 文档](https://docs.cocos.com/creator/2.4/manual/zh/asset/atlas.html)、[Auto Atlas 文档](https://docs.cocos.com/creator/2.4/manual/zh/asset/auto-atlas.html)和 `2.4.15engine/cocos2d/core/assets/CCSpriteAtlas.js`。
+2. 把自动图集 `.pac`（构建阶段打包）、导入 Atlas（`.plist`/`.png`）、运行时 `cc.SpriteAtlas` 与 dynamic atlas 分开描述；依据官方 [Atlas 文档](https://docs.cocos.com/creator/2.4/manual/zh/asset/atlas.html)、[Auto Atlas 文档](https://docs.cocos.com/creator/2.4/manual/zh/asset/auto-atlas.html)和 `engine/2.4.15engine/cocos2d/core/assets/CCSpriteAtlas.js`。
 3. 移除“第三方包提供 AssetDB/import 命令”的默认暗示；当前包没有第三方 Creator 工具桥，必须检查 Host 实时工具目录。
 4. 禁止在没有实时 Creator Prefab 写入合同的情况下直接改序列化 Prefab 文件。
 5. 把操作回执、operation ID、checkpoint 和恢复能力改成“工具实际提供时才用”；普通源码改动通过 Host 文件读回和版本控制 diff 核对。

@@ -20,7 +20,7 @@
 
 第五轮后端接线核对：2.4 3D 的 Cannon/Builtin `instantiate.ts` 各受构建宏控制，`CCDirector.sharedInit` 还按宏和管理器模块存在性决定是否创建管理器。3.8 的后端模块在 `Game.EVENT_PRE_SUBSYSTEM_INIT` 注册选择器，Director 初始化阶段构造系统和 World；3D 项目设置可关闭系统，Bullet/PhysX 与 2D Box2D WASM 构建可手动异步加载。3.8 2D `.instance` 会懒创建 World，3D `.instance` 仅返回已有单例；`PHYSICS_*` 标志只反映选择器 ID。诊断依次记录后端 ID、系统、World，不用 `selector.switchTo` 做只读识别：本快照 2D 切换没有销毁旧 World。此处全是源码推断，尚未观测示例的实际模块加载次序。
 
-仓库现成的 `3.8.7engine/tests/physics2d/scene-query.ts` 以 `result.length` 和 `result[0]` 使用 `testPoint`，支持“工程测试按数组签名编写”的判断；`physics2d.test.ts` 注册 Builtin、TypeScript Box2D 与 WASM 后端，但 `scene-query.ts` 和 `events.ts` 对 Builtin 明确跳过。尝试从引擎目录运行该聚焦 Jest 测试时，`node_modules/.bin/jest` 不存在（当前依赖目录没有 Jest 可执行文件），因此**没有获得测试通过结果**，也没有安装或修改依赖。
+仓库现成的 `engine/3.8.7engine/tests/physics2d/scene-query.ts` 以 `result.length` 和 `result[0]` 使用 `testPoint`，支持“工程测试按数组签名编写”的判断；`physics2d.test.ts` 注册 Builtin、TypeScript Box2D 与 WASM 后端，但 `scene-query.ts` 和 `events.ts` 对 Builtin 明确跳过。尝试从引擎目录运行该聚焦 Jest 测试时，`node_modules/.bin/jest` 不存在（当前依赖目录没有 Jest 可执行文件），因此**没有获得测试通过结果**，也没有安装或修改依赖。
 
 待验证矩阵：
 

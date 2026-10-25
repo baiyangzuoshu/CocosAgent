@@ -28,7 +28,7 @@ flowchart TD
 
 ## Verified local example
 
-The paired sample registers `EventListenerMouse` against the Sprite, checks left-button input, converts to scene-node space, performs a bounding-box hit test, increments a Label, and moves the Sprite. The 2026-10-17 macOS desktop run verified two clicks and the resulting visible state. See [the demo notes](../../../../docs/cocos2d-x-creator2x-demo.md), [the comparison record](../../../../docs/comparisons/cocos2d-x-4-vs-creator-2.4.md), and `cocos2d-x-4/templates/cpp-template-default/Classes/HelloWorldScene.cpp`.
+The paired sample registers `EventListenerMouse` against the Sprite, checks left-button input, converts to scene-node space, performs a bounding-box hit test, increments a Label, and moves the Sprite. The 2026-10-17 macOS desktop run verified two clicks and the resulting visible state. See [the demo notes](../../../../docs/cocos2d-x-creator2x-demo.md), [the comparison record](../../../../docs/comparisons/cocos2d-x-4-vs-creator-2.4.md), and `engine/cocos2d-x-4/templates/cpp-template-default/Classes/HelloWorldScene.cpp`.
 
 That slice does not verify touch devices, propagation edge cases, event latency, or every platform dispatcher implementation. Consult the [Cocos2d-x v4 event guide](https://docs.cocos2d-x.org/cocos2d-x/v4/en/event_dispatcher/registering.html) and the local `cocos/event_dispatcher/` implementation for the exact target.
 

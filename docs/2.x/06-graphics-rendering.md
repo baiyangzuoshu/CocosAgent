@@ -1,6 +1,6 @@
 # 2.4.15 图形渲染
 
-本篇以 [2.4 图像和渲染](https://docs.cocos.com/creator/2.4/manual/zh/render/)、[Sprite](https://docs.cocos.com/creator/2.4/manual/zh/components/sprite.html)、[Camera](https://docs.cocos.com/creator/2.4/manual/zh/render/camera.html)、[材质](https://docs.cocos.com/creator/2.4/manual/zh/render/material.html)、[Effect](https://docs.cocos.com/creator/2.4/manual/zh/render/effect.html)和 [Mesh Renderer](https://docs.cocos.com/creator/2.4/manual/zh/3d/mesh-renderer.html)为公开行为基线。源码快照是 `2.4.15engine`，运行观察来自 Creator 2.4.15 打开的 `2.4.15NewProject` 桌面 Web 预览。
+本篇以 [2.4 图像和渲染](https://docs.cocos.com/creator/2.4/manual/zh/render/)、[Sprite](https://docs.cocos.com/creator/2.4/manual/zh/components/sprite.html)、[Camera](https://docs.cocos.com/creator/2.4/manual/zh/render/camera.html)、[材质](https://docs.cocos.com/creator/2.4/manual/zh/render/material.html)、[Effect](https://docs.cocos.com/creator/2.4/manual/zh/render/effect.html)和 [Mesh Renderer](https://docs.cocos.com/creator/2.4/manual/zh/3d/mesh-renderer.html)为公开行为基线。源码快照是 `engine/2.4.15engine`，运行观察来自 Creator 2.4.15 打开的 `2.4.15NewProject` 桌面 Web 预览。
 
 ## 范围与对象
 

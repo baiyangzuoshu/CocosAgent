@@ -2,12 +2,12 @@
 
 ## 比较范围
 
-本页比较仓库中的 `cocos2d-x-4/` 快照（README/CHANGELOG 标记 4.0）与 `2.4.15engine/`、`2.4.15NewProject/`。包括源码架构对照，以及 2026-10-17 在 macOS 上的首屏运行和相同交互切片：点击 Sprite 后计数递增并向右移动。Cocos2d-x 使用 x86_64 原生窗口，Creator 使用浏览器 WebGL 预览；不将两端 FPS 读数当作性能排名。
+本页比较仓库中的 `engine/cocos2d-x-4/` 快照（README/CHANGELOG 标记 4.0）与 `engine/2.4.15engine/`、`2.4.15NewProject/`。包括源码架构对照，以及 2026-10-17 在 macOS 上的首屏运行和相同交互切片：点击 Sprite 后计数递增并向右移动。Cocos2d-x 使用 x86_64 原生窗口，Creator 使用浏览器 WebGL 预览；不将两端 FPS 读数当作性能排名。
 
 ## Demo 构建与运行状态（2026-10-17）
 
 - 选定 macOS 桌面作为共同观察环境。Cocos2d-x v4 使用官方 `cpp-template-default`，通过独立 CMake wrapper 构建为 x86_64 macOS app bundle；Creator 使用 2.4.15 Web 预览。两边画面区域均约为 960×640，均显示一个 Sprite 和一个 Label；素材、背景、运行后端和构建模式不同。Demo 增加同一交互：鼠标左键点击 Sprite 后计数加一、x 坐标增加 40。
-- CMake 4.4.4 安装在 `/private/tmp/cocos-cmake-runtime`，Apple Clang 21 编译器探测通过。GitHub 官方 `metal-support-22` 包已下载并通过 ZIP 完整性检查，按引擎脚本布局安装到忽略目录 `cocos2d-x-4/external/`。包大小为 109,325,429 字节，与 `external/config.json` 的旧估值不同；ZIP 检查无错误，所需目录与库文件存在。
+- CMake 4.4.4 安装在 `/private/tmp/cocos-cmake-runtime`，Apple Clang 21 编译器探测通过。GitHub 官方 `metal-support-22` 包已下载并通过 ZIP 完整性检查，按引擎脚本布局安装到忽略目录 `engine/cocos2d-x-4/external/`。包大小为 109,325,429 字节，与 `external/config.json` 的旧估值不同；ZIP 检查无错误，所需目录与库文件存在。
 - macOS x86_64 的官方 `cpp-tests` 已通过 CMake Unix Makefiles 构建并启动；它验证依赖、链接、窗口创建和基础渲染，但不替代模板 Demo。
 - Cocos2d-x 官方 `cpp-template-default` 的 `HelloCpp` 已重建并通过桌面应用启动。启动方式为从桌面会话打开生成的 app bundle；此前在命令行直接运行二进制会在 GLFW/macOS `NSApplication` 注册阶段 abort，这不是场景代码失败。交互版窗口显示默认 Cocos2d-x 标志、`Clicks` 计数和实时统计；构建产物是 x86_64，Apple Silicon 上经 Rosetta 运行。
 - Creator Dashboard、编辑器窗口和目标工程身份一致：`/Users/youjunmao/WORK/Cocos_Engine/2.4.15NewProject`、Creator 2.4.15。独立场景 `assets/Scene/Cocos2dComparison.fire` 已从 Creator 预览场景列表选择并成功启动，浏览器运行画面显示 Cocos Sprite、`Label` 和深色背景。没有改动原 `helloworld.fire` 或 `settings/project.json`。
@@ -15,7 +15,7 @@
 - 构建期间在引擎源码做了两项窄修正以适配当前 Apple SDK：`CCFontAtlas.cpp` 对保存为 `void*` 的 `iconv_t` 调用做显式转换；`AudioCache.h` 显式包含其使用的 `<functional>`。构建时还禁用了 CMake 预编译头以避开 Objective-C++ PCH 冲突。这些修改须与构建证据一并审阅，不是上游 v4 的原样构建。
 - 可重现步骤、构建位置和运行限制见[对照 Demo 构建说明](../cocos2d-x-creator2x-demo.md)。现有证据支持“两边 Demo 已运行”的场景和运行链路对照；不支持启动耗时、同后端性能排名或同素材画质比较。
 
-两者不能按“一个 API 对另一个 API”整体比较。Cocos2d-x 4.0 是跨平台 C++ 游戏框架源码及模板/构建/tests；Creator 2.4.15 是带项目资源与场景工作流的 Creator 运行时源码快照。Creator 编辑器完整实现不在本地 `2.4.15engine/` 中，而 Cocos2d-x 没有 Creator 同型的内置场景/资源编辑器。这是产品范围差异，不应被描述成同一层的功能缺失。
+两者不能按“一个 API 对另一个 API”整体比较。Cocos2d-x 4.0 是跨平台 C++ 游戏框架源码及模板/构建/tests；Creator 2.4.15 是带项目资源与场景工作流的 Creator 运行时源码快照。Creator 编辑器完整实现不在本地 `engine/2.4.15engine/` 中，而 Cocos2d-x 没有 Creator 同型的内置场景/资源编辑器。这是产品范围差异，不应被描述成同一层的功能缺失。
 
 ## 首屏 Demo 实际比较
 
@@ -42,7 +42,7 @@
 - **从 Cocos2d-x 移植到 Creator 时，优先重建用户行为和资源引用，不要逐个照搬 C++ 类名。** 重点重写应用入口、场景构建、资源寻址、生命周期和更新逻辑。
 - **当前可以下运行时链路和首屏行为对照结论，不能下同条件运行性能结论。** 两边 Demo 已分别启动，且 Creator 预览使用独立干净场景；默认 `helloworld` 与原场景保持不变。
 
-证据入口：Cocos2d-x `templates/cpp-template-default/Classes/AppDelegate.cpp`、`HelloWorldScene.cpp`、`proj.ios_mac/mac/main.cpp`、`cocos/platform/mac/CCApplication-mac.mm`；Creator `2.4.15engine/cocos2d/core/CCGame.js`、`CCDirector.js`、`2.4.15NewProject/assets/Scene/Cocos2dComparison.fire`。运行证据为 2026-10-17 桌面会话中两端实际窗口/预览画面；没有录制帧时间序列或完成统一后端基准。
+证据入口：Cocos2d-x `templates/cpp-template-default/Classes/AppDelegate.cpp`、`HelloWorldScene.cpp`、`proj.ios_mac/mac/main.cpp`、`cocos/platform/mac/CCApplication-mac.mm`；Creator `engine/2.4.15engine/cocos2d/core/CCGame.js`、`CCDirector.js`、`2.4.15NewProject/assets/Scene/Cocos2dComparison.fire`。运行证据为 2026-10-17 桌面会话中两端实际窗口/预览画面；没有录制帧时间序列或完成统一后端基准。
 
 ## 架构路径
 
@@ -73,7 +73,7 @@ flowchart LR
 
 | 开发者目标 | Cocos2d-x 4.0 | Creator 2.4.15 | 对照结论与证据边界 |
 | --- | --- | --- | --- |
-| 建立项目并运行首屏 | C++ 默认模板在 `AppDelegate::applicationDidFinishLaunching()` 设定 GLView、分辨率和帧率，创建 `HelloWorld::createScene()` 后调用 `Director::runWithScene()`。平台 launcher/工程与 CMake 接入目标。 | 项目由 Creator 工程和编辑器管理；运行时从 `cc.game`/`cc.director` 接入，场景资源由 Creator 项目构建/预览流程提供。 | 一侧从应用委托和平台工程进入；另一侧从编辑器项目、构建/预览宿主和 JS runtime 进入。两端最小 Demo 已在 macOS 桌面分别启动；本轮没有采集同步帧时间序列。详见 `cocos2d-x-4/templates/cpp-template-default/Classes/AppDelegate.cpp`、`2.4.15engine/cocos2d/core/CCGame.js`、`CCDirector.js`。 |
+| 建立项目并运行首屏 | C++ 默认模板在 `AppDelegate::applicationDidFinishLaunching()` 设定 GLView、分辨率和帧率，创建 `HelloWorld::createScene()` 后调用 `Director::runWithScene()`。平台 launcher/工程与 CMake 接入目标。 | 项目由 Creator 工程和编辑器管理；运行时从 `cc.game`/`cc.director` 接入，场景资源由 Creator 项目构建/预览流程提供。 | 一侧从应用委托和平台工程进入；另一侧从编辑器项目、构建/预览宿主和 JS runtime 进入。两端最小 Demo 已在 macOS 桌面分别启动；本轮没有采集同步帧时间序列。详见 `engine/cocos2d-x-4/templates/cpp-template-default/Classes/AppDelegate.cpp`、`engine/2.4.15engine/cocos2d/core/CCGame.js`、`CCDirector.js`。 |
 | 构造场景与对象树 | `Scene`/`Node` 是运行时对象；通过 `addChild` 建树并由 Director 运行 Scene。节点类可在 C++ 中直接构造或子类化；v4 也提供 `Component`/`ComponentContainer`。 | `.fire` 场景、Prefab 和编辑器对象树是可编辑/序列化内容；运行时使用 `cc.Node` 和挂载在 Node 上的 `cc.Component`。 | 两边都有 Node、scene graph 和组件概念；Creator 增加的编辑器序列化/资源引用工作流不是 C++ `Scene` 对象的对等格式。不可把 `.fire` 等同于 C++ Scene 类。Creator 手册：[Node & Component](https://docs.cocos.com/creator/2.4/manual/zh/content-workflow/node-component.html)。 |
 | 管理对象生命周期 | Cocos2d-x `Ref` 使用引用计数/autorelease；Node 的 `onEnter/onExit/cleanup`、组件容器和 Actions/Scheduler 共同影响对象生命周期。 | Creator Component 生命周期由节点激活状态、组件回调与引擎延迟销毁流程组织；脚本对象由 JS runtime 管理，Native 另有桥接路径。 | 两边都有组件，但回调模型与所有权不等价。任何端口都要从对象创建、入树、移除、延迟销毁直至析构/回调追踪；不可将 `retain/release` 与 JS `destroy()` 直接替换。见[对象生命周期切片](../cocos2d-x/02-objects-and-lifecycle.md)。 |
 | 编写游戏逻辑 | 原生主路径为 C++；源码含 Lua bindings。v4 changelog 标记移除 HTML5 engine 和 JSB，因此要以当前快照的 `cocos/scripting/` 内容和构建选项核对具体语言支持。 | Creator 2.4 主路径为 JavaScript，支持 Creator 脚本/组件模型；项目可含 TypeScript，但编译和 Creator 脚本加载需按 2.4 流程确认。 | 语言、代码生命周期与构建链不同。不能仅根据旧 README 功能清单推断 v4 仍有 JSB；本地 changelog、构建文件和入口代码优先。 |

@@ -14,7 +14,7 @@ Unity 的比较对象为官方 **Editor 内 Assistant 的 Ask / Plan / Agent**�
 
 本次查看了项目根目录组成、原生面板/主进程入口、TS 内核模块、Host/MCP 注册、Creator 命令目录、编辑合同、技能发布清单、打包与凭据实现，以及计划和运行轨迹文档。没有运行新的 Creator 任务或自动测试，也没有逐行审计全部引擎源码。
 
-当前工作区根目录包含 `2.4.15engine/`、`2.4.15NewProject/`、`docs/`、`tools/`、`plugins/`、`vendor/`。`docs/2.x/`、`docs/3.x/` 与 `docs/comparisons/` 各有 12 份主线章节；3.x 研究资料不代表当前产品支持 3.x。工作区没有现成的 `graphify-out/graph.json`，本次按实际代码入口、合同与证据复核，没有新建全仓知识图谱。
+当前工作区根目录包含 `engine/2.4.15engine/`、`2.4.15NewProject/`、`docs/`、`tools/`、`plugins/`、`vendor/`。`docs/2.x/`、`docs/3.x/` 与 `docs/comparisons/` 各有 12 份主线章节；3.x 研究资料不代表当前产品支持 3.x。工作区没有现成的 `graphify-out/graph.json`，本次按实际代码入口、合同与证据复核，没有新建全仓知识图谱。
 
 状态区分：
 
@@ -29,7 +29,7 @@ Unity 的比较对象为官方 **Editor 内 Assistant 的 Ask / Plan / Agent**�
 
 | 层 | 主要位置 | 已有价值 | 当前边界 |
 | --- | --- | --- | --- |
-| 引擎研究与测量 | `2.4.15engine/`、`docs/2.x/`、比较章节、probes | 引擎生命周期、资源、渲染、UI、发布、性能的研究基础 | 研究正文/探针不是自动可调用的 Agent 编辑能力 |
+| 引擎研究与测量 | `engine/2.4.15engine/`、`docs/2.x/`、比较章节、probes | 引擎生命周期、资源、渲染、UI、发布、性能的研究基础 | 研究正文/探针不是自动可调用的 Agent 编辑能力 |
 | Creator 原生入口 | `2.4.15NewProject/packages/cocos-agent-bridge/` | 面板、工程/选择上下文、模型配置、服务生命周期、审批与回执 | 当前只推进 2.4.15；全局安装和编辑器重载仍有人工步骤 |
 | 单 Agent 内核 | `tools/cocos-agent-runtime/src/` | Provider、工具循环、hooks、Todo、压缩、记忆、任务图、目标续跑 | 通用机制已有，复杂真实任务的结果验收仍不足 |
 | Host 与 MCP | `tools/cocos-agent-bridge/mcp/` | 模式路由、Plan、状态存储、工具/Resource 读取、恢复与日志 | TS 内核仍使用 JS 技能适配器；新旧 JS/TS 路径并存增加维护面 |

@@ -11,14 +11,14 @@
 
 | 层 | 证据与职责 |
 | --- | --- |
-| 公开系统接口 | `3.8.7engine/cocos/core/platform/sys.ts` 把 `pal/system-info` 暴露为 `sys`；`cocos/game/game.ts` 使用 `pal/env`、`pal/pacer`、`pal/system-info`。 |
-| 平台实现选择 | `3.8.7engine/cc.config.json` 的 `overrides` 以 `context.buildTimeConstants.HTML5/NATIVE/MINIGAME/RUNTIME_BASED` 选择 `pal/system-info`、`pal/env`、`pal/pacer` 等目标实现；小游戏的 `pal/minigame` 还按 `context.platform` 选具体宿主。 |
+| 公开系统接口 | `engine/3.8.7engine/cocos/core/platform/sys.ts` 把 `pal/system-info` 暴露为 `sys`；`cocos/game/game.ts` 使用 `pal/env`、`pal/pacer`、`pal/system-info`。 |
+| 平台实现选择 | `engine/3.8.7engine/cc.config.json` 的 `overrides` 以 `context.buildTimeConstants.HTML5/NATIVE/MINIGAME/RUNTIME_BASED` 选择 `pal/system-info`、`pal/env`、`pal/pacer` 等目标实现；小游戏的 `pal/minigame` 还按 `context.platform` 选具体宿主。 |
 | 平台实现 | `pal/system-info/{web,native,minigame}/system-info.ts` 分别取浏览器、JSB 或小游戏宿主信息；`pal/env/{web,native,minigame}/env.ts` 分别处理 Canvas 与脚本加载。构建映射已选择模块，运行时不是一个实现文件里逐项切换。 |
 | 适配器 | `platforms/native/builtin/index.js` 提供类浏览器全局与定时/帧回调；`platforms/native/engine/index.js` 挂接引擎原生适配。`scripts/build-adapter.js` 将两者分别打包成 `web-adapter.js`、`engine-adapter.js`，也为小游戏平台打包适配器。 |
 | C++ 宿主 | `native/cocos/application/CocosApplication.cpp` 注册绑定并启动脚本引擎；`BaseGame.cpp` 接着运行 `jsb-adapter/web-adapter.js` 与 `main.js`。 |
 | 项目构建产物 | `3.8,7NewProject/build/mac/data/main.js`、`application.js`、`src/settings.json` 是当前 Mac 快照。完整 Creator 构建器不在此引擎仓库；产物不能代表所有平台。 |
 
-现有 `build/mac/cocos.compile.config.json` 的 `engineInfo.typescript` 和 `engineInfo.native` 都标为 `builtin`，路径指向 `/Applications/Cocos/Creator/3.8.7/.../engine`，构建日志也把该安装目录作为引擎入口。因此本 Mac 包**明确不是用邻接的 `3.8.7engine/` 构建**；它可用于观察 Creator 3.8.7 的已发布包，却不能直接验证邻接源码的改动。`data/main.js` 与 `.app/Contents/Resources/main.js` 当前 SHA-256 相同，证明所读入口对应这份应用资源快照。
+现有 `build/mac/cocos.compile.config.json` 的 `engineInfo.typescript` 和 `engineInfo.native` 都标为 `builtin`，路径指向 `/Applications/Cocos/Creator/3.8.7/.../engine`，构建日志也把该安装目录作为引擎入口。因此本 Mac 包**明确不是用邻接的 `engine/3.8.7engine/` 构建**；它可用于观察 Creator 3.8.7 的已发布包，却不能直接验证邻接源码的改动。`data/main.js` 与 `.app/Contents/Resources/main.js` 当前 SHA-256 相同，证明所读入口对应这份应用资源快照。
 
 ## 同一项目的 Mac 原生启动链（静态）
 
@@ -41,7 +41,7 @@ Web `SystemInfo` 从 `navigator`/UA 判定浏览器信息，Native `SystemInfo` 
 ## 已验证切口与待验证
 
 1. 已在同一示例源场景取得 Web 预览与 Mac 已发布包的初始化、场景启动和首次绘制回调轨迹；两者构建条件不同，若需纯平台差异，另做正式 Web 发布包对照。
-2. 若要验证邻接 `3.8.7engine` 的源码改动，须在编辑器设置自定义 TypeScript 与 Native 引擎并重新构建；现有包的配置已证明使用内置引擎。
+2. 若要验证邻接 `engine/3.8.7engine` 的源码改动，须在编辑器设置自定义 TypeScript 与 Native 引擎并重新构建；现有包的配置已证明使用内置引擎。
 3. 小游戏运行、JS/绑定对象所有权及各目标发布选项仍需分平台验证。
 
 [Mac 启动冒烟记录](../agent-foundation/traces/stage10-mac-native-startup-smoke.jsonl)中标准输出为空；后来对运行中进程采样，确见 `Engine::tick → EventDispatcher::dispatchTickEvent`，说明没有停在 macOS 启动阶段。首次尝试写到 `/private/tmp` 没有产物；改用应用可写目录后，分别标记 `.app/Contents/Resources/main.js` 和构建目录 `data/main.js`，仅 `.app` 标记出现，确认实际入口。首次无产物符合应用容器的写入限制，不能从空 stdout 推断引擎未启动。

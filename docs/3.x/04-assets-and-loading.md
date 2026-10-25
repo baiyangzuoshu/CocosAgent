@@ -4,7 +4,7 @@
 
 公开行为以 3.8 手册的[资源工作流](https://docs.cocos.com/creator/3.8/manual/zh/asset/asset-workflow.html)、[`.meta` 文件](https://docs.cocos.com/creator/3.8/manual/zh/asset/meta.html)、[加载资源](https://docs.cocos.com/creator/3.8/manual/zh/asset/dynamic-load-resources.html)、[Asset Manager](https://docs.cocos.com/creator/3.8/manual/zh/asset/asset-manager.html)、[Asset Bundle](https://docs.cocos.com/creator/3.8/manual/zh/asset/bundle.html)和[资源释放](https://docs.cocos.com/creator/3.8/manual/zh/asset/release-manager.html)为基准。手册说明 `resources.load` 使用 `assets/resources` 下的相对路径；其他动态资源通常通过 Bundle；预加载只下载、不完成反序列化/初始化；已加载的资源进入 Asset Manager 缓存。贴图子资源例如 SpriteFrame 需要使用手册所列子路径与类型，不能仅凭图片文件名判断返回对象。
 
-本篇追踪 `3.8.7engine/cocos/asset/asset-manager/` 与场景切换。`.meta` 的生成和导入器属于 Creator 编辑器工作流；`library/` 是生成结果。JSON 动态加载/引用释放及真实磁盘场景切换均已分别在 Chrome 预览和 Mac 原生进程打点；`native/cocos/` 的底层下载实现及 Android/iOS 等其他原生平台仍需单独研究。
+本篇追踪 `engine/3.8.7engine/cocos/asset/asset-manager/` 与场景切换。`.meta` 的生成和导入器属于 Creator 编辑器工作流；`library/` 是生成结果。JSON 动态加载/引用释放及真实磁盘场景切换均已分别在 Chrome 预览和 Mac 原生进程打点；`native/cocos/` 的底层下载实现及 Android/iOS 等其他原生平台仍需单独研究。
 
 ## 示例中的身份链
 

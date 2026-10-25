@@ -16,7 +16,7 @@
 
 ### 网络与资源下载
 
-`2.4.15engine/cocos2d/core/asset-manager/download-file.js` 的资源下载会创建 `XMLHttpRequest`；`downloader.js::downloadFile` 是资源管线入口。游戏脚本手册直接使用全局 `XMLHttpRequest`/`WebSocket`，而不是要求经过 `cc.assetManager`。`cocos2d/core/asset-manager/deprecated.js::getXMLHttpRequest` 也仅返回新建的全局 XHR，并已标为弃用。由此不能从资源下载器的重试/缓存规则推导游戏自写请求的行为。
+`engine/2.4.15engine/cocos2d/core/asset-manager/download-file.js` 的资源下载会创建 `XMLHttpRequest`；`downloader.js::downloadFile` 是资源管线入口。游戏脚本手册直接使用全局 `XMLHttpRequest`/`WebSocket`，而不是要求经过 `cc.assetManager`。`cocos2d/core/asset-manager/deprecated.js::getXMLHttpRequest` 也仅返回新建的全局 XHR，并已标为弃用。由此不能从资源下载器的重试/缓存规则推导游戏自写请求的行为。
 
 此引擎目录不含对应 2.4 原生 XHR/WebSocket 的 C++ 实现，也不含小游戏宿主的最终网络对象。原生网络可用性、TLS/证书、超时与回调线程需要在具体构建包中验证。
 

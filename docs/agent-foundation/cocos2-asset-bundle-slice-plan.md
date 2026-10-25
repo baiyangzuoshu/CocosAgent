@@ -16,9 +16,9 @@
 
 ## 本地实现依据与边界
 
-- `2.4.15engine/cocos2d/core/asset-manager/CCAssetManager.js`：`loadBundle` 先按 `basename(nameOrUrl)` 检查 Bundle 缓存，命中后直接返回缓存对象；不会用本次 `options.version` 替换已缓存的同名 Bundle。`removeBundle` 调用 `bundle._destroy()` 并从 Bundle 缓存删除，但引擎注释明确资源不会自动释放。
-- `2.4.15engine/cocos2d/core/asset-manager/downloader.js`：非 URL 名称解析到 `assets/<bundleName>`；按 Bundle 版本请求 `config.<version>.json` 和 `index.<version>.js`。
-- `2.4.15engine/cocos2d/core/asset-manager/bundle.js`：`release(path,type)` 通过 `releaseManager` 释放具体资产；`releaseAll()` 遍历属于此 Bundle 的资产并尝试释放。
+- `engine/2.4.15engine/cocos2d/core/asset-manager/CCAssetManager.js`：`loadBundle` 先按 `basename(nameOrUrl)` 检查 Bundle 缓存，命中后直接返回缓存对象；不会用本次 `options.version` 替换已缓存的同名 Bundle。`removeBundle` 调用 `bundle._destroy()` 并从 Bundle 缓存删除，但引擎注释明确资源不会自动释放。
+- `engine/2.4.15engine/cocos2d/core/asset-manager/downloader.js`：非 URL 名称解析到 `assets/<bundleName>`；按 Bundle 版本请求 `config.<version>.json` 和 `index.<version>.js`。
+- `engine/2.4.15engine/cocos2d/core/asset-manager/bundle.js`：`release(path,type)` 通过 `releaseManager` 释放具体资产；`releaseAll()` 遍历属于此 Bundle 的资产并尝试释放。
 - `content-release.schema.json` 现在通过显式的 `delivery: asset-bundle` 扩展合同表示 2.4 Bundle，并要求 `bundleRoot`、唯一 `bundleName`、源摘要、Texture UUID、SpriteFrame UUID 与依赖图；3.8 请求被拒绝。
 - `content.bundle.plan/stage` 只读取已导入 PNG 与文件夹 `.meta`，检查本地 Bundle 身份与 UUID 链；不会导入资源或修改 Creator 场景。Host 在已有 release、build、preview 路径上复用所选版本、隔离输出和运行时回执合同。
 
@@ -58,9 +58,9 @@ Host 用 `content.bundle.plan/stage` 登记 `cocos-agent-smoke` 的红蓝 PNG，
 
 Creator 2.4 官方[释放 Asset Bundle 手册](https://docs.cocos.com/creator/2.4/manual/zh/scripting/asset-bundle.html)说明 `releaseAll()` 会释放 Bundle 内资源及其外部相关依赖；[优先级手册](https://docs.cocos.com/creator/2.4/manual/zh/asset-manager/bundle.html)说明低优先级 Bundle 对高优先级共享资源保存重定向，并要求先加载高优先级 Bundle。对照本仓库 2.4.15 源码后，这两条描述需要结合资源根节点和引用路径理解：
 
-- `2.4.15engine/cocos2d/core/asset-manager/bundle.js` 的 `releaseAll()` 遍历全局 Asset Cache，再查询当前 Bundle 的资源信息；当前 Bundle 将资源标为 `redirect` 时会跳过该缓存项。对于 Bundle 自有的缓存资源，`releaseManager.tryRelease(asset, true)` 会强制释放该根资源，并递归处理它的依赖；`releaseManager._free()` 对递归依赖执行 `decRef(false)` 与非强制释放，所以仍有其它引用的依赖不会因此被强制销毁。不要把“跳过重定向条目”泛化为“releaseAll 永不处理外部依赖”，也不要把官方的“包括外部相关依赖”泛化为“无视依赖引用强制销毁”。
-- `bundle.js` 的 `loadScene()` 返回 `SceneAsset`，但 `2.4.15engine/cocos2d/core/asset-manager/utilities.js` 的 `cache()` 不把 SceneAsset 放进全局 Asset Cache。场景依赖的 SpriteFrame 会在反序列化时建立对象引用；运行中的场景切换则经过 `CCDirector.js` 的 `runSceneImmediate()` 和 `releaseManager._autoRelease()`，旧场景的 `autoReleaseAssets` 决定依赖 `decRef()` 是否触发释放尝试。因此场景 Bundle 的资源回收不能只用 `Bundle.releaseAll()` 推断，还要记录 Director 切场景时的引用变化。
-- `2.4.15engine/cocos2d/core/asset-manager/urlTransformer.js` 在低优先级 Bundle 通过共享 UUID 解析到尚未加载的 owner 时拒绝该请求。本轮独立边界探针已实测具体错误 `Please load bundle resources first`；owner 先加载后，同一 UUID 和 Scene 可成功读回，详见[边界轨迹](traces/cocos-agent-shared-bundle-boundaries-2.4-web.json)。
+- `engine/2.4.15engine/cocos2d/core/asset-manager/bundle.js` 的 `releaseAll()` 遍历全局 Asset Cache，再查询当前 Bundle 的资源信息；当前 Bundle 将资源标为 `redirect` 时会跳过该缓存项。对于 Bundle 自有的缓存资源，`releaseManager.tryRelease(asset, true)` 会强制释放该根资源，并递归处理它的依赖；`releaseManager._free()` 对递归依赖执行 `decRef(false)` 与非强制释放，所以仍有其它引用的依赖不会因此被强制销毁。不要把“跳过重定向条目”泛化为“releaseAll 永不处理外部依赖”，也不要把官方的“包括外部相关依赖”泛化为“无视依赖引用强制销毁”。
+- `bundle.js` 的 `loadScene()` 返回 `SceneAsset`，但 `engine/2.4.15engine/cocos2d/core/asset-manager/utilities.js` 的 `cache()` 不把 SceneAsset 放进全局 Asset Cache。场景依赖的 SpriteFrame 会在反序列化时建立对象引用；运行中的场景切换则经过 `CCDirector.js` 的 `runSceneImmediate()` 和 `releaseManager._autoRelease()`，旧场景的 `autoReleaseAssets` 决定依赖 `decRef()` 是否触发释放尝试。因此场景 Bundle 的资源回收不能只用 `Bundle.releaseAll()` 推断，还要记录 Director 切场景时的引用变化。
+- `engine/2.4.15engine/cocos2d/core/asset-manager/urlTransformer.js` 在低优先级 Bundle 通过共享 UUID 解析到尚未加载的 owner 时拒绝该请求。本轮独立边界探针已实测具体错误 `Please load bundle resources first`；owner 先加载后，同一 UUID 和 Scene 可成功读回，详见[边界轨迹](traces/cocos-agent-shared-bundle-boundaries-2.4-web.json)。
 
 Creator 2.4.15 通过 Agent 的 `asset.refreshFolder` 刷新 Smoke 与 Sidecar 夹具后，正式构建隔离 Web-Mobile 包 `shared-dependency-20261010-01`。两份场景 UUID 分别为 `d86b9b2f-5d52-43b3-b2c7-5e345f9960e4` 和 `53751717-051c-4b3d-abe7-19bfc2b3990a`；共享 PNG 的 Texture UUID 为 `bf8602ca-5561-4eb5-8c63-9653d4c32a4f`，SpriteFrame UUID 为 `0683b14a-8790-4ecd-9ee5-4b83163e34ff`，SpriteFrame `.meta` 的 `rawTextureUuid` 回指该 Texture。两个 Bundle config 的 SHA-256 分别为 `2e3b0a886ec3df7833eaa6ec35e2556bed5aeee22f5b49fc16b3da0eb6fe6b5`、`dd2f4c25b6f4e70bf25b45b21d44c1c87391d1ca072f265e1c0edb438f34eeaf`，都声明 `deps: ["resources", "internal"]`，并把共享 Frame UUID 重定向到 `resources`。配置、压缩 UUID、redirect 与场景关系见 [`共享依赖运行轨迹`](traces/cocos-agent-shared-bundle-dependency-2.4-web.json)。
 

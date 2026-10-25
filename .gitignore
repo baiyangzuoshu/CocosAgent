@@ -9,6 +9,7 @@ node_modules/
 **/assistant-runtime/
 /2.4.15NewProject/packages/cocos-agent-bridge/.assistant-runtime.rollback-*/
 /2.4.15NewProject/packages/.cocos-agent-bridge.rollback-*/
+/engine/3.8.7engine/native/simulator/Release/SimulatorApp-Mac.app/
 .cocos-agent/
 graphify-out/
 .env

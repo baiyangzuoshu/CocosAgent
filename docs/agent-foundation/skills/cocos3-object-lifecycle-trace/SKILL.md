@@ -5,7 +5,7 @@ description: Diagnose Cocos Creator 3.8.7 prefab instantiation and instance over
 
 # Trace 3.8.7 scene objects
 
-Confirm the target is `3.8.7engine/` or `3.8,7NewProject/`, then identify whether the object came from runtime `instantiate(prefab)` or from a serialized scene prefab instance. These paths share types but perform different work.
+Confirm the target is `engine/3.8.7engine/` or `3.8,7NewProject/`, then identify whether the object came from runtime `instantiate(prefab)` or from a serialized scene prefab instance. These paths share types but perform different work.
 
 Check the relevant 3.8 manual behavior first: [node activity and parenting](https://docs.cocos.com/creator/3.8/manual/zh/scripting/basic-node-api.html), [prefab assets and instance overrides](https://docs.cocos.com/creator/3.8/manual/zh/asset/prefab.html), [creation and destruction](https://docs.cocos.com/creator/3.8/manual/zh/scripting/create-destroy.html), or [lifecycle callbacks](https://docs.cocos.com/creator/3.8/manual/zh/scripting/life-cycle-callbacks.html). The measured preview trace uses an in-memory prefab; it does not validate the editor's save/revert/update workflow.
 

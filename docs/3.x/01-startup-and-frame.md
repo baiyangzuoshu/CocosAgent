@@ -4,7 +4,7 @@
 
 ## 范围与证据状态
 
-本篇追踪 `3.8.7engine/` 的 Web 桌面模板、引擎运行时和 `3.8,7NewProject/` 的编辑器浏览器预览。已读取 `localhost:7457` 实际返回的入口页面、`settings.js`、`preview-app/index.js` 与 `preview-app/main.js`，并通过临时本机代理插入探针，在 Chrome 图形预览中测得初始化、场景和首帧事件顺序；[原始记录](../agent-foundation/traces/3.8.7-preview-startup.jsonl)保留 `performance.now()` 时间戳。代理没有改动工程或引擎源码。`temp/logs/project.log` 属于编辑器 Scene 进程，不等同于浏览器预览。已核对本工作区与已安装 Creator 所附带的 `game.ts`、`director.ts`、`application.ejs` 文件哈希一致。原生和小游戏有各自的模板与 `Pacer` 实现。
+本篇追踪 `engine/3.8.7engine/` 的 Web 桌面模板、引擎运行时和 `3.8,7NewProject/` 的编辑器浏览器预览。已读取 `localhost:7457` 实际返回的入口页面、`settings.js`、`preview-app/index.js` 与 `preview-app/main.js`，并通过临时本机代理插入探针，在 Chrome 图形预览中测得初始化、场景和首帧事件顺序；[原始记录](../agent-foundation/traces/3.8.7-preview-startup.jsonl)保留 `performance.now()` 时间戳。代理没有改动工程或引擎源码。`temp/logs/project.log` 属于编辑器 Scene 进程，不等同于浏览器预览。已核对本工作区与已安装 Creator 所附带的 `game.ts`、`director.ts`、`application.ejs` 文件哈希一致。原生和小游戏有各自的模板与 `Pacer` 实现。
 
 ## 3.8 官网手册校准
 

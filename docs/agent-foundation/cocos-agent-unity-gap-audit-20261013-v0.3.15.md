@@ -8,7 +8,7 @@
 
 | 层 | 仓库位置 | 当前作用 |
 | --- | --- | --- |
-| 引擎与研究 | `2.4.15engine/`、`docs/2.x/`、`docs/3.x/` | 引擎、资源生命周期、平台、渲染及内存研究；研究结果不能自动算成 Agent 工具 |
+| 引擎与研究 | `engine/2.4.15engine/`、`docs/2.x/`、`docs/3.x/` | 引擎、资源生命周期、平台、渲染及内存研究；研究结果不能自动算成 Agent 工具 |
 | Creator 原生入口 | `2.4.15NewProject/packages/cocos-agent-bridge/` | 面板、工程/场景/选择上下文、凭据、服务启动、编辑器主进程和场景脚本桥接 |
 | 单 Agent 内核 | `tools/cocos-agent-runtime/src/` | TS/Node 模型循环、工具注册、策略、审批、hooks、执行清单、任务图、目标续跑、压缩、证据档案、工程记忆 |
 | Host 与受限命令 | `tools/cocos-agent-bridge/`、其 `mcp/` | Creator 命令合同、身份校验、操作记录、保存读回、批次/流水线、内容构建/预览、会话/计划/任务持久化 |

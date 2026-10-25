@@ -2,7 +2,7 @@
 
 ## 范围与证据
 
-本篇研究 `2.4.15engine/` 的 Web 运行时对象模型，并用 `2.4.15NewProject/` 和 Creator 2.4.15 浏览器预览核对。编辑器预览中临时注入了内存中的预制体、组件和节点；[原始事件记录](../agent-foundation/traces/2.4.15-object-scene.jsonl)来自一次实际运行，工程和引擎源码均未修改。工作区的 `CCNode.js`、`base-node.js`、`CCComponent.js`、`node-activator.js` 与已安装编辑器中的对应文件 SHA-256 一致。对象序列化与资源释放的完整机制留到阶段 4，每帧组件调度留到阶段 3。
+本篇研究 `engine/2.4.15engine/` 的 Web 运行时对象模型，并用 `2.4.15NewProject/` 和 Creator 2.4.15 浏览器预览核对。编辑器预览中临时注入了内存中的预制体、组件和节点；[原始事件记录](../agent-foundation/traces/2.4.15-object-scene.jsonl)来自一次实际运行，工程和引擎源码均未修改。工作区的 `CCNode.js`、`base-node.js`、`CCComponent.js`、`node-activator.js` 与已安装编辑器中的对应文件 SHA-256 一致。对象序列化与资源释放的完整机制留到阶段 4，每帧组件调度留到阶段 3。
 
 ## 2.4 官网手册校准
 

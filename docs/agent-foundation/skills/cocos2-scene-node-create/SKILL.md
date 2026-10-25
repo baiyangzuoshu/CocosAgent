@@ -13,4 +13,4 @@ description: 在 Cocos Creator 2.4.15 中用 CocosAgent 创建、检查、补偿
 
 需要验证编辑器场景重开时，在 Creator UI 中切到另一个已保存场景，再重新打开目标 `.fire`，然后执行只读 `scene.node.inspect`。`operation.get` 只做磁盘恢复，不能代替 UI 重开。完成测试后按来源操作 ID 补偿，并检查示例场景没有残留探针；Creator 保存可能重写无关序列化字段，核对并恢复已确认干净的样例文件。
 
-命令合同、自动预览证据、实测范围与局限见 [`scene.node.create 0.1`](../../scene-node-create-0.1.md)。源码研究要结合 [Creator 2.4 节点树手册](https://docs.cocos.com/creator/2.4/manual/zh/content-workflow/node-tree.html)、`2.4.15engine/cocos2d/core/components/CCRenderComponent.js` 与 `core/utils/base-node.js`；版本边界和运行证据见 [P1 轨迹](../../traces/scene-node-component-p1-2.4.jsonl)。
+命令合同、自动预览证据、实测范围与局限见 [`scene.node.create 0.1`](../../scene-node-create-0.1.md)。源码研究要结合 [Creator 2.4 节点树手册](https://docs.cocos.com/creator/2.4/manual/zh/content-workflow/node-tree.html)、`engine/2.4.15engine/cocos2d/core/components/CCRenderComponent.js` 与 `core/utils/base-node.js`；版本边界和运行证据见 [P1 轨迹](../../traces/scene-node-component-p1-2.4.jsonl)。

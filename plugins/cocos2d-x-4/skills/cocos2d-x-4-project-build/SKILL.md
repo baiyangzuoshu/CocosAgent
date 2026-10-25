@@ -21,7 +21,7 @@ flowchart TD
     J --> K[Report build and runtime evidence separately]
 ```
 
-1. Confirm the engine snapshot/version, project root, target platform/architecture, build configuration, and actual entry point. In this repository, `cocos2d-x-4/` is the local 4.0 source tree; check its README, CHANGELOG, CMake files, and project files.
+1. Confirm the engine snapshot/version, project root, target platform/architecture, build configuration, and actual entry point. In this repository, `engine/cocos2d-x-4/` is the local 4.0 source tree; check its README, CHANGELOG, CMake files, and project files.
 2. Inspect the target's CMake/project files, launcher, `Classes/`, `Resources/`, dependency payload, and submodule state. Check compiler, CMake/IDE, SDK, and required Python version before configuration.
 3. Use the build path documented by the selected template/platform. Keep generated output outside tracked source. Do not assume a generic desktop `main.cpp` describes mobile or other desktop platform launchers.
 4. Do not download dependencies, install toolchains, or change global environment as an implicit step. Report missing prerequisites and the smallest required user action when setup needs external changes.
@@ -29,7 +29,7 @@ flowchart TD
 
 ## Repository evidence
 
-- The local default C++ template is `cocos2d-x-4/templates/cpp-template-default/`.
+- The local default C++ template is `engine/cocos2d-x-4/templates/cpp-template-default/`.
 - The [demo build record](../../../../docs/cocos2d-x-creator2x-demo.md) documents a successful macOS x86_64 `HelloCpp` build and launch, including the local wrapper/toolchain setup and limits. Its temporary paths describe that recorded run, not portable defaults.
 - The [Cocos2d-x source study plan](../../../../docs/cocos2d-x-creator2x-source-study-plan.md) records dependency and platform boundaries. Recheck current machine state instead of reusing historical availability claims.
 

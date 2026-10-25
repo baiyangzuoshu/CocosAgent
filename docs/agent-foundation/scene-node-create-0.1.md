@@ -19,7 +19,7 @@
 
 - `components` 可省略或包含一个已验证类型：`cc.Sprite` 加已导入的 SpriteFrame UUID，或 `cc.Label` 加最多 256 字符的文本。资源只接受 UUID，不接受任意磁盘路径。
 - `transform` 当前只接收 2D `position` 与 `scale`，坐标分量范围为 ±4096；省略字段沿用 Creator 默认值。
-- Creator 2.4.15 的 `cc.Sprite` 与 `cc.Label` 都继承 `RenderComponent`，该基类禁止同一节点挂载多个渲染组件。Host 和扩展在写入前拒绝 Sprite+Label 组合；需要两者时，用父子节点分别挂载。源码证据为 `2.4.15engine/cocos2d/core/components/CCRenderComponent.js` 的 `disallowMultiple` 与 `core/utils/base-node.js::addComponent`。
+- Creator 2.4.15 的 `cc.Sprite` 与 `cc.Label` 都继承 `RenderComponent`，该基类禁止同一节点挂载多个渲染组件。Host 和扩展在写入前拒绝 Sprite+Label 组合；需要两者时，用父子节点分别挂载。源码证据为 `engine/2.4.15engine/cocos2d/core/components/CCRenderComponent.js` 的 `disallowMultiple` 与 `core/utils/base-node.js::addComponent`。
 - 任意组件类、脚本组件、Prefab 内部节点、材质属性、旋转、锚点和 3D 变换尚未开放。未知类型不会被动态解析执行。
 
 `apply` 创建并保存；`compensate` 仅依据已通过磁盘校验的来源记录和目标 UUID 删除；`replay` 引用补偿记录重新创建并接受新 UUID。每次动作使用独立 `operationId`。Host 保存意图后核对 Creator 回执、`.fire` 序列化对象、组件数据、资源 UUID 和变换，再用活动场景快照交叉检查。

@@ -2,7 +2,7 @@
 
 ## 范围与证据
 
-本篇研究 `3.8.7engine/cocos/` 的对象模型，并以 `3.8,7NewProject/` 的当前场景预览核对。预览中临时注入内存预制体、组件和节点；[原始事件记录](../agent-foundation/traces/3.8.7-object-scene.jsonl)来自一次 Chrome 图形预览，工程和引擎源码均未修改。工作区的 `node.ts`、`component.ts`、`scene.ts`、`node-activator.ts` 与已安装编辑器中的对应文件 SHA-256 一致。序列化及资源释放的完整机制留到阶段 4，组件每帧调度留到阶段 3。`native/cocos/` 中对应的原生实现尚未在本篇验证。
+本篇研究 `engine/3.8.7engine/cocos/` 的对象模型，并以 `3.8,7NewProject/` 的当前场景预览核对。预览中临时注入内存预制体、组件和节点；[原始事件记录](../agent-foundation/traces/3.8.7-object-scene.jsonl)来自一次 Chrome 图形预览，工程和引擎源码均未修改。工作区的 `node.ts`、`component.ts`、`scene.ts`、`node-activator.ts` 与已安装编辑器中的对应文件 SHA-256 一致。序列化及资源释放的完整机制留到阶段 4，组件每帧调度留到阶段 3。`native/cocos/` 中对应的原生实现尚未在本篇验证。
 
 ## 3.8 官网手册校准
 

@@ -4,7 +4,7 @@
 
 用两个递进切片比较两套工程：首屏启动与帧循环；点击 Sprite 后计数加一并向右移动 40 个设计单位。首轮在 macOS 桌面分别运行；Cocos2d-x 为 x86_64 原生 app（Apple Silicon 经 Rosetta），Creator 为浏览器 WebGL 预览。两边画面约 960×640；运行时可对照，但不将其用于性能排名。
 
-Creator 工程中的独立对照场景为 `2.4.15NewProject/assets/Scene/Cocos2dComparison.fire`。它包含 Canvas、Main Camera、background、cocos Sprite 和 label，复用 Creator 默认示例资源；交互代码在 `assets/Script/ComparisonInteraction.js`，挂载于 `cocos` 节点。原 `helloworld.fire` 和 `settings/project.json` 保持不变。Cocos2d-x 对照源使用 `cocos2d-x-4/templates/cpp-template-default/Classes/HelloWorldScene.cpp` 与 `AppDelegate.cpp`，示例同样创建 Scene、Sprite 和 Label。
+Creator 工程中的独立对照场景为 `2.4.15NewProject/assets/Scene/Cocos2dComparison.fire`。它包含 Canvas、Main Camera、background、cocos Sprite 和 label，复用 Creator 默认示例资源；交互代码在 `assets/Script/ComparisonInteraction.js`，挂载于 `cocos` 节点。原 `helloworld.fire` 和 `settings/project.json` 保持不变。Cocos2d-x 对照源使用 `engine/cocos2d-x-4/templates/cpp-template-default/Classes/HelloWorldScene.cpp` 与 `AppDelegate.cpp`，示例同样创建 Scene、Sprite 和 Label。
 
 ## Cocos2d-x 构建
 

@@ -48,7 +48,7 @@ flowchart TD
     s24g --> f24a
 ```
 
-`_runMainLoop` **安排**帧请求早于 `EVENT_GAME_INITED`，不代表当时已绘出场景。本次[预览轨迹](../agent-foundation/traces/2.4.15-preview-startup.jsonl)中，首次 `mainLoop` 出现在 `AFTER_SCENE_LAUNCH` 之后。`runSceneImmediate` 的第二参数是 `onBeforeLoadScene`，所以宿主传入的 `game.resume()` 回调位于 `BEFORE_SCENE_LAUNCH` 之前。源码主线：`2.4.15engine/index.js`、`cocos2d/core/CCGame.js`、`cocos2d/core/CCDirector.js`，以及 Creator 安装包的 `static/preview-templates/boot.js`；细节见[2.x 独立笔记](../2.x/01-startup-and-frame.md)。
+`_runMainLoop` **安排**帧请求早于 `EVENT_GAME_INITED`，不代表当时已绘出场景。本次[预览轨迹](../agent-foundation/traces/2.4.15-preview-startup.jsonl)中，首次 `mainLoop` 出现在 `AFTER_SCENE_LAUNCH` 之后。`runSceneImmediate` 的第二参数是 `onBeforeLoadScene`，所以宿主传入的 `game.resume()` 回调位于 `BEFORE_SCENE_LAUNCH` 之前。源码主线：`engine/2.4.15engine/index.js`、`cocos2d/core/CCGame.js`、`cocos2d/core/CCDirector.js`，以及 Creator 安装包的 `static/preview-templates/boot.js`；细节见[2.x 独立笔记](../2.x/01-startup-and-frame.md)。
 
 ## 3.8.7：`game.init` 四阶段，`Pacer` 驱动首帧
 
@@ -92,7 +92,7 @@ flowchart TD
     p38f --> f38a
 ```
 
-本次[预览轨迹](../agent-foundation/traces/3.8.7-preview-startup.jsonl)测得 `ENGINE_INITED` 先于 `RENDERER_INITED`，符合本地 `game.ts` 中 Subsystem 与 Project 的调用点；事件常量的注释写了相反顺序。启动画面和资源加载的耗时可能改变进入 `tick` 的回调次数，本次是第三次 `_updateCallback` 才进入首次 `tick`，图中不把“三次”写成固定规则。源码主线：`3.8.7engine/exports/base.ts`、`cocos/game/game.ts`、`cocos/game/director.ts`、`pal/pacer/pacer-web.ts`、`cocos/root.ts`；预览宿主为本次请求到的 `/preview-app/index.js` 与 `/preview-app/main.js`，细节见[3.x 独立笔记](../3.x/01-startup-and-frame.md)。
+本次[预览轨迹](../agent-foundation/traces/3.8.7-preview-startup.jsonl)测得 `ENGINE_INITED` 先于 `RENDERER_INITED`，符合本地 `game.ts` 中 Subsystem 与 Project 的调用点；事件常量的注释写了相反顺序。启动画面和资源加载的耗时可能改变进入 `tick` 的回调次数，本次是第三次 `_updateCallback` 才进入首次 `tick`，图中不把“三次”写成固定规则。源码主线：`engine/3.8.7engine/exports/base.ts`、`cocos/game/game.ts`、`cocos/game/director.ts`、`pal/pacer/pacer-web.ts`、`cocos/root.ts`；预览宿主为本次请求到的 `/preview-app/index.js` 与 `/preview-app/main.js`，细节见[3.x 独立笔记](../3.x/01-startup-and-frame.md)。
 
 ## 同一行为的路径对照
 

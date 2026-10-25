@@ -56,7 +56,7 @@
 ## 如何定位阶段
 
 - `resourceLoadTotalMs` 量 `cc.resources.load` 的完整回调延迟，包含资源管理器的下载/缓存与解析路径，不等同于纯网络时间。
-- `parse.samplesByType.import` 来自 2.4 `AssetManager.parser.parse` 的 `import` 解析回调。源码 `2.4.15engine/cocos2d/core/asset-manager/parser.js::parseImport` 调用 `deserialize(file, options)`，因此这段覆盖导入 JSON 反序列化；`.png` 项量 `parseImage` 回调，Web 下可能包括图片解码。新命令的解析夹具目前仍是 2×2 PNG，不能推断大图、复杂依赖或冷设备的表现。
+- `parse.samplesByType.import` 来自 2.4 `AssetManager.parser.parse` 的 `import` 解析回调。源码 `engine/2.4.15engine/cocos2d/core/asset-manager/parser.js::parseImport` 调用 `deserialize(file, options)`，因此这段覆盖导入 JSON 反序列化；`.png` 项量 `parseImage` 回调，Web 下可能包括图片解码。新命令的解析夹具目前仍是 2×2 PNG，不能推断大图、复杂依赖或冷设备的表现。
 - `spriteFrameCreateMs`、`spriteFrameInstallMs`、`nodeMutationMs` 把帧构建、批量切换和节点更新从资源加载中分开。128 节点组没有显示节点写入成本明显增长；安装成本略增，但样本不足以支持引擎优化结论。
 - `releaseCallMs` 是同步调用耗时；`releaseObservedMs` 还包含等下一次 `EVENT_AFTER_DRAW` 的时间，不应把约 16–22 ms 全算作释放函数 CPU 成本。`visibleDrawWaitMs` 同样是事件等待，不是 GPU 时间。
 - 测试环境的 draw 间隔 P95 约 17–22 ms，最大值出现 60–128 ms 的长尾。Chrome headless、SwiftShader、截图/CDP 与宿主调度都会影响这些观测；没有配置 FPS 门槛，不能据此宣布帧预算通过或失败。

@@ -2,7 +2,7 @@
 
 ## 范围和证据状态
 
-本文追踪本地 `cocos2d-x-4/` 默认 C++ 模板的 macOS desktop 路径：`main.cpp` → `Application::run()` → `AppDelegate::applicationDidFinishLaunching()` → `Director::runWithScene()` → Director 帧循环。版本依据为该源码树 README/CHANGELOG 中的 4.0 标记。当前为静态源码追踪，没有构建或运行样例；不能作为实际窗口、首帧绘制、平台时序或帧率的验证证据。
+本文追踪本地 `engine/cocos2d-x-4/` 默认 C++ 模板的 macOS desktop 路径：`main.cpp` → `Application::run()` → `AppDelegate::applicationDidFinishLaunching()` → `Director::runWithScene()` → Director 帧循环。版本依据为该源码树 README/CHANGELOG 中的 4.0 标记。当前为静态源码追踪，没有构建或运行样例；不能作为实际窗口、首帧绘制、平台时序或帧率的验证证据。
 
 ## 启动路径
 

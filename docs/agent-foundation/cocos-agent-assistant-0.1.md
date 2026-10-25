@@ -1,15 +1,17 @@
 # Creator 原生 Agent 0.1
 
+归档：Creator 原生 CocosAgent 与旧示例工程 `2.4.15NewProject/` 已停止维护并从当前工作区移除。以下内容只记录当时的实机操作，不是当前安装指南；当前 CLI 入口见 [Cocos Creator Agent CLI](../../tools/cocos-creator-agent-cli/README.md)。
+
 状态：2026-10-10，Windows + Creator **2.4.15** + DeepSeek **Flash** 完成首条实机切片。面板内直接对话并切换 Ask、Plan、Agent；此次写入范围为独立临时空节点。不是完整 Unity Assistant 功能集，不表示 3.8 或全部 MCP 工具已经通过真实模型验收。
 
 2026-10-11，Creator 原生 Ask 已在 macOS 2.4.15 实机验收；按需 skill 目录、正文与引用读取已接入模型工具循环，并由自动化模型循环测试验证。Creator 已安装运行时尚未更新到包含此能力的包，因此“Creator 面板中的真实模型按任务读取 skill”仍待重载新包后实测。
 
-## 使用
+## 历史操作记录
 
-1. 打开 `2.4.15NewProject`，启用 `cocos-agent-bridge` 扩展。
-2. 本机安装 Node.js 20+，按[扩展包说明](../../2.4.15NewProject/packages/cocos-agent-bridge/README.md)构建可安装目录；可用 `COCOS_AGENT_NODE` 指定 Node 路径。
-3. 菜单 **扩展 → CocosAgent → Assistant**。在面板输入 DeepSeek Key 后连接；勾选“记住 Key”会保存到 OS 用户配置目录，重启 Creator 后自动恢复。
-4. 选择模式，在面板直接输入。Enter 发送，Shift+Enter 换行。Agent 每项非只读操作均显示工具及完整参数，批准后执行；拒绝或等待超过 120 秒不会执行该项。
+1. 实机测试使用了 `2.4.15NewProject` 和 `cocos-agent-bridge` 扩展；示例工程现已删除。
+2. 当时在本机安装 Node.js 20+，并按旧工程中的 `packages/cocos-agent-bridge/README.md` 构建可安装目录；该说明不在当前工作区。
+3. 当时从 **扩展 → CocosAgent → Assistant** 打开面板，输入 DeepSeek Key 后连接；勾选“记住 Key”会保存到 OS 用户配置目录，重启 Creator 后自动恢复。
+4. 当时可选择模式并在面板输入；Enter 发送，Shift+Enter 换行。Agent 每项非只读操作均显示工具及完整参数，批准后执行；拒绝或等待超过 120 秒不会执行该项。
 
 原型最初把 Key 保存到 `.env.local`。当前 Creator 原生改造将“记住 Key”移到当前 OS 用户目录 `~/.cocos-agent/credentials.env`（Windows 为 `%USERPROFILE%\\.cocos-agent\\credentials.env`），避免把凭据写进游戏项目；该文件仍为明文，需限制访问并避免分享。改造后需在面板重新输入一次之前保存的 Key。Flash 已真实验收，V4 Pro 仅有配置选项，未在本轮调用。
 

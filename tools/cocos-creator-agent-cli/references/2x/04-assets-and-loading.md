@@ -2,7 +2,7 @@
 
 ## 范围与官网基线
 
-本篇以 2.4 手册的[资源工作流程](https://docs.cocos.com/creator/2.4/manual/zh/asset-workflow/index.html)、[Asset Manager](https://docs.cocos.com/creator/2.4/manual/zh/asset-manager/index.html)、[Asset Bundle](https://docs.cocos.com/creator/2.4/manual/zh/asset-manager/bundle.html)和[资源释放](https://docs.cocos.com/creator/2.4/manual/zh/asset-manager/release-manager.html)为公开行为基线，分析 `2.4.15engine/` 的 Web 运行时代码，并用 `2.4.15NewProject/` 的源文件核对资源身份。官网把 `cc.resources.load` 与 Bundle 的 `load` 作为动态加载入口；预加载只完成必要下载，不完成反序列化和初始化；加载结果进入 `cc.assetManager` 缓存。`cc.loader` 仍有兼容入口，但本研究以 2.4 新的 Asset Manager 为主。
+本篇以 2.4 手册的[资源工作流程](https://docs.cocos.com/creator/2.4/manual/zh/asset-workflow/index.html)、[Asset Manager](https://docs.cocos.com/creator/2.4/manual/zh/asset-manager/index.html)、[Asset Bundle](https://docs.cocos.com/creator/2.4/manual/zh/asset-manager/bundle.html)和[资源释放](https://docs.cocos.com/creator/2.4/manual/zh/asset-manager/release-manager.html)为公开行为基线，分析 `engine/2.4.15engine/` 的 Web 运行时代码，并用 `2.4.15NewProject/` 的源文件核对资源身份。官网把 `cc.resources.load` 与 Bundle 的 `load` 作为动态加载入口；预加载只完成必要下载，不完成反序列化和初始化；加载结果进入 `cc.assetManager` 缓存。`cc.loader` 仍有兼容入口，但本研究以 2.4 新的 Asset Manager 为主。
 
 手册要求资源及对应 `.meta` 一起维护 UUID。此处的引擎源码覆盖运行时反序列化、依赖和释放；编辑器导入器、生成 `library/`、构建 Bundle 配置的完整实现不在这条运行时调用链里。因此下面将**源资源身份**和**运行时请求/缓存身份**分开。
 

@@ -10,8 +10,8 @@
 
 | 版本 | 引擎源码 | 示例工程 |
 | --- | --- | --- |
-| 2.x | `2.4.15engine/` | `2.4.15NewProject/` |
-| 3.x | `3.8.7engine/` | `3.8,7NewProject/`（目录名含逗号） |
+| 2.x | `engine/2.4.15engine/` | `2.4.15NewProject/` |
+| 3.x | `engine/3.8.7engine/` | `3.8,7NewProject/`（目录名含逗号） |
 
 引擎运行时、编辑器集成代码、Creator 编辑器本体是不同的研究对象。先确认当前源码对每一项能力的覆盖程度；遇到仓库没有提供的实现，应标明边界，不用推测补全。
 
@@ -44,11 +44,11 @@
 
 ### A. 独立理解 2.x
 
-从 2.4 手册描述的开发者行为出发，向下追踪 2.x 的入口、核心对象、数据结构、调用链和平台实现。以 `2.4.15engine/` 为内部实现证据，`2.4.15NewProject/` 用于观察和验证。形成一份可以单独阅读的 2.x 架构说明，不借用 3.x 的术语来解释它。
+从 2.4 手册描述的开发者行为出发，向下追踪 2.x 的入口、核心对象、数据结构、调用链和平台实现。以 `engine/2.4.15engine/` 为内部实现证据，`2.4.15NewProject/` 用于观察和验证。形成一份可以单独阅读的 2.x 架构说明，不借用 3.x 的术语来解释它。
 
 ### B. 独立理解 3.x
 
-用同样的研究问题，从 3.8 手册描述的行为和 3.x 自身的模块划分、执行路径出发。以 `3.8.7engine/` 为内部实现证据，`3.8,7NewProject/` 用于观察和验证。分别理清 TypeScript 运行时、原生 C++、平台适配和构建链路之间的关系。形成一份可以单独阅读的 3.x 架构说明。
+用同样的研究问题，从 3.8 手册描述的行为和 3.x 自身的模块划分、执行路径出发。以 `engine/3.8.7engine/` 为内部实现证据，`3.8,7NewProject/` 用于观察和验证。分别理清 TypeScript 运行时、原生 C++、平台适配和构建链路之间的关系。形成一份可以单独阅读的 3.x 架构说明。
 
 ### C. 相同行为的实现对照
 
@@ -181,10 +181,10 @@ skill 在研究过程中逐步积累；等两代架构和行为对照积累到�
 - 阶段 9 的 3D 后端查询再校准：两版 3D Builtin 都能做物理射线查询，不能套用 3.8 2D Builtin 的空射线结论；3.8.7 3D Builtin 的射线结果法线为零，且两版 3D Builtin 源码均忽略 `queryTrigger`。3.8 官网提供[几何投射 API](https://docs.cocos.com/creator/3.8/manual/zh/physics/physics-sweep.html)，本快照只有 Bullet/PhysX 后端实现 Sweep，Builtin/Cannon 方法直接警告并返回 `false`。当前 Cannon/Bullet 的最小射线后来已取得 Web 轨迹；Builtin、Sweep 与其他后端仍待验证，细节见阶段 9 独立笔记和[验证矩阵](agent-foundation/skills/physics-spatial-validation.md)。
 - 阶段 9 的第一轮 2D 运行验证已准备[2.4 页面内存探针](agent-foundation/probes/stage9-2d-query-contact-2.4.js)与[3.8 页面内存探针](agent-foundation/probes/stage9-2d-query-contact-3.8.js)。2026-10-04 通过 2.4 预览生成脚本的临时注入取得[局部 Web 轨迹](agent-foundation/traces/2.4.15-stage9-2d-query-web.jsonl)：普通碰撞 Enter/Stay/Exit、Box2D Dynamic 查询命中及 Static 查询被过滤。生成脚本已按 SHA-256 还原；3.8 探针随后在 TypeScript Box2D Web 预览运行。
 - 阶段 9 又核对了 3.8 的 `box2d/`、`box2d-wasm/`、`box2d-jsb/` 三套包装器：系统级接触回调的刚体监听门槛一致；`testPoint/testAABB` 都返回去重的复用数组。结论已从仅 TypeScript Box2D 扩展为本仓库三套包装器的源码证据；TypeScript Box2D 已有 Web 查询轨迹，WASM/JSB、原生底层和接触事件仍未验证，见[3.8 独立笔记](3.x/09-physics-and-spatial.md)及[验证记录](agent-foundation/skills/physics-spatial-validation.md)。
-- 3.8 仓库现成 `tests/physics2d/scene-query.ts` 按数组签名检查点测试，但 Builtin 的查询和事件测试被跳过。本机 `3.8.7engine/node_modules/.bin` 缺 Jest，聚焦测试未能执行；这不是测试失败或通过的证据。当时阶段 9 已有 2.4 局部 Web 轨迹，3.8 2D 查询与两版 3D 后端身份获局部验证，3D 射线/事件尚待验证；用户随后要求开始阶段 10，未完成项保留在[验证矩阵](agent-foundation/skills/physics-spatial-validation.md)，不标为阶段 9 完成。
+- 3.8 仓库现成 `tests/physics2d/scene-query.ts` 按数组签名检查点测试，但 Builtin 的查询和事件测试被跳过。本机 `engine/3.8.7engine/node_modules/.bin` 缺 Jest，聚焦测试未能执行；这不是测试失败或通过的证据。当时阶段 9 已有 2.4 局部 Web 轨迹，3.8 2D 查询与两版 3D 后端身份获局部验证，3D 射线/事件尚待验证；用户随后要求开始阶段 10，未完成项保留在[验证矩阵](agent-foundation/skills/physics-spatial-validation.md)，不标为阶段 9 完成。
 - 阶段 9 后端接线已补查：2.4 3D 由构建宏控制 Cannon/Builtin 构造器绑定及 Director 管理器创建；3.8 的 2D/3D 后端先在预子系统事件注册，再于 Director 初始化或手动异步加载后创建系统与 World。3.8 2D `.instance` 会懒创建 World，3D `.instance` 可能尚不存在；探针先查选择器标志，再核实系统和 World，不调用 2D `selector.switchTo` 改写现场。详见两版[独立笔记](2.x/09-physics-and-spatial.md)、[3.8 笔记](3.x/09-physics-and-spatial.md)与[验证状态](agent-foundation/skills/physics-spatial-validation.md)。阶段 9 仍待其余运行轨迹。
 - 阶段 10 已在本轮可验证的 Web 预览与 Mac 已发布包范围收口，阶段 9 未完成项仍保留。已按 2.4/3.8 官网 Web、原生、小游戏与 JSB 页面建立[2.x 发布与原生笔记](2.x/10-publishing-and-native.md)、[3.x 独立笔记](3.x/10-publishing-and-native.md)和[同一启动行为对照](comparisons/10-publishing-and-native.md)。源码追到 2.4 `AppDelegate → jsb-builtin → main.js → boot`，3.8 `CocosApplication/BaseGame → web-adapter → main.js → application.js → game.init/run`，并区分 2.4 `CC_JSB/CCSys` 与 3.8 `cc.config.json` 的 PAL 构建分流。两份[候选诊断 skill 与验证记录](agent-foundation/skills/publishing-native-validation.md)已建立；小游戏宿主未验证。
-- 阶段 10 的帧驱动继续追到 2.4 `CCGame._setAnimFrame/_runMainLoop` 与 3.8 `Pacer` 的 Web/Native 实现、`Engine::tick → events::Tick → gameTick`。构建来源也已核查：3.8 `build/mac/cocos.compile.config.json` 明确记录使用 Creator 3.8.7 安装包内置的 TS/Native 引擎，故此包不能验证邻接 `3.8.7engine` 的源码改动；2.4 `local/builder.json`/`settings/builder.json` 未给出引擎路径。详见两版笔记及[阶段 10 验证记录](agent-foundation/skills/publishing-native-validation.md)。
+- 阶段 10 的帧驱动继续追到 2.4 `CCGame._setAnimFrame/_runMainLoop` 与 3.8 `Pacer` 的 Web/Native 实现、`Engine::tick → events::Tick → gameTick`。构建来源也已核查：3.8 `build/mac/cocos.compile.config.json` 明确记录使用 Creator 3.8.7 安装包内置的 TS/Native 引擎，故此包不能验证邻接 `engine/3.8.7engine` 的源码改动；2.4 `local/builder.json`/`settings/builder.json` 未给出引擎路径。详见两版笔记及[阶段 10 验证记录](agent-foundation/skills/publishing-native-validation.md)。
 - 阶段 10 已用两份[2.4 原生轨迹](agent-foundation/traces/2.4.15-stage10-mac-native-startup.jsonl)和[3.8 原生轨迹](agent-foundation/traces/3.8.7-stage10-mac-native-startup.jsonl)记录初始化、场景启动前后 `AFTER_DRAW` 与平台标志；两版原生包均有 `window/document` 而 `isBrowser=false`。临时生成脚本已逐字节还原。与阶段 1 各自同场景 Web 预览轨迹的事件关系已写入[对照](comparisons/10-publishing-and-native.md)；正式 Web 发布包、小游戏、移动端与自定义引擎包仍是各自独立的未验证范围。
 - 阶段 11 已启动：按官网网络、存储、多语言、热更新与平台扩展专题建立[2.x 独立笔记](2.x/11-auxiliary-capabilities.md)、[3.x 独立笔记](3.x/11-auxiliary-capabilities.md)及[同一行为对照](comparisons/11-auxiliary-capabilities.md)。首轮源码定位和候选 skill 状态见[验证记录](agent-foundation/skills/auxiliary-capabilities-validation.md)；两套现有 Mac 包已分别验证唯一临时键跨进程重启的读取与删除，其余专题及 Web/小游戏仍待运行验证。
 - 阶段 11 的业务 HTTP 已取得[200/503](agent-foundation/traces/README.md)与[连接被拒绝](agent-foundation/skills/auxiliary-capabilities-validation.md)的两版 Mac 轨迹：XHR 对 503 均 `onload`，3.8 `fetch` 对 503 仍 resolve；连接被拒绝且 XHR 超时设为 4 秒时，2.4 XHR 两轮都 `ontimeout`，3.8 XHR 两轮都 `onerror`、`fetch` rejected。两份网络诊断候选 skill 已编写；资源下载、TLS、其他网络失败及 Web/小游戏仍需分别验证。

@@ -14,9 +14,9 @@
 
 | 案例 | skill 的定位结果 | 核对证据 |
 | --- | --- | --- |
-| 2.x：`EVENT_ENGINE_INITED` 已触发，但没有组件帧回调 | 从 `CCGame._prepareFinished` 检查内建资源回调、`_prepared` 与 `_runMainLoop`，再查 `CCDirector.mainLoop` 的暂停状态；不能仅凭引擎事件断定帧循环已开始。 | `2.4.15engine/cocos2d/core/CCGame.js:387-400,625-651`、`CCDirector.js:870-913` |
+| 2.x：`EVENT_ENGINE_INITED` 已触发，但没有组件帧回调 | 从 `CCGame._prepareFinished` 检查内建资源回调、`_prepared` 与 `_runMainLoop`，再查 `CCDirector.mainLoop` 的暂停状态；不能仅凭引擎事件断定帧循环已开始。 | `engine/2.4.15engine/cocos2d/core/CCGame.js:387-400,625-651`、`CCDirector.js:870-913` |
 | 2.x：示例配置有起始场景 UUID，为什么仍黑屏？ | 对照 `settings/project.json` 与 `.fire.meta` 确认场景身份，再检查预览 `boot.js` 的 bundle 加载、`game.run`、`onStart`、`preview-scene.json` 与 `runSceneImmediate`。实测 `onStart` 在 `GAME_INITED` 后，首个 `mainLoop` 在场景启动后。 | 预览 `settings.js`、`boot.js`、[2.x 记录](../traces/2.4.15-preview-startup.jsonl) |
-| 3.x：先调用 `game.run()` 却没有帧回调 | `run()` 在 `_inited` 为假时返回；应先核对 `init()` Promise 是否完成，然后才检查 `Pacer` 和 `director.tick`。 | `3.8.7engine/cocos/game/game.ts:734-915,1031-1039,1090-1096` |
+| 3.x：先调用 `game.run()` 却没有帧回调 | `run()` 在 `_inited` 为假时返回；应先核对 `init()` Promise 是否完成，然后才检查 `Pacer` 和 `director.tick`。 | `engine/3.8.7engine/cocos/game/game.ts:734-915,1031-1039,1090-1096` |
 | 3.x：`assets/scene/main.scene` 存在，却不知道是否被启动 | 检查实际宿主。此预览的 `settings.js` 给出 `current_scene`，`preview-app/main.js` 将自动启动配置清空，再手动请求当前场景 JSON。skill 区分了编辑器预览、Web 构建模板和其他平台。 | 预览 `settings.js`、`preview-app/main.js`、[3.x 记录](../traces/3.8.7-preview-startup.jsonl) |
 
 以上四例都能定位到正确版本的源码入口，并保留缺失证据的边界。校准后两份 `SKILL.md` 的 YAML frontmatter 已通过 Ruby 标准 YAML 解析器检查。安装 PyYAML 6.0.3 后，又使用当前 Homebrew Python 3.13 分别运行 `skill-creator/scripts/quick_validate.py`，两份 skill 均输出 `Skill is valid!`。

@@ -5,7 +5,7 @@ description: Diagnose Cocos Creator 3.8.7 component onLoad/onEnable/start/update
 
 # Trace 3.8.7 component timing
 
-Confirm the report concerns `3.8.7engine/` or a Creator 3.8 project. Record the callback, node, component class, frame, activation operation, `component.enabled`, and `node.activeInHierarchy`; identify browser preview, editor scene, published Web, or native runtime.
+Confirm the report concerns `engine/3.8.7engine/` or a Creator 3.8 project. Record the callback, node, component class, frame, activation operation, `component.enabled`, and `node.activeInHierarchy`; identify browser preview, editor scene, published Web, or native runtime.
 
 Check the matching 3.8 manual pages first: [components and execution order](https://docs.cocos.com/creator/3.8/manual/zh/scripting/component.html), [lifecycle](https://docs.cocos.com/creator/3.8/manual/zh/scripting/life-cycle-callbacks.html), and [timers](https://docs.cocos.com/creator/3.8/manual/zh/scripting/scheduler.html). Project scripts use `@ccclass` and, when needed, `@executionOrder`; create components with `node.addComponent`, not by constructing them directly.
 

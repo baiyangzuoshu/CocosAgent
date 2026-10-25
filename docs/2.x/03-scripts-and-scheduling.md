@@ -8,7 +8,7 @@
 
 ## 脚本对象与两个调度器
 
-示例 [`HelloWorld.js`](../../2.4.15NewProject/assets/Script/HelloWorld.js) 使用 `cc.Class` 声明 `cc.Component`，在 `onLoad` 中给 `cc.Label` 赋值。`cocos2d/core/platform/CCClass.js:949-1024` 从描述对象创建类；`cocos2d/core/components/CCComponent.js:627,663-665` 为组件类保存默认及配置的 `_executionOrder`。创建实例仍应走节点的 `addComponent`，而非自己 `new` 后接入生命周期。
+历史示例工程中的 `HelloWorld.js`（原路径 `2.4.15NewProject/assets/Script/HelloWorld.js`，工程已删除）使用 `cc.Class` 声明 `cc.Component`，在 `onLoad` 中给 `cc.Label` 赋值。`cocos2d/core/platform/CCClass.js:949-1024` 从描述对象创建类；`cocos2d/core/components/CCComponent.js:627,663-665` 为组件类保存默认及配置的 `_executionOrder`。创建实例仍应走节点的 `addComponent`，而非自己 `new` 后接入生命周期。
 
 运行时有两套相邻但不同的调度结构：
 

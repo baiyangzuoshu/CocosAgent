@@ -1,6 +1,6 @@
 # 3.8.7 图形渲染
 
-本篇以 [3.8 图形渲染](https://docs.cocos.com/creator/3.8/manual/zh/module-map/graphics.html)、[MeshRenderer](https://docs.cocos.com/creator/3.8/manual/zh/engine/renderable/model-component.html)、[Camera](https://docs.cocos.com/creator/3.8/manual/zh/editor/components/camera-component.html)、[材质脚本](https://docs.cocos.com/creator/3.8/manual/zh/material-system/material-script.html)、[材质结构](https://docs.cocos.com/creator/3.8/manual/zh/material-system/material-structure.html)和[自定义渲染管线](https://docs.cocos.com/creator/3.8/manual/zh/render-pipeline/write-render-pipeline.html)为公开行为基线。源码快照为 `3.8.7engine`；运行观察来自 Creator 3.8.7 的 `3.8,7NewProject` 桌面 Web 预览。
+本篇以 [3.8 图形渲染](https://docs.cocos.com/creator/3.8/manual/zh/module-map/graphics.html)、[MeshRenderer](https://docs.cocos.com/creator/3.8/manual/zh/engine/renderable/model-component.html)、[Camera](https://docs.cocos.com/creator/3.8/manual/zh/editor/components/camera-component.html)、[材质脚本](https://docs.cocos.com/creator/3.8/manual/zh/material-system/material-script.html)、[材质结构](https://docs.cocos.com/creator/3.8/manual/zh/material-system/material-structure.html)和[自定义渲染管线](https://docs.cocos.com/creator/3.8/manual/zh/render-pipeline/write-render-pipeline.html)为公开行为基线。源码快照为 `engine/3.8.7engine`；运行观察来自 Creator 3.8.7 的 `3.8,7NewProject` 桌面 Web 预览。
 
 ## 场景与模块边界
 

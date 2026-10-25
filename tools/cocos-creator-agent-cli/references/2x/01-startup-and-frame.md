@@ -4,7 +4,7 @@
 
 ## 范围与证据状态
 
-本篇分析本工作区 `2.4.15engine/` 的运行时路径，以 `2.4.15NewProject/` 核对场景身份。已在 Creator 2.4.15 浏览器预览中观察到 Hello World 场景，并读取 `localhost:7456` 实际返回的页面、`settings.js` 与 `app/editor/static/preview-templates/boot.js`。还通过临时本机代理插入探针，在 Chrome 图形预览中测得初始化、场景和首帧事件顺序；[原始记录](../agent-foundation/traces/2.4.15-preview-startup.jsonl)保留 `performance.now()` 时间戳。代理没有改动工程或引擎源码。已核对本工作区与已安装 Creator 所附带的 `index.js`、`CCGame.js`、`CCDirector.js` 文件哈希一致。这里测量的是编辑器**浏览器预览**，不是构建产物或原生平台。
+本篇分析本工作区 `engine/2.4.15engine/` 的运行时路径，以 `2.4.15NewProject/` 核对场景身份。已在 Creator 2.4.15 浏览器预览中观察到 Hello World 场景，并读取 `localhost:7456` 实际返回的页面、`settings.js` 与 `app/editor/static/preview-templates/boot.js`。还通过临时本机代理插入探针，在 Chrome 图形预览中测得初始化、场景和首帧事件顺序；[原始记录](../agent-foundation/traces/2.4.15-preview-startup.jsonl)保留 `performance.now()` 时间戳。代理没有改动工程或引擎源码。已核对本工作区与已安装 Creator 所附带的 `index.js`、`CCGame.js`、`CCDirector.js` 文件哈希一致。这里测量的是编辑器**浏览器预览**，不是构建产物或原生平台。
 
 ## 2.4 官网手册校准
 

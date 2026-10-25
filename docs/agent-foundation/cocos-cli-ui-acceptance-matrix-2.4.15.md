@@ -1,6 +1,6 @@
 # Cocos CLI UI 编辑验收矩阵（Creator 2.4.15）
 
-本矩阵拆分 **Creator 引擎注册、CLI 接口覆盖、实机证据** 三种状态。引擎清单来自 `2.4.15engine/cocos2d/core/components/index.js`；CLI 场景 Inspector 名单来自 `creator-extension/scene.js` 的 `UI_COMPONENT_CLASS_NAMES`；UI 事件字段来自 `UI_EVENT_PROPERTIES`；Widget/Layout 运行时刷新来自 `bridge/runtime-preview.mjs`。静态注册或通用属性合同不等于该组件的写入已经实机验收。
+本矩阵拆分 **Creator 引擎注册、CLI 接口覆盖、实机证据** 三种状态。引擎清单来自 `engine/2.4.15engine/cocos2d/core/components/index.js`；CLI 场景 Inspector 名单来自 `creator-extension/scene.js` 的 `UI_COMPONENT_CLASS_NAMES`；UI 事件字段来自 `UI_EVENT_PROPERTIES`；Widget/Layout 运行时刷新来自 `bridge/runtime-preview.mjs`。静态注册或通用属性合同不等于该组件的写入已经实机验收。
 
 状态判定分开记录接口和证据：CLI 检查列为“有”或属性/事件列有明确命令，表示**接口已实现**；当前证据列写有 Creator 2.4.15 操作轨迹及关闭/重开读回，才表示相应字段的**实机验收通过**；“后续验收”列及明确标注的“仍待验证”描述未覆盖的字段、组件或运行时行为。`实机基线` 只证明曾创建/挂载、读取或编辑代表字段，不表示穷举；`字段往返` 表示保存、CLI 重开/读回和来源补偿通过；`接口具备` 表示存在调用路径但没有该组件的实机闭环；`待补接口` 表示当前缺少专用检查或运行时交互入口。静态合同和单测不能替代实机验收。
 

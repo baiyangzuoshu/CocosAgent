@@ -13,7 +13,7 @@ Creator 2.4.15 安装包包含配套原生源码：
 | Native 引擎 | `/Applications/Cocos/Creator/2.4.15/CocosCreator.app/Contents/Resources/cocos2d-x/` |
 | Native package | `package.json` 名称 `cocos2d-x-lite`，版本 `2.4.15`，仓库 `https://github.com/cocos-creator/cocos2d-x-lite.git` |
 | 上游说明 | 该目录 `README.md` 说明它基于 cocos2d-x 3.9；它是 Creator 的裁剪版，不能等同于通用 cocos2d-x 3.9 |
-| 2.4 JS 引擎 | 本仓库 `2.4.15engine/`，`package.json` 版本 `2.4.15`；这是 JS 引擎，不含 Native C++ 源码 |
+| 2.4 JS 引擎 | 本仓库 `engine/2.4.15engine/`，`package.json` 版本 `2.4.15`；这是 JS 引擎，不含 Native C++ 源码 |
 | 示例工程链接 | 生成的 `hello_world.xcodeproj` 以绝对路径引用安装包里的 `build/cocos2d_libs.xcodeproj` |
 
 安装包没有 `.git` 元数据，因此只能确认 Creator 安装版本、package 来源 URL 和本地源码指纹，**不能确认其上游 Git commit**。关键本机文件 SHA-256：`package.json` 为 `8d03a7336f9a97f5213b4184287a1f47f4e12c5b30e5f59f8022e2b30727496f`；原始 `jsb_module_register.cpp` 为 `7237a871dc347b2dcb32c8d5572a7be3acbf22475df5c8be61e85d8b98c09039`。

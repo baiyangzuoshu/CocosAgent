@@ -31,6 +31,6 @@ flowchart TD
 
 ## Local reference and evidence boundary
 
-Use the [Scene/Node/Component lifecycle trace](../../../../docs/cocos2d-x/02-objects-and-lifecycle.md) and inspect `cocos2d-x-4/cocos/base/CCRef.*`, `CCAutoreleasePool.*`, `cocos/2d/CCNode.*`, `CCScene.*`, and `CCComponent*` as relevant. The current Cocos2d-x lifecycle study is static; the paired HelloCpp demo verifies scene construction and display, not destruction/release callback order.
+Use the [Scene/Node/Component lifecycle trace](../../../../docs/cocos2d-x/02-objects-and-lifecycle.md) and inspect `engine/cocos2d-x-4/cocos/base/CCRef.*`, `CCAutoreleasePool.*`, `cocos/2d/CCNode.*`, `CCScene.*`, and `CCComponent*` as relevant. The current Cocos2d-x lifecycle study is static; the paired HelloCpp demo verifies scene construction and display, not destruction/release callback order.
 
 For a Creator lifecycle comparison or port, consult the [topic comparison](../../../../docs/comparisons/cocos2d-x-4-vs-creator-2.4/03-scene-node-lifecycle.md). Ordinary Cocos2d-x lifetime work does not need that cross-engine reference.

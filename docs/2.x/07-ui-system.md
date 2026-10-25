@@ -1,6 +1,6 @@
 # 2.4.15 UI 系统
 
-本篇以 [2.4 UI 系统](https://docs.cocos.com/creator/2.4/manual/zh/ui/index.html)、[多分辨率适配](https://docs.cocos.com/creator/2.4/manual/zh/ui/multi-resolution.html)、[对齐策略](https://docs.cocos.com/creator/2.4/manual/zh/ui/widget-align.html)、[Layout](https://docs.cocos.com/creator/2.4/manual/zh/components/layout.html)、[Widget](https://docs.cocos.com/creator/2.4/manual/zh/components/widget.html)、[ScrollView](https://docs.cocos.com/creator/2.4/manual/zh/components/scrollview.html)和[动态列表](https://docs.cocos.com/creator/2.4/manual/zh/ui/list-with-data.html)为公开行为基线。源码快照是 `2.4.15engine`；`2.4.15NewProject` 的 Hello World 场景提供现成 Canvas、背景 Widget 与 Label。Button、Layout 列表通过浏览器 DevTools 临时创建，未写入工程文件。
+本篇以 [2.4 UI 系统](https://docs.cocos.com/creator/2.4/manual/zh/ui/index.html)、[多分辨率适配](https://docs.cocos.com/creator/2.4/manual/zh/ui/multi-resolution.html)、[对齐策略](https://docs.cocos.com/creator/2.4/manual/zh/ui/widget-align.html)、[Layout](https://docs.cocos.com/creator/2.4/manual/zh/components/layout.html)、[Widget](https://docs.cocos.com/creator/2.4/manual/zh/components/widget.html)、[ScrollView](https://docs.cocos.com/creator/2.4/manual/zh/components/scrollview.html)和[动态列表](https://docs.cocos.com/creator/2.4/manual/zh/ui/list-with-data.html)为公开行为基线。源码快照是 `engine/2.4.15engine`；`2.4.15NewProject` 的 Hello World 场景提供现成 Canvas、背景 Widget 与 Label。Button、Layout 列表通过浏览器 DevTools 临时创建，未写入工程文件。
 
 ## UI 的四层职责
 
