@@ -79,6 +79,9 @@ cocos-creator-agent extension update --project-root /absolute/path/to/project
 cocos-creator-agent extension uninstall --project-root /absolute/path/to/project
 cocos-creator-agent extension commands list --instance <instance-id>
 cocos-creator-agent extension command call --instance <instance-id> --provider <provider-id> --command <command-id> --input '{"query":"icon"}'
+cocos-creator-agent runtime sessions list
+cocos-creator-agent runtime commands list --session <preview-session-id>
+cocos-creator-agent runtime command call --session <preview-session-id> --provider game-state --command get-score --fingerprint <sha256> --input '{}'
 cocos-creator-agent creator build --project-root /absolute/path/to/project --platform web-mobile
 cocos-creator-agent creator build --project-root /absolute/path/to/project --platform android --build-path /absolute/path/to/native-build
 cocos-creator-agent creator build --project-root /absolute/path/to/project --platform web-mobile --excluded-modules '["physics-2d","physics-3d"]'
@@ -296,3 +299,33 @@ After a bridge restart, queued tasks become interrupted; dispatched reads can be
 Use that session ID with `preview observe`, `preview screenshot`, `preview refresh`, `preview interact`, and `preview stop`. Interactions include a keyboard whitelist, normalized canvas clicks and drags, bounded text insertion into the focused control, and exact-path `cc.Widget.updateAlignment()` or `cc.Layout.updateLayout()` refreshes; declarative assertions can verify scene/node/Console/component fields and UI geometry. Numeric component-property assertions may set a bounded tolerance (0–100) for runtime-computed float values such as Slider progress. Refresh reuses the same browser session and verifies the expected scene again. Screenshots are saved under `~/.cocos-creator-agent/captures/`; stopping closes the Agent-owned browser but leaves Creator's preview server running.
 
 The runtime browser commands fail closed when Chromium, the loopback preview server, or the expected scene identity is unavailable. Runtime evidence is not inferred from source code or from Creator compile events.
+
+## Player runtime command Providers
+
+`runtime sessions list` lists active CLI-owned Web Preview sessions. `runtime commands list --session <id>` returns the game-side command catalog. To add a Provider, copy the packaged `runtime/provider.js` helper into the project's `assets/` directory, require it from a game script, and register a bounded command catalog:
+
+```js
+const runtime = require('./AgentRuntime/provider');
+const gameState = require('./GameState');
+
+runtime.registerProvider({
+  providerId: 'game-state',
+  protocolVersion: '1',
+  commands: [{
+    id: 'get-score', title: 'Read score', description: 'Read the current score.',
+    access: 'read',
+    input: { type: 'object', properties: {}, additionalProperties: false },
+  }],
+}, {
+  'get-score': function () { return { score: gameState.score }; },
+});
+```
+
+Invoke a listed command with its exact provider fingerprint and a schema-validated JSON object:
+
+```sh
+cocos-creator-agent runtime command call --session <preview-session-id> \
+  --provider game-state --command get-score --fingerprint <sha256> --input '{}'
+```
+
+The CLI re-discovers the Provider before each call and the helper compares the live declaration again immediately before dispatch. `write` and `control` commands must declare `approval: true`; MCP marks them destructive. Provider handlers execute in the game page without sandboxing. Timed-out calls return an uncertain result and are not retried. The runtime API is available only in Agent-owned Web Preview sessions; it does not attach to arbitrary browsers or native Players.

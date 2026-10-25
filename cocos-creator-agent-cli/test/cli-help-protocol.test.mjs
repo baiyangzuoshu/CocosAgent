@@ -12,6 +12,11 @@ function runCli(args) {
 }
 
 test('CLI supports filtered subcommand help and command catalog search', () => {
+  const rootHelp = runCli(['--help']);
+  assert.equal(rootHelp.status, 0);
+  assert.match(rootHelp.stdout, /preview start --instance/);
+  assert.match(rootHelp.stdout, /preview observe\|screenshot\|refresh\|stop/);
+
   const subcommand = runCli(['project', '--help']);
   assert.equal(subcommand.status, 0);
   assert.match(subcommand.stdout, /project open/);

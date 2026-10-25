@@ -27,6 +27,7 @@ const VCS_WORKFLOW_PROPERTIES = {
 const activeToolRequests = new Map();
 let projectToolAdapters = new Map();
 let extensionCommandAdapters = new Map();
+let runtimeCommandAdapters = new Map();
 let cachedTools = null;
 let cachedToolFingerprint = null;
 let toolRefreshPromise = null;
@@ -197,6 +198,20 @@ const infrastructureTools = [
     annotations: READ_ONLY_ANNOTATIONS,
   },
   {
+    name: 'cocos_runtime_sessions_list',
+    description: 'List active Player sessions created by the Cocos CLI Web Preview workflow.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: READ_ONLY_ANNOTATIONS,
+  },
+  {
+    name: 'cocos_runtime_commands_list',
+    description: 'Discover the validated runtime Provider commands published by one exact Web Preview session.',
+    inputSchema: { type: 'object', required: ['previewSessionId'], properties: {
+      previewSessionId: { type: 'string', minLength: 36, maxLength: 36, pattern: '^[0-9a-f-]{36}$' },
+    }, additionalProperties: false },
+    annotations: READ_ONLY_ANNOTATIONS,
+  },
+  {
     name: 'cocos_cloud_actions_workflows',
     description: 'List GitHub Actions workflow targets for a repository. Uses the origin remote from projectRoot when repository is omitted. Read-only; requires Actions read permission for private repositories.',
     inputSchema: { type: 'object', properties: {
@@ -333,6 +348,7 @@ const infrastructureTools = [
 async function getTools() {
   const nextProjectToolAdapters = new Map();
   const nextExtensionCommandAdapters = new Map();
+  const nextRuntimeCommandAdapters = new Map();
   const tools = [...infrastructureTools];
   let catalog;
   try { catalog = await invokeCliJson(['catalog']); }
@@ -340,6 +356,7 @@ async function getTools() {
     process.stderr.write(`Cocos CLI unavailable; Creator command tools omitted: ${error.message}\n`);
     projectToolAdapters = nextProjectToolAdapters;
     extensionCommandAdapters = nextExtensionCommandAdapters;
+    runtimeCommandAdapters = nextRuntimeCommandAdapters;
     return tools;
   }
   if (!catalog || !Array.isArray(catalog.commands)) throw new Error('COCOS_CLI_CATALOG_INVALID');
@@ -404,8 +421,42 @@ async function getTools() {
   } catch (error) {
     process.stderr.write(`Project tool discovery unavailable: ${error.message}\n`);
   }
+  try {
+    const live = await invokeCliJson(['runtime', 'sessions', 'list']);
+    for (const session of (Array.isArray(live.sessions) ? live.sessions : []).slice(0, 16)) {
+      if (typeof session.previewSessionId !== 'string' || typeof session.projectRoot !== 'string'
+        || session.state !== 'running') continue;
+      let runtimeCatalog;
+      try { runtimeCatalog = await invokeCliJson(['runtime', 'commands', 'list', '--session', session.previewSessionId]); }
+      catch (error) { process.stderr.write(`Runtime command discovery skipped for ${session.previewSessionId}: ${error.message}\n`); continue; }
+      for (const command of runtimeCatalog.commands || []) {
+        if (command.status !== 'available' || !['read', 'plan', 'write', 'control'].includes(command.access)
+          || tools.length >= 128) continue;
+        const projectFingerprint = createHash('sha256').update(session.projectRoot).digest('hex').slice(0, 10);
+        const commandFingerprint = createHash('sha256').update(`${session.previewSessionId}\0${command.providerId}\0${command.id}\0${command.providerFingerprint}`)
+          .digest('hex').slice(0, 16);
+        const name = `cocos_runtime_${projectFingerprint}_${commandFingerprint}`;
+        if (nextRuntimeCommandAdapters.has(name)) continue;
+        if (Object.hasOwn(command.input?.properties || {}, 'previewSessionId')) continue;
+        const properties = { ...(command.input.properties || {}), previewSessionId: {
+          type: 'string', minLength: 36, maxLength: 36, pattern: '^[0-9a-f-]{36}$',
+        } };
+        const required = [...new Set(['previewSessionId', ...(command.input.required || [])])];
+        nextRuntimeCommandAdapters.set(name, { previewSessionId: session.previewSessionId,
+          providerId: command.providerId, commandId: command.id,
+          providerFingerprint: command.providerFingerprint, access: command.access });
+        tools.push({ name,
+          description: `Invoke project-published Web Preview runtime command ${command.providerId}:${command.id}. It runs game code in the selected Player session; assess its declared access before calling.`,
+          inputSchema: { ...command.input, required, properties, additionalProperties: false },
+          annotations: commandAnnotations(command.access) });
+      }
+    }
+  } catch (error) {
+    process.stderr.write(`Runtime command discovery unavailable: ${error.message}\n`);
+  }
   projectToolAdapters = nextProjectToolAdapters;
   extensionCommandAdapters = nextExtensionCommandAdapters;
+  runtimeCommandAdapters = nextRuntimeCommandAdapters;
   return tools;
 }
 
@@ -460,6 +511,11 @@ async function handleTool(name, args = {}, signal) {
     }
   }
   if (name === 'cocos_instances_list') return invokeCliJson(['instances', 'list'], { signal });
+  if (name === 'cocos_runtime_sessions_list') return invokeCliJson(['runtime', 'sessions', 'list'], { signal });
+  if (name === 'cocos_runtime_commands_list') {
+    if (typeof args.previewSessionId !== 'string' || !args.previewSessionId) throw new Error('PREVIEW_SESSION_REQUIRED');
+    return invokeCliJson(['runtime', 'commands', 'list', '--session', args.previewSessionId], { signal });
+  }
   if (name === 'cocos_cloud_actions_workflows' || name === 'cocos_cloud_actions_runs'
     || name === 'cocos_cloud_actions_jobs' || name === 'cocos_cloud_actions_artifacts') {
     const kind = name.endsWith('_workflows') ? 'workflows' : name.endsWith('_runs') ? 'runs'
@@ -553,6 +609,22 @@ async function handleTool(name, args = {}, signal) {
       '--provider', extensionAdapter.providerId, '--command', extensionAdapter.commandId,
       '--fingerprint', extensionAdapter.providerFingerprint, '--input', JSON.stringify(input)], {
       signal, timeoutMs: extensionAdapter.access === 'write' || extensionAdapter.access === 'control' ? 190000 : 40000,
+    });
+  }
+  const runtimeAdapter = runtimeCommandAdapters.get(name);
+  if (runtimeAdapter) {
+    if (args.previewSessionId !== runtimeAdapter.previewSessionId) throw new Error('RUNTIME_COMMAND_TARGET_MISMATCH');
+    const catalog = await invokeCliJson(['runtime', 'commands', 'list', '--session', runtimeAdapter.previewSessionId], { signal });
+    const current = catalog.commands?.find((item) => item.providerId === runtimeAdapter.providerId
+      && item.id === runtimeAdapter.commandId);
+    if (!current || current.providerFingerprint !== runtimeAdapter.providerFingerprint
+      || current.access !== runtimeAdapter.access || current.status !== 'available')
+      throw new Error('RUNTIME_PROVIDER_CHANGED: refresh tools/list and rediscover the running Player commands');
+    const { previewSessionId, ...input } = args;
+    return invokeCliJson(['runtime', 'command', 'call', '--session', previewSessionId,
+      '--provider', runtimeAdapter.providerId, '--command', runtimeAdapter.commandId,
+      '--fingerprint', runtimeAdapter.providerFingerprint, '--input', JSON.stringify(input)], {
+      signal, timeoutMs: runtimeAdapter.access === 'write' || runtimeAdapter.access === 'control' ? 40000 : 35000,
     });
   }
   const adapter = commandToolAdapters.find((item) => item.name === name);

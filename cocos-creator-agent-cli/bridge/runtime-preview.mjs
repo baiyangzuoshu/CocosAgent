@@ -4,12 +4,16 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { createRequire } from 'node:module';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { findSerializedSceneIdentity } from './preview-scene-identity.mjs';
 import { readPreviewComponentProperty } from './preview-components.mjs';
 import { normalizePreviewCoverage } from './preview-coverage.mjs';
 import { createPreviewTestHarness, MAX_PREVIEW_TEST_CASES_PER_RUN, MAX_PREVIEW_TEST_INPUT_BYTES,
   MAX_PREVIEW_TEST_RESULT_BYTES, MAX_PREVIEW_TEST_TIMEOUT_MS, readPreviewTestSource } from './preview-test-script.mjs';
+
+const require = createRequire(import.meta.url);
+const creatorProviderContract = require('../creator-extension/provider-contract.cjs');
 
 const DATA_ROOT = path.join(os.homedir(), '.cocos-creator-agent');
 const SESSION_ROOT = path.join(DATA_ROOT, 'preview-sessions');
@@ -18,8 +22,25 @@ const MAX_LOGS = 500;
 const MAX_LOG_TEXT = 2000;
 const MAX_ACTIONS = 12;
 const MAX_ASSERTIONS = 12;
+const MAX_RUNTIME_PROVIDERS = 32;
+const MAX_RUNTIME_COMMANDS = 128;
+const MAX_RUNTIME_CATALOG_BYTES = 256 * 1024;
+const MAX_RUNTIME_RESULT_BYTES = 64 * 1024;
+const MAX_RUNTIME_COMMAND_TIMEOUT_MS = 25000;
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
 const sessions = new Map();
+
+export function runtimePlayerErrorCode(error) {
+  const code = error?.code;
+  if (code === 'PREVIEW_DEVTOOLS_DISCONNECTED' || code === 'PREVIEW_DEVTOOLS_SOCKET_ERROR'
+    || code === 'PREVIEW_BROWSER_EXITED') return 'RUNTIME_PLAYER_DISCONNECTED';
+  if (code === 'PREVIEW_DEVTOOLS_COMMAND_TIMEOUT' || code === 'PREVIEW_COMMAND_TIMEOUT') return 'RUNTIME_PLAYER_UNRESPONSIVE';
+  return null;
+}
+
+function runtimeFailure(error, fallbackCode) {
+  return failure(runtimePlayerErrorCode(error) || fallbackCode, error?.code || error?.message);
+}
 
 function failure(code, detail) {
   const error = new Error(detail ? `${code}:${String(detail).slice(0, 240)}` : code);
@@ -396,14 +417,164 @@ async function launchBrowser(session, cancelled = () => false) {
 }
 
 function publicSession(session) {
+  const exited = session.browserExited || session.browserSpawnError || session.browser?.exitCode !== null;
   return { previewSessionId: session.previewSessionId, instanceId: session.instanceId,
     creatorSessionId: session.creatorSessionId, projectRoot: session.projectRoot,
     creatorVersion: session.creatorVersion, sceneName: session.sceneName, sceneUuid: session.sceneUuid,
     sceneAssetIdentity: session.sceneAssetIdentity || null,
-    previewUrl: session.previewUrl, state: session.browserExited ? 'browser-exited' : 'running',
+    previewUrl: session.previewUrl, state: exited ? 'browser-exited' : 'running',
     startedAt: session.startedAt, navigationCount: session.navigationCount,
     lastNavigationAt: session.lastNavigationAt, consoleSequence: session.consoleSequence,
     consoleErrorCount: session.console.filter((entry) => entry.level === 'error').length };
+}
+
+function runtimeSessionById(previewSessionId, { allowExited = false } = {}) {
+  if (typeof previewSessionId !== 'string' || !/^[0-9a-f-]{36}$/i.test(previewSessionId))
+    throw failure('PREVIEW_SESSION_ID_INVALID');
+  const session = sessions.get(previewSessionId);
+  if (!session) throw failure('PREVIEW_SESSION_NOT_FOUND');
+  if (!allowExited && (session.browserExited || session.browserSpawnError || session.browser?.exitCode !== null))
+    throw failure('PREVIEW_BROWSER_EXITED', session.browserSpawnError?.message);
+  return session;
+}
+
+export function listRuntimeSessions() {
+  return [...sessions.values()].sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt))
+    .map(publicSession);
+}
+
+async function verifyRuntimePage(session) {
+  let page;
+  try { page = await evaluate(session, PAGE_SNAPSHOT_EXPRESSION); }
+  catch (error) { throw runtimeFailure(error, 'RUNTIME_PLAYER_IDENTITY_UNAVAILABLE'); }
+  let pageOrigin;
+  let previewOrigin;
+  try { pageOrigin = new URL(page?.url).origin; previewOrigin = new URL(session.previewUrl).origin; }
+  catch (_) { throw failure('RUNTIME_PLAYER_IDENTITY_UNAVAILABLE'); }
+  if (pageOrigin !== previewOrigin) throw failure('RUNTIME_PLAYER_ORIGIN_MISMATCH');
+  if (!page?.ready) throw failure('RUNTIME_PLAYER_NOT_READY');
+  if (page.sceneUuid !== session.sceneUuid || page.sceneName !== session.sceneName)
+    throw failure('PREVIEW_SCENE_IDENTITY_MISMATCH');
+  return page;
+}
+
+function runtimeProviderDescribeExpression() {
+  return `(() => { const api = window.CocosCreatorAgentRuntime;
+    if (!api || typeof api.describe !== 'function') return { available: false, providers: [] };
+    return { available: true, providers: api.describe() }; })()`;
+}
+
+function runtimeProviderInvokeExpression(request) {
+  const serialized = JSON.stringify(request);
+  return `(() => { const api = window.CocosCreatorAgentRuntime;
+    if (!api || typeof api.invoke !== 'function') throw new Error('RUNTIME_PROVIDER_API_UNAVAILABLE');
+    return api.invoke(${serialized}); })()`;
+}
+
+function fingerprintRuntimeProvider(metadata) {
+  return createHash('sha256').update(creatorProviderContract.canonical(metadata)).digest('hex');
+}
+
+function normalizeRuntimeProvider(candidate, creatorVersion) {
+  if (candidate && Array.isArray(candidate.commands) && candidate.commands.some((command) =>
+    Object.prototype.hasOwnProperty.call(command?.input?.properties || {}, 'previewSessionId')))
+    throw failure('RUNTIME_PROVIDER_SCHEMA_RESERVED_FIELD');
+  const normalized = creatorProviderContract.normalizeProvider(candidate?.providerId, {
+    creatorVersion, protocolVersion: candidate?.protocolVersion, commands: candidate?.commands,
+  });
+  return { providerId: normalized.providerId, protocolVersion: normalized.protocolVersion, commands: normalized.commands };
+}
+
+export async function runtimeProviderCommands(previewSessionId) {
+  const session = runtimeSessionById(previewSessionId);
+  await verifyRuntimePage(session);
+  let raw;
+  try { raw = await evaluate(session, runtimeProviderDescribeExpression()); }
+  catch (error) { throw runtimeFailure(error, 'RUNTIME_PROVIDER_DISCOVERY_FAILED'); }
+  if (!raw || raw.available !== true) return { ...publicSession(session), providerApiAvailable: false,
+    reason: 'RUNTIME_PROVIDER_API_UNAVAILABLE', providers: [], commands: [], skipped: [], catalogHash: createHash('sha256').update('[]').digest('hex') };
+  if (!Array.isArray(raw.providers) || raw.providers.length > MAX_RUNTIME_PROVIDERS)
+    throw failure('RUNTIME_PROVIDER_CATALOG_INVALID');
+  let rawBytes;
+  try { rawBytes = Buffer.byteLength(JSON.stringify(raw.providers), 'utf8'); }
+  catch (_) { throw failure('RUNTIME_PROVIDER_CATALOG_INVALID'); }
+  if (rawBytes > MAX_RUNTIME_CATALOG_BYTES) throw failure('RUNTIME_PROVIDER_CATALOG_TOO_LARGE');
+
+  const providers = [];
+  const skipped = [];
+  const counts = new Map();
+  for (const candidate of raw.providers) {
+    try {
+      const metadata = normalizeRuntimeProvider(candidate, session.creatorVersion);
+      counts.set(metadata.providerId, (counts.get(metadata.providerId) || 0) + 1);
+      providers.push({ providerId: metadata.providerId, metadata,
+        providerFingerprint: fingerprintRuntimeProvider(metadata), commands: metadata.commands });
+    } catch (error) {
+      skipped.push({ providerId: typeof candidate?.providerId === 'string' ? candidate.providerId : null,
+        code: error.code || 'RUNTIME_PROVIDER_METADATA_INVALID' });
+    }
+  }
+  const duplicateIds = new Set([...counts].filter(([, count]) => count > 1).map(([id]) => id));
+  const uniqueProviders = providers.filter((provider) => {
+    if (!duplicateIds.has(provider.providerId)) return true;
+    skipped.push({ providerId: provider.providerId, code: 'RUNTIME_PROVIDER_DUPLICATE' });
+    return false;
+  });
+  const commandCount = uniqueProviders.reduce((sum, provider) => sum + provider.commands.length, 0);
+  if (commandCount > MAX_RUNTIME_COMMANDS) throw failure('RUNTIME_PROVIDER_COMMAND_LIMIT_EXCEEDED');
+  const commands = uniqueProviders.flatMap((provider) => provider.commands.map((command) => ({ ...command,
+    providerId: provider.providerId, providerFingerprint: provider.providerFingerprint, status: 'available' })));
+  const catalogHash = createHash('sha256').update(creatorProviderContract.canonical(commands)).digest('hex');
+  return { ...publicSession(session), providerApiAvailable: true, providers: uniqueProviders, commands, skipped, catalogHash };
+}
+
+export async function callRuntimeProvider(previewSessionId, input, cancelled = () => false) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw failure('RUNTIME_COMMAND_INPUT_INVALID');
+  const { providerId, commandId, providerFingerprint, arguments: args = {} } = input;
+  if (typeof providerId !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(providerId))
+    throw failure('RUNTIME_PROVIDER_ID_INVALID');
+  if (typeof commandId !== 'string' || !/^[a-z][a-z0-9-]{0,47}$/.test(commandId))
+    throw failure('RUNTIME_COMMAND_ID_INVALID');
+  if (typeof providerFingerprint !== 'string' || !/^[0-9a-f]{64}$/.test(providerFingerprint))
+    throw failure('RUNTIME_PROVIDER_FINGERPRINT_REQUIRED');
+  const session = runtimeSessionById(previewSessionId);
+  if (cancelled()) throw failure('RUNTIME_COMMAND_CANCELLED_BEFORE_DISPATCH');
+  const catalog = await runtimeProviderCommands(previewSessionId);
+  const provider = catalog.providers.find((item) => item.providerId === providerId);
+  if (!provider || provider.providerFingerprint !== providerFingerprint) throw failure('RUNTIME_PROVIDER_CHANGED');
+  const command = provider.commands.find((item) => item.id === commandId);
+  if (!command) throw failure('RUNTIME_PROVIDER_COMMAND_NOT_FOUND');
+  try { creatorProviderContract.validateArguments(command.input, args); }
+  catch (error) { throw failure(error.code || 'RUNTIME_COMMAND_INPUT_INVALID'); }
+  const expectedMetadata = creatorProviderContract.canonical(provider.metadata);
+  if (cancelled()) throw failure('RUNTIME_COMMAND_CANCELLED_BEFORE_DISPATCH');
+  let result;
+  try {
+    result = await evaluate(session, runtimeProviderInvokeExpression({ providerId, commandId, expectedMetadata,
+      input: args, timeoutMs: MAX_RUNTIME_COMMAND_TIMEOUT_MS - 1000 }),
+      MAX_RUNTIME_COMMAND_TIMEOUT_MS);
+  } catch (error) {
+    if (runtimePlayerErrorCode(error) === 'RUNTIME_PLAYER_UNRESPONSIVE')
+      throw failure('RUNTIME_COMMAND_TIMEOUT_UNCERTAIN');
+    if (runtimePlayerErrorCode(error) === 'RUNTIME_PLAYER_DISCONNECTED')
+      throw failure('RUNTIME_PLAYER_DISCONNECTED');
+    throw failure('RUNTIME_COMMAND_FAILED', error.code || error.message);
+  }
+  if (!result || result.ok !== true) {
+    const code = result?.error?.code || 'RUNTIME_COMMAND_FAILED';
+    if (code === 'RUNTIME_PROVIDER_TIMEOUT_UNCERTAIN') throw failure('RUNTIME_COMMAND_TIMEOUT_UNCERTAIN');
+    if (code === 'RUNTIME_PROVIDER_CHANGED') throw failure('RUNTIME_PROVIDER_CHANGED');
+    throw failure(code, result?.error?.message);
+  }
+  result = result.result;
+  let resultBytes;
+  try { resultBytes = Buffer.byteLength(JSON.stringify(result), 'utf8'); }
+  catch (_) { throw failure('RUNTIME_COMMAND_RESULT_INVALID'); }
+  if (resultBytes > MAX_RUNTIME_RESULT_BYTES) throw failure('RUNTIME_COMMAND_RESULT_TOO_LARGE');
+  if (cancelled()) throw failure('RUNTIME_COMMAND_CANCELLED_AFTER_DISPATCH_UNCERTAIN');
+  return { previewSessionId, instanceId: session.instanceId, projectRoot: session.projectRoot,
+    creatorVersion: session.creatorVersion, sceneUuid: session.sceneUuid, providerId, commandId,
+    providerFingerprint, access: command.access, result };
 }
 
 export async function startPreview(instance, creatorResult, input = {}, cancelled = () => false) {

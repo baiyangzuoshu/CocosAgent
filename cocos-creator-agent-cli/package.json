@@ -35,6 +35,7 @@
     "doctor.mjs",
     "skills.mjs",
     "mcp/",
+    "runtime/",
     "skills/",
     "references/2x/",
     "bridge/",

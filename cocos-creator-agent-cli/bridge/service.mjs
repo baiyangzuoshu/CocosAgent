@@ -5,7 +5,8 @@ import path from 'node:path';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { CREATOR_VERSION, PROTOCOL_VERSION, COMMANDS, isSupportedCreatorVersion, validateCommand, publicCatalog } from './contracts.mjs';
-import { previewCommand, previewHostCapabilities, startPreview, stopAllPreviews, stopInstancePreviews } from './runtime-preview.mjs';
+import { previewCommand, previewHostCapabilities, startPreview, stopAllPreviews, stopInstancePreviews,
+  listRuntimeSessions, runtimeProviderCommands, callRuntimeProvider } from './runtime-preview.mjs';
 import { readProjectTools } from './project-tools.mjs';
 import { loadTaskRecords, writeTaskRecord } from './task-store.mjs';
 
@@ -607,6 +608,50 @@ async function route(request, response) {
     for (const [id, record] of rejectedInstances) if (Date.now() - record.seen > INSTANCE_TTL_MS) rejectedInstances.delete(id);
     sendJson(response, 200, { instances: [...instances.values()].map(publicInstance),
       rejectedInstances: [...rejectedInstances.values()].map(({ seen, ...record }) => record) }); return;
+  }
+  if (routeKey === 'GET /v1/runtime-sessions') {
+    expireInstances();
+    sendJson(response, 200, { sessions: listRuntimeSessions() }); return;
+  }
+  const runtimeCommandsMatch = url.pathname.match(/^\/v1\/runtime-sessions\/([0-9a-f-]{36})\/commands$/i);
+  if (runtimeCommandsMatch) {
+    expireInstances();
+    const previewSessionId = runtimeCommandsMatch[1];
+    const runtimeSession = listRuntimeSessions().find((item) => item.previewSessionId === previewSessionId);
+    if (!runtimeSession) { sendFailure(response, 404, 'PREVIEW_SESSION_NOT_FOUND'); return; }
+    const instance = resolveInstance(runtimeSession.instanceId, response);
+    if (!instance) return;
+    if (runtimeSession.creatorSessionId !== instance.sessionId || runtimeSession.projectRoot !== instance.projectRoot
+      || runtimeSession.creatorVersion !== instance.creatorVersion) {
+      sendFailure(response, 409, 'CREATOR_SESSION_STALE'); return;
+    }
+    if (request.method === 'GET') {
+      try { sendJson(response, 200, await runtimeProviderCommands(previewSessionId)); }
+      catch (error) {
+        const status = /_INVALID$|_REQUIRED$|_TOO_LARGE$|_LIMIT_EXCEEDED$/.test(error.code || '') ? 400 : 409;
+        sendFailure(response, status, error.code || 'RUNTIME_PROVIDER_DISCOVERY_FAILED', error.detail); }
+      return;
+    }
+    if (request.method === 'POST') {
+      const body = await readBody(request);
+      if (!body || typeof body !== 'object' || Array.isArray(body)
+        || Object.keys(body).some((key) => !['providerId', 'commandId', 'providerFingerprint', 'arguments'].includes(key))) {
+        sendFailure(response, 400, 'RUNTIME_COMMAND_INPUT_INVALID'); return;
+      }
+      let cancelled = false;
+      const cancelOnDisconnect = () => { if (!response.writableEnded) cancelled = true; };
+      response.once('close', cancelOnDisconnect);
+      try {
+        const result = await callRuntimeProvider(previewSessionId, body, () => cancelled);
+        if (!response.destroyed && !response.writableEnded && !cancelled) sendJson(response, 200, result);
+      } catch (error) {
+        if (response.destroyed || response.writableEnded || cancelled) return;
+        const status = /_INVALID$|_REQUIRED$|_TOO_LARGE$|_LIMIT_EXCEEDED$/.test(error.code || '') ? 400 : 409;
+        sendFailure(response, status, error.code || 'RUNTIME_COMMAND_FAILED', error.detail);
+      } finally { response.removeListener('close', cancelOnDisconnect); }
+      return;
+    }
+    sendFailure(response, 405, 'RUNTIME_COMMAND_METHOD_NOT_ALLOWED'); return;
   }
   const disconnectInstanceMatch = url.pathname.match(/^\/v1\/instances\/([0-9a-f-]{36})\/disconnect$/i);
   if (request.method === 'POST' && disconnectInstanceMatch) {

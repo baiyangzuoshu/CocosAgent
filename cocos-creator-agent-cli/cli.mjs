@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { bridgeStatus, stopBridge, ensureBridge, listInstances, getCapabilities, callCommand, getProjectTools,
   getExtensionCommands, callExtensionCommand, callProjectTool, startTask, listTasks, getTask, waitTask,
-  cancelTask, resumeTask, pluginRoot } from './bridge/client.mjs';
+  cancelTask, resumeTask, listRuntimeSessions, getRuntimeCommands, callRuntimeCommand, pluginRoot } from './bridge/client.mjs';
 import { COMMANDS, CREATOR_VERSION } from './bridge/contracts.mjs';
 import { installExtension, extensionStatus, updateExtension, uninstallExtension } from './extension-lifecycle.mjs';
 import { updateCli } from './release.mjs';
@@ -57,6 +57,9 @@ const HELP_LINES = [
   '  extension uninstall --project-root <absolute-path> [--force]',
   '  extension commands list --instance <instance-id>',
   '  extension command call --instance <instance-id> --provider <provider-id> --command <command-id> --input <json-object>',
+  '  runtime sessions list',
+  '  runtime commands list --session <preview-session-id>',
+  '  runtime command call --session <preview-session-id> --provider <provider-id> --command <command-id> --fingerprint <sha256> --input <json-object>',
   '  instances list',
   '  capabilities --instance <instance-id>',
   '  creator installations [--search-root <absolute-path>]',
@@ -433,6 +436,16 @@ async function main() {
   }
   if (group === 'extension' && action === 'command' && rest[0] === 'call') {
     print(await callExtensionCommand(value('--instance'), value('--provider'), value('--command'), parseInput(),
+      { expectedFingerprint: value('--fingerprint') })); return;
+  }
+  if (group === 'runtime' && action === 'sessions' && rest[0] === 'list') {
+    print(await listRuntimeSessions()); return;
+  }
+  if (group === 'runtime' && action === 'commands' && rest[0] === 'list') {
+    print(await getRuntimeCommands(value('--session'))); return;
+  }
+  if (group === 'runtime' && action === 'command' && rest[0] === 'call') {
+    print(await callRuntimeCommand(value('--session'), value('--provider'), value('--command'), parseInput(),
       { expectedFingerprint: value('--fingerprint') })); return;
   }
 

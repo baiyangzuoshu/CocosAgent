@@ -123,6 +123,35 @@ export async function listInstances({ start = true } = {}) {
   return bridgeRequest('GET', '/v1/instances');
 }
 
+export async function listRuntimeSessions({ start = true } = {}) {
+  if (start) await ensureBridge();
+  return bridgeRequest('GET', '/v1/runtime-sessions');
+}
+
+export async function getRuntimeCommands(previewSessionId) {
+  if (typeof previewSessionId !== 'string' || !/^[0-9a-f-]{36}$/i.test(previewSessionId))
+    throw new Error('PREVIEW_SESSION_ID_INVALID');
+  await ensureBridge();
+  return bridgeRequest('GET', `/v1/runtime-sessions/${encodeURIComponent(previewSessionId)}/commands`);
+}
+
+export async function callRuntimeCommand(previewSessionId, providerId, commandId, input = {}, { expectedFingerprint } = {}) {
+  if (typeof previewSessionId !== 'string' || !/^[0-9a-f-]{36}$/i.test(previewSessionId))
+    throw new Error('PREVIEW_SESSION_ID_INVALID');
+  if (typeof providerId !== 'string' || !PROVIDER_ID.test(providerId)) throw new Error('RUNTIME_PROVIDER_ID_INVALID');
+  if (typeof commandId !== 'string' || !COMMAND_ID.test(commandId)) throw new Error('RUNTIME_COMMAND_ID_INVALID');
+  if (typeof expectedFingerprint !== 'string' || !/^[0-9a-f]{64}$/.test(expectedFingerprint))
+    throw new Error('RUNTIME_PROVIDER_FINGERPRINT_REQUIRED');
+  const catalog = await getRuntimeCommands(previewSessionId);
+  const command = catalog.commands?.find((item) => item.providerId === providerId && item.id === commandId);
+  if (!command || command.status !== 'available') throw new Error('RUNTIME_COMMAND_NOT_AVAILABLE');
+  if (command.providerFingerprint !== expectedFingerprint) throw new Error('RUNTIME_PROVIDER_CHANGED');
+  validateArguments(command.input, input);
+  return bridgeRequest('POST', `/v1/runtime-sessions/${encodeURIComponent(previewSessionId)}/commands`, {
+    providerId, commandId, providerFingerprint: expectedFingerprint, arguments: input,
+  }, { timeoutMs: 40000 });
+}
+
 export async function disconnectInstance(instanceId, processId) {
   if (typeof instanceId !== 'string' || !/^[0-9a-f-]{36}$/i.test(instanceId)) throw new Error('INSTANCE_ID_REQUIRED');
   if (!Number.isSafeInteger(processId) || processId < 1 || processId > 2147483647) throw new Error('PROCESS_ID_INVALID');
