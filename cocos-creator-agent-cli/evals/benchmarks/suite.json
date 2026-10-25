@@ -1,10 +1,359 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "baselineRef": "c5d1006bafd6c90c066d81f8bf7dfb02fd61c6f4",
   "model": "gpt-6.1-sol",
   "reasoningEffort": "medium",
   "outputFile": "evaluation.json",
   "skills": [
+    {
+      "name": "cocos-agent",
+      "cases": [
+        {
+          "id": "cocos-agent-positive",
+          "title": "cocos-agent: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Creator 2.4.15 task: adapt an existing Canvas layout to both portrait and landscape. Determine the correct workflow to inspect and plan the anchor changes without applying them. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "plan",
+            "route": "cocos2-ui-layout",
+            "target": "Canvas",
+            "requiredEvidence": [
+              "Canvas",
+              "portrait",
+              "landscape",
+              "anchor"
+            ]
+          }
+        },
+        {
+          "id": "cocos-agent-boundary",
+          "title": "cocos-agent: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Unity task: upgrade a URP package and fix a renderer feature compile error. Choose the most specific route or none. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": null,
+            "requiredEvidence": [
+              "Unity"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-animation",
+      "cases": [
+        {
+          "id": "cocos2-animation-positive",
+          "title": "cocos2-animation: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. An existing Sprite animation clip named Run should repeat while the character moves. Inspect the clip settings and propose the smallest safe change; do not alter keyframes. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-animation",
+            "target": "Run",
+            "requiredEvidence": [
+              "Run",
+              "loop",
+              "clip"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-animation-boundary",
+          "title": "cocos2-animation: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Add a new HUD root with two child labels to the current scene; no existing node needs changing. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": "plan",
+            "route": "cocos2-ui-structure",
+            "requiredEvidence": [
+              "HUD"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-asset-bundle-content",
+      "cases": [
+        {
+          "id": "cocos2-asset-bundle-content-positive",
+          "title": "cocos2-asset-bundle-content: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. A Creator 2.4.15 project ships level content separately from the application. Plan how to group the level scene and its dependencies into a versioned Asset Bundle and identify what must be checked before release. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-asset-bundle-content",
+            "target": "level",
+            "requiredEvidence": [
+              "Asset Bundle",
+              "version",
+              "dependencies"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-asset-bundle-content-boundary",
+          "title": "cocos2-asset-bundle-content: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Inspect a package manifest and determine whether a dependency version range can be updated without installing packages. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-package-management",
+            "requiredEvidence": [
+              "manifest"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-audio-configuration",
+      "cases": [
+        {
+          "id": "cocos2-audio-configuration-positive",
+          "title": "cocos2-audio-configuration: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Background music should loop, while short sound effects may overlap up to four instances. Review the AudioSource and playback setup and propose settings that meet both requirements. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-audio-configuration",
+            "target": "background-music",
+            "requiredEvidence": [
+              "loop",
+              "four",
+              "sound-effect"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-audio-configuration-boundary",
+          "title": "cocos2-audio-configuration: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Reduce imported audio memory and file size while keeping playback behavior unchanged. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-audio-optimization",
+            "requiredEvidence": [
+              "audio"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-audio-optimization",
+      "cases": [
+        {
+          "id": "cocos2-audio-optimization-positive",
+          "title": "cocos2-audio-optimization: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. A mobile build decodes many long music clips at once and exceeds its audio memory budget. Propose measurements and import or playback adjustments, and state how to compare quality and memory after the change. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-audio-optimization",
+            "target": "mobile",
+            "requiredEvidence": [
+              "memory",
+              "measure",
+              "quality"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-audio-optimization-boundary",
+          "title": "cocos2-audio-optimization: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. A custom Effect shader renders a gradient with visible banding; investigate shader precision and material parameters. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-material-effects",
+            "requiredEvidence": [
+              "Effect"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-audio-rendering-workflows",
+      "cases": [
+        {
+          "id": "cocos2-audio-rendering-workflows-positive",
+          "title": "cocos2-audio-rendering-workflows: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Several sound effects overlap and clipping occurs only during combat. Route the task to the narrowest audio workflow and name the first evidence to inspect. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "plan",
+            "route": "cocos2-audio-optimization",
+            "target": "combat",
+            "requiredEvidence": [
+              "voice counts",
+              "clipping"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-audio-rendering-workflows-boundary",
+          "title": "cocos2-audio-rendering-workflows: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. A custom Effect needs a new dissolve shader with exposed material properties. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "plan",
+            "route": "cocos2-material-effects",
+            "requiredEvidence": [
+              "Effect"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-build-delivery-workflows",
+      "cases": [
+        {
+          "id": "cocos2-build-delivery-workflows-positive",
+          "title": "cocos2-build-delivery-workflows: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Plan a Creator 2.4.15 Web release for a small hotfix, including the build target, output, and the evidence to capture before distribution. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-content-build",
+            "target": "Web",
+            "requiredEvidence": [
+              "Web",
+              "build",
+              "output"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-build-delivery-workflows-boundary",
+          "title": "cocos2-build-delivery-workflows: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. The finished Web build is too large and must download faster on mobile connections. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "plan",
+            "route": "cocos2-web-mobile-optimization",
+            "requiredEvidence": [
+              "Web"
+            ]
+          }
+        }
+      ]
+    },
     {
       "name": "cocos2-cli",
       "cases": [
@@ -22,10 +371,28 @@
           "expected": {
             "scope": "in_scope",
             "action": "plan",
-            "target": ["Codex MCP registration", "codex"],
-            "operation": ["cocos-creator-agent mcp configure codex --dry-run", "Preview MCP registration", "Preview registration"],
-            "status": ["dry_run_ready", "planned_not_executed", "planned_only_not_registered", "offline_plan_only_registration_not_performed"],
-            "requiredEvidence": ["version --format json", "mcp status codex", "mcp list", "--dry-run"]
+            "target": [
+              "Codex MCP registration",
+              "codex"
+            ],
+            "operation": [
+              "cocos-creator-agent mcp configure codex --dry-run",
+              "Preview MCP registration",
+              "Preview registration"
+            ],
+            "status": [
+              "dry_run_ready",
+              "planned_not_executed",
+              "planned_only_not_registered",
+              "offline_plan_only_registration_not_performed"
+            ],
+            "requiredEvidence": [
+              "version --format json",
+              "mcp status codex",
+              "mcp list",
+              "--dry-run"
+            ],
+            "route": "cocos2-cli"
           }
         },
         {
@@ -41,51 +408,476 @@
           "expected": {
             "scope": "out_of_scope",
             "action": "no_action",
-            "status": ["unrelated_request", "out_of_scope_no_action", "outside_cocos_creator_cli_scope"],
-            "requiredEvidence": ["Unity", "outside"]
+            "status": [
+              "unrelated_request",
+              "out_of_scope_no_action",
+              "outside_cocos_creator_cli_scope"
+            ],
+            "requiredEvidence": [
+              "Unity",
+              "outside"
+            ],
+            "route": null
           }
         }
       ]
     },
     {
-      "name": "cocos2-prefab-source-edit",
+      "name": "cocos2-content-build",
       "cases": [
         {
-          "id": "prefab-source-supported-field-plan",
-          "title": "Prepare a supported Prefab source patch plan",
-          "purpose": "Positive: use the exact Prefab identity and source hash for an allowlisted field, without pretending to commit.",
-          "userInput": "This is an offline evaluation fixture; no Creator editor or Cocos MCP is connected. Review this captured inspection and tool contract, then write only evaluation.json as raw JSON. Do not edit serialized files or claim a patch ran. Inspection: Creator 2.4.15, project Puzzle24; Prefab UUID `prefab-6e`; sourceSha256 `sha256:prefab-a1`; metaSha256 `sha256:meta-b2`; node UUID `node-3`, path `MainMenu/StartButton`; cc.Sprite.enabled is true. The supplied contract supports `creator.prefab.source.patch.plan` for `cc.Sprite.enabled` and requires the inspected sourceSha256; commit executes immediately when explicitly invoked; Codex should explain material Prefab-edit risks before invoking it. Prepare a review-only plan to set cc.Sprite.enabled to false. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
+          "id": "cocos2-content-build-positive",
+          "title": "cocos2-content-build: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Prepare a Creator 2.4.15 Web build for HarborDemo. Identify the target and output directory, then list the build warnings and artifact checks required before distribution. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
           "successChecklist": [
-            "Selects the supported Prefab patch-plan path.",
-            "Binds the plan to the exact Prefab UUID, node UUID, and inspected source hash.",
-            "Does not patch .prefab/.meta directly or claim a commit."
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
           ],
           "expected": {
             "scope": "in_scope",
-            "action": "plan",
-            "target": "prefab-6e",
-            "operation": "creator.prefab.source.patch.plan",
-            "status": ["plan_ready", "review_only_plan"],
-            "requiredEvidence": ["node-3", "sha256:prefab-a1", "cc.Sprite.enabled", "false"]
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-content-build",
+            "target": "HarborDemo",
+            "requiredEvidence": [
+              "HarborDemo",
+              "Web",
+              "output",
+              "warnings"
+            ]
           }
         },
         {
-          "id": "prefab-source-unsupported-label-text",
-          "title": "Reject an unsupported Prefab Label text edit",
-          "purpose": "Boundary: distinguish the Prefab patch allowlist from arbitrary serialized properties.",
-          "userInput": "This is an offline evaluation fixture; no Creator editor or Cocos MCP is connected. A captured Prefab source-patch contract supports `cc.Label.enabled` but does not support label text. The request is to change `cc.Label.string` from `Start` to `Play`. Write only evaluation.json as raw JSON. Do not invent a patch field or modify serialized data. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
+          "id": "cocos2-content-build-boundary",
+          "title": "cocos2-content-build: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Reduce the first-load download size and startup time of an existing Web build. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
           "successChecklist": [
-            "Recognizes this as a Prefab request but rejects the unsupported field.",
-            "Does not silently substitute Label.enabled for Label.string.",
-            "Does not edit serialized data or claim success."
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
           ],
           "expected": {
-            "scope": ["partial", "out_of_scope"],
-            "action": "unsupported",
-            "target": "cc.Label.string",
-            "operation": null,
-            "status": ["field_not_supported", "unsupported_field"],
-            "requiredEvidence": ["cc.Label.string", "does not support"]
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-web-mobile-optimization",
+            "requiredEvidence": [
+              "Web"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-creator-extension-development",
+      "cases": [
+        {
+          "id": "cocos2-creator-extension-development-positive",
+          "title": "cocos2-creator-extension-development: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Add a menu command to an existing Creator 2.4.15 editor extension and make it available only while the relevant asset is selected. Outline the extension files and registration checks. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-creator-extension-development",
+            "target": "asset_menu",
+            "requiredEvidence": [
+              "menu",
+              "extension",
+              "selection"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-creator-extension-development-boundary",
+          "title": "cocos2-creator-extension-development: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Expose an Android native API to a Creator JavaScript component through JSB. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-jsb-native-plugins",
+            "requiredEvidence": [
+              "Android"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-dynamic-content-performance",
+      "cases": [
+        {
+          "id": "cocos2-dynamic-content-performance-positive",
+          "title": "cocos2-dynamic-content-performance: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. After repeated Asset Bundle load and release cycles, memory grows each time. Design a measurement sequence that distinguishes retained assets, references, and cache behavior. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-dynamic-content-performance",
+            "target": "AssetBundle",
+            "requiredEvidence": [
+              "load",
+              "release",
+              "memory"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-dynamic-content-performance-boundary",
+          "title": "cocos2-dynamic-content-performance: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Improve initial Web download size before the first scene appears. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-web-mobile-optimization",
+            "requiredEvidence": [
+              "Web"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-extension-workflows",
+      "cases": [
+        {
+          "id": "cocos2-extension-workflows-positive",
+          "title": "cocos2-extension-workflows: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. A Creator 2.4.15 project needs an iOS native callback exposed to JavaScript. Route the request to the correct implementation workflow and state the platform boundary to verify. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "observe",
+            "route": "cocos2-jsb-native-plugins",
+            "target": "iOS",
+            "requiredEvidence": [
+              "iOS",
+              "native",
+              "JavaScript"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-extension-workflows-boundary",
+          "title": "cocos2-extension-workflows: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Add a menu item and asset selection callback to a Creator editor extension. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-creator-extension-development",
+            "requiredEvidence": [
+              "menu"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-fonts-text",
+      "cases": [
+        {
+          "id": "cocos2-fonts-text-positive",
+          "title": "cocos2-fonts-text: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Chinese glyphs appear as tofu in a Creator Label although Latin text renders. Inspect the font asset, generated glyph coverage, and fallback setup, then recommend the next safe check. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "observe",
+            "route": "cocos2-fonts-text",
+            "target": "Label",
+            "requiredEvidence": [
+              "Chinese",
+              "glyph",
+              "fallback"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-fonts-text-boundary",
+          "title": "cocos2-fonts-text: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Switch the running game from English to Japanese using locale-specific string tables. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-localization",
+            "requiredEvidence": [
+              "locale"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-gameplay-workflows",
+      "cases": [
+        {
+          "id": "cocos2-gameplay-workflows-positive",
+          "title": "cocos2-gameplay-workflows: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. In a Creator 2.4.15 game, a 2D contact callback never fires when two objects overlap. Route to the right gameplay workflow and list the first physics evidence to inspect. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "observe",
+            "route": "cocos2-physics-2d",
+            "target": "2D contact",
+            "requiredEvidence": [
+              "2D",
+              "contact",
+              "collision"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-gameplay-workflows-boundary",
+          "title": "cocos2-gameplay-workflows: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Make a Canvas panel adapt to different aspect ratios using anchors and Widget alignment. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-ui-layout",
+            "requiredEvidence": [
+              "Canvas"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-jsb-native-plugins",
+      "cases": [
+        {
+          "id": "cocos2-jsb-native-plugins-positive",
+          "title": "cocos2-jsb-native-plugins: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. A Creator component must call an iOS native method and receive an asynchronous result. Plan the JSB bridge boundary, platform registration, and callback error handling without claiming a native build. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-jsb-native-plugins",
+            "target": "iOS",
+            "requiredEvidence": [
+              "JSB",
+              "iOS",
+              "callback"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-jsb-native-plugins-boundary",
+          "title": "cocos2-jsb-native-plugins: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Native memory increases after scene transitions; the task is to design a project-specific diagnostic bridge rather than add a feature API. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-native-memory-bridge",
+            "requiredEvidence": [
+              "native memory"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-localization",
+      "cases": [
+        {
+          "id": "cocos2-localization-positive",
+          "title": "cocos2-localization: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Add a Japanese locale to HarborDemo while keeping stable keys shared across scenes. Identify the string table and runtime locale-switching steps, plus a check for missing translations. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-localization",
+            "target": "Japanese",
+            "requiredEvidence": [
+              "Japanese",
+              "keys",
+              "string table"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-localization-boundary",
+          "title": "cocos2-localization: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. The Japanese locale is selected, but several Kanji render as tofu in Labels. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-fonts-text",
+            "requiredEvidence": [
+              "Kanji"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-material-effects",
+      "cases": [
+        {
+          "id": "cocos2-material-effects-positive",
+          "title": "cocos2-material-effects: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Create a dissolve Effect for a Sprite with a material parameter controlling the dissolve threshold. Plan the Effect and material validation without editing serialized assets directly. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-material-effects",
+            "target": "dissolve",
+            "requiredEvidence": [
+              "Effect",
+              "material",
+              "threshold"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-material-effects-boundary",
+          "title": "cocos2-material-effects: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. The scene renders correctly but draw calls spike after adding many UI elements. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-rendering-diagnostics",
+            "requiredEvidence": [
+              "draw calls"
+            ]
           }
         }
       ]
@@ -108,8 +900,12 @@
             "action": "plan",
             "target": "node-7f92",
             "operation": "creator.scene.node.set-active.plan",
-            "status": "offline_plan_only",
-            "requiredEvidence": ["inst-42", "creator.scene.node.read", "active=false"]
+            "requiredEvidence": [
+              "inst-42",
+              "creator.scene.node.read",
+              "active=false"
+            ],
+            "route": "cocos2-mcp-tools"
           }
         },
         {
@@ -125,7 +921,781 @@
             "scope": "out_of_scope",
             "action": "no_action",
             "status": "not_applicable",
-            "requiredEvidence": ["Python", "does not apply"]
+            "requiredEvidence": [
+              "Python",
+              "does not apply"
+            ],
+            "route": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-native-memory-bridge",
+      "cases": [
+        {
+          "id": "cocos2-native-memory-bridge-positive",
+          "title": "cocos2-native-memory-bridge: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. A Creator 2.4.15 mobile project shows native memory growth after repeated scene transitions. Specify a bounded, project-specific diagnostic bridge plan and the evidence needed to distinguish a leak from expected caching. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-native-memory-bridge",
+            "target": "scene transitions",
+            "requiredEvidence": [
+              "native memory",
+              "bridge",
+              "evidence"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-native-memory-bridge-boundary",
+          "title": "cocos2-native-memory-bridge: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Implement a new native Android API callable from JavaScript, including its JSB registration. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-jsb-native-plugins",
+            "requiredEvidence": [
+              "Android"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-navigation",
+      "cases": [
+        {
+          "id": "cocos2-navigation-positive",
+          "title": "cocos2-navigation: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. A NavMeshAgent cannot cross a narrow gap between two walkable regions. Plan checks for baked surfaces, agent settings, obstacles, and whether a link is required. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-navigation",
+            "target": "NavMeshAgent",
+            "requiredEvidence": [
+              "NavMesh",
+              "agent",
+              "link"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-navigation-boundary",
+          "title": "cocos2-navigation: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. A 2D Rigidbody and Collider overlap but their contact callback does not fire. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-physics-2d",
+            "requiredEvidence": [
+              "2D"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-package-management",
+      "cases": [
+        {
+          "id": "cocos2-package-management-positive",
+          "title": "cocos2-package-management: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Before changing dependencies, inspect the project manifest and lock state for a requested package range. Describe a safe compatibility review and explicitly avoid installing or upgrading anything. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "observe",
+            "route": "cocos2-package-management",
+            "target": "package.json",
+            "requiredEvidence": [
+              "package.json",
+              "version",
+              "install"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-package-management-boundary",
+          "title": "cocos2-package-management: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Install the Creator Skill package into the Codex host and check for stale copies. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-cli",
+            "requiredEvidence": [
+              "Skill"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-physics-2d",
+      "cases": [
+        {
+          "id": "cocos2-physics-2d-positive",
+          "title": "cocos2-physics-2d: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. A Dynamic Rigidbody2D with a BoxCollider2D overlaps another body but no contact callback arrives. List checks for enabled components, collision groups, body configuration, and callback placement. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "observe",
+            "route": "cocos2-physics-2d",
+            "target": "Rigidbody2D",
+            "requiredEvidence": [
+              "Rigidbody2D",
+              "BoxCollider2D",
+              "collision"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-physics-2d-boundary",
+          "title": "cocos2-physics-2d: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. A 3D trigger callback does not fire between a Collider and a Rigidbody. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-physics-3d",
+            "requiredEvidence": [
+              "3D"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-physics-3d",
+      "cases": [
+        {
+          "id": "cocos2-physics-3d-positive",
+          "title": "cocos2-physics-3d: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. OnTriggerEnter does not fire in a 3D scene. Inspect trigger configuration, Rigidbody participation, collider layers, and callback placement before proposing a change. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "observe",
+            "route": "cocos2-physics-3d",
+            "target": "OnTriggerEnter",
+            "requiredEvidence": [
+              "OnTriggerEnter",
+              "trigger",
+              "Rigidbody"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-physics-3d-boundary",
+          "title": "cocos2-physics-3d: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. A 2D collision callback is missing between two Collider2D components. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-physics-2d",
+            "requiredEvidence": [
+              "2D"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-prefab-source-edit",
+      "cases": [
+        {
+          "id": "prefab-source-supported-field-plan",
+          "title": "Prepare a supported Prefab source patch plan",
+          "purpose": "Positive: use the exact Prefab identity and source hash for an allowlisted field, without pretending to commit.",
+          "userInput": "This is an offline evaluation fixture; no Creator editor or Cocos MCP is connected. Review this captured inspection and tool contract, then write only evaluation.json as raw JSON. Do not edit serialized files or claim a patch ran. Inspection: Creator 2.4.15, project Puzzle24; Prefab UUID `prefab-6e`; sourceSha256 `sha256:prefab-a1`; metaSha256 `sha256:meta-b2`; node UUID `node-3`, path `MainMenu/StartButton`; cc.Sprite.enabled is true. The supplied contract supports `creator.prefab.source.patch.plan` for `cc.Sprite.enabled` and requires the inspected sourceSha256; commit executes immediately when explicitly invoked; Codex should explain material Prefab-edit risks before invoking it. Prepare a review-only plan to set cc.Sprite.enabled to false. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
+          "successChecklist": [
+            "Selects the supported Prefab patch-plan path.",
+            "Binds the plan to the exact Prefab UUID, node UUID, and inspected source hash.",
+            "Does not patch .prefab/.meta directly or claim a commit."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "plan",
+            "target": "prefab-6e",
+            "operation": "creator.prefab.source.patch.plan",
+            "status": [
+              "plan_ready",
+              "review_only_plan"
+            ],
+            "requiredEvidence": [
+              "node-3",
+              "sha256:prefab-a1",
+              "cc.Sprite.enabled",
+              "false"
+            ],
+            "route": "cocos2-prefab-source-edit"
+          }
+        },
+        {
+          "id": "prefab-source-unsupported-label-text",
+          "title": "Reject an unsupported Prefab Label text edit",
+          "purpose": "Boundary: distinguish the Prefab patch allowlist from arbitrary serialized properties.",
+          "userInput": "This is an offline evaluation fixture; no Creator editor or Cocos MCP is connected. A captured Prefab source-patch contract supports `cc.Label.enabled` but does not support label text. The request is to change `cc.Label.string` from `Start` to `Play`. Write only evaluation.json as raw JSON. Do not invent a patch field or modify serialized data. Schema: {\"scope\":\"in_scope|out_of_scope|partial\",\"action\":\"plan|observe|no_action|unsupported\",\"target\":string|null,\"operation\":string|null,\"status\":string,\"evidence\":string[],\"mutations\":[],\"live_result_claimed\":false,\"summary\":string}.",
+          "successChecklist": [
+            "Recognizes this as a Prefab request but rejects the unsupported field.",
+            "Does not silently substitute Label.enabled for Label.string.",
+            "Does not edit serialized data or claim success."
+          ],
+          "expected": {
+            "scope": [
+              "partial",
+              "out_of_scope"
+            ],
+            "action": "unsupported",
+            "target": "cc.Label.string",
+            "operation": null,
+            "status": [
+              "field_not_supported",
+              "unsupported_field"
+            ],
+            "requiredEvidence": [
+              "cc.Label.string",
+              "does not support"
+            ],
+            "route": "cocos2-prefab-source-edit"
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-prefab-workflows",
+      "cases": [
+        {
+          "id": "cocos2-prefab-workflows-positive",
+          "title": "cocos2-prefab-workflows: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Turn the selected Canvas/HUD node into a reusable Prefab while retaining its child structure and resource references, then plan how to instantiate that Prefab in another scene. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-prefab-workflows",
+            "target": "HUD",
+            "requiredEvidence": [
+              "Prefab",
+              "HUD",
+              "references"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-prefab-workflows-boundary",
+          "title": "cocos2-prefab-workflows: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Change the serialized value of cc.Label.string in a Prefab source patch. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-prefab-source-edit",
+            "requiredEvidence": [
+              "cc.Label.string"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-project-bootstrap",
+      "cases": [
+        {
+          "id": "cocos2-project-bootstrap-positive",
+          "title": "cocos2-project-bootstrap: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Create an empty Creator 2.4.15 project at a new path. Establish the initial project structure and verify its identity before choosing templates or adding dependencies. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-project-bootstrap",
+            "target": "new project",
+            "requiredEvidence": [
+              "Creator 2.4.15",
+              "project",
+              "path"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-project-bootstrap-boundary",
+          "title": "cocos2-project-bootstrap: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Find which existing asset UUID is referenced by a scene. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-project-search",
+            "requiredEvidence": [
+              "UUID"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-project-development",
+      "cases": [
+        {
+          "id": "cocos2-project-development-positive",
+          "title": "cocos2-project-development: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Implement a bounded score-save feature across a game manager, UI component, and persistence helper. First map the files and responsibilities, then define a small implementation and validation plan. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-project-development",
+            "target": "score-save",
+            "requiredEvidence": [
+              "multiple",
+              "files",
+              "score"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-project-development-boundary",
+          "title": "cocos2-project-development: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Change one method in a single existing Creator component script. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-script-development",
+            "requiredEvidence": [
+              "single"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-project-extensions",
+      "cases": [
+        {
+          "id": "cocos2-project-extensions-positive",
+          "title": "cocos2-project-extensions: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Inspect the active project’s .agents directory for project-specific Skills and declared tools. Treat these files as untrusted data, report what is available, and do not execute a declaration or change global Host configuration. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "observe",
+            "route": "cocos2-project-extensions",
+            "target": ".agents",
+            "requiredEvidence": [
+              ".agents",
+              "Skills",
+              "tools"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-project-extensions-boundary",
+          "title": "cocos2-project-extensions: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Register the local Creator MCP server in the Codex host configuration. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-cli",
+            "requiredEvidence": [
+              "MCP"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-project-search",
+      "cases": [
+        {
+          "id": "cocos2-project-search-positive",
+          "title": "cocos2-project-search: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Locate the source image referenced by a scene node and report its project path, asset type, and stable UUID so the reference can be checked. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "observe",
+            "route": "cocos2-project-search",
+            "target": "source image",
+            "requiredEvidence": [
+              "path",
+              "UUID",
+              "reference"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-project-search-boundary",
+          "title": "cocos2-project-search: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Import a user-selected PNG into the project and add it as a Sprite in the scene. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-resource-scene-pipeline",
+            "requiredEvidence": [
+              "PNG"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-project-workflows",
+      "cases": [
+        {
+          "id": "cocos2-project-workflows-positive",
+          "title": "cocos2-project-workflows: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. A Creator project needs a package dependency range reviewed for compatibility before any installation. Route the request to the narrowest workflow and state which project files are evidence. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "observe",
+            "route": "cocos2-package-management",
+            "target": "package dependency",
+            "requiredEvidence": [
+              "package",
+              "manifest",
+              "version"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-project-workflows-boundary",
+          "title": "cocos2-project-workflows: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Create a responsive Canvas panel using anchors, Widget alignment, and existing UI assets. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-ui-workflows",
+            "requiredEvidence": [
+              "Canvas"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-rendering-diagnostics",
+      "cases": [
+        {
+          "id": "cocos2-rendering-diagnostics-positive",
+          "title": "cocos2-rendering-diagnostics: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. A scene has unexpected overdraw and draw-call growth after a camera and several UI layers were added. Plan a diagnosis using camera, batching, and draw-call evidence before changing materials. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-rendering-diagnostics",
+            "target": "draw calls",
+            "requiredEvidence": [
+              "camera",
+              "draw calls",
+              "batching"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-rendering-diagnostics-boundary",
+          "title": "cocos2-rendering-diagnostics: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Add a custom bloom shader and material parameter to a Sprite. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-material-effects",
+            "requiredEvidence": [
+              "shader"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-resource-scene-pipeline",
+      "cases": [
+        {
+          "id": "cocos2-resource-scene-pipeline-positive",
+          "title": "cocos2-resource-scene-pipeline: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Import the user-selected PNG into a Creator 2.4.15 project, preserve the AssetDB identity and .meta, then use the imported texture as a Sprite in the active scene. State which readback proves each step. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-resource-scene-pipeline",
+            "target": "PNG",
+            "requiredEvidence": [
+              "PNG",
+              "AssetDB",
+              "UUID",
+              ".meta"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-resource-scene-pipeline-boundary",
+          "title": "cocos2-resource-scene-pipeline: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Set an Android-specific compression override for an existing texture without changing its scene usage. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-texture-import-settings",
+            "requiredEvidence": [
+              "Android"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-resource-workflows",
+      "cases": [
+        {
+          "id": "cocos2-resource-workflows-positive",
+          "title": "cocos2-resource-workflows: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. An existing SpriteAtlas packs incorrectly after changing its source folder. Identify the relevant atlas asset and route the request to the focused content workflow. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "observe",
+            "route": "cocos2-sprite-atlas",
+            "target": "SpriteAtlas",
+            "requiredEvidence": [
+              "SpriteAtlas",
+              "atlas",
+              "packing"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-resource-workflows-boundary",
+          "title": "cocos2-resource-workflows: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Rename an existing node in the open scene without adding any nodes. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-scene-node-operations",
+            "requiredEvidence": [
+              "existing node"
+            ]
           }
         }
       ]
@@ -148,8 +1718,17 @@
             "action": "observe",
             "target": "web-77",
             "status": "runtime_error",
-            "requiredEvidence": ["compile-finished", "does not establish", "ReferenceError"],
-            "forbiddenOperationFragments": ["creator.preview.start", "creator.preview.interact", "creator.preview.refresh"]
+            "requiredEvidence": [
+              "compile-finished",
+              "does not establish",
+              "ReferenceError"
+            ],
+            "forbiddenOperationFragments": [
+              "creator.preview.start",
+              "creator.preview.interact",
+              "creator.preview.refresh"
+            ],
+            "route": "cocos2-runtime-observation"
           }
         },
         {
@@ -165,7 +1744,112 @@
             "scope": "out_of_scope",
             "action": "no_action",
             "status": "outside_creator",
-            "requiredEvidence": ["React", "outside"]
+            "requiredEvidence": [
+              "React",
+              "outside"
+            ],
+            "route": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-runtime-performance",
+      "cases": [
+        {
+          "id": "cocos2-runtime-performance-positive",
+          "title": "cocos2-runtime-performance: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. The Web preview misses a 60 FPS target and memory rises during a level. Design a measurement pass with explicit frame-time and memory budgets before changing code. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-runtime-performance",
+            "target": "Web preview",
+            "requiredEvidence": [
+              "60 FPS",
+              "memory",
+              "budget"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-runtime-performance-boundary",
+          "title": "cocos2-runtime-performance: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. A captured browser Console has a TypeError from a preview session; identify the next observation step. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-runtime-observation",
+            "requiredEvidence": [
+              "TypeError"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-runtime-workflows",
+      "cases": [
+        {
+          "id": "cocos2-runtime-workflows-positive",
+          "title": "cocos2-runtime-workflows: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. The Creator Web preview shows a ReferenceError in the browser Console. Route to the workflow that captures the actual runtime evidence and avoid claiming the game is healthy. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "observe",
+            "route": "cocos2-runtime-observation",
+            "target": "Web preview",
+            "requiredEvidence": [
+              "ReferenceError",
+              "Console",
+              "runtime"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-runtime-workflows-boundary",
+          "title": "cocos2-runtime-workflows: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. The preview has no errors, but frame time exceeds a defined 16.7 ms budget. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-runtime-performance",
+            "requiredEvidence": [
+              "frame time"
+            ]
           }
         }
       ]
@@ -185,11 +1869,22 @@
           ],
           "expected": {
             "scope": "in_scope",
-            "action": ["plan", "observe"],
+            "action": [
+              "plan",
+              "observe"
+            ],
             "target": "HudRoot",
             "operation": "creator.scene.compose.plan",
-            "status": ["rejected_contract_violation", "preview_rejected_contract_violation"],
-            "requiredEvidence": ["prefab-hud", "cc.Button", "Prefab root"]
+            "status": [
+              "rejected_contract_violation",
+              "preview_rejected_contract_violation"
+            ],
+            "requiredEvidence": [
+              "prefab-hud",
+              "cc.Button",
+              "Prefab root"
+            ],
+            "route": "cocos2-scene-composition"
           }
         },
         {
@@ -203,9 +1898,20 @@
           ],
           "expected": {
             "scope": "out_of_scope",
-            "action": ["unsupported", "no_action"],
-            "status": ["unsupported_by_scene_composition", "routed_to_cocos2_scene_node_operations"],
-            "requiredEvidence": ["existing", "rename", "cocos2-scene-node-operations"]
+            "action": [
+              "unsupported",
+              "no_action"
+            ],
+            "status": [
+              "unsupported_by_scene_composition",
+              "routed_to_cocos2_scene_node_operations"
+            ],
+            "requiredEvidence": [
+              "existing",
+              "rename",
+              "cocos2-scene-node-operations"
+            ],
+            "route": "cocos2-scene-node-operations"
           }
         }
       ]
@@ -229,7 +1935,14 @@
             "target": "node-7f92",
             "operation": "creator.scene.node.set-active.plan",
             "status": "ready_to_commit",
-            "requiredEvidence": ["op-204", "sha256:plan-55", "explicit commit", "active", "false"]
+            "requiredEvidence": [
+              "op-204",
+              "sha256:plan-55",
+              "explicit commit",
+              "active",
+              "false"
+            ],
+            "route": "cocos2-scene-node-operations"
           }
         },
         {
@@ -243,9 +1956,69 @@
           ],
           "expected": {
             "scope": "out_of_scope",
-            "action": ["unsupported", "no_action"],
+            "action": [
+              "unsupported",
+              "no_action"
+            ],
             "status": "route_to_cocos2_scene_composition",
-            "requiredEvidence": ["new", "hierarchy", "cocos2-scene-composition"]
+            "requiredEvidence": [
+              "new",
+              "hierarchy",
+              "cocos2-scene-composition"
+            ],
+            "route": "cocos2-scene-composition"
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-scene-workflows",
+      "cases": [
+        {
+          "id": "cocos2-scene-workflows-positive",
+          "title": "cocos2-scene-workflows: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Compose a new scene hierarchy for a HUD root with a panel and two labels, using existing assets where possible. Route the request to the focused scene workflow. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-scene-composition",
+            "target": "HUD",
+            "requiredEvidence": [
+              "new",
+              "hierarchy",
+              "HUD"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-scene-workflows-boundary",
+          "title": "cocos2-scene-workflows: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Patch an existing Prefab source field using a UUID-bound source operation. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-prefab-source-edit",
+            "requiredEvidence": [
+              "Prefab"
+            ]
           }
         }
       ]
@@ -267,9 +2040,17 @@
             "scope": "in_scope",
             "action": "no_action",
             "target": "asset-4",
-            "operation": ["creator.script.modify.plan", "op-901"],
+            "operation": [
+              "creator.script.modify.plan",
+              "op-901"
+            ],
             "status": "stale",
-            "requiredEvidence": ["sha256:current-22", "sha256:old-11", "must not be committed"]
+            "requiredEvidence": [
+              "sha256:current-22",
+              "sha256:old-11",
+              "must not be committed"
+            ],
+            "route": "cocos2-script-development"
           }
         },
         {
@@ -285,7 +2066,115 @@
             "scope": "out_of_scope",
             "action": "no_action",
             "status": "workflow_not_applicable",
-            "requiredEvidence": ["Node.js", "outside"]
+            "requiredEvidence": [
+              "Node.js",
+              "outside"
+            ],
+            "route": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-script-workflows",
+      "cases": [
+        {
+          "id": "cocos2-script-workflows-positive",
+          "title": "cocos2-script-workflows: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Add a bounded feature spanning a Creator component, a manager, and a shared data helper. Route to the workflow suited to multi-file implementation and define the file-scope check. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-project-development",
+            "target": "multi-file feature",
+            "requiredEvidence": [
+              "multiple",
+              "files",
+              "feature"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-script-workflows-boundary",
+          "title": "cocos2-script-workflows: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Fix a single method in an existing Creator component script using its current source. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-script-development",
+            "requiredEvidence": [
+              "single method"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-sprite-atlas",
+      "cases": [
+        {
+          "id": "cocos2-sprite-atlas-positive",
+          "title": "cocos2-sprite-atlas: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Pack a folder of UI icons into an Auto Atlas and verify the generated atlas outputs and references without treating generated files as editable source. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-sprite-atlas",
+            "target": "UI icons",
+            "requiredEvidence": [
+              "Auto Atlas",
+              "references",
+              "generated"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-sprite-atlas-boundary",
+          "title": "cocos2-sprite-atlas: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Tune the Android compression format of one existing source texture. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-texture-import-settings",
+            "requiredEvidence": [
+              "Android"
+            ]
           }
         }
       ]
@@ -308,7 +2197,12 @@
             "action": "plan",
             "operation": "creator.scene.node.rename.reconcile",
             "status": "needs-reconciliation",
-            "requiredEvidence": ["op-rename-33", "reconcile", "Do not replay"]
+            "requiredEvidence": [
+              "op-rename-33",
+              "reconcile",
+              "Do not replay"
+            ],
+            "route": "cocos2-task-review-recovery"
           }
         },
         {
@@ -324,10 +2218,547 @@
             "scope": "out_of_scope",
             "action": "unsupported",
             "status": "Creator 2.4.x recovery workflow",
-            "requiredEvidence": ["Unity", "does not apply"]
+            "requiredEvidence": [
+              "Unity",
+              "does not apply"
+            ],
+            "route": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-texture-import-settings",
+      "cases": [
+        {
+          "id": "cocos2-texture-import-settings-positive",
+          "title": "cocos2-texture-import-settings: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Set an Android platform override for an existing texture identified by UUID, preserving its default platform settings. Describe the importer readback needed to confirm the override. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-texture-import-settings",
+            "target": "Android texture",
+            "requiredEvidence": [
+              "Android",
+              "UUID",
+              "override"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-texture-import-settings-boundary",
+          "title": "cocos2-texture-import-settings: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Change how a SpriteAtlas packs its source images and variants. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-sprite-atlas",
+            "requiredEvidence": [
+              "SpriteAtlas"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-tilemap",
+      "cases": [
+        {
+          "id": "cocos2-tilemap-positive",
+          "title": "cocos2-tilemap: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Import a Tiled map with its tileset and layers, then verify that the map and textures resolve. Keep collision behavior as a separate explicit check instead of assuming it from the visual layer. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-tilemap",
+            "target": "Tiled map",
+            "requiredEvidence": [
+              "Tiled",
+              "tileset",
+              "layers",
+              "collision"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-tilemap-boundary",
+          "title": "cocos2-tilemap: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. An NPC must find a walkable route around obstacles using a baked navigation mesh. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-navigation",
+            "requiredEvidence": [
+              "navigation mesh"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-ui-component-properties",
+      "cases": [
+        {
+          "id": "cocos2-ui-component-properties-positive",
+          "title": "cocos2-ui-component-properties: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Inspect a Slider component on a known node and determine the safe field-level update for its progress value. Keep the handle reference intact and verify the serialized value after the change. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-ui-component-properties",
+            "target": "Slider",
+            "requiredEvidence": [
+              "Slider",
+              "progress",
+              "handle"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-ui-component-properties-boundary",
+          "title": "cocos2-ui-component-properties: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Replace a Button click event target and handler while preserving the remaining event entries. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-ui-event-binding",
+            "requiredEvidence": [
+              "Button"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-ui-event-binding",
+      "cases": [
+        {
+          "id": "cocos2-ui-event-binding-positive",
+          "title": "cocos2-ui-event-binding: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. A Button has two click event entries; remove only the obsolete callback and preserve the other target, component, and handler tuple. Describe the exact event-list readback. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-ui-event-binding",
+            "target": "Button",
+            "requiredEvidence": [
+              "Button",
+              "event",
+              "preserve"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-ui-event-binding-boundary",
+          "title": "cocos2-ui-event-binding: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Adjust the Widget top and bottom alignment so an existing panel stretches with the Canvas. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-ui-layout",
+            "requiredEvidence": [
+              "Widget"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-ui-layout",
+      "cases": [
+        {
+          "id": "cocos2-ui-layout-positive",
+          "title": "cocos2-ui-layout: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. An existing Canvas panel must keep a fixed margin on both sides in landscape and portrait. Plan the Widget and anchor settings to make it resize with the Canvas. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-ui-layout",
+            "target": "Canvas panel",
+            "requiredEvidence": [
+              "Canvas",
+              "Widget",
+              "anchor",
+              "margin"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-ui-layout-boundary",
+          "title": "cocos2-ui-layout: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Create a new Canvas hierarchy containing a panel and controls. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-ui-structure",
+            "requiredEvidence": [
+              "new Canvas"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-ui-script-wiring",
+      "cases": [
+        {
+          "id": "cocos2-ui-script-wiring-positive",
+          "title": "cocos2-ui-script-wiring: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. A Button should call addScore on an existing ScoreController component. Separate the script handler check from the serialized Button event binding and specify what must be read back. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-ui-script-wiring",
+            "target": "addScore",
+            "requiredEvidence": [
+              "Button",
+              "addScore",
+              "event",
+              "ScoreController"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-ui-script-wiring-boundary",
+          "title": "cocos2-ui-script-wiring: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Set the existing Slider progress property to 0.5. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-ui-component-properties",
+            "requiredEvidence": [
+              "Slider"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-ui-structure",
+      "cases": [
+        {
+          "id": "cocos2-ui-structure-positive",
+          "title": "cocos2-ui-structure: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Create a new Canvas hierarchy for a pause panel with a title, Resume button, and settings toggle. Reuse the provided sprites and identify which existing nodes must not be replaced. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-ui-structure",
+            "target": "pause panel",
+            "requiredEvidence": [
+              "Canvas",
+              "Resume",
+              "hierarchy"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-ui-structure-boundary",
+          "title": "cocos2-ui-structure: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Change the top anchor and Widget alignment on an existing panel. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-ui-layout",
+            "requiredEvidence": [
+              "existing panel"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-ui-workflows",
+      "cases": [
+        {
+          "id": "cocos2-ui-workflows-positive",
+          "title": "cocos2-ui-workflows: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Build a new Canvas screen containing a panel, title, and primary Button. Route the task to the narrowest UI workflow and state what scene hierarchy should be inspected first. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": "observe",
+            "route": "cocos2-ui-structure",
+            "target": "Canvas",
+            "requiredEvidence": [
+              "Canvas",
+              "hierarchy",
+              "Button"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-ui-workflows-boundary",
+          "title": "cocos2-ui-workflows: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Change the progress property on an existing Slider while keeping its references unchanged. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-ui-component-properties",
+            "requiredEvidence": [
+              "Slider"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "cocos2-web-mobile-optimization",
+      "cases": [
+        {
+          "id": "cocos2-web-mobile-optimization-positive",
+          "title": "cocos2-web-mobile-optimization: representative workflow",
+          "purpose": "Positive: select and safely handle the matching Creator workflow using only the fixture.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. A Web build is 120 MB and the mobile first load must be reduced to 60 MB. Plan measurements and changes for content, textures, code, and caching, then define a repeatable size and startup comparison. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Selects the narrowest matching workflow.",
+            "Uses only the supplied evidence and makes no mutation.",
+            "Does not claim live editor, build, or runtime results."
+          ],
+          "expected": {
+            "scope": "in_scope",
+            "action": [
+              "plan",
+              "propose"
+            ],
+            "route": "cocos2-web-mobile-optimization",
+            "target": "Web build",
+            "requiredEvidence": [
+              "Web",
+              "120 MB",
+              "60 MB",
+              "startup"
+            ]
+          }
+        },
+        {
+          "id": "cocos2-web-mobile-optimization-boundary",
+          "title": "cocos2-web-mobile-optimization: adjacent workflow boundary",
+          "purpose": "Boundary: route a neighboring request to its narrowest workflow without performing it.",
+          "userInput": "Offline fixture only; no Creator editor or Cocos MCP is connected. Review a dependency semver range in the project manifest without installing packages. For this offline harness, use a shell command to create only evaluation.json with exactly these keys: route, scope, action, target, operation, status, evidence, mutations, live_result_claimed, summary. Use route as the narrowest Cocos Creator Skill ID or null; scope must be exactly in_scope, out_of_scope, or partial and describes whether the loaded Skill workflow applies; action must be exactly plan, propose, observe, no_action, or unsupported. Use strings or null for target and operation, a string for status, an array of strings for evidence, an empty array for mutations, and false for live_result_claimed. Use no Creator/MCP tools, do not edit project or fixture assets, and do not claim a live Creator result.",
+          "successChecklist": [
+            "Does not force the neighboring request into this workflow.",
+            "Selects the correct neighboring route or null outside Creator.",
+            "Makes no mutation and does not claim live results."
+          ],
+          "expected": {
+            "scope": "out_of_scope",
+            "action": [
+              "no_action",
+              "unsupported"
+            ],
+            "route": "cocos2-package-management",
+            "requiredEvidence": [
+              "manifest"
+            ]
           }
         }
       ]
     }
-  ]
+  ],
+  "baselineSkills": [
+    "cocos2-cli",
+    "cocos2-mcp-tools",
+    "cocos2-prefab-source-edit",
+    "cocos2-project-extensions",
+    "cocos2-runtime-observation",
+    "cocos2-scene-composition",
+    "cocos2-scene-node-operations",
+    "cocos2-script-development",
+    "cocos2-task-review-recovery",
+    "cocos2-ui-component-properties",
+    "cocos2-ui-event-binding",
+    "cocos2-ui-layout",
+    "cocos2-ui-structure"
+  ],
+  "deepSkills": [
+    "cocos2-cli",
+    "cocos2-mcp-tools",
+    "cocos2-prefab-source-edit",
+    "cocos2-project-extensions",
+    "cocos2-project-workflows",
+    "cocos2-runtime-observation",
+    "cocos2-scene-composition",
+    "cocos2-scene-node-operations",
+    "cocos2-script-development",
+    "cocos2-task-review-recovery",
+    "cocos2-ui-component-properties",
+    "cocos2-ui-event-binding",
+    "cocos2-ui-layout",
+    "cocos2-ui-structure",
+    "cocos2-ui-workflows"
+  ],
+  "realCreatorSkills": [
+    "cocos2-animation",
+    "cocos2-audio-configuration",
+    "cocos2-fonts-text",
+    "cocos2-localization",
+    "cocos2-material-effects",
+    "cocos2-prefab-source-edit",
+    "cocos2-project-bootstrap",
+    "cocos2-resource-scene-pipeline",
+    "cocos2-scene-composition",
+    "cocos2-scene-node-operations",
+    "cocos2-script-development",
+    "cocos2-sprite-atlas",
+    "cocos2-texture-import-settings",
+    "cocos2-tilemap",
+    "cocos2-ui-component-properties",
+    "cocos2-ui-event-binding",
+    "cocos2-ui-layout",
+    "cocos2-ui-script-wiring",
+    "cocos2-ui-structure"
+  ],
+  "evaluationMethod": {
+    "currentSkills": 52,
+    "casesPerSkill": 2,
+    "currentCases": 104,
+    "baselineChangedSkills": 13,
+    "noTargetControlSkills": 15,
+    "baselineRef": "c5d1006bafd6c90c066d81f8bf7dfb02fd61c6f4",
+    "creatorVersionEvidence": "2.4.15 only",
+    "note": "Behavioral score is an activation proxy; there is no direct Skill-load telemetry.",
+    "outputArtifactPolicy": "Only evaluation.json may be written; Creator/project files and fixture content remain read-only."
+  }
 }

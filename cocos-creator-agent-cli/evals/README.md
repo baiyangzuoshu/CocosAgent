@@ -12,10 +12,13 @@ node cocos-creator-agent-cli/evals/analyze-skills.mjs --format json --output /tm
 node cocos-creator-agent-cli/evals/analyze-skills.mjs --skill cocos2-scene-composition
 ```
 
-The current 52-Skill snapshot is recorded in [skill-static-analysis-2026-10-23.md](skill-static-analysis-2026-10-23.md).
+The current 52-Skill snapshot is recorded in [skill-static-analysis-2026-10-25.md](skill-static-analysis-2026-10-25.md).
+The latest layered acceptance progress is recorded in [skill-acceptance-status-2026-10-25.md](skill-acceptance-status-2026-10-25.md).
 
 The static scan checks each `SKILL.md` structure, frontmatter, relative links, progressive disclosure, helper code, and estimated trigger/invocation token cost. It does not test whether Codex selects the right Skill or completes a real Creator workflow. Scores are diagnostic signals; inspect each finding before changing instructions.
 
-For behavior, curate realistic positive and near-miss prompts for one Skill, define observable success checks, then initialize its benchmark with `plugin-eval init-benchmark <skill-directory> --output <benchmark.json>`. Review the generated config and point its workspace at a disposable fixture before running `plugin-eval benchmark`. The starter scenarios are generic and need replacement with real task prompts. Keep live Creator MCP/editor operations out of benchmark runs; use fixtures and isolated workspaces. The targeted eight-Skill suite also supports a matched no-target-Skill control using an unrelated sentinel Skill; see `benchmarks/README.md` and record the control result when interpreting behavior lift.
+For behavior, the checked-in benchmark suite contains two curated prompts for each of the 52 Skills: one representative task and one adjacent-scope boundary. Each run uses an isolated Codex home and offline fixture; a deterministic verifier checks route, decision, evidence, and mutation/claim boundaries. The phases cover all 52 current Skills, the 13 Skills changed since the pinned baseline, and a 15-Skill no-target control set. See [benchmarks/README.md](benchmarks/README.md) for commands and limits.
+
+Creator editor and persistence acceptance is separate from the offline suite. The 19 editor/content Skills listed in the benchmark README require an identity-checked Creator 2.4.15 project and actual readback. Do not treat an offline plan or static finding as real editor acceptance.
 
 Keep generated benchmark configs, run artifacts, and usage logs outside the published CLI package unless they are deliberately versioned as evaluation data.

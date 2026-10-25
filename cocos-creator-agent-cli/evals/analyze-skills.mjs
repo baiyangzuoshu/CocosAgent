@@ -9,6 +9,11 @@ import { fileURLToPath } from 'node:url';
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultSkillsRoot = path.resolve(scriptDir, '../skills');
 const args = process.argv.slice(2);
+const advisoryFindingIds = new Set([
+  'description-trigger-weak',
+  'trigger_cost_tokens-budget-high',
+  'invoke_cost_tokens-budget-high',
+]);
 
 function option(name) {
   const index = args.indexOf(name);
@@ -76,6 +81,7 @@ function markdownReport(report) {
     `Plugin Eval: ${report.pluginEvalVersion}`,
     `Skills analyzed: ${report.analyzed}`,
     `Grades: ${Object.entries(report.gradeCounts).map(([grade, count]) => `${grade} ${count}`).join(', ')}`,
+    `Static acceptance gate: ${report.staticGate.passed ? 'PASS' : 'FAIL'} (${report.staticGate.hardFailureCount} hard failures; ${report.staticGate.advisoryCount} advisory findings)`,
     '',
     'This is a static structure and token-budget scan. It does not measure skill selection, task success, or Creator runtime behavior.',
     '',
@@ -88,6 +94,7 @@ function markdownReport(report) {
   }
   lines.push('', '## Finding counts', '');
   for (const [id, count] of Object.entries(report.findingCounts)) lines.push(`- ${id}: ${count}`);
+  lines.push('', 'Project acceptance policy: description-trigger and token-cost findings are advisory, even if Plugin Eval reports a fail/error severity; they do not fail the static gate. Other Plugin Eval error-severity findings do fail the gate.');
   lines.push('', 'The `description-trigger-weak` check currently requires the literal phrase “Use when”. Treat it as a review cue, not a proven activation defect; inspect each description for a clear positive and negative trigger boundary before editing.');
   lines.push('');
   return lines.join('\n');
@@ -132,6 +139,9 @@ function main() {
     });
   }
 
+  const hardFailures = results.flatMap((item) => item.findings.filter((finding) => finding.severity === 'error'
+    && !advisoryFindingIds.has(finding.id)).map((finding) => ({ skill: item.name, id: finding.id, message: finding.message })));
+  const advisoryCount = results.reduce((total, item) => total + item.findings.filter((finding) => advisoryFindingIds.has(finding.id)).length, 0);
   const report = {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
@@ -141,6 +151,15 @@ function main() {
     gradeCounts: countBy(results, (item) => item.grade),
     findingCounts: Object.fromEntries([...new Set(results.flatMap((item) => item.findings.map((finding) => finding.id)))].sort()
       .map((id) => [id, results.reduce((total, item) => total + item.findings.filter((finding) => finding.id === id).length, 0)])),
+    staticGate: {
+      passed: results.length === selected.length && hardFailures.length === 0,
+      expected: selected.length,
+      analyzed: results.length,
+      hardFailureCount: hardFailures.length,
+      hardFailures,
+      advisoryCount,
+      advisoryFindingIds: [...advisoryFindingIds],
+    },
     results,
   };
   const content = options.format === 'json' ? `${JSON.stringify(report, null, 2)}\n` : `${markdownReport(report)}\n`;

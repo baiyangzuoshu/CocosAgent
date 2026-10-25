@@ -15,6 +15,16 @@ const testCases = requestedCaseIds.map((caseId) => {
 });
 
 const failures = [];
+const catalogPath = path.join(process.cwd(), 'skill-catalog.json');
+let catalog;
+try { catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8')); }
+catch (error) { failures.push(`skill-catalog.json is missing or invalid JSON: ${error.message}`); }
+const expectedSkillIds = suite.skills.map((skill) => skill.name).sort();
+if (!catalog || catalog.schemaVersion !== 1 || !Array.isArray(catalog.skills)
+    || JSON.stringify([...catalog.skills].sort()) !== JSON.stringify(expectedSkillIds)
+    || new Set(catalog.skills).size !== catalog.skills.length) {
+  failures.push('skill-catalog.json must list each current Skill ID exactly once');
+}
 const resultPath = path.resolve(process.cwd(), 'evaluation.json');
 let result;
 try { result = JSON.parse(fs.readFileSync(resultPath, 'utf8')); }
@@ -27,7 +37,7 @@ if (result && typeof result === 'object' && !Array.isArray(result)) {
       failures.push(`${testCase.id}: result object is missing`);
       continue;
     }
-    for (const key of ['scope', 'action', 'target', 'operation', 'status']) {
+    for (const key of ['scope', 'action', 'route', 'target', 'operation', 'status']) {
       if (!Object.hasOwn(testCase.expected, key)) continue;
       const expected = testCase.expected[key];
       const accepted = Array.isArray(expected) ? expected : [expected];
@@ -60,13 +70,16 @@ if (result && typeof result === 'object' && !Array.isArray(result)) {
   }
 }
 
-const allowedFiles = new Set(['README.md', 'evaluation.json']);
+const allowedFiles = new Set(['README.md', 'skill-catalog.json', 'evaluation.json']);
 for (const entry of fs.readdirSync(process.cwd(), { withFileTypes: true })) {
   if (!allowedFiles.has(entry.name)) failures.push(`unexpected workspace entry: ${entry.name}`);
   if (!entry.isFile()) failures.push(`workspace entry is not a regular file: ${entry.name}`);
 }
 const readme = fs.readFileSync(path.join(process.cwd(), 'README.md'), 'utf8');
 if (!readme.includes('No Creator editor or Cocos MCP connection is configured.')) {
+  failures.push('offline fixture README was modified');
+}
+if (!readme.includes('only the benchmark target Skill\'s full instructions are loaded')) {
   failures.push('offline fixture README was modified');
 }
 

@@ -14,47 +14,44 @@ function option(name, fallback) {
 }
 
 const resultsRoot = path.resolve(option('--results-root', '/private/tmp/cocos-skill-benchmark'));
-const outputPath = path.resolve(option('--output', path.join(scriptDir, 'behavior-comparison-2026-10-22.md')));
-const beforeStaticPath = option('--before-static', '/private/tmp/cocos-skill-eval-20261022.json');
-const afterStaticPath = option('--after-static', '/private/tmp/cocos-skill-benchmark/final-static.json');
+const outputPath = path.resolve(option('--output', path.join(scriptDir, 'behavior-comparison-2026-10-25.md')));
 const before = JSON.parse(await fs.readFile(path.join(resultsRoot, 'baseline/graded-results.json'), 'utf8'));
 const after = JSON.parse(await fs.readFile(path.join(resultsRoot, 'after/graded-results.json'), 'utf8'));
 for (const [phase, result] of [['baseline', before], ['after', after]]) {
   if (result.suiteFingerprint !== currentTaskSetFingerprint) {
     throw new Error(`${phase} results were graded from a different task set; rerun and regrade before comparing.`);
   }
+  if (result.infrastructureErrors) throw new Error(`${phase} has ${result.infrastructureErrors} infrastructure errors; complete the phase before comparing.`);
+}
+if (before.model !== after.model || before.reasoningEffort !== after.reasoningEffort
+    || (before.codexVersion && after.codexVersion && before.codexVersion !== after.codexVersion)) {
+  throw new Error('Baseline and current phases must use the same model, reasoning effort, and Codex CLI version.');
 }
 const beforeByCase = new Map(before.results.map((result) => [result.caseId, result]));
 const afterByCase = new Map(after.results.map((result) => [result.caseId, result]));
-const expectedCaseIds = suite.skills.flatMap((skill) => skill.cases.map((testCase) => testCase.id));
-for (const [phase, indexed] of [['baseline', beforeByCase], ['after', afterByCase]]) {
-  if (indexed.size !== expectedCaseIds.length || expectedCaseIds.some((caseId) => !indexed.has(caseId))) {
+const expectedCaseIds = suite.baselineSkills.flatMap((name) => suite.skills.find((skill) => skill.name === name).cases.map((testCase) => testCase.id));
+const allAfterCaseIds = suite.skills.flatMap((skill) => skill.cases.map((testCase) => testCase.id));
+for (const [phase, indexed, cases] of [['baseline', beforeByCase, expectedCaseIds], ['after', afterByCase, allAfterCaseIds]]) {
+  if (indexed.size !== cases.length || cases.some((caseId) => !indexed.has(caseId))) {
     throw new Error(`${phase} results were graded against a different task set; rerun and regrade before comparing.`);
   }
 }
 
-const staticBefore = JSON.parse(await fs.readFile(beforeStaticPath, 'utf8')).results;
-const staticAfter = JSON.parse(await fs.readFile(afterStaticPath, 'utf8')).results;
-const staticValue = (items, name, field) => {
-  const item = items.find((entry) => entry.name === name);
-  const row = item?.summary || item;
-  return row?.[field] ?? '—';
-};
-
 const lines = [
-  '# Targeted behavior comparison for eight Cocos Skills',
+  '# 52 个 Cocos Skill 行为验收与改动前后对比',
   '',
   `Baseline Skill source: \`${suite.baselineRef}\`.`,
-  `Model: \`${suite.model}\`, reasoning effort: \`${suite.reasoningEffort}\`; Codex CLI: \`codex-cli 0.163.0-alpha.10.2\`.`,
-  `Task set: ${suite.skills.length} Skills, ${suite.skills.reduce((sum, skill) => sum + skill.cases.length, 0)} cases (one positive and one near-miss per Skill).`,
+  `Model: \`${suite.model}\`, reasoning effort: \`${suite.reasoningEffort}\`; Codex CLI: baseline \`${before.codexVersion || 'unknown'}\`, current \`${after.codexVersion || 'unknown'}\`.`,
+  `Current suite: ${suite.skills.length} Skills, ${allAfterCaseIds.length} cases; before/after regression subset: ${suite.baselineSkills.length} changed Skills, ${expectedCaseIds.length} matched cases.`,
   '',
-  `Behavior score: **${before.passed}/${before.total} (${Math.round(100 * before.passed / before.total)}%) → ${after.passed}/${after.total} (${Math.round(100 * after.passed / after.total)}%)**.`,
+  `Matched changed-Skill behavior: **${before.passed}/${before.total} (${Math.round(100 * before.passed / before.total)}%) → ${expectedCaseIds.filter((id) => afterByCase.get(id).status === 'passed').length}/${expectedCaseIds.length} (${Math.round(100 * expectedCaseIds.filter((id) => afterByCase.get(id).status === 'passed').length / expectedCaseIds.length)}%)**.`,
   '',
   '| Skill | Before | After |',
   '| --- | ---: | ---: |',
 ];
 
-for (const skill of suite.skills) {
+for (const name of suite.baselineSkills) {
+  const skill = suite.skills.find((entry) => entry.name === name);
   const prior = skill.cases.filter((testCase) => beforeByCase.get(testCase.id)?.status === 'passed').length;
   const current = skill.cases.filter((testCase) => afterByCase.get(testCase.id)?.status === 'passed').length;
   lines.push(`| ${skill.name} | ${prior}/${skill.cases.length} | ${current}/${skill.cases.length} |`);
@@ -76,24 +73,14 @@ if (regressions.length) {
   lines.push('- No baseline-passing case regressed.');
 }
 
-lines.push('', '## Static analysis', '', '| Skill | Before | After |', '| --- | ---: | ---: |');
-for (const skill of suite.skills) {
-  const beforeScore = staticValue(staticBefore, skill.name, 'score');
-  const beforeGrade = staticValue(staticBefore, skill.name, 'grade');
-  const afterScore = staticValue(staticAfter, skill.name, 'score');
-  const afterGrade = staticValue(staticAfter, skill.name, 'grade');
-  lines.push(`| ${skill.name} | ${beforeGrade}/${beforeScore} | ${afterGrade}/${afterScore} |`);
-}
-lines.push('', 'The weak-trigger-description finding cleared for all eight Skills. Token-budget findings remain on several Skills; these are static estimates, not behavior failures.');
-
-const sameCompletedCases = before.results.length === after.results.length
-  && before.results.every((result) => afterByCase.has(result.caseId));
-if (!sameCompletedCases) throw new Error('Before/after case sets do not match.');
+lines.push('', '## Static analysis', '', 'The current 52-Skill static snapshot is recorded separately in [skill-static-analysis-2026-10-25.md](../skill-static-analysis-2026-10-25.md). Static grades and token-cost findings are diagnostic signals, not behavior pass/fail results.');
 
 lines.push('', '## Method and limits', '');
 lines.push('- The before phase loaded each Skill from the pinned source commit; the after phase loaded the current working-tree Skill. Each Codex run used an isolated workspace and isolated home with no MCP servers or Creator editor connection.');
 lines.push('- Each case required a structured `evaluation.json`; `grade-phase.mjs` applied the finalized deterministic verifier to the captured outputs. During the initial runs, some equivalent status/operation wording was rejected by the first verifier draft; the outputs were regraded with the final acceptance rules without rerunning Codex.');
-lines.push('- One Codex run per Skill evaluated both cases. Results are a targeted regression signal, not a statistical estimate. The benchmark does not validate live Creator editor, scene persistence, or runtime behavior, and it has no no-Skill control.');
+lines.push('- One Codex run per Skill evaluated its positive and boundary cases. The baseline ran only the 13 Skills whose content changed since the pinned commit; the current phase covered all 52. This is a targeted regression signal, not a statistical estimate.');
+lines.push('- The suite has no direct Skill-load telemetry. Routing and task success are behavioral proxies only; the separate no-target-Skill comparison checks whether the cases distinguish Skill instructions from general model knowledge.');
+lines.push(`- Creator live acceptance is a separate phase for ${suite.realCreatorSkills.length} editor/content Skills on Creator 2.4.15; offline benchmark results do not establish project persistence or runtime behavior.`);
 lines.push('- Raw run artifacts and per-phase graded results are under `/private/tmp/cocos-skill-benchmark/`; the task prompts and verifier are versioned beside this report.');
 lines.push('');
 
