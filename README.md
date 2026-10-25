@@ -12,19 +12,19 @@
 
 ## 安装
 
-当前 GitHub Releases 最新版本为 `0.11.1`。CLI 源码 `package.json` 中的 `1.0.0` 是尚未发布的版本，暂时没有对应 tag 或下载资产。发布包通过 GitHub Release 分发，不从 npm 公共 registry 安装。
+CLI 当前发布版本为 `1.0.0`，通过 GitHub Release 分发，不从 npm 公共 registry 安装。
 
 ### macOS / Linux 终端
 
 ```sh
-VERSION="0.11.1"
+VERSION="1.0.0"
 npm install --global "https://github.com/baiyangzuoshu/CocosAgent/releases/download/cocos-creator-agent-cli-v${VERSION}/cocos-creator-agent-cli-v${VERSION}.tgz"
 ```
 
 ### Windows PowerShell
 
 ```powershell
-$Version = "0.11.1"
+$Version = "1.0.0"
 npm install --global "https://github.com/baiyangzuoshu/CocosAgent/releases/download/cocos-creator-agent-cli-v$Version/cocos-creator-agent-cli-v$Version.tgz"
 ```
 
