@@ -1,6 +1,6 @@
 # Cocos Creator 2.4.x 第三方 Agent Skill 系统
 
-更新日期：2026-10-25。当前 CLI 源码为 `0.12.62`，Creator 扩展为 `0.8.111`，自动化测试 `371/371` 通过；实机版本边界为 Creator `2.4.15`。Tank 项目已通过 CLI 关闭、重开和 doctor `9/9` 检查。UI 组件接口与实机证据见 [UI 验收矩阵](cocos-cli-ui-acceptance-matrix-2.4.15.md)；Prefab 已验收直接删除既有末尾 `cc.BlockInputEvents` 并来源补偿恢复、Material 数组资源追加，以及 Button.target 节点引用和 Slider.handle 组件引用往返；其他既有组件删除和数组/属性组合仍未完成。完整命令、版本、能力边界及各类编辑记录以[独立 CLI README](../../cocos-creator-agent-cli/README.md)为准。Creator 原生 CocosAgent 已移除，旧插件仅作 CLI 引导。另有 5 项可选 SDK Skills。
+更新日期：2026-10-25。CLI 包版本为 `1.0.0`，Creator 扩展为 `0.8.127`；此前自动化测试 `371/371` 通过（本次版本范围改动未重跑）；CLI 当前接受 Creator `2.4.1`–`2.4.16`，自动按 `2.4.16` 到 `2.4.1` 降序选择；实机版本证据仍只覆盖 `2.4.15`。Tank 项目已通过 CLI 关闭、重开和 doctor `9/9` 检查。UI 组件接口与实机证据见 [UI 验收矩阵](cocos-cli-ui-acceptance-matrix-2.4.15.md)；Prefab 已验收直接删除既有末尾 `cc.BlockInputEvents` 并来源补偿恢复、Material 数组资源追加，以及 Button.target 节点引用和 Slider.handle 组件引用往返；其他既有组件删除和数组/属性组合仍未完成。完整命令、版本、能力边界及各类编辑记录以[独立 CLI README](../../cocos-creator-agent-cli/README.md)为准。Creator 原生 CocosAgent 已移除，旧插件仅作 CLI 引导。另有 5 项可选 SDK Skills。
 
 ## 产品边界
 
@@ -62,7 +62,7 @@
 
 ## 版本与操作边界
 
-- 面向 Creator 2.4.x；当前仓库的工具实现与实机证据基线仍是 2.4.15。核对项目实际 patch 和目标平台后再应用 API 细节。
+- CLI 与扩展接受 Creator 2.4.1–2.4.16，自动按补丁版降序选择；当前实现细节与实机证据仍主要基于 2.4.15。核对项目实际 patch 和目标平台后再应用 API 细节。
 - Skill 是任务流程知识，不是工具合同。先盘点 Codex/Claude 当前暴露的工具；只有已安装并声明的 Creator CLI/MCP/编辑器工具才能操作活动场景、Prefab、导入设置或运行状态。
 - Host 文件工具可按项目约定编辑代码；无法通过 Creator-aware 工具安全处理的编辑器状态应说明具体缺口。禁止伪造 Creator 读回、编译、预览或运行结果。
 - 保留 Creator 生成的 `.meta`、UUID 和资源引用；把源码落盘、Creator 接受、编译/构建、运行时行为分开报告。

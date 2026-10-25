@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { runVcsStatus } from './vcs-status.mjs';
 import { runVcsImpact } from './vcs-impact.mjs';
+import { isSupportedCreatorVersion } from './bridge/contracts.mjs';
 
 const MAX_OUTPUT = 64 * 1024 * 1024;
 const MAX_DIRTY_FILES = 4000;
@@ -45,7 +46,7 @@ function context(options) {
   const relative = path.relative(gitRoot, projectRoot);
   if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) fail('PROJECT_OUTSIDE_GIT_ROOT');
   const status = runVcsStatus({ gitRoot, projectRoot });
-  if (status.creatorVersion !== '2.4.15') fail('CREATOR_VERSION_UNSUPPORTED');
+  if (!isSupportedCreatorVersion(status.creatorVersion)) fail('CREATOR_VERSION_UNSUPPORTED');
   if (!status.head) fail('VCS_HEAD_REQUIRED');
   const prefix = relative.split(path.sep).filter(Boolean).join('/');
   return { gitRoot, projectRoot, prefix, status };
@@ -268,7 +269,7 @@ function preview(ctx, options) {
     ? !options.createBranch && destinationBranch === ctx.status.branch && targetCommit === ctx.status.head
     : containsTarget;
   const plan = { schemaVersion: 1, operation, gitRoot: ctx.gitRoot, projectRoot: ctx.projectRoot,
-    creatorVersion: '2.4.15', targetRef, targetCommit, destinationBranch, createBranch: Boolean(options.createBranch),
+    creatorVersion: ctx.status.creatorVersion, targetRef, targetCommit, destinationBranch, createBranch: Boolean(options.createBranch),
     detach: Boolean(options.detach), state, noOp };
   return { ...plan, readOnly: true, phase: 'preview', planHash: sha(JSON.stringify(plan)),
     canApply: blockers.length === 0, blockers: [...new Set(blockers)], dirtyOverlapPaths: overlaps,
@@ -343,7 +344,7 @@ function runFetch(ctx, options) {
   const state = repositoryState(ctx);
   const refspec = `+refs/heads/*:refs/remotes/${remote}/*`;
   const plan = { schemaVersion: 1, operation: 'fetch', gitRoot: ctx.gitRoot, projectRoot: ctx.projectRoot,
-    creatorVersion: '2.4.15', remote, refspec, state, remoteRefs: remoteRefs(ctx.gitRoot, remote) };
+    creatorVersion: ctx.status.creatorVersion, remote, refspec, state, remoteRefs: remoteRefs(ctx.gitRoot, remote) };
   const planHash = sha(JSON.stringify(plan));
   if (!options.apply) return { ...plan, planHash, readOnly: true, phase: 'preview', canApply: true,
     effects: ['Fetch remote heads into this remote tracking namespace only.',

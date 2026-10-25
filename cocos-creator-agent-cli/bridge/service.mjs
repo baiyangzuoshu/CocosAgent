@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { CREATOR_VERSION, PROTOCOL_VERSION, COMMANDS, validateCommand, publicCatalog } from './contracts.mjs';
+import { CREATOR_VERSION, PROTOCOL_VERSION, COMMANDS, isSupportedCreatorVersion, validateCommand, publicCatalog } from './contracts.mjs';
 import { previewCommand, previewHostCapabilities, startPreview, stopAllPreviews, stopInstancePreviews } from './runtime-preview.mjs';
 import { readProjectTools } from './project-tools.mjs';
 import { loadTaskRecords, writeTaskRecord } from './task-store.mjs';
@@ -271,7 +271,7 @@ function makeInstance(body) {
     && typeof body.creatorVersion === 'string' && body.creatorVersion.length <= 32
     && typeof body.extensionVersion === 'string' && body.extensionVersion.length <= 32) {
     const reasons = [];
-    if (body.creatorVersion !== CREATOR_VERSION) reasons.push('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(body.creatorVersion)) reasons.push('CREATOR_VERSION_MISMATCH');
     if (body.extensionVersion !== EXTENSION_VERSION) reasons.push('EXTENSION_VERSION_MISMATCH');
     if (body.contractFingerprint !== CONTRACT_FINGERPRINT) reasons.push('COMMAND_CONTRACT_MISMATCH');
     if (!validCapabilities(body.capabilities)) reasons.push('CAPABILITIES_INVALID');
@@ -286,7 +286,7 @@ function makeInstance(body) {
       if (rejectedInstances.size > 16) rejectedInstances.delete(rejectedInstances.keys().next().value);
     }
   }
-  if (!body || !/^[0-9a-f-]{36}$/i.test(body.instanceId || '') || body.creatorVersion !== CREATOR_VERSION
+  if (!body || !/^[0-9a-f-]{36}$/i.test(body.instanceId || '') || !isSupportedCreatorVersion(body.creatorVersion)
     || body.extensionVersion !== EXTENSION_VERSION || body.contractFingerprint !== CONTRACT_FINGERPRINT
     || !validCapabilities(body.capabilities)) throw Object.assign(new Error('CREATOR_REGISTRATION_INVALID'), { status: 400 });
   let projectRoot;

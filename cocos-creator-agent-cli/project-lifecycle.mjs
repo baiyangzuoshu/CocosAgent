@@ -2,9 +2,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { discoverCreatorInstallations, resolveCreatorExecutable } from './creator-workflows.mjs';
+import { resolveCreatorExecutable, resolvePreferredCreatorExecutable } from './creator-workflows.mjs';
+import { CREATOR_VERSION, SUPPORTED_CREATOR_VERSIONS, isSupportedCreatorVersion } from './bridge/contracts.mjs';
 
-const SUPPORTED_CREATOR_VERSION = '2.4.15';
 const DEFAULT_MAX_DEPTH = 3;
 const MAX_SCAN_DIRECTORIES = 10000;
 const MAX_PROJECT_JSON_BYTES = 64 * 1024;
@@ -90,7 +90,7 @@ export function listCreatorProjects({ searchRoots, maxDepth = DEFAULT_MAX_DEPTH,
             projectRoot: current.directory,
             creatorVersion: project.version,
             projectId: typeof project.id === 'string' ? project.id : null,
-            supported: project.version === SUPPORTED_CREATOR_VERSION,
+            supported: isSupportedCreatorVersion(project.version),
           });
           continue;
         }
@@ -107,7 +107,8 @@ export function listCreatorProjects({ searchRoots, maxDepth = DEFAULT_MAX_DEPTH,
   }
 
   projects.sort((left, right) => left.name.localeCompare(right.name) || left.projectRoot.localeCompare(right.projectRoot));
-  return { schemaVersion: 1, supportedCreatorVersion: SUPPORTED_CREATOR_VERSION, searchedRoots: roots,
+  return { schemaVersion: 1, supportedCreatorVersion: CREATOR_VERSION,
+    creatorVersionPreference: SUPPORTED_CREATOR_VERSIONS, searchedRoots: roots,
     maxDepth, scannedDirectories: Math.min(scannedDirectories, MAX_SCAN_DIRECTORIES), truncated, projects, issues };
 }
 
@@ -119,7 +120,7 @@ function requireProjectRoot(projectRoot) {
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw coded('PROJECT_ROOT_INVALID');
   const inspected = inspectProject(root);
   if (!inspected.project) throw coded(inspected.issue || 'PROJECT_ROOT_INVALID');
-  if (inspected.project.version !== SUPPORTED_CREATOR_VERSION)
+  if (!isSupportedCreatorVersion(inspected.project.version))
     throw coded('PROJECT_CREATOR_VERSION_MISMATCH', inspected.project.version);
   return { root, project: inspected.project };
 }
@@ -134,19 +135,15 @@ function realDirectory(input, code) {
 
 function resolveTemplateRoot({ creatorPath, templateRoot, platform = process.platform } = {}) {
   if (creatorPath !== undefined && templateRoot !== undefined) throw coded('PROJECT_TEMPLATE_ROOT_EXCLUSIVE');
-  if (templateRoot !== undefined) return realDirectory(templateRoot, 'PROJECT_TEMPLATE_ROOT_INVALID');
-  let bundleRoot;
-  if (creatorPath !== undefined) bundleRoot = resolveCreatorExecutable(creatorPath, { platform }).bundleRoot;
-  else {
-    const installations = discoverCreatorInstallations({ platform }).installations
-      .filter((installation) => installation.creatorVersion === SUPPORTED_CREATOR_VERSION && installation.executableAvailable);
-    if (installations.length === 0) throw coded('CREATOR_INSTALLATION_NOT_FOUND');
-    if (installations.length > 1) throw coded('CREATOR_INSTALLATION_AMBIGUOUS', installations.map((item) => item.bundlePath).join(', '));
-    bundleRoot = installations[0].bundlePath;
-  }
+  if (templateRoot !== undefined) return { root: realDirectory(templateRoot, 'PROJECT_TEMPLATE_ROOT_INVALID'), creatorVersion: null };
+  const creator = creatorPath !== undefined
+    ? resolveCreatorExecutable(creatorPath, { platform })
+    : resolvePreferredCreatorExecutable({ platform });
+  const bundleRoot = creator.bundleRoot;
   const resourcesRoot = platform === 'win32'
     ? path.join(bundleRoot, 'resources') : path.join(bundleRoot, 'Contents', 'Resources');
-  return realDirectory(path.join(resourcesRoot, 'templates'), 'PROJECT_TEMPLATES_NOT_FOUND');
+  return { root: realDirectory(path.join(resourcesRoot, 'templates'), 'PROJECT_TEMPLATES_NOT_FOUND'),
+    creatorVersion: creator.creatorVersion };
 }
 
 function inspectTemplate(templateRoot, templateId) {
@@ -157,13 +154,14 @@ function inspectTemplate(templateRoot, templateId) {
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw coded('PROJECT_TEMPLATE_NOT_FOUND', templateId);
   const inspected = inspectProject(templatePath);
   if (!inspected.project) throw coded('PROJECT_TEMPLATE_INVALID', inspected.issue);
-  const major = Number(inspected.project.version.split('.')[0]);
-  if (major !== 2) throw coded('PROJECT_TEMPLATE_CREATOR_VERSION_UNSUPPORTED', inspected.project.version);
+  if (!isSupportedCreatorVersion(inspected.project.version))
+    throw coded('PROJECT_TEMPLATE_CREATOR_VERSION_UNSUPPORTED', inspected.project.version);
   return { templatePath: fs.realpathSync(templatePath), project: inspected.project };
 }
 
 export function listCreatorTemplates({ creatorPath, templateRoot, platform } = {}) {
-  const root = resolveTemplateRoot({ creatorPath, templateRoot, platform });
+  const resolved = resolveTemplateRoot({ creatorPath, templateRoot, platform });
+  const root = resolved.root;
   const templates = [];
   const issues = [];
   for (const entry of fs.readdirSync(root, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
@@ -186,7 +184,8 @@ export function listCreatorTemplates({ creatorPath, templateRoot, platform } = {
       issues.push({ id: entry.name, code: error.code || 'PROJECT_TEMPLATE_INVALID' });
     }
   }
-  return { schemaVersion: 1, creatorVersion: SUPPORTED_CREATOR_VERSION, templateRoot: root, templates, issues };
+  return { schemaVersion: 1, creatorVersion: resolved.creatorVersion || CREATOR_VERSION,
+    templateRoot: root, templates, issues };
 }
 
 function validateProjectName(name) {
@@ -206,7 +205,7 @@ function excludedDirectory(relative, name) {
   return !relative && ROOT_CACHE_DIRECTORIES.has(name);
 }
 
-function copyProjectTree(sourceRoot, targetRoot, name, projectId, creatorVersion = SUPPORTED_CREATOR_VERSION) {
+function copyProjectTree(sourceRoot, targetRoot, name, projectId, creatorVersion) {
   let copiedFiles = 0;
   let copiedBytes = 0;
   const skippedDirectories = [];
@@ -271,14 +270,18 @@ function materializeProject({ sourceRoot, targetPath, name, operation }) {
 
   const projectName = validateProjectName(name) || targetName;
   const projectId = randomUUID();
+  const sourceProject = inspectProject(sourceRoot);
+  if (!sourceProject.project || !isSupportedCreatorVersion(sourceProject.project.version))
+    throw coded('PROJECT_CREATOR_VERSION_MISMATCH', sourceProject.project?.version || sourceProject.issue);
+  const creatorVersion = sourceProject.project.version;
   const stagingRoot = path.join(canonicalParent, `.${targetName}.cocos-${operation}-${randomUUID()}`);
   try {
-    const copied = copyProjectTree(sourceRoot, stagingRoot, projectName, projectId, SUPPORTED_CREATOR_VERSION);
+    const copied = copyProjectTree(sourceRoot, stagingRoot, projectName, projectId, creatorVersion);
     try { fs.lstatSync(targetRoot); throw coded('PROJECT_TARGET_ALREADY_EXISTS'); }
     catch (error) { if (error?.code !== 'ENOENT') throw error; }
     fs.renameSync(stagingRoot, targetRoot);
     return { schemaVersion: 1, success: true, projectRoot: targetRoot, projectName, projectId,
-      creatorVersion: SUPPORTED_CREATOR_VERSION, ...copied, opened: false,
+      creatorVersion, ...copied, opened: false,
       note: 'The project was created locally and is not open. Verify its name, path, and Creator version in Cocos Dashboard before opening it.' };
   } catch (error) {
     try { fs.rmSync(stagingRoot, { recursive: true, force: true }); } catch (_) {}
@@ -292,7 +295,7 @@ export function cloneCreatorProject({ projectRoot, targetPath, name } = {}) {
 }
 
 export function createCreatorProject({ templateId, targetPath, name, creatorPath, templateRoot, platform } = {}) {
-  const root = resolveTemplateRoot({ creatorPath, templateRoot, platform });
+  const root = resolveTemplateRoot({ creatorPath, templateRoot, platform }).root;
   const source = inspectTemplate(root, templateId);
   return { sourceTemplateId: templateId, sourceTemplateRoot: source.templatePath,
     ...materializeProject({ sourceRoot: source.templatePath, targetPath, name, operation: 'create' }) };

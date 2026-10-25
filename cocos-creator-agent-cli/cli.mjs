@@ -29,7 +29,7 @@ let globalOptionError = null;
 let jsonOutput = false;
 
 const HELP_LINES = [
-  'Cocos Creator Agent CLI (Creator 2.4.15; commit commands apply their reviewed plans without a Creator dialog)',
+  'Cocos Creator Agent CLI (Creator 2.4.x; commit commands apply their reviewed plans without a Creator dialog)',
   '  --version | version',
   '  help [<command> [<subcommand>]] | help search <query>',
   '  catalog [--format json]',
@@ -114,8 +114,8 @@ const HELP_LINES = [
   '  call --instance <instance-id> --command creator.scene.ui-events.set.compensate.plan --input <sourceOperationId>',
   '  call --instance <instance-id> --command creator.scene.ui-events.set.compensate.commit --input <operationId,planHash>',
   '  call --instance <instance-id> --command creator.scene.ui-events.set.compensate.reconcile --input <operationId>',
-  '  creator build --project-root <path> --creator <Creator-install-path-or-CocosCreator.exe> --platform web-mobile|web-desktop|android|ios|mac|win32 [--build-path <new-path>] [--debug] [--auto-compile] [--excluded-modules <json-array>] [--timeout-ms N]',
-  '  creator compile --project-root <path> --creator <Creator-install-path-or-CocosCreator.exe> --platform android|ios|mac|win32 --build-path <existing-native-build-path> [--debug] [--timeout-ms N]',
+  '  creator build --project-root <path> [--creator <Creator-install-path-or-CocosCreator.exe>] --platform web-mobile|web-desktop|android|ios|mac|win32 [--build-path <new-path>] [--debug] [--auto-compile] [--excluded-modules <json-array>] [--timeout-ms N]',
+  '  creator compile --project-root <path> [--creator <Creator-install-path-or-CocosCreator.exe>] --platform android|ios|mac|win32 --build-path <existing-native-build-path> [--debug] [--timeout-ms N]',
   '  creator test --instance <instance-id> --session <preview-session-id> --input <actions-and-assertions-json>',
   '  creator test --project-root <path> [--list] [--suite <id>] [--rerun-failed <results.json>] [--shard <index>/<total>] [--coverage] [--instance <id>] [--session <id>] [--report-dir <new-path>]',
   '  creator test merge --reports <json-array-of-shard-results.json> [--report-dir <new-path>]',

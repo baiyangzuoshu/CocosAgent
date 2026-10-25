@@ -162,7 +162,7 @@ function commandAnnotations(access) {
 const infrastructureTools = [
   {
     name: 'cocos_vcs_workflow_plan',
-    description: 'Preview a Git fetch, branch switch, fast-forward sync, or uncommitted merge for an exact Creator 2.4.15 project. Binds HEAD, target commit or remote refs, repository configuration, index and local file contents to a plan hash. Reports incoming changes, metadata pairing and blockers; does not fetch or modify Git.',
+    description: 'Preview a Git fetch, branch switch, fast-forward sync, or uncommitted merge for an exact supported Creator 2.4.x project. Binds HEAD, target commit or remote refs, repository configuration, index and local file contents to a plan hash. Reports incoming changes, metadata pairing and blockers; does not fetch or modify Git.',
     inputSchema: { type: 'object', required: ['gitRoot', 'projectRoot', 'operation'],
       properties: VCS_WORKFLOW_PROPERTIES, additionalProperties: false },
     annotations: READ_ONLY_ANNOTATIONS,
@@ -192,7 +192,7 @@ const infrastructureTools = [
   },
   {
     name: 'cocos_instances_list',
-    description: 'List Creator 2.4.15 editor instances connected to the local Cocos bridge.',
+    description: 'List supported Creator 2.4.x editor instances connected to the local Cocos bridge.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: READ_ONLY_ANNOTATIONS,
   },

@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { bridgeStatus, listInstances, getCapabilities } from './bridge/client.mjs';
-import { CREATOR_VERSION, PROTOCOL_VERSION } from './bridge/contracts.mjs';
+import { CREATOR_VERSION, PROTOCOL_VERSION, SUPPORTED_CREATOR_VERSIONS, isSupportedCreatorVersion } from './bridge/contracts.mjs';
 import { extensionStatus, validateProjectRoot } from './extension-lifecycle.mjs';
 
 const PACKAGE_ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -43,6 +43,7 @@ export async function runDoctor({ packageInfo, projectRoot: requestedProjectRoot
     const extensionMetadataPath = path.join(PACKAGE_ROOT, 'creator-extension/package.json');
     extensionPackage = JSON.parse(fs.readFileSync(extensionMetadataPath, 'utf8'));
     const valid = fingerprint.contract.creatorVersion === CREATOR_VERSION
+      && JSON.stringify(fingerprint.contract.supportedCreatorVersions) === JSON.stringify(SUPPORTED_CREATOR_VERSIONS)
       && extensionPackage.name === 'cocos-creator-agent-extension'
       && extensionPackage['cocos-creator-agent']?.creatorVersion === CREATOR_VERSION;
     checks.push(check('bundled-extension', valid ? 'pass' : 'error',
@@ -118,7 +119,7 @@ export async function runDoctor({ packageInfo, projectRoot: requestedProjectRoot
     checks.push(check('selected-instance', 'error', 'The requested instance ID is not connected to the local bridge.', { instanceId: requestedInstanceId }));
   }
   for (const instance of selectedInstances) {
-    const identityMatches = instance.creatorVersion === CREATOR_VERSION
+    const identityMatches = isSupportedCreatorVersion(instance.creatorVersion)
       && (!extensionPackage || instance.extensionVersion === extensionPackage.version);
     checks.push(check(`instance:${instance.instanceId}`, identityMatches ? 'pass' : 'error',
       identityMatches ? 'Creator and extension versions match the bundled CLI contract.' : 'Creator or extension version differs from the bundled CLI contract.',

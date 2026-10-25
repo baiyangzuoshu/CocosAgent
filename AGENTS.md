@@ -17,7 +17,7 @@
 ## 仓库级约束
 
 - **Creator 工程身份：** 每次需要打开或切换 Creator 工程，先在 Cocos Dashboard 核对项目名称、绝对路径、Creator 版本和打开状态；进入编辑器后再核对窗口版本及面板报告的工程路径。身份不一致就停止，不调用项目工具、不读写工程。
-- **版本边界：** 当前第三方 CLI/MCP/Creator 扩展实现与实机验收只推进 Creator 2.4.15。Creator 3.8 新功能、场景接线和实机验收暂停；只有用户明确要求或涉及现有数据完整性/安全问题时再触及，并说明范围。
+- **版本边界：** 第三方 CLI/MCP/Creator 扩展接受 Creator 2.4.1–2.4.16；自动选择按 2.4.16、2.4.15……2.4.1 降序，显式路径优先。当前实机验收证据仍只覆盖 Creator 2.4.15，不能外推到其他补丁版。Creator 3.8 新功能、场景接线和实机验收暂停；只有用户明确要求或涉及现有数据完整性/安全问题时再触及，并说明范围。
 - **产品线边界：** Creator 原生 CocosAgent 已停止并从当前仓库移除；不要从历史文档或备份恢复其产品实现。`cocos-creator-agent-cli/` 独立拥有 Codex/Claude MCP server 配置与 Creator Skills；`plugins/cocos-creator-agent/` 只保留兼容引导 Skill，不得恢复插件内 MCP server 或重复维护领域 Skills。Creator 项目扩展仍由 CLI 独立安装/更新。可选厂商 SDK Skills 独立放在 `plugins/cocos-creator-agent-sdk/`。
 - **项目数据：** Creator 资源、场景和 Prefab 要保留编辑器生成的 `.meta`、UUID 与引用；不要把 `library/`、`temp/`、`local/`、`build/` 等缓存/产物当成源文件。跨版本操作分别实现、分别验证。
 - **证据表述：** 区分文档、静态源码、构建、测试、编辑器与目标运行时证据；明确版本、平台、工程和限制。源码接线、模拟测试或构建成功都不能替代目标编辑器/运行时验收。

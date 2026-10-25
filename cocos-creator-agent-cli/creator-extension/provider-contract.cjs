@@ -1,6 +1,8 @@
 'use strict';
 
 const crypto = require('crypto');
+const creatorContract = require('./command-contract.json');
+const supportedCreatorVersions = new Set(creatorContract.supportedCreatorVersions || []);
 
 const PROVIDER_ID = /^[a-z][a-z0-9-]{0,63}$/;
 const COMMAND_ID = /^[a-z][a-z0-9-]{0,47}$/;
@@ -75,7 +77,8 @@ function validateSchema(schema, depth = 0, state = { nodes: 0 }) {
 
 function normalizeProvider(packageName, metadata) {
     if (typeof packageName !== 'string' || !PROVIDER_ID.test(packageName) || !metadata || typeof metadata !== 'object'
-        || Array.isArray(metadata) || metadata.creatorVersion !== '2.4.15' || metadata.protocolVersion !== '1'
+        || Array.isArray(metadata) || (metadata.creatorVersion !== creatorContract.creatorVersion
+            && !supportedCreatorVersions.has(metadata.creatorVersion)) || metadata.protocolVersion !== '1'
         || !Array.isArray(metadata.commands) || metadata.commands.length > MAX_COMMANDS
         || Object.keys(metadata).some((key) => !['creatorVersion', 'protocolVersion', 'commands'].includes(key)))
         throw coded('EXTENSION_PROVIDER_METADATA_INVALID');

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import { isSupportedCreatorVersion } from './bridge/contracts.mjs';
 
 const EXTENSION_NAME = 'cocos-creator-agent-extension';
 const INSTALL_MARKER = '.cocos-creator-agent-install.json';
@@ -17,6 +18,11 @@ export function validateProjectRoot(projectRoot) {
   const projectFile = path.join(root, 'project.json');
   const projectStat = fs.lstatSync(projectFile);
   if (!rootStat.isDirectory() || !projectStat.isFile() || projectStat.isSymbolicLink()) throw new Error('TARGET_IS_NOT_COCOS_PROJECT');
+  let project;
+  try { project = JSON.parse(fs.readFileSync(projectFile, 'utf8')); }
+  catch (_) { throw new Error('PROJECT_JSON_INVALID'); }
+  if (!project || typeof project !== 'object' || Array.isArray(project)
+    || !isSupportedCreatorVersion(project.version)) throw new Error('PROJECT_CREATOR_VERSION_UNSUPPORTED');
   return root;
 }
 

@@ -2,7 +2,7 @@
   "name": "cocos-creator-agent-cli",
   "version": "1.0.0",
   "type": "module",
-  "description": "Standalone Cocos Creator 2.4.15 CLI with MCP configuration, Agent Skills, bridge, and project extension management.",
+  "description": "Standalone Cocos Creator 2.4.x CLI with MCP configuration, Agent Skills, bridge, and project extension management.",
   "repository": {
     "type": "git",
     "url": "https://github.com/baiyangzuoshu/CocosAgent.git",

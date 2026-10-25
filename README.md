@@ -2,12 +2,12 @@
 
 `cocos-creator-agent` 是独立的 Cocos Creator Agent 命令行工具：可以直接在终端使用，也可以连接 Codex、Claude Code、Cursor、VS Code 或 DeepSeek Harness。它提供 MCP 工具、Creator 工作流 Skills 和项目扩展管理；不需要另装一个 Host 插件。
 
-当前编辑器连接与项目操作支持 **Cocos Creator 2.4.15**。Creator 3.8 不在当前支持范围内。
+当前编辑器连接与项目操作支持 **Cocos Creator 2.4.1–2.4.16**。启动新编辑器或执行构建/编译时，自动按 2.4.16、2.4.15、2.4.14……2.4.1 的顺序优先使用已安装版本中最高的补丁版；已打开的受支持实例会复用，传入 `--creator` 时使用指定安装。Creator 3.8 不在当前支持范围内。实机验收证据目前仍以 2.4.15 为准。
 
 ## 环境要求
 
 - Node.js 20 或更高版本。
-- 要使用编辑器连接能力，准备一个 Creator 2.4.15 工程和对应版本的编辑器。CLI 的 Creator 编辑器发现与启动支持 macOS、Windows。
+- 要使用编辑器连接能力，准备一个 Creator 2.4.1–2.4.16 工程和对应版本的编辑器。CLI 的 Creator 编辑器发现与启动支持 macOS、Windows。
 - Codex、Claude Code 等 Agent Host 是可选的；不使用 Host 时仍可直接运行 CLI 命令。
 
 ## 安装

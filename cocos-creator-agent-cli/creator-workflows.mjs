@@ -4,8 +4,8 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { callCommand, disconnectInstance, listInstances } from './bridge/client.mjs';
+import { CREATOR_VERSION, compareCreatorVersionPriority, isSupportedCreatorVersion } from './bridge/contracts.mjs';
 
-const CREATOR_VERSION = '2.4.15';
 const BUILD_PLATFORMS = new Set(['web-mobile', 'web-desktop', 'android', 'ios', 'mac', 'win32']);
 const NATIVE_PLATFORMS = new Set(['android', 'ios', 'mac', 'win32']);
 const MAX_LOG_BYTES = 128 * 1024;
@@ -23,7 +23,7 @@ function canonicalProjectRoot(projectRoot) {
   const projectStat = fs.lstatSync(projectFile);
   if (!stat.isDirectory() || !projectStat.isFile() || projectStat.isSymbolicLink()) throw coded('PROJECT_ROOT_INVALID');
   const project = JSON.parse(fs.readFileSync(projectFile, 'utf8'));
-  if (project.version !== CREATOR_VERSION) throw coded('PROJECT_CREATOR_VERSION_MISMATCH');
+  if (!isSupportedCreatorVersion(project.version)) throw coded('PROJECT_CREATOR_VERSION_MISMATCH', project.version);
   return { root, project };
 }
 
@@ -110,7 +110,7 @@ export function resolveCreatorExecutable(creatorPath, { platform = process.platf
     const installRoot = path.dirname(executable);
     const version = windowsCreatorVersion(installRoot);
     if (!version) throw coded('CREATOR_VERSION_UNREADABLE');
-    if (version !== CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH', version);
+    if (!isSupportedCreatorVersion(version)) throw coded('CREATOR_VERSION_MISMATCH', version);
     return { executable, bundleRoot: installRoot, creatorVersion: version };
   }
   if (platform !== 'darwin') throw coded('CREATOR_EXECUTABLE_PLATFORM_UNSUPPORTED', platform);
@@ -125,7 +125,7 @@ export function resolveCreatorExecutable(creatorPath, { platform = process.platf
   catch (_) { throw coded('CREATOR_VERSION_UNREADABLE'); }
   const versionMatch = plist.match(/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/);
   const version = versionMatch?.[1]?.trim();
-  if (version !== CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH', version || 'unreadable bundle version');
+  if (!isSupportedCreatorVersion(version)) throw coded('CREATOR_VERSION_MISMATCH', version || 'unreadable bundle version');
   return { executable, bundleRoot, creatorVersion: version };
 }
 
@@ -235,8 +235,8 @@ function inspectCreatorBundle(bundlePath) {
     executableAvailable = executableStat.isFile() && !!(executableStat.mode & 0o111);
   } catch (_) {}
   return { bundlePath, executable, creatorVersion, executableAvailable,
-    supported: executableAvailable && creatorVersion === CREATOR_VERSION,
-    status: !executableAvailable || !creatorVersion ? 'invalid' : creatorVersion === CREATOR_VERSION ? 'supported' : 'unsupported-version' };
+    supported: executableAvailable && isSupportedCreatorVersion(creatorVersion),
+    status: !executableAvailable || !creatorVersion ? 'invalid' : isSupportedCreatorVersion(creatorVersion) ? 'supported' : 'unsupported-version' };
 }
 
 function inspectCreatorWindowsExecutable(executable) {
@@ -244,8 +244,8 @@ function inspectCreatorWindowsExecutable(executable) {
   const creatorVersion = windowsCreatorVersion(installRoot);
   const executableAvailable = regularFile(executable);
   return { bundlePath: installRoot, executable, creatorVersion, executableAvailable,
-    supported: executableAvailable && creatorVersion === CREATOR_VERSION,
-    status: !executableAvailable || !creatorVersion ? 'invalid' : creatorVersion === CREATOR_VERSION ? 'supported' : 'unsupported-version' };
+    supported: executableAvailable && isSupportedCreatorVersion(creatorVersion),
+    status: !executableAvailable || !creatorVersion ? 'invalid' : isSupportedCreatorVersion(creatorVersion) ? 'supported' : 'unsupported-version' };
 }
 
 export function discoverCreatorInstallations({ searchRoots, platform = process.platform, home, env } = {}) {
@@ -268,23 +268,37 @@ export function discoverCreatorInstallations({ searchRoots, platform = process.p
   }
   const installations = [...candidates].map((candidate) => platform === 'darwin'
     ? inspectCreatorBundle(candidate) : inspectCreatorWindowsExecutable(candidate))
-    .sort((left, right) => left.bundlePath.localeCompare(right.bundlePath));
+    .sort((left, right) => compareCreatorVersionPriority(left.creatorVersion, right.creatorVersion)
+      || left.bundlePath.localeCompare(right.bundlePath));
   return { platform, supported: true, searchedRoots: roots, scanTruncated,
     installations, matchingCreatorVersion: CREATOR_VERSION,
     matches: installations.filter((item) => item.supported).length };
 }
 
-function resolveMatchingCreator(projectVersion, searchRoots, platform = process.platform) {
-  const inventory = discoverCreatorInstallations({ ...(searchRoots ? { searchRoots } : {}), platform });
-  const matches = inventory.installations.filter((item) => item.creatorVersion === projectVersion && item.executableAvailable);
-  if (matches.length === 0) throw coded('CREATOR_INSTALLATION_NOT_FOUND', JSON.stringify({
-    projectVersion, searchedRoots: inventory.searchedRoots || [],
+function selectPreferredInstallation(inventory, projectVersion) {
+  const candidates = inventory.installations.filter((item) => isSupportedCreatorVersion(item.creatorVersion)
+    && item.executableAvailable);
+  if (!candidates.length) throw coded('CREATOR_INSTALLATION_NOT_FOUND', JSON.stringify({
+    projectVersion: projectVersion || null, supportedCreatorVersion: CREATOR_VERSION,
+    searchedRoots: inventory.searchedRoots || [],
     discoveredVersions: inventory.installations.map((item) => ({ path: item.bundlePath, version: item.creatorVersion, status: item.status })),
   }));
-  if (matches.length > 1) throw coded('CREATOR_INSTALLATION_AMBIGUOUS', JSON.stringify({
-    projectVersion, matches: matches.map((item) => item.bundlePath),
+  const preferredVersion = candidates[0].creatorVersion;
+  const preferred = candidates.filter((item) => item.creatorVersion === preferredVersion);
+  if (preferred.length > 1) throw coded('CREATOR_INSTALLATION_AMBIGUOUS', JSON.stringify({
+    projectVersion: projectVersion || null, preferredVersion, matches: preferred.map((item) => item.bundlePath),
   }));
-  return resolveCreatorExecutable(matches[0].bundlePath, { platform });
+  return preferred[0];
+}
+
+export function resolvePreferredCreatorExecutable({ searchRoots, platform = process.platform, home, env } = {}) {
+  const inventory = discoverCreatorInstallations({ ...(searchRoots ? { searchRoots } : {}), platform, home, env });
+  return resolveCreatorExecutable(selectPreferredInstallation(inventory).bundlePath, { platform });
+}
+
+function resolvePreferredProjectCreator(projectVersion, searchRoots, platform = process.platform) {
+  const inventory = discoverCreatorInstallations({ ...(searchRoots ? { searchRoots } : {}), platform });
+  return resolveCreatorExecutable(selectPreferredInstallation(inventory, projectVersion).bundlePath, { platform });
 }
 
 export function diagnoseCreatorModal(processId, { platform = process.platform, spawnSyncImpl = spawnSync } = {}) {
@@ -577,7 +591,7 @@ export function requestCreatorApplicationQuit(processId, { platform = process.pl
 }
 
 function validRejectedCreatorInstance(instance, platform) {
-  if (!instance || instance.connected !== false || instance.creatorVersion !== CREATOR_VERSION
+  if (!instance || instance.connected !== false || !isSupportedCreatorVersion(instance.creatorVersion)
     || typeof instance.extensionVersion !== 'string' || instance.extensionVersion.length > 32
     || !Number.isSafeInteger(instance.processId) || instance.processId < 1 || instance.processId > 2147483647
     || !Array.isArray(instance.reasons) || !instance.reasons.length
@@ -614,7 +628,7 @@ export async function closeCreatorProject({ instanceId, timeoutMs = 60000 }, {
       projectRoot: rejectedInstance.reportedProjectRoot, creatorVersion: rejectedInstance.creatorVersion,
       extensionVersion: rejectedInstance.extensionVersion, processId: rejectedInstance.processId,
       staleExtension: true, closeRoute: 'application.quit', alreadyExited: true };
-    if (processInfo.creator !== true || processInfo.creatorVersion !== CREATOR_VERSION)
+    if (processInfo.creator !== true || processInfo.creatorVersion !== rejectedInstance.creatorVersion)
       throw coded('CREATOR_CLOSE_PROCESS_IDENTITY_INVALID');
     requestQuitImpl(rejectedInstance.processId, { platform });
     const deadline = nowImpl() + timeoutMs;
@@ -642,7 +656,7 @@ export async function closeCreatorProject({ instanceId, timeoutMs = 60000 }, {
   }
   if (!instance || instance.connected !== true) throw coded('CREATOR_CLOSE_INSTANCE_NOT_CONNECTED');
   const isAbsoluteProjectPath = platform === 'win32' ? path.win32.isAbsolute(instance.projectRoot) : path.isAbsolute(instance.projectRoot);
-  if (instance.creatorVersion !== CREATOR_VERSION || !isAbsoluteProjectPath)
+  if (!isSupportedCreatorVersion(instance.creatorVersion) || !isAbsoluteProjectPath)
     throw coded('CREATOR_CLOSE_INSTANCE_IDENTITY_INVALID');
   if (!Number.isSafeInteger(instance.processId) || instance.processId < 1)
     throw coded('CREATOR_CLOSE_PROCESS_ID_UNAVAILABLE');
@@ -703,7 +717,7 @@ function projectInstances(inventory, projectRoot, { inspectProcessImpl = inspect
       || !Number.isSafeInteger(instance.processId) || instance.processId < 1) return false;
     const processInfo = inspectProcessImpl(instance.processId, { platform });
     return processInfo?.running === true && processInfo.creator === true
-      && processInfo.creatorVersion === CREATOR_VERSION;
+      && processInfo.creatorVersion === instance.creatorVersion && isSupportedCreatorVersion(instance.creatorVersion);
   });
   const rejected = (inventory.rejectedInstances || []).filter((instance) => {
     if (typeof instance.reportedProjectRoot !== 'string'
@@ -725,14 +739,15 @@ function sameProjectRoot(candidate, canonicalRoot) {
   catch (_) { return path.resolve(candidate) === canonicalRoot; }
 }
 
-function readyResult(receipt, instanceId, project) {
+function readyResult(receipt, instanceId, project, expectedCreatorVersion) {
   const info = receipt?.result && typeof receipt.result === 'object' ? receipt.result : receipt;
   const reportedRoot = receipt?.projectRoot || info?.projectRoot;
-  if (!sameProjectRoot(reportedRoot, project.root) || info?.creatorVersion !== CREATOR_VERSION)
+  if (!sameProjectRoot(reportedRoot, project.root) || !isSupportedCreatorVersion(info?.creatorVersion)
+    || (expectedCreatorVersion && info.creatorVersion !== expectedCreatorVersion))
     throw coded('CREATOR_OPEN_TARGET_IDENTITY_MISMATCH', JSON.stringify({
       expectedProjectRoot: project.root,
       actualProjectRoot: reportedRoot || null,
-      expectedCreatorVersion: CREATOR_VERSION,
+      expectedCreatorVersion: expectedCreatorVersion || CREATOR_VERSION,
       actualCreatorVersion: info?.creatorVersion || receipt?.creatorVersion || null,
     }));
   return { instanceId: receipt?.instanceId || instanceId, projectName: info.projectName || project.project.name || path.basename(project.root),
@@ -740,7 +755,7 @@ function readyResult(receipt, instanceId, project) {
 }
 
 async function waitForProjectReady(project, { timeoutMs, listInstancesImpl, probeProjectImpl, sleepImpl, nowImpl,
-  inspectProcessImpl, platform }) {
+  inspectProcessImpl, platform, expectedCreatorVersion }) {
   const deadline = nowImpl() + timeoutMs;
   let lastError = null;
   while (nowImpl() < deadline) {
@@ -770,7 +785,7 @@ async function waitForProjectReady(project, { timeoutMs, listInstancesImpl, prob
         const receipt = await probeProjectImpl(instance.instanceId, 'creator.project.info', {}, {
           timeoutMs: Math.min(10000, remaining),
         });
-        return { status: 'ready', ...readyResult(receipt, instance.instanceId, project) };
+        return { status: 'ready', ...readyResult(receipt, instance.instanceId, project, expectedCreatorVersion) };
       } catch (error) {
         lastError = error;
         const code = error?.code || error?.message;
@@ -791,8 +806,6 @@ export async function openCreatorProject({ projectRoot, creatorPath, waitReady =
   sleepImpl = (duration) => new Promise((resolve) => setTimeout(resolve, duration)),
 } = {}) {
   const project = canonicalProjectRoot(projectRoot);
-  const creator = creatorPath ? resolveCreatorExecutable(creatorPath, { platform: installationPlatform })
-    : resolveMatchingCreator(project.project.version, installationSearchRoots, installationPlatform);
   if (waitReady && (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 600000))
     throw coded('CREATOR_OPEN_TIMEOUT_INVALID');
 
@@ -813,6 +826,13 @@ export async function openCreatorProject({ projectRoot, creatorPath, waitReady =
     }
     existingInstance = matching[0] || null;
   }
+  const creator = creatorPath !== undefined ? resolveCreatorExecutable(creatorPath, { platform: installationPlatform })
+    : existingInstance ? null
+      : resolvePreferredProjectCreator(project.project.version, installationSearchRoots, installationPlatform);
+  if (existingInstance && creator && existingInstance.creatorVersion !== creator.creatorVersion)
+    throw coded('CREATOR_OPEN_INSTANCE_VERSION_MISMATCH', JSON.stringify({
+      instanceCreatorVersion: existingInstance.creatorVersion, requestedCreatorVersion: creator.creatorVersion,
+    }));
 
   const args = ['--path', project.root];
   let child = null;
@@ -846,14 +866,16 @@ export async function openCreatorProject({ projectRoot, creatorPath, waitReady =
     alreadyOpen: !!existingInstance,
     projectName: project.project.name || path.basename(project.root),
     projectRoot: project.root,
-    creatorVersion: creator.creatorVersion,
+    projectCreatorVersion: project.project.version,
+    creatorVersion: existingInstance?.creatorVersion || creator.creatorVersion,
+    creatorSelectionPolicy: existingInstance ? 'reuse-open-instance' : creatorPath !== undefined ? 'explicit-path' : 'highest-supported-patch',
     processId: child?.pid ?? null,
     ...(child ? { command: [creator.executable, ...args] } : {}),
   };
   if (!waitReady) return { ...base, success: true, editorReady: false, readiness: { status: 'not-checked' } };
 
   const readiness = await waitForProjectReady(project, { timeoutMs, listInstancesImpl, probeProjectImpl, sleepImpl, nowImpl,
-    inspectProcessImpl, platform: installationPlatform });
+    inspectProcessImpl, platform: installationPlatform, expectedCreatorVersion: existingInstance?.creatorVersion || creator.creatorVersion });
   if (readiness.status !== 'ready') {
     const modalDiagnosis = await diagnoseModalImpl(existingInstance?.processId || child?.pid);
     return {
@@ -949,7 +971,7 @@ export async function runCreatorWorkflow({ operation, projectRoot, creatorPath, 
   }
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 3600000) throw coded('CREATOR_WORKFLOW_TIMEOUT_INVALID');
   const project = canonicalProjectRoot(projectRoot);
-  const creator = resolveCreatorExecutable(creatorPath);
+  const creator = creatorPath !== undefined ? resolveCreatorExecutable(creatorPath) : resolvePreferredCreatorExecutable();
   const toolchain = NATIVE_PLATFORMS.has(platform) ? nativeToolchain(platform) : { status: 'not-required', missing: [] };
   if (toolchain.status === 'missing') throw coded('CREATOR_TOOLCHAIN_MISSING', toolchain.missing.join(', '));
   const outputPath = ensureOutputPath(project.root, buildPath, { mustExist: operation === 'compile' });
@@ -1033,6 +1055,7 @@ export async function runCreatorWorkflow({ operation, projectRoot, creatorPath, 
       const completedAt = new Date().toISOString();
       resolve({ operation, projectName: project.project.name || path.basename(project.root), projectRoot: project.root,
         creatorVersion: creator.creatorVersion, platform, outputPath, outputExists, toolchain,
+        creatorSelectionPolicy: creatorPath !== undefined ? 'explicit-path' : 'highest-supported-patch',
         ...(excludedModules === undefined ? {} : { excludedModules }),
         command: [creator.executable, ...args], exitCode, signal: signal || null, timedOut, builderFinished,
         success: failureCode === null, failureCode, failureReason: builderFailure,

@@ -1,7 +1,7 @@
 {
   "name": "cocos-creator-agent-extension",
-  "version": "0.8.126",
-  "description": "Project-local Creator 2.4.15 command adapter for third-party Agent Hosts.",
+  "version": "0.8.127",
+  "description": "Project-local Creator 2.4.x command adapter for third-party Agent Hosts.",
   "main": "main.js",
   "scene-script": "scene.js",
   "main-menu": {
@@ -10,7 +10,7 @@
     }
   },
   "cocos-creator-agent": {
-    "creatorVersion": "2.4.15",
+    "creatorVersion": "2.4.x",
     "protocolVersion": "0.1"
   }
 }

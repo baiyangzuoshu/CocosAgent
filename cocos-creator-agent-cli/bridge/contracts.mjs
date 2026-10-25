@@ -7,7 +7,19 @@ const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
 
 export const PROTOCOL_VERSION = '0.1';
 export const CREATOR_VERSION = contract.creatorVersion;
+export const SUPPORTED_CREATOR_VERSIONS = Object.freeze([...contract.supportedCreatorVersions]);
+const creatorVersionPriority = new Map(SUPPORTED_CREATOR_VERSIONS.map((version, index) => [version, index]));
 export const COMMANDS = new Map(contract.commands.map((item) => [item.id, item]));
+
+export function isSupportedCreatorVersion(version) {
+  return creatorVersionPriority.has(version);
+}
+
+export function compareCreatorVersionPriority(left, right) {
+  const leftPriority = creatorVersionPriority.get(left) ?? Number.POSITIVE_INFINITY;
+  const rightPriority = creatorVersionPriority.get(right) ?? Number.POSITIVE_INFINITY;
+  return leftPriority - rightPriority;
+}
 
 export function validateCommand(commandId, input) {
   const command = COMMANDS.get(commandId);

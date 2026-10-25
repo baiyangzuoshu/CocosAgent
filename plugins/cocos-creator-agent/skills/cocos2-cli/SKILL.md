@@ -5,6 +5,8 @@ description: Set up the standalone Cocos Creator CLI MCP server and install its 
 
 # Cocos Creator CLI setup
 
+The CLI supports Creator 2.4.1–2.4.16. Automatic editor selection prefers 2.4.16, then 2.4.15 down through 2.4.1; an explicit `--creator` path overrides that order. Current real-editor acceptance evidence covers 2.4.15.
+
 The standalone `cocos-creator-agent` CLI owns the MCP server, client configuration, and bundled Creator workflow skills. Use this bootstrap skill only to install or repair that CLI integration.
 
 1. Check `cocos-creator-agent version --format json` and `cocos-creator-agent doctor`.

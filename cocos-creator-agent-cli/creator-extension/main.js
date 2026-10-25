@@ -20,6 +20,8 @@ const contract = require('./command-contract.json');
 const { normalizeProvider, validateArguments, canonical, PROVIDER_ID, COMMAND_ID } = require('./provider-contract.cjs');
 
 const EXPECTED_CREATOR_VERSION = contract.creatorVersion;
+const SUPPORTED_CREATOR_VERSIONS = new Set(contract.supportedCreatorVersions || []);
+function isSupportedCreatorVersion(version) { return SUPPORTED_CREATOR_VERSIONS.has(version); }
 const PROTOCOL_VERSION = '0.1';
 const STATE_FILE = path.join(os.homedir(), '.cocos-creator-agent', 'third-party-bridge.json');
 const OPERATION_DIRECTORY = path.join(os.homedir(), '.cocos-creator-agent', 'creator-operations');
@@ -306,7 +308,7 @@ async function startPreview(input, context) {
     if (!Editor.Ipc || typeof Editor.Ipc.sendToPanel !== 'function') throw coded('CREATOR_PREVIEW_IPC_UNAVAILABLE');
     const currentRoot = projectRoot();
     const currentVersion = editorVersion();
-    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(currentVersion)) throw coded('CREATOR_VERSION_MISMATCH');
     const scene = await callScene('snapshot', { maxNodes: 1 });
     if (!scene || scene.available !== true || typeof scene.sceneName !== 'string' || typeof scene.sceneUuid !== 'string')
         throw coded('ACTIVE_SCENE_IDENTITY_UNAVAILABLE');
@@ -1258,7 +1260,7 @@ function inspectImportSource(sourcePath, projectRootPath) {
 function verifyAssetImportPlan(operation, { requireCurrentContract = true, requireAbsent = true, verifySource = true } = {}) {
     const plan = operation.plan;
     if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
-    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+    if (editorVersion() !== plan.creatorVersion || !isSupportedCreatorVersion(plan.creatorVersion))
         throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
     if (requireCurrentContract && (plan.extensionVersion !== extensionPackage.version
         || plan.contractFingerprint !== CONTRACT_FINGERPRINT)) throw coded('OPERATION_CONTRACT_MISMATCH');
@@ -1281,7 +1283,7 @@ async function createAssetImportPlan(input) {
         || typeof Editor.assetdb.queryAssets !== 'function') throw coded('ASSETDB_IMPORT_UNAVAILABLE');
     const root = projectRoot();
     const version = editorVersion();
-    if (version !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(version)) throw coded('CREATOR_VERSION_MISMATCH');
     const target = safeNewAssetTarget(input.assetPath);
     const source = inspectImportSource(input.sourcePath, root);
     if (!source.extension || source.extension !== target.extension) throw coded('ASSET_IMPORT_EXTENSION_MISMATCH');
@@ -1577,7 +1579,7 @@ function assetMoveStateMatches(actual, expected, { allowPathDerivedMetaKey = fal
 async function verifyAssetMoveBefore(operation, { requireCurrentContract = true } = {}) {
     const plan = operation.plan;
     if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
-    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+    if (editorVersion() !== plan.creatorVersion || !isSupportedCreatorVersion(plan.creatorVersion))
         throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
     if (requireCurrentContract && (plan.extensionVersion !== extensionPackage.version
         || plan.contractFingerprint !== CONTRACT_FINGERPRINT)) throw coded('OPERATION_CONTRACT_MISMATCH');
@@ -1599,7 +1601,7 @@ async function createAssetMovePlan(input) {
         || typeof Editor.assetdb.queryAssets !== 'function') throw coded('ASSETDB_MOVE_UNAVAILABLE');
     const root = projectRoot();
     const version = editorVersion();
-    if (version !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(version)) throw coded('CREATOR_VERSION_MISMATCH');
     const sourceTarget = assetTargetPaths(input.sourceAssetPath);
     const destinationTarget = assetTargetPaths(input.destinationAssetPath);
     if (sourceTarget.root !== root || destinationTarget.root !== root) throw coded('OPERATION_PROJECT_MISMATCH');
@@ -1733,7 +1735,7 @@ async function reconcileAssetMove(input) {
     const operation = readAssetMoveOperation(input.operationId);
     const plan = operation.plan;
     if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
-    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+    if (editorVersion() !== plan.creatorVersion || !isSupportedCreatorVersion(plan.creatorVersion))
         throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
     if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
     let source = null;
@@ -1840,7 +1842,7 @@ function scanAssetDeleteReferences(root, assetPath, assetUuid, subAssets = []) {
 async function verifyAssetDeleteBefore(operation, { requireCurrentContract = true } = {}) {
     const plan = operation.plan;
     if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
-    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+    if (editorVersion() !== plan.creatorVersion || !isSupportedCreatorVersion(plan.creatorVersion))
         throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
     if (requireCurrentContract && (plan.extensionVersion !== extensionPackage.version
         || plan.contractFingerprint !== CONTRACT_FINGERPRINT)) throw coded('OPERATION_CONTRACT_MISMATCH');
@@ -1869,7 +1871,7 @@ async function createAssetDeletePlan(input) {
         || typeof Editor.assetdb.containsSubAssets !== 'function') throw coded('ASSETDB_DELETE_UNAVAILABLE');
     const root = projectRoot();
     const version = editorVersion();
-    if (version !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(version)) throw coded('CREATOR_VERSION_MISMATCH');
     const asset = await queryAssetByUuid(input.assetUuid);
     if (!asset) throw coded('ASSET_UUID_NOT_FOUND');
     if (asset.isSubAsset === true || Editor.assetdb.isSubAsset(asset.url)) throw coded('ASSET_DELETE_SUB_ASSET_UNSUPPORTED');
@@ -2010,7 +2012,7 @@ async function reconcileAssetDelete(input) {
     const operation = readAssetDeleteOperation(input.operationId);
     const plan = operation.plan;
     if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
-    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+    if (editorVersion() !== plan.creatorVersion || !isSupportedCreatorVersion(plan.creatorVersion))
         throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
     if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
     let files = null;
@@ -2117,7 +2119,7 @@ async function createTextureImportSettingsPlan(input) {
     const fields = validateTextureImportSettings(input.settings);
     const root = projectRoot();
     const version = editorVersion();
-    if (version !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(version)) throw coded('CREATOR_VERSION_MISMATCH');
     const asset = await queryAssetByUuid(input.assetUuid);
     if (!asset || typeof asset.url !== 'string' || !asset.url.startsWith('db://assets/')) throw coded('ASSET_UUID_NOT_FOUND');
     const assetPath = asset.url.slice('db://assets/'.length);
@@ -2166,7 +2168,7 @@ async function createTextureImportSettingsPlan(input) {
 async function verifyTextureImportSettingsBefore(operation, { requireCurrentContract = true } = {}) {
     const plan = operation.plan;
     if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
-    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+    if (editorVersion() !== plan.creatorVersion || !isSupportedCreatorVersion(plan.creatorVersion))
         throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
     if (requireCurrentContract && (plan.extensionVersion !== extensionPackage.version
         || plan.contractFingerprint !== CONTRACT_FINGERPRINT)) throw coded('OPERATION_CONTRACT_MISMATCH');
@@ -2273,7 +2275,7 @@ async function reconcileTextureImportSettings(input) {
     const operation = readTextureImportSettingsOperation(input.operationId);
     const plan = operation.plan;
     if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
-    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+    if (editorVersion() !== plan.creatorVersion || !isSupportedCreatorVersion(plan.creatorVersion))
         throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
     if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
     operation.reconcileReason = null;
@@ -2321,7 +2323,7 @@ function validatePrefabTarget(prefabPath, requireAbsent) {
 async function verifyPrefabCreatePlan(operation, { requireCurrentContract = true, requireAbsent = true, verifySourceNode = true } = {}) {
     const plan = operation.plan;
     if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
-    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+    if (editorVersion() !== plan.creatorVersion || !isSupportedCreatorVersion(plan.creatorVersion))
         throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
     if (requireCurrentContract && (plan.extensionVersion !== extensionPackage.version
         || plan.contractFingerprint !== CONTRACT_FINGERPRINT)) throw coded('OPERATION_CONTRACT_MISMATCH');
@@ -2342,7 +2344,7 @@ async function createPrefabPlan(input) {
         || typeof Editor.assetdb.queryAssets !== 'function') throw coded('PREFAB_API_UNAVAILABLE');
     const currentRoot = projectRoot();
     const currentVersion = editorVersion();
-    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(currentVersion)) throw coded('CREATOR_VERSION_MISMATCH');
     const node = await prefabNodeState(input.sceneUuid, input.nodeUuid);
     const target = validatePrefabTarget(input.prefabPath, true);
     if (target.root !== currentRoot) throw coded('OPERATION_PROJECT_MISMATCH');
@@ -2373,7 +2375,7 @@ async function createPrefabPlan(input) {
 async function inspectPrefabSourceCommand(input) {
     if (!Editor.Project || !Editor.Project.path || !Editor.assetdb
         || typeof Editor.assetdb.queryAssets !== 'function') throw coded('PREFAB_SOURCE_INSPECT_UNAVAILABLE');
-    if (editorVersion() !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(editorVersion())) throw coded('CREATOR_VERSION_MISMATCH');
     if (typeof input.prefabUuid !== 'string'
         || !/^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$/.test(input.prefabUuid))
         throw coded('PREFAB_UUID_INVALID');
@@ -2401,7 +2403,7 @@ async function inspectPrefabSourceCommand(input) {
     } else nodes = nodes.slice(0, 100);
     const freshRow = await queryAssetByUuid(input.prefabUuid);
     if (!freshRow || freshRow.url !== row.url || freshRow.uuid !== row.uuid
-        || projectRoot() !== currentRoot || editorVersion() !== EXPECTED_CREATOR_VERSION)
+        || projectRoot() !== currentRoot || !isSupportedCreatorVersion(editorVersion()))
         throw coded('PREFAB_ASSET_IDENTITY_CHANGED');
     const freshPrefabBytes = readStableProjectFile(prefabFile, MAX_PREFAB_SERIALIZATION_BYTES, 'PREFAB_SERIALIZATION_FILE_UNSAFE');
     const freshMetaBytes = readStableProjectFile(metaFile, MAX_PREFAB_META_BYTES, 'PREFAB_META_FILE_UNSAFE');
@@ -2472,7 +2474,7 @@ async function inspectPrefabEditableCommand(input) {
 }
 
 async function inspectPrefabInstanceCommand(input) {
-    if (editorVersion() !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(editorVersion())) throw coded('CREATOR_VERSION_MISMATCH');
     if (!input || typeof input.sceneUuid !== 'string' || typeof input.nodeUuid !== 'string')
         throw coded('PREFAB_INSTANCE_INPUT_INVALID');
     const live = await callScene('prefabInstanceState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);
@@ -2514,7 +2516,7 @@ async function currentPrefabEditMode() {
 
 async function createPrefabSourcePatchPlan(input) {
     if (!prefabPatch.validInput(input)) throw coded('PREFAB_SOURCE_PATCH_INPUT_INVALID');
-    if (editorVersion() !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(editorVersion())) throw coded('CREATOR_VERSION_MISMATCH');
     const mode = await currentPrefabEditMode();
     if (mode.modeName !== 'scene' || typeof mode.sceneUuid !== 'string') throw coded('EDITOR_BUSY');
     let source = await inspectPrefabSourceCommand({ prefabUuid: input.prefabUuid, nodeUuid: input.targetNodeUuid });
@@ -2612,7 +2614,7 @@ async function createPrefabSourcePatchPlan(input) {
             ? ['apply', 'replay'].includes(sourcePlan.action) : sourcePlan.action === 'compensate';
         const sourceAfterPath = prefabPatch.targetPathAt(sourcePlan.targetNodePath, sourcePlan.expectedDiff, 'after');
         if (sourceOperation.status !== 'completed' || sourcePlan.projectRoot !== projectRoot()
-            || sourcePlan.creatorVersion !== EXPECTED_CREATOR_VERSION || sourcePlan.prefabUuid !== input.prefabUuid
+            || !isSupportedCreatorVersion(sourcePlan.creatorVersion) || sourcePlan.prefabUuid !== input.prefabUuid
             || sourcePlan.targetNodeUuid !== input.targetNodeUuid || !allowedSourceAction
             || sourceOperation.afterSourceSha256 !== source.sourceSha256 || sourceAfterPath !== input.targetNodePath)
             throw coded('PREFAB_SOURCE_OPERATION_MISMATCH');
@@ -2733,7 +2735,7 @@ async function createPrefabSourcePatchPlan(input) {
 async function verifyPrefabSourcePatchPlan(operation, { requireCurrentContract = true } = {}) {
     const plan = operation.plan;
     if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
-    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+    if (editorVersion() !== plan.creatorVersion || !isSupportedCreatorVersion(plan.creatorVersion))
         throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
     if (requireCurrentContract && (plan.extensionVersion !== extensionPackage.version
         || plan.contractFingerprint !== CONTRACT_FINGERPRINT)) throw coded('OPERATION_CONTRACT_MISMATCH');
@@ -3124,7 +3126,7 @@ function prefabInstanceOverrideReceipt(operation, observed = null) {
 async function createPrefabInstanceOverridePlan(input) {
     if (!input || typeof input.sceneUuid !== 'string' || typeof input.nodeUuid !== 'string'
         || !['apply', 'revert'].includes(input.action)) throw coded('PREFAB_INSTANCE_OVERRIDE_INPUT_INVALID');
-    if (editorVersion() !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(editorVersion())) throw coded('CREATOR_VERSION_MISMATCH');
     const snapshot = await capturePrefabInstanceOverrideSnapshot(input.sceneUuid, input.nodeUuid);
     const operationId = uuid();
     const plan = {
@@ -3174,7 +3176,7 @@ async function createPrefabInstanceOverridePlan(input) {
 async function verifyPrefabInstanceOverridePlan(operation, { requireCurrentContract = true } = {}) {
     const plan = operation.plan;
     if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
-    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+    if (editorVersion() !== plan.creatorVersion || !isSupportedCreatorVersion(plan.creatorVersion))
         throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
     if (requireCurrentContract && (plan.extensionVersion !== extensionPackage.version
         || plan.contractFingerprint !== CONTRACT_FINGERPRINT)) throw coded('OPERATION_CONTRACT_MISMATCH');
@@ -3577,7 +3579,7 @@ async function createScriptRecompilePlan(input) {
 function verifyScriptRecompileIdentity(operation, { requireCurrentContract = true, requireSameInstance = true } = {}) {
     const plan = operation.plan;
     if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
-    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+    if (editorVersion() !== plan.creatorVersion || !isSupportedCreatorVersion(plan.creatorVersion))
         throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
     if (requireCurrentContract && (plan.extensionVersion !== extensionPackage.version
         || plan.contractFingerprint !== CONTRACT_FINGERPRINT)) throw coded('OPERATION_CONTRACT_MISMATCH');
@@ -3806,7 +3808,7 @@ async function createScriptModifyPlan(input) {
 function verifyScriptModifyIdentity(operation) {
     const plan = operation.plan;
     if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
-    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+    if (editorVersion() !== plan.creatorVersion || !isSupportedCreatorVersion(plan.creatorVersion))
         throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
     if (plan.extensionVersion !== extensionPackage.version || plan.contractFingerprint !== CONTRACT_FINGERPRINT)
         throw coded('OPERATION_CONTRACT_MISMATCH');
@@ -3949,7 +3951,7 @@ async function reconcileScriptModify(input) {
     const operation = readScriptModifyOperation(input.operationId);
     const plan = operation.plan;
     if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
-    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+    if (editorVersion() !== plan.creatorVersion || !isSupportedCreatorVersion(plan.creatorVersion))
         throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
     let current;
     try { current = await currentScriptAsset(plan.scriptPath); }
@@ -3985,7 +3987,7 @@ async function createSceneNodeActivePlan(input) {
     if (!Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function') throw coded('SCENE_API_UNAVAILABLE');
     const currentRoot = projectRoot();
     const currentVersion = editorVersion();
-    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(currentVersion)) throw coded('CREATOR_VERSION_MISMATCH');
     const current = await callScene('nodeState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);
     if (!current || current.available !== true) throw coded(current && current.reason || 'SCENE_NODE_STATE_UNAVAILABLE');
     if (typeof current.nodePath !== 'string' || typeof current.active !== 'boolean'
@@ -4014,7 +4016,7 @@ async function createSceneNodeActivePlan(input) {
         diskBefore: sceneNodeDiskBaseline(diskBefore),
         expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString(),
     };
-    if (plan.creatorVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(plan.creatorVersion)) throw coded('CREATOR_VERSION_MISMATCH');
     const operation = { schemaVersion: 1, operationId: plan.operationId, operation: plan.operation,
         plan, planHash: planFingerprint(plan), status: 'planned', createdAt, plannedByInstanceId: INSTANCE_ID };
     writeOperation(operation);
@@ -4034,7 +4036,7 @@ async function createSceneNodeTransformPlan(input) {
     if (!input.values || typeof input.values !== 'object' || Array.isArray(input.values)) throw coded('SCENE_NODE_TRANSFORM_FIELDS_INVALID');
     const currentRoot = projectRoot();
     const currentVersion = editorVersion();
-    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(currentVersion)) throw coded('CREATOR_VERSION_MISMATCH');
     const current = await callScene('nodeTransformState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid,
         values: input.values }, 20000);
     if (!current || current.available !== true) throw coded(current && current.reason || 'SCENE_NODE_TRANSFORM_STATE_UNAVAILABLE');
@@ -4086,7 +4088,7 @@ async function createSceneButtonEventsPlan(input) {
     if (!Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function') throw coded('SCENE_API_UNAVAILABLE');
     const currentRoot = projectRoot();
     const currentVersion = editorVersion();
-    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(currentVersion)) throw coded('CREATOR_VERSION_MISMATCH');
     const node = await callScene('nodeState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);
     if (!node || node.available !== true) throw coded(node && node.reason || 'SCENE_NODE_STATE_UNAVAILABLE');
     if (node.sceneUuid !== input.sceneUuid || node.nodeUuid !== input.nodeUuid || typeof node.nodePath !== 'string'
@@ -4135,7 +4137,7 @@ async function createSceneNodeRenamePlan(input) {
     if (!Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function') throw coded('SCENE_API_UNAVAILABLE');
     const currentRoot = projectRoot();
     const currentVersion = editorVersion();
-    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(currentVersion)) throw coded('CREATOR_VERSION_MISMATCH');
     const current = await callScene('nodeNameState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid,
         newName: input.newName }, 20000);
     if (!current || current.available !== true) throw coded(current && current.reason || 'SCENE_NODE_NAME_STATE_UNAVAILABLE');
@@ -4184,7 +4186,7 @@ async function createSceneNodeDeletePlan(input) {
     if (!Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function') throw coded('SCENE_API_UNAVAILABLE');
     const currentRoot = projectRoot();
     const currentVersion = editorVersion();
-    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(currentVersion)) throw coded('CREATOR_VERSION_MISMATCH');
     const current = await callScene('nodeDeleteState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);
     if (!current || current.available !== true) throw coded(current && current.reason || 'SCENE_NODE_DELETE_STATE_UNAVAILABLE');
     if (current.sceneUuid !== input.sceneUuid || current.nodeUuid !== input.nodeUuid
@@ -4225,7 +4227,7 @@ async function createSceneComponentRemovePlan(input) {
     if (!Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function') throw coded('SCENE_API_UNAVAILABLE');
     const currentRoot = projectRoot();
     const currentVersion = editorVersion();
-    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(currentVersion)) throw coded('CREATOR_VERSION_MISMATCH');
     const node = await callScene('nodeState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);
     if (!node || node.available !== true) throw coded(node && node.reason || 'SCENE_NODE_STATE_UNAVAILABLE');
     const current = await callScene('componentRemoveState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid,
@@ -4274,7 +4276,7 @@ async function createSceneNodeReparentPlan(input) {
     if (!Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function') throw coded('SCENE_API_UNAVAILABLE');
     const currentRoot = projectRoot();
     const currentVersion = editorVersion();
-    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(currentVersion)) throw coded('CREATOR_VERSION_MISMATCH');
     const current = await callScene('nodeReparentState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid,
         targetParentUuid: input.targetParentUuid }, 20000);
     if (!current || current.available !== true) throw coded(current && current.reason || 'SCENE_NODE_REPARENT_STATE_UNAVAILABLE');
@@ -4332,7 +4334,7 @@ async function createSceneComponentAddPlan(input) {
     if (!Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function') throw coded('SCENE_API_UNAVAILABLE');
     const currentRoot = projectRoot();
     const currentVersion = editorVersion();
-    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(currentVersion)) throw coded('CREATOR_VERSION_MISMATCH');
     const node = await callScene('nodeState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);
     if (!node || node.available !== true) throw coded(node && node.reason || 'SCENE_NODE_STATE_UNAVAILABLE');
     if (node.sceneUuid !== input.sceneUuid || node.nodeUuid !== input.nodeUuid || typeof node.nodePath !== 'string')
@@ -4444,7 +4446,7 @@ async function createSceneComposePlan(input) {
     if (!Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function') throw coded('SCENE_API_UNAVAILABLE');
     const currentRoot = projectRoot();
     const currentVersion = editorVersion();
-    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(currentVersion)) throw coded('CREATOR_VERSION_MISMATCH');
     const operationId = uuid();
     const request = { ...input, nodes: input.nodes.map((node) => ({ ...node, uuid: uuid() })),
         buttonEvents: input.buttonEvents || [], uiEvents: input.uiEvents || [] };
@@ -4491,7 +4493,7 @@ async function createSceneComponentPropertyPlan(input) {
     if (!Editor.Scene || typeof Editor.Scene.callSceneScript !== 'function') throw coded('SCENE_API_UNAVAILABLE');
     const currentRoot = projectRoot();
     const currentVersion = editorVersion();
-    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(currentVersion)) throw coded('CREATOR_VERSION_MISMATCH');
     const node = await callScene('nodeState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);
     if (!node || node.available !== true) throw coded(node && node.reason || 'SCENE_NODE_STATE_UNAVAILABLE');
     if (node.sceneUuid !== input.sceneUuid || node.nodeUuid !== input.nodeUuid || typeof node.nodePath !== 'string')
@@ -4720,7 +4722,7 @@ function linkCompletedSceneComponentPropertyCompensation(operation) {
 function verifySceneOperationIdentity(operation, { requireCurrentContract = true } = {}) {
     const plan = operation.plan;
     if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
-    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+    if (editorVersion() !== plan.creatorVersion || !isSupportedCreatorVersion(plan.creatorVersion))
         throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
     if (requireCurrentContract && (plan.extensionVersion !== extensionPackage.version
         || plan.contractFingerprint !== CONTRACT_FINGERPRINT)) throw coded('OPERATION_CONTRACT_MISMATCH');
@@ -5196,7 +5198,7 @@ async function createSceneUiEventsPlan(input) {
         throw coded('SCENE_UI_EVENT_PROPERTY_UNSUPPORTED');
     const currentRoot = projectRoot();
     const currentVersion = editorVersion();
-    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(currentVersion)) throw coded('CREATOR_VERSION_MISMATCH');
     const node = await callScene('nodeState', { sceneUuid: input.sceneUuid, nodeUuid: input.nodeUuid }, 20000);
     if (!node || node.available !== true) throw coded(node && node.reason || 'SCENE_NODE_STATE_UNAVAILABLE');
     if (node.sceneUuid !== input.sceneUuid || node.nodeUuid !== input.nodeUuid || typeof node.nodePath !== 'string')
@@ -7524,7 +7526,7 @@ async function reconcileSceneComposeCompensation(input) {
 
 function verifyPlanIdentity(operation, { requireCurrentContract = true } = {}) {
     if (projectRoot() !== operation.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
-    if (editorVersion() !== operation.creatorVersion || operation.creatorVersion !== EXPECTED_CREATOR_VERSION)
+    if (editorVersion() !== operation.creatorVersion || !isSupportedCreatorVersion(operation.creatorVersion))
         throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
     if (requireCurrentContract && (operation.extensionVersion !== extensionPackage.version
         || operation.contractFingerprint !== CONTRACT_FINGERPRINT))
@@ -7816,7 +7818,7 @@ function readEditorEvalOperation(operationId) {
 function verifyEditorEvalIdentity(operation) {
     const plan = operation.plan;
     if (projectRoot() !== plan.projectRoot) throw coded('OPERATION_PROJECT_MISMATCH');
-    if (editorVersion() !== plan.creatorVersion || plan.creatorVersion !== EXPECTED_CREATOR_VERSION)
+    if (editorVersion() !== plan.creatorVersion || !isSupportedCreatorVersion(plan.creatorVersion))
         throw coded('OPERATION_CREATOR_VERSION_MISMATCH');
     if (plan.creatorInstanceId !== INSTANCE_ID) throw coded('OPERATION_CREATOR_INSTANCE_MISMATCH');
     if (plan.extensionVersion !== extensionPackage.version || plan.contractFingerprint !== CONTRACT_FINGERPRINT)
@@ -7843,7 +7845,7 @@ function editorEvalReceipt(operation) {
 async function createEditorEvalPlan(input, mode) {
     const currentRoot = projectRoot();
     const currentVersion = editorVersion();
-    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
+    if (!isSupportedCreatorVersion(currentVersion)) throw coded('CREATOR_VERSION_MISMATCH');
     let source;
     let scriptPath = null;
     if (mode === 'inline') source = input.source;
@@ -8136,7 +8138,7 @@ function projectInfo() {
     let metadata = {};
     try { metadata = JSON.parse(fs.readFileSync(path.join(root, 'project.json'), 'utf8')); } catch (_) {}
     const currentVersion = editorVersion();
-    if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH', `Expected ${EXPECTED_CREATOR_VERSION}; detected ${currentVersion || 'unknown'}.`);
+    if (!isSupportedCreatorVersion(currentVersion)) throw coded('CREATOR_VERSION_MISMATCH', `Expected ${EXPECTED_CREATOR_VERSION}; detected ${currentVersion || 'unknown'}.`);
     return callScene('snapshot', { maxNodes: 1 }).catch(() => ({ sceneName: null, sceneUuid: null }))
         .then((scene) => { lastSceneName = scene.sceneName || null; return ({ projectRoot: root, projectName: typeof metadata.name === 'string' ? metadata.name : path.basename(root),
             creatorVersion: currentVersion, extensionVersion: extensionPackage.version,
@@ -8443,7 +8445,7 @@ async function discoverExtensionCommands() {
                 || response.challenge !== challenge || !Array.isArray(response.commands))
                 throw coded('EXTENSION_PROVIDER_HANDSHAKE_MISMATCH');
             const live = normalizeProvider(candidate.providerId, {
-                creatorVersion: '2.4.15', protocolVersion: '1', commands: response.commands,
+                creatorVersion: EXPECTED_CREATOR_VERSION, protocolVersion: '1', commands: response.commands,
             });
             if (!providerDescriptorMatches(live.commands, candidate.commands)) throw coded('EXTENSION_PROVIDER_CONTRACT_MISMATCH');
             const provider = { providerId: candidate.providerId, providerFingerprint: candidate.providerFingerprint,
@@ -8615,7 +8617,7 @@ function pollLoop() {
         timer = null;
         try {
             const version = editorVersion();
-            if (version !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH', `Expected ${EXPECTED_CREATOR_VERSION}; detected ${version || 'unknown'}.`);
+            if (!isSupportedCreatorVersion(version)) throw coded('CREATOR_VERSION_MISMATCH', `Expected ${EXPECTED_CREATOR_VERSION}; detected ${version || 'unknown'}.`);
             const root = projectRoot();
             const state = readBridgeState();
             if (!state) { bridgeSession = null; pollLoop(); return; }

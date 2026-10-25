@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { isSupportedCreatorVersion } from './bridge/contracts.mjs';
 
-const CREATOR_VERSION = '2.4.15';
 const MAX_GIT_OUTPUT = 32 * 1024 * 1024;
 const MAX_REPORTED_FILES = 2000;
 
@@ -43,7 +43,7 @@ function ensureRoots(requestedGitRoot, requestedProjectRoot) {
   try { project = JSON.parse(fs.readFileSync(projectFile, 'utf8')); }
   catch (_) { throw coded('PROJECT_JSON_INVALID'); }
   if (!project || typeof project !== 'object' || Array.isArray(project)) throw coded('PROJECT_JSON_INVALID');
-  if (project.version !== CREATOR_VERSION) throw coded('CREATOR_VERSION_UNSUPPORTED');
+  if (!isSupportedCreatorVersion(project.version)) throw coded('CREATOR_VERSION_UNSUPPORTED');
   return { gitRoot, projectRoot, project, projectPrefix: path.relative(gitRoot, projectRoot).split(path.sep).filter(Boolean).join('/') };
 }
 
@@ -188,11 +188,11 @@ export function runVcsImpact({ gitRoot: requestedGitRoot, projectRoot: requested
     projectConfiguration: projectChanges.filter((item) => item.category === 'project-configuration').length };
   const editorWorkRequired = projectChanges.length > 0;
   return { schemaVersion: 1, readOnly: true, operation, gitRoot: roots.gitRoot, projectRoot: roots.projectRoot,
-    projectName: roots.project.name || path.basename(roots.projectRoot), creatorVersion: CREATOR_VERSION,
+    projectName: roots.project.name || path.basename(roots.projectRoot), creatorVersion: roots.project.version,
     currentBranch: branch, fromCommit: currentCommit, targetRef, targetCommit,
     ...(operation === 'sync' ? { fastForwardPossible, alreadyContainsTarget,
       mergeRequired: !fastForwardPossible && !alreadyContainsTarget } : {}),
-    targetProject, compatibleCreatorVersion: targetProject.creatorVersion === CREATOR_VERSION,
+    targetProject, compatibleCreatorVersion: isSupportedCreatorVersion(targetProject.creatorVersion),
     dirtyRepository: dirty.length > 0, dirtyOverlapPaths: overlaps,
     importImpact: { assetDbImportRequired: summary.assetDbImport > 0,
       assetIdentityReviewRequired: summary.metadata > 0, scriptRecompileRecommended: summary.scripts > 0,

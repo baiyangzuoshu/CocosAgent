@@ -3,6 +3,7 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { diffCreatorSerializedAssets, inspectCreatorSerializedAsset } from './creator-asset-diff.mjs';
+import { isSupportedCreatorVersion } from './bridge/contracts.mjs';
 
 const MAX_GIT_OUTPUT = 18 * 1024 * 1024;
 const ASSET_PATH = /\.(?:fire|prefab)$/i;
@@ -42,7 +43,8 @@ function ensureProject(gitRoot, projectRoot) {
   try { project = JSON.parse(fs.readFileSync(projectFile, 'utf8')); }
   catch (_) { throw coded('PROJECT_JSON_INVALID'); }
   if (!project || typeof project !== 'object' || Array.isArray(project)) throw coded('PROJECT_JSON_INVALID');
-  if (project.version !== '2.4.15') throw coded('CREATOR_VERSION_UNSUPPORTED');
+  if (!isSupportedCreatorVersion(project.version)) throw coded('CREATOR_VERSION_UNSUPPORTED');
+  return project;
 }
 
 function projectAssetPath(projectRoot, inputPath) {
@@ -107,7 +109,7 @@ export function runVcsDiff({ gitRoot: requestedGitRoot, projectRoot: requestedPr
   from = 'HEAD', to } = {}) {
   const gitRoot = canonicalDirectory(requestedGitRoot, 'GIT_ROOT');
   const projectRoot = canonicalDirectory(requestedProjectRoot, 'PROJECT_ROOT');
-  ensureProject(gitRoot, projectRoot);
+  const project = ensureProject(gitRoot, projectRoot);
   const asset = projectAssetPath(projectRoot, inputAssetPath);
   const metaRelative = `${asset.relative}.meta`;
   const repoPrefix = path.relative(gitRoot, projectRoot).split(path.sep).filter(Boolean).join('/');
@@ -137,7 +139,7 @@ export function runVcsDiff({ gitRoot: requestedGitRoot, projectRoot: requestedPr
   }
   const semanticDiff = diffCreatorSerializedAssets({ beforeBytes, beforeMetaBytes,
     afterBytes, afterMetaBytes, assetPath: asset.relative });
-  return { schemaVersion: 1, readOnly: true, projectRoot, gitRoot, creatorVersion: '2.4.15',
+  return { schemaVersion: 1, readOnly: true, projectRoot, gitRoot, creatorVersion: project.version,
     asset: semanticDiff.asset,
     from: { revision: from, commit: fromCommit, scope: fromCommit,
       sourceSha256: sha256(beforeBytes), metaSha256: sha256(beforeMetaBytes) },
@@ -190,7 +192,7 @@ export function runVcsObjectBlame({ gitRoot: requestedGitRoot, projectRoot: requ
   assetPath: inputAssetPath, nodeUuid, revision = 'HEAD', maxCommits = 128 } = {}) {
   const gitRoot = canonicalDirectory(requestedGitRoot, 'GIT_ROOT');
   const projectRoot = canonicalDirectory(requestedProjectRoot, 'PROJECT_ROOT');
-  ensureProject(gitRoot, projectRoot);
+  const project = ensureProject(gitRoot, projectRoot);
   const asset = projectAssetPath(projectRoot, inputAssetPath);
   if (typeof nodeUuid !== 'string' || !nodeUuid || nodeUuid.length > 128 || nodeUuid.includes('\0'))
     throw coded('VCS_BLAME_NODE_UUID_INVALID');
@@ -221,7 +223,7 @@ export function runVcsObjectBlame({ gitRoot: requestedGitRoot, projectRoot: requ
       break;
     }
   }
-  return { schemaVersion: 1, readOnly: true, projectRoot, gitRoot, creatorVersion: '2.4.15',
+  return { schemaVersion: 1, readOnly: true, projectRoot, gitRoot, creatorVersion: project.version,
     asset: { path: asset.relative, uuid: targetAsset?.snapshot.assetUuid || null,
       type: targetAsset?.snapshot.assetType || path.extname(asset.relative).slice(1) },
     nodeUuid, revision, revisionCommit: targetCommit, existsAtRevision: Boolean(targetNode),
@@ -444,7 +446,7 @@ function semanticConflict(gitRoot, sourceStages, metaSides, projectAssetRelative
 export function runVcsConflictReport({ gitRoot: requestedGitRoot, projectRoot: requestedProjectRoot } = {}) {
   const gitRoot = canonicalDirectory(requestedGitRoot, 'GIT_ROOT');
   const projectRoot = canonicalDirectory(requestedProjectRoot, 'PROJECT_ROOT');
-  ensureProject(gitRoot, projectRoot);
+  const project = ensureProject(gitRoot, projectRoot);
   const unmerged = parseIndexEntries(git(gitRoot, ['ls-files', '--unmerged', '-z']).stdout);
   const repoPrefix = path.relative(gitRoot, projectRoot).split(path.sep).filter(Boolean).join('/');
   const projectPrefix = repoPrefix ? `${repoPrefix}/` : '';
@@ -482,7 +484,7 @@ export function runVcsConflictReport({ gitRoot: requestedGitRoot, projectRoot: r
     conflicts.push(row);
   }
   conflicts.sort((left, right) => left.path.localeCompare(right.path));
-  return { schemaVersion: 1, readOnly: true, projectRoot, gitRoot, creatorVersion: '2.4.15',
+  return { schemaVersion: 1, readOnly: true, projectRoot, gitRoot, creatorVersion: project.version,
     hasConflicts: projectConflictCount > 0 || outsideProjectCount > 0,
     summary: { projectConflicts: projectConflictCount, reportedProjectConflicts: conflicts.length,
       outsideProjectConflicts: outsideProjectCount, truncated: projectConflictCount > conflicts.length,
@@ -638,7 +640,7 @@ export function runVcsConflictResolve({ gitRoot: requestedGitRoot, projectRoot: 
   if (typeof apply !== 'boolean') throw coded('VCS_CONFLICT_APPLY_INVALID');
   const gitRoot = canonicalDirectory(requestedGitRoot, 'GIT_ROOT');
   const projectRoot = canonicalDirectory(requestedProjectRoot, 'PROJECT_ROOT');
-  ensureProject(gitRoot, projectRoot);
+  const project = ensureProject(gitRoot, projectRoot);
   const requested = safeConflictPath(projectRoot, requestedPath);
   const canonicalAsset = requested.projectRelative.match(/^(.*\.(?:fire|prefab))\.meta$/i)?.[1]
     || requested.projectRelative;
@@ -668,7 +670,7 @@ export function runVcsConflictResolve({ gitRoot: requestedGitRoot, projectRoot: 
     if (assetBytes) inspectCreatorSerializedAsset({ sourceBytes: assetBytes, metaBytes, assetPath: assetRelative });
   }
   const base = { schemaVersion: 1, command: 'vcs conflicts resolve', projectRoot, gitRoot,
-    creatorVersion: '2.4.15', assetPath: canonical.projectRelative, side,
+    creatorVersion: project.version, assetPath: canonical.projectRelative, side,
     files: files.map((file) => ({ path: file.projectRelative, action: file.action,
       selectedObjectId: file.selectedObjectId, selectedSha256: file.selectedSha256,
       previousSha256: file.beforeWorking.sha256, previousStages: file.beforeStages })),

@@ -5,7 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { listInstances, callCommand, getExtensionCommands, callExtensionCommand } from './bridge/client.mjs';
-import { validateCommand } from './bridge/contracts.mjs';
+import { isSupportedCreatorVersion, validateCommand } from './bridge/contracts.mjs';
 import { mergePreviewCoverageReports } from './bridge/preview-coverage.mjs';
 import { MAX_PREVIEW_TEST_INPUT_BYTES, MAX_PREVIEW_TEST_SOURCE_BYTES, MAX_PREVIEW_TEST_TIMEOUT_MS } from './bridge/preview-test-script.mjs';
 import { startProjectFileWatch } from './creator-watch.mjs';
@@ -116,7 +116,7 @@ export function loadTestPlan(projectRoot) {
   if (!path.isAbsolute(projectRoot || '')) throw coded('PROJECT_ROOT_ABSOLUTE_PATH_REQUIRED');
   const root = fs.realpathSync(projectRoot);
   const project = JSON.parse(safeFile(root, 'project.json').bytes);
-  if (project.version !== '2.4.15') throw coded('PROJECT_CREATOR_VERSION_MISMATCH');
+  if (!isSupportedCreatorVersion(project.version)) throw coded('PROJECT_CREATOR_VERSION_MISMATCH');
   const source = safeFile(root, MANIFEST, { maxBytes: 256 * 1024 });
   const manifest = JSON.parse(source.bytes);
   rejectUnknown(manifest, ['schemaVersion', 'suites']);
@@ -215,7 +215,7 @@ export function loadTestPlan(projectRoot) {
     return { ...suite, timeoutMs: suite.timeoutMs ?? (suite.adapter === 'preview' && suite.scriptPath
       ? MAX_PREVIEW_TEST_TIMEOUT_MS : 30000) };
   });
-  return { projectRoot: root, projectName: project.name || path.basename(root), manifestPath: MANIFEST,
+  return { projectRoot: root, projectName: project.name || path.basename(root), creatorVersion: project.version, manifestPath: MANIFEST,
     manifestHash: hash(source.bytes), suites };
 }
 
@@ -418,7 +418,7 @@ function sameList(actual, expected) {
 
 function validateMergeReport(report, plan, selectedSuiteIds, expectedCoverage) {
   if (!plain(report) || report.schemaVersion !== 1 || typeof report.runId !== 'string'
-    || report.creatorVersion !== '2.4.15' || report.projectName !== plan.projectName
+    || !isSupportedCreatorVersion(report.creatorVersion) || report.projectName !== plan.projectName
     || report.manifestHash !== plan.manifestHash || report.projectRoot !== plan.projectRoot
     || report.coverageEnabled !== expectedCoverage || report.cancelled === true || report.requiresManualReview === true
     || report.passed !== (report.counts?.failed === 0 && report.counts?.passed > 0 || report.emptyShard === true)
@@ -530,6 +530,8 @@ export function mergeTestReports({ reportPaths, reportDir } = {}) {
   if (typeof coverageEnabled !== 'boolean') throw coded('TEST_MERGE_REPORT_MISMATCH');
   const entries = loaded.map(({ report, realPath }) => ({ report, realPath,
     validation: validateMergeReport(report, plan, selectedSuiteIds, coverageEnabled) }));
+  const creatorVersion = entries[0].report.creatorVersion;
+  if (entries.some((entry) => entry.report.creatorVersion !== creatorVersion)) throw coded('TEST_MERGE_REPORT_MISMATCH');
   const total = entries[0].validation.shard.total;
   if (entries.some((entry) => entry.validation.shard.total !== total)) throw coded('TEST_MERGE_REPORT_MISMATCH');
   entries.sort((left, right) => left.validation.shard.index - right.validation.shard.index);
@@ -611,7 +613,7 @@ export function mergeTestReports({ reportPaths, reportDir } = {}) {
   const startedAt = entries.map(({ report }) => report.startedAt).filter((value) => typeof value === 'string').sort()[0];
   const completedAt = entries.map(({ report }) => report.completedAt).filter((value) => typeof value === 'string').sort().at(-1);
   const report = { schemaVersion: 1, runId: randomUUID(), projectRoot: plan.projectRoot, projectName: plan.projectName,
-    creatorVersion: '2.4.15', manifestHash: plan.manifestHash, selectedSuiteIds,
+    creatorVersion, manifestHash: plan.manifestHash, selectedSuiteIds,
     mergedFrom: entries.map(({ report: source, realPath, validation }) => ({ runId: source.runId,
       reportPath: realPath, shard: validation.shard })),
     shard: { total, indexes: entries.map((entry) => entry.validation.shard.index), strategies: entries[0].report.shard.strategies },
@@ -670,15 +672,17 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
   const call = dependencies.callCommand || callCommand;
   const discover = dependencies.getExtensionCommands || getExtensionCommands;
   const invoke = dependencies.callExtensionCommand || callExtensionCommand;
+  let creatorVersion = plan.creatorVersion;
   if (selected.some((suite) => suite.adapter !== 'node')) {
     const live = await liveInstances({ start: false });
     const instance = live.instances?.find((item) => item.instanceId === instanceId);
-    if (!instance || instance.projectRoot !== plan.projectRoot || instance.creatorVersion !== '2.4.15')
+    if (!instance || instance.projectRoot !== plan.projectRoot || !isSupportedCreatorVersion(instance.creatorVersion))
       throw coded('TEST_CREATOR_IDENTITY_MISMATCH');
+    creatorVersion = instance.creatorVersion;
   }
   const started = Date.now();
   const report = { schemaVersion: 1, runId: randomUUID(), projectRoot: plan.projectRoot, projectName: plan.projectName,
-    creatorVersion: '2.4.15', manifestHash: plan.manifestHash, selectedSuiteIds: selected.map((suite) => suite.id),
+    creatorVersion, manifestHash: plan.manifestHash, selectedSuiteIds: selected.map((suite) => suite.id),
     ...(normalizedShard ? { shard: { ...normalizedShard,
       strategies: { node: 'test-case', creator: 'test-case-when-manifested-otherwise-suite',
         editor: 'test-case-when-manifested-otherwise-suite', preview: 'test-case-when-manifested-otherwise-suite' } } } : {}),
@@ -717,7 +721,7 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
         const planned = planReceipt.result;
         const expectedInput = JSON.stringify(editorInput);
         if (planned?.status !== 'planned' || planned.mode !== 'file' || planned.projectRoot !== plan.projectRoot
-          || planned.creatorVersion !== '2.4.15' || planned.creatorInstanceId !== instanceId
+          || planned.creatorVersion !== creatorVersion || planned.creatorInstanceId !== instanceId
           || planned.scriptPath !== suite.scriptPath
           || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(planned.operationId || '')
           || !/^[0-9a-f]{64}$/.test(planned.planHash || '') || !/^[0-9a-f]{64}$/.test(planned.sourceSha256 || '')
@@ -733,7 +737,7 @@ export async function runTestPlan({ projectRoot, suiteIds = [], changedPaths, in
         });
         const execution = runReceipt.result;
         if (execution?.status !== 'completed' || execution.manualReviewRequired !== false
-          || execution.projectRoot !== plan.projectRoot || execution.creatorVersion !== '2.4.15'
+          || execution.projectRoot !== plan.projectRoot || execution.creatorVersion !== creatorVersion
           || execution.creatorInstanceId !== instanceId || execution.operationId !== planned.operationId
           || execution.mode !== 'file' || execution.scriptPath !== suite.scriptPath
           || execution.sourceSha256 !== planned.sourceSha256 || execution.inputSha256 !== planned.inputSha256)
