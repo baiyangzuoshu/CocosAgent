@@ -9,6 +9,7 @@ const extensionPackage = require('./package.json');
 const authorizeCommit = require('./commit-authorization.cjs');
 const { inspectSceneAssetIdentity, inspectSceneComposition, inspectSavedSceneNode, componentValueForDisk,
     validComponentDiskValue, sceneDiskTransformMatches } = require('./scene-persistence.cjs');
+const { orderCreatedSubtreesForDeletion } = require('./scene-compose-compensation.cjs');
 const { inspectPrefabSource: inspectPrefabSourceData } = require('./prefab-source.cjs');
 const prefabPatch = require('./prefab-patch.cjs');
 const prefabInstanceOperations = require('./prefab-instance-operations.cjs');
@@ -1147,7 +1148,9 @@ function readSceneComposeOperation(operationId) {
         || typeof plan.contractFingerprint !== 'string' || typeof plan.creatorInstanceId !== 'string'
         || typeof plan.sceneUuid !== 'string' || typeof plan.sceneName !== 'string'
         || !plan.request || !Array.isArray(plan.request.nodes) || !Array.isArray(plan.request.components)
-        || !Array.isArray(plan.request.buttonEvents) || !Array.isArray(plan.assetIdentities)
+        || (plan.request.buttonEvents !== undefined && !Array.isArray(plan.request.buttonEvents))
+        || (plan.request.uiEvents !== undefined && !Array.isArray(plan.request.uiEvents))
+        || !Array.isArray(plan.assetIdentities)
         || !plan.expectedState || typeof plan.expiresAt !== 'string'
         || !['planned', 'awaiting-approval', 'cancelled', 'abandoned', 'applying', 'mutation-applied',
             'save-requested', 'save-unconfirmed', 'completed', 'not-applied', 'save-required', 'needs-reconciliation', 'conflict'].includes(operation.status))
@@ -4443,7 +4446,8 @@ async function createSceneComposePlan(input) {
     const currentVersion = editorVersion();
     if (currentVersion !== EXPECTED_CREATOR_VERSION) throw coded('CREATOR_VERSION_MISMATCH');
     const operationId = uuid();
-    const request = { ...input, nodes: input.nodes.map((node) => ({ ...node, uuid: uuid() })) };
+    const request = { ...input, nodes: input.nodes.map((node) => ({ ...node, uuid: uuid() })),
+        buttonEvents: input.buttonEvents || [], uiEvents: input.uiEvents || [] };
     const expectedState = await callScene('compositionState', request, 30000);
     if (!expectedState || expectedState.available !== true) throw coded(expectedState && expectedState.reason || 'SCENE_COMPOSE_PREFLIGHT_FAILED');
     if (expectedState.sceneUuid !== input.sceneUuid || !Array.isArray(expectedState.existingNodes)
@@ -4466,9 +4470,8 @@ async function createSceneComposePlan(input) {
         createdNodes: expectedState.createdNodes,
         components: request.components.map((item) => ({ id: item.id, nodeRef: item.nodeRef, className: item.className,
             properties: item.properties.map((property) => ({ name: property.name,
-                value: property.value && typeof property.value === 'object' ? { assetUuid: property.value.assetUuid,
-                    assetClass: property.value.assetClass } : property.value })) })),
-        buttonEvents: request.buttonEvents, assetIdentities, expiresAt: plan.expiresAt,
+                value: property.value && typeof property.value === 'object' ? { ...property.value } : property.value })) })),
+        buttonEvents: request.buttonEvents, uiEvents: request.uiEvents, assetIdentities, expiresAt: plan.expiresAt,
         diff: { action: 'compose-scene', scene: plan.sceneName,
             sceneAsset: { uuid: plan.sceneAssetIdentity.uuid, url: plan.sceneAssetIdentity.url },
             create: expectedState.createdNodes.map((item) => ({ uuid: item.uuid, name: item.name, parentUuid: item.parentUuid,
@@ -4476,6 +4479,8 @@ async function createSceneComposePlan(input) {
             addComponents: request.components.map((item) => ({ nodeRef: item.nodeRef, className: item.className })),
             bindButtonEvents: request.buttonEvents.map((item) => ({ buttonRef: item.buttonRef,
                 handlerRef: item.handlerRef, component: item.handlerComponentClassName, handler: item.handler })),
+            bindUiEvents: request.uiEvents.map((group) => ({ componentRef: group.componentRef,
+                eventProperty: group.eventProperty, events: group.events })),
             resourceReferences: assetIdentities.map((item) => ({ assetUuid: item.assetUuid, url: item.url, type: item.type })) },
         recovery: { operationId, automaticRetry: false, reconcileCommand: 'creator.scene.compose.reconcile',
             sceneSaveCompletionConfirmed: false,
@@ -6844,7 +6849,10 @@ function sceneComposeReceipt(operation, readback) {
         sceneName: plan.sceneName, sceneUuid: plan.sceneUuid, sceneAssetIdentity: plan.sceneAssetIdentity,
         createdNodes: readback && readback.nodes || [], componentCount: plan.request.components.length,
         prefabInstanceCount: plan.request.nodes.filter((item) => !!item.prefabUuid).length,
-        buttonEventCount: plan.request.buttonEvents.length, assetIdentities: plan.assetIdentities,
+        buttonEventCount: (plan.request.buttonEvents || []).length,
+        uiEventGroupCount: (plan.request.uiEvents || []).length,
+        uiEventCount: (plan.request.uiEvents || []).reduce((total, group) => total + group.events.length, 0),
+        assetIdentities: plan.assetIdentities,
         sceneSaveRequestSent: !!operation.sceneSaveRequestSent, sceneSaveCompletionConfirmed: false,
         scenePersistenceConfirmed: !!(operation.scenePersistenceReadback && operation.scenePersistenceReadback.verified),
         scenePersistenceReadback: operation.scenePersistenceReadback || null,
@@ -6855,7 +6863,7 @@ function sceneComposeReceipt(operation, readback) {
         recovery: { automaticRetry: false, reconcileCommand: 'creator.scene.compose.reconcile',
             manualSaveMayBeRequired: ['save-required', 'save-unconfirmed'].includes(operation.status),
             note: operation.scenePersistenceReadback && operation.scenePersistenceReadback.verified
-                ? 'The exact Creator scene AssetDB file and .meta were reread and semantically matched the planned nodes, transforms, components, resource references, and Button events.'
+                ? 'The exact Creator scene AssetDB file and .meta were reread and semantically matched the planned nodes, transforms, components, resource references, and UI event lists.'
                 : 'Disk persistence is not yet confirmed; inspect or save the scene in Creator, then reconcile. The save IPC has no documented acknowledgement.' } };
 }
 
@@ -6863,15 +6871,41 @@ function sceneComposeReadbackMatches(operation, readback) {
     if (!readback || readback.available !== true || readback.sceneUuid !== operation.plan.sceneUuid
         || !Array.isArray(readback.nodes) || readback.nodes.length !== operation.plan.request.nodes.length) return false;
     const nodesById = new Map(readback.nodes.map((node) => [node.id, node]));
+    const resolveUuid = (ref) => ref.startsWith('new:')
+        ? operation.plan.request.nodes.find((node) => node.id === ref.slice(4))?.uuid || null : ref.slice(5);
+    const sizeManagedByCreator = (nodeId, node) => operation.plan.request.components.some((component) =>
+        component.nodeRef === `new:${nodeId}` && ['cc.Label', 'cc.Widget'].includes(component.className))
+        || (node.allComponents || []).some((component) => ['cc.Label', 'cc.Widget'].includes(component.componentClassName));
+    const positionManagedByCreator = (expectedNode, node) => {
+        const requestedWidget = operation.plan.request.components.find((component) => component.nodeRef === `new:${expectedNode.id}`
+            && component.className === 'cc.Widget');
+        const requestedWidgetAligns = requestedWidget && requestedWidget.properties.some((property) =>
+            ['isAlignLeft', 'isAlignRight', 'isAlignTop', 'isAlignBottom'].includes(property.name) && property.value === true);
+        if (requestedWidgetAligns || (expectedNode.prefabUuid
+            && (node.allComponents || []).some((component) => component.componentClassName === 'cc.Widget')))
+            return true;
+        const parent = operation.plan.expectedState.createdNodes.find((node) => node.uuid === expectedNode.parentUuid);
+        if (!parent) return false;
+        const layout = operation.plan.request.components.find((component) => component.nodeRef === `new:${parent.id}`
+            && component.className === 'cc.Layout');
+        const type = layout && layout.properties.find((property) => property.name === 'type')?.value;
+        const enabled = layout && layout.properties.find((property) => property.name === 'enabled')?.value;
+        return !!layout && enabled !== false && Number.isFinite(type) && type !== 0;
+    };
     for (const expectedNode of operation.plan.expectedState.createdNodes) {
         const node = nodesById.get(expectedNode.id);
         if (!node || node.uuid !== expectedNode.uuid || node.name !== expectedNode.name
             || node.parentUuid !== expectedNode.parentUuid || typeof node.nodePath !== 'string') return false;
         if ((node.prefabUuid || null) !== (expectedNode.prefabUuid || null)) return false;
         if (expectedNode.prefabUuid && node.prefabRootUuid !== expectedNode.prefabRootUuid) return false;
-        for (const key of ['x', 'y', 'z', 'scaleX', 'scaleY', 'angle', 'width', 'height']) {
+        for (const key of ['x', 'y', 'z', 'scaleX', 'scaleY', 'angle', 'width', 'height',
+            ...(Object.prototype.hasOwnProperty.call(expectedNode.transform, 'anchorX') ? ['anchorX'] : []),
+            ...(Object.prototype.hasOwnProperty.call(expectedNode.transform, 'anchorY') ? ['anchorY'] : [])]) {
+            const creatorSized = ['width', 'height'].includes(key) && sizeManagedByCreator(expectedNode.id, node);
+            const layoutPositioned = ['x', 'y'].includes(key) && positionManagedByCreator(expectedNode, node);
+            const creatorControlled = creatorSized || layoutPositioned;
             if (!Number.isFinite(node.transform && node.transform[key])
-                || Math.abs(node.transform[key] - expectedNode.transform[key]) > 0.001) return false;
+                || (!creatorControlled && Math.abs(node.transform[key] - expectedNode.transform[key]) > 0.001)) return false;
         }
     }
     for (const expectedComponent of operation.plan.request.components) {
@@ -6879,39 +6913,55 @@ function sceneComposeReadbackMatches(operation, readback) {
         const component = node && node.components.find((item) => item.id === expectedComponent.id);
         if (!component || component.available === false || component.componentClassName !== expectedComponent.className) return false;
         for (const property of expectedComponent.properties) {
-            const expected = property.value && typeof property.value === 'object'
-                ? property.value.assetUuid : property.value;
+            let expected = property.value;
+            if (property.value && typeof property.value === 'object' && typeof property.value.assetUuid === 'string')
+                expected = property.value.assetUuid;
+            else if (property.value && typeof property.value === 'object' && typeof property.value.nodeRef === 'string')
+                expected = `node:${resolveUuid(property.value.nodeRef)}`;
+            else if (property.value && typeof property.value === 'object' && typeof property.value.componentRef === 'string')
+                expected = property.value.componentRef.startsWith('new:') ? `component:${property.value.componentRef.slice(4)}`
+                    : `component:${property.value.componentRef.slice(5)}:${property.value.componentInstanceId}`;
             if (!Object.is(component.propertyValues[property.name], expected)) return false;
         }
     }
-    const resolveUuid = (ref) => ref.startsWith('new:')
-        ? operation.plan.request.nodes.find((node) => node.id === ref.slice(4))?.uuid || null : ref.slice(5);
+    const expectedEvent = (event, targetRefField) => ({ targetUuid: resolveUuid(event[targetRefField]),
+        component: event.component || event.handlerComponentClassName, handler: event.handler,
+        customEventData: event.customEventData || '' });
+    const eventListsMatch = (actual, expected) => Array.isArray(actual) && actual.length === expected.length
+        && actual.every((left, index) => {
+            const right = expected[index];
+            return left.targetUuid === right.targetUuid && left.component === right.component
+                && left.handler === right.handler && (left.customEventData || '') === right.customEventData;
+        });
     const expectedByButton = new Map();
-    for (const event of operation.plan.request.buttonEvents) {
+    for (const event of (operation.plan.request.buttonEvents || [])) {
         const buttonId = event.buttonRef.slice(4);
         const buttonComponent = operation.plan.request.components.find((item) => item.nodeRef === event.buttonRef && item.className === 'cc.Button');
         if (!buttonComponent) return false;
         const node = nodesById.get(buttonId);
         const component = node && node.components.find((item) => item.id === buttonComponent.id);
         if (!component || !Array.isArray(component.clickEvents)) return false;
-        const expectedEvent = { targetUuid: resolveUuid(event.handlerRef), component: event.handlerComponentClassName,
-            handler: event.handler, customEventData: event.customEventData || '' };
         const key = `${buttonId}:${buttonComponent.id}`;
         const list = expectedByButton.get(key) || [];
-        list.push(expectedEvent);
+        list.push(expectedEvent(event, 'handlerRef'));
         expectedByButton.set(key, list);
     }
     for (const [key, expectedEvents] of expectedByButton) {
         const [buttonId, componentId] = key.split(':');
         const component = nodesById.get(buttonId)?.components.find((item) => item.id === componentId);
         const actual = component && component.clickEvents || [];
-        if (actual.length !== expectedEvents.length) return false;
-        for (let index = 0; index < actual.length; index += 1) {
-            const left = actual[index];
-            const right = expectedEvents[index];
-            if (left.targetUuid !== right.targetUuid || left.component !== right.component
-                || left.handler !== right.handler || left.customEventData !== right.customEventData) return false;
-        }
+        if (!eventListsMatch(actual, expectedEvents)) return false;
+    }
+    const expectedByComponent = new Map();
+    for (const group of (operation.plan.request.uiEvents || [])) {
+        const componentId = group.componentRef.slice(4);
+        const node = nodesById.get(operation.plan.request.components.find((item) => item.id === componentId)?.nodeRef.slice(4));
+        const component = node && node.components.find((item) => item.id === componentId);
+        if (!component || !component.eventLists || !Array.isArray(component.eventLists[group.eventProperty])) return false;
+        const expected = group.events.map((event) => expectedEvent(event, 'targetRef'));
+        const key = `${componentId}:${group.eventProperty}`;
+        if (expectedByComponent.has(key) || !eventListsMatch(component.eventLists[group.eventProperty], expected)) return false;
+        expectedByComponent.set(key, true);
     }
     return true;
 }
@@ -6946,7 +6996,8 @@ async function inspectSceneComposePersistence(operation) {
     return { verified: true, sceneUuid: plan.sceneUuid, sceneAssetUuid: identity.uuid, sceneUrl: identity.url,
         scenePath: relative, sceneSha256: fileHash(sceneBytes), metaSha256: fileHash(metaBytes),
         nodeCount: inspection.nodeCount, componentCount: inspection.componentCount,
-        buttonEventCount: inspection.buttonEventCount, prefabInstanceCount: inspection.prefabInstanceCount,
+        buttonEventCount: inspection.buttonEventCount, uiEventGroupCount: inspection.uiEventGroupCount,
+        uiEventCount: inspection.uiEventCount, prefabInstanceCount: inspection.prefabInstanceCount,
         verifiedAt: new Date().toISOString() };
 }
 
@@ -6967,6 +7018,60 @@ async function waitForSceneComposePersistence(operation, timeoutMs = SCENE_SAVE_
         await new Promise((resolve) => setTimeout(resolve, 250));
     } while (Date.now() <= deadline);
     return last;
+}
+
+async function readSceneComposeSubtrees(operation) {
+    const plan = operation.plan;
+    const roots = plan.request.nodes.filter((node) => !node.parentRef.startsWith('new:'));
+    const states = [];
+    const covered = new Set();
+    for (const root of roots) {
+        const node = plan.request.nodes.find((candidate) => candidate.id === root.id);
+        const state = await callScene('nodeDeleteState', { sceneUuid: plan.sceneUuid, nodeUuid: node.uuid }, 30000);
+        if (!state || state.available !== true || state.nodeUuid !== node.uuid)
+            throw coded(state && state.reason || 'SCENE_COMPOSE_SUBTREE_READBACK_FAILED');
+        for (const entry of state.subtree || []) {
+            if (covered.has(entry.nodeUuid)) throw coded('SCENE_COMPOSE_SUBTREE_OVERLAP');
+            covered.add(entry.nodeUuid);
+        }
+        states.push(state);
+    }
+    if (plan.request.nodes.some((node) => !covered.has(node.uuid))) throw coded('SCENE_COMPOSE_SUBTREE_INCOMPLETE');
+    return states;
+}
+
+function composeOperationLiveReadbackMatches(source, readback, subtrees) {
+    if (!sceneComposeReadbackMatches(source, readback) || canonical(readback) !== canonical(source.sceneReadback)) return false;
+    return Array.isArray(source.createdSubtrees) && Array.isArray(subtrees)
+        && canonical(subtrees) === canonical(source.createdSubtrees);
+}
+
+async function validateSceneComposeCompensationSource(compensation, source, { checkDisk = true } = {}) {
+    const plan = compensation.plan;
+    if (!source || source.operation !== 'creator.scene.compose' || source.status !== 'completed'
+        || source.planHash !== plan.sourcePlanHash || source.operationId !== plan.sourceOperationId
+        || source.plan.projectRoot !== plan.projectRoot || source.plan.creatorVersion !== plan.creatorVersion
+        || source.plan.sceneUuid !== plan.sceneUuid || source.plan.sceneAssetIdentity.uuid !== plan.sceneAssetBefore.uuid
+        || source.compensationOperationId !== compensation.operationId
+        || source.compensationPlanHash !== compensation.planHash
+        || source.plan.compensationFor || source.compensatedByOperationId
+        || !source.scenePersistenceReadback || source.scenePersistenceReadback.verified !== true
+        || source.scenePersistenceReadback.sceneSha256 !== plan.sceneAssetAfter.sceneSha256
+        || source.scenePersistenceReadback.metaSha256 !== plan.sceneAssetAfter.metaSha256
+        || !Array.isArray(source.createdSubtrees) || !source.createdSubtrees.length)
+        throw coded('SCENE_COMPOSE_COMPENSATION_SOURCE_MISMATCH');
+    verifySceneOperationIdentity(source, { requireCurrentContract: false });
+    if (checkDisk) {
+        const disk = await sceneAssetIdentity(plan.sceneUuid);
+        if (disk.uuid !== plan.sceneAssetAfter.sceneAssetUuid || disk.url !== plan.sceneAssetAfter.sceneUrl
+            || disk.sceneSha256 !== plan.sceneAssetAfter.sceneSha256 || disk.metaSha256 !== plan.sceneAssetAfter.metaSha256)
+            throw coded('SCENE_COMPOSE_COMPENSATION_DISK_DRIFT');
+    }
+    const readback = await callScene('compositionReadback', source.plan.request, 30000);
+    const subtrees = await readSceneComposeSubtrees(source);
+    if (!composeOperationLiveReadbackMatches(source, readback, subtrees))
+        throw coded('SCENE_COMPOSE_COMPENSATION_LIVE_DRIFT');
+    return { readback, subtrees };
 }
 
 async function commitSceneCompose(input, context) {
@@ -7036,6 +7141,15 @@ async function commitSceneCompose(input, context) {
         writeOperation(operation);
         throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
     }
+    try {
+        operation.createdSubtrees = await readSceneComposeSubtrees(operation);
+        writeOperation(operation);
+    } catch (error) {
+        operation.status = 'needs-reconciliation';
+        operation.reconcileReason = error.code || 'SCENE_COMPOSE_SUBTREE_READBACK_FAILED';
+        writeOperation(operation);
+        throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
+    }
     if (!Editor.Ipc || typeof Editor.Ipc.sendToPanel !== 'function') throw coded('CREATOR_SCENE_SAVE_IPC_UNAVAILABLE');
     try { Editor.Ipc.sendToPanel('scene', 'scene:stash-and-save'); }
     catch (error) {
@@ -7091,21 +7205,6 @@ async function reconcileSceneCompose(input) {
         return { ...sceneComposeReceipt(operation, null), observed,
             retry: 'Never replay this operation. The original plan remains cancelled and the scene before-state is unchanged.' };
     }
-    try {
-        operation.scenePersistenceReadback = await waitForSceneComposePersistence(operation, 0);
-        if (operation.scenePersistenceReadback.verified) {
-            operation.status = 'completed';
-            operation.completedAt = operation.completedAt || new Date().toISOString();
-            operation.completedByInstanceId = operation.completedByInstanceId || INSTANCE_ID;
-            operation.reconciledAt = new Date().toISOString();
-            writeOperation(operation);
-            return { ...sceneComposeReceipt(operation, operation.sceneReadback || null),
-                observed: operation.scenePersistenceReadback,
-                retry: 'Never replay this operation. Disk persistence has been verified for the original operation.' };
-        }
-    } catch (error) {
-        operation.scenePersistenceReadback = { verified: false, reason: error.code || 'SCENE_PERSISTENCE_READBACK_FAILED' };
-    }
     let readback;
     try { readback = await callScene('compositionReadback', operation.plan.request, 30000); }
     catch (error) {
@@ -7115,20 +7214,312 @@ async function reconcileSceneCompose(input) {
         writeOperation(operation);
         return { ...sceneComposeReceipt(operation, null), observed: null, reason: operation.reconcileReason };
     }
-    if (sceneComposeReadbackMatches(operation, readback)) {
-        if (operation.sceneSaveRequestSent) operation.status = 'save-unconfirmed';
-        else if (['mutation-applied', 'applying', 'needs-reconciliation'].includes(operation.status)) operation.status = 'save-required';
-        else operation.status = 'conflict';
-    } else if (!readback || readback.available !== true) {
-        if (operation.sceneSaveRequestSent) operation.status = 'save-unconfirmed';
-        else if (['planned', 'awaiting-approval', 'applying'].includes(operation.status)) operation.status = 'not-applied';
-        else operation.status = 'needs-reconciliation';
-    } else operation.status = 'conflict';
-    operation.reconciledAt = new Date().toISOString();
+    if (!readback || readback.available !== true) {
+        let verifiedBeforeState = false;
+        if (operation.sceneSaveRequestSent) {
+            operation.status = 'save-unconfirmed';
+            operation.reconcileReason = readback && readback.reason || 'SCENE_COMPOSE_READBACK_UNAVAILABLE';
+        } else {
+            try {
+                await validateSceneComposePlan(operation);
+                operation.status = 'not-applied';
+                operation.reconcileReason = null;
+                verifiedBeforeState = true;
+            } catch (error) {
+                operation.status = 'needs-reconciliation';
+                operation.reconcileReason = error.code || 'SCENE_COMPOSE_BEFORE_STATE_UNVERIFIED';
+            }
+        }
+        operation.reconciledAt = new Date().toISOString();
+        writeOperation(operation);
+        return { ...sceneComposeReceipt(operation, readback), observed: readback, verifiedBeforeState,
+            retry: 'Never replay this operation. If the created node identities do not match, inspect the active scene and use a new plan.' };
+    }
+    if (!sceneComposeReadbackMatches(operation, readback)) {
+        operation.status = 'conflict';
+        operation.reconcileReason = 'SCENE_COMPOSE_LIVE_READBACK_MISMATCH';
+        operation.reconciledAt = new Date().toISOString();
+        writeOperation(operation);
+        return { ...sceneComposeReceipt(operation, readback), observed: readback, verifiedBeforeState: false,
+            reason: operation.reconcileReason,
+            retry: 'Never replay this operation. The live scene differs from the original composition snapshot; inspect it and plan a new operation.' };
+    }
+    // The exact live snapshot becomes the compensation baseline after structural, reference,
+    // property, and event checks pass; Creator may recompute Label, Widget, and Layout geometry
+    // when the project is reopened.
     operation.sceneReadback = readback;
+    try {
+        operation.scenePersistenceReadback = await waitForSceneComposePersistence(operation, 0);
+    } catch (error) {
+        operation.scenePersistenceReadback = { verified: false, reason: error.code || 'SCENE_PERSISTENCE_READBACK_FAILED' };
+    }
+    let verifiedBeforeState = false;
+    if (operation.scenePersistenceReadback && operation.scenePersistenceReadback.verified) {
+        operation.status = 'completed';
+        operation.completedAt = operation.completedAt || new Date().toISOString();
+        operation.completedByInstanceId = operation.completedByInstanceId || INSTANCE_ID;
+        operation.reconcileReason = null;
+    } else if (operation.sceneSaveRequestSent) operation.status = 'save-unconfirmed';
+    else if (['mutation-applied', 'applying', 'needs-reconciliation'].includes(operation.status)) operation.status = 'save-required';
+    else operation.status = 'conflict';
+    operation.reconciledAt = new Date().toISOString();
     writeOperation(operation);
-    return { ...sceneComposeReceipt(operation, readback), observed: readback,
+    const observed = operation.scenePersistenceReadback && operation.scenePersistenceReadback.verified
+        ? operation.scenePersistenceReadback : readback;
+    return { ...sceneComposeReceipt(operation, readback), observed, liveReadback: readback, verifiedBeforeState,
         retry: 'Never replay this operation. If the created node identities do not match, inspect the active scene and use a new plan.' };
+}
+
+function readSceneComposeCompensationOperation(operationId) {
+    const filename = operationPath(operationId);
+    let stat;
+    try { stat = fs.lstatSync(filename); }
+    catch (error) { if (error.code === 'ENOENT') throw coded('OPERATION_NOT_FOUND'); throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > OPERATION_FILE_MAX_BYTES) throw coded('OPERATION_FILE_UNSAFE');
+    const operation = JSON.parse(fs.readFileSync(filename, 'utf8'));
+    const plan = operation && operation.plan;
+    if (!operation || operation.schemaVersion !== 1 || operation.operationId !== operationId
+        || operation.operation !== 'creator.scene.compose.compensate' || !plan || plan.operation !== operation.operation
+        || plan.operationId !== operationId || !/^[0-9a-f-]{36}$/i.test(plan.sourceOperationId || '')
+        || !/^[a-f0-9]{64}$/.test(plan.sourcePlanHash || '') || typeof plan.projectRoot !== 'string'
+        || typeof plan.creatorVersion !== 'string' || typeof plan.extensionVersion !== 'string'
+        || typeof plan.contractFingerprint !== 'string' || typeof plan.creatorInstanceId !== 'string'
+        || typeof plan.sceneUuid !== 'string' || !Array.isArray(plan.createdSubtrees)
+        || !plan.createdSubtrees.length || !plan.sceneAssetBefore || !plan.sceneAssetAfter
+        || typeof plan.expiresAt !== 'string'
+        || !['planned', 'applying', 'mutation-applied', 'save-requested', 'save-required',
+            'save-unconfirmed', 'completed', 'not-applied', 'needs-reconciliation', 'conflict'].includes(operation.status))
+        throw coded('OPERATION_RECORD_INVALID');
+    if (planFingerprint(plan) !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+    return operation;
+}
+
+function verifySceneComposeCompensationSource(operation) {
+    const plan = operation.plan;
+    const source = readSceneComposeOperation(plan.sourceOperationId);
+    if (source.status !== 'completed' || source.planHash !== plan.sourcePlanHash
+        || source.compensationOperationId !== operation.operationId
+        || source.compensationPlanHash !== operation.planHash
+        || source.plan.projectRoot !== plan.projectRoot || source.plan.creatorVersion !== plan.creatorVersion
+        || source.plan.sceneUuid !== plan.sceneUuid || source.plan.sceneAssetIdentity.uuid !== plan.sceneAssetBefore.uuid
+        || source.plan.sceneAssetIdentity.sceneSha256 !== plan.sceneAssetBefore.sceneSha256
+        || source.plan.sceneAssetIdentity.metaSha256 !== plan.sceneAssetBefore.metaSha256
+        || canonical(source.createdSubtrees) !== canonical(plan.createdSubtrees)
+        || source.scenePersistenceReadback.sceneSha256 !== plan.sceneAssetAfter.sceneSha256
+        || source.scenePersistenceReadback.metaSha256 !== plan.sceneAssetAfter.metaSha256
+        || source.compensatedByOperationId && source.compensatedByOperationId !== operation.operationId)
+        throw coded('SCENE_COMPOSE_COMPENSATION_SOURCE_MISMATCH');
+    verifySceneOperationIdentity(source, { requireCurrentContract: false });
+    return source;
+}
+
+function composeCompensationReceipt(operation, observed = null) {
+    const plan = operation.plan;
+    return { operationId: operation.operationId, operation: operation.operation, status: operation.status,
+        sourceOperationId: plan.sourceOperationId, sourcePlanHash: plan.sourcePlanHash,
+        projectRoot: plan.projectRoot, creatorVersion: plan.creatorVersion,
+        sceneUuid: plan.sceneUuid, createdNodeCount: plan.createdSubtrees.reduce((count, root) => count + root.subtree.length, 0),
+        rootCount: plan.createdSubtrees.length, sceneSaveRequestSent: !!operation.sceneSaveRequestSent,
+        baselineRestored: !!(operation.diskReadback && operation.diskReadback.verified),
+        diskReadback: operation.diskReadback || null, observed,
+        recovery: { automaticRetry: false, reconcileCommand: 'creator.scene.compose.compensate.reconcile',
+            note: 'Reconcile only observes node identities and the original .fire/.meta hashes; it never repeats deletion or save.' } };
+}
+
+async function createSceneComposeCompensationPlan(input) {
+    const source = readSceneComposeOperation(input.sourceOperationId);
+    verifySceneOperationIdentity(source, { requireCurrentContract: false });
+    if (source.status !== 'completed' || !source.scenePersistenceReadback
+        || source.scenePersistenceReadback.verified !== true || source.plan.compensationFor
+        || source.compensatedByOperationId || !Array.isArray(source.createdSubtrees) || !source.createdSubtrees.length)
+        throw coded('SCENE_COMPOSE_COMPENSATION_SOURCE_NOT_ELIGIBLE');
+    if (source.compensationOperationId) throw coded('SCENE_COMPOSE_COMPENSATION_ALREADY_RESERVED');
+    const current = await sceneAssetIdentity(source.plan.sceneUuid);
+    if (current.uuid !== source.scenePersistenceReadback.sceneAssetUuid
+        || current.url !== source.scenePersistenceReadback.sceneUrl
+        || current.sceneSha256 !== source.scenePersistenceReadback.sceneSha256
+        || current.metaSha256 !== source.scenePersistenceReadback.metaSha256)
+        throw coded('SCENE_COMPOSE_COMPENSATION_DISK_DRIFT');
+    const readback = await callScene('compositionReadback', source.plan.request, 30000);
+    const subtrees = await readSceneComposeSubtrees(source);
+    if (!composeOperationLiveReadbackMatches(source, readback, subtrees))
+        throw coded('SCENE_COMPOSE_COMPENSATION_LIVE_DRIFT');
+    const operationId = uuid();
+    const plan = { operationId, operation: 'creator.scene.compose.compensate', sourceOperationId: source.operationId,
+        sourcePlanHash: source.planHash, projectRoot: source.plan.projectRoot, creatorVersion: source.plan.creatorVersion,
+        extensionVersion: extensionPackage.version, contractFingerprint: CONTRACT_FINGERPRINT,
+        creatorInstanceId: INSTANCE_ID, sceneUuid: source.plan.sceneUuid,
+        sceneAssetBefore: source.plan.sceneAssetIdentity, sceneAssetAfter: source.scenePersistenceReadback,
+        createdSubtrees: source.createdSubtrees, expiresAt: new Date(Date.now() + OPERATION_TTL_MS).toISOString() };
+    const operation = { schemaVersion: 1, operationId, operation: plan.operation, plan,
+        planHash: planFingerprint(plan), status: 'planned', createdAt: new Date().toISOString(), plannedByInstanceId: INSTANCE_ID };
+    writeOperation(operation);
+    source.compensationOperationId = operationId;
+    source.compensationPlanHash = operation.planHash;
+    source.compensationPlannedAt = new Date().toISOString();
+    writeOperation(source);
+    return { operationId, operation: plan.operation, status: operation.status, planHash: operation.planHash,
+        sourceOperationId: source.operationId, sourcePlanHash: source.planHash, projectRoot: plan.projectRoot,
+        creatorVersion: plan.creatorVersion, sceneUuid: plan.sceneUuid, sceneAssetAfter: plan.sceneAssetAfter,
+        deleteRoots: plan.createdSubtrees.map((root) => ({ nodeUuid: root.nodeUuid, nodePath: root.nodePath,
+            nodeName: root.nodeName, parentUuid: root.parentUuid, childCount: root.childCount,
+            subtreeNodeCount: root.subtree.length })),
+        diff: { action: 'delete-source-created-nodes', sourceOperationId: source.operationId,
+            sourcePlanHash: source.planHash, restoreSceneSha256: plan.sceneAssetBefore.sceneSha256,
+            restoreMetaSha256: plan.sceneAssetBefore.metaSha256 },
+        recovery: { automaticRetry: false, reconcileCommand: 'creator.scene.compose.compensate.reconcile' } };
+}
+
+async function waitForSceneComposeBaseline(plan, timeoutMs = SCENE_SAVE_READBACK_TIMEOUT_MS) {
+    const deadline = Date.now() + Math.max(0, timeoutMs);
+    let last = null;
+    do {
+        try {
+            last = await sceneAssetIdentity(plan.sceneUuid);
+            if (last.uuid === plan.sceneAssetBefore.uuid && last.url === plan.sceneAssetBefore.url
+                && last.sceneSha256 === plan.sceneAssetBefore.sceneSha256
+                && last.metaSha256 === plan.sceneAssetBefore.metaSha256)
+                return { verified: true, sceneUuid: plan.sceneUuid, sceneUrl: last.url,
+                    sceneSha256: last.sceneSha256, metaSha256: last.metaSha256, verifiedAt: new Date().toISOString() };
+        } catch (error) { last = { reason: error.code || 'SCENE_ASSET_IDENTITY_UNAVAILABLE' }; }
+        if (Date.now() >= deadline) break;
+        await new Promise((resolve) => setTimeout(resolve, 250));
+    } while (Date.now() <= deadline);
+    return { verified: false, reason: 'SCENE_COMPOSE_BASELINE_HASH_MISMATCH',
+        observedSceneSha256: last && last.sceneSha256 || null, observedMetaSha256: last && last.metaSha256 || null };
+}
+
+async function commitSceneComposeCompensation(input, context) {
+    let operation;
+    let phase = 'read-operation';
+    try {
+        operation = readSceneComposeCompensationOperation(input.operationId);
+        phase = 'verify-identity';
+        verifySceneOperationIdentity(operation);
+        phase = 'verify-source';
+        verifySceneComposeCompensationSource(operation);
+        if (input.planHash !== operation.planHash) throw coded('OPERATION_PLAN_HASH_MISMATCH');
+        if (operation.status !== 'planned') throw coded(operation.status === 'applying' || operation.status === 'mutation-applied'
+            || operation.status === 'save-requested' || operation.status === 'needs-reconciliation'
+            ? 'OPERATION_RECONCILIATION_REQUIRED' : 'OPERATION_NOT_COMMITTABLE');
+        if (Date.now() > Date.parse(operation.plan.expiresAt)) throw coded('OPERATION_PLAN_EXPIRED');
+        const source = readSceneComposeOperation(operation.plan.sourceOperationId);
+        phase = 'validate-live-and-disk-state';
+        await validateSceneComposeCompensationSource(operation, source);
+    } catch (error) {
+        if (operation && operation.status === 'planned') {
+            operation.preCommitFailure = { phase, code: error.code || null,
+                message: String(error.message || error).slice(0, 240), at: new Date().toISOString() };
+            writeOperation(operation);
+        }
+        if (!error.code) throw coded('SCENE_COMPOSE_COMPENSATION_PREFLIGHT_FAILED', `${phase}: ${String(error.message || error)}`);
+        throw error;
+    }
+    operation.status = 'applying';
+    operation.approvalRequestedAt = new Date().toISOString();
+    writeOperation(operation);
+    const approved = await authorizeCommit();
+    if (!approved) { operation.status = 'not-applied'; operation.cancelledAt = new Date().toISOString(); writeOperation(operation); throw coded('OPERATION_NOT_APPROVED'); }
+    try { await authorizeWriteRequest(context && context.requestId); }
+    catch (error) { operation.status = 'not-applied'; operation.abandonedAt = new Date().toISOString(); writeOperation(operation); throw coded('WRITE_REQUEST_NO_LONGER_ACTIVE'); }
+    try { await validateSceneComposeCompensationSource(operation, readSceneComposeOperation(operation.plan.sourceOperationId)); }
+    catch (error) { operation.status = 'conflict'; operation.reconcileReason = error.code || 'SCENE_COMPOSE_COMPENSATION_PRECONDITION_FAILED'; writeOperation(operation); throw error; }
+    operation.status = 'applying';
+    operation.approvedAt = new Date().toISOString();
+    operation.appliedByInstanceId = INSTANCE_ID;
+    writeOperation(operation);
+    try {
+        for (const root of orderCreatedSubtreesForDeletion(operation.plan.createdSubtrees)) {
+            const result = await callScene('deleteNode', { sceneUuid: operation.plan.sceneUuid,
+                nodeUuid: root.nodeUuid, nodePath: root.nodePath, expectedName: root.nodeName,
+                expectedParentUuid: root.parentUuid, expectedChildCount: root.childCount,
+                expectedSubtree: root.subtree }, 30000);
+            if (!result || result.available !== true || result.deleted !== true)
+                throw coded(result && result.reason || 'SCENE_COMPOSE_COMPENSATION_DELETE_FAILED');
+        }
+    } catch (error) {
+        operation.status = 'needs-reconciliation';
+        operation.reconcileReason = error.code || error.message || 'SCENE_COMPOSE_COMPENSATION_DELETE_FAILED';
+        operation.mutationMayHaveRun = true;
+        writeOperation(operation);
+        throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
+    }
+    operation.status = 'mutation-applied';
+    operation.mutationAppliedAt = new Date().toISOString();
+    writeOperation(operation);
+    if (!Editor.Ipc || typeof Editor.Ipc.sendToPanel !== 'function') throw coded('CREATOR_SCENE_SAVE_IPC_UNAVAILABLE');
+    try { Editor.Ipc.sendToPanel('scene', 'scene:stash-and-save'); }
+    catch (error) { operation.status = 'save-required'; operation.saveErrorCode = 'CREATOR_SCENE_SAVE_REQUEST_FAILED'; writeOperation(operation); throw coded('CREATOR_SCENE_SAVE_REQUEST_FAILED'); }
+    operation.status = 'save-requested';
+    operation.sceneSaveRequestSent = true;
+    operation.sceneSaveRequestedAt = new Date().toISOString();
+    writeOperation(operation);
+    operation.diskReadback = await waitForSceneComposeBaseline(operation.plan);
+    operation.status = operation.diskReadback.verified ? 'completed' : 'save-unconfirmed';
+    operation.completedAt = operation.diskReadback.verified ? new Date().toISOString() : null;
+    operation.reconciledAt = null;
+    writeOperation(operation);
+    if (operation.diskReadback.verified) {
+        const currentSource = readSceneComposeOperation(operation.plan.sourceOperationId);
+        currentSource.compensatedByOperationId = operation.operationId;
+        currentSource.compensatedAt = new Date().toISOString();
+        currentSource.compensationDiskReadback = operation.diskReadback;
+        writeOperation(currentSource);
+    }
+    return composeCompensationReceipt(operation, operation.diskReadback);
+}
+
+async function reconcileSceneComposeCompensation(input) {
+    const operation = readSceneComposeCompensationOperation(input.operationId);
+    verifySceneOperationIdentity(operation, { requireCurrentContract: false });
+    const source = verifySceneComposeCompensationSource(operation);
+    let disk = null;
+    try { disk = await sceneAssetIdentity(operation.plan.sceneUuid); }
+    catch (error) { disk = { reason: error.code || 'SCENE_ASSET_IDENTITY_UNAVAILABLE' }; }
+    let absent = 0;
+    let present = 0;
+    for (const node of source.plan.request.nodes) {
+        const state = await callScene('nodeState', { sceneUuid: source.plan.sceneUuid, nodeUuid: node.uuid }, 20000);
+        if (state && state.available === true) present += 1;
+        else if (state && state.reason === 'SCENE_NODE_NOT_FOUND') absent += 1;
+        else { operation.status = 'conflict'; operation.reconcileReason = state && state.reason || 'SCENE_COMPOSE_NODE_STATE_UNAVAILABLE'; }
+    }
+    const baselineMatches = disk && disk.sceneSha256 === operation.plan.sceneAssetBefore.sceneSha256
+        && disk.metaSha256 === operation.plan.sceneAssetBefore.metaSha256;
+    const afterMatches = disk && disk.sceneSha256 === operation.plan.sceneAssetAfter.sceneSha256
+        && disk.metaSha256 === operation.plan.sceneAssetAfter.metaSha256;
+    if (baselineMatches && absent === source.plan.request.nodes.length && !present) {
+        operation.status = 'completed';
+        operation.diskReadback = { verified: true, sceneUuid: operation.plan.sceneUuid, sceneUrl: disk.url,
+            sceneSha256: disk.sceneSha256, metaSha256: disk.metaSha256, verifiedAt: new Date().toISOString() };
+        source.compensatedByOperationId = operation.operationId;
+        source.compensatedAt = new Date().toISOString();
+        source.compensationDiskReadback = operation.diskReadback;
+        writeOperation(source);
+    } else if (afterMatches && present === source.plan.request.nodes.length && !absent) {
+        try {
+            const live = await callScene('compositionReadback', source.plan.request, 30000);
+            const subtrees = await readSceneComposeSubtrees(source);
+            operation.status = composeOperationLiveReadbackMatches(source, live, subtrees) ? 'not-applied' : 'conflict';
+        } catch (_) { operation.status = 'conflict'; }
+        if (operation.status === 'not-applied' && source.compensationOperationId === operation.operationId) {
+            delete source.compensationOperationId;
+            delete source.compensationPlanHash;
+            delete source.compensationPlannedAt;
+            writeOperation(source);
+            operation.reservationReleased = true;
+        }
+    } else if (absent === source.plan.request.nodes.length && !present) {
+        operation.status = 'save-required';
+        operation.reconcileReason = baselineMatches ? null : 'SCENE_COMPOSE_BASELINE_NOT_PERSISTED';
+    } else {
+        operation.status = 'conflict';
+        operation.reconcileReason = operation.reconcileReason || 'SCENE_COMPOSE_COMPENSATION_STATE_MISMATCH';
+    }
+    operation.reconciledAt = new Date().toISOString();
+    writeOperation(operation);
+    return composeCompensationReceipt(operation, { disk: disk && { sceneSha256: disk.sceneSha256 || null,
+        metaSha256: disk.metaSha256 || null }, presentNodeCount: present, absentNodeCount: absent });
 }
 
 function verifyPlanIdentity(operation, { requireCurrentContract = true } = {}) {
@@ -7673,6 +8064,11 @@ function capabilityList() {
         'creator.scene.compose.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
             && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'),
         'creator.scene.compose.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
+        'creator.scene.compose.compensate.plan': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
+        'creator.scene.compose.compensate.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
+            && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'),
+        'creator.scene.compose.compensate.reconcile': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
         'creator.scene.node.set-active.plan': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
         'creator.scene.node.set-active.commit': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
             && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'),
@@ -8171,6 +8567,9 @@ function execute(command, input, context) {
     if (command === 'creator.scene.compose.plan') return createSceneComposePlan(input);
     if (command === 'creator.scene.compose.commit') return commitSceneCompose(input, context);
     if (command === 'creator.scene.compose.reconcile') return reconcileSceneCompose(input);
+    if (command === 'creator.scene.compose.compensate.plan') return createSceneComposeCompensationPlan(input);
+    if (command === 'creator.scene.compose.compensate.commit') return commitSceneComposeCompensation(input, context);
+    if (command === 'creator.scene.compose.compensate.reconcile') return reconcileSceneComposeCompensation(input);
     if (command === 'creator.scene.node.set-active.plan') return createSceneNodeActivePlan(input);
     if (command === 'creator.scene.node.set-active.commit') return commitSceneNodeActive(input, context);
     if (command === 'creator.scene.node.set-active.reconcile') return reconcileSceneNodeActive(input);

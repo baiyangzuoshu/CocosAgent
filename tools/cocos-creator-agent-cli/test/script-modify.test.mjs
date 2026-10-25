@@ -11,17 +11,21 @@ import { validateCommand } from '../bridge/contracts.mjs';
 
 const extensionRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../creator-extension');
 const contract = JSON.parse(fs.readFileSync(path.join(extensionRoot, 'command-contract.json'), 'utf8'));
-const sceneClassIds = { 'cc.Button': 'cc.Button', 'game.ButtonState': 'c8f27f4c-3728-4ce7-8db6-8fdc99e9a70a' };
+const sceneClassIds = { 'cc.Button': 'cc.Button', 'cc.Label': 'cc.Label', 'cc.Layout': 'cc.Layout', 'cc.Widget': 'cc.Widget',
+  'game.ButtonState': 'c8f27f4c-3728-4ce7-8db6-8fdc99e9a70a' };
 const sceneRootUuid = '4b02b1e4-d163-47e2-91ad-2da0193a3907';
 
 function normalizedSceneTransform(value = {}) {
   return { x: value.x ?? 0, y: value.y ?? 0, z: value.z ?? 0,
     scaleX: value.scaleX ?? 1, scaleY: value.scaleY ?? 1,
-    angle: value.angle ?? 0, width: value.width ?? 0, height: value.height ?? 0 };
+    angle: value.angle ?? 0, width: value.width ?? 0, height: value.height ?? 0,
+    ...(Object.prototype.hasOwnProperty.call(value, 'anchorX') ? { anchorX: value.anchorX } : {}),
+    ...(Object.prototype.hasOwnProperty.call(value, 'anchorY') ? { anchorY: value.anchorY } : {}) };
 }
 
 function mockSceneCompositionState(params, sceneUuid) {
-  const parentUuids = [...new Set(params.nodes.map((node) => node.parentRef.slice('uuid:'.length)))].sort();
+  const parentUuids = [...new Set(params.nodes.filter((node) => node.parentRef.startsWith('uuid:'))
+    .map((node) => node.parentRef.slice('uuid:'.length)))].sort();
   const existingNodes = parentUuids.map((nodeUuid) => ({ sceneUuid, nodeUuid,
     nodePath: 'Scene', active: true, children: 0, components: [] }));
   return { available: true, sceneUuid, sceneName: 'Scene', existingNodes,
@@ -30,37 +34,53 @@ function mockSceneCompositionState(params, sceneUuid) {
         ? params.nodes.find((candidate) => candidate.id === node.parentRef.slice(4))?.uuid
         : node.parentRef.slice('uuid:'.length),
       name: node.name, transform: normalizedSceneTransform(node.transform) })),
-    componentCount: params.components.length, buttonEventCount: params.buttonEvents.length };
+    componentCount: params.components.length, buttonEventCount: (params.buttonEvents || []).length,
+    uiEventGroupCount: (params.uiEvents || []).length,
+    uiEventCount: (params.uiEvents || []).reduce((total, group) => total + group.events.length, 0) };
 }
 
-function mockSceneCompositionReadback(params, sceneUuid) {
+function mockSceneCompositionReadback(params, sceneUuid, transformOverrides = {}) {
   return { available: true, sceneUuid, nodes: params.nodes.map((node) => ({ id: node.id, uuid: node.uuid,
     name: node.name, nodePath: `Scene/${node.name}`,
     parentUuid: node.parentRef.startsWith('new:')
       ? params.nodes.find((candidate) => candidate.id === node.parentRef.slice(4))?.uuid
       : node.parentRef.slice('uuid:'.length),
-    transform: normalizedSceneTransform(node.transform),
+    childrenUuids: params.nodes.filter((child) => child.parentRef === `new:${node.id}`).map((child) => child.uuid),
+    allComponents: params.components.filter((item) => item.nodeRef === `new:${node.id}`).map((item) => ({
+      componentInstanceId: `instance-${item.id}`, componentClassName: item.className,
+    })),
+    transform: { ...normalizedSceneTransform(node.transform), ...(transformOverrides[node.id] || {}) },
     components: params.components.filter((component) => component.nodeRef === `new:${node.id}`).map((component) => ({
       id: component.id, componentClassName: component.className, serializedClassId: sceneClassIds[component.className],
       componentInstanceId: `instance-${component.id}`,
       propertyValues: Object.fromEntries(component.properties.map((property) => [property.name,
-        property.value && typeof property.value === 'object' ? property.value.assetUuid : property.value])),
-      clickEvents: component.className === 'cc.Button' ? params.buttonEvents.filter((event) => event.buttonRef === `new:${node.id}`)
+        property.value && typeof property.value === 'object' && typeof property.value.assetUuid === 'string' ? property.value.assetUuid
+          : property.value && typeof property.value === 'object' && typeof property.value.nodeRef === 'string'
+            ? `node:${property.value.nodeRef.startsWith('new:') ? params.nodes.find((candidate) => candidate.id === property.value.nodeRef.slice(4))?.uuid : property.value.nodeRef.slice(5)}`
+            : property.value && typeof property.value === 'object' && typeof property.value.componentRef === 'string'
+              ? property.value.componentRef.startsWith('new:') ? `component:${property.value.componentRef.slice(4)}`
+                : `component:${property.value.componentRef.slice(5)}:${property.value.componentInstanceId}` : property.value])),
+      clickEvents: component.className === 'cc.Button' ? (params.buttonEvents || []).filter((event) => event.buttonRef === `new:${node.id}`)
         .map((event) => ({ targetUuid: event.handlerRef.startsWith('new:')
           ? params.nodes.find((candidate) => candidate.id === event.handlerRef.slice(4))?.uuid
           : event.handlerRef.slice('uuid:'.length), component: event.handlerComponentClassName,
         handler: event.handler, customEventData: event.customEventData || '' })) : null,
+      eventLists: Object.fromEntries((params.uiEvents || []).filter((group) => group.componentRef === `new:${component.id}`)
+        .map((group) => [group.eventProperty, group.events.map((event) => ({ targetUuid: event.targetRef.startsWith('new:')
+          ? params.nodes.find((candidate) => candidate.id === event.targetRef.slice(4))?.uuid
+          : event.targetRef.slice(5), component: event.component, handler: event.handler,
+        customEventData: event.customEventData || '' }))])),
     })) })) };
 }
 
-function serializeSceneComposition(params, sceneUuid) {
+function serializeSceneComposition(params, sceneUuid, transformOverrides = {}) {
   const expected = mockSceneCompositionState(params, sceneUuid);
   const records = [{ __type__: 'cc.SceneAsset', scene: { __id__: 1 } },
     { __type__: 'cc.Scene', _id: sceneRootUuid, _active: true, _children: [] }];
   const nodeIndices = new Map();
   for (const node of params.nodes) {
     const state = expected.createdNodes.find((item) => item.id === node.id);
-    const transform = state.transform;
+    const transform = { ...state.transform, ...(transformOverrides[node.id] || {}) };
     const angle = transform.angle * Math.PI / 360;
     const index = records.length;
     nodeIndices.set(node.id, index);
@@ -84,7 +104,7 @@ function serializeSceneComposition(params, sceneUuid) {
       ...(component.className === 'cc.Button' ? { clickEvents: [] } : {}) });
     records[nodeIndices.get(nodeId)]._components.push({ __id__: index });
   }
-  for (const event of params.buttonEvents) {
+  for (const event of (params.buttonEvents || [])) {
     const buttonComponent = params.components.find((component) => component.nodeRef === event.buttonRef
       && component.className === 'cc.Button');
     const handlerComponent = params.components.find((component) => component.nodeRef === event.handlerRef
@@ -184,6 +204,7 @@ function serializeExistingSceneNode({ transform, name = 'Button', active = true,
 
 function makeHarness(t, { approved = true, beforeCommitAuthorization = () => {}, refreshResults, refreshFailure = null,
   ipcMode = 'electron', assetCreateMode = 'complete', sceneCompose = false, sceneActive = false,
+  sceneComposeFailure = null, sceneComposeTransformOverrides = {}, sceneComposeDiskTransformOverrides = {},
   liveSceneName = 'Scene',
   sceneRename = false, sceneReparent = false,
   sceneNodeDelete = false, sceneComponentRemove = false, sceneComponentAdd = false,
@@ -357,7 +378,8 @@ function makeHarness(t, { approved = true, beforeCommitAuthorization = () => {},
         || sceneComponentRemove || sceneComponentAdd || sceneTransform || sceneButtonEvents || sceneProperty);
       sceneSaveCount += 1;
       if (sceneSaveMode === 'write' && currentSceneComposition) {
-        fs.writeFileSync(sceneFile, JSON.stringify(serializeSceneComposition(currentSceneComposition, sceneUuid)));
+        fs.writeFileSync(sceneFile, JSON.stringify(serializeSceneComposition(currentSceneComposition, sceneUuid,
+          sceneComposeDiskTransformOverrides)));
         fs.writeFileSync(sceneMetaFile, JSON.stringify({ uuid: sceneAssetUuid, importer: 'scene' }));
       } else if (sceneSaveMode === 'write' && (sceneActive || sceneRename || sceneReparent || sceneNodeDelete
         || sceneComponentRemove || sceneComponentAdd || sceneTransform || sceneButtonEvents || sceneProperty)) {
@@ -594,12 +616,38 @@ function makeHarness(t, { approved = true, beforeCommitAuthorization = () => {},
       assert.ok(sceneCompose, `unexpected scene method: ${method}`);
       if (method === 'compositionState') callback(null, mockSceneCompositionState(params, sceneUuid));
       else if (method === 'compose') {
+        if (sceneComposeFailure === 'callback-error') { callback(new Error('injected compose callback loss')); return; }
+        if (sceneComposeFailure) {
+          callback(null, { available: false, reason: sceneComposeFailure, mutationStarted: false });
+          return;
+        }
         currentSceneComposition = params;
-        callback(null, { available: true, readback: mockSceneCompositionReadback(params, sceneUuid) });
+        callback(null, { available: true, readback: mockSceneCompositionReadback(params, sceneUuid,
+          sceneComposeTransformOverrides) });
       } else if (method === 'compositionReadback') {
         callback(null, currentSceneComposition
-          ? mockSceneCompositionReadback(currentSceneComposition, sceneUuid)
+          ? mockSceneCompositionReadback(currentSceneComposition, sceneUuid, sceneComposeTransformOverrides)
           : { available: false, reason: 'SCENE_NODE_NOT_FOUND' });
+      } else if (method === 'nodeDeleteState' && currentSceneComposition) {
+        const root = currentSceneComposition.nodes.find((node) => node.uuid === params.nodeUuid);
+        if (!root) { callback(null, { available: false, reason: 'SCENE_NODE_NOT_FOUND' }); return; }
+        const subtree = [];
+        const stack = [{ node: root, parentUuid: root.parentRef.startsWith('new:')
+          ? currentSceneComposition.nodes.find((node) => node.id === root.parentRef.slice(4))?.uuid
+          : root.parentRef.slice(5), siblingIndex: 0 }];
+        while (stack.length) {
+          const item = stack.pop();
+          const children = currentSceneComposition.nodes.filter((node) => node.parentRef === `new:${item.node.id}`);
+          subtree.push({ nodeUuid: item.node.uuid, nodeName: item.node.name, parentUuid: item.parentUuid,
+            siblingIndex: item.siblingIndex, childCount: children.length });
+          for (let index = children.length - 1; index >= 0; index -= 1)
+            stack.push({ node: children[index], parentUuid: item.node.uuid, siblingIndex: index });
+        }
+        callback(null, { available: true, sceneName: 'Scene', sceneUuid,
+          nodeName: root.name, nodeUuid: root.uuid, nodePath: `Scene/${root.name}`,
+          parentUuid: root.parentRef.startsWith('new:')
+            ? currentSceneComposition.nodes.find((node) => node.id === root.parentRef.slice(4))?.uuid
+            : root.parentRef.slice(5), childCount: subtree[0].childCount, subtree });
       } else throw new Error(`unexpected scene method: ${method}`);
     } },
     assetdb: {
@@ -724,6 +772,8 @@ function makeHarness(t, { approved = true, beforeCommitAuthorization = () => {},
     createAssetImportPlan, commitAssetImport, reconcileAssetImport,
     createPrefabPlan, commitPrefabCreate, reconcilePrefabCreate,
     createSceneComposePlan, commitSceneCompose, reconcileSceneCompose,
+    createSceneComposeCompensationPlan, readSceneComposeCompensationOperation,
+    readSceneComposeOperation, validateSceneComposeCompensationSource,
     createSceneNodeActivePlan, commitSceneNodeActive, reconcileSceneNodeActive,
     createSceneNodeTransformPlan, commitSceneNodeTransform, reconcileSceneNodeTransform,
     createSceneButtonEventsPlan, commitSceneButtonEvents, reconcileSceneButtonEvents,
@@ -1571,6 +1621,53 @@ test('scene composition reports completion only after the saved .fire and .meta 
   assert.equal(reconciled.observed.verified, true);
 });
 
+test('scene composition captures Creator-resolved Label size and verifies it through save and reconcile', async (t) => {
+  const harness = makeHarness(t, { sceneCompose: true, ipcMode: 'editor',
+    sceneComposeTransformOverrides: { title: { y: 129.8, width: 101.17, height: 50.4 } },
+    sceneComposeDiskTransformOverrides: { title: { y: 137, width: 101.17, height: 50.4 } } });
+  const input = { sceneUuid: harness.sceneUuid,
+    nodes: [
+      { id: 'layout', name: 'SettingsLayout', parentRef: `uuid:${harness.sceneUuid}`,
+        transform: { width: 400, height: 200 } },
+      { id: 'title', name: 'SettingsTitle', parentRef: 'new:layout',
+        transform: { y: 100, width: 300, height: 40, anchorX: 0.5, anchorY: 0.5 } },
+    ],
+    components: [
+      { id: 'settings-layout', nodeRef: 'new:layout', className: 'cc.Layout',
+        properties: [{ name: 'type', value: 2 }, { name: 'resizeMode', value: 0 }] },
+      { id: 'title-label', nodeRef: 'new:title', className: 'cc.Label',
+        properties: [{ name: 'string', value: 'Settings' }] },
+    ],
+    buttonEvents: [] };
+  const plan = await harness.api.createSceneComposePlan(input);
+  const receipt = await harness.api.commitSceneCompose({ operationId: plan.operationId, planHash: plan.planHash },
+    { requestId: 'label-size-compose-request' });
+  assert.equal(receipt.status, 'completed', JSON.stringify(receipt.scenePersistenceReadback));
+  const title = receipt.createdNodes.find((node) => node.id === 'title');
+  assert.deepEqual({ y: title.transform.y, width: title.transform.width, height: title.transform.height },
+    { y: 129.8, width: 101.17, height: 50.4 });
+  assert.equal(receipt.scenePersistenceReadback.verified, true);
+  const reconciled = await harness.api.reconcileSceneCompose({ operationId: plan.operationId });
+  assert.equal(reconciled.status, 'completed');
+  assert.equal(reconciled.observed.verified, true);
+});
+
+test('scene composition compensation preflight compares the source asset identity with its bound before-state', async (t) => {
+  const harness = makeHarness(t, { sceneCompose: true, ipcMode: 'editor' });
+  const input = { sceneUuid: harness.sceneUuid,
+    nodes: [{ id: 'root', name: 'CompensationFixture', parentRef: `uuid:${harness.sceneUuid}`, transform: { width: 100, height: 40 } }],
+    components: [], buttonEvents: [] };
+  const sourcePlan = await harness.api.createSceneComposePlan(input);
+  await harness.api.commitSceneCompose({ operationId: sourcePlan.operationId, planHash: sourcePlan.planHash },
+    { requestId: 'compose-for-compensation-preflight' });
+  const compensation = await harness.api.createSceneComposeCompensationPlan({ sourceOperationId: sourcePlan.operationId });
+  const operation = harness.api.readSceneComposeCompensationOperation(compensation.operationId);
+  const source = harness.api.readSceneComposeOperation(sourcePlan.operationId);
+  const validated = await harness.api.validateSceneComposeCompensationSource(operation, source);
+  assert.equal(validated.readback.available, true);
+  assert.equal(compensation.planHash, operation.planHash);
+});
+
 test('scene composition rejects a stale plan before approval after the scene asset changes', async (t) => {
   let approvals = 0;
   const harness = makeHarness(t, { sceneCompose: true, ipcMode: 'editor', beforeCommitAuthorization() { approvals += 1; } });
@@ -1608,6 +1705,27 @@ test('denied scene composition stays cancelled when read-only reconciliation ver
   assert.equal(reconciled.status, 'cancelled');
   assert.equal(reconciled.observed.mutationApplied, false);
   assert.equal(reconciled.observed.readOnly, true);
+  assert.match(reconciled.retry, /Never replay/);
+  assert.equal(harness.getSceneSaveCount(), 0);
+  assert.equal(await sourceHash(fs.readFileSync(harness.sceneFile)), sceneBefore);
+  assert.equal(await sourceHash(fs.readFileSync(harness.sceneMetaFile)), metaBefore);
+});
+
+test('scene composition reconcile verifies the saved before-state after a lost pre-mutation callback', async (t) => {
+  const harness = makeHarness(t, { sceneCompose: true, ipcMode: 'editor', sceneComposeFailure: 'callback-error' });
+  const input = { sceneUuid: harness.sceneUuid,
+    nodes: [{ id: 'button', name: 'StartButton', parentRef: `uuid:${harness.sceneUuid}` }],
+    components: [], buttonEvents: [] };
+  const plan = await harness.api.createSceneComposePlan(input);
+  const sceneBefore = await sourceHash(fs.readFileSync(harness.sceneFile));
+  const metaBefore = await sourceHash(fs.readFileSync(harness.sceneMetaFile));
+  await assert.rejects(harness.api.commitSceneCompose({ operationId: plan.operationId, planHash: plan.planHash },
+    { requestId: 'uncertain-compose-before-mutation' }), (error) => error.code === 'OPERATION_RECONCILIATION_REQUIRED');
+  assert.equal(harness.getSceneSaveCount(), 0);
+  const reconciled = await harness.api.reconcileSceneCompose({ operationId: plan.operationId });
+  assert.equal(reconciled.status, 'not-applied');
+  assert.equal(reconciled.verifiedBeforeState, true);
+  assert.equal(reconciled.observed.available, false);
   assert.match(reconciled.retry, /Never replay/);
   assert.equal(harness.getSceneSaveCount(), 0);
   assert.equal(await sourceHash(fs.readFileSync(harness.sceneFile)), sceneBefore);

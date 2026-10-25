@@ -7,7 +7,7 @@ const COMMAND_ID = /^[a-z][a-z0-9-]{0,47}$/;
 const ACCESS = new Set(['read', 'plan', 'write', 'control']);
 const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 const MAX_COMMANDS = 32;
-const MAX_SCHEMA_DEPTH = 4;
+const MAX_SCHEMA_DEPTH = 6;
 const MAX_SCHEMA_NODES = 128;
 const MAX_ARGUMENT_BYTES = 16 * 1024;
 

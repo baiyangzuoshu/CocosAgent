@@ -233,18 +233,25 @@ test('scene deletion and component removal use exact plans, explicit commits, an
   assert.equal(validateCommand(componentReconcile.id, { operationId: nodeUuid }).ok, true);
 });
 
-test('scene composition contract bounds node, component, asset-reference, and click-handler input', () => {
+test('scene composition contract bounds nodes, components, typed references, Button and generic UI events', () => {
   const plan = COMMANDS.get('creator.scene.compose.plan');
   const commit = COMMANDS.get('creator.scene.compose.commit');
   const reconcile = COMMANDS.get('creator.scene.compose.reconcile');
+  const compensatePlan = COMMANDS.get('creator.scene.compose.compensate.plan');
+  const compensateCommit = COMMANDS.get('creator.scene.compose.compensate.commit');
+  const compensateReconcile = COMMANDS.get('creator.scene.compose.compensate.reconcile');
   assert.ok(plan);
   assert.equal(plan.access, 'plan');
   assert.equal(commit.access, 'write');
   assert.equal(commit.approval, true);
   assert.equal(reconcile.access, 'plan');
+  assert.equal(compensatePlan.access, 'plan');
+  assert.equal(compensateCommit.access, 'write');
+  assert.equal(compensateCommit.approval, true);
+  assert.equal(compensateReconcile.access, 'plan');
   const input = { sceneUuid,
     nodes: [{ id: 'button', name: 'StartButton',
-      parentRef: `uuid:${nodeUuid}`, transform: { x: 10, y: 20, width: 180, height: 64 } }],
+      parentRef: `uuid:${nodeUuid}`, transform: { x: 10, y: 20, width: 180, height: 64, anchorX: 0.5, anchorY: 1 } }],
     components: [{ id: 'sprite', nodeRef: 'new:button', className: 'cc.Sprite', properties: [
       { name: 'spriteFrame', value: { assetUuid: '44444444-4444-4444-8444-444444444444', assetClass: 'SpriteFrame' } },
     ] }],
@@ -252,10 +259,26 @@ test('scene composition contract bounds node, component, asset-reference, and cl
       handler: 'onClick', customEventData: 'toggle' }],
   };
   assert.equal(validateCommand(plan.id, input).ok, true);
+  const { buttonEvents, ...legacyWithoutButtonEvents } = input;
+  assert.equal(validateCommand(plan.id, legacyWithoutButtonEvents).ok, true);
+  assert.equal(validateCommand(plan.id, { ...input, components: [{ id: 'layout', nodeRef: 'new:button',
+    className: 'cc.ScrollView', properties: [{ name: 'content', value: { nodeRef: 'new:button' } }] }] }).ok, true);
+  assert.equal(validateCommand(plan.id, { ...input, components: Array.from({ length: 65 }, (_, index) => ({
+    id: `layout${index}`, nodeRef: 'new:button', className: 'cc.Widget', properties: [] })) }).ok, false);
+  assert.equal(validateCommand(plan.id, { ...input, nodes: Array.from({ length: 33 }, (_, index) => ({
+    id: `node${index}`, name: `Node${index}`, parentRef: `uuid:${nodeUuid}` })) }).ok, false);
+  assert.equal(validateCommand(plan.id, { ...input, buttonEvents: Array(33).fill(input.buttonEvents[0]) }).ok, false);
+  assert.equal(validateCommand(plan.id, { ...input, uiEvents: [{ componentRef: 'new:sprite', eventProperty: 'pageEvents',
+    events: Array(13).fill({ targetRef: 'new:button', component: 'example.Handler', handler: 'onEvent' }) }] }).ok, false);
+  assert.equal(validateCommand(plan.id, { ...input, uiEvents: [{ componentRef: 'new:sprite', eventProperty: 'pageEvents',
+    events: [{ targetRef: 'uuid:../outside', component: 'example.Handler', handler: 'onEvent' }] }] }).ok, false);
   assert.equal(validateCommand(plan.id, { ...input, components: [{ ...input.components[0], properties: [
     { name: 'spriteFrame', value: { assetUuid: '44444444-4444-4444-8444-444444444444', assetClass: 'SpriteFrame', url: 'db://unsafe' } },
   ] }] }).code, 'UNKNOWN_INPUT_FIELD');
   assert.equal(validateCommand(plan.id, { ...input, nodes: [{ ...input.nodes[0], transform: { x: Infinity } }] }).ok, false);
   assert.equal(validateCommand(commit.id, { operationId: nodeUuid, planHash: 'd'.repeat(64) }).ok, true);
   assert.equal(validateCommand(reconcile.id, { operationId: nodeUuid }).ok, true);
+  assert.equal(validateCommand(compensatePlan.id, { sourceOperationId: nodeUuid }).ok, true);
+  assert.equal(validateCommand(compensateCommit.id, { operationId: nodeUuid, planHash: 'd'.repeat(64) }).ok, true);
+  assert.equal(validateCommand(compensateReconcile.id, { operationId: nodeUuid }).ok, true);
 });

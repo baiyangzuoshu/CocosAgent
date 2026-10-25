@@ -11,6 +11,9 @@ const MAX_MUTATION_SCAN_DEPTH = 64;
 const MAX_COMPONENT_INSTANCES = 32;
 const MAX_DELETE_SUBTREE_NODES = 256;
 const MAX_PREFAB_INSTANCE_NODES = 256;
+const MAX_COMPOSE_NODES = 32;
+const MAX_COMPOSE_COMPONENTS = 64;
+const MAX_COMPOSE_EVENT_GROUPS = 32;
 const UI_COMPONENT_CLASS_NAMES = new Set([
     'cc.Canvas', 'cc.Widget', 'cc.Layout', 'cc.Sprite', 'cc.Label', 'cc.Button',
     'cc.Toggle', 'cc.ToggleContainer', 'cc.Slider', 'cc.ProgressBar', 'cc.EditBox', 'cc.RichText',
@@ -1025,8 +1028,25 @@ function isWritableComponentProperty(component, property) {
 
 function componentPropertyAttributes(constructor, property) {
     if (!cc.Class || typeof cc.Class.attr !== 'function') return null;
-    const attributes = cc.Class.attr(constructor, property);
-    return attributes && typeof attributes === 'object' ? attributes : null;
+    const merged = {};
+    const visited = new Set();
+    let current = constructor;
+    for (let depth = 0; typeof current === 'function' && depth < 32 && !visited.has(current); depth += 1) {
+        visited.add(current);
+        const attributes = cc.Class.attr(current, property);
+        if (attributes && typeof attributes === 'object') {
+            for (const [key, value] of Object.entries(attributes)) {
+                if (!Object.prototype.hasOwnProperty.call(merged, key)) merged[key] = value;
+            }
+            // Inherited Inspector fields can have no value instance from which to infer
+            // a type (for example a null SpriteFrame on cc.Toggle). Walk to the class
+            // that declared the type, keeping child-class metadata overrides.
+            if (attributes.type !== undefined && attributes.type !== null
+                || typeof attributes.ctor === 'function') break;
+        }
+        current = current.$super;
+    }
+    return Object.keys(merged).length ? merged : null;
 }
 
 function componentPropertyInspectorMetadata(constructor, property, attributes, attrType, component) {
@@ -2784,17 +2804,19 @@ function transformState(node) {
     const position = typeof node.getPosition === 'function' ? node.getPosition() : { x: node.x, y: node.y, z: 0 };
     return { x: Number(position.x) || 0, y: Number(position.y) || 0, z: Number(position.z) || 0,
         scaleX: Number(node.scaleX) || 0, scaleY: Number(node.scaleY) || 0,
-        angle: Number(node.angle) || 0, width: Number(node.width) || 0, height: Number(node.height) || 0 };
+        angle: Number(node.angle) || 0, width: Number(node.width) || 0, height: Number(node.height) || 0,
+        anchorX: Number(node.anchorX), anchorY: Number(node.anchorY) };
 }
 
 function normalizeTransform(value) {
     const input = value || {};
-    const keys = ['x', 'y', 'z', 'scaleX', 'scaleY', 'angle', 'width', 'height'];
+    const keys = ['x', 'y', 'z', 'scaleX', 'scaleY', 'angle', 'width', 'height', 'anchorX', 'anchorY'];
     const output = { x: 0, y: 0, z: 0, scaleX: 1, scaleY: 1, angle: 0, width: 0, height: 0 };
     for (const key of keys) {
         if (input[key] === undefined) continue;
         if (typeof input[key] !== 'number' || !Number.isFinite(input[key]) || Math.abs(input[key]) > 1000000
-            || (['width', 'height'].includes(key) && input[key] < 0))
+            || (['width', 'height'].includes(key) && input[key] < 0)
+            || (['anchorX', 'anchorY'].includes(key) && (input[key] < 0 || input[key] > 1)))
             return { available: false, reason: 'SCENE_COMPOSE_TRANSFORM_INVALID', field: key };
         output[key] = input[key];
     }
@@ -2810,13 +2832,19 @@ function applyCompositionTransform(node, value) {
     node.scaleY = t.scaleY;
     node.angle = t.angle;
     node.setContentSize(t.width, t.height);
+    if (Object.prototype.hasOwnProperty.call(t, 'anchorX')) node.anchorX = t.anchorX;
+    if (Object.prototype.hasOwnProperty.call(t, 'anchorY')) node.anchorY = t.anchorY;
 }
 
 function compositionState(params) {
     if (!params || typeof params.sceneUuid !== 'string' || !Array.isArray(params.nodes)
-        || params.nodes.length < 1 || params.nodes.length > 12 || !Array.isArray(params.components)
-        || params.components.length > 24 || !Array.isArray(params.buttonEvents) || params.buttonEvents.length > 12)
+        || params.nodes.length < 1 || params.nodes.length > MAX_COMPOSE_NODES || !Array.isArray(params.components)
+        || params.components.length > MAX_COMPOSE_COMPONENTS
+        || (params.buttonEvents !== undefined && (!Array.isArray(params.buttonEvents) || params.buttonEvents.length > MAX_COMPOSE_EVENT_GROUPS))
+        || (params.uiEvents !== undefined && (!Array.isArray(params.uiEvents) || params.uiEvents.length > MAX_COMPOSE_EVENT_GROUPS)))
         return { available: false, reason: 'SCENE_COMPOSE_INPUT_INVALID' };
+    const buttonEvents = params.buttonEvents || [];
+    const uiEvents = params.uiEvents || [];
     const scene = cc && cc.director && cc.director.getScene && cc.director.getScene();
     if (!scene) return { available: false, reason: 'NO_ACTIVE_SCENE' };
     if (editorManaged(scene)) return { available: false, reason: 'NO_AUTHORING_SCENE' };
@@ -2861,6 +2889,8 @@ function compositionState(params) {
         const parent = resolveRef(item.parentRef, true);
         if (!parent.available) return parent;
         const parentUuid = parent.created ? parent.row.uuid : parent.nodeUuid;
+        const depth = parent.created ? parent.row.depth + 1 : 1;
+        if (depth > MAX_DEPTH) return { available: false, reason: 'SCENE_COMPOSE_DEPTH_LIMIT', nodeId: item.id };
         const parentPrefab = parent.created
             ? { available: true, prefabUuid: parent.row.prefabUuid, prefabRootUuid: parent.row.prefabRootUuid }
             : compositionPrefabLink(parent.node);
@@ -2873,7 +2903,7 @@ function compositionState(params) {
         const isPrefabInstanceRoot = Boolean(prefabUuid);
         const effectivePrefabUuid = prefabUuid || parentPrefab.prefabUuid || null;
         const prefabRootUuid = prefabUuid ? item.uuid : parentPrefab.prefabRootUuid || null;
-        const row = { id: item.id, uuid: item.uuid, name: item.name, parentRef: item.parentRef,
+        const row = { id: item.id, uuid: item.uuid, name: item.name, parentRef: item.parentRef, depth,
             parentUuid, transform: transform.value, prefabUuid: effectivePrefabUuid,
             prefabRootUuid, isPrefabInstanceRoot,
             isPrefabOverride: Boolean(!prefabUuid && effectivePrefabUuid) };
@@ -2926,34 +2956,73 @@ function compositionState(params) {
             const assetRef = value && typeof value === 'object' && !Array.isArray(value)
                 && typeof value.assetUuid === 'string' && typeof value.assetClass === 'string'
                 && Object.keys(value).length === 2;
-            if (!assetRef && !isScalar(value)) return { available: false, reason: 'SCENE_COMPOSE_PROPERTY_VALUE_INVALID', property: property.name };
+            const nodeRefValue = value && typeof value === 'object' && !Array.isArray(value)
+                && Object.keys(value).length === 1 && typeof value.nodeRef === 'string';
+            const componentRefValue = value && typeof value === 'object' && !Array.isArray(value)
+                && typeof value.componentRef === 'string'
+                && (Object.keys(value).sort().join(',') === 'componentRef'
+                    || Object.keys(value).sort().join(',') === 'componentInstanceId,componentRef')
+                && (value.componentInstanceId === undefined || (typeof value.componentInstanceId === 'string'
+                    && value.componentInstanceId.length > 0 && value.componentInstanceId.length <= 128));
+            if (!assetRef && !nodeRefValue && !componentRefValue && !isScalar(value))
+                return { available: false, reason: 'SCENE_COMPOSE_PROPERTY_VALUE_INVALID', property: property.name };
             const attributes = componentPropertyAttributes(resolved.constructor, property.name);
-            const attrType = componentPropertyType(attributes);
+            const attrType = componentPropertyType(attributes, value);
             const enumOptions = Array.isArray(attributes && attributes.enumList) ? attributes.enumList : [];
             if (assetRef) {
                 const assetClass = cc[value.assetClass];
                 if (!validUuid(value.assetUuid) || typeof assetClass !== 'function' || attrType !== assetClass)
                     return { available: false, reason: 'SCENE_COMPOSE_ASSET_PROPERTY_TYPE_MISMATCH', property: property.name };
+            } else if (nodeRefValue) {
+                if (attrType !== cc.Node) return { available: false, reason: 'SCENE_COMPOSE_PROPERTY_TYPE_MISMATCH', property: property.name };
+                const referencedNode = resolveRef(value.nodeRef, true);
+                if (!referencedNode.available) return referencedNode;
+            } else if (componentRefValue) {
+                if (!isComponentConstructor(attrType))
+                    return { available: false, reason: 'SCENE_COMPOSE_PROPERTY_TYPE_MISMATCH', property: property.name };
+                const ref = value.componentRef;
+                if (ref.startsWith('new:')) {
+                    const targetSpec = params.components.find((candidate) => candidate.id === ref.slice(4));
+                    const targetClass = targetSpec && componentClass(targetSpec.className);
+                    if (!targetSpec || !targetClass.available || !cc.js.isChildClassOf(targetClass.constructor, attrType))
+                        return { available: false, reason: 'SCENE_COMPOSE_COMPONENT_REFERENCE_TYPE_MISMATCH', property: property.name };
+                } else {
+                    if (!ref.startsWith('uuid:') || !validUuid(ref.slice(5)) || !value.componentInstanceId)
+                        return { available: false, reason: 'SCENE_COMPOSE_COMPONENT_REFERENCE_INVALID', property: property.name };
+                    const referencedNode = resolveRef(ref, true);
+                    if (!referencedNode.available) return referencedNode;
+                    const matches = referencedNode.state.components.filter((component) => {
+                        if (component.componentInstanceId !== value.componentInstanceId || !component.componentClassName) return false;
+                        const candidate = componentClass(component.componentClassName);
+                        return candidate.available && cc.js.isChildClassOf(candidate.constructor, attrType);
+                    });
+                    if (matches.length !== 1)
+                        return { available: false, reason: 'SCENE_COMPOSE_COMPONENT_REFERENCE_NOT_FOUND', property: property.name };
+                }
             } else if (enumOptions.length) {
                 if (typeof value !== 'number' || !enumOptions.some((item) => item
                     && Number.isFinite(item.value) && item.value === value))
                     return { available: false, reason: 'SCENE_COMPOSE_PROPERTY_ENUM_VALUE_INVALID', property: property.name };
-            } else if (attrType === String && typeof value !== 'string') {
+            } else if (primitiveTypeName(attrType) === 'String' && typeof value !== 'string') {
                 return { available: false, reason: 'SCENE_COMPOSE_PROPERTY_TYPE_MISMATCH', property: property.name };
-            } else if (attrType === Number && typeof value !== 'number') {
+            } else if (['Number', 'Float', 'Integer'].includes(primitiveTypeName(attrType))
+                && (typeof value !== 'number' || (primitiveTypeName(attrType) === 'Integer' && !Number.isInteger(value)))) {
                 return { available: false, reason: 'SCENE_COMPOSE_PROPERTY_TYPE_MISMATCH', property: property.name };
-            } else if (attrType === Boolean && typeof value !== 'boolean') {
+            } else if (primitiveTypeName(attrType) === 'Boolean' && typeof value !== 'boolean') {
                 return { available: false, reason: 'SCENE_COMPOSE_PROPERTY_TYPE_MISMATCH', property: property.name };
-            } else if (attrType && attrType !== String && attrType !== Number && attrType !== Boolean && !assetRef) {
+            } else if (attrType && !primitiveTypeName(attrType) && attrType !== String && attrType !== Number
+                && attrType !== Boolean && !assetRef) {
                 return { available: false, reason: 'SCENE_COMPOSE_PROPERTY_TYPE_UNSUPPORTED', property: property.name };
             }
         }
-        componentById.set(item.id, { ...item, className: resolved.componentClassName, nodeUuid: node.row.uuid });
+        componentById.set(item.id, { ...item, className: resolved.componentClassName, nodeUuid: node.row.uuid,
+            constructor: resolved.constructor });
     }
 
     const buttonClass = componentClass('cc.Button');
-    if (params.buttonEvents.length && !buttonClass.available) return { available: false, reason: buttonClass.reason };
-    for (const event of params.buttonEvents) {
+    if (buttonEvents.length && !buttonClass.available) return { available: false, reason: buttonClass.reason };
+    const boundEventPairs = new Set();
+    for (const event of buttonEvents) {
         if (!event || typeof event.buttonRef !== 'string' || typeof event.handlerRef !== 'string'
             || typeof event.handlerComponentClassName !== 'string' || typeof event.handler !== 'string'
             || !/^[A-Za-z_$][A-Za-z0-9_$]{0,63}$/.test(event.handler))
@@ -2980,6 +3049,48 @@ function compositionState(params) {
         }
         if (!hasSafeComponentHandler(handler.constructor, event.handler))
             return { available: false, reason: 'SCENE_COMPOSE_HANDLER_NOT_FOUND', handler: event.handler };
+        const component = params.components.find((item) => item.nodeRef === event.buttonRef && item.className === 'cc.Button');
+        const pair = `${component.id}:clickEvents`;
+        if (boundEventPairs.has(pair)) return { available: false, reason: 'SCENE_COMPOSE_EVENT_BINDING_DUPLICATE' };
+        boundEventPairs.add(pair);
+    }
+    if (uiEvents.length && !cc.Component.EventHandler)
+        return { available: false, reason: 'SCENE_COMPOSE_UI_EVENT_HANDLER_UNAVAILABLE' };
+    for (const group of uiEvents) {
+        if (!group || typeof group.componentRef !== 'string' || !group.componentRef.startsWith('new:')
+            || typeof group.eventProperty !== 'string' || !Array.isArray(group.events) || group.events.length > 12)
+            return { available: false, reason: 'SCENE_COMPOSE_UI_EVENT_GROUP_INVALID' };
+        const component = componentById.get(group.componentRef.slice(4));
+        if (!component) return { available: false, reason: 'SCENE_COMPOSE_UI_EVENT_COMPONENT_NOT_FOUND' };
+        if (!(UI_EVENT_PROPERTIES[component.className] || []).includes(group.eventProperty))
+            return { available: false, reason: 'SCENE_COMPOSE_UI_EVENT_PROPERTY_NOT_ALLOWED' };
+        const pair = `${component.id}:${group.eventProperty}`;
+        if (boundEventPairs.has(pair)) return { available: false, reason: 'SCENE_COMPOSE_EVENT_BINDING_DUPLICATE' };
+        boundEventPairs.add(pair);
+        const owner = created.get(`uuid:${component.nodeUuid}`);
+        if (owner && owner.isPrefabInstanceRoot)
+            return { available: false, reason: 'SCENE_COMPOSE_PREFAB_UI_EVENT_MUTATION_UNSUPPORTED' };
+        for (const event of group.events) {
+            if (!event || typeof event.targetRef !== 'string' || typeof event.component !== 'string'
+                || typeof event.handler !== 'string' || !/^[A-Za-z_$][A-Za-z0-9_$]{0,63}$/.test(event.handler)
+                || (event.customEventData !== undefined && (typeof event.customEventData !== 'string' || event.customEventData.length > 240)))
+                return { available: false, reason: 'SCENE_COMPOSE_UI_EVENT_INVALID' };
+            const targetNode = resolveRef(event.targetRef, true);
+            if (!targetNode.available) return targetNode;
+            if (targetNode.created && targetNode.row.isPrefabInstanceRoot)
+                return { available: false, reason: 'SCENE_COMPOSE_PREFAB_HANDLER_TARGET_UNSUPPORTED' };
+            const handler = componentClass(event.component);
+            if (!handler.available) return handler;
+            const planned = params.components.filter((item) => item.nodeRef === event.targetRef && item.className === event.component);
+            if (targetNode.created && planned.length !== 1)
+                return { available: false, reason: 'SCENE_COMPOSE_HANDLER_COMPONENT_REQUIRED' };
+            if (!targetNode.created) {
+                const matches = targetNode.state.components.filter((item) => item.componentClassName === event.component);
+                if (matches.length !== 1) return { available: false, reason: 'SCENE_COMPOSE_HANDLER_COMPONENT_AMBIGUOUS' };
+            }
+            if (!hasSafeComponentHandler(handler.constructor, event.handler))
+                return { available: false, reason: 'SCENE_COMPOSE_HANDLER_NOT_FOUND', handler: event.handler };
+        }
     }
 
     const existingNodes = Array.from(existing.values()).map((entry) => ({ sceneUuid: entry.state.sceneUuid,
@@ -2993,7 +3104,8 @@ function compositionState(params) {
                 prefabRootUuid: created.get(item.id).prefabRootUuid,
                 prefabInstanceRoot: created.get(item.id).isPrefabInstanceRoot,
                 prefabOverride: created.get(item.id).isPrefabOverride } : {}) })),
-        componentCount: params.components.length, buttonEventCount: params.buttonEvents.length };
+        componentCount: params.components.length, buttonEventCount: buttonEvents.length,
+        uiEventGroupCount: uiEvents.length, uiEventCount: uiEvents.reduce((total, group) => total + group.events.length, 0) };
 }
 
 function compositionReadback(params) {
@@ -3020,7 +3132,26 @@ function compositionReadback(params) {
                 serializedPropertyCandidates[property.name] = serializedComponentPropertyCandidates(resolved.constructor, property.name);
                 if (property.value && typeof property.value === 'object' && typeof property.value.assetUuid === 'string')
                     propertyValues[property.name] = value && (value._uuid || value.uuid) || null;
+                else if (property.value && typeof property.value === 'object' && typeof property.value.nodeRef === 'string') {
+                    const ref = property.value.nodeRef;
+                    const uuid = ref.startsWith('new:')
+                        ? params.nodes.find((candidate) => candidate.id === ref.slice(4))?.uuid || null : ref.slice(5);
+                    propertyValues[property.name] = uuid ? `node:${uuid}` : null;
+                } else if (property.value && typeof property.value === 'object' && typeof property.value.componentRef === 'string') {
+                    const ref = property.value.componentRef;
+                    propertyValues[property.name] = ref.startsWith('new:') ? `component:${ref.slice(4)}`
+                        : `component:${ref.slice(5)}:${property.value.componentInstanceId}`;
+                }
                 else propertyValues[property.name] = isScalar(value) ? value : null;
+            }
+            const eventLists = {};
+            for (const group of (params.uiEvents || []).filter((entry) => entry.componentRef === `new:${component.id}`)) {
+                const state = normalizedUiEvents(instance, group.eventProperty);
+                eventLists[group.eventProperty] = state.available ? state.events : null;
+            }
+            if (component.className === 'cc.Button' && (params.buttonEvents || []).some((entry) => entry.buttonRef === component.nodeRef)) {
+                const state = normalizedUiEvents(instance, 'clickEvents');
+                eventLists.clickEvents = state.available ? state.events : null;
             }
             const clickEvents = component.className === 'cc.Button' && Array.isArray(instance.clickEvents)
                 ? instance.clickEvents.map((entry) => ({ targetUuid: entry && entry.target && entry.target.uuid || null,
@@ -3030,11 +3161,19 @@ function compositionReadback(params) {
                 serializedClassId: typeof serializedClassId === 'string' ? serializedClassId : null,
                 componentInstanceId: instance._id != null ? String(instance._id) : null, propertyValues,
                 serializedPropertyCandidates,
-                clickEventCount: Array.isArray(clickEvents) ? clickEvents.length : null, clickEvents };
+                clickEventCount: Array.isArray(clickEvents) ? clickEvents.length : null, clickEvents, eventLists };
         });
+        const allComponents = typeof located.node.getComponents === 'function' && cc.Component
+            ? located.node.getComponents(cc.Component).filter((component) => component && !editorManaged(component))
+                .map((component) => ({ componentInstanceId: component._id != null ? String(component._id) : null,
+                    componentClassName: classNameOf(component) })) : [];
+        const actualTransform = transformState(located.node);
+        if (!Object.prototype.hasOwnProperty.call(item.transform || {}, 'anchorX')) delete actualTransform.anchorX;
+        if (!Object.prototype.hasOwnProperty.call(item.transform || {}, 'anchorY')) delete actualTransform.anchorY;
         nodes.push({ id: item.id, uuid: located.state.nodeUuid, name: located.state.nodeName,
             nodePath: located.state.nodePath, parentUuid: parent && parent.uuid || null,
-            transform: transformState(located.node), prefabUuid: located.node._prefab && located.node._prefab.asset
+            childrenUuids: authoringChildren(located.node).map((child) => child.uuid), allComponents,
+            transform: actualTransform, prefabUuid: located.node._prefab && located.node._prefab.asset
                 ? located.node._prefab.asset._uuid || located.node._prefab.asset.uuid || null : null,
             prefabRootUuid: located.node._prefab && located.node._prefab.root
                 ? located.node._prefab.root.uuid || located.node._prefab.root._id || null : null, components });
@@ -3096,6 +3235,15 @@ function compose(params, callback) {
                 created.set(item.id, node);
                 rows.push({ id: item.id, node, parentRef: item.parentRef, transform: item.transform });
             }
+            // Build and attach the complete hierarchy before adding components. Built-in UI
+            // lifecycle hooks and typed reference setters may need valid parent transforms.
+            for (const row of rows) {
+                const parent = row.parentRef.startsWith('new:') ? created.get(row.parentRef.slice(4))
+                    : locateNode(params.sceneUuid, row.parentRef.slice(5)).node;
+                if (!parent || typeof parent.addChild !== 'function') throw new Error('SCENE_COMPOSE_PARENT_UNAVAILABLE');
+                mutationStarted = true;
+                parent.addChild(row.node);
+            }
             for (const spec of params.components) {
                 const node = created.get(spec.nodeRef.slice(4));
                 const resolved = componentClass(spec.className);
@@ -3103,11 +3251,31 @@ function compose(params, callback) {
                 const component = node.addComponent(resolved.constructor);
                 if (!component) throw new Error('SCENE_COMPOSE_COMPONENT_ADD_REJECTED');
                 addedComponents.set(spec.id, component);
+            }
+            const resolveNodeRef = (ref) => ref.startsWith('new:') ? created.get(ref.slice(4))
+                : locateNode(params.sceneUuid, ref.slice(5)).node;
+            const resolveComponentRef = (value) => {
+                if (value.componentRef.startsWith('new:')) return addedComponents.get(value.componentRef.slice(4));
+                const target = locateNode(params.sceneUuid, value.componentRef.slice(5)).node;
+                const matches = target && typeof target.getComponents === 'function'
+                    ? target.getComponents(cc.Component).filter((candidate) => candidate
+                        && String(candidate._id) === value.componentInstanceId) : [];
+                return matches.length === 1 ? matches[0] : null;
+            };
+            for (const spec of params.components) {
+                const component = addedComponents.get(spec.id);
                 for (const property of spec.properties) {
                     const value = property.value && typeof property.value === 'object' && typeof property.value.assetUuid === 'string'
-                        ? assets.get(property.value.assetUuid) : property.value;
+                        ? assets.get(property.value.assetUuid)
+                        : property.value && typeof property.value === 'object' && typeof property.value.nodeRef === 'string'
+                            ? resolveNodeRef(property.value.nodeRef)
+                            : property.value && typeof property.value === 'object' && typeof property.value.componentRef === 'string'
+                                ? resolveComponentRef(property.value) : property.value;
                     if (property.value && typeof property.value === 'object' && typeof property.value.assetUuid === 'string' && !value)
                         throw new Error('SCENE_ASSET_READBACK_MISSING');
+                    if (property.value && typeof property.value === 'object'
+                        && (typeof property.value.nodeRef === 'string' || typeof property.value.componentRef === 'string') && !value)
+                        throw new Error('SCENE_COMPOSE_REFERENCE_READBACK_MISSING');
                     component[property.name] = value;
                     const observed = component[property.name];
                     if (value && typeof value === 'object') {
@@ -3116,7 +3284,7 @@ function compose(params, callback) {
                     } else if (!Object.is(observed, value)) throw new Error('SCENE_COMPOSE_PROPERTY_READBACK_FAILED');
                 }
             }
-            for (const event of params.buttonEvents) {
+            for (const event of (params.buttonEvents || [])) {
                 const button = created.get(event.buttonRef.slice(4));
                 const target = event.handlerRef.startsWith('new:') ? created.get(event.handlerRef.slice(4))
                     : locateNode(params.sceneUuid, event.handlerRef.slice(5)).node;
@@ -3133,12 +3301,26 @@ function compose(params, callback) {
                 if (!last || last.target !== target || last.component !== event.handlerComponentClassName || last.handler !== event.handler)
                     throw new Error('SCENE_COMPOSE_BUTTON_BIND_READBACK_FAILED');
             }
-            for (const row of rows) {
-                const parent = row.parentRef.startsWith('new:') ? created.get(row.parentRef.slice(4))
-                    : locateNode(params.sceneUuid, row.parentRef.slice(5)).node;
-                if (!parent || typeof parent.addChild !== 'function') throw new Error('SCENE_COMPOSE_PARENT_UNAVAILABLE');
-                mutationStarted = true;
-                parent.addChild(row.node);
+            for (const group of (params.uiEvents || [])) {
+                const component = addedComponents.get(group.componentRef.slice(4));
+                if (!component || !cc.Component || typeof cc.Component.EventHandler !== 'function')
+                    throw new Error('SCENE_COMPOSE_UI_EVENT_BIND_UNAVAILABLE');
+                const list = group.events.map((event) => {
+                    const target = resolveNodeRef(event.targetRef);
+                    if (!target) throw new Error('SCENE_COMPOSE_UI_EVENT_TARGET_UNAVAILABLE');
+                    const eventHandler = new cc.Component.EventHandler();
+                    eventHandler.target = target;
+                    eventHandler.component = event.component;
+                    eventHandler.handler = event.handler;
+                    eventHandler.customEventData = typeof event.customEventData === 'string' ? event.customEventData : '';
+                    return eventHandler;
+                });
+                component[group.eventProperty] = list;
+                const actual = component[group.eventProperty];
+                if (!Array.isArray(actual) || actual.length !== list.length || actual.some((entry, index) =>
+                    entry.target !== list[index].target || entry.component !== list[index].component
+                    || entry.handler !== list[index].handler || entry.customEventData !== list[index].customEventData))
+                    throw new Error('SCENE_COMPOSE_UI_EVENT_BIND_READBACK_FAILED');
             }
             // Component setters and lifecycle hooks can change content size (for example, cc.Label.string).
             // Restore every requested transform after the nodes are parented so the planned geometry wins.

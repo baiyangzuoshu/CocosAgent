@@ -50,6 +50,7 @@ function fixture() {
   class Material extends Asset {}
   class MaterialVariant extends Material { constructor(uuid = 'material-variant') { super(); this._uuid = uuid; } }
   const Integer = { name: 'Integer' };
+  const Float = { name: 'Float' };
   class Canvas extends Component { constructor() { super(); this.designResolution = new Size(960, 640); this.fitWidth = false; this.fitHeight = true; } }
   Canvas.prototype.__classname__ = 'cc.Canvas';
   Canvas.__props__ = ['designResolution', 'fitWidth', 'fitHeight'];
@@ -135,12 +136,17 @@ function fixture() {
   }
   Label.prototype.__classname__ = 'cc.Label';
   Label.__props__ = ['font', 'string', 'overflow', 'useSystemFont', 'enableBold', 'enableItalic', 'enableUnderline'];
-  class Button extends Component { constructor() { super(); this._id = 'button-component'; this.clickEvents = []; } }
+  class Button extends Component {
+    constructor() { super(); this._id = 'button-component'; this.clickEvents = []; this.normalSprite = null;
+      this.pressedSprite = null; this.disabledSprite = null; this.transition = 0; }
+  }
   Button.prototype.__classname__ = 'cc.Button';
-  Button.__props__ = ['clickEvents'];
+  Button.$super = Component;
+  Button.__props__ = ['clickEvents', 'normalSprite', 'pressedSprite', 'disabledSprite', 'transition'];
   class Toggle extends Button { constructor() { super(); this.checkEvents = []; this.isChecked = false; } }
   Toggle.prototype.__classname__ = 'cc.Toggle';
-  Toggle.__props__ = ['clickEvents', 'checkEvents', 'isChecked'];
+  Toggle.$super = Button;
+  Toggle.__props__ = ['clickEvents', 'checkEvents', 'isChecked', 'normalSprite', 'pressedSprite', 'disabledSprite', 'transition'];
   class ToggleContainer extends Component { constructor() { super(); this.checkEvents = []; } }
   ToggleContainer.prototype.__classname__ = 'cc.ToggleContainer';
   ToggleContainer.__props__ = ['checkEvents'];
@@ -193,6 +199,9 @@ function fixture() {
   class DefaultArrayComponent extends Component { constructor() { super(); this.values = []; } }
   DefaultArrayComponent.prototype.__classname__ = 'sample.DefaultArrayComponent';
   DefaultArrayComponent.__props__ = ['values'];
+  class NumericTypes extends Component { constructor() { super(); this.floatValue = 0; this.integerValue = 0; } }
+  NumericTypes.prototype.__classname__ = 'sample.NumericTypes';
+  NumericTypes.__props__ = ['floatValue', 'integerValue'];
   class NeedsOther extends Component {}
   NeedsOther.prototype.__classname__ = 'sample.NeedsOther';
   NeedsOther._requireComponent = Label;
@@ -203,7 +212,7 @@ function fixture() {
   for (const ComponentType of [Component, BaseSprite, Canvas, Widget, Layout, Sprite, Label, Button, Toggle,
     ToggleContainer, Slider, ScrollView, PageView, EditBox, LabelOutline, LabelShadow, ToggleGroup, SafeArea,
     SubContextView, Scrollbar, Controller, ReferenceHolder, DefaultArrayComponent,
-    NeedsOther, AutoSizeOnLoad]) ComponentType.__values__ = (ComponentType.__props__ || []).slice();
+    NumericTypes, NeedsOther, AutoSizeOnLoad]) ComponentType.__values__ = (ComponentType.__props__ || []).slice();
   Widget.__values__ = ['target', '_alignFlags', 'top', 'alignMode'];
   Layout.__values__ = ['_N$layoutType', '_resize', 'cellSize', 'spacingY'];
   Label.__values__ = ['_N$file', '_string', 'overflow', '_isSystemFontUsed', '_styleFlags'];
@@ -225,13 +234,16 @@ function fixture() {
   const cc = {
     Component, Asset, Material, MaterialVariant, Node: FakeNode, SpriteFrame, Font, TTFFont, Label, Canvas, Widget, Layout, Button, Toggle,
     ToggleContainer, Slider, ScrollView, PageView, EditBox, LabelOutline, LabelShadow, ToggleGroup, SafeArea,
-    SubContextView, Scrollbar, Vec2, Vec3, Vec4, Rect, Size, Color,
+    SubContextView, Scrollbar, Vec2, Vec3, Vec4, Rect, Size, Color, Integer, Float,
     Class: { attr(type, property) {
       const typeMap = new Map([
         [`Sprite.spriteFrame`, SpriteFrame], [`Sprite.position`, Vec2], [`Sprite.direction`, Vec3],
         [`Sprite.size`, Size], [`Sprite.tint`, Color], [`Sprite.thresholds`, Array],
         [`Sprite.materials`, Material],
         [`Sprite.integerList`, Integer], [`Label.font`, Font], [`Label.overflow`, 'Number'],
+        [`Button.normalSprite`, SpriteFrame], [`Button.pressedSprite`, SpriteFrame],
+        [`Button.disabledSprite`, SpriteFrame], [`Button.transition`, 'Number'],
+        [`NumericTypes.floatValue`, Float], [`NumericTypes.integerValue`, Integer],
         [`Label.useSystemFont`, Boolean], [`Label.enableBold`, Boolean], [`Label.enableItalic`, Boolean],
         [`Label.enableUnderline`, Boolean],
         [`Canvas.designResolution`, Size], [`Widget.target`, FakeNode], [`Layout.cellSize`, Size],
@@ -251,7 +263,8 @@ function fixture() {
       if (type === Label && property === 'overflow') return { type: 'Number', min: 0, max: 2, step: 1 };
       const className = type === Sprite ? 'Sprite' : type === Label ? 'Label'
         : type === Canvas ? 'Canvas' : type === Widget ? 'Widget' : type === Layout ? 'Layout'
-          : type === ScrollView ? 'ScrollView'
+          : type === ScrollView ? 'ScrollView' : type === Button ? 'Button' : type === Toggle ? 'Toggle'
+          : type === NumericTypes ? 'NumericTypes'
           : type === LabelOutline ? 'LabelOutline' : type === LabelShadow ? 'LabelShadow'
             : type === ToggleGroup ? 'ToggleGroup' : type === SubContextView ? 'SubContextView'
           : type === ReferenceHolder ? 'ReferenceHolder' : '';
@@ -281,7 +294,7 @@ function fixture() {
         'cc.LabelShadow': LabelShadow, 'cc.ToggleGroup': ToggleGroup, 'cc.SafeArea': SafeArea,
         'cc.SubContextView': SubContextView, 'cc.Scrollbar': Scrollbar,
         'sample.Controller': Controller, 'sample.ReferenceHolder': ReferenceHolder,
-        'sample.DefaultArrayComponent': DefaultArrayComponent,
+        'sample.DefaultArrayComponent': DefaultArrayComponent, 'sample.NumericTypes': NumericTypes,
         'sample.NeedsOther': NeedsOther, 'sample.AutoSizeOnLoad': AutoSizeOnLoad,
         'sample.NotAComponent': NotAComponent })[name]; },
       getClassName(type) { return type.prototype.__classname__ || (type.name ? `cc.${type.name}` : ''); },
@@ -297,7 +310,7 @@ function fixture() {
   return { api: module.exports, root, Sprite, Label, Canvas, Widget, Layout, Button, Toggle, ToggleContainer,
     Slider, ScrollView, PageView, EditBox, LabelOutline, LabelShadow, ToggleGroup, SafeArea, SubContextView,
     Scrollbar, Controller, ReferenceHolder, DefaultArrayComponent, Vec2, Vec3, Vec4, Rect,
-    Size, Color, Asset, Material, MaterialVariant, SpriteFrame, Font, TTFFont, Integer, cc, FakeNode };
+    Size, Color, Asset, Material, MaterialVariant, SpriteFrame, Font, TTFFont, Integer, Float, NumericTypes, cc, FakeNode };
 }
 
 function invoke(api, method, input) {
@@ -466,6 +479,30 @@ test('Label font inspection and assignment use the cc.Font base type for derived
   assert.equal(changed.available, true, changed.reason);
   assert.ok(label.font instanceof TTFFont);
   assert.ok(label.font instanceof Font);
+});
+
+test('Toggle inherited Button SpriteFrame properties resolve the Creator declaration type', () => {
+  const { api, root, FakeNode, Toggle, SpriteFrame } = fixture();
+  const node = new FakeNode('Toggle');
+  node._id = '33333333-3333-4333-8333-333333333333';
+  root.addChild(node);
+  const toggle = node.addComponent(Toggle);
+  const base = { sceneUuid: root.uuid, nodeUuid: node.uuid, nodePath: 'Scene/Toggle',
+    componentClassName: 'cc.Toggle', componentInstanceId: toggle._id };
+  const before = invoke(api, 'componentPropertyState', { ...base, property: 'normalSprite' }).result;
+  assert.equal(before.available, true, JSON.stringify(before));
+  assert.equal(before.propertyKind, 'asset');
+  assert.deepEqual(JSON.parse(JSON.stringify(before.value)), { kind: 'asset', assetClass: 'SpriteFrame' });
+  assert.deepEqual(JSON.parse(JSON.stringify(before.inspector)), { type: 'cc.SpriteFrame', assetClass: 'SpriteFrame',
+    referenceKind: 'asset', readonly: false, visibility: 'visible', serializable: true, editable: true,
+    serializedProperty: 'normalSprite' });
+
+  const changed = invoke(api, 'setComponentProperty', { ...base, property: 'normalSprite',
+    expectedValue: before.value, value: { kind: 'asset', assetClass: 'SpriteFrame',
+      assetUuid: '44444444-4444-4444-8444-444444444444' } }).result;
+  assert.equal(changed.available, true, JSON.stringify(changed));
+  assert.ok(toggle.normalSprite instanceof SpriteFrame);
+  assert.equal(toggle.normalSprite._uuid, '44444444-4444-4444-8444-444444444444');
 });
 
 test('Label public overflow property remains writable and supplies bounded serialized-key candidates', () => {
@@ -1389,6 +1426,33 @@ test('scene composition accepts declared enum values on built-in components', as
   assert.equal(canvas.children.length, 1);
 });
 
+test('scene composition accepts Creator Float properties and enforces Integer declarations', () => {
+  const { api, root, FakeNode } = fixture();
+  root.uuid = '11111111-1111-4111-8111-111111111111';
+  const canvas = new FakeNode('Canvas');
+  canvas._id = '22222222-2222-4222-8222-222222222222';
+  root.addChild(canvas);
+  const request = {
+    sceneUuid: root.uuid,
+    nodes: [{ id: 'numeric', uuid: '33333333-3333-4333-8333-333333333333', name: 'Numeric',
+      parentRef: `uuid:${canvas.uuid}`, transform: { width: 100, height: 20 } }],
+    components: [{ id: 'numeric_component', nodeRef: 'new:numeric', className: 'sample.NumericTypes',
+      properties: [{ name: 'floatValue', value: 0.65 }, { name: 'integerValue', value: 2 }] }],
+  };
+  assert.equal(invoke(api, 'compositionState', request).result.available, true);
+  const invalidFloat = invoke(api, 'compositionState', { ...request,
+    components: [{ ...request.components[0], properties: [{ name: 'floatValue', value: '0.65' }] }],
+  }).result;
+  assert.equal(invalidFloat.available, false);
+  assert.equal(invalidFloat.reason, 'SCENE_COMPOSE_PROPERTY_TYPE_MISMATCH');
+  const invalidInteger = invoke(api, 'compositionState', { ...request,
+    components: [{ ...request.components[0], properties: [{ name: 'integerValue', value: 2.5 }] }],
+  }).result;
+  assert.equal(invalidInteger.available, false);
+  assert.equal(invalidInteger.reason, 'SCENE_COMPOSE_PROPERTY_TYPE_MISMATCH');
+  assert.equal(canvas.children.length, 0);
+});
+
 test('scene composition rejects stale, ambiguous, and non-serializable inputs before adding nodes', () => {
   const { api, root, FakeNode } = fixture();
   root.uuid = '11111111-1111-4111-8111-111111111111';
@@ -1413,6 +1477,56 @@ test('scene composition rejects stale, ambiguous, and non-serializable inputs be
   assert.equal(renderConflict.reason, 'SCENE_COMPOSE_COMPONENT_DISALLOW_MULTIPLE_CONFLICT');
   assert.equal(renderConflict.disallowMultipleClassName, 'cc.BaseSprite');
   assert.equal(parent.children.length, 0);
+});
+
+test('scene composition rejects duplicate IDs, excess depth, invalid references, wrong reference types, and missing handlers', () => {
+  const { api, root, FakeNode } = fixture();
+  root.uuid = '11111111-1111-4111-8111-111111111111';
+  const canvas = new FakeNode('Canvas');
+  canvas._id = '22222222-2222-4222-8222-222222222222';
+  root.addChild(canvas);
+  const base = { sceneUuid: root.uuid, nodes: [{ id: 'item', uuid: '33333333-3333-4333-8333-333333333333',
+    name: 'Item', parentRef: `uuid:${canvas.uuid}` }], components: [], buttonEvents: [] };
+
+  const duplicateId = invoke(api, 'compositionState', { ...base, nodes: [base.nodes[0], {
+    id: 'item', uuid: '44444444-4444-4444-8444-444444444444', name: 'Other', parentRef: `uuid:${canvas.uuid}`,
+  }] }).result;
+  assert.equal(duplicateId.available, false);
+  assert.equal(duplicateId.reason, 'SCENE_COMPOSE_NODE_INVALID');
+
+  const deepNodes = Array.from({ length: 7 }, (_, index) => ({ id: `depth_${index}`,
+    uuid: `55555555-5555-4555-8555-${String(index + 1).padStart(12, '0')}`,
+    name: `Depth${index}`, parentRef: index === 0 ? `uuid:${canvas.uuid}` : `new:depth_${index - 1}` }));
+  const excessDepth = invoke(api, 'compositionState', { ...base, nodes: deepNodes }).result;
+  assert.equal(excessDepth.available, false);
+  assert.equal(excessDepth.reason, 'SCENE_COMPOSE_DEPTH_LIMIT');
+
+  const invalidReference = invoke(api, 'compositionState', { ...base,
+    nodes: [{ ...base.nodes[0], parentRef: 'uuid:not-a-valid-uuid' }],
+  }).result;
+  assert.equal(invalidReference.available, false);
+  assert.equal(invalidReference.reason, 'SCENE_COMPOSE_REFERENCE_INVALID');
+
+  const wrongReferenceType = invoke(api, 'compositionState', { ...base,
+    nodes: [base.nodes[0], { id: 'handle', uuid: '66666666-6666-4666-8666-666666666666',
+      name: 'Handle', parentRef: 'new:item' }],
+    components: [
+      { id: 'holder', nodeRef: 'new:item', className: 'sample.ReferenceHolder',
+        properties: [{ name: 'targetComponent', value: { componentRef: 'new:sprite' } }] },
+      { id: 'sprite', nodeRef: 'new:handle', className: 'cc.Sprite', properties: [] },
+    ],
+  }).result;
+  assert.equal(wrongReferenceType.available, false);
+  assert.equal(wrongReferenceType.reason, 'SCENE_COMPOSE_COMPONENT_REFERENCE_TYPE_MISMATCH');
+
+  const missingHandler = invoke(api, 'compositionState', { ...base,
+    components: [{ id: 'button', nodeRef: 'new:item', className: 'cc.Button', properties: [] }],
+    buttonEvents: [{ buttonRef: 'new:item', handlerRef: 'new:item',
+      handlerComponentClassName: 'cc.Button', handler: 'missingMethod' }],
+  }).result;
+  assert.equal(missingHandler.available, false);
+  assert.equal(missingHandler.reason, 'SCENE_COMPOSE_HANDLER_NOT_FOUND');
+  assert.equal(canvas.children.length, 0);
 });
 
 test('scene composition restores planned transforms after Label properties auto-size the node', async () => {

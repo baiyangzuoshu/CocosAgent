@@ -1,22 +1,23 @@
 {
   "schemaVersion": 1,
   "extensionName": "cocos-creator-agent-extension",
-  "extensionVersion": "0.8.111",
-  "installedByCliVersion": "0.12.62",
-  "installedAt": "2026-10-24T22:05:23.872Z",
+  "extensionVersion": "0.8.126",
+  "installedByCliVersion": "0.12.63",
+  "installedAt": "2026-10-25T09:22:26.466Z",
   "files": {
     "asset-import-operations.cjs": "ec5a58fbd613518a1019453dd72a59626c3736a9d5a9faebdbc1e4a68e30e139",
     "asset-references.cjs": "35ce4a041792b1e91f0864a4cd875a613d0e92b7ea36af89734df64dfb069f13",
-    "command-contract.json": "741c87c621fbaea81eba4dcbfb07622e3ef554066722252a3eb703e8c985ffdf",
+    "command-contract.json": "f285337f2596bf91771482b581eea9ab9088a131b07f1d00ba91aa541c1af7bf",
     "commit-authorization.cjs": "7e297866deb67ac86d87cf749d77597cac543c9fc03b2e50abe15f4920741e24",
     "editor-script-eval.cjs": "0aa2e6a6a226970132468d698acfd2c3f804112c22f16194996380a6bb47e075",
-    "main.js": "6c30868adb93f7766bf4931f09c713f34307ec0bcfe03e41ed0a277dc39d8c87",
-    "package.json": "83550442cce66847be6725d776bc9aee6d6d1d7bf2926e0a95522312180434b7",
+    "main.js": "1176467b16e8bbc79530c56071d5611678a7eeaabc0173cf50031c8000ef3ec6",
+    "package.json": "b285cd7d024a4f8c1cc8b18c94451a64b24e95e7ddcaeae937a5328f827bb30f",
     "prefab-instance-operations.cjs": "164e8773f891d4f7d1c5a629d811bc26506b588ee37b373868cf20c1829a04e2",
     "prefab-patch.cjs": "c6667b242236040bd543e33e1ce4ea5a19bcdeca47b3dca0d1c508776a9e661d",
     "prefab-source.cjs": "4884914a6475573912ca956935dc823623b1616900ee896de04fd3b09d528cda",
-    "provider-contract.cjs": "4d070471d4b37d02968707b1eca4cc17c7696e5769e612b23f667d5a83017bab",
-    "scene-persistence.cjs": "8c224ef46705f9a740e376e83751991a4e2c8a775604e583e1cf2faefc1901d4",
-    "scene.js": "4e28d4a29bf2ff98d9330720f15c86986eece76ffe10e68d5bacbdb1c2de6a11"
+    "provider-contract.cjs": "a5e58a63f0685900959a5ae2a62798218e83b320031140f6486ecf64f7841b05",
+    "scene-compose-compensation.cjs": "f5e309c937d126f411bffeebc2eec598fd3574021c3dcfdbc3c4730b89727c67",
+    "scene-persistence.cjs": "67e4d49da385a295eecaf5128eea0fdff1617dd09bca171d78eba72bc21dd8df",
+    "scene.js": "9db97243423651da94c3e09548302e15036e7893e02895799288ffa22869bf8a"
   }
 }

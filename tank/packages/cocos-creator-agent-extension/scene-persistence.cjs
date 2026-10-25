@@ -297,6 +297,22 @@ function inspectButtonEvents(nodeRecord, records) {
     return { buttonComponentCount: buttons.length, buttonEvents: events };
 }
 
+function inspectSerializedEventList(component, records, property) {
+    const rawEvents = component && component[property] === undefined ? [] : component && component[property];
+    if (!Array.isArray(rawEvents) || rawEvents.length > 12) return fail('SCENE_UI_EVENT_LIST_INVALID', { eventProperty: property });
+    const events = [];
+    for (const reference of rawEvents) {
+        const event = resolveRef(reference, records);
+        const target = event && resolveRef(event.target, records);
+        if (!event || event.__type__ !== 'cc.ClickEvent' || !target
+            || !['cc.Node', 'cc.Scene'].includes(target.__type__) || typeof target._id !== 'string'
+            || typeof event.component !== 'string' || typeof event.handler !== 'string'
+            || typeof event.customEventData !== 'string') return fail('SCENE_UI_EVENT_RECORD_INVALID', { eventProperty: property });
+        events.push({ event, target, targetUuid: target._id });
+    }
+    return { verified: true, events };
+}
+
 function inspectSerializedUiEvents(nodeRecord, records, sceneRootUuid, selector) {
     if (!selector || typeof selector.componentInstanceId !== 'string' || !selector.componentInstanceId
         || selector.componentInstanceId.length > 128 || typeof selector.serializedClassId !== 'string'
@@ -491,7 +507,9 @@ function inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid, sceneAssetR
     const plan = operation && operation.plan;
     const currentReadback = readback || operation && operation.sceneReadback;
     if (!plan || plan.sceneUuid !== sceneUuid || !plan.request || !Array.isArray(plan.request.nodes)
-        || !Array.isArray(plan.request.components) || !Array.isArray(plan.request.buttonEvents)
+        || !Array.isArray(plan.request.components)
+        || (plan.request.buttonEvents !== undefined && !Array.isArray(plan.request.buttonEvents))
+        || (plan.request.uiEvents !== undefined && !Array.isArray(plan.request.uiEvents))
         || !currentReadback || currentReadback.available !== true || currentReadback.sceneUuid !== sceneUuid
         || !Array.isArray(currentReadback.nodes)) return fail('SCENE_PERSISTENCE_INPUT_INVALID');
 
@@ -532,6 +550,7 @@ function inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid, sceneAssetR
         return fail('SCENE_COMPOSITION_NODE_SET_MISMATCH');
     let verifiedComponentCount = 0;
     let verifiedButtonEventCount = 0;
+    let verifiedUiEventCount = 0;
     let verifiedPrefabInstanceCount = 0;
     const serializedComponents = new Map();
 
@@ -571,11 +590,45 @@ function inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid, sceneAssetR
         const transform = expectedState && expectedState.transform;
         const trs = found.record._trs && found.record._trs.array;
         const size = found.record._contentSize;
+        const creatorSized = plan.request.components.some((component) => component.nodeRef === `new:${nodeId}`
+            && ['cc.Label', 'cc.Widget'].includes(component.className))
+            || (observed.allComponents || []).some((component) => ['cc.Label', 'cc.Widget'].includes(component.componentClassName));
+        const layout = expected.parentRef.startsWith('new:')
+            ? plan.request.components.find((component) => component.nodeRef === expected.parentRef
+                && component.className === 'cc.Layout') : null;
+        const widget = plan.request.components.find((component) => component.nodeRef === `new:${nodeId}`
+            && component.className === 'cc.Widget');
+        const widgetAligns = widget && widget.properties.some((property) =>
+            ['isAlignLeft', 'isAlignRight', 'isAlignTop', 'isAlignBottom'].includes(property.name) && property.value === true);
+        const layoutType = layout && layout.properties.find((property) => property.name === 'type')?.value;
+        const layoutEnabled = layout && layout.properties.find((property) => property.name === 'enabled')?.value;
+        const positionManagedByLayout = !!layout && layoutEnabled !== false && Number.isFinite(layoutType) && layoutType !== 0;
+        const positionManagedByPrefabWidget = !!expectedPrefabUuid
+            && (observed.allComponents || []).some((component) => component.componentClassName === 'cc.Widget');
+        const positionManagedByCreator = !!widgetAligns || positionManagedByLayout || positionManagedByPrefabWidget;
+        const resolvedWidth = creatorSized && observed.transform && Number.isFinite(observed.transform.width)
+            ? observed.transform.width : transform.width;
+        const resolvedHeight = creatorSized && observed.transform && Number.isFinite(observed.transform.height)
+            ? observed.transform.height : transform.height;
+        const resolvedX = positionManagedByCreator && observed.transform && Number.isFinite(observed.transform.x)
+            ? observed.transform.x : transform.x;
+        const resolvedY = positionManagedByCreator && observed.transform && Number.isFinite(observed.transform.y)
+            ? observed.transform.y : transform.y;
         if (!Array.isArray(trs) || trs.length < 10 || !size
-            || !close(trs[0], transform.x) || !close(trs[1], transform.y) || !close(trs[2], transform.z)
+            || !Number.isFinite(trs[0]) || !Number.isFinite(trs[1])
+            || (!positionManagedByCreator && (!close(trs[0], resolvedX) || !close(trs[1], resolvedY)))
+            || !close(trs[2], transform.z)
             || !close(trs[7], transform.scaleX) || !close(trs[8], transform.scaleY)
-            || !close(size.width, transform.width) || !close(size.height, transform.height))
-            return fail('SCENE_COMPOSITION_TRANSFORM_MISMATCH', { nodeId });
+            || !close(size.width, resolvedWidth) || !close(size.height, resolvedHeight))
+            return fail('SCENE_COMPOSITION_TRANSFORM_MISMATCH', { nodeId,
+                expectedResolvedTransform: { x: resolvedX, y: resolvedY, z: transform.z,
+                    scaleX: transform.scaleX, scaleY: transform.scaleY, width: resolvedWidth, height: resolvedHeight },
+                serializedTransform: { x: trs && trs[0], y: trs && trs[1], z: trs && trs[2],
+                    scaleX: trs && trs[7], scaleY: trs && trs[8], width: size && size.width, height: size && size.height } });
+        const anchor = found.record._anchorPoint;
+        if ((own(transform, 'anchorX') && (!anchor || !close(anchor.x, transform.anchorX)))
+            || (own(transform, 'anchorY') && (!anchor || !close(anchor.y, transform.anchorY))))
+            return fail('SCENE_COMPOSITION_ANCHOR_MISMATCH', { nodeId });
         const halfAngle = transform.angle * Math.PI / 360;
         const expectedQz = Math.sin(halfAngle);
         const expectedQw = Math.cos(halfAngle);
@@ -633,6 +686,40 @@ function inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid, sceneAssetR
                     if (!actual || typeof actual !== 'object' || actual.__uuid__ !== value.assetUuid)
                         return fail('SCENE_COMPOSITION_ASSET_REFERENCE_MISMATCH',
                             { componentId: expectedComponent.id, property: property.name });
+                } else if (value && typeof value === 'object' && typeof value.nodeRef === 'string') {
+                    const expectedNodeUuid = value.nodeRef.startsWith('new:')
+                        ? expectedNodes.get(value.nodeRef.slice(4))?.uuid : value.nodeRef.slice(5);
+                    const actualNode = resolveRef(actual, records);
+                    if (!expectedNodeUuid || !actualNode || !['cc.Node', 'cc.Scene'].includes(actualNode.__type__)
+                        || actualNode._id !== expectedNodeUuid)
+                        return fail('SCENE_COMPOSITION_NODE_REFERENCE_MISMATCH',
+                            { componentId: expectedComponent.id, property: property.name });
+                } else if (value && typeof value === 'object' && typeof value.componentRef === 'string') {
+                    let expectedNodeUuid;
+                    let expectedInstanceId;
+                    let expectedClassId;
+                    if (value.componentRef.startsWith('new:')) {
+                        const target = plan.request.components.find((item) => item.id === value.componentRef.slice(4));
+                        const targetReadback = target && observedNodes.get(target.nodeRef.slice(4));
+                        const targetComponent = targetReadback && targetReadback.components.find((item) => item.id === target.id);
+                        expectedNodeUuid = target && expectedNodes.get(target.nodeRef.slice(4))?.uuid;
+                        expectedInstanceId = targetComponent && targetComponent.componentInstanceId;
+                        expectedClassId = targetComponent && targetComponent.serializedClassId;
+                    } else {
+                        expectedNodeUuid = value.componentRef.slice(5);
+                        expectedInstanceId = value.componentInstanceId;
+                        const existingNode = (plan.expectedState.existingNodes || []).find((item) => item.nodeUuid === expectedNodeUuid);
+                        const existingComponent = existingNode && existingNode.components.find((item) =>
+                            item.componentInstanceId === expectedInstanceId);
+                        expectedClassId = existingComponent && existingComponent.serializedClassId;
+                    }
+                    const actualComponent = resolveRef(actual, records);
+                    const actualOwner = actualComponent && resolveRef(actualComponent.node, records);
+                    if (!expectedNodeUuid || !expectedInstanceId || !expectedClassId || !actualComponent || !actualOwner
+                        || actualOwner._id !== expectedNodeUuid || actualComponent._id !== expectedInstanceId
+                        || actualComponent.__type__ !== expectedClassId)
+                        return fail('SCENE_COMPOSITION_COMPONENT_REFERENCE_MISMATCH',
+                            { componentId: expectedComponent.id, property: property.name });
                 } else if (!Object.is(actual, value)) return fail('SCENE_COMPOSITION_PROPERTY_MISMATCH',
                     { componentId: expectedComponent.id, property: property.name });
             }
@@ -642,45 +729,69 @@ function inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid, sceneAssetR
     }
 
     const eventGroups = new Map();
-    for (const event of plan.request.buttonEvents) {
+    for (const event of plan.request.buttonEvents || []) {
         const buttonComponent = plan.request.components.find((component) => component.nodeRef === event.buttonRef
             && component.className === 'cc.Button');
         const buttonSerialized = buttonComponent && serializedComponents.get(buttonComponent.id);
         if (!buttonSerialized) return fail('SCENE_BUTTON_COMPONENT_MISSING');
-        const expectedEvents = eventGroups.get(buttonComponent.id) || [];
-        expectedEvents.push(event);
-        eventGroups.set(buttonComponent.id, expectedEvents);
+        const key = `${buttonComponent.id}:clickEvents`;
+        const group = eventGroups.get(key) || { componentId: buttonComponent.id, eventProperty: 'clickEvents', events: [], kind: 'button' };
+        group.events.push(event);
+        eventGroups.set(key, group);
     }
-    for (const [componentId, expectedEvents] of eventGroups) {
-        const buttonSerialized = serializedComponents.get(componentId);
-        const rawEvents = buttonSerialized && buttonSerialized.record.clickEvents;
-        if (!Array.isArray(rawEvents) || rawEvents.length !== expectedEvents.length)
-            return fail('SCENE_BUTTON_EVENT_COUNT_MISMATCH', { componentId });
-        for (let index = 0; index < expectedEvents.length; index += 1) {
-            const expectedEvent = expectedEvents[index];
-            const rawEvent = resolveRef(rawEvents[index], records);
-            const targetUuid = expectedEvent.handlerRef.startsWith('new:')
-                ? expectedNodes.get(expectedEvent.handlerRef.slice('new:'.length))?.uuid
-                : expectedEvent.handlerRef.slice('uuid:'.length);
-            const rawTarget = rawEvent && resolveRef(rawEvent.target, records);
-            const handlerComponent = plan.request.components.find((component) => component.nodeRef === expectedEvent.handlerRef
-                && component.className === expectedEvent.handlerComponentClassName);
-            const handlerSerialized = handlerComponent && serializedComponents.get(handlerComponent.id);
-            const componentNameMatches = rawEvent && rawEvent.component === expectedEvent.handlerComponentClassName;
-            const componentIdMatches = rawEvent && handlerSerialized && rawEvent._componentId === handlerSerialized.classId;
-            if (!rawEvent || rawEvent.__type__ !== 'cc.ClickEvent' || !rawTarget || rawTarget._id !== targetUuid
+    for (const group of plan.request.uiEvents || []) {
+        const componentId = group.componentRef.slice('new:'.length);
+        const key = `${componentId}:${group.eventProperty}`;
+        if (eventGroups.has(key)) return fail('SCENE_UI_EVENT_BINDING_DUPLICATE', { componentId });
+        const component = plan.request.components.find((item) => item.id === componentId);
+        if (!component || !(UI_EVENT_PROPERTIES[component.className] || []).includes(group.eventProperty))
+            return fail('SCENE_UI_EVENT_COMPONENT_MISMATCH', { componentId });
+        eventGroups.set(key, { componentId, eventProperty: group.eventProperty, events: group.events, kind: 'ui' });
+    }
+    for (const group of eventGroups.values()) {
+        const componentId = group.componentId;
+        const componentSerialized = serializedComponents.get(componentId);
+        const inspected = inspectSerializedEventList(componentSerialized && componentSerialized.record, records, group.eventProperty);
+        if (!inspected.verified || inspected.events.length !== group.events.length)
+            return fail(group.kind === 'button' ? 'SCENE_BUTTON_EVENT_COUNT_MISMATCH' : 'SCENE_UI_EVENT_COUNT_MISMATCH',
+                { componentId, eventProperty: group.eventProperty });
+        for (let index = 0; index < group.events.length; index += 1) {
+            const expectedEvent = group.events[index];
+            const rawEvent = inspected.events[index].event;
+            const targetRef = group.kind === 'button' ? expectedEvent.handlerRef : expectedEvent.targetRef;
+            const handlerClassName = group.kind === 'button' ? expectedEvent.handlerComponentClassName : expectedEvent.component;
+            const targetUuid = targetRef.startsWith('new:')
+                ? expectedNodes.get(targetRef.slice('new:'.length))?.uuid : targetRef.slice('uuid:'.length);
+            const handlerSpec = plan.request.components.find((item) => item.nodeRef === targetRef && item.className === handlerClassName);
+            let handlerClassId = handlerSpec && serializedComponents.get(handlerSpec.id)?.classId;
+            if (!handlerSpec && targetRef.startsWith('uuid:')) {
+                const existingNode = (plan.expectedState.existingNodes || []).find((item) => item.nodeUuid === targetRef.slice(5));
+                const existingComponent = existingNode && existingNode.components.find((item) => item.componentClassName === handlerClassName);
+                handlerClassId = existingComponent && existingComponent.serializedClassId;
+            }
+            const componentNameMatches = rawEvent.component === handlerClassName;
+            const componentIdMatches = handlerClassId && rawEvent._componentId === handlerClassId;
+            if (!targetUuid || inspected.events[index].targetUuid !== targetUuid
                 || (!componentNameMatches && !componentIdMatches) || rawEvent.handler !== expectedEvent.handler
                 || (rawEvent.customEventData || '') !== (expectedEvent.customEventData || ''))
-                return fail('SCENE_BUTTON_EVENT_MISMATCH', { componentId, eventIndex: index });
-            verifiedButtonEventCount += 1;
+                return fail(group.kind === 'button' ? 'SCENE_BUTTON_EVENT_MISMATCH' : 'SCENE_UI_EVENT_MISMATCH',
+                    { componentId, eventProperty: group.eventProperty, eventIndex: index });
+            if (group.kind === 'button') verifiedButtonEventCount += 1;
+            else verifiedUiEventCount += 1;
         }
     }
 
-    if (verifiedButtonEventCount !== plan.request.buttonEvents.length)
+    const expectedButtonEventCount = (plan.request.buttonEvents || []).length;
+    const expectedUiEventCount = (plan.request.uiEvents || []).reduce((total, group) => total + group.events.length, 0);
+    if (verifiedButtonEventCount !== expectedButtonEventCount)
         return fail('SCENE_BUTTON_EVENT_COUNT_MISMATCH');
+    if (verifiedUiEventCount !== expectedUiEventCount)
+        return fail('SCENE_UI_EVENT_COUNT_MISMATCH');
     return { verified: true, sceneUuid, sceneUrl: sceneAssetRow.url,
         nodeCount: expectedNodes.size, componentCount: verifiedComponentCount,
-        buttonEventCount: verifiedButtonEventCount, prefabInstanceCount: verifiedPrefabInstanceCount };
+        buttonEventCount: verifiedButtonEventCount, uiEventGroupCount: (plan.request.uiEvents || []).length,
+        uiEventCount: verifiedUiEventCount === expectedUiEventCount ? verifiedUiEventCount : null,
+        prefabInstanceCount: verifiedPrefabInstanceCount };
 }
 
 module.exports = { inspectSceneAssetIdentity, inspectSceneComposition, inspectSavedSceneNode,

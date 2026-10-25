@@ -359,7 +359,73 @@ test('persisted scene verification matches nodes, transforms, resource UUIDs, co
   const source = fixture();
   const result = inspectSceneComposition({ ...source, sceneUuid, sceneAssetRow });
   assert.deepEqual(result, { verified: true, sceneUuid, sceneUrl: sceneAssetRow.url,
-    nodeCount: 1, componentCount: 2, buttonEventCount: 1, prefabInstanceCount: 0 });
+    nodeCount: 1, componentCount: 2, buttonEventCount: 1, uiEventGroupCount: 0, uiEventCount: 0, prefabInstanceCount: 0 });
+});
+
+test('persisted scene composition verifies optional anchor values and generic whitelisted UI event lists', () => {
+  const source = fixture();
+  const operation = source.operation;
+  const request = operation.plan.request;
+  request.nodes[0].transform = { x: 12, y: 20, z: 0, scaleX: 1.5, scaleY: 0.75,
+    angle: 30, width: 180, height: 64, anchorX: 0.25, anchorY: 0.75 };
+  request.components[0] = { id: 'toggle', nodeRef: 'new:button', className: 'cc.Toggle', properties: [] };
+  request.buttonEvents = [];
+  request.uiEvents = [{ componentRef: 'new:toggle', eventProperty: 'checkEvents', events: [
+    { targetRef: 'new:button', component: 'game.ButtonState', handler: 'onClick', customEventData: 'checked' },
+  ] }];
+  operation.plan.expectedState.createdNodes[0].transform = request.nodes[0].transform;
+  const toggleReadback = operation.sceneReadback.nodes[0].components[0];
+  toggleReadback.id = 'toggle';
+  toggleReadback.componentClassName = 'cc.Toggle';
+  toggleReadback.serializedClassId = 'cc.Toggle';
+  toggleReadback.componentInstanceId = 'toggle-instance';
+  toggleReadback.eventLists = { checkEvents: [{ targetUuid: nodeUuid, component: 'game.ButtonState',
+    handler: 'onClick', customEventData: 'checked' }] };
+  operation.sceneReadback.nodes[0].transform = request.nodes[0].transform;
+  const records = JSON.parse(source.sceneBytes.toString('utf8'));
+  records[2]._anchorPoint = { __type__: 'cc.Vec2', x: 0.25, y: 0.75 };
+  records[3].__type__ = 'cc.Toggle';
+  records[3].checkEvents = [{ __id__: 5 }];
+  delete records[3].clickEvents;
+  records[5].customEventData = 'checked';
+  source.sceneBytes = Buffer.from(JSON.stringify(records));
+  const result = inspectSceneComposition({ ...source, sceneUuid, sceneAssetRow });
+  assert.equal(result.verified, true);
+  assert.equal(result.uiEventGroupCount, 1);
+  assert.equal(result.uiEventCount, 1);
+
+  records[2]._anchorPoint.y = 0.5;
+  const staleAnchor = inspectSceneComposition({ ...source, sceneBytes: Buffer.from(JSON.stringify(records)), sceneUuid, sceneAssetRow });
+  assert.equal(staleAnchor.reason, 'SCENE_COMPOSITION_ANCHOR_MISMATCH');
+});
+
+test('persisted scene composition verifies exact node and component reference properties', () => {
+  const source = fixture();
+  const operation = source.operation;
+  const handler = operation.plan.request.components[1];
+  handler.properties = [{ name: 'targetNode', value: { nodeRef: 'new:button' } },
+    { name: 'buttonComponent', value: { componentRef: 'new:button-ui' } }];
+  operation.sceneReadback.nodes[0].components[0].componentInstanceId = 'button-instance';
+  operation.sceneReadback.nodes[0].components[1].propertyValues = {
+    targetNode: `node:${nodeUuid}`, buttonComponent: 'component:button-ui',
+  };
+  operation.sceneReadback.nodes[0].components[1].serializedPropertyCandidates = {
+    targetNode: ['targetNode'], buttonComponent: ['buttonComponent'],
+  };
+  const records = JSON.parse(source.sceneBytes.toString('utf8'));
+  records[3]._id = 'button-instance';
+  records[3].node = { __id__: 2 };
+  records[4]._id = 'handler-instance';
+  records[4].node = { __id__: 2 };
+  records[4].targetNode = { __id__: 2 };
+  records[4].buttonComponent = { __id__: 3 };
+  source.sceneBytes = Buffer.from(JSON.stringify(records));
+  const result = inspectSceneComposition({ ...source, sceneUuid, sceneAssetRow });
+  assert.equal(result.verified, true);
+
+  records[4].buttonComponent = { __id__: 4 };
+  const wrongReference = inspectSceneComposition({ ...source, sceneBytes: Buffer.from(JSON.stringify(records)), sceneUuid, sceneAssetRow });
+  assert.equal(wrongReference.reason, 'SCENE_COMPOSITION_COMPONENT_REFERENCE_MISMATCH');
 });
 
 test('persisted scene composition verifies a new Prefab instance child against its actual Prefab root', () => {
@@ -395,7 +461,7 @@ test('persisted scene composition verifies a new Prefab instance child against i
     metaBytes: Buffer.from(JSON.stringify({ uuid: sceneAssetUuid, importer: 'scene' })) };
   const result = inspectSceneComposition({ ...source, sceneUuid, sceneAssetRow });
   assert.deepEqual(result, { verified: true, sceneUuid, sceneUrl: sceneAssetRow.url,
-    nodeCount: 1, componentCount: 0, buttonEventCount: 0, prefabInstanceCount: 0 });
+    nodeCount: 1, componentCount: 0, buttonEventCount: 0, uiEventGroupCount: 0, uiEventCount: 0, prefabInstanceCount: 0 });
 });
 
 test('persisted scene composition resolves Creator backing-property names such as cc.Label.string', () => {
@@ -418,6 +484,54 @@ test('persisted scene composition resolves Creator backing-property names such a
   assert.equal(result.verified, true);
   assert.equal(result.componentCount, 1);
   assert.equal(result.buttonEventCount, 0);
+});
+
+test('persisted scene composition verifies Creator-resolved Label dimensions from the post-create snapshot', () => {
+  const source = fixture();
+  const operation = source.operation;
+  operation.plan.request.components.push({ id: 'label', nodeRef: 'new:button', className: 'cc.Label',
+    properties: [{ name: 'string', value: 'Settings' }] });
+  operation.plan.expectedState.createdNodes[0].transform.width = 180;
+  operation.plan.expectedState.createdNodes[0].transform.height = 64;
+  operation.sceneReadback.nodes[0].transform.width = 346.84;
+  operation.sceneReadback.nodes[0].transform.height = 50.4;
+  operation.sceneReadback.nodes[0].components.push({ id: 'label', componentClassName: 'cc.Label',
+    serializedClassId: 'cc.Label', componentInstanceId: 'label-instance',
+    propertyValues: { string: 'Settings' }, serializedPropertyCandidates: { string: ['_N$string'] } });
+  const records = JSON.parse(source.sceneBytes.toString('utf8'));
+  records[2]._contentSize = { __type__: 'cc.Size', width: 346.84, height: 50.4 };
+  records[2]._components.push({ __id__: 6 });
+  records.push({ __type__: 'cc.Label', _id: 'label-instance', node: { __id__: 2 }, _N$string: 'Settings' });
+  source.sceneBytes = Buffer.from(JSON.stringify(records));
+
+  const result = inspectSceneComposition({ ...source, sceneUuid, sceneAssetRow });
+  assert.equal(result.verified, true);
+  assert.equal(result.componentCount, 3);
+});
+
+test('persisted Prefab instance accepts position resolved by its internal Widget from the post-create snapshot', () => {
+  const source = fixture();
+  const prefabUuid = 'f477dd52-5a0e-46c1-9810-ea8c2b2d7d9e';
+  const operation = source.operation;
+  operation.plan.request.nodes[0].prefabUuid = prefabUuid;
+  Object.assign(operation.plan.expectedState.createdNodes[0], { prefabUuid, prefabRootUuid: nodeUuid,
+    prefabInstanceRoot: true });
+  Object.assign(operation.sceneReadback.nodes[0], { prefabUuid, prefabRootUuid: nodeUuid, prefabInstanceRoot: true,
+    transform: { ...operation.sceneReadback.nodes[0].transform, x: 0, y: 0, width: 100, height: 100 },
+    allComponents: [{ componentClassName: 'cc.Widget' }] });
+  const records = JSON.parse(source.sceneBytes.toString('utf8'));
+  records[2]._trs.array[0] = 0;
+  records[2]._trs.array[1] = 0;
+  records[2]._contentSize = { __type__: 'cc.Size', width: 100, height: 100 };
+  records[2]._prefab = { __id__: 6 };
+  records[2]._components.push({ __id__: 7 });
+  records.push({ __type__: 'cc.PrefabInfo', root: { __id__: 2 }, asset: { __uuid__: prefabUuid }, fileId: '', sync: false });
+  records.push({ __type__: 'cc.Widget', _id: 'prefab-widget', node: { __id__: 2 }, _alignFlags: 45 });
+  source.sceneBytes = Buffer.from(JSON.stringify(records));
+
+  const result = inspectSceneComposition({ ...source, sceneUuid, sceneAssetRow });
+  assert.equal(result.verified, true, result.reason);
+  assert.equal(result.prefabInstanceCount, 1);
 });
 
 test('persisted scene composition verifies Widget alignment booleans against the serialized _alignFlags bitfield', () => {
