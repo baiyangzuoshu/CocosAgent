@@ -35,7 +35,7 @@ function ensureRoots(requestedGitRoot, requestedProjectRoot) {
   const projectRoot = canonicalDirectory(requestedProjectRoot, 'PROJECT_ROOT');
   const top = fs.realpathSync(git(gitRoot, ['rev-parse', '--show-toplevel']).stdout.toString('utf8').trim());
   if (top !== gitRoot) throw coded('GIT_ROOT_MISMATCH');
-  if (!inside(gitRoot, projectRoot) || projectRoot === gitRoot) throw coded('PROJECT_OUTSIDE_GIT_ROOT');
+  if (!inside(gitRoot, projectRoot)) throw coded('PROJECT_OUTSIDE_GIT_ROOT');
   const projectFile = path.join(projectRoot, 'project.json');
   const stat = fs.lstatSync(projectFile);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 1024 * 1024) throw coded('PROJECT_JSON_UNSAFE');
@@ -155,8 +155,17 @@ export function runVcsImpact({ gitRoot: requestedGitRoot, projectRoot: requested
   const targetRef = target === undefined || target === null || target === '' ? upstreamRef(roots.gitRoot) : target;
   const currentCommit = resolveCommit(roots.gitRoot, 'HEAD');
   const targetCommit = resolveCommit(roots.gitRoot, targetRef);
+  let fastForwardPossible = null;
+  let alreadyContainsTarget = null;
+  if (operation === 'sync') {
+    const forward = git(roots.gitRoot, ['merge-base', '--is-ancestor', currentCommit, targetCommit], { allowFailure: true });
+    const reverse = git(roots.gitRoot, ['merge-base', '--is-ancestor', targetCommit, currentCommit], { allowFailure: true });
+    if (![0, 1].includes(forward.status) || ![0, 1].includes(reverse.status)) throw coded('VCS_IMPACT_ANCESTRY_CHECK_FAILED');
+    fastForwardPossible = forward.status === 0;
+    alreadyContainsTarget = reverse.status === 0;
+  }
   const nameStatus = git(roots.gitRoot, ['diff', '--name-status', '-z', '--no-renames', currentCommit, targetCommit, '--']);
-  const allChanges = parseNameStatus(nameStatus.stdout);
+  const allChanges = alreadyContainsTarget ? [] : parseNameStatus(nameStatus.stdout);
   const files = allChanges.map((change) => {
     const projectPath = roots.projectPrefix
       ? (change.path.startsWith(`${roots.projectPrefix}/`) ? change.path.slice(roots.projectPrefix.length + 1) : null)
@@ -170,12 +179,6 @@ export function runVcsImpact({ gitRoot: requestedGitRoot, projectRoot: requested
   const targetProject = targetProjectInfo(roots.gitRoot, targetCommit, roots.projectPrefix);
   const currentBranch = git(roots.gitRoot, ['symbolic-ref', '--quiet', '--short', 'HEAD'], { allowFailure: true });
   const branch = currentBranch.status === 0 ? currentBranch.stdout.toString('utf8').trim() : null;
-  let fastForwardPossible = null;
-  if (operation === 'sync') {
-    const ancestor = git(roots.gitRoot, ['merge-base', '--is-ancestor', currentCommit, targetCommit], { allowFailure: true });
-    if (ancestor.status !== 0 && ancestor.status !== 1) throw coded('VCS_IMPACT_ANCESTRY_CHECK_FAILED');
-    fastForwardPossible = ancestor.status === 0;
-  }
   const summary = { total: files.length, project: projectChanges.length, outsideProject: outsideProjectChanges.length,
     assetDbImport: projectChanges.filter((item) => item.requiresAssetDbImport).length,
     metadata: projectChanges.filter((item) => item.requiresAssetIdentityReview).length,
@@ -187,7 +190,8 @@ export function runVcsImpact({ gitRoot: requestedGitRoot, projectRoot: requested
   return { schemaVersion: 1, readOnly: true, operation, gitRoot: roots.gitRoot, projectRoot: roots.projectRoot,
     projectName: roots.project.name || path.basename(roots.projectRoot), creatorVersion: CREATOR_VERSION,
     currentBranch: branch, fromCommit: currentCommit, targetRef, targetCommit,
-    ...(operation === 'sync' ? { fastForwardPossible, mergeRequired: !fastForwardPossible } : {}),
+    ...(operation === 'sync' ? { fastForwardPossible, alreadyContainsTarget,
+      mergeRequired: !fastForwardPossible && !alreadyContainsTarget } : {}),
     targetProject, compatibleCreatorVersion: targetProject.creatorVersion === CREATOR_VERSION,
     dirtyRepository: dirty.length > 0, dirtyOverlapPaths: overlaps,
     importImpact: { assetDbImportRequired: summary.assetDbImport > 0,

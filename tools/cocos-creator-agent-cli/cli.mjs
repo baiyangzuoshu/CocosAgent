@@ -16,6 +16,7 @@ import { loadTestPlan, loadFailedSuiteIds, mergeTestReports, parseTestShard, run
 import { runVcsDoctor } from './vcs-integrity.mjs';
 import { runVcsStatus } from './vcs-status.mjs';
 import { runVcsImpact } from './vcs-impact.mjs';
+import { runVcsWorkflow } from './vcs-workflow.mjs';
 import { runVcsDiff, runVcsObjectBlame, runVcsConflictReport, runVcsConflictResolve } from './vcs-diff.mjs';
 import { configureMcp, mcpStatus, removeMcp, supportedMcpClients } from './mcp/configure.mjs';
 import { availableSkills, installSkills, listSkillStatus, showSkill } from './skills.mjs';
@@ -41,7 +42,10 @@ const HELP_LINES = [
   '  doctor [--project-root <absolute-path>] [--instance <instance-id>]',
   '  vcs doctor --git-root <absolute-path> --project-root <absolute-path>',
   '  vcs status --git-root <absolute-path> --project-root <absolute-path>',
+  '  vcs fetch --git-root <absolute-path> --project-root <absolute-path> [--remote origin] [--apply --plan-hash <sha256>]',
   '  vcs impact --git-root <absolute-path> --project-root <absolute-path> [--target <ref>] [--operation switch|sync]',
+  '  vcs switch --git-root <absolute-path> --project-root <absolute-path> --target <local-branch|ref> [--create <new-branch> | --detach] [--apply --plan-hash <sha256> --editor-closed]',
+  '  vcs sync|merge --git-root <absolute-path> --project-root <absolute-path> [--target <local-ref>] [--apply --plan-hash <sha256> --editor-closed]',
   '  vcs diff --git-root <absolute-path> --project-root <absolute-path> --path <assets-relative.fire-or-prefab> [--from <revision>] [--to <revision>]',
   '  vcs blame --git-root <absolute-path> --project-root <absolute-path> --path <assets-relative.fire-or-prefab> --node <serialized-node-uuid> [--revision <revision>] [--max-commits <1-256>]',
   '  vcs conflicts --git-root <absolute-path> --project-root <absolute-path>',
@@ -350,6 +354,39 @@ async function main() {
   if (group === 'vcs' && action === 'impact') {
     print(runVcsImpact({ gitRoot: value('--git-root'), projectRoot: value('--project-root'),
       target: value('--target'), operation: value('--operation', 'switch') }));
+    return;
+  }
+  if (group === 'vcs' && ['fetch', 'switch', 'sync', 'merge'].includes(action)) {
+    const options = { gitRoot: value('--git-root'), projectRoot: value('--project-root'), operation: action,
+      target: value('--target'), remote: value('--remote'), createBranch: value('--create'), detach: args.includes('--detach'),
+      apply: args.includes('--apply'), planHash: value('--plan-hash'), editorClosed: args.includes('--editor-closed') };
+    if (options.apply && action !== 'fetch' && !options.editorClosed) {
+      throw Object.assign(new Error('VCS_EDITOR_CLOSED_REQUIRED'), { code: 'VCS_EDITOR_CLOSED_REQUIRED' });
+    }
+    if (options.apply && action !== 'fetch') {
+      // Connected Editors, including incompatible extension handshakes, cannot safely
+      // coexist with repository-wide checkout/merge operations. A stopped bridge alone
+      // is not proof of a closed Editor; the explicit flag remains a caller assertion.
+      let instances;
+      try { instances = await listInstances({ start: false }); }
+      catch (error) {
+        if (!['BRIDGE_NOT_RUNNING', 'BRIDGE_HTTP_ECONNREFUSED', 'ECONNREFUSED', 'fetch failed'].includes(error.message)) throw error;
+        instances = { instances: [], observationUnavailable: true };
+      }
+      const selectedRoot = fs.realpathSync(options.gitRoot);
+      const connected = [...(instances.instances || []), ...(instances.rejectedInstances || [])].filter((instance) => {
+        const project = instance.projectRoot || instance.projectPath;
+        if (typeof project !== 'string') return false;
+        const relative = path.relative(selectedRoot, path.resolve(project));
+        return relative === '' || relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+      });
+      if (connected.length) throw Object.assign(new Error('VCS_CREATOR_STILL_CONNECTED'), {
+        code: 'VCS_CREATOR_STILL_CONNECTED', detail: { instanceIds: connected.map((item) => item.instanceId) } });
+      options.editorConnectionCheck = instances.observationUnavailable ? 'bridge-unavailable' : 'no-connected-instances';
+    }
+    const report = runVcsWorkflow(options);
+    print({ ...report, ...(options.editorConnectionCheck ? { editorConnectionCheck: options.editorConnectionCheck } : {}) });
+    if (report.requiresManualReview || report.conflicted) setFailureExitCode(5);
     return;
   }
   if (group === 'vcs' && action === 'diff') {

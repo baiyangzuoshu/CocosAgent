@@ -26,6 +26,7 @@
     "vcs-integrity.mjs",
     "vcs-status.mjs",
     "vcs-impact.mjs",
+    "vcs-workflow.mjs",
     "vcs-diff.mjs",
     "creator-asset-diff.mjs",
     "testing/",

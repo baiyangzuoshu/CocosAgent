@@ -172,7 +172,7 @@ test('MCP discovers a project alias and routes it through CLI to the selected Cr
     result: { projectRoot: canonicalRoot, creatorVersion: '2.4.15', providers: [], commands: [providerCommand], skipped: [] },
   });
   const listing = await listingPromise;
-  assert.equal(listing.tools.length, 98, 'Expected 95 fixed tools, two project aliases, and one live extension command.');
+  assert.equal(listing.tools.length, 100, 'Expected 97 fixed tools, two project aliases, and one live extension command.');
   assert.equal(listing.tools.find((item) => item.name === 'cocos_project_tool_call').annotations.destructiveHint, true,
     'The generic project-alias call can invoke project writes and must be marked destructive.');
   const componentPlanTool = listing.tools.find((item) => item.name === 'cocos_scene_node_add_component_plan');

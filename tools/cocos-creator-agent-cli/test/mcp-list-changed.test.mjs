@@ -85,6 +85,17 @@ test('MCP advertises listChanged and notifies after dynamic command tools change
   mcp.notify('notifications/initialized');
   const first = await mcp.request('tools/list');
   assert.equal(first.tools.some((tool) => tool.name === 'cocos_project_info'), false);
+  const vcsPlan = first.tools.find((tool) => tool.name === 'cocos_vcs_workflow_plan');
+  const vcsApply = first.tools.find((tool) => tool.name === 'cocos_vcs_workflow_apply');
+  assert.equal(vcsPlan.annotations.readOnlyHint, true);
+  assert.equal(vcsApply.annotations.destructiveHint, true);
+  assert.ok(vcsPlan.inputSchema.properties.operation.enum.includes('fetch'));
+  assert.ok(vcsApply.inputSchema.required.includes('planHash'));
+  const missingClose = await mcp.request('tools/call', { name: 'cocos_vcs_workflow_apply', arguments: {
+    gitRoot: '/tmp/repo', projectRoot: '/tmp/repo/game', operation: 'switch', target: 'main', planHash: 'a'.repeat(64),
+  } });
+  assert.equal(missingClose.isError, true);
+  assert.match(missingClose.content[0].text, /VCS_EDITOR_CLOSED_REQUIRED/);
   for (const name of ['cocos_cloud_actions_workflows', 'cocos_cloud_actions_runs', 'cocos_cloud_actions_jobs', 'cocos_cloud_actions_artifacts']) {
     const tool = first.tools.find((item) => item.name === name);
     assert.ok(tool, `Expected ${name} in tools/list`);

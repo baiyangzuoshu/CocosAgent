@@ -16,6 +16,14 @@ const INSTANCE_ID_SCHEMA = { type: 'string', minLength: 36, maxLength: 36 };
 const READ_ONLY_ANNOTATIONS = { readOnlyHint: true, destructiveHint: false };
 const CONTROL_ANNOTATIONS = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
 const EXTERNAL_ACTION_ANNOTATIONS = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true };
+const VCS_WORKFLOW_PROPERTIES = {
+  gitRoot: { type: 'string', minLength: 1, maxLength: 4096 },
+  projectRoot: { type: 'string', minLength: 1, maxLength: 4096 },
+  operation: { type: 'string', enum: ['fetch', 'switch', 'sync', 'merge'] },
+  remote: { type: 'string', minLength: 1, maxLength: 128 },
+  target: { type: 'string', minLength: 1, maxLength: 256 },
+  createBranch: { type: 'string', minLength: 1, maxLength: 240 }, detach: { type: 'boolean' },
+};
 const activeToolRequests = new Map();
 let projectToolAdapters = new Map();
 let extensionCommandAdapters = new Map();
@@ -152,6 +160,21 @@ function commandAnnotations(access) {
 }
 
 const infrastructureTools = [
+  {
+    name: 'cocos_vcs_workflow_plan',
+    description: 'Preview a Git fetch, branch switch, fast-forward sync, or uncommitted merge for an exact Creator 2.4.15 project. Binds HEAD, target commit or remote refs, repository configuration, index and local file contents to a plan hash. Reports incoming changes, metadata pairing and blockers; does not fetch or modify Git.',
+    inputSchema: { type: 'object', required: ['gitRoot', 'projectRoot', 'operation'],
+      properties: VCS_WORKFLOW_PROPERTIES, additionalProperties: false },
+    annotations: READ_ONLY_ANNOTATIONS,
+  },
+  {
+    name: 'cocos_vcs_workflow_apply',
+    description: 'Apply one reviewed Git workflow plan with its original SHA-256. Changes branch/index/worktree and may run configured Git hooks or filters. Close affected Creator projects through Cocos CLI first; editorClosed is caller confirmation, not observed Editor proof. Preserves unrelated local changes; rejects stale plans and overlaps. Merge stays uncommitted and can produce conflicts. Interrupted operations are never retried automatically.',
+    inputSchema: { type: 'object', required: ['gitRoot', 'projectRoot', 'operation', 'planHash'],
+      properties: { ...VCS_WORKFLOW_PROPERTIES, planHash: { type: 'string', pattern: '^[0-9a-f]{64}$' },
+        editorClosed: { type: 'boolean', enum: [true] } }, additionalProperties: false },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+  },
   {
     name: 'cocos_scene_diff',
     description: 'Compare two Creator scene snapshots returned by cocos_scene_snapshot. Requires matching scene identity and bounded, complete snapshots; reads no files and does not mutate the project.',
@@ -413,6 +436,19 @@ function startToolRefresh() {
 }
 
 async function handleTool(name, args = {}, signal) {
+  if (name === 'cocos_vcs_workflow_plan' || name === 'cocos_vcs_workflow_apply') {
+    const cliArgs = ['vcs', args.operation, '--git-root', args.gitRoot, '--project-root', args.projectRoot];
+    for (const [key, flag] of [['target', '--target'], ['createBranch', '--create'], ['remote', '--remote']]) {
+      if (args[key] !== undefined) cliArgs.push(flag, args[key]);
+    }
+    if (args.detach) cliArgs.push('--detach');
+    if (name === 'cocos_vcs_workflow_apply') {
+      if (args.operation !== 'fetch' && args.editorClosed !== true) throw new Error('VCS_EDITOR_CLOSED_REQUIRED');
+      cliArgs.push('--apply', '--plan-hash', args.planHash);
+      if (args.editorClosed === true) cliArgs.push('--editor-closed');
+    }
+    return invokeCliJson(cliArgs, { signal, timeoutMs: name === 'cocos_vcs_workflow_apply' ? 150000 : 40000 });
+  }
   if (name === 'cocos_scene_diff') {
     return diffSceneSnapshots(args.beforeSnapshot, args.afterSnapshot);
   }
