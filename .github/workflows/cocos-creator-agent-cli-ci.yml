@@ -1,14 +1,7 @@
 name: Cocos Creator Agent CLI
 
 on:
-  push:
-    paths:
-      - '.github/workflows/cocos-creator-agent-cli-ci.yml'
-      - 'cocos-creator-agent-cli/**'
-  pull_request:
-    paths:
-      - '.github/workflows/cocos-creator-agent-cli-ci.yml'
-      - 'cocos-creator-agent-cli/**'
+  workflow_dispatch:
 
 permissions:
   contents: read
