@@ -1,6 +1,6 @@
 # Cocos CLI 代表性 UI Prefab 闭环验收（Creator 2.4.15）
 
-本记录验证一份包含 Button、Label、Widget 与事件的 Prefab 可由 Cocos CLI 创建和编辑，再实例化到场景、关闭并重开工程、预览交互，最后清除临时场景实例。所有 Creator 操作均通过 `tools/cocos-creator-agent-cli/cli.mjs` 完成；未使用桌面 UI 自动化。
+本记录验证一份包含 Button、Label、Widget 与事件的 Prefab 可由 Cocos CLI 创建和编辑，再实例化到场景、关闭并重开工程、预览交互，最后清除临时场景实例。所有 Creator 操作均通过 `cocos-creator-agent-cli/cli.mjs` 完成；未使用桌面 UI 自动化。
 
 ## 环境与最终读回
 

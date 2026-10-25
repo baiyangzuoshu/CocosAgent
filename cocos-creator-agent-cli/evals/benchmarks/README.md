@@ -5,19 +5,19 @@ This suite covers the two D-grade and six C-grade Skills from the 2026-10-22 sta
 Run against the original Skill snapshot and the current Skill files:
 
 ```sh
-node tools/cocos-creator-agent-cli/evals/benchmarks/run-suite.mjs --phase baseline
-node tools/cocos-creator-agent-cli/evals/benchmarks/grade-phase.mjs --phase baseline
-node tools/cocos-creator-agent-cli/evals/benchmarks/run-suite.mjs --phase after
-node tools/cocos-creator-agent-cli/evals/benchmarks/grade-phase.mjs --phase after
-node tools/cocos-creator-agent-cli/evals/benchmarks/compare-phases.mjs
+node cocos-creator-agent-cli/evals/benchmarks/run-suite.mjs --phase baseline
+node cocos-creator-agent-cli/evals/benchmarks/grade-phase.mjs --phase baseline
+node cocos-creator-agent-cli/evals/benchmarks/run-suite.mjs --phase after
+node cocos-creator-agent-cli/evals/benchmarks/grade-phase.mjs --phase after
+node cocos-creator-agent-cli/evals/benchmarks/compare-phases.mjs
 ```
 
 To test whether the same cases can be solved without a Cocos Skill, run a matched control phase:
 
 ```sh
-node tools/cocos-creator-agent-cli/evals/benchmarks/run-suite.mjs --phase control --output-dir /private/tmp/cocos-skill-benchmark-control
-node tools/cocos-creator-agent-cli/evals/benchmarks/grade-phase.mjs --phase control --output-dir /private/tmp/cocos-skill-benchmark-control
-node tools/cocos-creator-agent-cli/evals/benchmarks/compare-control.mjs --control-results-root /private/tmp/cocos-skill-benchmark-control
+node cocos-creator-agent-cli/evals/benchmarks/run-suite.mjs --phase control --output-dir /private/tmp/cocos-skill-benchmark-control
+node cocos-creator-agent-cli/evals/benchmarks/grade-phase.mjs --phase control --output-dir /private/tmp/cocos-skill-benchmark-control
+node cocos-creator-agent-cli/evals/benchmarks/compare-control.mjs --control-results-root /private/tmp/cocos-skill-benchmark-control
 ```
 
 Add `--resume` to continue a partially completed phase; captured, valid `evaluation.json` outputs are retained.

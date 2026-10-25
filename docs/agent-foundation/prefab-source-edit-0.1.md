@@ -1,6 +1,6 @@
 # Creator 2.4 Prefab 源内容受约束编辑 0.1
 
-> 当前实现由 `tools/cocos-creator-agent-cli/` 独立拥有；仓库不再提供 Creator 原生 CocosAgent 产品。本文保留设计与历史验证依据，旧版 0.3.x 扩展记录不代表当前 CLI 的实机验收。
+> 当前实现由 `cocos-creator-agent-cli/` 独立拥有；仓库不再提供 Creator 原生 CocosAgent 产品。本文保留设计与历史验证依据，旧版 0.3.x 扩展记录不代表当前 CLI 的实机验收。
 
 ## 目标
 

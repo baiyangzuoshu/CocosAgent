@@ -20,4 +20,4 @@ VCS 检查以明确的 Git 仓库根目录和 Creator 工程根目录为输入�
 
 模板和资源包的源文件、`.meta`、主/子资源 UUID、导入器设置、场景/Prefab 引用都要保留。`library/`、`temp/`、`local/`、`build/` 不作为资源包源内容。资源包不能仅用普通文件复制的结果冒充 AssetDB 导入回执。
 
-现有版本事实依据：[`docs/2.x/04-assets-and-loading.md`](../2.x/04-assets-and-loading.md) 的资产身份和导入证据、[`docs/2.x/02-objects-and-scenes.md`](../2.x/02-objects-and-scenes.md) 的对象/场景机制，以及 [`docs/2.x/12-editor-extension-and-diagnostics.md`](../2.x/12-editor-extension-and-diagnostics.md) 的扩展/AssetDB 边界。CLI 当前能力以 [`tools/cocos-creator-agent-cli/README.md`](../../tools/cocos-creator-agent-cli/README.md) 和共享命令合同为准。
+现有版本事实依据：[`docs/2.x/04-assets-and-loading.md`](../2.x/04-assets-and-loading.md) 的资产身份和导入证据、[`docs/2.x/02-objects-and-scenes.md`](../2.x/02-objects-and-scenes.md) 的对象/场景机制，以及 [`docs/2.x/12-editor-extension-and-diagnostics.md`](../2.x/12-editor-extension-and-diagnostics.md) 的扩展/AssetDB 边界。CLI 当前能力以 [`cocos-creator-agent-cli/README.md`](../../cocos-creator-agent-cli/README.md) 和共享命令合同为准。

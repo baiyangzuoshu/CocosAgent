@@ -43,4 +43,4 @@ __pycache__/
 # information for Eclipse / Flash Builder.
 
 # Machine-specific generated DeepSeek Harness bundle
-tools/cocos-creator-agent-cli/.local/
+/cocos-creator-agent-cli/.local/

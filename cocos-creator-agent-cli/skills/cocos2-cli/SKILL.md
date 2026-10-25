@@ -10,7 +10,7 @@ Use the standalone `cocos-creator-agent` command for MCP setup, Creator Skill in
 ## Check and install
 
 1. Run `cocos-creator-agent version --format json` to identify the installed CLI and Creator contract version.
-2. If the command is missing, use a versioned tarball from the [CLI Releases](https://github.com/baiyangzuoshu/CocosAgent/releases). For repository development, install from `tools/cocos-creator-agent-cli/`.
+2. If the command is missing, use a versioned tarball from the [CLI Releases](https://github.com/baiyangzuoshu/CocosAgent/releases). For repository development, install from `cocos-creator-agent-cli/`.
 3. Check for releases with `cocos-creator-agent self-update --check`; run `cocos-creator-agent self-update` only when an update is needed. A CLI release does not exist until its matching version tag has published the GitHub Release assets. For private repositories, provide `GH_TOKEN`/`GITHUB_TOKEN` or authenticate GitHub CLI with `gh auth login`; never put a token on the command line.
 4. After updating the CLI, verify its version and restart the Host MCP server so its tool catalog is refreshed.
 

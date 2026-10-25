@@ -4,11 +4,11 @@ on:
   push:
     paths:
       - '.github/workflows/cocos-creator-agent-cli-ci.yml'
-      - 'tools/cocos-creator-agent-cli/**'
+      - 'cocos-creator-agent-cli/**'
   pull_request:
     paths:
       - '.github/workflows/cocos-creator-agent-cli-ci.yml'
-      - 'tools/cocos-creator-agent-cli/**'
+      - 'cocos-creator-agent-cli/**'
 
 permissions:
   contents: read
@@ -22,8 +22,8 @@ jobs:
         with:
           node-version: 20
       - name: Run CLI test suite
-        working-directory: tools/cocos-creator-agent-cli
+        working-directory: cocos-creator-agent-cli
         run: npm test
       - name: Verify npm package contents
-        working-directory: tools/cocos-creator-agent-cli
+        working-directory: cocos-creator-agent-cli
         run: npm pack --dry-run --json

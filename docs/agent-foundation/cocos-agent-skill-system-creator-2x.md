@@ -1,15 +1,15 @@
 # Cocos Creator 2.4.x 第三方 Agent Skill 系统
 
-更新日期：2026-10-25。当前 CLI 源码为 `0.12.62`，Creator 扩展为 `0.8.111`，自动化测试 `371/371` 通过；实机版本边界为 Creator `2.4.15`。Tank 项目已通过 CLI 关闭、重开和 doctor `9/9` 检查。UI 组件接口与实机证据见 [UI 验收矩阵](cocos-cli-ui-acceptance-matrix-2.4.15.md)；Prefab 已验收直接删除既有末尾 `cc.BlockInputEvents` 并来源补偿恢复、Material 数组资源追加，以及 Button.target 节点引用和 Slider.handle 组件引用往返；其他既有组件删除和数组/属性组合仍未完成。完整命令、版本、能力边界及各类编辑记录以[独立 CLI README](../../tools/cocos-creator-agent-cli/README.md)为准。Creator 原生 CocosAgent 已移除，旧插件仅作 CLI 引导。另有 5 项可选 SDK Skills。
+更新日期：2026-10-25。当前 CLI 源码为 `0.12.62`，Creator 扩展为 `0.8.111`，自动化测试 `371/371` 通过；实机版本边界为 Creator `2.4.15`。Tank 项目已通过 CLI 关闭、重开和 doctor `9/9` 检查。UI 组件接口与实机证据见 [UI 验收矩阵](cocos-cli-ui-acceptance-matrix-2.4.15.md)；Prefab 已验收直接删除既有末尾 `cc.BlockInputEvents` 并来源补偿恢复、Material 数组资源追加，以及 Button.target 节点引用和 Slider.handle 组件引用往返；其他既有组件删除和数组/属性组合仍未完成。完整命令、版本、能力边界及各类编辑记录以[独立 CLI README](../../cocos-creator-agent-cli/README.md)为准。Creator 原生 CocosAgent 已移除，旧插件仅作 CLI 引导。另有 5 项可选 SDK Skills。
 
 ## 产品边界
 
-- `tools/cocos-creator-agent-cli/skills/`：Creator 2.4.x 通用技能唯一维护源。独立 CLI 将其与 `references/2x/` 一起打包，并用 `skill install` 分发到 Codex/Claude 原生 Skill 目录。
+- `cocos-creator-agent-cli/skills/`：Creator 2.4.x 通用技能唯一维护源。独立 CLI 将其与 `references/2x/` 一起打包，并用 `skill install` 分发到 Codex/Claude 原生 Skill 目录。
 - `plugins/cocos-creator-agent/`：旧式 Codex/Claude 插件安装方式的兼容入口，只含 `cocos2-cli` 引导 Skill，不含 MCP server、领域 Skills 或 Creator 参考资料。
 - `plugins/cocos-creator-agent-sdk/`：独立可选的 SDK Skills 插件，包含广告、内购、联网和语音集成工作流。SDK 插件未安装时，核心插件不加载这些内容。
 - Creator 原生 CocosAgent 的源码与扩展已从仓库移除；相关研究文档和验收轨迹保留为历史材料，不是可用产品或当前实施计划。
 - 原生 CocosAgent 已停用并移除；当前第三方 Skills 通过 CLI 安装到 Codex/Claude 原生 Skill 目录，第三方 Host 不调用原生模型/Provider。
-- MCP server、客户端配置、CLI 与 Creator 桥接统一位于独立包 `tools/cocos-creator-agent-cli/`；合同、写入/运行能力与验收状态见[第三方接入实现](cocos-creator-third-party-integration-mvp-0.1.md)。
+- MCP server、客户端配置、CLI 与 Creator 桥接统一位于独立包 `cocos-creator-agent-cli/`；合同、写入/运行能力与验收状态见[第三方接入实现](cocos-creator-third-party-integration-mvp-0.1.md)。
 
 独立 CLI 提供 `mcp configure codex|claude-code|cursor|vscode`、`mcp serve` 与 `skill install/show/list/refresh`；Codex 和 Claude Code 通过各自 CLI 配置，Cursor 和 VS Code 使用各自 JSON 配置格式。Creator 引擎参考资料与 Skills 同属 CLI 发布包，按当前任务按需读取；其中源码和运行证据主要针对 2.4.15，不能外推到全部 2.4.x。旧式 bootstrap 插件保留 Host 元数据，仅为已有插件用户提供迁移入口。Codex 的插件打包参考 [OpenAI 插件打包文档](https://developers.openai.com/plugins/build/plugins)；Claude Code 插件结构参考 [Anthropic 官方插件结构](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/plugin-dev/skills/plugin-structure)。
 
@@ -72,5 +72,5 @@
 
 1. 51 项 Creator 工作流 Skills、1 项 CLI Skill 与 Creator 2.x 参考资料已迁入 CLI 包；CLI `skill install` 负责选择性分发与漂移检测，`mcp configure` / `mcp serve` 管理 Host 配置与工具协议。
 2. 旧式 `plugins/cocos-creator-agent/` 仅保留兼容引导 Skill；MCP server、Creator 工作流 Skills、桥接与命令合同由独立 CLI 包维护。
-3. 当前功能基线、发布命令和不支持边界以 [CLI README](../../tools/cocos-creator-agent-cli/README.md) 为准；组件逐字段接口/实机状态以 [Creator 2.4.15 UI 验收矩阵](cocos-cli-ui-acceptance-matrix-2.4.15.md) 为准。源码支持不等于目标平台和运行时行为已验收。
+3. 当前功能基线、发布命令和不支持边界以 [CLI README](../../cocos-creator-agent-cli/README.md) 为准；组件逐字段接口/实机状态以 [Creator 2.4.15 UI 验收矩阵](cocos-cli-ui-acceptance-matrix-2.4.15.md) 为准。源码支持不等于目标平台和运行时行为已验收。
 4. Prefab 源编辑和场景实例 Apply/Revert 分别记录；直接删除既有组件目前只对可还原的末尾 `cc.BlockInputEvents` 实机通过。完整记录见 [Prefab 子树与组件验收](cocos-cli-prefab-subtree-acceptance-20261024.md) 和 [Prefab Apply/Revert 验收](traces/cocos-creator-cli-prefab-instance-apply-revert-acceptance-20261025.md)。其他既有组件删除、任意组件引用恢复和剩余 UI 字段/平台行为继续列为待办。

@@ -6,9 +6,9 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/baiyangzuoshu/CocosAgent.git",
-    "directory": "tools/cocos-creator-agent-cli"
+    "directory": "cocos-creator-agent-cli"
   },
-  "homepage": "https://github.com/baiyangzuoshu/CocosAgent/tree/main/tools/cocos-creator-agent-cli",
+  "homepage": "https://github.com/baiyangzuoshu/CocosAgent/tree/main/cocos-creator-agent-cli",
   "bugs": { "url": "https://github.com/baiyangzuoshu/CocosAgent/issues" },
   "engines": { "node": ">=20" },
   "scripts": { "test": "node --test" },

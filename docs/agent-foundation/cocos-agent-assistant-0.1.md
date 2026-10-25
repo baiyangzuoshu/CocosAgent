@@ -1,6 +1,6 @@
 # Creator 原生 Agent 0.1
 
-归档：Creator 原生 CocosAgent 与旧示例工程 `2.4.15NewProject/` 已停止维护并从当前工作区移除。以下内容只记录当时的实机操作，不是当前安装指南；当前 CLI 入口见 [Cocos Creator Agent CLI](../../tools/cocos-creator-agent-cli/README.md)。
+归档：Creator 原生 CocosAgent 与旧示例工程 `2.4.15NewProject/` 已停止维护并从当前工作区移除。以下内容只记录当时的实机操作，不是当前安装指南；当前 CLI 入口见 [Cocos Creator Agent CLI](../../cocos-creator-agent-cli/README.md)。
 
 状态：2026-10-10，Windows + Creator **2.4.15** + DeepSeek **Flash** 完成首条实机切片。面板内直接对话并切换 Ask、Plan、Agent；此次写入范围为独立临时空节点。不是完整 Unity Assistant 功能集，不表示 3.8 或全部 MCP 工具已经通过真实模型验收。
 

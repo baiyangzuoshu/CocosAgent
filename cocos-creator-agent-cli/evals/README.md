@@ -7,9 +7,9 @@ Install the OpenAI Codex plugin once with `codex plugin add plugin-eval@openai-c
 Run a static scan across the complete CLI Skills directory:
 
 ```sh
-node tools/cocos-creator-agent-cli/evals/analyze-skills.mjs --format markdown
-node tools/cocos-creator-agent-cli/evals/analyze-skills.mjs --format json --output /tmp/cocos-skills-eval.json
-node tools/cocos-creator-agent-cli/evals/analyze-skills.mjs --skill cocos2-scene-composition
+node cocos-creator-agent-cli/evals/analyze-skills.mjs --format markdown
+node cocos-creator-agent-cli/evals/analyze-skills.mjs --format json --output /tmp/cocos-skills-eval.json
+node cocos-creator-agent-cli/evals/analyze-skills.mjs --skill cocos2-scene-composition
 ```
 
 The current 52-Skill snapshot is recorded in [skill-static-analysis-2026-10-23.md](skill-static-analysis-2026-10-23.md).

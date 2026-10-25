@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: 20
       - name: Run CLI test suite
-        working-directory: tools/cocos-creator-agent-cli
+        working-directory: cocos-creator-agent-cli
         run: npm test
       - name: Pack and verify the tagged CLI version
         env:
@@ -25,13 +25,13 @@ jobs:
         run: |
           set -euo pipefail
           version="${RELEASE_TAG#cocos-creator-agent-cli-v}"
-          package_version="$(node -p "require('./tools/cocos-creator-agent-cli/package.json').version")"
+          package_version="$(node -p "require('./cocos-creator-agent-cli/package.json').version")"
           if [ "$version" != "$package_version" ]; then
             echo "Tag version $version does not match CLI package version $package_version" >&2
             exit 1
           fi
           mkdir -p "$RUNNER_TEMP/cocos-creator-agent-cli-release"
-          npm pack ./tools/cocos-creator-agent-cli --pack-destination "$RUNNER_TEMP/cocos-creator-agent-cli-release" --json > "$RUNNER_TEMP/cocos-creator-agent-cli-pack.json"
+          npm pack ./cocos-creator-agent-cli --pack-destination "$RUNNER_TEMP/cocos-creator-agent-cli-release" --json > "$RUNNER_TEMP/cocos-creator-agent-cli-pack.json"
           packed_name="$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'))[0].filename)" "$RUNNER_TEMP/cocos-creator-agent-cli-pack.json")"
           archive="$RUNNER_TEMP/cocos-creator-agent-cli-release/cocos-creator-agent-cli-v${version}.tgz"
           mv "$RUNNER_TEMP/cocos-creator-agent-cli-release/$packed_name" "$archive"
