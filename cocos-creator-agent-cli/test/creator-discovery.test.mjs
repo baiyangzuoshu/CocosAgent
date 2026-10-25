@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { discoverCreatorInstallations, openCreatorProject, resolveCreatorExecutable } from '../creator-workflows.mjs';
-import { listCreatorTemplates } from '../project-lifecycle.mjs';
+import { createCreatorProject, listCreatorTemplates } from '../project-lifecycle.mjs';
 
 function appBundle(root, name, version) {
   const bundlePath = path.join(root, name);
@@ -73,7 +73,7 @@ test('Windows Creator discovery reads the packaged Creator version and finds Das
   const supported = windowsCreatorInstall(dashboardRoot, '2.4.15');
   const templatePath = path.join(supported.installRoot, 'resources', 'templates', 'hello-world');
   fs.mkdirSync(templatePath, { recursive: true });
-  fs.writeFileSync(path.join(templatePath, 'project.json'), JSON.stringify({ version: '2.4.1' }));
+  fs.writeFileSync(path.join(templatePath, 'project.json'), JSON.stringify({ version: '2.1.2' }));
   const unsupported = windowsCreatorInstall(dashboardRoot, '3.8.7');
   const inventory = discoverCreatorInstallations({ platform: 'win32', searchRoots: [dashboardRoot] });
   assert.equal(inventory.supported, true);
@@ -89,7 +89,13 @@ test('Windows Creator discovery reads the packaged Creator version and finds Das
     executable: supported.executable, bundleRoot: supported.installRoot, creatorVersion: '2.4.15',
   });
   assert.throws(() => resolveCreatorExecutable(unsupported.installRoot, { platform: 'win32' }), { code: 'CREATOR_VERSION_MISMATCH' });
-  assert.equal(listCreatorTemplates({ creatorPath: supported.executable, platform: 'win32' }).templates[0].id, 'hello-world');
+  const listedTemplates = listCreatorTemplates({ creatorPath: supported.executable, platform: 'win32' });
+  assert.equal(listedTemplates.templates[0].id, 'hello-world');
+  assert.equal(listedTemplates.templates[0].templateCreatorVersion, '2.1.2');
+  const created = createCreatorProject({ templateId: 'hello-world', creatorPath: supported.executable, platform: 'win32',
+    targetPath: path.join(state.root, 'created'), name: 'Created From Old Template' });
+  assert.equal(created.creatorVersion, '2.4.15');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(created.projectRoot, 'project.json'), 'utf8')).version, '2.4.15');
   assert.equal(discoverCreatorInstallations({ platform: 'linux', searchRoots: [dashboardRoot] }).supported, false);
 });
 

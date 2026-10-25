@@ -146,7 +146,7 @@ function resolveTemplateRoot({ creatorPath, templateRoot, platform = process.pla
     creatorVersion: creator.creatorVersion };
 }
 
-function inspectTemplate(templateRoot, templateId) {
+function inspectTemplate(templateRoot, templateId, { allowUnsupportedCreatorVersion = false } = {}) {
   if (typeof templateId !== 'string' || !TEMPLATE_ID_PATTERN.test(templateId)) throw coded('PROJECT_TEMPLATE_ID_INVALID');
   const templatePath = path.join(templateRoot, templateId);
   let stat;
@@ -154,7 +154,7 @@ function inspectTemplate(templateRoot, templateId) {
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw coded('PROJECT_TEMPLATE_NOT_FOUND', templateId);
   const inspected = inspectProject(templatePath);
   if (!inspected.project) throw coded('PROJECT_TEMPLATE_INVALID', inspected.issue);
-  if (!isSupportedCreatorVersion(inspected.project.version))
+  if (!allowUnsupportedCreatorVersion && !isSupportedCreatorVersion(inspected.project.version))
     throw coded('PROJECT_TEMPLATE_CREATOR_VERSION_UNSUPPORTED', inspected.project.version);
   return { templatePath: fs.realpathSync(templatePath), project: inspected.project };
 }
@@ -167,7 +167,7 @@ export function listCreatorTemplates({ creatorPath, templateRoot, platform } = {
   for (const entry of fs.readdirSync(root, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
     if (!entry.isDirectory() || entry.isSymbolicLink() || !TEMPLATE_ID_PATTERN.test(entry.name)) continue;
     try {
-      const inspected = inspectTemplate(root, entry.name);
+      const inspected = inspectTemplate(root, entry.name, { allowUnsupportedCreatorVersion: resolved.creatorVersion !== null });
       let metadata = {};
       const metadataPath = path.join(inspected.templatePath, 'template.json');
       try {
@@ -251,7 +251,7 @@ function copyProjectTree(sourceRoot, targetRoot, name, projectId, creatorVersion
   return { copiedFiles, copiedBytes, skippedDirectories };
 }
 
-function materializeProject({ sourceRoot, targetPath, name, operation }) {
+function materializeProject({ sourceRoot, targetPath, name, operation, creatorVersionOverride }) {
   if (typeof targetPath !== 'string' || !path.isAbsolute(targetPath)) throw coded('PROJECT_TARGET_ABSOLUTE_PATH_REQUIRED');
   const requestedTarget = path.resolve(targetPath);
   const targetName = path.basename(requestedTarget);
@@ -271,9 +271,11 @@ function materializeProject({ sourceRoot, targetPath, name, operation }) {
   const projectName = validateProjectName(name) || targetName;
   const projectId = randomUUID();
   const sourceProject = inspectProject(sourceRoot);
-  if (!sourceProject.project || !isSupportedCreatorVersion(sourceProject.project.version))
-    throw coded('PROJECT_CREATOR_VERSION_MISMATCH', sourceProject.project?.version || sourceProject.issue);
-  const creatorVersion = sourceProject.project.version;
+  if (!sourceProject.project)
+    throw coded('PROJECT_CREATOR_VERSION_MISMATCH', sourceProject.issue);
+  const creatorVersion = creatorVersionOverride ?? sourceProject.project.version;
+  if (!isSupportedCreatorVersion(creatorVersion))
+    throw coded('PROJECT_CREATOR_VERSION_MISMATCH', creatorVersion);
   const stagingRoot = path.join(canonicalParent, `.${targetName}.cocos-${operation}-${randomUUID()}`);
   try {
     const copied = copyProjectTree(sourceRoot, stagingRoot, projectName, projectId, creatorVersion);
@@ -295,8 +297,9 @@ export function cloneCreatorProject({ projectRoot, targetPath, name } = {}) {
 }
 
 export function createCreatorProject({ templateId, targetPath, name, creatorPath, templateRoot, platform } = {}) {
-  const root = resolveTemplateRoot({ creatorPath, templateRoot, platform }).root;
-  const source = inspectTemplate(root, templateId);
+  const resolved = resolveTemplateRoot({ creatorPath, templateRoot, platform });
+  const source = inspectTemplate(resolved.root, templateId, { allowUnsupportedCreatorVersion: resolved.creatorVersion !== null });
   return { sourceTemplateId: templateId, sourceTemplateRoot: source.templatePath,
-    ...materializeProject({ sourceRoot: source.templatePath, targetPath, name, operation: 'create' }) };
+    ...materializeProject({ sourceRoot: source.templatePath, targetPath, name, operation: 'create',
+      creatorVersionOverride: resolved.creatorVersion }) };
 }
