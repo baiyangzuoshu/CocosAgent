@@ -48,7 +48,7 @@ function run(command, args, {
   };
 }
 
-function repositoryName(value) {
+function repositoryPath(value) {
   const source = String(value || '').trim();
   const normalized = source.startsWith('git@github.com:')
     ? `ssh://git@github.com/${source.slice('git@github.com:'.length)}`
@@ -60,7 +60,12 @@ function repositoryName(value) {
     return null;
   }
   if (!['github.com', 'ssh.github.com'].includes(parsed.hostname.toLowerCase())) return null;
-  return parsed.pathname.replace(/^\//, '').replace(/\.git$/i, '').replace(/\/$/, '').toLowerCase();
+  const pathname = parsed.pathname.replace(/^\//, '').replace(/\.git$/i, '').replace(/\/$/, '');
+  return /^[^/]+\/[^/]+$/.test(pathname) ? pathname : null;
+}
+
+function repositoryName(value) {
+  return repositoryPath(value)?.toLowerCase() || null;
 }
 
 function sshConnection() {
@@ -198,12 +203,13 @@ try {
     fail('CLI_RELEASE_ARGUMENT_INVALID', 'Only --dry-run is supported.');
   }
 
-  const repo = repositoryName(packageInfo.repository?.url);
-  if (!repo) fail('CLI_RELEASE_REPOSITORY_INVALID', 'The CLI package must declare its GitHub repository URL.');
+  const repoPath = repositoryPath(packageInfo.repository?.url);
+  const repo = repoPath?.toLowerCase();
+  if (!repoPath) fail('CLI_RELEASE_REPOSITORY_INVALID', 'The CLI package must declare its GitHub repository URL.');
   if (!/^[a-z0-9][a-z0-9._-]*$/i.test(packageInfo.name || '')) {
     fail('CLI_RELEASE_PACKAGE_NAME_INVALID', `Invalid package name: ${packageInfo.name || '(empty)'}`);
   }
-  const expectedRemote = `ssh://git@ssh.github.com:443/${repo}.git`;
+  const expectedRemote = `ssh://git@ssh.github.com:443/${repoPath}.git`;
   const currentRemote = run('git', ['remote', 'get-url', 'origin']).stdout;
   if (repositoryName(currentRemote) !== repo) {
     fail('CLI_RELEASE_ORIGIN_MISMATCH', `origin must point to the GitHub repository ${repo}.`);
@@ -240,10 +246,10 @@ try {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-cli-release-'));
   try {
     const assets = buildReleaseAssets(tempRoot, version);
-    const release = releaseForTag(repo, tag);
+    const release = releaseForTag(repoPath, tag);
     if (release) {
       if (!remoteTagRef) fail('CLI_RELEASE_TAG_MISSING_FOR_RELEASE', `${tag} has a GitHub Release but no remote Git tag.`);
-      if (!verifyExistingRelease(repo, tag, release, assets, tempRoot)) {
+      if (!verifyExistingRelease(repoPath, tag, release, assets, tempRoot)) {
         fail('CLI_RELEASE_ASSETS_MISMATCH', `${tag} already has a Release with assets that do not exactly match the current local package; inspect it before changing anything.`);
       }
       process.stdout.write(`Release already exists and its downloaded assets match ${packageInfo.name}@${version}.\n`);
@@ -268,7 +274,7 @@ try {
         'release', 'create', tag,
         assets.archive,
         assets.checksum,
-        '--repo', repo,
+        '--repo', repoPath,
         '--title', `Cocos Creator Agent CLI v${version}`,
         '--generate-notes',
         '--verify-tag',
