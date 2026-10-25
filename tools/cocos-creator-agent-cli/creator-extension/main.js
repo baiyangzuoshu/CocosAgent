@@ -1111,7 +1111,10 @@ function readSceneComponentPropertyOperation(operationId) {
         || sceneComponentValueKind(plan.expectedBefore.value) !== plan.propertyKind
         || sceneComponentValueKind(plan.expectedAfter.value) !== plan.propertyKind
         || (plan.propertyKind === 'asset' && plan.expectedBefore.value.assetClass !== plan.expectedAfter.value.assetClass)
-        || sceneComponentValuesEqual(plan.expectedBefore.value, plan.expectedAfter.value)
+        || (sceneComponentValuesEqual(plan.expectedBefore.value, plan.expectedAfter.value)
+            && plan.restoreSerializedOmission !== true)
+        || (plan.restoreSerializedOmission === true
+            && !['node-ref', 'component-ref', 'asset'].includes(plan.propertyKind))
         || (plan.diskBefore !== undefined && (!validSceneNodeDiskBaseline(plan.diskBefore)
             || !validSavedComponentProperty(plan.diskBefore.componentProperty)
             || plan.diskBefore.componentProperty.componentInstanceId !== plan.componentInstanceId
@@ -2542,14 +2545,60 @@ async function createPrefabSourcePatchPlan(input) {
         const componentStructureDiff = expectedDiff.find((item) => item.path === 'component.structure');
         if (componentStructureDiff) {
             const change = prefabPatch.componentStateChange(componentStructureDiff.before, componentStructureDiff.after);
-            if (!change || change.kind !== 'add' || change.component.componentInstanceId !== prefabPatch.AUTO_COMPONENT_INSTANCE_ID
-                || !change.component.componentClassName.startsWith('cc.')
-                || change.component.serializedClassId !== change.component.componentClassName)
-                throw coded('PREFAB_COMPONENT_STRUCTURE_ADD_INVALID');
-            expectedDiff = expectedDiff.map((item) => item === componentStructureDiff ? { ...item,
-                after: { ...item.after, components: item.after.components.map((component) => component === change.component
-                    ? { ...component, componentInstanceId: prefabPatch.componentIdFor(input.prefabUuid, input.targetNodeUuid,
-                        component.componentIndex, component.serializedClassId, null) } : component) } } : item);
+            if (!change) throw coded('PREFAB_COMPONENT_STRUCTURE_DIFF_INVALID');
+            if (change.kind === 'add') {
+                if (change.component.componentInstanceId !== prefabPatch.AUTO_COMPONENT_INSTANCE_ID
+                    || change.component.componentClassName === 'cc.Component')
+                    throw coded('PREFAB_COMPONENT_STRUCTURE_ADD_INVALID');
+                expectedDiff = expectedDiff.map((item) => item === componentStructureDiff ? { ...item,
+                    after: { ...item.after, components: item.after.components.map((component) => component === change.component
+                        ? { ...component, componentInstanceId: prefabPatch.componentIdFor(input.prefabUuid, input.targetNodeUuid,
+                            component.componentIndex, component.serializedClassId, null) } : component) } } : item);
+            } else {
+                const sourceNode = singlePrefabNode(source, input.targetNodeUuid);
+                const serialized = sourceNode.components.find((component) => component.index === change.component.componentIndex
+                    && component.instanceId === change.component.componentInstanceId
+                    && component.classId === change.component.serializedClassId);
+                if (!serialized || !/^cc\.[A-Za-z_$][A-Za-z0-9_$.]{0,117}$/.test(change.component.componentClassName))
+                    throw coded('PREFAB_COMPONENT_DIRECT_REMOVE_UNSUPPORTED');
+                const editable = await inspectPrefabEditableCommand({ prefabUuid: input.prefabUuid,
+                    nodeUuid: input.targetNodeUuid });
+                const liveComponent = editable.editableState.components.find((component) =>
+                    component.componentIndex === change.component.componentIndex
+                    && component.componentInstanceId === change.component.componentInstanceId);
+                const serializableProperties = liveComponent && liveComponent.propertySchema
+                    && liveComponent.propertySchema.serializablePublicProperties;
+                if (!liveComponent || liveComponent.propertiesTruncated || !Array.isArray(serializableProperties)
+                    || serializableProperties.length > 64)
+                    throw coded('PREFAB_COMPONENT_RESTORE_STATE_UNAVAILABLE');
+                const propertyRows = new Map((liveComponent.properties || []).map((property) => [property.name, property]));
+                const restoreProperties = [];
+                for (const propertyName of serializableProperties) {
+                    if (propertyName === 'enabled') continue;
+                    const property = propertyRows.get(propertyName);
+                    const serializedProperty = property && property.inspector && property.inspector.serializedProperty;
+                    const restorableKind = property && (property.kind === 'boolean' || property.kind === 'number'
+                        || property.kind === 'string' || ['vec2', 'vec3', 'vec4', 'size', 'rect', 'color'].includes(property.kind));
+                    if (!property || !restorableKind || property.inspector.editable !== true
+                        || typeof serializedProperty !== 'string')
+                        throw coded('PREFAB_COMPONENT_RESTORE_STATE_UNAVAILABLE', propertyName);
+                    const omitted = !serialized.serializedProperties.includes(serializedProperty);
+                    restoreProperties.push({ property: propertyName, value: property.value,
+                        serializedProperty, serializedWasOmitted: omitted });
+                }
+                const eventLists = serialized.eventLists || {};
+                if (Object.values(eventLists).some((events) => !Array.isArray(events) || events.length > 0)
+                    || Object.keys(serialized.eventListsUnavailable || {}).length > 0)
+                    throw coded('PREFAB_COMPONENT_EVENT_LIST_RESTORE_UNSUPPORTED');
+                expectedDiff = expectedDiff.map((item) => item === componentStructureDiff ? { ...item,
+                    before: { ...item.before, components: item.before.components.map((component) =>
+                        component.componentIndex === change.component.componentIndex
+                            ? { ...component, enabled: serialized.enabled,
+                                componentIdSynthetic: serialized.instanceIdSynthetic,
+                                restoreProperties } : component) } } : item);
+                source = await inspectPrefabSourceCommand({ prefabUuid: input.prefabUuid,
+                    nodeUuid: input.targetNodeUuid, expectedDiff: expectedDiff.filter((item) => item.path === 'component.structure') });
+            }
             if (!prefabPatch.validateDiff(expectedDiff)) throw coded('PREFAB_COMPONENT_STRUCTURE_DIFF_INVALID');
         }
     } else {
@@ -2580,9 +2629,12 @@ async function createPrefabSourcePatchPlan(input) {
         throw coded('PREFAB_UI_EVENT_TARGET_REQUIRED');
     for (const item of expectedDiff.filter((entry) => entry.path === 'component.structure')) {
         const change = prefabPatch.componentStateChange(item.before, item.after);
-        if (!change || (input.action === 'apply' && change.kind !== 'add')
-            || (change.kind === 'add' && (!change.component.componentClassName.startsWith('cc.')
-                || change.component.serializedClassId !== change.component.componentClassName)))
+        const safeDirectRemoval = change && change.kind === 'remove'
+            && /^cc\.[A-Za-z_$][A-Za-z0-9_$.]{0,117}$/.test(change.component.componentClassName)
+            && typeof change.component.enabled === 'boolean'
+            && Array.isArray(change.component.restoreProperties);
+        if (!change || (input.action === 'apply' && change.kind !== 'add' && !safeDirectRemoval)
+            || (change.kind === 'add' && change.component.componentClassName === 'cc.Component'))
             throw coded('PREFAB_COMPONENT_STRUCTURE_ACTION_INVALID');
     }
     let node = singlePrefabNode(source, input.targetNodeUuid);
@@ -2622,15 +2674,17 @@ async function createPrefabSourcePatchPlan(input) {
                     serializedWasOmitted: omitted,
                     ...(omitted ? { serializedDefaultValue: item.before } : {}) };
             });
+            const sourceSelectors = prefabPatch.sourceInspectionDiff(expectedDiff);
             source = await inspectPrefabSourceCommand({ prefabUuid: input.prefabUuid,
-                nodeUuid: input.targetNodeUuid, expectedDiff: prefabPatch.sourceInspectionDiff(expectedDiff) });
+                nodeUuid: input.targetNodeUuid, ...(sourceSelectors.length ? { expectedDiff: sourceSelectors } : {}) });
             node = singlePrefabNode(source, input.targetNodeUuid);
         } finally {
             if (entered) await exitPrefabSourceMode(input.prefabUuid, mode.sceneUuid);
         }
     } else if (hasComponentDiff) {
+        const sourceSelectors = prefabPatch.sourceInspectionDiff(expectedDiff);
         source = await inspectPrefabSourceCommand({ prefabUuid: input.prefabUuid,
-            nodeUuid: input.targetNodeUuid, expectedDiff: prefabPatch.sourceInspectionDiff(expectedDiff) });
+            nodeUuid: input.targetNodeUuid, ...(sourceSelectors.length ? { expectedDiff: sourceSelectors } : {}) });
         node = singlePrefabNode(source, input.targetNodeUuid);
     }
     if (!prefabPatch.matchesDiff(node, expectedDiff, 'before')) throw coded('PREFAB_SOURCE_STALE');
@@ -3988,12 +4042,16 @@ async function createSceneNodeTransformPlan(input) {
     if (!sceneNodePathsMatch(diskBefore.nodePath, current.nodePath)
         || !sceneDiskTransformMatches(diskBefore.transform, current.transform))
         throw coded('SCENE_DISK_STATE_DIFFERS_FROM_EDITOR');
-    const fields = Object.keys(input.values).sort();
-    if (!fields.length || !current.changed) throw coded('SCENE_NODE_TRANSFORM_NO_CHANGE');
+    const requestedFields = Object.keys(input.values).sort();
+    if (!requestedFields.length) throw coded('SCENE_NODE_TRANSFORM_NO_CHANGE');
+    for (const field of requestedFields) {
+        if (!Object.prototype.hasOwnProperty.call(current.transform, field)) throw coded('SCENE_NODE_TRANSFORM_FIELD_UNAVAILABLE', field);
+    }
+    const fields = requestedFields.filter((field) => current.transform[field] !== input.values[field]);
+    if (!fields.length) throw coded('SCENE_NODE_TRANSFORM_NO_CHANGE');
     const expectedBefore = {};
     const expectedAfter = {};
     for (const field of fields) {
-        if (!Object.prototype.hasOwnProperty.call(current.transform, field)) throw coded('SCENE_NODE_TRANSFORM_FIELD_UNAVAILABLE', field);
         expectedBefore[field] = current.transform[field];
         expectedAfter[field] = input.values[field];
     }
@@ -4283,7 +4341,8 @@ async function createSceneComponentAddPlan(input) {
         || current.componentClassName !== input.componentClassName || !Number.isInteger(current.componentCount))
         throw coded('SCENE_COMPONENT_STATE_INVALID');
     if (current.componentCount !== 0) throw coded('SCENE_COMPONENT_ALREADY_PRESENT');
-    if (current.requiresComponent || current.canAdd !== true) throw coded('SCENE_COMPONENT_HAS_UNAPPROVED_REQUIREMENT');
+    if (current.canAdd !== true) throw coded(current.requiresComponent
+        ? 'SCENE_COMPONENT_HAS_UNAPPROVED_REQUIREMENT' : 'SCENE_COMPONENT_ALREADY_PRESENT');
     if (typeof current.serializedClassId !== 'string' || !current.serializedClassId || current.serializedClassId.length > 128)
         throw coded('SCENE_COMPONENT_SERIALIZED_CLASS_ID_UNAVAILABLE');
     if (projectRoot() !== currentRoot || editorVersion() !== currentVersion) throw coded('CREATOR_IDENTITY_CHANGED');
@@ -4460,7 +4519,15 @@ async function createSceneComponentPropertyPlan(input) {
     if (inputKind !== state.propertyKind) throw coded('SCENE_COMPONENT_PROPERTY_TYPE_MISMATCH');
     if (inputKind === 'asset' && (!state.value || input.value.assetClass !== state.value.assetClass))
         throw coded('SCENE_COMPONENT_PROPERTY_TYPE_MISMATCH');
-    if (sceneComponentValuesEqual(state.value, input.value)) throw coded('SCENE_COMPONENT_PROPERTY_NO_CHANGE');
+    const restoreSerializedOmission = input.restoreDefaultOmitted === true;
+    const emptyReference = input.value && typeof input.value === 'object'
+        && ['node-ref', 'component-ref', 'asset'].includes(input.value.kind)
+        && input.value.nodeUuid === undefined && input.value.componentInstanceId === undefined
+        && input.value.assetUuid === undefined;
+    if (restoreSerializedOmission && !emptyReference)
+        throw coded('SCENE_COMPONENT_PROPERTY_OMITTED_DEFAULT_INVALID');
+    if (sceneComponentValuesEqual(state.value, input.value) && !restoreSerializedOmission)
+        throw coded('SCENE_COMPONENT_PROPERTY_NO_CHANGE');
     if (typeof state.serializedClassId !== 'string' || !state.serializedClassId || state.serializedClassId.length > 128)
         throw coded('SCENE_COMPONENT_SERIALIZED_CLASS_ID_UNAVAILABLE');
     const referenceClasses = Array.isArray(state.referenceClasses) ? state.referenceClasses : [];
@@ -4468,7 +4535,7 @@ async function createSceneComponentPropertyPlan(input) {
     const serializedAfter = componentValueForDisk(input.value, referenceClasses);
     if (!serializedBefore.verified || !serializedAfter.verified) throw coded('SCENE_COMPONENT_SERIALIZED_VALUE_UNAVAILABLE');
     const serializedBeforeValue = state.serializedValue === undefined ? serializedBefore.value : state.serializedValue;
-    const serializedAfterValue = state.requestedSerializedValue === undefined
+    const serializedAfterValue = restoreSerializedOmission ? null : state.requestedSerializedValue === undefined
         ? serializedAfter.value : state.requestedSerializedValue;
     let omittedDefault;
     if (state.declaredDefaultValue !== undefined) {
@@ -4488,6 +4555,8 @@ async function createSceneComponentPropertyPlan(input) {
         serializedClassId: state.serializedClassId, componentInstanceId: state.componentInstanceId,
         property: state.property, serializedPropertyCandidates: state.serializedPropertyCandidates,
         ...(omittedDefault !== undefined ? { defaultValue: omittedDefault } : {}) } });
+    if (restoreSerializedOmission && diskBefore.componentProperty.isDefaultOmitted === true)
+        throw coded('SCENE_COMPONENT_PROPERTY_NO_CHANGE');
     if (!sceneNodePathsMatch(diskBefore.nodePath, state.nodePath)
         || diskBefore.componentProperty.property !== state.property
         || !sceneComponentValuesEqual(diskBefore.componentProperty.value, serializedBeforeValue))
@@ -4516,6 +4585,7 @@ async function createSceneComponentPropertyPlan(input) {
         property: state.property,
         serializedProperty,
         propertyKind: state.propertyKind,
+        ...(restoreSerializedOmission ? { restoreSerializedOmission: true } : {}),
         expectedBefore: { value: state.value },
         expectedAfter: { value: input.value, serializedValue: serializedAfterValue },
         nodeTransformBefore: transformBefore,
@@ -4585,6 +4655,9 @@ async function createSceneComponentPropertyCompensationPlan(input) {
         || !sceneComponentValuesEqual(operation.plan.expectedAfter.value, source.plan.expectedBefore.value))
         throw coded('SCENE_COMPONENT_COMPENSATION_PLAN_VALUE_MISMATCH');
     operation.plan.compensationFor = { sourceOperationId: source.operationId, sourcePlanHash: source.planHash };
+    if (source.plan.nodeTransformBefore && source.nodeTransformAfter
+        && !sceneDiskTransformMatches(source.plan.nodeTransformBefore, source.nodeTransformAfter))
+        operation.plan.restoreNodeTransform = { ...source.plan.nodeTransformBefore };
     if (source.plan.diskBefore.componentProperty.isDefaultOmitted === true
         && ['node-ref', 'component-ref', 'asset'].includes(source.plan.propertyKind))
         operation.plan.restoreSerializedOmission = true;
@@ -4599,6 +4672,7 @@ async function createSceneComponentPropertyCompensationPlan(input) {
         sourceOperationStatus: source.status, sourceDiskSha256: source.diskReadback.sourceSha256,
         diff: { ...planned.diff, action: 'compensate-component-property',
             sourceOperationId: source.operationId, sourcePlanHash: source.planHash,
+            restoreNodeTransform: operation.plan.restoreNodeTransform || null,
             before: operation.plan.expectedBefore.value, after: operation.plan.expectedAfter.value } };
 }
 
@@ -5786,6 +5860,17 @@ async function commitSceneDestructiveOperation(operation, input, context) {
         operation.status = 'needs-reconciliation'; operation.reconcileReason = mutation && mutation.reason || 'SCENE_DESTRUCTIVE_READBACK_FAILED';
         writeOperation(operation); throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
     }
+    if (!isNode) {
+        try {
+            operation.nodeTransformAfter = await readSceneNodeTransformAfterComponentRemoval(operation.plan);
+            writeOperation(operation);
+        } catch (error) {
+            operation.status = 'needs-reconciliation';
+            operation.reconcileReason = error.code || 'SCENE_COMPONENT_REMOVE_TRANSFORM_READBACK_FAILED';
+            writeOperation(operation);
+            throw coded('OPERATION_RECONCILIATION_REQUIRED', operation.reconcileReason);
+        }
+    }
     operation.status = 'mutation-applied'; operation.mutationAppliedAt = new Date().toISOString(); writeOperation(operation);
     if (!Editor.Ipc || typeof Editor.Ipc.sendToPanel !== 'function') throw coded('CREATOR_SCENE_SAVE_IPC_UNAVAILABLE');
     try { Editor.Ipc.sendToPanel('scene', 'scene:stash-and-save'); }
@@ -5817,6 +5902,8 @@ async function reconcileSceneDestructiveOperation(operation) {
         if (!operation.plan.diskBefore) throw coded('SCENE_DISK_BASELINE_MISSING');
         const liveBefore = sceneDestructiveStateMatchesBefore(operation, observed);
         const liveAfter = observed.present === false;
+        if (!isNode && liveAfter && !operation.nodeTransformAfter)
+            operation.nodeTransformAfter = await readSceneNodeTransformAfterComponentRemoval(operation.plan);
         diskState = isNode
             ? await reconcileSceneNodeDeletionDiskOperation(operation, liveBefore, liveAfter)
             : await reconcileSceneNodeDiskOperation(operation, liveBefore, liveAfter);
@@ -5831,6 +5918,19 @@ async function reconcileSceneDestructiveOperation(operation) {
             ...(Array.isArray(diskState.disk.components) ? { components: diskState.disk.components } : {}),
             matchesBefore: diskState.before, matchesAfter: diskState.after } } : {}) },
         retry: 'Never replay this operation. If the original object remains, create a fresh plan after inspection; if save-required, save in Creator and inspect the scene.' };
+}
+
+async function readSceneNodeTransformAfterComponentRemoval(plan) {
+    // Creator defers component destruction and its onDestroy/layout effects.
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    const state = await callScene('nodeTransformState', { sceneUuid: plan.sceneUuid, nodeUuid: plan.nodeUuid }, 20000);
+    if (!state || state.available !== true || state.sceneUuid !== plan.sceneUuid || state.nodeUuid !== plan.nodeUuid
+        || !sceneNodePathsMatch(state.nodePath, plan.nodePath) || !state.transform)
+        throw coded(state && state.reason || 'SCENE_NODE_TRANSFORM_STATE_UNAVAILABLE');
+    const fields = ['anchorX', 'anchorY', 'angle', 'height', 'scaleX', 'scaleY', 'width', 'x', 'y', 'z'];
+    if (fields.some((field) => !Number.isFinite(state.transform[field])))
+        throw coded('SCENE_NODE_TRANSFORM_STATE_INVALID');
+    return Object.fromEntries(fields.map((field) => [field, state.transform[field]]));
 }
 
 async function readPlannedSceneComponent(plan) {
@@ -6151,6 +6251,15 @@ async function commitSceneComponentProperty(input, context) {
     }
     try {
         operation.nodeTransformAfter = await readSceneComponentPropertyTransform(operation.plan, { afterMutation: true });
+        if (operation.plan.restoreNodeTransform) {
+            const restored = await callScene('setNodeTransform', { sceneUuid: operation.plan.sceneUuid,
+                nodeUuid: operation.plan.nodeUuid, nodePath: operation.plan.nodePath,
+                expectedBefore: operation.nodeTransformAfter, values: operation.plan.restoreNodeTransform }, 20000);
+            if (!restored || restored.available !== true
+                || !sceneDiskTransformMatches(restored.transform, operation.plan.restoreNodeTransform))
+                throw coded(restored && restored.reason || 'SCENE_COMPONENT_COMPENSATION_TRANSFORM_RESTORE_FAILED');
+            operation.nodeTransformAfter = restored.transform;
+        }
     } catch (error) {
         operation.status = 'needs-reconciliation';
         operation.reconcileReason = error.code || 'SCENE_COMPONENT_PROPERTY_TRANSFORM_READBACK_FAILED';
@@ -6366,6 +6475,8 @@ async function readSceneComponentPropertyTransform(plan, { afterMutation = false
         && ['string', 'fontSize', 'fontFamily', 'font', 'useSystemFont', 'maxWidth', 'lineHeight'].includes(plan.property)
         || plan.componentClassName === 'cc.Label'
         && ['string', 'fontSize', 'fontFamily', 'font', 'lineHeight', 'overflow', 'enableWrapText', 'spacingX'].includes(plan.property)
+        || plan.componentClassName === 'cc.LabelOutline' && ['enabled', 'width'].includes(plan.property)
+        || plan.componentClassName === 'cc.LabelShadow' && ['enabled', 'offset', 'blur'].includes(plan.property)
         || widgetAlignmentSensitive
         || plan.componentClassName === 'cc.Layout'
         && ['enabled', 'type', 'resizeMode', 'cellSize', 'startAxis', 'paddingLeft', 'paddingRight', 'paddingTop',
@@ -6505,6 +6616,8 @@ function sceneNodeDiskExpected(plan, side, operation) {
     } else if (plan.operation === 'creator.scene.node.remove-component') {
         expected.components = expected.components.filter((component) =>
             component.componentInstanceId !== plan.componentInstanceId);
+        if (operation && operation.nodeTransformAfter && typeof operation.nodeTransformAfter === 'object')
+            expected.transform = { ...operation.nodeTransformAfter };
     }
     return expected;
 }

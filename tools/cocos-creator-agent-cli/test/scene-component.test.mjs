@@ -38,6 +38,7 @@ function fixture() {
     destroy() { this.destroyed = true; }
   }
   class BaseSprite extends Component {}
+  BaseSprite._disallowMultiple = BaseSprite;
   BaseSprite.__props__ = ['enabled', 'inheritedValue'];
   class Vec2 { constructor(x = 0, y = 0) { this.x = x; this.y = y; } }
   class Vec3 { constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; } }
@@ -113,7 +114,7 @@ function fixture() {
   class SpriteFrame extends Asset { constructor(uuid = 'sprite-frame') { super(); this._uuid = uuid; } }
   class Font extends Asset { constructor(uuid = 'font') { super(); this._uuid = uuid; } }
   class TTFFont extends Font {}
-  class Label extends Component {
+  class Label extends BaseSprite {
     constructor() { super(); this._N$file = null; this._isSystemFontUsed = true; this._styleFlags = 0;
       this._string = ''; this.overflow = 0; }
     get font() { return this._N$file; }
@@ -146,9 +147,16 @@ function fixture() {
   class Slider extends Component { constructor() { super(); this.slideEvents = []; this.progress = 0; } }
   Slider.prototype.__classname__ = 'cc.Slider';
   Slider.__props__ = ['slideEvents', 'progress'];
-  class ScrollView extends Component { constructor() { super(); this.scrollEvents = []; } }
+  class Scrollbar extends Component {
+    constructor() { super(); this._scrollView = null; }
+    setTargetScrollView(view) { this._scrollView = view; }
+  }
+  Scrollbar.prototype.__classname__ = 'cc.Scrollbar';
+  Scrollbar.__props__ = [];
+  class ScrollView extends Component { constructor() { super(); this.scrollEvents = [];
+    this.horizontalScrollBar = null; this.verticalScrollBar = null; } }
   ScrollView.prototype.__classname__ = 'cc.ScrollView';
-  ScrollView.__props__ = ['scrollEvents'];
+  ScrollView.__props__ = ['scrollEvents', 'horizontalScrollBar', 'verticalScrollBar'];
   class PageView extends ScrollView { constructor() { super(); this.pageEvents = []; } }
   PageView.prototype.__classname__ = 'cc.PageView';
   PageView.__props__ = ['scrollEvents', 'pageEvents'];
@@ -157,6 +165,22 @@ function fixture() {
   }
   EditBox.prototype.__classname__ = 'cc.EditBox';
   EditBox.__props__ = ['editingDidBegan', 'textChanged', 'editingDidEnded', 'editingReturn'];
+  class LabelOutline extends Component { constructor() { super(); this.color = new Color(0, 0, 0); this.width = 1; } }
+  LabelOutline.prototype.__classname__ = 'cc.LabelOutline';
+  LabelOutline.__props__ = ['color', 'width'];
+  class LabelShadow extends Component { constructor() { super(); this.color = new Color(0, 0, 0); this.offset = new Vec2(2, 2); this.blur = 2; } }
+  LabelShadow.prototype.__classname__ = 'cc.LabelShadow';
+  LabelShadow.__props__ = ['color', 'offset', 'blur'];
+  class ToggleGroup extends Component { constructor() { super(); this.allowSwitchOff = false; this._toggleItems = []; }
+    get toggleItems() { return this._toggleItems; } }
+  ToggleGroup.prototype.__classname__ = 'cc.ToggleGroup';
+  ToggleGroup.__props__ = ['allowSwitchOff', 'toggleItems'];
+  class SafeArea extends Component {}
+  SafeArea.prototype.__classname__ = 'cc.SafeArea';
+  SafeArea.__props__ = [];
+  class SubContextView extends Component { constructor() { super(); this.fps = 60; } }
+  SubContextView.prototype.__classname__ = 'cc.SubContextView';
+  SubContextView.__props__ = ['fps'];
   class Controller extends Component { onClick() {} }
   Controller.prototype.__classname__ = 'sample.Controller';
   Controller.__props__ = [];
@@ -171,13 +195,14 @@ function fixture() {
   DefaultArrayComponent.__props__ = ['values'];
   class NeedsOther extends Component {}
   NeedsOther.prototype.__classname__ = 'sample.NeedsOther';
-  NeedsOther._requireComponent = Component;
+  NeedsOther._requireComponent = Label;
   class AutoSizeOnLoad extends Component { onLoad() { this.node.setContentSize(153.38, 50.4); } }
   AutoSizeOnLoad.prototype.__classname__ = 'sample.AutoSizeOnLoad';
   class NotAComponent {}
 
   for (const ComponentType of [Component, BaseSprite, Canvas, Widget, Layout, Sprite, Label, Button, Toggle,
-    ToggleContainer, Slider, ScrollView, PageView, EditBox, Controller, ReferenceHolder, DefaultArrayComponent,
+    ToggleContainer, Slider, ScrollView, PageView, EditBox, LabelOutline, LabelShadow, ToggleGroup, SafeArea,
+    SubContextView, Scrollbar, Controller, ReferenceHolder, DefaultArrayComponent,
     NeedsOther, AutoSizeOnLoad]) ComponentType.__values__ = (ComponentType.__props__ || []).slice();
   Widget.__values__ = ['target', '_alignFlags', 'top', 'alignMode'];
   Layout.__values__ = ['_N$layoutType', '_resize', 'cellSize', 'spacingY'];
@@ -199,7 +224,8 @@ function fixture() {
   };
   const cc = {
     Component, Asset, Material, MaterialVariant, Node: FakeNode, SpriteFrame, Font, TTFFont, Label, Canvas, Widget, Layout, Button, Toggle,
-    ToggleContainer, Slider, ScrollView, PageView, EditBox, Vec2, Vec3, Vec4, Rect, Size, Color,
+    ToggleContainer, Slider, ScrollView, PageView, EditBox, LabelOutline, LabelShadow, ToggleGroup, SafeArea,
+    SubContextView, Scrollbar, Vec2, Vec3, Vec4, Rect, Size, Color,
     Class: { attr(type, property) {
       const typeMap = new Map([
         [`Sprite.spriteFrame`, SpriteFrame], [`Sprite.position`, Vec2], [`Sprite.direction`, Vec3],
@@ -210,9 +236,12 @@ function fixture() {
         [`Label.enableUnderline`, Boolean],
         [`Canvas.designResolution`, Size], [`Widget.target`, FakeNode], [`Layout.cellSize`, Size],
         [`ReferenceHolder.targetNode`, FakeNode], [`ReferenceHolder.targetComponent`, Controller],
+        [`ScrollView.horizontalScrollBar`, Scrollbar], [`ScrollView.verticalScrollBar`, Scrollbar],
         [`ReferenceHolder.nodeList`, FakeNode], [`ReferenceHolder.vectorList`, Vec2],
         [`ReferenceHolder.vector4`, Vec4], [`ReferenceHolder.rect`, Rect],
-        [`DefaultArrayComponent.values`, Integer],
+        [`DefaultArrayComponent.values`, Integer], [`LabelOutline.color`, Color], [`LabelOutline.width`, Number],
+        [`LabelShadow.color`, Color], [`LabelShadow.offset`, Vec2], [`LabelShadow.blur`, Number],
+        [`ToggleGroup.allowSwitchOff`, Boolean], [`ToggleGroup.toggleItems`, Array], [`SubContextView.fps`, Number],
       ]);
       if (type === Layout && property === 'type') return { type: { NONE: 0, HORIZONTAL: 1, VERTICAL: 2, GRID: 3 },
         enumList: [{ name: 'NONE', value: 0 }, { name: 'HORIZONTAL', value: 1 },
@@ -222,6 +251,9 @@ function fixture() {
       if (type === Label && property === 'overflow') return { type: 'Number', min: 0, max: 2, step: 1 };
       const className = type === Sprite ? 'Sprite' : type === Label ? 'Label'
         : type === Canvas ? 'Canvas' : type === Widget ? 'Widget' : type === Layout ? 'Layout'
+          : type === ScrollView ? 'ScrollView'
+          : type === LabelOutline ? 'LabelOutline' : type === LabelShadow ? 'LabelShadow'
+            : type === ToggleGroup ? 'ToggleGroup' : type === SubContextView ? 'SubContextView'
           : type === ReferenceHolder ? 'ReferenceHolder' : '';
       const declaredType = typeMap.get(`${className}.${property}`);
       if (declaredType === undefined) {
@@ -245,13 +277,16 @@ function fixture() {
         'cc.Sprite': Sprite, 'cc.Label': Label,
         'cc.Canvas': Canvas, 'cc.Widget': Widget, 'cc.Layout': Layout, 'cc.Button': Button, 'cc.Toggle': Toggle,
         'cc.ToggleContainer': ToggleContainer, 'cc.Slider': Slider, 'cc.ScrollView': ScrollView,
-        'cc.PageView': PageView, 'cc.EditBox': EditBox,
+        'cc.PageView': PageView, 'cc.EditBox': EditBox, 'cc.LabelOutline': LabelOutline,
+        'cc.LabelShadow': LabelShadow, 'cc.ToggleGroup': ToggleGroup, 'cc.SafeArea': SafeArea,
+        'cc.SubContextView': SubContextView, 'cc.Scrollbar': Scrollbar,
         'sample.Controller': Controller, 'sample.ReferenceHolder': ReferenceHolder,
         'sample.DefaultArrayComponent': DefaultArrayComponent,
         'sample.NeedsOther': NeedsOther, 'sample.AutoSizeOnLoad': AutoSizeOnLoad,
         'sample.NotAComponent': NotAComponent })[name]; },
       getClassName(type) { return type.prototype.__classname__ || (type.name ? `cc.${type.name}` : ''); },
       _getClassId(type) { return type.prototype.__classname__ || (type.name ? `cc.${type.name}` : ''); },
+      getSuper(type) { return type.$super || Object.getPrototypeOf(type); },
       isChildClassOf(type, base) { return type === base || type.prototype instanceof base; },
     },
   };
@@ -260,7 +295,8 @@ function fixture() {
   vm.runInNewContext(sceneSource, { module, exports: module.exports, cc, Array,
     require: createRequire(path.join(packageRoot, 'creator-extension/scene.js')) }, { filename: 'scene.js' });
   return { api: module.exports, root, Sprite, Label, Canvas, Widget, Layout, Button, Toggle, ToggleContainer,
-    Slider, ScrollView, PageView, EditBox, Controller, ReferenceHolder, DefaultArrayComponent, Vec2, Vec3, Vec4, Rect,
+    Slider, ScrollView, PageView, EditBox, LabelOutline, LabelShadow, ToggleGroup, SafeArea, SubContextView,
+    Scrollbar, Controller, ReferenceHolder, DefaultArrayComponent, Vec2, Vec3, Vec4, Rect,
     Size, Color, Asset, Material, MaterialVariant, SpriteFrame, Font, TTFFont, Integer, cc, FakeNode };
 }
 
@@ -347,6 +383,31 @@ test('UI inspection reads typed declared properties and bounded event lists for 
   assert.deepEqual(Object.keys(editBoxState.eventLists).sort(),
     ['editingDidBegan', 'editingDidEnded', 'editingReturn', 'textChanged']);
   assert.equal(sprite.spriteFrame, null);
+});
+
+test('UI inspection includes outline, shadow, ToggleGroup, SafeArea, and SubContextView schemas', () => {
+  const { api, root, FakeNode, LabelOutline, LabelShadow, ToggleGroup, SafeArea, SubContextView } = fixture();
+  const node = new FakeNode('ExtendedControls');
+  node._id = '11111111-1111-4111-8111-111111111111';
+  root.addChild(node);
+  for (const Type of [LabelOutline, LabelShadow, ToggleGroup, SafeArea, SubContextView]) node.addComponent(Type);
+
+  const inspected = invoke(api, 'uiComponentState', { sceneUuid: root.uuid, nodeUuid: node.uuid }).result;
+  assert.equal(inspected.available, true);
+  assert.deepEqual(Array.from(inspected.components, (component) => component.componentClassName), [
+    'cc.LabelOutline', 'cc.LabelShadow', 'cc.ToggleGroup', 'cc.SafeArea', 'cc.SubContextView',
+  ]);
+  const property = (className, name) => inspected.components.find((component) => component.componentClassName === className)
+    .properties.find((entry) => entry.name === name);
+  assert.equal(property('cc.LabelOutline', 'color').kind, 'color');
+  assert.equal(property('cc.LabelOutline', 'width').kind, 'number');
+  assert.equal(property('cc.LabelShadow', 'offset').kind, 'vec2');
+  assert.equal(property('cc.LabelShadow', 'blur').kind, 'number');
+  assert.equal(property('cc.ToggleGroup', 'allowSwitchOff').kind, 'boolean');
+  assert.equal(property('cc.ToggleGroup', 'toggleItems').kind, 'array');
+  assert.equal(property('cc.ToggleGroup', 'toggleItems').inspector.readonly, true);
+  assert.equal(inspected.components.find((component) => component.componentClassName === 'cc.SafeArea').properties.length, 0);
+  assert.equal(property('cc.SubContextView', 'fps').kind, 'number');
 });
 
 test('generic component writes reject UI event arrays and preserve bounded event inspection', () => {
@@ -831,6 +892,47 @@ test('component addition requires exact before count and refuses implicit depend
   assert.equal(root._components.length, 0);
 });
 
+test('component addition permits an explicit requirement only when its exact dependency already exists', () => {
+  const { api, root, Label } = fixture();
+  const label = root.addComponent(Label);
+  label.node = root;
+  const state = invoke(api, 'componentState', { sceneUuid: 'scene-uuid', nodeUuid: 'scene-uuid',
+    nodePath: 'Scene', componentClassName: 'sample.NeedsOther' }).result;
+  assert.equal(state.available, true);
+  assert.equal(state.requiresComponent, true);
+  assert.equal(state.requiredComponentClassName, 'cc.Label');
+  assert.equal(state.requiredComponentPresent, true);
+  assert.equal(state.canAdd, true);
+
+  const added = invoke(api, 'addNodeComponent', { sceneUuid: 'scene-uuid', nodeUuid: 'scene-uuid',
+    nodePath: 'Scene', componentClassName: 'sample.NeedsOther', expectedComponentCount: 0 });
+  assert.equal(added.error, null);
+  assert.equal(added.result.available, true);
+  assert.equal(root.getComponents(Label).length, 1);
+  assert.equal(root._components.length, 2);
+  assert.equal(label.node, root);
+});
+
+test('component addition detects inherited disallow-multiple families before calling Creator', () => {
+  const { api, root, Sprite } = fixture();
+  root.addComponent(Sprite);
+
+  const state = invoke(api, 'componentState', { sceneUuid: 'scene-uuid', nodeUuid: 'scene-uuid',
+    nodePath: 'Scene', componentClassName: 'cc.Label' }).result;
+  assert.equal(state.available, true);
+  assert.equal(state.componentCount, 0);
+  assert.equal(state.disallowMultiple, true);
+  assert.equal(state.disallowMultipleClassName, 'cc.BaseSprite');
+  assert.equal(state.disallowMultipleConflict, true);
+  assert.equal(state.canAdd, false);
+
+  const add = invoke(api, 'addNodeComponent', { sceneUuid: 'scene-uuid', nodeUuid: 'scene-uuid',
+    nodePath: 'Scene', componentClassName: 'cc.Label', expectedComponentCount: 0 });
+  assert.equal(add.result.available, false);
+  assert.equal(add.result.reason, 'SCENE_COMPONENT_ALREADY_PRESENT');
+  assert.equal(root._components.length, 1);
+});
+
 test('component addition reads back exactly one new component and instance identity', () => {
   const { api, root } = fixture();
   const added = invoke(api, 'addNodeComponent', {
@@ -1066,6 +1168,11 @@ test('component properties round-trip exact scene node/component references and 
   assert.equal(holder.targetNode, targetNode);
   assert.deepEqual({ ...nodeWrite.value }, { kind: 'node-ref', nodeUuid: targetNode.uuid });
 
+  const resetReference = invoke(api, 'setComponentProperty', { ...base, property: 'targetNode',
+    expectedValue: nodeWrite.value, value: { kind: 'node-ref' }, restoreDefaultOmitted: true }).result;
+  assert.equal(resetReference.available, true);
+  assert.equal(holder.targetNode, undefined);
+
   const componentBefore = invoke(api, 'componentPropertyState', { ...base, property: 'targetComponent', requestedValue: {
     kind: 'component-ref', nodeUuid: targetNode.uuid, componentClassName: 'sample.Controller', componentInstanceId: targetComponent._id,
   } }).result;
@@ -1135,6 +1242,32 @@ test('component asset properties load exact resources and represent an empty ref
   assert.equal(cleared.available, true, cleared.reason);
   assert.equal(root._components[0].spriteFrame, null);
   assert.deepEqual(JSON.parse(JSON.stringify(cleared.value)), { kind: 'asset', assetClass: 'SpriteFrame' });
+});
+
+test('clearing a ScrollView scrollbar reference clears the Scrollbars reciprocal runtime target', () => {
+  const { api, root, FakeNode, ScrollView, Scrollbar } = fixture();
+  const viewNode = new FakeNode('ScrollView');
+  viewNode._id = '11111111-1111-4111-8111-111111111111';
+  root.addChild(viewNode);
+  const barNode = new FakeNode('Scrollbar');
+  barNode._id = '22222222-2222-4222-8222-222222222222';
+  root.addChild(barNode);
+  const view = viewNode.addComponent(ScrollView);
+  view._id = 'scroll-view-component';
+  const scrollbar = barNode.addComponent(Scrollbar);
+  scrollbar._id = 'scrollbar-component';
+  view.horizontalScrollBar = scrollbar;
+  scrollbar.setTargetScrollView(view);
+  const input = { sceneUuid: root.uuid, nodeUuid: viewNode.uuid, nodePath: 'Scene/ScrollView',
+    componentClassName: 'cc.ScrollView', componentInstanceId: view._id, property: 'horizontalScrollBar' };
+  const before = invoke(api, 'componentPropertyState', input).result;
+  assert.equal(before.available, true, JSON.stringify(before));
+  assert.equal(before.value.componentInstanceId, scrollbar._id);
+  const cleared = invoke(api, 'setComponentProperty', { ...input, expectedValue: before.value,
+    value: { kind: 'component-ref', componentClassName: 'cc.Scrollbar' } }).result;
+  assert.equal(cleared.available, true, JSON.stringify(cleared));
+  assert.equal(view.horizontalScrollBar, null);
+  assert.equal(scrollbar._scrollView, null);
 });
 
 test('component asset arrays inspect and assign exact derived AssetDB resources', () => {
@@ -1269,6 +1402,16 @@ test('scene composition rejects stale, ambiguous, and non-serializable inputs be
   const rejected = invoke(api, 'compositionState', request).result;
   assert.equal(rejected.available, false);
   assert.equal(rejected.reason, 'SCENE_COMPOSE_PROPERTY_NOT_SERIALIZABLE');
+
+  const renderConflict = invoke(api, 'compositionState', { ...request,
+    components: [
+      { id: 'sprite', nodeRef: 'new:button', className: 'cc.Sprite', properties: [] },
+      { id: 'label', nodeRef: 'new:button', className: 'cc.Label', properties: [] },
+    ],
+  }).result;
+  assert.equal(renderConflict.available, false, JSON.stringify(renderConflict));
+  assert.equal(renderConflict.reason, 'SCENE_COMPOSE_COMPONENT_DISALLOW_MULTIPLE_CONFLICT');
+  assert.equal(renderConflict.disallowMultipleClassName, 'cc.BaseSprite');
   assert.equal(parent.children.length, 0);
 });
 

@@ -20,6 +20,7 @@ export function readPreviewComponentProperty(node, componentType, componentPrope
         : componentProperty === 'overflow' ? '_N$overflow' : null
       : componentType === 'cc.EditBox' && componentProperty === 'string' ? '_string'
         : componentType === 'cc.PageView' && componentProperty === 'direction' ? '_N$direction'
+        : componentType === 'cc.Sprite' && componentProperty === 'fillRange' ? '_fillRange'
         : componentType === 'cc.Toggle' && componentProperty === 'isChecked' ? '_N$isChecked'
           : componentType === 'cc.ProgressBar' && componentProperty === 'progress' ? '_N$progress'
           : componentType === 'cc.Slider' && componentProperty === 'progress' ? '_N$progress'

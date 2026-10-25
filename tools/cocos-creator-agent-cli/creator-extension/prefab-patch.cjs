@@ -255,15 +255,49 @@ function validChildDiff(item) {
 
 function validComponentRow(value, allowAuto = false) {
     const serializedClassId = value && value.serializedClassId;
+    const registeredClassName = value && value.registeredClassName;
+    const builtinClassName = value && /^cc\.[A-Za-z_$][A-Za-z0-9_$.]{0,117}$/.test(value.componentClassName || '');
     return !!value && typeof value === 'object' && !Array.isArray(value)
-        && Object.keys(value).sort().join(',') === 'componentClassName,componentIndex,componentInstanceId,serializedClassId'
+        && ['componentClassName', 'componentIndex', 'componentInstanceId', 'serializedClassId']
+            .every((key) => Object.prototype.hasOwnProperty.call(value, key))
+        && Object.keys(value).every((key) => ['componentClassName', 'componentIndex', 'componentInstanceId',
+            'serializedClassId', 'registeredClassName', 'enabled', 'componentIdSynthetic', 'restoreProperties'].includes(key))
         && typeof value.componentClassName === 'string'
-        && (/^cc\.[A-Za-z_$][A-Za-z0-9_$.]{0,117}$/.test(value.componentClassName) || NODE_ID.test(value.componentClassName))
-        && typeof serializedClassId === 'string' && serializedClassId.length <= 160
+        && (builtinClassName || NODE_ID.test(value.componentClassName))
+        && typeof serializedClassId === 'string' && /^[A-Za-z0-9_$./+-]{1,160}$/.test(serializedClassId)
         && value.serializedClassId === value.componentClassName
+        && (registeredClassName === undefined || typeof registeredClassName === 'string'
+            && /^[A-Za-z_$][A-Za-z0-9_$.]{0,119}$/.test(registeredClassName))
+        && (builtinClassName || value.componentInstanceId !== AUTO_COMPONENT_INSTANCE_ID
+            || typeof registeredClassName === 'string')
         && (value.componentInstanceId === AUTO_COMPONENT_INSTANCE_ID
             ? allowAuto : NODE_ID.test(value.componentInstanceId || ''))
+        && (value.enabled === undefined || typeof value.enabled === 'boolean')
+        && (value.componentIdSynthetic === undefined || typeof value.componentIdSynthetic === 'boolean')
+        && (value.restoreProperties === undefined || validRestorableComponentProperties(value.restoreProperties))
         && Number.isInteger(value.componentIndex) && value.componentIndex >= 0 && value.componentIndex < 64;
+}
+
+function validRestorableComponentProperties(properties) {
+    if (!Array.isArray(properties) || properties.length > 64) return false;
+    const names = new Set();
+    const serializedNames = new Set();
+    return properties.every((item) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)
+            || Object.keys(item).some((key) => !['property', 'value', 'serializedProperty', 'serializedWasOmitted'].includes(key))
+            || typeof item.property !== 'string' || !/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(item.property)
+            || item.property.startsWith('_') || typeof item.serializedProperty !== 'string'
+            || !/^[A-Za-z_$][A-Za-z0-9_$]{0,63}$/.test(item.serializedProperty)
+            || item.serializedWasOmitted !== undefined && typeof item.serializedWasOmitted !== 'boolean'
+            || !validPropertyValue(item.value)) return false;
+        const value = item.value;
+        const restorable = value !== null && (typeof value !== 'object'
+            || ['vec2', 'vec3', 'vec4', 'size', 'rect', 'color'].includes(value.kind));
+        if (!restorable || names.has(item.property) || serializedNames.has(item.serializedProperty)) return false;
+        names.add(item.property);
+        serializedNames.add(item.serializedProperty);
+        return true;
+    });
 }
 
 function validComponentState(value, { allowAuto = false } = {}) {
@@ -351,8 +385,17 @@ function valueAt(node, fieldPath) {
         ? { found: true, value: node.childState } : { found: false };
     if (item.path === 'node.subtree') return node.subtreeState && validSubtreeState(node.subtreeState)
         ? { found: true, value: node.subtreeState } : { found: false };
-    if (item.path === 'component.structure') return node.componentState && validComponentState(node.componentState)
-        ? { found: true, value: node.componentState } : { found: false };
+    if (item.path === 'component.structure') {
+        if (!node.componentState || !validComponentState(node.componentState)) return { found: false };
+        const expectsEnabled = [item.before, item.after].some((state) => state && Array.isArray(state.components)
+            && state.components.some((component) => typeof component.enabled === 'boolean'));
+        if (!expectsEnabled) return { found: true, value: node.componentState };
+        const components = node.componentState.components.map((component, index) => {
+            const inspected = node.components && node.components[index];
+            return inspected && typeof inspected.enabled === 'boolean' ? { ...component, enabled: inspected.enabled } : component;
+        });
+        return { found: true, value: { ...node.componentState, components } };
+    }
     if (item.path === 'component.property') {
         const properties = node.componentProperties && node.componentProperties[item.componentInstanceId];
         return properties && Object.prototype.hasOwnProperty.call(properties, item.property)
@@ -391,11 +434,20 @@ function valueAt(node, fieldPath) {
         ? { found: true, value: matches[0][key] } : { found: false };
 }
 
+function comparableComponentState(value) {
+    return { ...value, components: value.components.map(({ registeredClassName, ...row }) => row) };
+}
+
+function comparableValue(item, value) {
+    return item.path === 'component.structure' ? comparableComponentState(value) : value;
+}
+
 function matchesDiff(node, diff, side) {
     if (!validateDiff(diff) || !['before', 'after'].includes(side)) return false;
     return diff.every((item) => {
         const actual = valueAt(node, item);
-        return actual.found && canonicalValue(actual.value) === canonicalValue(item[side]);
+        return actual.found && canonicalValue(comparableValue(item, actual.value))
+            === canonicalValue(comparableValue(item, item[side]));
     });
 }
 
@@ -405,15 +457,15 @@ function matchesBeforeOrGeometryAfter(node, diff) {
     return diff.every((item) => {
         const actual = valueAt(node, item);
         if (!actual.found) return false;
-        const current = canonicalValue(actual.value);
-        return current === canonicalValue(item.before)
-            || geometryPaths.has(item.path) && current === canonicalValue(item.after);
+        const current = canonicalValue(comparableValue(item, actual.value));
+        return current === canonicalValue(comparableValue(item, item.before))
+            || geometryPaths.has(item.path) && current === canonicalValue(comparableValue(item, item.after));
     });
 }
 
 function sourceInspectionDiff(diff) {
     if (!Array.isArray(diff)) return [];
-    return diff.filter((item) => item && ['component.property', 'component.eventList'].includes(item.path));
+    return diff.filter((item) => item && ['component.property', 'component.eventList', 'component.structure'].includes(item.path));
 }
 
 function validTransformSnapshot(transform) {

@@ -41,10 +41,13 @@ function componentSummary(reference, records, index, nodeId, prefabUuid) {
     const serializedProperties = Object.keys(component).filter((key) => /^[A-Za-z_$][A-Za-z0-9_$]{0,63}$/.test(key));
     row.serializedProperties = serializedProperties.slice(0, 256);
     row.serializedPropertiesTruncated = serializedProperties.length > row.serializedProperties.length;
+    row.enabled = typeof component._enabled === 'boolean' ? component._enabled : true;
     if (component.__type__ === 'cc.Sprite' || component.__type__ === 'cc.Label') {
         row.className = component.__type__;
-        row.enabled = typeof component._enabled === 'boolean' ? component._enabled : true;
         if (component.__type__ === 'cc.Sprite') row.spriteFrameUuid = serializedAssetUuid(component._spriteFrame);
+    }
+    if (component.__type__ === 'cc.BlockInputEvents') {
+        row.componentIdSynthetic = row.instanceIdSynthetic;
     }
     const eventProperties = prefabPatch.UI_EVENT_PROPERTIES[component.__type__] || [];
     if (eventProperties.length) {
@@ -96,16 +99,23 @@ function serializedUiEvents(rawEvents, records, prefabUuid) {
     return events;
 }
 
-function diskPropertyValue(raw, records, prefabUuid, expected, depth = 0, visited = new Set()) {
+function diskPropertyValue(raw, records, prefabUuid, expected, depth = 0, visited = new Set(), alternateExpected) {
     if (raw === null || typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean') {
         if (raw === null && expected && expected.kind === 'asset') return { kind: 'asset', assetClass: expected.assetClass };
+        if (raw === null && expected && expected.kind === 'node-ref') return { kind: 'node-ref' };
+        if (raw === null && expected && expected.kind === 'component-ref')
+            return { kind: 'component-ref', componentClassName: expected.componentClassName };
         return raw;
     }
     if (Array.isArray(raw)) {
         if (depth !== 0 || raw.length > 32) return undefined;
         const templates = expected && expected.kind === 'array' ? expected.items : [];
-        return { kind: 'array', items: raw.map((item, index) => diskPropertyValue(item, records, prefabUuid,
-            templates[index], depth + 1, visited)) };
+        const alternateTemplates = alternateExpected && alternateExpected.kind === 'array' ? alternateExpected.items : [];
+        return { kind: 'array', items: raw.map((item, index) => {
+            const itemExpected = templates[index] || alternateTemplates[index]
+                || templates[0] || alternateTemplates[0];
+            return diskPropertyValue(item, records, prefabUuid, itemExpected, depth + 1, visited);
+        }) };
     }
     if (!raw || typeof raw !== 'object') return undefined;
     if (typeof raw.__uuid__ === 'string' && Object.keys(raw).length === 1)
@@ -119,11 +129,15 @@ function diskPropertyValue(raw, records, prefabUuid, expected, depth = 0, visite
             return nodeUuid ? { kind: 'node-ref', nodeUuid } : undefined;
         }
         const owner = Number.isInteger(record.node && record.node.__id__) ? records[record.node.__id__] : null;
-        if (owner && owner.__type__ === 'cc.Node' && typeof record._id === 'string' && record._id) {
+        if (owner && owner.__type__ === 'cc.Node') {
             const nodeUuid = prefabNodeId(owner, records, prefabUuid);
-            return nodeUuid ? { kind: 'component-ref', componentClassName: expected && expected.kind === 'component-ref'
-                ? expected.componentClassName : record.__type__,
-                componentInstanceId: record._id, nodeUuid } : undefined;
+            const componentIndex = Array.isArray(owner._components)
+                ? owner._components.findIndex((reference) => refIndex(reference, records) === raw.__id__) : -1;
+            if (!nodeUuid || componentIndex < 0) return undefined;
+            const componentInstanceId = typeof record._id === 'string' && record._id
+                ? record._id : prefabPatch.componentIdFor(prefabUuid, nodeUuid, componentIndex, record.__type__, null);
+            return { kind: 'component-ref', componentClassName: expected && expected.kind === 'component-ref'
+                ? expected.componentClassName : record.__type__, componentInstanceId, nodeUuid };
         }
         const next = new Set(visited); next.add(record);
         return diskPropertyValue(record, records, prefabUuid, expected, depth, next);
@@ -142,7 +156,8 @@ function valueForExpectedProperty(component, records, prefabUuid, diff) {
     const candidates = diff.serializedProperty ? [diff.serializedProperty] : diff.serializedPropertyCandidates || [];
     const serializedProperty = candidates.find((property) => Object.prototype.hasOwnProperty.call(component, property));
     let value;
-    if (serializedProperty) value = diskPropertyValue(component[serializedProperty], records, prefabUuid, diff.before);
+    if (serializedProperty) value = diskPropertyValue(component[serializedProperty], records, prefabUuid,
+        diff.before, 0, new Set(), diff.after);
     else if (diff.serializedWasOmitted === true && Object.prototype.hasOwnProperty.call(diff, 'serializedDefaultValue'))
         value = diff.serializedDefaultValue;
     else return { found: false };
@@ -155,6 +170,22 @@ function valueForExpectedProperty(component, records, prefabUuid, diff) {
         if (Number.isSafeInteger(flags) && flags >= 0) value = (flags & WIDGET_ALIGN_FLAGS[diff.property]) !== 0;
     }
     return { found: true, value };
+}
+
+function valuesForRestorableProperties(component, records, prefabUuid, properties) {
+    if (!Array.isArray(properties)) return null;
+    const result = [];
+    for (const property of properties) {
+        if (!property || typeof property.property !== 'string' || typeof property.serializedProperty !== 'string') return null;
+        let value;
+        if (Object.prototype.hasOwnProperty.call(component, property.serializedProperty)) {
+            value = diskPropertyValue(component[property.serializedProperty], records, prefabUuid, property.value);
+            if (value === undefined) return null;
+        } else if (property.serializedWasOmitted === true) value = property.value;
+        else return null;
+        result.push({ ...property, value });
+    }
+    return result;
 }
 
 function inspectPrefabSource({ prefabBytes, metaBytes, prefabUuid, maxComponentsPerNode = 8, expectedDiff, targetNodeUuid }) {
@@ -282,15 +313,35 @@ function inspectPrefabSource({ prefabBytes, metaBytes, prefabUuid, maxComponents
                 componentEventLists[diff.componentInstanceId][diff.eventProperty] = events;
             }
         }
+        const structureDiff = Array.isArray(expectedDiff)
+            ? expectedDiff.find((entry) => entry && entry.path === 'component.structure') : null;
+        const expectedComponentState = structureDiff && [structureDiff.before, structureDiff.after]
+            .find((state) => state && state.componentCount === allComponents.length
+                && state.components.every((expected, index) => expected.componentIndex === index
+                    && expected.serializedClassId === allComponents[index].classId
+                    && expected.componentInstanceId === allComponents[index].instanceId));
+        const componentStateRows = allComponents.map((component, index) => {
+            const expected = expectedComponentState && expectedComponentState.components[index];
+            const rawIndex = refIndex(componentRefs[index], records);
+            const raw = rawIndex === null ? null : records[rawIndex];
+            const restoreProperties = expected && Array.isArray(expected.restoreProperties)
+                ? valuesForRestorableProperties(raw, records, prefabUuid, expected.restoreProperties) : null;
+            if (expected && Array.isArray(expected.restoreProperties) && !restoreProperties) return null;
+            return { componentClassName: component.className, componentIndex: component.index,
+                componentInstanceId: component.instanceId, serializedClassId: component.classId,
+                ...(component.className === 'cc.BlockInputEvents' || expected && typeof expected.enabled === 'boolean'
+                    ? { enabled: component.enabled } : {}),
+                ...(component.className === 'cc.BlockInputEvents' || expected && typeof expected.componentIdSynthetic === 'boolean'
+                    ? { componentIdSynthetic: component.instanceIdSynthetic } : {}),
+                ...(restoreProperties ? { restoreProperties } : {}) };
+        });
+        if (componentStateRows.some((row) => !row)) return fail('PREFAB_COMPONENT_RESTORE_STATE_UNAVAILABLE');
         const node = { nodeUuid: nodeId, fileId, name, nodePath, parentUuid: item.parentId,
             identityKind: serializedNodeId ? 'serialized-node-id' : item.depth === 0 ? 'prefab-root' : null,
             siblingIndex: item.siblingIndex, siblingCount: item.siblingCount,
             childCount: Array.isArray(record._children) ? record._children.length : 0,
             componentCount: allComponents.length,
-            componentState: { componentCount: allComponents.length, components: allComponents.map((component) => ({
-                componentClassName: component.className, componentIndex: component.index,
-                componentInstanceId: component.instanceId, serializedClassId: component.classId,
-            })) },
+            componentState: { componentCount: allComponents.length, components: componentStateRows },
             active: typeof record._active === 'boolean' ? record._active : true,
             transform, components, componentsTruncated: allComponents.length > components.length,
             ...(Object.keys(componentProperties).length ? { componentProperties } : {}),

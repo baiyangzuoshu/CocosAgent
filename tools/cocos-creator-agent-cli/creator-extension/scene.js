@@ -15,6 +15,7 @@ const UI_COMPONENT_CLASS_NAMES = new Set([
     'cc.Canvas', 'cc.Widget', 'cc.Layout', 'cc.Sprite', 'cc.Label', 'cc.Button',
     'cc.Toggle', 'cc.ToggleContainer', 'cc.Slider', 'cc.ProgressBar', 'cc.EditBox', 'cc.RichText',
     'cc.ScrollView', 'cc.Scrollbar', 'cc.Mask', 'cc.PageView', 'cc.PageViewIndicator', 'cc.BlockInputEvents',
+    'cc.LabelOutline', 'cc.LabelShadow', 'cc.ToggleGroup', 'cc.SafeArea', 'cc.SubContextView',
 ]);
 const UI_EVENT_PROPERTIES = Object.freeze({
     'cc.Button': ['clickEvents'],
@@ -769,21 +770,36 @@ function setNodeActive(params) {
         nodePath: params.nodePath, beforeActive: before.active, active: node.active };
 }
 
-function componentClass(componentClassName) {
-    if (typeof componentClassName !== 'string' || componentClassName.length < 1 || componentClassName.length > MAX_NAME
-        || !/^[A-Za-z_$][A-Za-z0-9_$.]*$/.test(componentClassName))
+function componentClass(requestedClassName) {
+    if (typeof requestedClassName !== 'string' || requestedClassName.length < 1 || requestedClassName.length > MAX_NAME
+        || !/^[A-Za-z_$][A-Za-z0-9_$.]*$/.test(requestedClassName))
         return { available: false, reason: 'SCENE_COMPONENT_CLASS_NAME_INVALID' };
     if (!cc || !cc.js || typeof cc.js.getClassByName !== 'function' || typeof cc.js.isChildClassOf !== 'function'
         || !cc.Component) return { available: false, reason: 'SCENE_COMPONENT_REGISTRY_UNAVAILABLE' };
-    const constructor = cc.js.getClassByName(componentClassName);
+    const constructor = cc.js.getClassByName(requestedClassName);
     if (typeof constructor !== 'function') return { available: false, reason: 'SCENE_COMPONENT_CLASS_NOT_REGISTERED' };
     if (constructor === cc.Component || !cc.js.isChildClassOf(constructor, cc.Component))
         return { available: false, reason: 'SCENE_CLASS_IS_NOT_COMPONENT' };
     const registeredName = typeof cc.js.getClassName === 'function' ? cc.js.getClassName(constructor) : componentClassName;
-    if (registeredName !== componentClassName)
+    if (registeredName !== requestedClassName)
         return { available: false, reason: 'SCENE_COMPONENT_CLASS_IDENTITY_MISMATCH' };
+    let disallowMultipleClass = null;
+    let currentClass = constructor;
+    let depth = 0;
+    while (currentClass && currentClass !== cc.Component && depth < 32) {
+        if (Object.prototype.hasOwnProperty.call(currentClass, '_disallowMultiple')
+            && currentClass._disallowMultiple) {
+            disallowMultipleClass = currentClass._disallowMultiple;
+            break;
+        }
+        currentClass = typeof cc.js.getSuper === 'function' ? cc.js.getSuper(currentClass)
+            : currentClass.$super || null;
+        depth += 1;
+    }
     return { available: true, constructor, componentClassName: registeredName,
-        requiresComponent: !!constructor._requireComponent, disallowMultiple: !!constructor._disallowMultiple };
+        requiresComponent: !!constructor._requireComponent, disallowMultiple: !!disallowMultipleClass,
+        disallowMultipleClass, disallowMultipleClassName: disallowMultipleClass
+            ? componentClassName(disallowMultipleClass) : null };
 }
 
 function exactComponentInstances(node, constructor) {
@@ -794,6 +810,19 @@ function exactComponentInstances(node, constructor) {
     if (candidates.length > MAX_COMPONENT_INSTANCES)
         return { available: false, reason: 'SCENE_COMPONENT_LIMIT', componentCount: candidates.length };
     const components = candidates.filter((component) => component && component.constructor === constructor);
+    if (components.some(editorManaged)) return { available: false, reason: 'SCENE_EDITOR_COMPONENT_PROTECTED' };
+    return { available: true, components };
+}
+
+function componentInstancesOfType(node, constructor) {
+    if (!node || typeof node.getComponents !== 'function')
+        return { available: false, reason: 'SCENE_NODE_COMPONENT_QUERY_UNAVAILABLE' };
+    const candidates = node.getComponents(constructor);
+    if (!Array.isArray(candidates)) return { available: false, reason: 'SCENE_COMPONENT_QUERY_INVALID' };
+    if (candidates.length > MAX_COMPONENT_INSTANCES)
+        return { available: false, reason: 'SCENE_COMPONENT_LIMIT', componentCount: candidates.length };
+    const components = candidates.filter((component) => component && component.constructor
+        && typeof cc.js.isChildClassOf === 'function' && cc.js.isChildClassOf(component.constructor, constructor));
     if (components.some(editorManaged)) return { available: false, reason: 'SCENE_EDITOR_COMPONENT_PROTECTED' };
     return { available: true, components };
 }
@@ -886,13 +915,28 @@ function componentState(params) {
     const query = exactComponentInstances(located.node, resolved.constructor);
     if (!query.available) return query;
     const components = query.components;
+    const disallowQuery = resolved.disallowMultipleClass
+        ? componentInstancesOfType(located.node, resolved.disallowMultipleClass) : { available: true, components: [] };
+    if (!disallowQuery.available) return disallowQuery;
+    const requirement = resolved.constructor._requireComponent;
+    const requiredComponentClassName = typeof requirement === 'function' && isComponentConstructor(requirement)
+        ? componentClassName(requirement) : null;
+    const requiredComponentInstances = requiredComponentClassName
+        ? exactComponentInstances(located.node, requirement) : null;
+    const requiredComponentPresent = !resolved.requiresComponent
+        ? true
+        : !!(requiredComponentInstances && requiredComponentInstances.available
+            && requiredComponentInstances.components.length > 0);
     return { available: true, sceneName: located.state.sceneName, sceneUuid: located.state.sceneUuid,
         nodePath: located.state.nodePath, nodeUuid: located.state.nodeUuid,
         componentClassName: resolved.componentClassName, serializedClassId: serializedClassIdOf(resolved.constructor),
         componentCount: components.length,
         componentInstanceIds: components.map((component) => component && component._id != null ? String(component._id) : null),
-        requiresComponent: resolved.requiresComponent, disallowMultiple: resolved.disallowMultiple,
-        canAdd: components.length === 0 && !resolved.requiresComponent };
+        requiresComponent: resolved.requiresComponent, requiredComponentClassName, requiredComponentPresent,
+        disallowMultiple: resolved.disallowMultiple,
+        disallowMultipleClassName: resolved.disallowMultipleClassName,
+        disallowMultipleConflict: disallowQuery.components.length > 0,
+        canAdd: components.length === 0 && requiredComponentPresent && disallowQuery.components.length === 0 };
 }
 
 function isScalar(value) {
@@ -1528,7 +1572,7 @@ function setComponentProperty(params, loadedAssets) {
         return { ...before, available: false, reason: 'SCENE_COMPONENT_PROPERTY_READ_ONLY' };
     if (!sameValue(before.value, params.expectedValue))
         return { ...before, available: false, reason: 'SCENE_COMPONENT_PROPERTY_PRECONDITION_FAILED' };
-    if (sameValue(before.value, params.value))
+    if (sameValue(before.value, params.value) && params.restoreDefaultOmitted !== true)
         return { ...before, available: false, reason: 'SCENE_COMPONENT_PROPERTY_NO_CHANGE' };
     const located = directNode
         ? { node: directNode, state: { available: true, sceneUuid: params.sceneUuid,
@@ -1547,8 +1591,29 @@ function setComponentProperty(params, loadedAssets) {
     if (params.restoreDefaultOmitted === true && (decoded.value !== null
         || !['node-ref', 'component-ref', 'asset'].includes(params.value.kind)))
         return { ...before, available: false, reason: 'SCENE_COMPONENT_PROPERTY_OMITTED_DEFAULT_INVALID' };
+    const previousScrollbar = params.componentClassName === 'cc.ScrollView'
+        && ['horizontalScrollBar', 'verticalScrollBar'].includes(params.property)
+        && before.value && before.value.kind === 'component-ref'
+        && (decoded.value == null || decoded.value._id !== before.value.componentInstanceId)
+        ? before.value : null;
     try { component[params.property] = params.restoreDefaultOmitted === true ? undefined : decoded.value; }
     catch (_) { return { ...before, available: false, reason: 'SCENE_COMPONENT_PROPERTY_WRITE_FAILED' }; }
+    if (previousScrollbar && previousScrollbar.nodeUuid && previousScrollbar.componentInstanceId) {
+        const scrollbarClass = componentClass('cc.Scrollbar');
+        const oldNode = locateNode(params.sceneUuid, previousScrollbar.nodeUuid);
+        const oldComponents = scrollbarClass.available && oldNode.node
+            ? exactComponentInstances(oldNode.node, scrollbarClass.constructor) : null;
+        const oldScrollbar = oldComponents && oldComponents.available
+            ? oldComponents.components.find((item) => item && item._id != null
+                && String(item._id) === previousScrollbar.componentInstanceId) : null;
+        if (oldScrollbar && oldScrollbar._scrollView === component
+            && typeof oldScrollbar.setTargetScrollView === 'function') {
+            try { oldScrollbar.setTargetScrollView(null); }
+            catch (_) { return { ...before, available: false, reason: 'SCENE_COMPONENT_REFERENCE_DETACH_FAILED', mutationStarted: true }; }
+            if (oldScrollbar._scrollView !== null)
+                return { ...before, available: false, reason: 'SCENE_COMPONENT_REFERENCE_DETACH_READBACK_FAILED', mutationStarted: true };
+        }
+    }
     let value;
     try { value = component[params.property]; }
     catch (_) { return { ...before, available: false, reason: 'SCENE_COMPONENT_PROPERTY_READBACK_FAILED' }; }
@@ -1804,7 +1869,7 @@ function prefabFindLiveNode(sceneUuid, prefabUuid, stableNodeId) {
         : { available: false, reason: matches.length ? 'PREFAB_NODE_IDENTITY_AMBIGUOUS' : 'PREFAB_NODE_NOT_FOUND' };
 }
 
-function prefabStableComponentValue(value, sceneUuid, prefabUuid) {
+function prefabStableComponentValue(value, sceneUuid, prefabUuid, expectedValues = []) {
     if (!value || typeof value !== 'object') return value;
     if (value.kind === 'node-ref' && value.nodeUuid) {
         const nodeUuid = prefabStableNodeId(sceneUuid, prefabUuid, value.nodeUuid);
@@ -1812,6 +1877,14 @@ function prefabStableComponentValue(value, sceneUuid, prefabUuid) {
     }
     if (value.kind === 'component-ref' && value.nodeUuid) {
         const nodeUuid = prefabStableNodeId(sceneUuid, prefabUuid, value.nodeUuid);
+        if (nodeUuid) {
+            for (const expected of expectedValues) {
+                if (!expected || expected.kind !== 'component-ref' || expected.nodeUuid !== nodeUuid) continue;
+                const liveExpected = prefabLiveComponentValue(expected, sceneUuid, prefabUuid);
+                if (liveExpected && liveExpected.nodeUuid === value.nodeUuid
+                    && liveExpected.componentInstanceId === value.componentInstanceId) return expected;
+            }
+        }
         return nodeUuid ? { ...value, nodeUuid } : value;
     }
     if (value.kind === 'array') return { ...value, items: value.items.map((item) =>
@@ -1821,6 +1894,23 @@ function prefabStableComponentValue(value, sceneUuid, prefabUuid) {
 
 function prefabLiveComponentValue(value, sceneUuid, prefabUuid) {
     if (!value || typeof value !== 'object') return value;
+    if (value.kind === 'component-ref' && value.nodeUuid && value.componentInstanceId) {
+        const owner = prefabFindLiveNode(sceneUuid, prefabUuid, value.nodeUuid);
+        if (owner.available && Array.isArray(owner.node._components)) {
+            const matches = owner.node._components.map((component, index) => {
+                const className = classNameOf(component);
+                const classId = serializedClassIdOf(component && component.constructor) || className;
+                const liveId = component && component._id != null ? String(component._id) : '';
+                const syntheticId = prefabPatch.componentIdFor(prefabUuid, value.nodeUuid, index, classId, null);
+                return component && className === value.componentClassName
+                    && (liveId === value.componentInstanceId || syntheticId === value.componentInstanceId)
+                    ? { component, liveId } : null;
+            }).filter(Boolean);
+            if (matches.length === 1 && matches[0].liveId)
+                return { ...value, nodeUuid: owner.node.uuid, componentInstanceId: matches[0].liveId };
+        }
+        return value;
+    }
     if ((value.kind === 'node-ref' || value.kind === 'component-ref') && value.nodeUuid) {
         const node = prefabFindLiveNode(sceneUuid, prefabUuid, value.nodeUuid);
         if (node.available) return { ...value, nodeUuid: node.node.uuid };
@@ -1846,7 +1936,7 @@ function prefabStableUiEventList(component, eventProperty, sceneUuid, prefabUuid
     return { available: true, value: { kind: 'ui-events', items } };
 }
 
-function prefabPatchComponentState(node, mode, prefabUuid, expectedDiff) {
+function prefabPatchComponentState(node, nodePath, mode, prefabUuid, expectedDiff) {
     if (!node || !Array.isArray(node._components) || node._components.length > 64) return null;
     const nodeId = prefabStableNodeId(mode.sceneUuid, prefabUuid, node.uuid);
     if (!nodeId) return null;
@@ -1871,7 +1961,23 @@ function prefabPatchComponentState(node, mode, prefabUuid, expectedDiff) {
             : component._id != null && String(component._id)
                 ? String(component._id)
                 : prefabPatch.componentIdFor(prefabUuid, nodeId, componentIndex, serializedClassId, null);
-        return { componentClassName: serializedClassId, componentIndex, componentInstanceId, serializedClassId };
+        const expectedRow = expectedRows && expectedRows.components[componentIndex];
+        let restoreProperties = null;
+        if (expectedRow && Array.isArray(expectedRow.restoreProperties)) {
+            restoreProperties = expectedRow.restoreProperties.map((expected) => {
+                const liveId = component._id == null ? '' : String(component._id);
+                const state = componentPropertyState({ sceneUuid: mode.sceneUuid, nodeUuid: node.uuid, nodePath,
+                    componentClassName: className, componentInstanceId: liveId, property: expected.property, targetNode: node });
+                return state.available ? { ...expected,
+                    value: prefabStableComponentValue(state.value, mode.sceneUuid, prefabUuid) } : null;
+            });
+            if (restoreProperties.some((property) => !property)) return null;
+        }
+        return { componentClassName: serializedClassId, componentIndex, componentInstanceId, serializedClassId,
+            ...(expectedRow && typeof expectedRow.enabled === 'boolean' ? { enabled: expectedRow.enabled } : {}),
+            ...(expectedRow && typeof expectedRow.componentIdSynthetic === 'boolean'
+                ? { componentIdSynthetic: expectedRow.componentIdSynthetic } : {}),
+            ...(restoreProperties ? { restoreProperties } : {}) };
     });
     if (components.some((component) => !component)) return null;
     return { componentCount: components.length, components };
@@ -1926,7 +2032,7 @@ function prefabPatchSnapshot(node, nodePath, params, mode) {
         if (!state.available) continue;
         componentProperties[item.componentInstanceId] = componentProperties[item.componentInstanceId] || {};
         componentProperties[item.componentInstanceId][item.property] = prefabStableComponentValue(state.value,
-            mode.sceneUuid, params.prefabUuid);
+            mode.sceneUuid, params.prefabUuid, [item.before, item.after]);
         componentPropertyBindings[item.componentInstanceId] = componentPropertyBindings[item.componentInstanceId] || {};
         componentPropertyBindings[item.componentInstanceId][item.property] = {
             componentClassName: item.componentClassName, componentInstanceId: item.componentInstanceId,
@@ -1979,7 +2085,7 @@ function prefabPatchSnapshot(node, nodePath, params, mode) {
     const subtreeRows = childNodes.map((child, index) => liveSubtreeRow(child, index, 1));
     const subtreeState = subtreeRows.some((entry) => !entry) ? null
         : { childCount: subtreeRows.length, children: subtreeRows };
-    const componentState = prefabPatchComponentState(node, mode, params.prefabUuid, params.expectedDiff);
+    const componentState = prefabPatchComponentState(node, nodePath, mode, params.prefabUuid, params.expectedDiff);
     if (!componentState) return null;
     return { nodeUuid: typeof node.uuid === 'string' ? node.uuid : null, nodePath,
         name: String(node.name || ''), active: node.active !== false, parentUuid, siblingIndex,
@@ -2117,13 +2223,17 @@ function prefabSourcePatchPreflight(params) {
         if (!change) return { available: false, reason: 'PREFAB_COMPONENT_STRUCTURE_DIFF_INVALID' };
         if (change.kind === 'add') {
             const descriptor = change.component;
-            const resolved = componentClass(descriptor.componentClassName);
+            const resolved = componentClass(descriptor.registeredClassName || descriptor.componentClassName);
             const classId = resolved.available ? serializedClassIdOf(resolved.constructor) : null;
-            const existing = resolved.available ? exactComponentInstances(target.node, resolved.constructor) : null;
+            const existing = resolved.available ? componentInstancesOfType(target.node,
+                resolved.disallowMultipleClass || resolved.constructor) : null;
             const identity = prefabComponentIdExists(target.mode.sceneUuid, params.prefabUuid, descriptor.componentInstanceId);
             const attached = cc && cc.engine && cc.engine.attachedObjsForEditor;
-            if (params.action === 'compensate' || !descriptor.componentClassName.startsWith('cc.')
-                || !resolved.available || classId !== descriptor.serializedClassId || resolved.requiresComponent
+            const canRestoreRemovedComponent = params.action === 'compensate'
+                && /^cc\.[A-Za-z_$][A-Za-z0-9_$.]{0,117}$/.test(descriptor.componentClassName)
+                && typeof descriptor.enabled === 'boolean' && Array.isArray(descriptor.restoreProperties);
+            if (params.action === 'compensate' && !canRestoreRemovedComponent || !resolved.available
+                || classId !== descriptor.serializedClassId || resolved.requiresComponent
                 || (resolved.disallowMultiple && existing && existing.components && existing.components.length > 0)
                 || !existing || !existing.available || !identity.available
                 || attached && attached[descriptor.componentInstanceId]
@@ -2131,7 +2241,7 @@ function prefabSourcePatchPreflight(params) {
                 return { available: false, reason: resolved.available && resolved.requiresComponent
                     ? 'PREFAB_COMPONENT_HAS_UNAPPROVED_REQUIREMENT'
                     : resolved.available && resolved.disallowMultiple && existing && existing.components.length > 0
-                        ? 'PREFAB_COMPONENT_ALREADY_PRESENT' : identity.reason || 'PREFAB_COMPONENT_ADD_PRECONDITION_FAILED' };
+                        ? 'PREFAB_COMPONENT_DISALLOW_MULTIPLE_CONFLICT' : identity.reason || 'PREFAB_COMPONENT_ADD_PRECONDITION_FAILED' };
         } else {
             const descriptor = change.component;
             const component = target.node._components[descriptor.componentIndex];
@@ -2142,13 +2252,34 @@ function prefabSourcePatchPreflight(params) {
             const syntheticIdMatches = descriptor.componentInstanceId.startsWith('prefab_component_')
                 && prefabPatch.componentIdFor(params.prefabUuid, params.targetNodeUuid, descriptor.componentIndex,
                     descriptor.serializedClassId, null) === descriptor.componentInstanceId;
-            if (params.action !== 'compensate' || descriptor.componentIndex !== target.node._components.length - 1
+            const directRemoval = params.action === 'apply'
+                && /^cc\.[A-Za-z_$][A-Za-z0-9_$.]{0,117}$/.test(descriptor.componentClassName)
+                && typeof descriptor.enabled === 'boolean' && Array.isArray(descriptor.restoreProperties)
+                && component && component.enabled === descriptor.enabled;
+            const compensationRemoval = params.action === 'compensate'
+                && descriptor.componentIndex === target.node._components.length - 1;
+            if ((!directRemoval && !compensationRemoval) || descriptor.componentIndex !== target.node._components.length - 1
                 || !component || !stableRow || stableRow.componentInstanceId !== descriptor.componentInstanceId
                 || (!liveIdMatches && !syntheticIdMatches)
-                || classId !== descriptor.serializedClassId || classNameOf(component) !== descriptor.componentClassName
+                || classId !== descriptor.serializedClassId
+                || classNameOf(component) !== (descriptor.registeredClassName || descriptor.componentClassName)
                 || !Array.isArray(dependents) || dependents.length > 0 || typeof component.destroy !== 'function')
                 return { available: false, reason: Array.isArray(dependents) && dependents.length
                     ? 'PREFAB_COMPONENT_REQUIRED_BY_OTHER_COMPONENT' : 'PREFAB_COMPONENT_REMOVE_PRECONDITION_FAILED' };
+            if (directRemoval) {
+                for (const property of descriptor.restoreProperties) {
+                    const state = componentPropertyState({ sceneUuid: target.mode.sceneUuid, nodeUuid: target.node.uuid,
+                        nodePath: target.snapshot.nodePath, componentClassName: descriptor.componentClassName,
+                        componentInstanceId: component._id == null ? '' : String(component._id),
+                        property: property.property, targetNode: target.node });
+                    const actual = state.available
+                        ? prefabStableComponentValue(state.value, target.mode.sceneUuid, params.prefabUuid) : undefined;
+                    if (!state.available || prefabPatch.canonicalValue(actual) !== prefabPatch.canonicalValue(property.value)
+                        || state.inspector && state.inspector.editable !== true)
+                        return { available: false, reason: 'PREFAB_COMPONENT_RESTORE_STATE_MISMATCH',
+                            property: property.property, detail: state.reason || null };
+                }
+            }
         }
     }
     for (const item of params.expectedDiff.filter((entry) => entry.path === 'node.parent')) {
@@ -2335,28 +2466,59 @@ function prefabSourcePatchMutate(params, callback) {
                     if (!change) throw new Error('PREFAB_COMPONENT_STRUCTURE_DIFF_INVALID');
                     if (change.kind === 'add') {
                         const descriptor = change.component;
-                        const resolved = componentClass(descriptor.componentClassName);
+                        const resolved = componentClass(descriptor.registeredClassName || descriptor.componentClassName);
                         const classId = resolved.available ? serializedClassIdOf(resolved.constructor) : null;
+                        const canRestoreRemovedComponent = params.action === 'compensate'
+                            && /^cc\.[A-Za-z_$][A-Za-z0-9_$.]{0,117}$/.test(descriptor.componentClassName)
+                            && typeof descriptor.enabled === 'boolean' && Array.isArray(descriptor.restoreProperties);
                         if (!resolved.available || classId !== descriptor.serializedClassId
-                            || resolved.requiresComponent || params.action === 'compensate')
+                            || resolved.requiresComponent || params.action === 'compensate' && !canRestoreRemovedComponent)
                             throw new Error('PREFAB_COMPONENT_ADD_PRECONDITION_FAILED');
                         const expectedTransform = transformSummary(node);
                         const canPreserveTransform = ['x', 'y', 'z', 'scaleX', 'scaleY', 'angle', 'width', 'height', 'anchorX', 'anchorY']
                             .every((key) => Number.isFinite(expectedTransform[key]));
                         const component = node.addComponent(resolved.constructor);
                         if (!component) throw new Error('PREFAB_COMPONENT_ADD_REJECTED');
+                        if (canRestoreRemovedComponent) {
+                            component.enabled = descriptor.enabled;
+                            if (component.enabled !== descriptor.enabled)
+                                throw new Error('PREFAB_COMPONENT_RESTORE_STATE_FAILED');
+                        }
                         const previousId = component._id == null ? '' : String(component._id);
                         const attached = cc && cc.engine && cc.engine.attachedObjsForEditor;
-                        if (attached && attached[descriptor.componentInstanceId] && attached[descriptor.componentInstanceId] !== component)
+                        const preserveSyntheticId = canRestoreRemovedComponent && descriptor.componentIdSynthetic === true;
+                        if (!preserveSyntheticId && attached && attached[descriptor.componentInstanceId]
+                            && attached[descriptor.componentInstanceId] !== component)
                             throw new Error('PREFAB_COMPONENT_ID_ALREADY_EXISTS');
-                        if (attached && attached[previousId] && attached[previousId] !== component)
+                        if (!preserveSyntheticId && attached && attached[previousId] && attached[previousId] !== component)
                             throw new Error('PREFAB_COMPONENT_IDENTITY_WRITE_FAILED');
-                        const wasAttached = !!(attached && attached[previousId] === component);
-                        if (wasAttached) delete attached[previousId];
-                        component._id = descriptor.componentInstanceId;
-                        if (wasAttached) attached[descriptor.componentInstanceId] = component;
-                        if (String(component._id || '') !== descriptor.componentInstanceId)
-                            throw new Error('PREFAB_COMPONENT_IDENTITY_WRITE_FAILED');
+                        if (!preserveSyntheticId) {
+                            const wasAttached = !!(attached && attached[previousId] === component);
+                            if (wasAttached) delete attached[previousId];
+                            component._id = descriptor.componentInstanceId;
+                            if (wasAttached) attached[descriptor.componentInstanceId] = component;
+                            if (String(component._id || '') !== descriptor.componentInstanceId)
+                                throw new Error('PREFAB_COMPONENT_IDENTITY_WRITE_FAILED');
+                        }
+                        if (canRestoreRemovedComponent) {
+                            const liveComponentInstanceId = component._id == null ? '' : String(component._id);
+                            for (const property of descriptor.restoreProperties) {
+                                const state = componentPropertyState({ sceneUuid: current.mode.sceneUuid, nodeUuid: node.uuid,
+                                    nodePath: current.snapshot.nodePath, componentClassName: descriptor.componentClassName,
+                                    componentInstanceId: liveComponentInstanceId, property: property.property, targetNode: node });
+                                if (!state.available || state.inspector && state.inspector.editable !== true)
+                                    throw new Error(state.reason || 'PREFAB_COMPONENT_RESTORE_STATE_UNAVAILABLE');
+                                const value = prefabLiveComponentValue(property.value, current.mode.sceneUuid, params.prefabUuid);
+                                const currentValue = prefabStableComponentValue(state.value, current.mode.sceneUuid, params.prefabUuid);
+                                if (prefabPatch.canonicalValue(currentValue) !== prefabPatch.canonicalValue(property.value)) {
+                                    const restored = setComponentProperty({ sceneUuid: current.mode.sceneUuid, nodeUuid: node.uuid,
+                                        nodePath: current.snapshot.nodePath, componentClassName: descriptor.componentClassName,
+                                        componentInstanceId: liveComponentInstanceId, property: property.property,
+                                        expectedValue: currentValue, value, targetNode: node }, loaded);
+                                    if (!restored.available) throw new Error(restored.reason || 'PREFAB_COMPONENT_RESTORE_STATE_FAILED');
+                                }
+                            }
+                        }
                         if (canPreserveTransform) {
                             applyNodeTransformValues(node, expectedTransform);
                             const transformAfter = transformSummary(node);
@@ -2371,10 +2533,15 @@ function prefabSourcePatchMutate(params, callback) {
                         const syntheticIdMatches = descriptor.componentInstanceId.startsWith('prefab_component_')
                             && prefabPatch.componentIdFor(params.prefabUuid, params.targetNodeUuid, descriptor.componentIndex,
                                 descriptor.serializedClassId, null) === descriptor.componentInstanceId;
-                        if (params.action !== 'compensate' || !component || !stableRow
+                        const directRemoval = params.action === 'apply'
+                            && /^cc\.[A-Za-z_$][A-Za-z0-9_$.]{0,117}$/.test(descriptor.componentClassName)
+                            && typeof descriptor.enabled === 'boolean' && Array.isArray(descriptor.restoreProperties)
+                            && component && component.enabled === descriptor.enabled;
+                        const compensationRemoval = params.action === 'compensate';
+                        if ((!directRemoval && !compensationRemoval) || !component || !stableRow
                             || stableRow.componentInstanceId !== descriptor.componentInstanceId
                             || (!liveIdMatches && !syntheticIdMatches)
-                            || classNameOf(component) !== descriptor.componentClassName
+                            || classNameOf(component) !== (descriptor.registeredClassName || descriptor.componentClassName)
                             || typeof component.destroy !== 'function')
                             throw new Error('PREFAB_COMPONENT_REMOVE_PRECONDITION_FAILED');
                         const destroyStarted = component.destroy();
@@ -2582,7 +2749,7 @@ function prefabSourceEditableState(params) {
         const unsupportedProperties = [];
         for (const property of declaredProperties.slice(0, 64)) {
             const state = componentPropertyState({ sceneUuid: mode.sceneUuid, nodeUuid: found.node.uuid,
-                nodePath: found.nodePath, componentClassName, componentInstanceId, property });
+                nodePath: found.nodePath, componentClassName, componentInstanceId, property, targetNode: found.node });
             if (state.available) properties.push({ name: property, kind: state.propertyKind,
                 value: prefabStableComponentValue(state.value, mode.sceneUuid, params.prefabUuid), inspector: state.inspector });
             else unsupportedProperties.push({ name: property, reason: state.reason || 'PREFAB_COMPONENT_PROPERTY_UNAVAILABLE' });
@@ -2729,9 +2896,20 @@ function compositionState(params) {
         const resolved = componentClass(item.className);
         if (!resolved.available) return resolved;
         if (resolved.requiresComponent) return { available: false, reason: 'SCENE_COMPOSE_COMPONENT_HAS_UNAPPROVED_REQUIREMENT' };
-        const classes = classByNode.get(item.nodeRef) || new Set();
+        const classes = classByNode.get(item.nodeRef) || new Map();
         if (classes.has(item.className)) return { available: false, reason: 'SCENE_COMPOSE_COMPONENT_DUPLICATE' };
-        classes.add(item.className);
+        for (const previous of classes.values()) {
+            const candidateConflicts = resolved.disallowMultipleClass
+                && cc.js.isChildClassOf(previous.constructor, resolved.disallowMultipleClass);
+            const previousConflicts = previous.disallowMultipleClass
+                && cc.js.isChildClassOf(resolved.constructor, previous.disallowMultipleClass);
+            if (candidateConflicts || previousConflicts)
+                return { available: false, reason: 'SCENE_COMPOSE_COMPONENT_DISALLOW_MULTIPLE_CONFLICT',
+                    componentClassName: item.className, conflictingComponentClassName: previous.componentClassName,
+                    disallowMultipleClassName: candidateConflicts ? resolved.disallowMultipleClassName
+                        : previous.disallowMultipleClassName };
+        }
+        classes.set(item.className, resolved);
         classByNode.set(item.nodeRef, classes);
         const propertyNames = new Set();
         for (const property of item.properties) {

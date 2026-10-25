@@ -1,22 +1,22 @@
 {
   "schemaVersion": 1,
   "extensionName": "cocos-creator-agent-extension",
-  "extensionVersion": "0.8.94",
-  "installedByCliVersion": "0.12.59",
-  "installedAt": "2026-10-24T13:26:12.266Z",
+  "extensionVersion": "0.8.111",
+  "installedByCliVersion": "0.12.62",
+  "installedAt": "2026-10-24T22:05:23.872Z",
   "files": {
     "asset-import-operations.cjs": "ec5a58fbd613518a1019453dd72a59626c3736a9d5a9faebdbc1e4a68e30e139",
     "asset-references.cjs": "35ce4a041792b1e91f0864a4cd875a613d0e92b7ea36af89734df64dfb069f13",
-    "command-contract.json": "0959a6dc627c9428c784e61341dbb47c5d5ec477a6b04183712d45db63310c7c",
+    "command-contract.json": "741c87c621fbaea81eba4dcbfb07622e3ef554066722252a3eb703e8c985ffdf",
     "commit-authorization.cjs": "7e297866deb67ac86d87cf749d77597cac543c9fc03b2e50abe15f4920741e24",
     "editor-script-eval.cjs": "0aa2e6a6a226970132468d698acfd2c3f804112c22f16194996380a6bb47e075",
-    "main.js": "aa1321f8d564ba20edff608b35dea842383c2de377e96176a8a3f8f974df0885",
-    "package.json": "6def7861f98da2e7672d4c2845a285c37d350d8d5a4e2f90e1ba58f2e865c3c3",
+    "main.js": "6c30868adb93f7766bf4931f09c713f34307ec0bcfe03e41ed0a277dc39d8c87",
+    "package.json": "83550442cce66847be6725d776bc9aee6d6d1d7bf2926e0a95522312180434b7",
     "prefab-instance-operations.cjs": "164e8773f891d4f7d1c5a629d811bc26506b588ee37b373868cf20c1829a04e2",
-    "prefab-patch.cjs": "26666ccfd30f8661f38c282d5dfccad151828e1b032825371d89f30dafed6f91",
-    "prefab-source.cjs": "834dfcb88a89d733337ed57978aa13bb9540697fdf2ca7c44fb83e5ccf246317",
+    "prefab-patch.cjs": "c6667b242236040bd543e33e1ce4ea5a19bcdeca47b3dca0d1c508776a9e661d",
+    "prefab-source.cjs": "4884914a6475573912ca956935dc823623b1616900ee896de04fd3b09d528cda",
     "provider-contract.cjs": "4d070471d4b37d02968707b1eca4cc17c7696e5769e612b23f667d5a83017bab",
     "scene-persistence.cjs": "8c224ef46705f9a740e376e83751991a4e2c8a775604e583e1cf2faefc1901d4",
-    "scene.js": "c5f6b8576c3cddeec4ddb7781201d0f39b58923bc6fdc99e81a74e9348207609"
+    "scene.js": "4e28d4a29bf2ff98d9330720f15c86986eece76ffe10e68d5bacbdb1c2de6a11"
   }
 }

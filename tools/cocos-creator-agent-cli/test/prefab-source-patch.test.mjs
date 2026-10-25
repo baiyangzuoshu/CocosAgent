@@ -230,7 +230,7 @@ test('Prefab child edits bind the full sibling list and only insert or remove em
   ] }, after: { childCount: 0, children: [] } }]), false);
 });
 
-test('Prefab component structure appends one exact built-in component and derives its removal inverse', () => {
+test('Prefab component structure accepts exact built-in and project script components with a removal inverse', () => {
   const before = { componentCount: 0, components: [] };
   const planned = { componentCount: 1, components: [{
     componentClassName: 'cc.BlockInputEvents', componentIndex: 0,
@@ -241,6 +241,23 @@ test('Prefab component structure appends one exact built-in component and derive
   assert.deepEqual(prefabPatch.componentStateChange(before, planned), {
     kind: 'add', component: planned.components[0],
   });
+  const scriptComponent = { componentClassName: '5a61a838-87a2-4b9d-a9d0-2f3a6bd05112',
+    registeredClassName: 'CliAcceptanceButtonState', componentIndex: 0,
+    componentInstanceId: prefabPatch.AUTO_COMPONENT_INSTANCE_ID,
+    serializedClassId: '5a61a838-87a2-4b9d-a9d0-2f3a6bd05112' };
+  const scriptDiff = [{ path: 'component.structure', before,
+    after: { componentCount: 1, components: [scriptComponent] } }];
+  assert.equal(prefabPatch.validateDiff(scriptDiff), true);
+  assert.deepEqual(prefabPatch.componentStateChange(before, scriptDiff[0].after), {
+    kind: 'add', component: scriptComponent,
+  });
+  const liveScriptState = { componentCount: 1, components: [{ ...scriptComponent,
+    componentInstanceId: 'live-script-component-id' }] };
+  delete liveScriptState.components[0].registeredClassName;
+  const scriptRemovalDiff = [{ path: 'component.structure', before: liveScriptState, after: before }];
+  assert.equal(prefabPatch.matchesBeforeOrGeometryAfter({ componentState: liveScriptState }, scriptRemovalDiff), true);
+  assert.equal(prefabPatch.validateDiff([{ path: 'component.structure', before,
+    after: { componentCount: 1, components: [{ ...scriptComponent, serializedClassId: 'unsafe id' }] } }]), false);
 
   const added = { componentCount: 1, components: [{ ...planned.components[0], componentInstanceId: 'planned-component-id' }] };
   const addDiff = [{ path: 'component.structure', before, after: added }];
@@ -255,6 +272,31 @@ test('Prefab component structure appends one exact built-in component and derive
   assert.equal(prefabPatch.componentStateChange(inverse[0].before, inverse[0].after).kind, 'remove');
   target.componentState = before;
   assert.equal(prefabPatch.matchesDiff(target, inverse, 'after'), true);
+
+  const existingBlock = { componentCount: 1, components: [{ componentClassName: 'cc.BlockInputEvents',
+    componentIndex: 0, componentInstanceId: 'existing-block-input-events',
+    serializedClassId: 'cc.BlockInputEvents', enabled: false }] };
+  const removeBlock = [{ path: 'component.structure', before: existingBlock, after: before }];
+  assert.equal(prefabPatch.validateDiff(removeBlock), true);
+  assert.deepEqual(prefabPatch.sourceInspectionDiff(removeBlock), removeBlock);
+  assert.deepEqual(prefabPatch.componentStateChange(existingBlock, before), {
+    kind: 'remove', component: existingBlock.components[0],
+  });
+  const restoreBlock = prefabPatch.invertDiff(removeBlock);
+  assert.equal(prefabPatch.componentStateChange(restoreBlock[0].before, restoreBlock[0].after).kind, 'add');
+  assert.equal(prefabPatch.componentStateChange(restoreBlock[0].before, restoreBlock[0].after).component.enabled, false);
+  const existingToggleGroup = { componentCount: 1, components: [{ componentClassName: 'cc.ToggleGroup',
+    componentIndex: 0, componentInstanceId: 'toggle-group-id', serializedClassId: 'cc.ToggleGroup', enabled: true,
+    restoreProperties: [{ property: 'allowSwitchOff', value: true, serializedProperty: 'allowSwitchOff' }] }] };
+  assert.equal(prefabPatch.validateDiff([{ path: 'component.structure', before: existingToggleGroup, after: before }]), true);
+  assert.equal(prefabPatch.validateDiff([{ path: 'component.structure', before: { ...existingToggleGroup,
+    components: [{ ...existingToggleGroup.components[0], restoreProperties: [{ property: 'items',
+      value: { kind: 'array', items: [] }, serializedProperty: '_items' }] }] }, after: before }]), false);
+  const diskBlockRow = { ...existingBlock.components[0] };
+  delete diskBlockRow.enabled;
+  const diskBlock = { componentState: { componentCount: 1, components: [diskBlockRow] },
+    components: [{ index: 0, className: 'cc.BlockInputEvents', enabled: false }] };
+  assert.equal(prefabPatch.matchesDiff(diskBlock, removeBlock, 'before'), true);
 
   const reordered = { componentCount: 2, components: [added.components[0], {
     componentClassName: 'cc.Sprite', componentIndex: 1, componentInstanceId: 'sprite-id', serializedClassId: 'cc.Sprite',
@@ -416,6 +458,47 @@ test('Prefab source inspection accepts a validated component structure selector'
   assert.deepEqual(source.nodes[0].componentState, { componentCount: 0, components: [] });
 });
 
+test('Prefab source inspection captures reversible BlockInputEvents state and synthetic identity', () => {
+  const serialized = [{ __type__: 'cc.Prefab', data: { __id__: 1 } },
+    { __type__: 'cc.Node', _name: 'Root', _id: nodeUuid, _active: true, _parent: null,
+      _children: [], _components: [{ __id__: 3 }], _prefab: { __id__: 2 }, _trs: { array: [0, 0, 0, 0, 0, 0, 1, 1, 1] } },
+    { __type__: 'cc.PrefabInfo', fileId: 'root-file-id' },
+    { __type__: 'cc.BlockInputEvents', _enabled: false, _id: '' }];
+  const source = prefabSource.inspectPrefabSource({ prefabBytes: Buffer.from(JSON.stringify(serialized)),
+    metaBytes: Buffer.from(JSON.stringify({ uuid: prefabUuid, importer: 'prefab' })), prefabUuid });
+  assert.equal(source.available, true, JSON.stringify(source));
+  assert.deepEqual(source.nodes[0].componentState.components[0], {
+    componentClassName: 'cc.BlockInputEvents', componentIndex: 0,
+    componentInstanceId: prefabPatch.componentIdFor(prefabUuid, nodeUuid, 0, 'cc.BlockInputEvents', null),
+    serializedClassId: 'cc.BlockInputEvents', enabled: false, componentIdSynthetic: true,
+  });
+  assert.equal(source.nodes[0].components[0].enabled, false);
+  assert.equal(source.nodes[0].components[0].instanceIdSynthetic, true);
+});
+
+test('Prefab component removal readback binds and verifies every captured restorable property', () => {
+  const serialized = [{ __type__: 'cc.Prefab', data: { __id__: 1 } },
+    { __type__: 'cc.Node', _name: 'Root', _id: nodeUuid, _active: true, _parent: null,
+      _children: [], _components: [{ __id__: 3 }], _prefab: { __id__: 2 }, _trs: { array: [0, 0, 0, 0, 0, 0, 1, 1, 1] } },
+    { __type__: 'cc.PrefabInfo', fileId: 'root-file-id' },
+    { __type__: 'cc.ToggleGroup', _enabled: true, _id: 'toggle-group-id', allowSwitchOff: true }];
+  const before = { componentCount: 1, components: [{ componentClassName: 'cc.ToggleGroup', componentIndex: 0,
+    componentInstanceId: 'toggle-group-id', serializedClassId: 'cc.ToggleGroup', enabled: true,
+    restoreProperties: [{ property: 'allowSwitchOff', value: true, serializedProperty: 'allowSwitchOff' }] }] };
+  const diff = { path: 'component.structure', before, after: { componentCount: 0, components: [] } };
+  const inspect = (rows) => prefabSource.inspectPrefabSource({ prefabBytes: Buffer.from(JSON.stringify(rows)),
+    metaBytes: Buffer.from(JSON.stringify({ uuid: prefabUuid, importer: 'prefab' })), prefabUuid,
+    expectedDiff: [diff], targetNodeUuid: nodeUuid });
+  const source = inspect(serialized);
+  assert.equal(source.available, true, JSON.stringify(source));
+  assert.equal(prefabPatch.matchesDiff(source.nodes[0], [diff], 'before'), true);
+  const corrupted = structuredClone(serialized);
+  corrupted[3].allowSwitchOff = false;
+  const changedSource = inspect(corrupted);
+  assert.equal(changedSource.available, true, JSON.stringify(changedSource));
+  assert.equal(prefabPatch.matchesDiff(changedSource.nodes[0], [diff], 'before'), false);
+});
+
 test('Creator-authored Prefab roots with empty IDs use an asset-bound identity', () => {
   const serialized = [{ __type__: 'cc.Prefab', data: { __id__: 1 } },
     { __type__: 'cc.Node', _name: 'Root', _id: '', _active: true, _parent: null,
@@ -511,6 +594,29 @@ test('Prefab source inspection reads exact serialized component properties by co
   assert.ok(source.nodes[0].components[0].serializedProperties.includes('_string'));
 });
 
+test('Prefab source readback preserves declared asset types for newly appended array references', () => {
+  const materialUuid = '44444444-4444-4444-8444-444444444444';
+  const serialized = [{ __type__: 'cc.Prefab', data: { __id__: 1 } },
+    { __type__: 'cc.Node', _name: 'Root', _id: nodeUuid, _active: true, _parent: null,
+      _children: [], _components: [{ __id__: 2 }], _prefab: { __id__: 3 },
+      _trs: { array: [0, 0, 0, 0, 0, 0, 1, 1, 1] } },
+    { __type__: 'cc.Sprite', _id: 'sprite-1', node: { __id__: 1 }, _enabled: true,
+      _materials: [{ __uuid__: materialUuid }, { __uuid__: materialUuid }] },
+    { __type__: 'cc.PrefabInfo', fileId: 'root-file-id' }];
+  const asset = { kind: 'asset', assetClass: 'Material', assetUuid: materialUuid };
+  const diff = { path: 'component.property', componentClassName: 'cc.Sprite', componentInstanceId: 'sprite-1',
+    componentIndex: 0, property: 'materials', serializedProperty: '_materials',
+    serializedPropertyCandidates: ['_materials'], before: { kind: 'array', items: [asset] },
+    after: { kind: 'array', items: [asset, asset] } };
+  const source = prefabSource.inspectPrefabSource({ prefabBytes: Buffer.from(JSON.stringify(serialized)),
+    metaBytes: Buffer.from(JSON.stringify({ uuid: prefabUuid, importer: 'prefab' })), prefabUuid,
+    targetNodeUuid: nodeUuid, expectedDiff: [diff] });
+  assert.equal(source.available, true, JSON.stringify(source));
+  assert.deepEqual(source.nodes[0].componentProperties['sprite-1'].materials, diff.after);
+  assert.equal(prefabPatch.matchesDiff(source.nodes[0], [diff], 'after'), true,
+    JSON.stringify(source.nodes[0].componentProperties['sprite-1']));
+});
+
 test('Prefab source property readback resolves Prefab-local node and component references to stable IDs', () => {
   const serialized = [{ __type__: 'cc.Prefab', data: { __id__: 1 } },
     { __type__: 'cc.Node', _name: 'Root', _id: '', _active: true, _parent: null,
@@ -542,6 +648,62 @@ test('Prefab source property readback resolves Prefab-local node and component r
     targetComponent: { kind: 'component-ref', componentClassName: 'cc.Sprite',
       componentInstanceId: 'sprite-id', nodeUuid: 'child-id' },
   });
+});
+
+test('Prefab source readback derives stable component identities when referenced components omit serialized IDs', () => {
+  const serialized = [{ __type__: 'cc.Prefab', data: { __id__: 1 } },
+    { __type__: 'cc.Node', _name: 'Root', _id: '', _active: true, _parent: null,
+      _children: [{ __id__: 2 }], _components: [{ __id__: 4 }], _prefab: { __id__: 5 },
+      _trs: { array: [0, 0, 0, 0, 0, 0, 1, 1, 1] } },
+    { __type__: 'cc.Node', _name: 'Child', _id: 'child-id', _active: true, _parent: { __id__: 1 },
+      _children: [], _components: [{ __id__: 3 }], _prefab: { __id__: 6 },
+      _trs: { array: [0, 0, 0, 0, 0, 0, 1, 1, 1] } },
+    { __type__: 'cc.Sprite', node: { __id__: 2 }, _enabled: true },
+    { __type__: 'Test.ReferenceHolder', _id: 'holder-id', node: { __id__: 1 }, targetComponent: { __id__: 3 } },
+    { __type__: 'cc.PrefabInfo', fileId: '', root: { __id__: 1 }, asset: { __id__: 0 } },
+    { __type__: 'cc.PrefabInfo', fileId: 'child-file-id', root: { __id__: 1 }, asset: { __id__: 0 } }];
+  const componentInstanceId = prefabPatch.componentIdFor(prefabUuid, 'child-id', 0, 'cc.Sprite', null);
+  const expectedDiff = [{ path: 'component.property', componentClassName: 'Test.ReferenceHolder',
+    componentInstanceId: 'holder-id', componentIndex: 0, property: 'targetComponent',
+    serializedProperty: 'targetComponent', serializedPropertyCandidates: ['targetComponent'],
+    before: { kind: 'component-ref', componentClassName: 'cc.Sprite' },
+    after: { kind: 'component-ref', componentClassName: 'cc.Sprite', componentInstanceId, nodeUuid: 'child-id' } }];
+  const source = prefabSource.inspectPrefabSource({ prefabBytes: Buffer.from(JSON.stringify(serialized)),
+    metaBytes: Buffer.from(JSON.stringify({ uuid: prefabUuid, importer: 'prefab' })), prefabUuid,
+    targetNodeUuid: prefabPatch.rootNodeId(prefabUuid), expectedDiff });
+  assert.equal(source.available, true, JSON.stringify(source));
+  assert.deepEqual(source.nodes[0].componentProperties['holder-id'].targetComponent, expectedDiff[0].after);
+  assert.equal(prefabPatch.matchesDiff(source.nodes[0], expectedDiff, 'after'), true);
+});
+
+test('Prefab source readback preserves typed empty node and component references', () => {
+  const serialized = [{ __type__: 'cc.Prefab', data: { __id__: 1 } },
+    { __type__: 'cc.Node', _name: 'Root', _id: '', _active: true, _parent: null,
+      _children: [], _components: [{ __id__: 2 }], _prefab: { __id__: 3 },
+      _trs: { array: [0, 0, 0, 0, 0, 0, 1, 1, 1] } },
+    { __type__: 'Test.ReferenceHolder', _id: 'holder-id', node: { __id__: 1 },
+      targetNode: null, targetComponent: null },
+    { __type__: 'cc.PrefabInfo', fileId: '', root: { __id__: 1 }, asset: { __id__: 0 } }];
+  const expectedDiff = [
+    { path: 'component.property', componentClassName: 'Test.ReferenceHolder', componentInstanceId: 'holder-id',
+      componentIndex: 0, property: 'targetNode', serializedProperty: 'targetNode',
+      serializedPropertyCandidates: ['targetNode'], before: { kind: 'node-ref' },
+      after: { kind: 'node-ref', nodeUuid: 'child-id' } },
+    { path: 'component.property', componentClassName: 'Test.ReferenceHolder', componentInstanceId: 'holder-id',
+      componentIndex: 0, property: 'targetComponent', serializedProperty: 'targetComponent',
+      serializedPropertyCandidates: ['targetComponent'], before: { kind: 'component-ref', componentClassName: 'cc.Sprite' },
+      after: { kind: 'component-ref', componentClassName: 'cc.Sprite', componentInstanceId: 'sprite-id', nodeUuid: 'child-id' } },
+  ];
+  const source = prefabSource.inspectPrefabSource({ prefabBytes: Buffer.from(JSON.stringify(serialized)),
+    metaBytes: Buffer.from(JSON.stringify({ uuid: prefabUuid, importer: 'prefab' })), prefabUuid,
+    targetNodeUuid: prefabPatch.rootNodeId(prefabUuid), expectedDiff });
+  assert.equal(source.available, true, JSON.stringify(source));
+  assert.deepEqual(source.nodes[0].componentProperties['holder-id'], {
+    targetNode: { kind: 'node-ref' },
+    targetComponent: { kind: 'component-ref', componentClassName: 'cc.Sprite' },
+  });
+  assert.equal(prefabPatch.matchesDiff(source.nodes[0], expectedDiff, 'before'), true,
+    JSON.stringify(source.nodes[0].componentProperties['holder-id']));
 });
 
 test('Prefab source readback parses UI event targets into stable Prefab node identities', () => {
@@ -949,10 +1111,10 @@ test('Prefab patch creates and deletes one linked empty leaf child and compensat
   assert.deepEqual(root.children, [original]);
 });
 
-test('Prefab patch appends one registered built-in component and compensates by removing that exact instance', () => {
+test('Prefab patch appends one registered built-in or project script component and compensates that exact instance', () => {
   const scenePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../creator-extension/scene.js');
   class Component {
-    constructor() { this._id = 'runtime-component-id'; this.node = null; this._objFlags = 0; }
+    constructor() { this._id = 'runtime-component-id'; this.node = null; this._objFlags = 0; this.enabled = true; }
     destroy() {
       if (this._objFlags & 4) return false;
       const index = this.node._components.indexOf(this);
@@ -965,6 +1127,15 @@ test('Prefab patch appends one registered built-in component and compensates by 
   }
   class BlockInputEvents extends Component {}
   BlockInputEvents.prototype.__classname__ = 'cc.BlockInputEvents';
+  class ToggleGroup extends Component {
+    constructor() { super(); this.allowSwitchOff = false; }
+  }
+  ToggleGroup.prototype.__classname__ = 'cc.ToggleGroup';
+  ToggleGroup.__props__ = ['allowSwitchOff'];
+  ToggleGroup.__values__ = ['allowSwitchOff'];
+  class CliAcceptanceButtonState extends Component {}
+  CliAcceptanceButtonState.prototype.__classname__ = 'CliAcceptanceButtonState';
+  CliAcceptanceButtonState.prototype.__classId__ = '5a61a838-87a2-4b9d-a9d0-2f3a6bd05112';
   class Node {
     constructor(name, uuid, id) {
       this.name = name; this.uuid = uuid; this._id = id; this.children = []; this._components = [];
@@ -992,13 +1163,15 @@ test('Prefab patch appends one registered built-in component and compensates by 
   root._prefab = { root, fileId: '', asset: { _uuid: prefabUuid } };
   scene.addChild = (node) => { node.parent = scene; };
   scene.addChild(root);
-  const classes = { 'cc.Component': Component, 'cc.BlockInputEvents': BlockInputEvents };
+  const classes = { 'cc.Component': Component, 'cc.BlockInputEvents': BlockInputEvents, 'cc.ToggleGroup': ToggleGroup,
+    CliAcceptanceButtonState };
   const cc = { Node, Component, director: { getScene: () => scene },
+    Class: { attr(_constructor, property) { return property === 'allowSwitchOff' ? { type: Boolean, default: false } : null; } },
     Object: { Flags: { DontSave: 8, HideInHierarchy: 1024 }, _willDestroy(component) { return !!(component._objFlags & 4); } },
     engine: { attachedObjsForEditor: { 'root-runtime-id': root } },
     js: { getClassByName(name) { return classes[name]; },
       getClassName(type) { return type.prototype.__classname__ || type.name; },
-      _getClassId(type) { return type.prototype.__classname__ || type.name; },
+      _getClassId(type) { return type.prototype.__classId__ || type.prototype.__classname__ || type.name; },
       isChildClassOf(type, base) { return type === base || type.prototype instanceof base; } } };
   const mode = { name: 'prefab', save(callback) { callback(); }, dirty() { return false; } };
   const module = { exports: {} };
@@ -1044,6 +1217,110 @@ test('Prefab patch appends one registered built-in component and compensates by 
   assert.equal(removed.available, true, JSON.stringify(removed));
   assert.deepEqual(root._components, []);
   assert.equal(cc.engine.attachedObjsForEditor['planned-component-id'], undefined);
+
+  const customDiff = [{ path: 'component.structure', before,
+    after: { componentCount: 1, components: [{ componentClassName: '5a61a838-87a2-4b9d-a9d0-2f3a6bd05112',
+      registeredClassName: 'CliAcceptanceButtonState', componentIndex: 0,
+      componentInstanceId: 'custom-script-component-id', serializedClassId: '5a61a838-87a2-4b9d-a9d0-2f3a6bd05112' }] } }];
+  const customInput = { ...input, expectedDiff: customDiff };
+  assert.equal(prefabPatch.validateDiff(customDiff), true);
+  const customPreflight = invoke('prefabSourcePatchPreflight', customInput);
+  assert.equal(customPreflight.available, true, JSON.stringify(customPreflight));
+  const customAdded = invoke('prefabSourcePatchMutate', customInput);
+  assert.equal(customAdded.available, true, JSON.stringify(customAdded));
+  assert.equal(root._components[0].constructor, CliAcceptanceButtonState);
+  assert.equal(root._components[0]._id, 'custom-script-component-id');
+  assert.equal(customAdded.node.componentState.components[0].serializedClassId,
+    '5a61a838-87a2-4b9d-a9d0-2f3a6bd05112');
+
+  const customInverse = prefabPatch.invertDiff(customDiff);
+  const customCompensate = { ...customInput, action: 'compensate', expectedDiff: customInverse };
+  assert.equal(invoke('prefabSourcePatchPreflight', customCompensate).available, true);
+  root._components[0]._objFlags |= 4;
+  const customRemoved = invoke('prefabSourcePatchMutate', customCompensate);
+  assert.equal(customRemoved.available, true, JSON.stringify(customRemoved));
+  assert.deepEqual(root._components, []);
+  assert.equal(cc.engine.attachedObjsForEditor['custom-script-component-id'], undefined);
+
+  const existingBlock = root.addComponent(BlockInputEvents);
+  existingBlock._id = 'existing-block-input-events';
+  existingBlock.enabled = false;
+  cc.engine.attachedObjsForEditor[existingBlock._id] = existingBlock;
+  const blockBefore = { componentCount: 1, components: [{ componentClassName: 'cc.BlockInputEvents',
+    componentIndex: 0, componentInstanceId: 'existing-block-input-events',
+    serializedClassId: 'cc.BlockInputEvents', enabled: false, restoreProperties: [] }] };
+  const blockDiff = [{ path: 'component.structure', before: blockBefore, after: { componentCount: 0, components: [] } }];
+  const blockInput = { ...input, action: 'apply', expectedDiff: blockDiff };
+  const blockPreflight = invoke('prefabSourcePatchPreflight', blockInput);
+  assert.equal(blockPreflight.available, true, JSON.stringify(blockPreflight));
+  const blockRemoved = invoke('prefabSourcePatchMutate', blockInput);
+  assert.equal(blockRemoved.available, true, JSON.stringify(blockRemoved));
+  assert.deepEqual(root._components, []);
+  assert.equal(cc.engine.attachedObjsForEditor['existing-block-input-events'], undefined);
+
+  const blockInverse = prefabPatch.invertDiff(blockDiff);
+  const blockCompensate = { ...blockInput, action: 'compensate', expectedDiff: blockInverse };
+  const blockRestorePreflight = invoke('prefabSourcePatchPreflight', blockCompensate);
+  assert.equal(blockRestorePreflight.available, true, JSON.stringify(blockRestorePreflight));
+  const blockRestored = invoke('prefabSourcePatchMutate', blockCompensate);
+  assert.equal(blockRestored.available, true, JSON.stringify(blockRestored));
+  assert.equal(root._components.length, 1);
+  assert.equal(root._components[0].constructor, BlockInputEvents);
+  assert.equal(root._components[0]._id, 'existing-block-input-events');
+  assert.equal(root._components[0].enabled, false);
+  assert.equal(cc.engine.attachedObjsForEditor['existing-block-input-events'], root._components[0]);
+
+  const toggleGroup = root.addComponent(ToggleGroup);
+  toggleGroup._id = 'existing-toggle-group';
+  toggleGroup.allowSwitchOff = true;
+  cc.engine.attachedObjsForEditor[toggleGroup._id] = toggleGroup;
+  const toggleGroupBefore = { componentCount: 2, components: [
+    { componentClassName: 'cc.BlockInputEvents', componentIndex: 0,
+      componentInstanceId: 'existing-block-input-events', serializedClassId: 'cc.BlockInputEvents', enabled: false },
+    { componentClassName: 'cc.ToggleGroup', componentIndex: 1, componentInstanceId: 'existing-toggle-group',
+      serializedClassId: 'cc.ToggleGroup', enabled: true,
+      restoreProperties: [{ property: 'allowSwitchOff', value: true, serializedProperty: 'allowSwitchOff' }] },
+  ] };
+  const toggleGroupDiff = [{ path: 'component.structure', before: toggleGroupBefore,
+    after: { componentCount: 1, components: [toggleGroupBefore.components[0]] } }];
+  const toggleGroupInput = { ...input, action: 'apply', expectedDiff: toggleGroupDiff };
+  const toggleGroupPreflight = invoke('prefabSourcePatchPreflight', toggleGroupInput);
+  assert.equal(toggleGroupPreflight.available, true, JSON.stringify(toggleGroupPreflight));
+  assert.equal(invoke('prefabSourcePatchMutate', toggleGroupInput).available, true);
+  assert.equal(root._components.length, 1);
+  assert.equal(root._components[0].constructor, BlockInputEvents);
+  const toggleGroupRestore = { ...toggleGroupInput, action: 'compensate',
+    expectedDiff: prefabPatch.invertDiff(toggleGroupDiff) };
+  const toggleGroupRestorePreflight = invoke('prefabSourcePatchPreflight', toggleGroupRestore);
+  assert.equal(toggleGroupRestorePreflight.available, true, JSON.stringify(toggleGroupRestorePreflight));
+  const toggleGroupRestored = invoke('prefabSourcePatchMutate', toggleGroupRestore);
+  assert.equal(toggleGroupRestored.available, true, JSON.stringify(toggleGroupRestored));
+  assert.equal(root._components.length, 2);
+  assert.equal(root._components[1].constructor, ToggleGroup);
+  assert.equal(root._components[1]._id, 'existing-toggle-group');
+  assert.equal(root._components[1].allowSwitchOff, true);
+  assert.equal(cc.engine.attachedObjsForEditor['existing-toggle-group'], root._components[1]);
+
+  root._components[1].allowSwitchOff = false;
+  const toggleGroupFalseBefore = { componentCount: 2, components: [
+    { componentClassName: 'cc.BlockInputEvents', componentIndex: 0,
+      componentInstanceId: 'existing-block-input-events', serializedClassId: 'cc.BlockInputEvents', enabled: false },
+    { componentClassName: 'cc.ToggleGroup', componentIndex: 1, componentInstanceId: 'existing-toggle-group',
+      serializedClassId: 'cc.ToggleGroup', enabled: true,
+      restoreProperties: [{ property: 'allowSwitchOff', value: false, serializedProperty: 'allowSwitchOff' }] },
+  ] };
+  const toggleGroupFalseDiff = [{ path: 'component.structure', before: toggleGroupFalseBefore,
+    after: { componentCount: 1, components: [toggleGroupFalseBefore.components[0]] } }];
+  const toggleGroupFalseRemoval = { ...toggleGroupInput, expectedDiff: toggleGroupFalseDiff };
+  assert.equal(invoke('prefabSourcePatchPreflight', toggleGroupFalseRemoval).available, true);
+  assert.equal(invoke('prefabSourcePatchMutate', toggleGroupFalseRemoval).available, true);
+  const toggleGroupFalseCompensation = { ...toggleGroupFalseRemoval, action: 'compensate',
+    expectedDiff: prefabPatch.invertDiff(toggleGroupFalseDiff) };
+  assert.equal(invoke('prefabSourcePatchPreflight', toggleGroupFalseCompensation).available, true);
+  const toggleGroupFalseRestored = invoke('prefabSourcePatchMutate', toggleGroupFalseCompensation);
+  assert.equal(toggleGroupFalseRestored.available, true, JSON.stringify(toggleGroupFalseRestored));
+  assert.equal(root._components[1].constructor, ToggleGroup);
+  assert.equal(root._components[1].allowSwitchOff, false);
 });
 
 test('Prefab UI event lists use stable in-Prefab targets and reject external target nodes', () => {

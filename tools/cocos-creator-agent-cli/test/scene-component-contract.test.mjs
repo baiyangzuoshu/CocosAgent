@@ -129,6 +129,8 @@ test('component-property contract accepts bounded scalars and typed Creator prop
   const input = { sceneUuid, nodeUuid, componentClassName: 'cc.Label', componentInstanceId: 'component-1',
     property: 'string', value: 'Ready' };
   assert.equal(validateCommand(plan.id, input).ok, true);
+  assert.equal(validateCommand(plan.id, { ...input, restoreDefaultOmitted: true }).ok, true);
+  assert.equal(validateCommand(plan.id, { ...input, restoreDefaultOmitted: 'yes' }).ok, false);
   for (const value of [
     { kind: 'vec2', x: 1, y: 2 },
     { kind: 'vec3', x: 1, y: 2, z: 3 },

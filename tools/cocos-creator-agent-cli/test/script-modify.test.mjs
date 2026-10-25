@@ -187,6 +187,7 @@ function makeHarness(t, { approved = true, beforeCommitAuthorization = () => {},
   liveSceneName = 'Scene',
   sceneRename = false, sceneReparent = false,
   sceneNodeDelete = false, sceneComponentRemove = false, sceneComponentAdd = false,
+  sceneComponentRemoveTransform = null,
   sceneComponentAddClass = 'cc.Sprite', sceneComponentAddAutoSize = false,
   sceneTransform = false, sceneButtonEvents = false,
   sceneProperty = null, scenePropertyAutoSize = null, scenePropertyLiveTransform = null,
@@ -432,7 +433,7 @@ function makeHarness(t, { approved = true, beforeCommitAuthorization = () => {},
           componentInstanceId: 'button-instance', before: params.expectedBefore, events: [...buttonEvents] });
         return;
       }
-      if (method === 'nodeTransformState' && (sceneTransform || sceneProperty)) {
+      if (method === 'nodeTransformState' && (sceneTransform || sceneProperty || sceneComponentRemove)) {
         assert.equal(params.sceneUuid, sceneUuid);
         assert.equal(params.nodeUuid, nodeUuid);
         callback(null, { available: true, sceneName: 'Scene', sceneUuid, nodeUuid, nodePath: 'Scene/Button',
@@ -465,7 +466,7 @@ function makeHarness(t, { approved = true, beforeCommitAuthorization = () => {},
         callback(null, { available: true, sceneUuid, nodeUuid, active: sceneNodeActive });
         return;
       }
-      if (method === 'setNodeTransform' && sceneTransform) {
+      if (method === 'setNodeTransform' && (sceneTransform || sceneProperty)) {
         assert.equal(params.sceneUuid, sceneUuid);
         assert.equal(params.nodeUuid, nodeUuid);
         const before = Object.fromEntries(Object.keys(params.values).map((field) => [field, currentTransform[field]]));
@@ -559,6 +560,7 @@ function makeHarness(t, { approved = true, beforeCommitAuthorization = () => {},
       }
       if (method === 'removeNodeComponent' && sceneComponentRemove) {
         sceneComponentRemoved = true;
+        if (sceneComponentRemoveTransform) Object.assign(currentTransform, sceneComponentRemoveTransform);
         callback(null, { available: true, sceneUuid, nodeUuid, nodePath: 'Scene/Button',
           componentClassName: params.componentClassName, componentInstanceId: params.componentInstanceId,
           beforePresent: true, present: false });
@@ -1040,10 +1042,11 @@ test('scene-node reparent stops if the hierarchy changes during approval and doe
 test('existing node transform plan, approval, mutation, save request and reconcile use exact before-state', async (t) => {
   const harness = makeHarness(t, { sceneTransform: true, ipcMode: 'editor' });
   const plan = await harness.api.createSceneNodeTransformPlan({ sceneUuid: harness.sceneUuid,
-    nodeUuid: harness.nodeUuid, values: { x: 128, y: -32, angle: 45, width: 320, anchorX: 0 } });
+    nodeUuid: harness.nodeUuid, values: { x: 128, y: -32, angle: 45, width: 320, anchorX: 0, anchorY: 0.5 } });
   assert.equal(plan.status, 'planned');
   assert.deepEqual({ ...plan.expectedBefore }, { x: 1, y: 2, angle: 0, width: 50, anchorX: 0.5 });
   assert.deepEqual({ ...plan.expectedAfter }, { x: 128, y: -32, angle: 45, width: 320, anchorX: 0 });
+  assert.equal(plan.diff.changes.some((change) => change.field === 'anchorY'), false);
   assert.equal(harness.currentTransform.x, 1);
 
   const receipt = await harness.api.commitSceneNodeTransform({ operationId: plan.operationId, planHash: plan.planHash },
@@ -1061,6 +1064,15 @@ test('existing node transform plan, approval, mutation, save request and reconci
   assert.equal(reconciled.status, 'completed');
   assert.deepEqual({ ...reconciled.observed.transform }, { x: 128, y: -32, angle: 45, width: 320, anchorX: 0 });
   assert.equal(reconciled.scenePersistenceConfirmed, true);
+});
+
+test('existing node transform rejects an all-unchanged plan before writing an operation', async (t) => {
+  const harness = makeHarness(t, { sceneTransform: true, ipcMode: 'editor' });
+  await assert.rejects(harness.api.createSceneNodeTransformPlan({ sceneUuid: harness.sceneUuid,
+    nodeUuid: harness.nodeUuid, values: { anchorX: 0.5, anchorY: 0.5 } }),
+  (error) => error.code === 'SCENE_NODE_TRANSFORM_NO_CHANGE');
+  assert.equal(harness.currentTransform.x, 1);
+  assert.equal(harness.getSceneSaveCount(), 0);
 });
 
 test('existing node transform reports save-required when memory changes but saved scene does not', async (t) => {
@@ -1688,6 +1700,21 @@ test('scene subtree deletion and component removal require approval, save once, 
   assert.equal(removal.getSceneSaveCount(), 1);
 });
 
+test('component removal persists Creator lifecycle transform changes and reconciles the exact result', async (t) => {
+  const harness = makeHarness(t, { sceneComponentRemove: true,
+    sceneComponentRemoveTransform: { width: 73, height: 31 }, ipcMode: 'editor' });
+  const plan = await harness.api.createSceneComponentRemovePlan({ sceneUuid: harness.sceneUuid,
+    nodeUuid: harness.nodeUuid, componentClassName: 'cc.Sprite', componentInstanceId: 'sprite-instance' });
+  const removed = await harness.api.commitSceneComponentRemove({ operationId: plan.operationId, planHash: plan.planHash },
+    { requestId: 'remove-layout-sensitive-component' });
+  assert.equal(removed.status, 'completed');
+  assert.deepEqual({ width: removed.diskReadback.transform.width, height: removed.diskReadback.transform.height },
+    { width: 73, height: 31 });
+  const reconciled = await harness.api.reconcileSceneComponentRemove({ operationId: plan.operationId });
+  assert.equal(reconciled.status, 'completed');
+  assert.equal(reconciled.observed.disk.matchesAfter, true);
+});
+
 test('component addition completes only after the exact serialized component identity is saved', async (t) => {
   const harness = makeHarness(t, { sceneComponentAdd: true, sceneTransform: true, ipcMode: 'editor' });
   const plan = await harness.api.createSceneComponentAddPlan({ sceneUuid: harness.sceneUuid,
@@ -1849,6 +1876,31 @@ test('component-property compensation restores a reference whose original null f
   assert.equal(restored.diskReadback.componentProperty.value, null);
   assert.equal(restored.diskReadback.componentProperty.isDefaultOmitted, true);
   assert.equal(await sourceHash(fs.readFileSync(harness.sceneFile)), baselineSha256);
+  assert.equal(harness.getSceneSaveCount(), 2);
+});
+
+test('layout-sensitive component-property compensation restores the source operation transform', async (t) => {
+  const harness = makeHarness(t, { ipcMode: 'editor', sceneProperty: { serializedClassId: 'cc.RichText',
+    property: 'maxWidth', propertyKind: 'number', value: 0 },
+    scenePropertyAutoSize: { property: 'maxWidth', width: 240, height: 50.4 } });
+  const source = await harness.api.createSceneComponentPropertyPlan({ sceneUuid: harness.sceneUuid,
+    nodeUuid: harness.nodeUuid, componentClassName: 'cc.RichText', componentInstanceId: 'sprite-instance',
+    property: 'maxWidth', value: 240 });
+  const applied = await harness.api.commitSceneComponentProperty({ operationId: source.operationId, planHash: source.planHash },
+    { requestId: 'rich-text-layout-apply' });
+  assert.equal(applied.status, 'completed');
+  assert.equal(applied.nodeTransformAfter.width, 240);
+
+  const compensation = await harness.api.createSceneComponentPropertyCompensationPlan({ sourceOperationId: source.operationId });
+  assert.deepEqual(JSON.parse(JSON.stringify(compensation.diff.restoreNodeTransform)),
+    JSON.parse(JSON.stringify(source.nodeTransformBefore)));
+  const restored = await harness.api.commitSceneComponentProperty({ operationId: compensation.operationId,
+    planHash: compensation.planHash }, { requestId: 'rich-text-layout-restore' });
+  assert.equal(restored.status, 'completed');
+  assert.deepEqual(JSON.parse(JSON.stringify(restored.nodeTransformAfter)),
+    JSON.parse(JSON.stringify(source.nodeTransformBefore)));
+  assert.deepEqual(JSON.parse(JSON.stringify(restored.diskReadback.transform)),
+    JSON.parse(JSON.stringify(source.nodeTransformBefore)));
   assert.equal(harness.getSceneSaveCount(), 2);
 });
 

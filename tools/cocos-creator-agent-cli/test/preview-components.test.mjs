@@ -91,6 +91,18 @@ test('preview assertions read Creator 2.4 ProgressBar progress from serialized s
   assert.deepEqual(readPreviewComponentProperty(node, 'cc.ProgressBar', 'progress'), { found: true, actual: 0.75 });
 });
 
+test('preview assertions read Creator 2.4 Sprite fillRange from serialized storage without invoking its getter', () => {
+  class Sprite {
+    constructor() { this._fillRange = 0.25; }
+    get fillRange() { throw new Error('Sprite fillRange getter must not run in an assertion'); }
+  }
+  Sprite.prototype.__classname__ = 'cc.Sprite';
+  const node = { _components: [new Sprite()] };
+  assert.deepEqual(readPreviewComponentProperty(node, 'cc.Sprite', 'fillRange'), { found: true, actual: 0.25 });
+  node._components[0]._fillRange = 0.75;
+  assert.deepEqual(readPreviewComponentProperty(node, 'cc.Sprite', 'fillRange'), { found: true, actual: 0.75 });
+});
+
 test('preview assertions read Creator 2.4 Slider progress from serialized storage without invoking its getter', () => {
   class Slider {
     constructor() { this._N$progress = 0.78; }

@@ -8,7 +8,7 @@
 
 本能力当前只面向 Creator **2.4.15**。3.8.7 没有新增 Prefab 源编辑命令。
 
-## 当前 CLI 范围（0.12.55 / 扩展 0.8.70）
+## 当前 CLI 范围（0.12.62 / 扩展 0.8.111）
 
 当前 `creator.prefab.source.patch` 除节点名称、激活状态、二维位置/缩放，以及 Sprite/Label 的启用状态和 SpriteFrame 外，还支持通过 Creator Inspector 元数据读取和写入**已声明、公开、可序列化的组件属性**。值类型包括受限标量/枚举、向量、Size、Rect、Color、最多 32 项的声明类型数组、AssetDB 资源，以及有稳定身份的 Prefab 内节点/组件引用；赋值仍由 Creator Prefab 编辑模式执行，并须完成保存、退出、重开和磁盘读回。它不接受任意原始序列化字段或任意 JS 对象。
 
@@ -19,7 +19,7 @@
 - `creator.prefab.source.inspect`：只读解析 `.prefab` 和 `.meta`，以 Prefab UUID 定位唯一资源，返回源 SHA-256、节点路径/UUID、层级、有限组件摘要和受支持字段当前值。
 - `creator.prefab.source.patch.plan/commit/reconcile`：针对一个节点的一组白名单字段执行 `apply`、`compensate` 或 `replay`，并写入持久操作记录。除节点和声明属性外，可编辑受支持组件的 UI 事件列表；事件目标和 handler 都必须解析到当前 Prefab 内的精确身份。
 
-节点字段使用有限白名单，含同一父节点内的 sibling index；该字段还必须绑定父节点 ID，且索引必须落在当前子节点列表范围内。换父级使用 `node.parent`，精确绑定 before/after 父节点 UUID、Prefab 内路径与 siblingIndex；一次只移动一个非根节点，目标必须在同一 Prefab 内且不能构成循环，插入索引不得超出目标父级子节点范围。`node.child` 精确绑定父节点完整的直接子节点列表，一次只插入或移除一个没有组件、没有后代的叶子节点。新增的 `node.subtree` 可一次插入至多 16 个节点、深度至多 4 的无组件子树；各节点 ID 在计划阶段生成，删除仅允许由 source-linked compensate 精确移除本次添加的整棵子树。该路径已通过结构校验、模拟 Creator 节点树以及 Creator 2.4.15 Tank 实机两节点插入/补偿、保存、退出重开和源哈希往返验收。`component.structure` 一次只向一个节点追加一个注册的内置组件，并绑定组件类、索引和计划阶段生成的组件 ID；source-linked compensate 仅删除该源操作新建的精确组件，且要求没有组件依赖。组件字段由 Creator 实时 Inspector 元数据约束，并绑定组件实例、序列化类、属性名和 before/after 值；受支持类型见上面的当前 CLI 范围。UI 事件列表使用单独的事件字段白名单，并绑定组件身份、事件属性、Prefab 内目标节点、目标组件及 handler。既有组件直接删除、用户脚本组件创建和任意原始序列化字段仍不开放。
+节点字段使用有限白名单，含同一父节点内的 sibling index；该字段还必须绑定父节点 ID，且索引必须落在当前子节点列表范围内。换父级使用 `node.parent`，精确绑定 before/after 父节点 UUID、Prefab 内路径与 siblingIndex；一次只移动一个非根节点，目标必须在同一 Prefab 内且不能构成循环，插入索引不得超出目标父级子节点范围。`node.child` 精确绑定父节点完整的直接子节点列表，一次只插入或移除一个没有组件、没有后代的叶子节点。`node.subtree` 可一次插入至多 16 个节点、深度至多 4 的无组件子树；各节点 ID 在计划阶段生成，删除仅允许由 source-linked compensate 精确移除本次添加的整棵子树。该路径已通过 Creator 2.4.15 Tank 实机插入、补偿、保存、退出重开和源哈希往返验收。`component.structure` 一次只向一个节点追加一个注册的内置或项目脚本组件，并绑定组件类、索引和计划阶段生成的组件 ID；source-linked compensate 仅删除该源操作新建的精确组件，且要求没有组件依赖。已有组件可通过 `apply` 删除，但仅限末尾、无依赖的注册内置 `cc.*` 组件；计划必须捕获 enabled、稳定/合成身份和所有公开 Inspector 可序列化字段，字段类型限受支持的标量、向量、Size、Rect、Color，且组件不得含未捕获事件列表。来源补偿按捕获身份重新添加组件，并经 Creator setter 恢复字段；已在 Creator 2.4.15 实机覆盖 `cc.BlockInputEvents.enabled` 与 `cc.ToggleGroup.allowSwitchOff`。引用、数组、不支持的字段类型、组件依赖、非末尾组件和不满足读回约束的情况继续拒绝。组件字段由 Creator 实时 Inspector 元数据约束，并绑定组件实例、序列化类、属性名和 before/after 值；受支持类型见上面的当前 CLI 范围。UI 事件列表使用单独的事件字段白名单，并绑定组件身份、事件属性、Prefab 内目标节点、目标组件及 handler。任意原始序列化字段仍不开放。
 
 ## 一轮写入的合同
 
@@ -47,7 +47,7 @@
 
 ## 当前验证状态
 
-当前 CLI（0.12.55 / Creator 扩展 0.8.69）已有 Prefab 源编辑合同、Creator 场景进程实现、受限 UI 事件列表写入、同父节点顺序变更、同 Prefab 节点换父级、单个空叶子子节点插入/删除及单个内置组件追加/补偿删除实现。Creator 2.4.15 Tank 的节点字段及 `cc.BlockInputEvents.enabled`、`cc.Label.fontSize` apply/compensate 实机往返是在扩展 0.8.55 下完成；随后 reconciliation 分类修复随扩展 0.8.56 更新并经 CLI 退出/重开确认加载。0.8.59 的 `cc.Button.clickEvents`、0.8.63 的同父节点 sibling index、0.8.65 的同 Prefab 节点换父级，以及 0.8.66 的空叶子子节点插入/删除 apply/compensate 均通过 Creator CLI 实机验收；其他支持的 UI 事件属性尚无实机写入证据。组件属性全类型、非叶子子树编辑以及既有组件直接删除仍未完成；组件追加只支持一个内置 `cc.*` 类，删除只支持对本操作新增组件的 source-linked compensate。不能把部分实机覆盖写成任意 Prefab 编辑已完成。
+当前 CLI 0.12.62 / Creator 扩展 0.8.111 包含 Prefab 源编辑合同、Creator 场景进程实现、受限 UI 事件列表写入、同父节点顺序变更、同 Prefab 节点换父级、空叶子节点增删、有限子树插入、公开属性写入和组件结构编辑。Creator 2.4.15 Tank 已验收的 Prefab 闭环包含节点字段、Button clickEvents、组件追加与来源补偿、`cc.BlockInputEvents.enabled`、`cc.Label.fontSize`、`cc.ToggleGroup.allowSwitchOff`、兄弟顺序、换父级、空叶子节点和子树插入。既有组件删除在 0.8.108 下通过 `cc.BlockInputEvents` 和 `cc.ToggleGroup` 实机删除、来源补偿、Creator 关闭/重开、字段读回与哈希核验；默认值已等于恢复值时的 setter 无变化冲突也有自动化回归。扩展 0.8.109 修正 Prefab 组件属性数组新增资产引用时磁盘读回丢失元素 Inspector 类型元数据的问题，并已在 Creator 2.4.15 对 `cc.Sprite.materials` 的 Material UUID 做追加、来源补偿、整工程 CLI 关闭/重开及 Prefab/`.meta` 精确哈希恢复验收。扩展 0.8.110 将磁盘 `null` 按 Inspector 声明恢复为 typed empty node/component reference；Tank 的 `cc.Button.target` 已通过 Prefab 内节点引用写入、Creator 读回、来源补偿和整工程 CLI 关闭/重开，Prefab 与 `.meta` 哈希恢复。扩展 0.8.111 为未序列化 `_id` 的 Prefab 组件引用生成稳定身份，并在 Creator 实机通过 `cc.Slider.handle` 指向同 Prefab 根 `cc.Button`、Inspector 读回、来源补偿、整工程 CLI 关闭/重开和精确哈希恢复。详见[Prefab 资源数组轨迹](../../docs/agent-foundation/traces/cocos-creator-cli-prefab-asset-array-acceptance-20261025.md)、[Prefab 空引用轨迹](../../docs/agent-foundation/traces/cocos-creator-cli-prefab-null-reference-acceptance-20261025.md)和[Prefab 组件引用轨迹](../../docs/agent-foundation/traces/cocos-creator-cli-prefab-component-reference-acceptance-20261025.md)。其他 UI 事件属性、数组资源引用的更多组件/资源组合、全部 Inspector 类型、非叶子子树及任意多组件编辑仍待逐项验收。不能把部分实机覆盖写成任意 Prefab 编辑已完成。
 
 以下 0.3.x 扩展记录是历史原型验证，不代表 CLI 的当前运行时证据：
 

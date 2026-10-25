@@ -1,6 +1,6 @@
 {
   "name": "cocos-creator-agent-cli",
-  "version": "0.12.59",
+  "version": "0.12.62",
   "type": "module",
   "description": "Standalone Cocos Creator 2.4.15 CLI with MCP configuration, Agent Skills, bridge, and project extension management.",
   "repository": {

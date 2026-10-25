@@ -197,7 +197,7 @@
     {
       "id": "creator.prefab.source.patch.plan",
       "access": "plan",
-      "description": "Plan edits to an existing Prefab in Creator Prefab edit mode, including node fields, same-parent sibling order, bounded in-Prefab reparenting, one empty leaf child or componentless subtree insertion/removal (up to 16 nodes and depth 4), append of one registered built-in Cocos component, declared public Inspector-serializable component properties, and supported UI event lists. Child edits bind the exact parent child list; AUTO node IDs are accepted only for planned insertion and replaced with generated stable IDs. Component structure edits append one exact registered cc.* class at the end of the component list; removal is allowed only as source-linked compensation of that addition. Reparenting binds both exact parent paths and sibling positions, rejects cycles and root movement, and appends at an explicit target index. Event targets must be stable nodes inside the same Prefab and their handler component/method must resolve; compensation and replay derive their inverse from a completed source operation.",
+      "description": "Plan edits to an existing Prefab in Creator Prefab edit mode, including node fields, same-parent sibling order, bounded in-Prefab reparenting, one empty leaf child or componentless subtree insertion/removal (up to 16 nodes and depth 4), append of one registered built-in or project script component, direct removal of a final cc.BlockInputEvents component when its enabled state can be captured and restored, declared public Inspector-serializable component properties, and supported UI event lists. Child edits bind the exact parent child list; AUTO node IDs are accepted only for planned insertion and replaced with generated stable IDs. Other existing component types can be removed only as source-linked compensation of the exact addition. Reparenting binds both exact parent paths and sibling positions, rejects cycles and root movement, and appends at an explicit target index. Event targets must be stable nodes inside the same Prefab and their handler component/method must resolve; compensation and replay derive their inverse from a completed source operation.",
       "input": { "type": "object", "required": ["prefabUuid", "targetNodePath", "targetNodeUuid", "action"], "properties": {
         "prefabUuid": { "type": "string", "minLength": 22, "maxLength": 36,
           "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
@@ -824,7 +824,7 @@
     {
       "id": "creator.scene.node.set-component-property.plan",
       "access": "plan",
-      "description": "Plan changing one declared public serializable scalar, supported typed value, bounded typed array, active-scene node reference, component-instance reference, or supported AssetDB resource property on one exact component instance. Binds the saved AssetDB .fire/.meta, component ID, serialized class ID, owning node, and property value. Arbitrary project objects, lifecycle, and internal fields are rejected.",
+      "description": "Plan changing one declared public serializable scalar, supported typed value, bounded typed array, active-scene node reference, component-instance reference, or supported AssetDB resource property on one exact component instance. Binds the saved AssetDB .fire/.meta, component ID, serialized class ID, owning node, and property value. restoreDefaultOmitted is restricted to clearing a nullable reference and restoring Creator's omitted default serialization. Arbitrary project objects, lifecycle, and internal fields are rejected.",
       "input": {
         "type": "object",
         "required": ["sceneUuid", "nodeUuid", "componentClassName", "componentInstanceId", "property", "value"],
@@ -968,7 +968,8 @@
                 "pattern": "^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9+/]{22,23})$" },
               "assetClass": { "type": "string", "maxLength": 120, "pattern": "^[A-Za-z_$][A-Za-z0-9_$.]{0,119}$" }
             }, "additionalProperties": false }
-          ] }
+          ] },
+          "restoreDefaultOmitted": { "type": "boolean" }
         },
         "additionalProperties": false
       }
