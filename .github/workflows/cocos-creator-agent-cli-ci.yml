@@ -24,6 +24,9 @@ jobs:
       - name: Run CLI test suite
         working-directory: cocos-creator-agent-cli
         run: npm test
+      - name: Check release helper syntax
+        working-directory: cocos-creator-agent-cli
+        run: node --check publish-release.mjs
       - name: Verify npm package contents
         working-directory: cocos-creator-agent-cli
         run: npm pack --dry-run --json
