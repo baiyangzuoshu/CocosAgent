@@ -151,7 +151,7 @@ test('MCP discovers a project alias and routes it through CLI to the selected Cr
   const providerCommand = { ...normalizedProvider.commands[0], providerId: 'sample-assets',
     providerFingerprint: normalizedProvider.providerFingerprint, status: 'available' };
   const registration = await bridgeRequest(bridgeState, 'POST', '/v1/creator/register', {
-    instanceId, projectRoot: canonicalRoot, creatorVersion: contract.creatorVersion,
+    instanceId, projectRoot: canonicalRoot, creatorVersion: '2.4.15',
     extensionVersion: extensionPackage.version,
     contractFingerprint: crypto.createHash('sha256').update(contractBytes).digest('hex'),
     activeScene: 'Untitled',

@@ -71,7 +71,7 @@ async function runCli(args, home) {
 async function register(state, contract, extensionPackage, instanceId, projectRoot) {
   const contractBytes = fs.readFileSync(contractPath);
   return request(state, 'POST', '/v1/creator/register', {
-    instanceId, projectRoot, creatorVersion: contract.creatorVersion,
+    instanceId, projectRoot, creatorVersion: '2.4.15',
     extensionVersion: extensionPackage.version,
     contractFingerprint: crypto.createHash('sha256').update(contractBytes).digest('hex'),
     activeScene: 'Untitled',

@@ -27,7 +27,7 @@ test('extension lifecycle installs, updates, protects drift, backs up forced rep
   const oldSource = path.join(tempRoot, 'source-0.6.2');
   const newSource = path.join(tempRoot, 'source-0.7.0');
   fs.mkdirSync(path.join(projectRoot, 'packages'), { recursive: true });
-  fs.writeFileSync(path.join(projectRoot, 'project.json'), JSON.stringify({ name: 'fixture' }));
+  fs.writeFileSync(path.join(projectRoot, 'project.json'), JSON.stringify({ name: 'fixture', version: '2.4.15' }));
   writeExtension(oldSource, '0.6.2', 'module.exports = "old";\n');
   writeExtension(newSource, '0.7.0', 'module.exports = "new";\n');
 

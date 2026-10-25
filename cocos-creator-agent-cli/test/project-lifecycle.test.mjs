@@ -23,7 +23,7 @@ function fixture() {
   return { root, source };
 }
 
-function templateFixture(root, id, version = '2.4.0') {
+function templateFixture(root, id, version = '2.4.1') {
   const templateRoot = path.join(root, 'templates');
   const templatePath = path.join(templateRoot, id);
   fs.mkdirSync(path.join(templatePath, 'assets'), { recursive: true });
@@ -125,7 +125,7 @@ test('project templates list reports local Creator 2.x templates and marks incom
   templateFixture(state.root, 'old-engine', '3.8.7');
   const result = listCreatorTemplates({ templateRoot: templates.templateRoot });
   assert.deepEqual(result.templates.map((item) => item.id), ['hello-world']);
-  assert.equal(result.templates[0].templateCreatorVersion, '2.4.0');
+  assert.equal(result.templates[0].templateCreatorVersion, '2.4.1');
   assert.equal(result.templates[0].nameKey, 'TEMPLATES.hello-world.name');
   assert.ok(result.issues.some((issue) => issue.id === 'old-engine' && issue.code === 'PROJECT_TEMPLATE_CREATOR_VERSION_UNSUPPORTED'));
 });
@@ -133,7 +133,7 @@ test('project templates list reports local Creator 2.x templates and marks incom
 test('project create stamps the selected local template for Creator 2.4.15 and preserves metadata', (t) => {
   const state = fixture();
   t.after(() => fs.rmSync(state.root, { recursive: true, force: true }));
-  const templates = templateFixture(state.root, 'hello-world');
+  const templates = templateFixture(state.root, 'hello-world', '2.4.15');
   const target = path.join(state.root, 'created');
   const result = createCreatorProject({ templateId: 'hello-world', templateRoot: templates.templateRoot,
     targetPath: target, name: 'Created Project' });
@@ -159,7 +159,7 @@ test('project CLI exposes filesystem discovery and local cloning as JSON command
   const cloned = spawnSync(process.execPath, [cli, 'project', 'clone', '--project-root', state.source, '--target', target, '--format', 'json'], { encoding: 'utf8' });
   assert.equal(cloned.status, 0, cloned.stderr);
   assert.equal(JSON.parse(cloned.stdout).projectRoot, path.join(fs.realpathSync(state.root), 'cli-clone'));
-  const templates = templateFixture(state.root, 'cli-template');
+  const templates = templateFixture(state.root, 'cli-template', '2.4.15');
   const listedTemplates = spawnSync(process.execPath, [cli, 'project', 'templates', 'list', '--template-root', templates.templateRoot, '--format', 'json'], { encoding: 'utf8' });
   assert.equal(listedTemplates.status, 0, listedTemplates.stderr);
   assert.equal(JSON.parse(listedTemplates.stdout).templates[0].id, 'cli-template');

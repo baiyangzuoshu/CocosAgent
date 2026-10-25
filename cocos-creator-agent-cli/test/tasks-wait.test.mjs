@@ -86,7 +86,7 @@ test('tasks wait returns the next durable progress event and terminal result', a
   const extensionPackage = JSON.parse(fs.readFileSync(extensionPackagePath, 'utf8'));
   const instanceId = crypto.randomUUID();
   await assert.rejects(request(state, 'POST', '/v1/creator/register', {
-    instanceId, projectRoot, creatorVersion: contract.creatorVersion, extensionVersion: '0.0.1',
+    instanceId, projectRoot, creatorVersion: '2.4.15', extensionVersion: '0.0.1',
     contractFingerprint: '0'.repeat(64), capabilities: [],
   }), /CREATOR_REGISTRATION_INVALID/);
   const rejected = await request(state, 'GET', '/v1/instances');
@@ -97,7 +97,7 @@ test('tasks wait returns the next durable progress event and terminal result', a
     command: 'creator.project.info', input: {},
   }), /INSTANCE_NOT_FOUND/);
   const registration = await request(state, 'POST', '/v1/creator/register', {
-    instanceId, projectRoot, creatorVersion: contract.creatorVersion,
+    instanceId, projectRoot, creatorVersion: '2.4.15',
     extensionVersion: extensionPackage.version,
     contractFingerprint: crypto.createHash('sha256').update(contractBytes).digest('hex'),
     processId: 4321,

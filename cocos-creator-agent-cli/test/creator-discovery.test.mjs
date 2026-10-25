@@ -73,7 +73,7 @@ test('Windows Creator discovery reads the packaged Creator version and finds Das
   const supported = windowsCreatorInstall(dashboardRoot, '2.4.15');
   const templatePath = path.join(supported.installRoot, 'resources', 'templates', 'hello-world');
   fs.mkdirSync(templatePath, { recursive: true });
-  fs.writeFileSync(path.join(templatePath, 'project.json'), JSON.stringify({ version: '2.4.0' }));
+  fs.writeFileSync(path.join(templatePath, 'project.json'), JSON.stringify({ version: '2.4.1' }));
   const unsupported = windowsCreatorInstall(dashboardRoot, '3.8.7');
   const inventory = discoverCreatorInstallations({ platform: 'win32', searchRoots: [dashboardRoot] });
   assert.equal(inventory.supported, true);
