@@ -247,7 +247,9 @@ test('MCP discovers a project alias and routes it through CLI to the selected Cr
   assert.ok(composeCommitTool, 'Scene-composition commit tool was not discovered from the shared CLI catalog.');
   assert.ok(composeReconcileTool, 'Scene-composition reconcile tool was not discovered from the shared CLI catalog.');
   assert.deepEqual(composePlanTool.inputSchema.required,
-    ['instanceId', 'sceneUuid', 'nodes', 'components', 'buttonEvents']);
+    ['instanceId', 'sceneUuid', 'nodes', 'components']);
+  assert.ok(composePlanTool.inputSchema.properties.buttonEvents,
+    'Legacy buttonEvents input remains available as an optional compatibility field.');
   assert.equal(composeCommitTool.annotations.destructiveHint, true);
   assert.deepEqual(composeReconcileTool.inputSchema.required, ['instanceId', 'operationId']);
   const recompilePlanTool = listing.tools.find((item) => item.name === 'cocos_script_recompile_plan');

@@ -100,7 +100,7 @@ test('Cursor local MCP configure preserves other servers, reports status, and re
   assert.equal(configureMcp('cursor', options).status, 'already-configured');
   assert.equal(removeMcp('cursor', options).status, 'removed');
   assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), { mcpServers: { other: { command: 'other-server', args: [] } } });
-  assert.deepEqual(supportedMcpClients().map(({ id }) => id), ['codex', 'claude-code', 'cursor', 'vscode']);
+  assert.deepEqual(supportedMcpClients().map(({ id }) => id), ['codex', 'claude-code', 'cursor', 'vscode', 'deepseek-harness']);
 });
 
 test('VS Code MCP configure uses its servers schema and supports a dry run without creating files', (t) => {
