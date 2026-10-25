@@ -1,6 +1,6 @@
 # Cocos Creator 2.4.x 第三方 Agent Skill 系统
 
-更新日期：2026-10-25。CLI 包版本为 `1.0.0`，Creator 扩展为 `0.8.127`；此前自动化测试 `371/371` 通过（本次版本范围改动未重跑）；CLI 当前接受 Creator `2.4.1`–`2.4.16`，自动按 `2.4.16` 到 `2.4.1` 降序选择；实机版本证据仍只覆盖 `2.4.15`。Tank 项目已通过 CLI 关闭、重开和 doctor `9/9` 检查。UI 组件接口与实机证据见 [UI 验收矩阵](cocos-cli-ui-acceptance-matrix-2.4.15.md)；Prefab 已验收直接删除既有末尾 `cc.BlockInputEvents` 并来源补偿恢复、Material 数组资源追加，以及 Button.target 节点引用和 Slider.handle 组件引用往返；其他既有组件删除和数组/属性组合仍未完成。完整命令、版本、能力边界及各类编辑记录以[独立 CLI README](../../cocos-creator-agent-cli/README.md)为准。Creator 原生 CocosAgent 已移除，旧插件仅作 CLI 引导。另有 5 项可选 SDK Skills。
+更新日期：2026-10-25。CLI 源码包版本为 `1.0.0`（尚未发布；GitHub 最新 Release 为 `0.11.1`），Creator 扩展为 `0.8.127`；此前自动化测试 `371/371` 通过（本次版本范围改动未重跑）；CLI 当前接受 Creator `2.4.1`–`2.4.16`，自动按 `2.4.16` 到 `2.4.1` 降序选择；实机版本证据仍只覆盖 `2.4.15`。Tank 项目已通过 CLI 关闭、重开和 doctor `9/9` 检查。UI 组件接口与实机证据见 [UI 验收矩阵](cocos-cli-ui-acceptance-matrix-2.4.15.md)；Prefab 已验收直接删除既有末尾 `cc.BlockInputEvents` 并来源补偿恢复、Material 数组资源追加，以及 Button.target 节点引用和 Slider.handle 组件引用往返；其他既有组件删除和数组/属性组合仍未完成。完整命令、版本、能力边界及各类编辑记录以[独立 CLI README](../../cocos-creator-agent-cli/README.md)为准。Creator 原生 CocosAgent 已移除，旧插件仅作 CLI 引导。另有 5 项可选 SDK Skills。
 
 ## 产品边界
 
