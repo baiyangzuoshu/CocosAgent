@@ -7,10 +7,14 @@ import { fileURLToPath } from 'node:url';
 const PACKAGE_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const MARKER = '.cocos-creator-agent-managed.json';
 
-function skillRoot(client, { local = false, cwd = process.cwd(), home = os.homedir(), env = process.env } = {}) {
+function skillRoot(client, { local = false, cwd = process.cwd(), home = os.homedir(), env = process.env, dshHome } = {}) {
   if (client === 'codex') return local ? path.join(cwd, '.agents', 'skills') : path.join(env.CODEX_HOME || path.join(home, '.codex'), 'skills');
   if (client === 'claude-code') return local ? path.join(cwd, '.claude', 'skills') : path.join(env.CLAUDE_CONFIG_DIR || path.join(home, '.claude'), 'skills');
-  throw new Error('CLIENT_UNSUPPORTED: choose codex or claude-code');
+  if (client === 'deepseek-harness') {
+    if (local) throw new Error('DSH_LOCAL_SKILLS_UNSUPPORTED: install to the DeepSeek Harness user skill directory.');
+    return path.join(dshHome || env.DSH_HOME || path.join(home, '.dsh'), 'skills');
+  }
+  throw new Error('CLIENT_UNSUPPORTED: choose codex, claude-code, or deepseek-harness');
 }
 
 function listFiles(root, relative = '') {
@@ -128,8 +132,8 @@ export function showSkill(name, { skillsRoot = path.join(PACKAGE_ROOT, 'skills')
 
 export function installSkills(client, { local = false, force = false, dryRun = false, selected = [],
   cwd = process.cwd(), home = os.homedir(), env = process.env, packageVersion = 'unknown',
-  skillsRoot = path.join(PACKAGE_ROOT, 'skills'), referencesRoot = path.join(PACKAGE_ROOT, 'references', '2x') } = {}) {
-  const targetRoot = skillRoot(client, { local, cwd, home, env });
+  skillsRoot = path.join(PACKAGE_ROOT, 'skills'), referencesRoot = path.join(PACKAGE_ROOT, 'references', '2x'), dshHome } = {}) {
+  const targetRoot = skillRoot(client, { local, cwd, home, env, dshHome });
   const names = selected.length ? [...new Set(selected)] : availableSkills({ skillsRoot });
   const known = new Set(availableSkills({ skillsRoot }));
   for (const name of names) if (!known.has(name)) throw new Error(`SKILL_NOT_FOUND: ${name}`);
@@ -152,8 +156,8 @@ export function installSkills(client, { local = false, force = false, dryRun = f
 }
 
 export function listSkillStatus(client, { local = false, cwd = process.cwd(), home = os.homedir(), env = process.env,
-  skillsRoot = path.join(PACKAGE_ROOT, 'skills') } = {}) {
-  const root = skillRoot(client, { local, cwd, home, env });
+  skillsRoot = path.join(PACKAGE_ROOT, 'skills'), dshHome } = {}) {
+  const root = skillRoot(client, { local, cwd, home, env, dshHome });
   return availableSkills({ skillsRoot }).map((name) => {
     const target = path.join(root, name);
     if (!fs.existsSync(target)) return { name, status: 'not-installed', target };

@@ -36,8 +36,8 @@ const HELP_LINES = [
   '  cloud actions workflows|runs|jobs|artifacts [--repository <owner/name>] [--project-root <path>] [--workflow <id|file>] [--run <id>] [--branch <name>] [--event <name>] [--status <status>] [--page N] [--per-page N]',
   '  cloud actions dispatch --workflow <id|file> --ref <branch|tag> [--inputs <json-object>] [--repository <owner/name>] [--project-root <path>]',
   '  cloud actions cancel --run <id> [--repository <owner/name>] [--project-root <path>]',
-  '  mcp configure <codex|claude-code|cursor|vscode> [--local] [--force] [--dry-run] | list | status <client> [--local] | remove <client> [--local] | serve',
-  '  skill list [<codex|claude-code>] [--local] | show [<skill-name>|--list] (default: cocos2-cli) | install <client> [--local] [--skill <name>] [--force] | refresh <client> [--local] [--force]',
+  '  mcp configure <codex|claude-code|cursor|vscode|deepseek-harness> [--local] [--profile <name>] [--dsh-home <path>] [--force] [--dry-run] | list | status <client> [--local] [--profile <name>] [--dsh-home <path>] | remove <client> [--local] [--profile <name>] [--dsh-home <path>] | serve',
+  '  skill list [<codex|claude-code|deepseek-harness>] [--local] [--dsh-home <path>] | show [<skill-name>|--list] (default: cocos2-cli) | install <client> [--local] [--dsh-home <path>] [--skill <name>] [--force] | refresh <client> [--local] [--dsh-home <path>] [--force]',
   '  doctor [--project-root <absolute-path>] [--instance <instance-id>]',
   '  vcs doctor --git-root <absolute-path> --project-root <absolute-path>',
   '  vcs status --git-root <absolute-path> --project-root <absolute-path>',
@@ -271,31 +271,33 @@ async function main() {
         status: mcpStatus(client.id).status })) });
       return;
     }
+    const dshOptions = { profile: value('--profile') || 'web', dshHome: value('--dsh-home') };
     if (action === 'status') {
       const client = rest[0];
-      print(mcpStatus(client, { local: args.includes('--local') }));
+      print(mcpStatus(client, { local: args.includes('--local'), ...dshOptions }));
       return;
     }
     if (action === 'configure') {
       const client = rest[0];
-      print(configureMcp(client, { force: args.includes('--force'), local: args.includes('--local'), dryRun: args.includes('--dry-run') }));
+      print(configureMcp(client, { force: args.includes('--force'), local: args.includes('--local'), dryRun: args.includes('--dry-run'), ...dshOptions }));
       return;
     }
     if (action === 'remove') {
       const client = rest[0];
       const local = args.includes('--local');
-      const current = mcpStatus(client, { local });
+      const current = mcpStatus(client, { local, ...dshOptions });
       if (current.status === 'not-configured' || current.status === 'client-not-installed') {
         print({ client, server: 'cocos-creator-agent', status: current.status });
         return;
       }
       if (current.status !== 'configured') throw new Error(`MCP_SERVER_CONFLICT: ${client} has a different ${current.server} configuration; remove it through the client after reviewing it.`);
-      print(removeMcp(client, { local }));
+      print(removeMcp(client, { local, ...dshOptions }));
       return;
     }
     throw new Error('Unknown MCP action. Use mcp --help.');
   }
   if (group === 'skill') {
+    const skillOptions = { local: args.includes('--local'), dshHome: value('--dsh-home') };
     if (action === 'show') {
       if (args.includes('--list')) { print(showSkill(undefined, { list: true })); return; }
       const name = rest.find((item) => !item.startsWith('--')) || 'cocos2-cli';
@@ -306,7 +308,7 @@ async function main() {
     }
     if (action === 'list') {
       const client = rest.find((item) => !item.startsWith('--'));
-      if (client) print({ client, skills: listSkillStatus(client, { local: args.includes('--local') }) });
+      if (client) print({ client, skills: listSkillStatus(client, skillOptions) });
       else print({ skills: availableSkills().map((name) => ({ name, path: `skills/${name}/SKILL.md` })) });
       return;
     }
@@ -314,14 +316,14 @@ async function main() {
       const client = rest[0];
       const selected = args.flatMap((item, index) => item === '--skill' && args[index + 1] ? [args[index + 1]] : []);
       const managed = action === 'refresh' && selected.length === 0
-        ? listSkillStatus(client, { local: args.includes('--local') }).filter((item) => ['installed', 'modified'].includes(item.status)).map((item) => item.name)
+        ? listSkillStatus(client, skillOptions).filter((item) => ['installed', 'modified'].includes(item.status)).map((item) => item.name)
         : selected;
-      if (!['codex', 'claude-code'].includes(client)) throw new Error('SKILL_CLIENT_REQUIRED: choose codex or claude-code');
+      if (!['codex', 'claude-code', 'deepseek-harness'].includes(client)) throw new Error('SKILL_CLIENT_REQUIRED: choose codex, claude-code, or deepseek-harness');
       if (action === 'refresh' && selected.length === 0 && managed.length === 0) {
         print({ client, scope: args.includes('--local') ? 'project' : 'user', results: [], success: true, installedCount: 0 });
         return;
       }
-      const result = installSkills(client, { local: args.includes('--local'), force: args.includes('--force'),
+      const result = installSkills(client, { ...skillOptions, force: args.includes('--force'),
         dryRun: args.includes('--dry-run'), selected: managed, packageVersion: packageInfo.version });
       print(result);
       if (!result.success) process.exitCode = 1;

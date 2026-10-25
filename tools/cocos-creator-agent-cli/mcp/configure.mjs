@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { configureDeepseekHarness, deepseekHarnessStatus, removeDeepseekHarness } from './deepseek-harness.mjs';
 
 export const MCP_SERVER_NAME = 'cocos-creator-agent';
 
@@ -192,9 +193,12 @@ function isExpectedConfig(client, stdout, invocation) {
 
 export function configureMcp(client, { force = false, local = false, dryRun = false, runner = defaultRunner,
   nodePath = process.execPath, cliEntry = process.argv[1] || DEFAULT_CLI_ENTRY, cwd = process.cwd(), home = os.homedir(),
-  env = process.env, platform = process.platform } = {}) {
+  env = process.env, platform = process.platform, dshHome, profile = 'web' } = {}) {
   if (client === 'codex' && local) throw new Error('CODEX_LOCAL_MCP_SCOPE_UNSUPPORTED: Codex mcp add writes user configuration.');
+  if (client === 'deepseek-harness' && local) throw new Error('DSH_LOCAL_MCP_SCOPE_UNSUPPORTED: configure a DeepSeek Harness profile instead.');
   const invocation = cliInvocation({ nodePath, cliEntry });
+  if (client === 'deepseek-harness') return configureDeepseekHarness(invocation,
+    { home, env, dshHome, profile, force, dryRun });
   if (client === 'cursor' || client === 'vscode') {
     const location = fileClientLocation(client, { local, cwd, home, env, platform });
     return writeFileClientConfig(client, location, { force, dryRun, invocation });
@@ -224,8 +228,12 @@ export function configureMcp(client, { force = false, local = false, dryRun = fa
 
 export function mcpStatus(client, { runner = defaultRunner, nodePath = process.execPath,
   cliEntry = process.argv[1] || DEFAULT_CLI_ENTRY, local = false, cwd = process.cwd(), home = os.homedir(),
-  env = process.env, platform = process.platform } = {}) {
+  env = process.env, platform = process.platform, dshHome, profile = 'web' } = {}) {
   const invocation = cliInvocation({ nodePath, cliEntry });
+  if (client === 'deepseek-harness') {
+    if (local) return { client, server: MCP_SERVER_NAME, status: 'client-error', error: 'DSH_LOCAL_MCP_SCOPE_UNSUPPORTED' };
+    return deepseekHarnessStatus(invocation, { home, env, dshHome, profile });
+  }
   if (client === 'cursor' || client === 'vscode') {
     try { return fileClientStatus(client, fileClientLocation(client, { local, cwd, home, env, platform }), invocation); }
     catch (error) { return { client, server: MCP_SERVER_NAME, status: 'client-error', error: error.message }; }
@@ -245,13 +253,18 @@ export function supportedMcpClients() {
     { id: 'claude-code', configureCommand: 'claude mcp add', scope: 'user or local' },
     { id: 'cursor', configureCommand: 'edit MCP JSON config', scope: 'user or local' },
     { id: 'vscode', configureCommand: 'code --add-mcp or MCP JSON config', scope: 'user or local' },
+    { id: 'deepseek-harness', configureCommand: 'edit profile cordis.patch.yml', scope: 'user; profile defaults to web' },
   ];
 }
 
 export function removeMcp(client, { local = false, runner = defaultRunner, nodePath = process.execPath,
   cliEntry = process.argv[1] || DEFAULT_CLI_ENTRY, cwd = process.cwd(), home = os.homedir(), env = process.env,
-  platform = process.platform } = {}) {
+  platform = process.platform, dshHome, profile = 'web' } = {}) {
   const invocation = cliInvocation({ nodePath, cliEntry });
+  if (client === 'deepseek-harness') {
+    if (local) throw new Error('DSH_LOCAL_MCP_SCOPE_UNSUPPORTED: configure a DeepSeek Harness profile instead.');
+    return removeDeepseekHarness(invocation, { home, env, dshHome, profile });
+  }
   if (client === 'cursor' || client === 'vscode') {
     const location = fileClientLocation(client, { local, cwd, home, env, platform });
     const current = inspectConfigPath(location);

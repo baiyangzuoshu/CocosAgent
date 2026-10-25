@@ -1,13 +1,13 @@
 # Cocos Creator 第三方 Host 接入实现 0.1
 
-日期：2026-10-18（2026-10-21 更新）。范围：Codex / Claude Code → 独立 CLI（MCP 配置与 Skills 安装）→ 本机桥接 → Creator 2.4.15 项目扩展。CLI 0.11.0 / Creator 扩展 0.7.0 已在 `tank` 完成真实 Creator 脚本创建、批准式修改、恢复、哈希回读与错误前态拒绝；CLI/MCP 命令共用同一实例。临时验收脚本已通过 Creator 删除，工程 AssetDB 查询为空，活动场景恢复为默认 `New Node`。Creator 编译回执仍为 pending，不能判通过。CLI 全局安装和本地桥接 `doctor` 最新为 8/8 通过、33 条命令可用；0.11.0 本地 tarball 已生成并安装。GitHub Release 页面仍以 0.10.6 为 latest，显示账户 billing 问题；线上 Release、自更新和回滚仍未验收。详见[本轮验收](traces/cocos-cli-0.10.0-goal-20261020.md)、[测试合同](../../tools/cocos-creator-agent-cli/references/2x/14-project-test-runner.md)与[后续能力评估](cocos-cli-vcs-template-assets-evaluation-20261020.md)。
+日期：2026-10-18（2026-10-25 更新）。范围：Codex / Claude Code / Cursor / VS Code / DeepSeek Harness → 独立 CLI（MCP 配置与 Skills 安装）→ 本机桥接 → Creator 2.4.15 项目扩展。CLI 0.11.0 / Creator 扩展 0.7.0 已在 `tank` 完成真实 Creator 脚本创建、批准式修改、恢复、哈希回读与错误前态拒绝；CLI/MCP 命令共用同一实例。临时验收脚本已通过 Creator 删除，工程 AssetDB 查询为空，活动场景恢复为默认 `New Node`。Creator 编译回执仍为 pending，不能判通过。CLI 全局安装和本地桥接 `doctor` 最新为 8/8 通过、33 条命令可用；0.11.0 本地 tarball 已生成并安装。GitHub Release 页面仍以 0.10.6 为 latest，显示账户 billing 问题；线上 Release、自更新和回滚仍未验收。详见[本轮验收](traces/cocos-cli-0.10.0-goal-20261020.md)、[测试合同](../../tools/cocos-creator-agent-cli/references/2x/14-project-test-runner.md)与[后续能力评估](cocos-cli-vcs-template-assets-evaluation-20261020.md)。
 
 ## 目标链路
 
 ```text
-Codex / Claude Code
-  ├─ MCP 客户端原生配置 ← cocos-creator-agent mcp configure
-  └─ Codex/Claude 原生 Skill 目录 ← cocos-creator-agent skill install/refresh
+Codex / Claude Code / Cursor / VS Code / DeepSeek Harness
+  ├─ Host MCP 配置 ← cocos-creator-agent mcp configure
+  └─ Host Skill 目录 ← cocos-creator-agent skill install/refresh
                         ↓ stdio MCP
               独立安装与升级的本机 Cocos CLI
                 ├─ 内置 MCP server 与 Host 配置管理
@@ -29,15 +29,23 @@ Codex / Claude Code
                 └─ 截图证据（写入项目外）
 ```
 
-`mcp configure` 通过 Codex / Claude Code 原生命令，或 Cursor / VS Code 的标准 JSON 配置，注册 CLI 的 `mcp serve`；MCP server、命令 catalog 与 Creator 调用都由 CLI 包持有。JSON 配置更新保留其他服务、原子写入并拒绝符号链接、无效 JSON 和同名漂移覆盖。`skill install` 将 CLI 包内路由/专项 Skills 和参考资料装入 Codex/Claude 原生 Skill 目录；可按 Skill 选择、项目/用户作用域安装、预览、刷新和冲突备份。仓库保留的 `plugins/cocos-creator-agent/` 只提供旧式插件安装场景的 CLI 引导 Skill，不承载 MCP server 或 Creator 工作流 Skill 正文。CLI 不依赖 Codex、Claude、Cursor、VS Code 或 Creator 原生 CocosAgent，可以单独供人、脚本和 CI 使用。Creator 扩展轮询每用户状态目录以建立会话。Host 必须先列出实例，再把明确的 `instanceId` 传给后续调用；服务不按前台窗口或“最近项目”猜目标。
+### DeepSeek Harness 接入（CLI 0.12.63）
+
+- `mcp configure deepseek-harness [--profile web] [--dsh-home <path>]` 将 CLI 的 stdio MCP server 注册进已初始化的 Harness profile `cordis.patch.yml`。修改仅限 CLI 标记区块；`status`、`list`、`remove`、`--dry-run` 与 `--force` 均可用。
+- `skill install|refresh|list deepseek-harness` 管理 Harness 用户目录 `$DSH_HOME/skills/`，默认 `~/.dsh/skills/`；参考资料放在其上级目录以保持技能内相对链接。
+- Harness 的 project/local Skill 安装尚不支持。Harness profile 需要先由 DeepSeek Harness 自己初始化。
+- 此适配依照 DeepSeek Harness MCP/Skills 文件合同实现；尚未在用户 Harness 实例中连接、重载并调用实际 Creator 工具，不能当作 Harness 实机验收。
+
+`mcp configure` 通过 Codex / Claude Code 原生命令、Cursor / VS Code 的标准 JSON 配置，或 DeepSeek Harness 所选 profile 的 `cordis.patch.yml`，注册 CLI 的 `mcp serve`；DeepSeek Harness 使用受标记管理的 `@deepseek-ai/dsh-mcp-client` stdio entry。MCP server、命令 catalog 与 Creator 调用都由 CLI 包持有。配置更新保留其他服务、原子写入并拒绝符号链接和同名漂移覆盖；Harness 配置支持自定义 profile 与 `DSH_HOME`。`skill install` 将 CLI 包内路由/专项 Skills 和参考资料装入 Codex、Claude Code 或 DeepSeek Harness 用户 Skill 目录；可按 Skill 选择、预览、刷新和冲突备份。Harness 的 project/local Skill 安装暂未暴露。仓库保留的 `plugins/cocos-creator-agent/` 只提供 CLI 引导 Skill，不承载 MCP server 或 Creator 工作流 Skill 正文。CLI 不依赖 Codex、Claude、Cursor、VS Code、DeepSeek Harness 或 Creator 原生 CocosAgent，可以单独供人、脚本和 CI 使用。Creator 扩展轮询每用户状态目录以建立会话。Host 必须先列出实例，再把明确的 `instanceId` 传给后续调用；服务不按前台窗口或“最近项目”猜目标。
 
 ## 源码职责
 
 | 文件 | 职责 |
 | --- | --- |
 | `tools/cocos-creator-agent-cli/mcp/server.mjs` | CLI 自带 MCP initialize、tools/list、tools/call 和 stdio 服务 |
-| `tools/cocos-creator-agent-cli/mcp/configure.mjs` | 通过 Codex/Claude 原生命令或 Cursor/VS Code JSON 文件安装、检查、移除 CLI MCP 配置，并拒绝同名漂移覆盖 |
-| `tools/cocos-creator-agent-cli/skills.mjs` | 展示、安装、刷新 Creator Skills；检查目标漂移并为强制替换保留备份 |
+| `tools/cocos-creator-agent-cli/mcp/configure.mjs` | 通过 Codex/Claude 原生命令、Cursor/VS Code JSON 文件或 DeepSeek Harness profile patch 安装、检查、移除 CLI MCP 配置，并拒绝同名漂移覆盖 |
+| `tools/cocos-creator-agent-cli/mcp/deepseek-harness.mjs` | 更新 Harness Cordis profile 的受标记 MCP YAML block，保留其他配置并拒绝危险路径和手改 block |
+| `tools/cocos-creator-agent-cli/skills.mjs` | 展示、安装、刷新 Creator Skills；支持 Codex、Claude Code 和 DeepSeek Harness 用户目录，检查漂移并为强制替换保留备份 |
 | `tools/cocos-creator-agent-cli/skills/` | CLI 发布包内的路由与专项 Creator Skills；唯一维护源 |
 | `tools/cocos-creator-agent-cli/references/2x/` | 随 CLI Skills 分发的 Creator 2.4.x 参考资料 |
 | `plugins/cocos-creator-agent/skills/cocos2-cli/SKILL.md` | 旧式插件安装用户的 CLI 配置引导；不含 MCP server 或领域 Skill 正文 |
