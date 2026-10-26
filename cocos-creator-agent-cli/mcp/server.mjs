@@ -112,6 +112,8 @@ const commandToolAdapters = [
   { commandId: 'creator.script.create.commit', name: 'cocos_script_create_commit' },
   { commandId: 'creator.script.create.reconcile', name: 'cocos_script_create_reconcile' },
   { commandId: 'creator.diagnostics.read', name: 'cocos_diagnostics_read' },
+  { commandId: 'creator.diagnostics.snapshot', name: 'cocos_diagnostics_snapshot' },
+  { commandId: 'creator.diagnostics.runtime', name: 'cocos_diagnostics_runtime' },
   { commandId: 'creator.preview.start', name: 'cocos_preview_start' },
   { commandId: 'creator.preview.observe', name: 'cocos_preview_observe' },
   { commandId: 'creator.preview.screenshot', name: 'cocos_preview_screenshot' },

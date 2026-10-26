@@ -16,6 +16,7 @@ const prefabInstanceOperations = require('./prefab-instance-operations.cjs');
 const editorScriptEval = require('./editor-script-eval.cjs');
 const { scanAssetReferences } = require('./asset-references.cjs');
 const assetImportOperations = require('./asset-import-operations.cjs');
+const diagnosticAssets = require('./diagnostics-assets.cjs');
 const contract = require('./command-contract.json');
 const { normalizeProvider, validateArguments, canonical, PROVIDER_ID, COMMAND_ID } = require('./provider-contract.cjs');
 
@@ -301,6 +302,24 @@ function readDiagnostics(input) {
         sequence: diagnosticSequence, oldestSequence: diagnosticEvents[0]?.sequence || diagnosticSequence + 1,
         truncated: afterSequence > 0 && diagnosticEvents[0] && afterSequence < diagnosticEvents[0].sequence - 1,
         latestCompile, events: selected };
+}
+
+async function readDomainDiagnosticsSnapshot(input) {
+    const scene = await callScene('snapshot', { maxNodes: input.maxNodes || 100 }, 10000);
+    if (!scene || scene.available !== true) return { schemaVersion: 1, available: false,
+        reason: scene && scene.reason || 'SCENE_SNAPSHOT_UNAVAILABLE', source: 'creator-editor',
+        instanceId: INSTANCE_ID, projectRoot: projectRoot(), creatorVersion: editorVersion(), scene };
+    const collected = diagnosticAssets.collectDiagnosticAssetUuids(scene.nodes || []);
+    const assetIndex = diagnosticAssets.queryDiagnosticAssets(collected.assetUuids,
+        Editor && Editor.assetdb, collected.complete);
+    let projectName = path.basename(projectRoot());
+    try {
+        const metadata = JSON.parse(fs.readFileSync(path.join(projectRoot(), 'project.json'), 'utf8'));
+        if (typeof metadata.name === 'string' && metadata.name) projectName = metadata.name;
+    } catch (_) {}
+    return { schemaVersion: 1, available: true, source: 'creator-editor', capturedAt: new Date().toISOString(),
+        instanceId: INSTANCE_ID, projectRoot: projectRoot(), projectName, creatorVersion: editorVersion(),
+        domains: input.domains, scene, assetIndex };
 }
 
 
@@ -8122,6 +8141,7 @@ function capabilityList() {
         'creator.script.recompile.reconcile': !!(Editor && Editor.assetdb && typeof Editor.assetdb.queryAssets === 'function'),
         'creator.diagnostics.read': !!(Editor && ((Editor.Builder && typeof Editor.Builder.on === 'function')
             || (Editor.Ipc && typeof Editor.Ipc.on === 'function'))),
+        'creator.diagnostics.snapshot': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'),
         'creator.preview.start': !!(Editor && Editor.Scene && typeof Editor.Scene.callSceneScript === 'function'
             && Editor.Ipc && typeof Editor.Ipc.sendToPanel === 'function'),
     };
@@ -8606,8 +8626,9 @@ function execute(command, input, context) {
     if (command === 'creator.script.recompile.commit') return commitScriptRecompile(input, context);
     if (command === 'creator.script.recompile.reconcile') return reconcileScriptRecompile(input);
     if (command === 'creator.diagnostics.read') return Promise.resolve(readDiagnostics(input));
+    if (command === 'creator.diagnostics.snapshot') return readDomainDiagnosticsSnapshot(input);
     if (command === 'creator.preview.start') return startPreview(input, context);
-    if (command.startsWith('creator.preview.')) throw coded('BRIDGE_OWNED_COMMAND');
+    if (command.startsWith('creator.preview.') || command === 'creator.diagnostics.runtime') throw coded('BRIDGE_OWNED_COMMAND');
     throw coded('UNKNOWN_COMMAND');
 }
 

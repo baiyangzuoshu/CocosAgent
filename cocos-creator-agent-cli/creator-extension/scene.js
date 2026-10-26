@@ -134,6 +134,7 @@ function componentSemanticDetail(component, index) {
         properties[property] = semanticPropertyValue(descriptor.value);
     }
     const detail = { index, className, properties };
+    if (component && typeof component.enabled === 'boolean') detail.enabled = component.enabled;
     const clickEvents = ownDataValue(component, 'clickEvents');
     if (Array.isArray(clickEvents)) {
         detail.clickEvents = [];
@@ -420,6 +421,7 @@ function snapshot(maxNodes) {
         nodes.push({ name, path: nodePath, uuid: typeof node.uuid === 'string' ? node.uuid : null,
             parentUuid: typeof parentUuid === 'string' ? parentUuid : null,
             active: node.active !== false, children: children.length,
+            groupIndex: Number.isInteger(node.groupIndex) ? node.groupIndex : null,
             transform: transformSummary(node),
             components: componentRows.map((item) => classNameOf(item)).filter((item) => typeof item === 'string').slice(0, 16),
             componentDetails: componentRows.slice(0, 16).map((item, index) => componentSemanticDetail(item, index)) });

@@ -91,7 +91,7 @@ export function previewHostCapabilities(creatorPreviewAvailable = false) {
   let reason;
   try { findBrowser(); } catch (error) { available = false; reason = error.code || 'PREVIEW_BROWSER_NOT_FOUND'; }
   const commands = ['creator.preview.observe', 'creator.preview.screenshot', 'creator.preview.interact', 'creator.preview.test-script',
-    'creator.preview.refresh', 'creator.preview.stop'];
+    'creator.preview.refresh', 'creator.preview.stop', 'creator.diagnostics.runtime'];
   const result = commands.map((id) => ({ id, status: available ? 'available' : 'unavailable', ...(available ? {} : { reason }) }));
   result.push({ id: 'creator.preview.start', status: available && creatorPreviewAvailable ? 'available' : 'unavailable',
     reason: available ? 'CREATOR_PREVIEW_API_UNAVAILABLE' : (reason || 'PREVIEW_BROWSER_NOT_FOUND') });
@@ -299,6 +299,110 @@ const PAGE_SNAPSHOT_EXPRESSION = `(() => {
   return { ready: !!scene, title: document.title || '', url: location.href, readyState: document.readyState,
     sceneName: scene && String(scene.name || ''), sceneUuid: scene && (typeof scene.uuid === 'string' ? scene.uuid : null),
     canvas: canvas ? { width: canvas.width, height: canvas.height, left: rect.left, top: rect.top, clientWidth: rect.width, clientHeight: rect.height } : null };
+})()`;
+
+export const DOMAIN_DIAGNOSTICS_EXPRESSION = `(() => {
+  const cc = window.cc;
+  const scene = cc && cc.director && cc.director.getScene && cc.director.getScene();
+  if (!cc || !scene) return { available: false, reason: 'PREVIEW_SCENE_UNAVAILABLE' };
+  const className = (component) => {
+    try { return cc.js && cc.js.getClassName ? cc.js.getClassName(component.constructor) : component.constructor.name; }
+    catch (_) { return null; }
+  };
+  const assetRef = (asset) => asset && typeof asset._uuid === 'string'
+    ? { uuid: asset._uuid, className: className(asset) } : null;
+  const nodes = [];
+  const stack = [{ node: scene, parentPath: '', parentUuid: null, depth: 0 }];
+  let truncated = false;
+  while (stack.length) {
+    const current = stack.pop();
+    const node = current.node;
+    if (!node || current.depth > 64 || nodes.length >= 500) { truncated = true; continue; }
+    const name = String(node.name || '').slice(0, 120);
+    const nodePath = current.parentPath ? current.parentPath + '/' + name : name;
+    const components = typeof node.getComponents === 'function' && cc.Component ? node.getComponents(cc.Component) : [];
+    const rows = [];
+    for (const component of Array.isArray(components) ? components.slice(0, 24) : []) {
+      const type = className(component);
+      const row = { type, enabled: typeof component.enabled === 'boolean' ? component.enabled : null };
+      if (type === 'cc.RigidBody') {
+        row.bodyType = component.type;
+        row.enabledContactListener = component.enabledContactListener === true;
+        row.contactHandlers = ['onBeginContact', 'onEndContact', 'onPreSolve', 'onPostSolve']
+          .filter((method) => components.some((candidate) => typeof candidate[method] === 'function'));
+      } else if (typeof type === 'string' && /^cc\\.Physics.*Collider$/.test(type)) {
+        let body = component.body || null;
+        if (!body && cc.RigidBody && typeof node.getComponent === 'function') body = node.getComponent(cc.RigidBody);
+        row.bodyAvailable = !!body;
+        row.density = Number.isFinite(component.density) ? component.density : null;
+        row.sensor = component.sensor === true;
+        row.friction = Number.isFinite(component.friction) ? component.friction : null;
+        row.restitution = Number.isFinite(component.restitution) ? component.restitution : null;
+      } else if (['cc.BoxCollider', 'cc.CircleCollider', 'cc.PolygonCollider'].includes(type)) {
+        row.collisionHandlers = ['onCollisionEnter', 'onCollisionStay', 'onCollisionExit']
+          .filter((method) => components.some((candidate) => typeof candidate[method] === 'function'));
+      } else if (type === 'cc.AudioSource') {
+        row.clip = assetRef(component._clip || null);
+        row.playOnLoad = component.playOnLoad === true;
+        row.preload = component.preload === true;
+        row.loop = component.loop === true;
+        row.volume = Number.isFinite(component.volume) ? component.volume : null;
+        row.mute = component.mute === true;
+      } else if (type === 'cc.Label') {
+        const font = component._N$file || null;
+        row.string = typeof component.string === 'string' ? component.string.slice(0, 512) : '';
+        row.font = assetRef(font);
+        row.fontSize = Number.isFinite(component.fontSize) ? component.fontSize : null;
+        row.actualFontSize = Number.isFinite(component.actualFontSize) ? component.actualFontSize : null;
+        row.overflow = component.overflow;
+        row.shrinkOverflow = !!(cc.Label && cc.Label.Overflow && component.overflow === cc.Label.Overflow.SHRINK);
+        row.bitmapGlyphsAvailable = false;
+        row.missingGlyphs = [];
+        if (font && cc.BitmapFont && font instanceof cc.BitmapFont && font._fntConfig
+          && font._fntConfig.fontDefDictionary && typeof font._fntConfig.fontDefDictionary === 'object') {
+          const dictionary = font._fntConfig.fontDefDictionary;
+          row.bitmapGlyphsAvailable = true;
+          for (const character of Array.from(row.string)) {
+            if (/\\s/.test(character) || character.length !== 1) continue;
+            if (!Object.prototype.hasOwnProperty.call(dictionary, String(character.charCodeAt(0)))) {
+              if (!row.missingGlyphs.includes(character) && row.missingGlyphs.length < 64) row.missingGlyphs.push(character);
+            }
+          }
+        }
+      } else if (type === 'cc.Sprite') {
+        row.spriteFrame = assetRef(component._spriteFrame || null);
+        row.visible = component.visible !== false;
+      } else if (type === 'cc.Camera') {
+        row.cullingMask = Number.isFinite(component.cullingMask) ? component.cullingMask : null;
+      }
+      if (Array.isArray(component._materials)) row.materialEffects = component._materials.slice(0, 8).filter(Boolean).map((material) => ({
+        material: assetRef(material), effect: assetRef(material.effectAsset || material._effectAsset || null),
+      }));
+      rows.push(row);
+    }
+    nodes.push({ name, path: nodePath, uuid: typeof node.uuid === 'string' ? node.uuid : null,
+      parentUuid: current.parentUuid, active: current.depth === 0 ? true : node.activeInHierarchy !== false,
+      groupIndex: Number.isInteger(node.groupIndex) ? node.groupIndex : null, components: rows });
+    const children = Array.isArray(node.children) ? node.children : [];
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      if (current.depth >= 64 || nodes.length + stack.length >= 500) { truncated = true; break; }
+      stack.push({ node: children[index], parentPath: nodePath, parentUuid: node.uuid, depth: current.depth + 1 });
+    }
+  }
+  let manager = null;
+  try { manager = cc.director.getPhysicsManager && cc.director.getPhysicsManager(); } catch (_) {}
+  let collisionManager = null;
+  try { collisionManager = cc.director.getCollisionManager && cc.director.getCollisionManager(); } catch (_) {}
+  let maxAudioInstances = null;
+  try { maxAudioInstances = cc.audioEngine && cc.audioEngine.getMaxAudioInstance && cc.audioEngine.getMaxAudioInstance(); } catch (_) {}
+  const groupList = Array.isArray(cc.game && cc.game.groupList) ? cc.game.groupList.slice(0, 64) : null;
+  const collisionMatrix = Array.isArray(cc.game && cc.game.collisionMatrix)
+    ? cc.game.collisionMatrix.slice(0, 64).map((row) => Array.isArray(row) ? row.slice(0, 64).map((value) => value === true) : null) : null;
+  return { available: true, source: 'preview-runtime', scene: { name: String(scene.name || '').slice(0, 120),
+    uuid: typeof scene.uuid === 'string' ? scene.uuid : null, nodeCount: nodes.length, truncated, nodes },
+    physics: { managerAvailable: !!manager, managerEnabled: manager ? manager.enabled === true : null,
+      collisionManagerAvailable: !!collisionManager, collisionManagerEnabled: collisionManager ? collisionManager.enabled === true : null,
+      groupList, collisionMatrix }, audio: { maxInstancesPerClip: Number.isFinite(maxAudioInstances) ? maxAudioInstances : null } };
 })()`;
 
 async function waitForRuntime(session, timeoutMs = 30000, cancelled = () => false) {
@@ -629,6 +733,27 @@ export async function screenshotPreview(instance, input) {
   return { previewSessionId: session.previewSessionId, instanceId: session.instanceId,
     projectRoot: session.projectRoot, sceneUuid: session.sceneUuid, path: filename, sha256: createHash('sha256').update(bytes).digest('hex'),
     bytes: bytes.length, page: await evaluate(session, PAGE_SNAPSHOT_EXPRESSION) };
+}
+
+async function diagnosticsPreview(instance, input) {
+  if (input.cancelled?.()) throw failure('PREVIEW_ACTION_CANCELLED');
+  const session = await sessionFor(instance, input.previewSessionId);
+  const page = await evaluate(session, PAGE_SNAPSHOT_EXPRESSION);
+  if (!page?.ready || !page.canvas || page.sceneName !== session.sceneName
+    || (session.sceneUuid && page.sceneUuid !== session.sceneUuid))
+    throw failure('PREVIEW_SCENE_IDENTITY_MISMATCH', `${page?.sceneName || 'unknown'}/${page?.sceneUuid || 'unknown'}`);
+  const runtime = await evaluate(session, DOMAIN_DIAGNOSTICS_EXPRESSION, 15000);
+  if (!runtime || runtime.available !== true) throw failure(runtime?.reason || 'PREVIEW_DIAGNOSTICS_UNAVAILABLE');
+  if (runtime.scene?.name !== session.sceneName || (session.sceneUuid && runtime.scene?.uuid !== session.sceneUuid))
+    throw failure('PREVIEW_SCENE_IDENTITY_MISMATCH', `${runtime.scene?.name || 'unknown'}/${runtime.scene?.uuid || 'unknown'}`);
+  if (input.cancelled?.()) throw failure('PREVIEW_ACTION_CANCELLED');
+  let screenshot = null;
+  if (input.includeScreenshot === true) {
+    try { screenshot = await screenshotPreview(instance, input); }
+    catch (error) { screenshot = { available: false, reason: error.code || 'PREVIEW_SCREENSHOT_FAILED' }; }
+  }
+  return { ...publicSession(session), source: 'preview-runtime', capturedAt: new Date().toISOString(), requestedDomains: input.domains,
+    page, runtime, console: session.console.slice(-100), screenshot };
 }
 
 const KEY_NAMES = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter', 'Escape', 'Tab', 'KeyW', 'KeyA', 'KeyS', 'KeyD',
@@ -1092,6 +1217,7 @@ export function previewCommand(command, instance, input, cancelled = () => false
   switch (command) {
     case 'creator.preview.observe': return observePreview(instance, input);
     case 'creator.preview.screenshot': return screenshotPreview(instance, input);
+    case 'creator.diagnostics.runtime': return diagnosticsPreview(instance, input);
     case 'creator.preview.interact': return interactPreview(instance, scopedInput);
     case 'creator.preview.test-script': return testPreviewScript(instance, scopedInput);
     case 'creator.preview.refresh': return refreshPreview(instance, scopedInput);

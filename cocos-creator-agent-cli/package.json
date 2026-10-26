@@ -37,6 +37,7 @@
     "release.mjs",
     "extension-lifecycle.mjs",
     "doctor.mjs",
+    "diagnostics/",
     "skills.mjs",
     "mcp/",
     "runtime/",

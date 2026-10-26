@@ -21,6 +21,8 @@ import { runVcsDiff, runVcsObjectBlame, runVcsConflictReport, runVcsConflictReso
 import { configureMcp, mcpStatus, removeMcp, supportedMcpClients } from './mcp/configure.mjs';
 import { availableSkills, installSkills, listSkillStatus, showSkill } from './skills.mjs';
 import { diffSceneSnapshotFiles } from './semantic-diff.mjs';
+import { buildDomainDiagnostics, normalizeDiagnosticDomains, validateDiagnosticEvidence,
+  validateDiagnosticPlatform, validateDiagnosticSessionId } from './diagnostics/domain-diagnostics.mjs';
 
 const args = process.argv.slice(2);
 const root = pluginRoot();
@@ -125,6 +127,7 @@ const HELP_LINES = [
   '  creator watch --instance <instance-id> --session <preview-session-id> --paths <project-relative-paths-json> --input <actions-and-assertions-json> [--interval-ms N]',
   '  creator watch --project-root <path> --paths <files-or-directories-json> [--affected] [--suite <id>] [--instance <id>] [--session <id>] [--report-dir <path>]',
   '  diagnostics read --instance <instance-id> [--after-sequence N] [--limit N]',
+  '  diagnostics check --instance <instance-id> [--domain physics|audio|font|render|all] [--session <preview-session-id>] [--platform web-mobile|web-desktop|android|ios|mac|win32]',
   '  preview start --instance <instance-id> [--port 7456]',
   '  preview observe|screenshot|refresh|stop --instance <instance-id> --session <preview-session-id>',
   '  preview interact --instance <instance-id> --session <preview-session-id> --input <actions-and-assertions-json>',
@@ -693,6 +696,20 @@ async function main() {
     const input = { ...(value('--after-sequence') ? { afterSequence: Number(value('--after-sequence')) } : {}),
       ...(value('--limit') ? { limit: Number(value('--limit')) } : {}) };
     print(await callCommand(instanceId, 'creator.diagnostics.read', input)); return;
+  }
+  if (group === 'diagnostics' && action === 'check') {
+    const domains = normalizeDiagnosticDomains(args.includes('--domain') ? value('--domain') ?? null : 'all');
+    const targetPlatform = validateDiagnosticPlatform(args.includes('--platform') ? value('--platform') ?? null : 'unknown');
+    const previewSessionId = validateDiagnosticSessionId(args.includes('--session') ? value('--session') ?? null : undefined);
+    if (!instanceId) throw Object.assign(new Error('An instance ID is required.'), { code: 'INSTANCE_ID_REQUIRED' });
+    const snapshotReceipt = await callCommand(instanceId, 'creator.diagnostics.snapshot', { domains, maxNodes: 100 });
+    const runtimeReceipt = previewSessionId ? await callCommand(instanceId, 'creator.diagnostics.runtime', {
+      previewSessionId, domains, includeScreenshot: domains.includes('render') || domains.includes('font'),
+    }, { timeoutMs: 60000 }) : null;
+    const { snapshot, runtime } = validateDiagnosticEvidence(snapshotReceipt, runtimeReceipt, instanceId);
+    print(buildDomainDiagnostics({ snapshot, runtime, screenshot: runtime?.screenshot,
+      consoleEntries: runtime?.console || [], domains, targetPlatform }));
+    return;
   }
   if (group === 'preview') {
     const commandByAction = { start: 'creator.preview.start', observe: 'creator.preview.observe', screenshot: 'creator.preview.screenshot',
