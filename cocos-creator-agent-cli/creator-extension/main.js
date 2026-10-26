@@ -7,7 +7,7 @@ const path = require('path');
 const crypto = require('crypto');
 const extensionPackage = require('./package.json');
 const authorizeCommit = require('./commit-authorization.cjs');
-const { inspectSceneAssetIdentity, inspectSceneComposition, inspectSavedSceneNode, componentValueForDisk,
+const { sceneAssetIdentityMatches, inspectSceneAssetIdentity, inspectSceneComposition, inspectSavedSceneNode, componentValueForDisk,
     validComponentDiskValue, sceneDiskTransformMatches } = require('./scene-persistence.cjs');
 const { orderCreatedSubtreesForDeletion } = require('./scene-compose-compensation.cjs');
 const { inspectPrefabSource: inspectPrefabSourceData } = require('./prefab-source.cjs');
@@ -6393,7 +6393,7 @@ async function sceneAssetIdentity(sceneUuid) {
         const sceneBytes = readStableProjectFile(sceneFile, MAX_SCENE_SERIALIZATION_BYTES, 'SCENE_SERIALIZATION_FILE_UNSAFE');
         const metaBytes = readStableProjectFile(metaFile, MAX_SCENE_META_BYTES, 'SCENE_META_FILE_UNSAFE');
         const inspected = inspectSceneAssetIdentity({ sceneBytes, metaBytes, sceneAssetRow: row });
-        if (!inspected.verified || inspected.sceneUuid !== sceneUuid) continue;
+        if (!sceneAssetIdentityMatches(sceneUuid, inspected)) continue;
         matches.push({ uuid: row.uuid, sceneUuid, sceneRootUuid: inspected.sceneRootUuid,
             url: row.url, importer: 'scene',
             sceneSha256: fileHash(sceneBytes), metaSha256: fileHash(metaBytes) });
@@ -6413,7 +6413,7 @@ async function sceneAssetIdentity(sceneUuid) {
     const currentMetaBytes = readStableProjectFile(metaFile, MAX_SCENE_META_BYTES, 'SCENE_META_FILE_UNSAFE');
     const currentInspection = inspectSceneAssetIdentity({ sceneBytes: currentSceneBytes,
         metaBytes: currentMetaBytes, sceneAssetRow: currentRow });
-    if (!currentInspection.verified || currentInspection.sceneUuid !== sceneUuid
+    if (!sceneAssetIdentityMatches(sceneUuid, currentInspection) || currentInspection.sceneUuid !== identity.uuid
         || currentInspection.sceneRootUuid !== identity.sceneRootUuid
         || fileHash(currentSceneBytes) !== identity.sceneSha256 || fileHash(currentMetaBytes) !== identity.metaSha256)
         throw coded('SCENE_ASSETDB_IDENTITY_CHANGED');

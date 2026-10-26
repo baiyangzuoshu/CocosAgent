@@ -236,8 +236,8 @@ function makeHarness(t, { approved = true, beforeCommitAuthorization = () => {},
   let staleAssetDeleteQueriesRemaining = 0;
   const importedAssetUuid = 'a3b51e35-a9f2-4552-b597-4731bbf7b119';
   const prefabAssetUuid = 'dbce40c1-5298-4e0e-9bc3-670d31a650e4';
-  const sceneUuid = '2c12110c-6f11-4a89-bcd4-1941dc757ca4';
-  const sceneAssetUuid = sceneUuid;
+  const sceneUuid = sceneRootUuid;
+  const sceneAssetUuid = '2c12110c-6f11-4a89-bcd4-1941dc757ca4';
   const nodeUuid = 'df1bb94e-c8e6-41ba-b9c9-a04c6e86a581';
   const oldParentUuid = '9303f25a-11c9-44f5-8b4e-2872b7227a88';
   const targetParentUuid = 'ad1632bf-19b1-4976-8f36-930d57113e55';
@@ -1600,7 +1600,8 @@ test('scene composition reports completion only after the saved .fire and .meta 
   assert.equal(plan.status, 'planned');
   assert.equal(plan.sceneAssetIdentity.sceneUuid, harness.sceneUuid);
   assert.equal(plan.sceneAssetIdentity.uuid, harness.sceneAssetUuid);
-  assert.notEqual(plan.sceneAssetIdentity.sceneRootUuid, plan.sceneAssetIdentity.sceneUuid);
+  assert.equal(plan.sceneAssetIdentity.sceneRootUuid, plan.sceneAssetIdentity.sceneUuid);
+  assert.notEqual(plan.sceneAssetIdentity.sceneRootUuid, plan.sceneAssetIdentity.uuid);
   assert.equal(plan.assetIdentities[0].assetUuid, harness.spriteUuid);
   assert.equal(fs.existsSync(harness.sceneFile), true);
 

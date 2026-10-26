@@ -3,12 +3,12 @@ import test from 'node:test';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { inspectSceneAssetIdentity, inspectSceneComposition, inspectSavedSceneNode, componentValueForDisk,
+const { sceneAssetIdentityMatches, inspectSceneAssetIdentity, inspectSceneComposition, inspectSavedSceneNode, componentValueForDisk,
   validComponentDiskValue, sceneDiskTransformMatches } = require('../creator-extension/scene-persistence.cjs');
 
-const sceneUuid = '2c12110c-6f11-4a89-bcd4-1941dc757ca4';
-const sceneRootUuid = '4b02b1e4-d163-47e2-91ad-2da0193a3907';
-const sceneAssetUuid = sceneUuid;
+const sceneUuid = '4b02b1e4-d163-47e2-91ad-2da0193a3907';
+const sceneRootUuid = sceneUuid;
+const sceneAssetUuid = '2c12110c-6f11-4a89-bcd4-1941dc757ca4';
 const nodeUuid = 'df1bb94e-c8e6-41ba-b9c9-a04c6e86a581';
 const spriteUuid = 'a3b51e35-a9f2-4552-b597-4731bbf7b119';
 const handlerClassId = 'c8f27f4c-3728-4ce7-8db6-8fdc99e9a70a';
@@ -57,9 +57,31 @@ function fixture() {
 
 test('scene asset identity keeps the scene root UUID separate from the AssetDB metadata UUID', () => {
   const source = fixture();
-  assert.deepEqual(inspectSceneAssetIdentity({ ...source, sceneAssetRow }), {
-    verified: true, sceneUuid, sceneAssetUuid, sceneRootUuid, sceneUrl: sceneAssetRow.url,
+  const inspected = inspectSceneAssetIdentity({ ...source, sceneAssetRow });
+  assert.deepEqual(inspected, {
+    verified: true, sceneUuid: sceneAssetUuid, sceneAssetUuid, sceneRootUuid, sceneUrl: sceneAssetRow.url,
   });
+  assert.equal(sceneAssetIdentityMatches(sceneRootUuid, inspected), true);
+  assert.equal(sceneAssetIdentityMatches(sceneAssetUuid, inspected), true);
+  assert.equal(sceneAssetIdentityMatches(nodeUuid, inspected), false);
+});
+
+test('saved scene node inspection binds root UUID separately from AssetDB metadata UUID', () => {
+  const source = fixture();
+  const inspected = inspectSavedSceneNode({ ...source, sceneUuid: sceneRootUuid, sceneAssetRow, nodeUuid });
+  assert.equal(inspected.verified, true, JSON.stringify(inspected));
+  assert.equal(inspected.sceneUuid, sceneRootUuid);
+  assert.equal(inspected.parentUuid, sceneRootUuid);
+  const savedSceneId = inspectSavedSceneNode({ ...source, sceneUuid: sceneAssetUuid, sceneAssetRow, nodeUuid });
+  assert.equal(savedSceneId.verified, true, JSON.stringify(savedSceneId));
+});
+
+test('saved scene node inspection rejects a mismatched serialized root UUID', () => {
+  const source = fixture();
+  const inspected = inspectSavedSceneNode({ ...source,
+    sceneUuid: '853b0fb6-22e7-4a84-a044-9e82e6efea18', sceneAssetRow, nodeUuid });
+  assert.equal(inspected.verified, false);
+  assert.equal(inspected.reason, 'SCENE_ROOT_IDENTITY_MISMATCH');
 });
 
 test('layout-sensitive Label edits tolerate Creator-computed size changes but still bind stable transforms', () => {
@@ -589,7 +611,7 @@ test('persisted scene verification rejects stale transforms, wrong resources, an
 test('persisted scene verification binds the AssetDB scene identity and generated metadata UUID', () => {
   const source = fixture();
   assert.equal(inspectSceneComposition({ ...source, sceneUuid, sceneAssetRow: { ...sceneAssetRow, uuid: nodeUuid } }).reason,
-    'SCENE_ASSETDB_IDENTITY_MISMATCH');
+    'SCENE_META_IDENTITY_MISMATCH');
   assert.equal(inspectSceneComposition({ ...source, sceneUuid,
     sceneAssetRow: { ...sceneAssetRow, uuid: 'not-a-uuid' } }).reason, 'SCENE_ASSETDB_IDENTITY_MISMATCH');
   assert.equal(inspectSceneComposition({ ...source, sceneUuid,

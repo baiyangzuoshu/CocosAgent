@@ -27,6 +27,10 @@ const UUID = /^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0
 
 function fail(reason, details = {}) { return { verified: false, reason, ...details }; }
 function own(object, key) { return !!object && Object.prototype.hasOwnProperty.call(object, key); }
+function sceneAssetIdentityMatches(sceneUuid, inspected) {
+    return typeof sceneUuid === 'string' && !!inspected && inspected.verified === true
+        && (inspected.sceneRootUuid === sceneUuid || inspected.sceneUuid === sceneUuid);
+}
 function close(actual, expected) {
     return Number.isFinite(actual) && Number.isFinite(expected)
         && Math.abs(actual - expected) <= TRANSFORM_TOLERANCE;
@@ -386,7 +390,6 @@ function inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow
         return fail('SCENE_META_SIZE_INVALID');
     if (typeof sceneUuid !== 'string' || !UUID.test(sceneUuid) || typeof nodeUuid !== 'string' || !UUID.test(nodeUuid)
         || !sceneAssetRow || typeof sceneAssetRow.uuid !== 'string' || !UUID.test(sceneAssetRow.uuid)
-        || sceneUuid !== sceneAssetRow.uuid
         || typeof sceneAssetRow.url !== 'string' || !sceneAssetRow.url.startsWith('db://assets/')
         || !/\.fire$/i.test(sceneAssetRow.url) || (sceneAssetRow.importer && sceneAssetRow.importer !== 'scene'))
         return fail('SCENE_ASSETDB_IDENTITY_MISMATCH');
@@ -413,7 +416,8 @@ function inspectSavedSceneNode({ sceneBytes, metaBytes, sceneUuid, sceneAssetRow
             nodes.set(record._id, { record, index });
         }
     }
-    if (scenes.length !== 1) return fail('SCENE_ROOT_IDENTITY_MISMATCH');
+    if (scenes.length !== 1 || (scenes[0].record._id !== sceneUuid && sceneAssetRow.uuid !== sceneUuid))
+        return fail('SCENE_ROOT_IDENTITY_MISMATCH');
     const root = scenes[0].record;
     const sceneAssets = records.filter((record) => record.__type__ === 'cc.SceneAsset'
         && resolveRef(record.scene, records) === root);
@@ -500,7 +504,6 @@ function inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid, sceneAssetR
         return fail('SCENE_META_SIZE_INVALID');
     if (typeof sceneUuid !== 'string' || !UUID.test(sceneUuid) || !sceneAssetRow
         || typeof sceneAssetRow.uuid !== 'string' || !UUID.test(sceneAssetRow.uuid)
-        || sceneUuid !== sceneAssetRow.uuid
         || typeof sceneAssetRow.url !== 'string' || !sceneAssetRow.url.startsWith('db://assets/')
         || !/\.fire$/i.test(sceneAssetRow.url) || (sceneAssetRow.importer && sceneAssetRow.importer !== 'scene'))
         return fail('SCENE_ASSETDB_IDENTITY_MISMATCH');
@@ -536,7 +539,8 @@ function inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid, sceneAssetR
             nodeRows.set(record._id, { record, index });
         }
     }
-    if (sceneRows.length !== 1) return fail('SCENE_ROOT_IDENTITY_MISMATCH');
+    if (sceneRows.length !== 1 || (sceneRows[0].record._id !== sceneUuid && sceneAssetRow.uuid !== sceneUuid))
+        return fail('SCENE_ROOT_IDENTITY_MISMATCH');
     const sceneAssetRows = records.filter((record) => record.__type__ === 'cc.SceneAsset'
         && resolveRef(record.scene, records) === sceneRows[0].record);
     if (sceneAssetRows.length !== 1) return fail('SCENE_ASSET_REFERENCE_MISMATCH');
@@ -794,5 +798,5 @@ function inspectSceneComposition({ sceneBytes, metaBytes, sceneUuid, sceneAssetR
         prefabInstanceCount: verifiedPrefabInstanceCount };
 }
 
-module.exports = { inspectSceneAssetIdentity, inspectSceneComposition, inspectSavedSceneNode,
+module.exports = { sceneAssetIdentityMatches, inspectSceneAssetIdentity, inspectSceneComposition, inspectSavedSceneNode,
     componentValueForDisk, validComponentDiskValue, sceneDiskTransformMatches };
