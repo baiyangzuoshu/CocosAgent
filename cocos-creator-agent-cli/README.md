@@ -35,14 +35,14 @@ For a private GitHub repository, the updater reads `GH_TOKEN` or `GITHUB_TOKEN`,
 
 ### Publish a CLI release
 
-After updating `package.json`, commit the version change and push that commit to `main`. Then run the repository-only release helper from the repository root:
+After updating `package.json`, commit the version change and push that commit to `main`. From the repository root, run the local release workflow:
 
 ```sh
-node cocos-creator-agent-cli/publish-release.mjs --dry-run
-node cocos-creator-agent-cli/publish-release.mjs
+npm --prefix cocos-creator-agent-cli run release:dry-run
+npm --prefix cocos-creator-agent-cli run release:publish
 ```
 
-The helper runs the CLI test suite, builds the tarball with an isolated temporary npm cache, computes and verifies its SHA-256 checksum, pushes the annotated version tag over `ssh.github.com:443`, and creates the GitHub Release with `gh`. Authenticate both SSH and GitHub CLI first. The dry run also tests and packages locally but does not change Git configuration, tags, remote refs, or Releases. If a run stops after pushing its tag, rerun the helper: it can resume when the remote tag matches `main`, and it verifies an existing Release before reporting it as complete; it never overwrites mismatched assets. The GitHub Actions workflows are manual-only; local release does not depend on an Actions runner. `publish-release.mjs` is maintainer tooling and is excluded from the npm tarball. Bump `creator-extension/package.json` whenever its installed behavior or contract changes; extension updates use the template bundled in the installed CLI.
+The local workflow runs the CLI test suite, builds the tarball with an isolated temporary npm cache, computes its SHA-256 checksum, pushes the annotated version tag over `ssh.github.com:443`, and creates the GitHub Release with `gh`. Authenticate both SSH and GitHub CLI first. The dry run also tests and packages locally but does not change Git configuration, tags, remote refs, or Releases. If a run stops after pushing its tag, rerun the publish command: it can resume when the remote tag matches `main`, and it verifies an existing Release before reporting it as complete; it never overwrites mismatched assets. GitHub Actions remain manual-only and are not part of this workflow. The release command must be run after the version commit has reached `origin/main`; ordinary `git push` does not trigger a background publisher. `publish-release.mjs` is maintainer tooling and is excluded from the npm tarball. Bump `creator-extension/package.json` whenever its installed behavior or contract changes; extension updates use the template bundled in the installed CLI.
 
 ## Commands
 

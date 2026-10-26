@@ -12,19 +12,19 @@
 
 ## 安装
 
-CLI 当前发布版本为 `1.0.0`，通过 GitHub Release 分发，不从 npm 公共 registry 安装。
+CLI 当前发布版本为 `1.0.2`，通过 GitHub Release 分发，不从 npm 公共 registry 安装。
 
 ### macOS / Linux 终端
 
 ```sh
-VERSION="1.0.0"
+VERSION="1.0.2"
 npm install --global "https://github.com/baiyangzuoshu/CocosAgent/releases/download/cocos-creator-agent-cli-v${VERSION}/cocos-creator-agent-cli-v${VERSION}.tgz"
 ```
 
 ### Windows PowerShell
 
 ```powershell
-$Version = "1.0.0"
+$Version = "1.0.2"
 npm install --global "https://github.com/baiyangzuoshu/CocosAgent/releases/download/cocos-creator-agent-cli-v$Version/cocos-creator-agent-cli-v$Version.tgz"
 ```
 
@@ -41,6 +41,17 @@ cocos-creator-agent --help
 cocos-creator-agent self-update --check
 cocos-creator-agent self-update
 ```
+
+## 发布 CLI
+
+GitHub Actions 当前不可用时，可在本机通过 CLI 包的一键发布脚本完成测试、打包、校验和 GitHub Release 上传。先把版本提交推送到 `main`，然后在仓库根目录运行：
+
+```sh
+npm --prefix cocos-creator-agent-cli run release:dry-run
+npm --prefix cocos-creator-agent-cli run release:publish
+```
+
+首次使用前需确认 SSH 443 和 `gh auth status` 均已通过。普通 `git push` 不会自动触发后台发布；发布命令会在本机自动完成后续步骤。详情见 [CLI 发布说明](cocos-creator-agent-cli/README.md#publish-a-cli-release)。
 
 ## 连接 Agent Host
 

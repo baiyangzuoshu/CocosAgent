@@ -11,7 +11,11 @@
   "homepage": "https://github.com/baiyangzuoshu/CocosAgent/tree/main/cocos-creator-agent-cli",
   "bugs": { "url": "https://github.com/baiyangzuoshu/CocosAgent/issues" },
   "engines": { "node": ">=20" },
-  "scripts": { "test": "node --test" },
+  "scripts": {
+    "test": "node --test",
+    "release:dry-run": "node publish-release.mjs --dry-run",
+    "release:publish": "node publish-release.mjs"
+  },
   "bin": {
     "cocos-creator-agent": "./cli.mjs"
   },
