@@ -95,6 +95,14 @@ flowchart LR
 
 本地 Cocos2d-x v4 也定义了 `Component`，通过 `ComponentContainer` 挂在 Node 上；其 `onAdd/onEnter/onExit/onRemove/update` 与 Creator 2.4.15 的 `onLoad/start/onEnable/update/lateUpdate/onDisable/onDestroy` 并不相同。更关键的是：Cocos2d-x Node/Component 继承 `Ref`，其实际析构由引用计数决定；Creator `destroy()` 进入延迟销毁队列，生命周期清理由 JS 引擎统一调度。节点从父级移除、停用和对象析构必须分开比较。源码路径和待测矩阵见[对象生命周期切片](../cocos2d-x/02-objects-and-lifecycle.md)。Creator 的对应运行观察已有[2.4 研究与轨迹](../2.x/02-objects-and-scenes.md)；Cocos2d-x 仍只有静态源码证据。
 
+## 专题对照索引
+
+- [01 工程构建](cocos2d-x-4-vs-creator-2.4/01-project-build.md)
+- [02 启动与帧循环](cocos2d-x-4-vs-creator-2.4/02-startup-and-frame.md)
+- [03 Scene、Node 与对象生命周期](cocos2d-x-4-vs-creator-2.4/03-scene-node-lifecycle.md)
+- [04 输入事件](cocos2d-x-4-vs-creator-2.4/04-input-events.md)
+- [05 资源寻址、加载与释放](cocos2d-x-4-vs-creator-2.4/05-assets-loading-and-release.md)
+
 ## 移植与诊断时的决策
 
 1. 先判定项目实际是 Creator 工程还是 Cocos2d-x 工程；检查 Creator `project.json`/`assets`/`.meta`/场景，或 Cocos2d-x `CMakeLists.txt`/`Classes`/平台 launcher/`AppDelegate`。
@@ -104,8 +112,8 @@ flowchart LR
 
 ## 尚待研究
 
-- 在两边运行相同行为的首帧、节点生命周期、输入到回调、资源加载/释放轨迹。
-- Cocos2d-x 4.0 本地快照中 Lua bindings、组件支持、资源缓存/API 与版本文档清单的精确边界；特别核对 README 中语言描述与 v4 移除 JSB 记录的关系。
+- 在两边运行相同行为的节点生命周期、资源加载/释放轨迹；当前资源专题只完成源码静态对照，未做同条件运行测试。
+- Cocos2d-x 4.0 本地快照中 Lua bindings 与 v4 移除 JSB 记录的精确关系；不能仅凭历史 README 推断当前绑定能力。
 - Creator 2.4.15 JS 到 Native 的桥接和各平台构建差异；当前本地资料不能覆盖 Creator 编辑器全部实现。
 - 相同资产、屏幕尺寸、后端/构建配置下的渲染和性能对照。
 - 新引擎目录其他平台的依赖/submodule 和可复现构建状态；Creator 2.4.15 同工程原生构建；相同素材与构建配置下的性能基准。当前 `HelloCpp`/Creator 浏览器预览是运行时行为观察，`cpp-tests` 仍仅作引擎冒烟验证。

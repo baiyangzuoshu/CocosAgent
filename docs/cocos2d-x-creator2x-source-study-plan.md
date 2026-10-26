@@ -68,7 +68,7 @@
 | 应用启动与帧循环 | `cocos2d-x-4-startup-frame` | Skill 与[比较 MD](comparisons/cocos2d-x-4-vs-creator-2.4/02-startup-and-frame.md)已建立；macOS 桌面路径源码追踪并运行，其他平台未验证 |
 | Scene/Node/Component 生命周期 | `cocos2d-x-4-scene-node-lifecycle` | Skill 与[比较 MD](comparisons/cocos2d-x-4-vs-creator-2.4/03-scene-node-lifecycle.md)已建立；当前为静态源码研究，析构/回收时序未运行验证 |
 | 鼠标/触摸输入事件 | `cocos2d-x-4-input-events` | Skill 与[比较 MD](comparisons/cocos2d-x-4-vs-creator-2.4/04-input-events.md)已建立；鼠标点击切片已验证，触摸与其他平台未验证 |
-| 资源寻址、缓存与释放 | 后续独立建项 | 待源码地图与可复核验证切片 |
+| 资源寻址、缓存与释放 | `cocos2d-x-4-assets-loading` | 源码地图、对照 MD 与 Skill 已建立；核对了现有 FileUtils/SpriteFrameCache 测试入口，运行时加载、引用计数及释放尚未验证 |
 | 2D UI 与布局 | 后续独立建项 | 待源码地图与可复核验证切片 |
 | Action、动画与 Scheduler | 后续独立建项 | 待源码地图与可复核验证切片 |
 | 音频生命周期 | 后续独立建项 | 待源码地图与可复核验证切片 |
@@ -78,11 +78,11 @@
 
 ## 当前状态
 
-- 已确认比较对象为本地 Cocos2d-x 4.0 源码树与 Creator 2.4.15 源码/示例工程。
-- 已建立[架构层面对照](comparisons/cocos2d-x-4-vs-creator-2.4.md)及四份按专题拆分的比较 MD；不维护通用比较 Skill。
-- 已按专题建立 Cocos2d-x 技能源 `plugins/cocos2d-x-4/skills/`：项目构建、启动/帧循环、Scene/Node 生命周期、输入事件各有独立 Skill。项目构建、启动/首屏和桌面鼠标交互有 macOS 示例运行证据；Scene/Node 生命周期目前是静态源码研究，Skill 明确标记未验证析构/回收时序。Agent 的发现/加载集成尚未接线。
+- 已确认比较对象为本地 Cocos2d-x 4.0 与 Creator 2.4.15 引擎源码快照；历史 Creator 示例工程和运行轨迹仅作为归档证据，不视为当前工作树可复测工程。
+- 已建立[架构层面对照](comparisons/cocos2d-x-4-vs-creator-2.4.md)及五份按专题拆分的比较 MD；不维护通用比较 Skill。
+- 已按专题建立 Cocos2d-x 技能源 `plugins/cocos2d-x-4/skills/`：项目构建、启动/帧循环、Scene/Node 生命周期、输入事件、资源加载/释放各有独立 Skill。项目构建、启动/首屏和桌面鼠标交互有 macOS 示例运行证据；Scene/Node 生命周期及资源缓存/释放仍是静态源码研究。Agent 的发现/加载集成尚未接线。
 - 阶段 1 的 [Cocos2d-x 启动与帧循环](cocos2d-x/01-startup-and-frame.md) 已完成源码静态追踪；Creator 一侧复用已有[2.4.15 启动研究与 Chrome 预览轨迹](2.x/01-startup-and-frame.md)。
 - 阶段 2 已补 [Cocos2d-x Scene/Node/Component 生命周期源码地图](cocos2d-x/02-objects-and-lifecycle.md)，并确认本地 v4 含有 `Component`/`ComponentContainer`。Creator 2.4.15 对应源码与 Chrome 运行轨迹复用既有[对象与场景研究](2.x/02-objects-and-scenes.md)。两边尚未做相同行为运行对照。
 - 先前发现系统环境缺少 CMake、依赖 payload 与初始化 submodule；随后已在 `/private/tmp` 准备本轮专用 CMake/runtime，恢复构建依赖，并构建、启动 macOS x86_64 `cpp-tests` 与 `HelloCpp`。详细命令、补丁和限制见[Demo 记录](cocos2d-x-creator2x-demo.md)。这是本次对照验证环境，不代表其他机器具备相同构建条件。
 - 首个[启动到帧循环对照](comparisons/cocos2d-x-4-vs-creator-2.4.md#首个切片启动到帧循环)已扩展为两边 Demo 实际启动及同一鼠标交互行为验证。运行后端不同，不能据此比较性能或帧耗时。
-- 下一步按专题补齐源码地图与验证：优先节点/组件生命周期、资源加载与释放、UI/布局；每完成一专题再发布对应 Skill。性能对照须另行统一后端、平台、架构、素材与 Release 配置。
+- 2026-10-26 完成资源寻址、缓存与释放的静态专题：单图以解析后的完整路径进入 `TextureCache`，SpriteFrame/纹理分层持有引用；Creator 侧 Asset Manager 则按 UUID/Bundle 请求并维护依赖引用。Skill 的静态路由检查覆盖了单图加载和 Creator UUID 易误映射请求；没有运行资源加载或释放探针。下一步先补两侧资源缓存/释放的可重复运行切片，再进入 2D UI/布局；性能对照须另行统一后端、平台、架构、素材与 Release 配置。
