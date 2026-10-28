@@ -2391,7 +2391,7 @@ async function createPrefabPlan(input) {
             editorAuthored: true, note: 'Creation uses the Creator Scene panel IPC; no serialized Prefab source is fabricated or patched.' } };
 }
 
-async function inspectPrefabSourceCommand(input) {
+async function inspectPrefabSourceCommand(input, { allowAmbiguousPaths = false } = {}) {
     if (!Editor.Project || !Editor.Project.path || !Editor.assetdb
         || typeof Editor.assetdb.queryAssets !== 'function') throw coded('PREFAB_SOURCE_INSPECT_UNAVAILABLE');
     if (!isSupportedCreatorVersion(editorVersion())) throw coded('CREATOR_VERSION_MISMATCH');
@@ -2408,18 +2408,32 @@ async function inspectPrefabSourceCommand(input) {
     const prefabBytes = readStableProjectFile(prefabFile, MAX_PREFAB_SERIALIZATION_BYTES, 'PREFAB_SERIALIZATION_FILE_UNSAFE');
     const metaBytes = readStableProjectFile(metaFile, MAX_PREFAB_META_BYTES, 'PREFAB_META_FILE_UNSAFE');
     const state = inspectPrefabSourceData({ prefabBytes, metaBytes, prefabUuid: input.prefabUuid,
+        allowAmbiguousPaths,
         maxComponentsPerNode: input.nodeUuid !== undefined ? 64 : 8,
         ...(input.nodeUuid !== undefined ? { targetNodeUuid: input.nodeUuid } : {}),
         ...(input.expectedDiff !== undefined ? { expectedDiff: input.expectedDiff } : {}) });
     if (!state.available) throw coded(state.reason || 'PREFAB_SOURCE_INSPECT_FAILED');
     let nodes = state.nodes;
-    let truncated = nodes.length > 100;
+    let nodePage;
+    let truncated = false;
     if (input.nodeUuid !== undefined) {
+        if (input.offset !== undefined || input.limit !== undefined)
+            throw coded('PREFAB_NODE_PAGE_AND_UUID_CONFLICT');
         if (typeof input.nodeUuid !== 'string') throw coded('PREFAB_NODE_UUID_INVALID');
         nodes = nodes.filter((node) => node.nodeUuid === input.nodeUuid);
         if (nodes.length !== 1) throw coded('PREFAB_NODE_NOT_FOUND');
-        truncated = false;
-    } else nodes = nodes.slice(0, 100);
+        nodePage = { offset: 0, limit: 1, total: 1, returned: 1, nextOffset: null };
+    } else {
+        const offset = input.offset === undefined ? 0 : input.offset;
+        const limit = input.limit === undefined ? 100 : input.limit;
+        if (!Number.isInteger(offset) || offset < 0 || offset > state.nodeCount
+            || !Number.isInteger(limit) || limit < 1 || limit > 100)
+            throw coded('PREFAB_NODE_PAGE_INVALID');
+        nodes = nodes.slice(offset, offset + limit);
+        const nextOffset = offset + nodes.length < state.nodeCount ? offset + nodes.length : null;
+        truncated = offset > 0 || nextOffset !== null;
+        nodePage = { offset, limit, total: state.nodeCount, returned: nodes.length, nextOffset };
+    }
     const freshRow = await queryAssetByUuid(input.prefabUuid);
     if (!freshRow || freshRow.url !== row.url || freshRow.uuid !== row.uuid
         || projectRoot() !== currentRoot || !isSupportedCreatorVersion(editorVersion()))
@@ -2428,7 +2442,7 @@ async function inspectPrefabSourceCommand(input) {
     const freshMetaBytes = readStableProjectFile(metaFile, MAX_PREFAB_META_BYTES, 'PREFAB_META_FILE_UNSAFE');
     if (fileHash(freshPrefabBytes) !== fileHash(prefabBytes) || fileHash(freshMetaBytes) !== fileHash(metaBytes))
         throw coded('PREFAB_SOURCE_CHANGED_DURING_INSPECT');
-    return { ...state, nodes, truncated, projectRoot: currentRoot, creatorVersion: editorVersion(), prefabPath,
+    return { ...state, nodes, nodePage, truncated, projectRoot: currentRoot, creatorVersion: editorVersion(), prefabPath,
         targetUrl: row.url, importer: typeof row.importer === 'string' ? row.importer : null,
         assetType: typeof row.type === 'string' ? row.type : null,
         sourceSha256: fileHash(prefabBytes), metaSha256: fileHash(metaBytes), sourceScope: 'saved-disk-only' };
@@ -8554,7 +8568,7 @@ function execute(command, input, context) {
     if (command === 'creator.prefab.create.plan') return createPrefabPlan(input);
     if (command === 'creator.prefab.create.commit') return commitPrefabCreate(input, context);
     if (command === 'creator.prefab.create.reconcile') return reconcilePrefabCreate(input);
-    if (command === 'creator.prefab.source.inspect') return inspectPrefabSourceCommand(input);
+    if (command === 'creator.prefab.source.inspect') return inspectPrefabSourceCommand(input, { allowAmbiguousPaths: true });
     if (command === 'creator.prefab.source.editable.inspect') return inspectPrefabEditableCommand(input);
     if (command === 'creator.prefab.instance.inspect') return inspectPrefabInstanceCommand(input);
     if (command === 'creator.prefab.instance.override.plan') return createPrefabInstanceOverridePlan(input);

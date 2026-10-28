@@ -142,6 +142,10 @@ On Windows, `creator installations` scans `C:\CocosCreator`, `C:\CocosDashboard\
 
 Use `cocos-creator-agent help <command> [<subcommand>]` or append `--help` to a command to show focused usage; `help search <query>` searches CLI usage and the Creator command catalog. Machine callers can use `--json` or `--format json` on errors. Error objects include `schemaVersion`, stable `error.code`, `error.kind`, and `exitCode`. Exit codes are `1` for general failures, `2` for usage or input errors, `3` for bridge/MCP connection failures, `4` for Creator/project/build workflow failures, `5` for write conflicts or required reconciliation, and `10` when a Creator preview or project test fails.
 
+### Prefab source inspection
+
+`creator.prefab.source.inspect` returns at most 100 nodes per response. Each node includes a separate `prefabInfo` summary with the serialized `cc.PrefabInfo` field names and bounded normalized values; `componentCount` continues to count only ordinary node `_components`. For a complete hierarchy, pass the returned `nodePage.nextOffset` as `offset` on the next call, keeping the same `prefabUuid`, until `nextOffset` is `null`. `nodePage.total` is the complete serialized node count; `truncated` remains true for any response that contains only part of that full node list. Confirm that every page has the same `sourceSha256`; if it changes, restart from offset 0. Use `nodeUuid` instead of paging when inspecting one exact node.
+
 ### Component-property compensation
 
 `creator.scene.node.set-component-property.compensate.plan` takes a completed source `operationId` and derives the restore value from that source. It refuses live or saved state drift and reserves one compensation per source; the caller cannot substitute another restore value. Commit the returned compensation plan explicitly, then use its operation ID to reconcile an interrupted write.

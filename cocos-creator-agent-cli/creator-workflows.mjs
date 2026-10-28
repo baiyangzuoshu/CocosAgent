@@ -75,7 +75,7 @@ function readAsarPackageVersion(archivePath) {
     if (fs.readSync(descriptor, prefix, 0, prefix.length, 0) !== prefix.length || prefix.readUInt32LE(0) !== 4) return null;
     const headerPickleSize = prefix.readUInt32LE(4);
     const jsonSize = prefix.readUInt32LE(12);
-    const dataStart = 16 + jsonSize;
+    const dataStart = 8 + headerPickleSize;
     if (headerPickleSize < jsonSize || jsonSize < 2 || jsonSize > 8 * 1024 * 1024 || dataStart > archiveStat.size) return null;
     const headerBuffer = Buffer.alloc(jsonSize);
     if (fs.readSync(descriptor, headerBuffer, 0, jsonSize, 16) !== jsonSize) return null;

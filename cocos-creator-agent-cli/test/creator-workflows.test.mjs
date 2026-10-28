@@ -238,6 +238,31 @@ test('Creator workflow refuses a Creator bundle with the wrong patch version', a
   assert.throws(() => resolveCreatorExecutable(state.appRoot), (error) => error.code === 'CREATOR_VERSION_MISMATCH');
 });
 
+test('Windows Creator reads package version after the full ASAR header pickle', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cocos-creator-windows-asar-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const resources = path.join(root, 'resources');
+  const executable = path.join(root, 'CocosCreator.exe');
+  const packageBytes = Buffer.from(JSON.stringify({ name: 'CocosCreator', version: '2.4.15' }));
+  const headerBytes = Buffer.from(JSON.stringify({ files: { 'package.json': {
+    size: packageBytes.length, offset: '0',
+  } } }));
+  const headerPickleSize = headerBytes.length + 11;
+  const prefix = Buffer.alloc(16);
+  prefix.writeUInt32LE(4, 0);
+  prefix.writeUInt32LE(headerPickleSize, 4);
+  prefix.writeUInt32LE(headerBytes.length + 7, 8);
+  prefix.writeUInt32LE(headerBytes.length, 12);
+  const dataStart = 8 + headerPickleSize;
+  fs.mkdirSync(resources, { recursive: true });
+  fs.writeFileSync(executable, '');
+  fs.writeFileSync(path.join(resources, 'app.asar'), Buffer.concat([
+    prefix, headerBytes, Buffer.alloc(dataStart - 16 - headerBytes.length), packageBytes,
+  ]));
+
+  assert.equal(resolveCreatorExecutable(executable, { platform: 'win32' }).creatorVersion, '2.4.15');
+});
+
 test('native compile requires an existing output directory and native build auto-compile', async (t) => {
   const state = fixture();
   t.after(() => fs.rmSync(state.root, { recursive: true, force: true }));

@@ -29,6 +29,22 @@ function command(id) {
   return contract.commands.find((entry) => entry.id === id);
 }
 
+test('Prefab source inspection returns bounded cc.PrefabInfo metadata separately from ordinary components', () => {
+  const serialized = [{ __type__: 'cc.Prefab', data: { __id__: 1 } },
+    { __type__: 'cc.Node', _name: 'Root', _active: true, _parent: null, _children: [], _components: [],
+      _prefab: { __id__: 2 }, _trs: { array: [0, 0, 0, 0, 0, 0, 1, 1, 1] } },
+    { __type__: 'cc.PrefabInfo', root: { __id__: 1 }, asset: { __id__: 0 }, fileId: '', sync: false }];
+  const source = prefabSource.inspectPrefabSource({ prefabBytes: Buffer.from(JSON.stringify(serialized)),
+    metaBytes: Buffer.from(JSON.stringify({ uuid: prefabUuid, importer: 'prefab' })), prefabUuid });
+  assert.equal(source.available, true, JSON.stringify(source));
+  assert.equal(source.nodes[0].componentCount, 0);
+  assert.deepEqual(source.nodes[0].prefabInfo, { classId: 'cc.PrefabInfo',
+    serializedProperties: ['__type__', 'root', 'asset', 'fileId', 'sync'], serializedPropertiesTruncated: false,
+    fields: { root: { kind: 'node-ref', nodeUuid: source.nodes[0].nodeUuid, name: 'Root' },
+      asset: { kind: 'asset-ref', serializedObjectIndex: 0, classId: 'cc.Prefab', assetUuid: prefabUuid },
+      fileId: '', sync: false } });
+});
+
 test('Prefab source patch commands declare plan, explicit commit write, and non-replaying reconciliation contracts', () => {
   const plan = command('creator.prefab.source.patch.plan');
   const commit = command('creator.prefab.source.patch.commit');
@@ -401,6 +417,23 @@ test('Prefab patch distinguishes apply from source-linked compensation and repla
     action: 'compensate', sourceOperationId: inverseOperationId }), true);
   assert.equal(prefabPatch.validInput({ prefabUuid, targetNodePath: 'Root/Sprite', targetNodeUuid: nodeUuid,
     action: 'replay', sourceOperationId: inverseOperationId, expectedDiff: apply.expectedDiff }), false);
+});
+
+test('read-only Prefab inspection identifies duplicate paths while patch preflight remains strict', () => {
+  const rows = [{ __type__: 'cc.Prefab', data: { __id__: 1 } },
+    { __type__: 'cc.Node', _name: 'Root', _id: 'root', _parent: null,
+      _children: [{ __id__: 2 }, { __id__: 3 }], _components: [] },
+    { __type__: 'cc.Node', _name: 'Item', _id: 'item-a', _parent: { __id__: 1 },
+      _children: [], _components: [] },
+    { __type__: 'cc.Node', _name: 'Item', _id: 'item-b', _parent: { __id__: 1 },
+      _children: [], _components: [] }];
+  const input = { prefabBytes: Buffer.from(JSON.stringify(rows)),
+    metaBytes: Buffer.from(JSON.stringify({ uuid: prefabUuid, importer: 'prefab' })), prefabUuid };
+  assert.equal(prefabSource.inspectPrefabSource(input).reason, 'PREFAB_NODE_PATH_AMBIGUOUS');
+  const result = prefabSource.inspectPrefabSource({ ...input, allowAmbiguousPaths: true });
+  assert.equal(result.available, true);
+  assert.deepEqual(result.nodes.filter((item) => item.pathAmbiguous).map((item) => item.nodeUuid), ['item-a', 'item-b']);
+  assert.equal(result.nodes[0].pathAmbiguous, undefined);
 });
 
 test('single-node Prefab inspection can include a supported component after the default summary bound', () => {
