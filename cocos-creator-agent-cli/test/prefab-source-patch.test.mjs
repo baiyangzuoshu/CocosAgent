@@ -45,6 +45,22 @@ test('Prefab source inspection returns bounded cc.PrefabInfo metadata separately
       fileId: '', sync: false } });
 });
 
+test('Prefab source inspection ignores valid cc.PrivateNode rich text children', () => {
+  const serialized = [{ __type__: 'cc.Prefab', data: { __id__: 1 } },
+    { __type__: 'cc.Node', _name: 'Root', _active: true, _parent: null, _children: [{ __id__: 3 }],
+      _components: [], _prefab: { __id__: 2 }, _trs: { array: [0, 0, 0, 0, 0, 0, 1, 1, 1] } },
+    { __type__: 'cc.PrefabInfo', root: { __id__: 1 }, asset: { __id__: 0 }, fileId: '', sync: false },
+    { __type__: 'cc.Node', _name: 'Talk', _active: true, _parent: { __id__: 1 }, _children: [{ __id__: 6 }],
+      _components: [{ __id__: 5 }], _prefab: { __id__: 4 }, _trs: { array: [0, 0, 0, 0, 0, 0, 1, 1, 1] } },
+    { __type__: 'cc.PrefabInfo', root: { __id__: 1 }, asset: { __id__: 0 }, fileId: 'talk-file', sync: false },
+    { __type__: 'cc.RichText', node: { __id__: 3 }, string: 'Guide text' },
+    { __type__: 'cc.PrivateNode', _name: 'RICHTEXT_CHILD', _parent: { __id__: 3 }, _children: [], _components: [] }];
+  const source = prefabSource.inspectPrefabSource({ prefabBytes: Buffer.from(JSON.stringify(serialized)),
+    metaBytes: Buffer.from(JSON.stringify({ uuid: prefabUuid, importer: 'prefab' })), prefabUuid });
+  assert.equal(source.available, true, JSON.stringify(source));
+  assert.deepEqual(source.nodes.map((entry) => entry.nodePath), ['Root', 'Root/Talk']);
+  assert.deepEqual(source.nodes[1].childState, { childCount: 0, children: [] });
+});
 test('Prefab source patch commands declare plan, explicit commit write, and non-replaying reconciliation contracts', () => {
   const plan = command('creator.prefab.source.patch.plan');
   const commit = command('creator.prefab.source.patch.commit');
@@ -115,6 +131,15 @@ test('Prefab instance inspection is read-only and binds exact scene and node UUI
   }).ok, false);
 });
 
+test('Prefab instance inspection allows duplicate paths in its linked Prefab source', () => {
+  const extensionPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../creator-extension/main.js');
+  const extension = fs.readFileSync(extensionPath, 'utf8');
+  const start = extension.indexOf('async function inspectPrefabInstanceCommand(input) {');
+  const end = extension.indexOf('\nfunction singlePrefabNode', start);
+  assert.ok(start >= 0 && end > start, 'inspectPrefabInstanceCommand should remain discoverable');
+  assert.match(extension.slice(start, end),
+    /inspectPrefabSourceCommand\(\{\s*prefabUuid:\s*live\.prefabUuid\s*\},\s*\{\s*allowAmbiguousPaths:\s*true\s*\}\)/);
+});
 test('Prefab patch validates only explicit supported before/after fields', () => {
   const diff = [
     { path: 'node.name', before: 'Sprite', after: 'Player Sprite' },

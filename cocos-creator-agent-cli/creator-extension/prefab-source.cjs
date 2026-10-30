@@ -389,7 +389,7 @@ function inspectPrefabSource({ prefabBytes, metaBytes, prefabUuid, maxComponents
         const node = { nodeUuid: nodeId, fileId, name, nodePath, parentUuid: item.parentId,
             identityKind: serializedNodeId ? 'serialized-node-id' : item.depth === 0 ? 'prefab-root' : null,
             siblingIndex: item.siblingIndex, siblingCount: item.siblingCount,
-            childCount: Array.isArray(record._children) ? record._children.length : 0,
+            childCount: 0,
             componentCount: allComponents.length,
             componentState: { componentCount: allComponents.length, components: componentStateRows },
             prefabInfo: prefabInfoSummary(record, records, prefabUuid, rootAssetIndex),
@@ -400,22 +400,30 @@ function inspectPrefabSource({ prefabBytes, metaBytes, prefabUuid, maxComponents
         const children = Array.isArray(record._children) ? record._children : [];
         if (children.length > MAX_NODES) return fail('PREFAB_CHILD_LIMIT', { nodePath });
         const childRows = [];
-        for (let siblingIndex = 0; siblingIndex < children.length; siblingIndex += 1) {
-            const childRef = children[siblingIndex];
+        let publicSiblingIndex = 0;
+        for (const childRef of children) {
             const childIndex = refIndex(childRef, records);
+            const childRecord = childIndex === null ? null : records[childIndex];
+            if (childRecord && childRecord.__type__ === 'cc.PrivateNode') {
+                const privateParentIndex = refIndex(childRecord._parent, records);
+                if (privateParentIndex !== item.index) return fail('PREFAB_PARENT_CHILD_MISMATCH', { nodePath });
+                continue;
+            }
             const child = childIndex === null ? null : nodeRows.get(childIndex);
             const parentIndex = child && refIndex(child._parent, records);
             if (!child || parentIndex !== item.index) return fail('PREFAB_PARENT_CHILD_MISMATCH', { nodePath });
             const childInfo = prefabInfoFor(child, records);
             const childId = typeof child._id === 'string' && child._id
                 ? child._id : childInfo && typeof childInfo.fileId === 'string' && childInfo.fileId ? childInfo.fileId : null;
-            childRows.push({ index: childIndex, id: childId, siblingIndex, siblingCount: children.length });
+            childRows.push({ index: childIndex, id: childId, siblingIndex: publicSiblingIndex });
+            publicSiblingIndex += 1;
         }
+        node.childCount = childRows.length;
         nodes.push(node);
         for (let index = childRows.length - 1; index >= 0; index -= 1) {
             const child = childRows[index];
             stack.push({ index: child.index, parentPath: nodePath, parentId: nodeId,
-                siblingIndex: child.siblingIndex, siblingCount: child.siblingCount, depth: item.depth + 1 });
+                siblingIndex: child.siblingIndex, siblingCount: childRows.length, depth: item.depth + 1 });
         }
     }
     if (visited.size !== nodeRows.size) return fail('PREFAB_UNREACHABLE_NODE_RECORDS', {
