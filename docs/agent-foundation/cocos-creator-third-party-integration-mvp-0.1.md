@@ -42,7 +42,7 @@ Codex / Claude Code / Cursor / VS Code / DeepSeek Harness
 
 | 文件 | 职责 |
 | --- | --- |
-| `cocos-creator-agent-cli/mcp/server.mjs` | CLI 自带 MCP initialize、tools/list、tools/call 和 stdio 服务 |
+| `cocos-creator-agent-cli/mcp/server.mjs` | CLI 自带 MCP initialize、tools/list、tools/call 和 stdio 服务；默认只发布工具组选择器，Host 按任务选择后再发布对应工具组 |
 | `cocos-creator-agent-cli/mcp/configure.mjs` | 通过 Codex/Claude 原生命令、Cursor/VS Code JSON 文件或 DeepSeek Harness profile patch 安装、检查、移除 CLI MCP 配置，并拒绝同名漂移覆盖 |
 | `cocos-creator-agent-cli/mcp/deepseek-harness.mjs` | 更新 Harness Cordis profile 的受标记 MCP YAML block，保留其他配置并拒绝危险路径和手改 block |
 | `cocos-creator-agent-cli/skills.mjs` | 展示、安装、刷新 Creator Skills；支持 Codex、Claude Code 和 DeepSeek Harness 用户目录，检查漂移并为强制替换保留备份 |

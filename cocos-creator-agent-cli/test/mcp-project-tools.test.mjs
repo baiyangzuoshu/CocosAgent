@@ -164,15 +164,19 @@ test('MCP discovers a project alias and routes it through CLI to the selected Cr
   const providerPollPromise = bridgeRequest(bridgeState, 'POST', '/v1/creator/poll', {
     instanceId, sessionId: registration.sessionId, activeScene: 'Untitled',
   });
-  const listingPromise = mcp.request('tools/list');
+  const selectionPromise = mcp.request('tools/call', { name: 'cocos_tools_select', arguments: {
+    toolsets: ['project', 'assets', 'scripts', 'scene', 'prefab', 'runtime', 'extensions', 'vcs', 'cloud', 'tasks'],
+  } });
   const providerPoll = await providerPollPromise;
   assert.equal(providerPoll.command, 'creator.extension.commands.list');
   await bridgeRequest(bridgeState, 'POST', '/v1/creator/respond', {
     instanceId, sessionId: registration.sessionId, requestId: providerPoll.requestId, ok: true,
     result: { projectRoot: canonicalRoot, creatorVersion: '2.4.15', providers: [], commands: [providerCommand], skipped: [] },
   });
-  const listing = await listingPromise;
-  assert.equal(listing.tools.length, 104, 'Expected 101 fixed tools, two project aliases, and one live extension command.');
+  const selection = await selectionPromise;
+  assert.equal(selection.isError, false);
+  const listing = await mcp.request('tools/list');
+  assert.equal(listing.tools.length, 105, 'Expected 101 original tools, the selector, two project aliases, and one live extension command.');
   assert.ok(listing.tools.some((item) => item.name === 'cocos_diagnostics_snapshot'));
   assert.ok(listing.tools.some((item) => item.name === 'cocos_diagnostics_runtime'));
   assert.equal(listing.tools.find((item) => item.name === 'cocos_project_tool_call').annotations.destructiveHint, true,
