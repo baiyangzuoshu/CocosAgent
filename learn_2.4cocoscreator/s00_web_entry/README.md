@@ -8,7 +8,7 @@ index.html 加载 dist/src/main.js；构建任务将 src/main.ts 转换到这里
 
 ## 运行
 
-在 learn_2.4cocoscreator 目录运行：
+进入本课目录运行：
 
 ~~~sh
 deno task check
@@ -24,3 +24,5 @@ deno task serve
 
 - engine/2.4.15engine/index.js
 - engine/2.4.15engine/cocos2d/core/predefine.js
+
+本课代码独立放在本目录的 src/、index.html 和 deno.json 中，不依赖其他课程。

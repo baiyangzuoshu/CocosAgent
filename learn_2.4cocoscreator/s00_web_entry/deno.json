@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "lib": ["dom", "dom.iterable", "dom.asynciterable", "deno.ns"]
+  },
+  "tasks": {
+    "check": "deno check src/main.ts",
+    "build": "deno transpile src/**/*.ts --outdir dist",
+    "serve": "python3 -m http.server 8000 --bind 127.0.0.1"
+  }
+}
