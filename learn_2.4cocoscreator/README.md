@@ -16,7 +16,7 @@
 - [课程大纲](课程大纲.md)：完整阶段规划与源码文件索引。
 - [第 0 课：浏览器入口](s00_web_entry/README.md)：准备最小浏览器宿主。
 - [第 1 课：模块装配](s01_module_assembly/README.md)：创建 cc 命名空间并注册第一个模块。
-- 下一课：游戏启动与引擎初始化，见课程大纲第 2 课。
+- [第 2 课：游戏启动](s02_game_startup/README.md)：调用 cc.game.run() 并观察引擎启动事件。
 
 ## 代码结构
 
@@ -29,11 +29,16 @@ learn_2.4cocoscreator/
 │   ├── deno.json
 │   ├── index.html
 │   └── src/
-└── s01_module_assembly/       # 独立的第 1 课工程，含前课功能
+├── s01_module_assembly/       # 独立的第 1 课工程，含前课功能
+│   ├── README.md
+│   ├── deno.json
+│   ├── index.html
+│   └── src/cocos2d/core/      # 镜像 Creator 的模块职责
+└── s02_game_startup/          # 独立的第 2 课工程，含前课功能
     ├── README.md
     ├── deno.json
     ├── index.html
-    └── src/cocos2d/core/      # 镜像 Creator 的模块职责
+    └── src/cocos2d/core/
 ~~~
 
 ## 运行
