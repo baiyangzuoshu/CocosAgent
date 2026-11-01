@@ -17,6 +17,7 @@
 - [第 1 课：模块导出](s01_module_assembly/README.md)
 - [第 2 课：分阶段启动](s02_game_startup/README.md)
 - [第 3 课：Director 与帧调度](s03_director_loop/README.md)
+- [第 4 课：节点与场景树](s04_node_scene_tree/README.md)
 
 ## 目录结构
 
@@ -27,7 +28,8 @@ learn_3.8cocoscreator/
 ├── s00_web_entry/          # 浏览器加载 TypeScript 入口
 ├── s01_module_assembly/    # exports/base、模块重导出和兼容命名空间
 ├── s02_game_startup/       # Game.init 的阶段 Promise 链
-└── s03_director_loop/      # Pacer、Game 更新回调和 Director.tick
+├── s03_director_loop/      # Pacer、Game 更新回调和 Director.tick
+└── s04_node_scene_tree/    # Node 父子关系和 Scene 树
 ~~~
 
 每课进入自己的目录，按 README 运行 `deno task check`、`deno task build` 和 `deno task serve`。
