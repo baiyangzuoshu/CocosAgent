@@ -17,6 +17,7 @@
 - [第 0 课：浏览器入口](s00_web_entry/README.md)：准备最小浏览器宿主。
 - [第 1 课：模块装配](s01_module_assembly/README.md)：创建 cc 命名空间并注册第一个模块。
 - [第 2 课：游戏启动](s02_game_startup/README.md)：调用 cc.game.run() 并观察引擎启动事件。
+- [第 3 课：Director 初始化与主循环](s03_director_loop/README.md)：由 requestAnimationFrame 驱动 Director。
 
 ## 代码结构
 
@@ -34,7 +35,12 @@ learn_2.4cocoscreator/
 │   ├── deno.json
 │   ├── index.html
 │   └── src/cocos2d/core/      # 镜像 Creator 的模块职责
-└── s02_game_startup/          # 独立的第 2 课工程，含前课功能
+├── s02_game_startup/          # 独立的第 2 课工程，含前课功能
+│   ├── README.md
+│   ├── deno.json
+│   ├── index.html
+│   └── src/cocos2d/core/
+└── s03_director_loop/         # 独立的第 3 课工程，含前课功能
     ├── README.md
     ├── deno.json
     ├── index.html
