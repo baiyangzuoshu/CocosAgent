@@ -7,5 +7,6 @@
 | 主题 | Cocos2d-x 4.0 | Creator 2.4.15 | Creator 3.8.7 |
 | --- | --- | --- | --- |
 | 第 4 课：节点与场景树 | [本课](s04_node_scene_tree/README.md) | [本课](../learn_2.4cocoscreator/s04_node_scene_tree/README.md) | [本课](../learn_3.8cocoscreator/s04_node_scene_tree/README.md) |
+| 第 5 课：本地位置与世界位置 | [本课](s05_local_world_transform/README.md) | [本课](../learn_2.4cocoscreator/s05_local_world_transform/README.md) | [本课](../learn_3.8cocoscreator/s05_local_world_transform/README.md) |
 
 各课程独立阅读和运行；表格用于快速打开同主题内容。
