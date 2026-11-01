@@ -6,6 +6,8 @@ Creator：2.4.15
 项目扩展：0.8.72
 CLI：0.12.55
 
+本记录保留验收当日真实命令名；当前 CLI 统一使用 `cocos-creator-cli`，不提供旧命令名别名。
+
 ## 结果
 
 全程通过 Cocos CLI 对 Prefab 做计划、提交、补偿、关闭工程和重开；没有使用电脑 UI 自动化。每项写入后都关闭 Creator 工程，再由 `cocos-creator-agent project open` 等待项目路径、版本和扩展握手就绪。Prefab patch 回执另确认 Creator 保存、退出 Prefab 模式、重新进入和磁盘读回。

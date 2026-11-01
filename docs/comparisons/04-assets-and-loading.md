@@ -22,8 +22,8 @@
 | 从新源文件导入到冷缓存加载 | Creator 2.4.15 给 `resources/stage4-probe.json` 生成 `json` `.meta` 和 `library/imports/` 产物；Chrome 中 `cc.resources.load` 从未缓存状态取得 `cc_JsonAsset`，回调净引用为 0，探针自身 `addRef/decRef` 后失效。 | Creator 3.8.7 给独立的同名 JSON 生成 `json` `.meta` 和 `library/` 产物；Chrome 中 `resources.load` 取得 `JsonAsset`，缓存、净引用和探针释放结果与 2.x 相同。 | 两版均打通源文件、编辑器导入、Bundle 路径及浏览器资源对象，但 UUID、生成目录和对象类型各属其版本；保留各自 `.meta`。 |
 | Mac 原生包加载场景与 JSON | Mac 构建、编译、运行成功，窗口显示 `Hello, World!`；JSON 冷缓存加载及真实磁盘场景切换均有原生记录。 | Mac 构建、Make、运行成功，窗口显示 3D 场景；JSON 冷缓存加载及真实磁盘场景切换均有原生记录。 | JSON 生命周期见各自 `*-mac-native-asset-lifecycle.jsonl`，真实场景切换见 `*-mac-native-disk-scene-switch.jsonl`。这些记录仅覆盖当前 Mac 包、示例资源和开关条件，不代表其他原生平台。 |
 
-## 给后续 Cocos agent 的诊断约束
+## 给 Cocos CLI 资源诊断流程的约束
 
-Agent 应先识别 Creator 版本与运行环境，再按该版本手册确定合法入口；从源 `.meta`、场景引用、Bundle 配置、运行时缓存逐层建立证据，最后判断引用是否安全。面对“场景切换后内存没降”时，优先检查 `autoReleaseAssets`、动态持有和其他引用；面对“资源变黑/失效”时，查是否对在用资源调用了强制释放。没有运行时记录时将调用链标成源码结论，不能编造 `refCount` 数字、回调顺序或下载次数。
+资源诊断流程应先识别 Creator 版本与运行环境，再按该版本手册确定合法入口；从源 `.meta`、场景引用、Bundle 配置、运行时缓存逐层建立证据，最后判断引用是否安全。面对“场景切换后内存没降”时，优先检查 `autoReleaseAssets`、动态持有和其他引用；面对“资源变黑/失效”时，查是否对在用资源调用了强制释放。没有运行时记录时将调用链标成源码结论，不能编造 `refCount` 数字、回调顺序或下载次数。
 
 已验证的切口：3.x 对未被当前场景直接引用的 `hdcSky.prefab`，`preloadAny` 后缓存仍无对象，`loadAny` 后出现 Prefab 且净 `refCount=0`；显式 `addRef` 后非强制释放保留它，`decRef` 后异步移除。两版都已对隔离的内存 Scene 直接执行 `_autoRelease` 的开/关分支，对隔离 Asset 验证强制释放，也都通过 Director 真正切换内存 Scene 验证自动释放和常驻节点资源转移。随后各自从真实磁盘场景读取运行时依赖图，在编辑器导入最小 JSON，并在 Chrome 预览及 Mac 原生进程中分别完成冷缓存加载、引用保护与释放观测。现在两版 Chrome 预览还分别验证了旧磁盘场景独有资源在真实 `loadScene` 切换后随 `autoReleaseAssets` 开关的缓存状态；Mac 原生包的磁盘场景切换与 Android/iOS 仍没有对应打点。

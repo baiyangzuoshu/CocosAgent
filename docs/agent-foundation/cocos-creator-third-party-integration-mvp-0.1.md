@@ -1,13 +1,13 @@
 # Cocos Creator 第三方 Host 接入实现 0.1
 
-日期：2026-10-18（2026-10-25 更新）。范围：Codex / Claude Code / Cursor / VS Code / DeepSeek Harness → 独立 CLI（MCP 配置与 Skills 安装）→ 本机桥接 → Creator 2.4.x 项目扩展（CLI 当前接受 2.4.1–2.4.16，自动优先 2.4.16 到 2.4.1；实机验收证据仍为 2.4.15）。CLI 0.11.0 / Creator 扩展 0.7.0 已在 `tank` 完成真实 Creator 脚本创建、批准式修改、恢复、哈希回读与错误前态拒绝；CLI/MCP 命令共用同一实例。临时验收脚本已通过 Creator 删除，工程 AssetDB 查询为空，活动场景恢复为默认 `New Node`。Creator 编译回执仍为 pending，不能判通过。CLI 全局安装和本地桥接 `doctor` 最新为 8/8 通过、33 条命令可用；0.11.0 本地 tarball 已生成并安装。GitHub Release 页面仍以 0.10.6 为 latest，显示账户 billing 问题；线上 Release、自更新和回滚仍未验收。详见[本轮验收](traces/cocos-cli-0.10.0-goal-20261020.md)、[测试合同](../../cocos-creator-agent-cli/references/2x/14-project-test-runner.md)与[后续能力评估](cocos-cli-vcs-template-assets-evaluation-20261020.md)。
+日期：2026-10-18（2026-10-25 更新）。范围：Codex / Claude Code / Cursor / VS Code / DeepSeek Harness → 独立 CLI（MCP 配置与 Skills 安装）→ 本机桥接 → Creator 2.4.x 项目扩展（CLI 当前接受 2.4.1–2.4.16，自动优先 2.4.16 到 2.4.1；实机验收证据仍为 2.4.15）。CLI 0.11.0 / Creator 扩展 0.7.0 已在 `tank` 完成真实 Creator 脚本创建、批准式修改、恢复、哈希回读与错误前态拒绝；CLI/MCP 命令共用同一实例。临时验收脚本已通过 Creator 删除，工程 AssetDB 查询为空，活动场景恢复为默认 `New Node`。Creator 编译回执仍为 pending，不能判通过。CLI 全局安装和本地桥接 `doctor` 最新为 8/8 通过、33 条命令可用；0.11.0 本地 tarball 已生成并安装。GitHub Release 页面仍以 0.10.6 为 latest，显示账户 billing 问题；线上 Release、自更新和回滚仍未验收。详见[本轮验收](traces/cocos-cli-0.10.0-goal-20261020.md)、[测试合同](../../cocos-creator-cli/references/2x/14-project-test-runner.md)与[后续能力评估](cocos-cli-vcs-template-assets-evaluation-20261020.md)。
 
 ## 目标链路
 
 ```text
 Codex / Claude Code / Cursor / VS Code / DeepSeek Harness
-  ├─ Host MCP 配置 ← cocos-creator-agent mcp configure
-  └─ Host Skill 目录 ← cocos-creator-agent skill install/refresh
+  ├─ Host MCP 配置 ← cocos-creator-cli mcp configure
+  └─ Host Skill 目录 ← cocos-creator-cli skill install/refresh
                         ↓ stdio MCP
               独立安装与升级的本机 Cocos CLI
                 ├─ 内置 MCP server 与 Host 配置管理
@@ -36,33 +36,32 @@ Codex / Claude Code / Cursor / VS Code / DeepSeek Harness
 - Harness 的 project/local Skill 安装尚不支持。Harness profile 需要先由 DeepSeek Harness 自己初始化。
 - 此适配依照 DeepSeek Harness MCP/Skills 文件合同实现；尚未在用户 Harness 实例中连接、重载并调用实际 Creator 工具，不能当作 Harness 实机验收。
 
-`mcp configure` 通过 Codex / Claude Code 原生命令、Cursor / VS Code 的标准 JSON 配置，或 DeepSeek Harness 所选 profile 的 `cordis.patch.yml`，注册 CLI 的 `mcp serve`；DeepSeek Harness 使用受标记管理的 `@deepseek-ai/dsh-mcp-client` stdio entry。MCP server、命令 catalog 与 Creator 调用都由 CLI 包持有。配置更新保留其他服务、原子写入并拒绝符号链接和同名漂移覆盖；Harness 配置支持自定义 profile 与 `DSH_HOME`。`skill install` 将 CLI 包内路由/专项 Skills 和参考资料装入 Codex、Claude Code 或 DeepSeek Harness 用户 Skill 目录；可按 Skill 选择、预览、刷新和冲突备份。Harness 的 project/local Skill 安装暂未暴露。仓库保留的 `plugins/cocos-creator-agent/` 只提供 CLI 引导 Skill，不承载 MCP server 或 Creator 工作流 Skill 正文。CLI 不依赖 Codex、Claude、Cursor、VS Code、DeepSeek Harness 或 Creator 原生 CocosAgent，可以单独供人、脚本和 CI 使用。Creator 扩展轮询每用户状态目录以建立会话。Host 必须先列出实例，再把明确的 `instanceId` 传给后续调用；服务不按前台窗口或“最近项目”猜目标。
+`mcp configure` 通过 Codex / Claude Code 原生命令、Cursor / VS Code 的标准 JSON 配置，或 DeepSeek Harness 所选 profile 的 `cordis.patch.yml`，注册 CLI 的 `mcp serve`；DeepSeek Harness 使用受标记管理的 `@deepseek-ai/dsh-mcp-client` stdio entry。MCP server、命令 catalog 与 Creator 调用都由 CLI 包持有。配置更新保留其他服务、原子写入并拒绝符号链接和同名漂移覆盖；Harness 配置支持自定义 profile 与 `DSH_HOME`。`skill install` 将 CLI 包内路由/专项 Skills 和参考资料装入 Codex、Claude Code 或 DeepSeek Harness 用户 Skill 目录；可按 Skill 选择、预览、刷新和冲突备份。Harness 的 project/local Skill 安装暂未暴露。CLI 的 MCP server、Creator 工作流 Skills 和项目扩展生命周期均由 `cocos-creator-cli` 包维护，不依赖单独的 Host 插件。Cocos CLI 可直接供人、脚本和 CI 使用，也可由 Codex、Claude、Cursor、VS Code 或 DeepSeek Harness 调用。Creator 扩展轮询每用户状态目录以建立会话。Host 必须先列出实例，再把明确的 `instanceId` 传给后续调用；服务不按前台窗口或“最近项目”猜目标。
 
 ## 源码职责
 
 | 文件 | 职责 |
 | --- | --- |
-| `cocos-creator-agent-cli/mcp/server.mjs` | CLI 自带 MCP initialize、tools/list、tools/call 和 stdio 服务；默认只发布工具组选择器，Host 按任务选择后再发布对应工具组 |
-| `cocos-creator-agent-cli/mcp/configure.mjs` | 通过 Codex/Claude 原生命令、Cursor/VS Code JSON 文件或 DeepSeek Harness profile patch 安装、检查、移除 CLI MCP 配置，并拒绝同名漂移覆盖 |
-| `cocos-creator-agent-cli/mcp/deepseek-harness.mjs` | 更新 Harness Cordis profile 的受标记 MCP YAML block，保留其他配置并拒绝危险路径和手改 block |
-| `cocos-creator-agent-cli/skills.mjs` | 展示、安装、刷新 Creator Skills；支持 Codex、Claude Code 和 DeepSeek Harness 用户目录，检查漂移并为强制替换保留备份 |
-| `cocos-creator-agent-cli/skills/` | CLI 发布包内的路由与专项 Creator Skills；唯一维护源 |
-| `cocos-creator-agent-cli/references/2x/` | 随 CLI Skills 分发的 Creator 2.4.x 参考资料 |
-| `plugins/cocos-creator-agent/skills/cocos2-cli/SKILL.md` | 旧式插件安装用户的 CLI 配置引导；不含 MCP server 或领域 Skill 正文 |
-| `cocos-creator-agent-cli/cli.mjs` | 独立 CLI：版本/自更新、MCP/Skill 配置、doctor、桥接运维、项目扩展生命周期、实例/能力查询与 Creator 命令调用 |
-| `cocos-creator-agent-cli/bridge/` | loopback 桥接服务与客户端、合同加载、输入校验 |
-| `cocos-creator-agent-cli/bridge/runtime-preview.mjs` | 独立 Chromium 预览会话、CDP Console/截图/输入与断言；会话绑定 Creator instance/session、工程和场景 UUID |
-| `cocos-creator-agent-cli/bridge/project-tools.mjs` | 发现并严格校验项目 `.cocos-agent/tools.json` 合同命令别名；拒绝脚本回调、未审批副作用和自定义 schema |
-| `cocos-creator-agent-cli/creator-extension/provider-contract.cjs` | 验证 Creator 项目扩展命令 Provider 的 ID、schema 子集、审批声明和参数；由 Creator 扩展与 CLI 共用 |
-| `cocos-creator-agent-cli/bridge/task-store.mjs` | 在用户目录持久化异步任务输入、身份、状态、回执摘要与恢复轨迹 |
-| `cocos-creator-agent-cli/creator-extension/` | 支持 Creator 2.4.1–2.4.16 的扩展模板及其注册/命令实现（实机验收目前为 2.4.15） |
-| `cocos-creator-agent-cli/creator-extension/command-contract.json` | CLI、桥接、MCP catalog 与 Creator 扩展共用的命令描述/schema；注册时比较 SHA-256 |
+| `cocos-creator-cli/mcp/server.mjs` | CLI 自带 MCP initialize、tools/list、tools/call 和 stdio 服务；默认只发布工具组选择器，Host 按任务选择后再发布对应工具组 |
+| `cocos-creator-cli/mcp/configure.mjs` | 通过 Codex/Claude 原生命令、Cursor/VS Code JSON 文件或 DeepSeek Harness profile patch 安装、检查、移除 CLI MCP 配置，并拒绝同名漂移覆盖 |
+| `cocos-creator-cli/mcp/deepseek-harness.mjs` | 更新 Harness Cordis profile 的受标记 MCP YAML block，保留其他配置并拒绝危险路径和手改 block |
+| `cocos-creator-cli/skills.mjs` | 展示、安装、刷新 Creator Skills；支持 Codex、Claude Code 和 DeepSeek Harness 用户目录，检查漂移并为强制替换保留备份 |
+| `cocos-creator-cli/skills/` | CLI 发布包内的路由与专项 Creator Skills；唯一维护源 |
+| `cocos-creator-cli/references/2x/` | 随 CLI Skills 分发的 Creator 2.4.x 参考资料 |
+| `cocos-creator-cli/cli.mjs` | 独立 CLI：版本/自更新、MCP/Skill 配置、doctor、桥接运维、项目扩展生命周期、实例/能力查询与 Creator 命令调用 |
+| `cocos-creator-cli/bridge/` | loopback 桥接服务与客户端、合同加载、输入校验 |
+| `cocos-creator-cli/bridge/runtime-preview.mjs` | 独立 Chromium 预览会话、CDP Console/截图/输入与断言；会话绑定 Creator instance/session、工程和场景 UUID |
+| `cocos-creator-cli/bridge/project-tools.mjs` | 发现并严格校验项目 `.cocos-creator-cli/tools.json` 合同命令别名；拒绝脚本回调、未审批副作用和自定义 schema |
+| `cocos-creator-cli/creator-extension/provider-contract.cjs` | 验证 Creator 项目扩展命令 Provider 的 ID、schema 子集、审批声明和参数；由 Creator 扩展与 CLI 共用 |
+| `cocos-creator-cli/bridge/task-store.mjs` | 在用户目录持久化异步任务输入、身份、状态、回执摘要与恢复轨迹 |
+| `cocos-creator-cli/creator-extension/` | 支持 Creator 2.4.1–2.4.16 的扩展模板及其注册/命令实现（实机验收目前为 2.4.15） |
+| `cocos-creator-cli/creator-extension/command-contract.json` | CLI、桥接、MCP catalog 与 Creator 扩展共用的命令描述/schema；注册时比较 SHA-256 |
 
-没有依赖原生 `tools/cocos-agent-bridge/` 的运行时代码或 2.4.15 NewProject 内的原生 Assistant 扩展文件。SDK Skills 仍保留在独立 `plugins/cocos-creator-agent-sdk/`，不影响此链路。
+此链路由 CLI 包及 Creator 项目内按合同声明的扩展 Provider 组成。SDK Skills 仍保留在独立 `plugins/cocos-creator-cli-sdk/`，不影响此链路。
 
 ## CLI 与 MCP 的职责边界
 
-CLI 的职责是提供**独立安装、独立升级、无 Host 依赖**的本机命令与自动化接口，并像 Unity CLI 一样拥有 MCP server、`mcp configure`、Skill 清单及 `skill install/refresh/show`。Codex / Claude 的插件不再负责启动 MCP server 或分发领域 Skills；可选 bootstrap 插件只教用户如何调用 CLI。人、脚本和 CI 仍能直接使用 CLI。Host MCP 是 CLI 暴露的 stdio 协议入口，负责工具发现、schema 公布、工具调用和结果封装；工具目录与执行均由 CLI 内的同一命令合同驱动。
+CLI 的职责是提供**独立安装、独立升级、无 Host 依赖**的本机命令与自动化接口，并拥有 MCP server、`mcp configure`、Skill 清单及 `skill install/refresh/show`。Host 插件不是运行前提；人、脚本和 CI 可直接使用 CLI。Host MCP 是 CLI 暴露的 stdio 协议入口，负责工具发现、schema 公布、工具调用和结果封装；工具目录与执行均由 CLI 内的同一命令合同驱动。
 
 | 层 | 应负责 | 当前状态 |
 | --- | --- | --- |
@@ -73,11 +72,11 @@ CLI 的职责是提供**独立安装、独立升级、无 Host 依赖**的本机
 
 CLI 可直接供 shell 使用，也提供 Host MCP 所需的机器接口。Codex / Claude 客户端从 CLI 安装 Creator 工作流 Skills；Codex、Claude Code、Cursor 与 VS Code 都可由 CLI 配置 MCP server。可选 bootstrap 插件只用于迁移/引导。MCP 与直接 CLI 调用复用 CLI 持有的合同和执行层，不维护不同的命令语义。扩展/桥接生命周期属于 CLI。
 
-**命令描述与输入 schema 已收敛：** `cocos-creator-agent-cli/creator-extension/command-contract.json` 是 Creator 命令描述及输入 schema 的唯一来源。桥接校验和能力目录从它读取；Creator 扩展注册时读取同一文件并以其 SHA-256 做合同指纹；MCP 从 CLI `catalog --format json` 生成工具描述与 `inputSchema`，只叠加 MCP 路由必需的 `instanceId`，保留 Host 工具名到 Creator 命令 ID 的薄映射；调用通过 CLI `call --command ... --input ... --format json` 执行。
+**命令描述与输入 schema 已收敛：** `cocos-creator-cli/creator-extension/command-contract.json` 是 Creator 命令描述及输入 schema 的唯一来源。桥接校验和能力目录从它读取；Creator 扩展注册时读取同一文件并以其 SHA-256 做合同指纹；MCP 从 CLI `catalog --format json` 生成工具描述与 `inputSchema`，只叠加 MCP 路由必需的 `instanceId`，保留 Host 工具名到 Creator 命令 ID 的薄映射；调用通过 CLI `call --command ... --input ... --format json` 执行。
 
 ### CLI 独立分发决策
 
-目标是把 CLI 做成**独立安装和升级的本机工具**，按 [Unity CLI 的 MCP/Skill 安装模型](https://docs.unity.com/en-us/unity-cli/replace-mcp-server-unity-cli)提供 `mcp configure`、CLI 内 MCP server、`skill install/refresh/show/list`。Creator Skills 与参考资料随 CLI 版本打包，Skill 安装不依赖 Host 插件市场。CLI 即使没有 Codex、Claude 或 Creator 原生 CocosAgent，也能用于人、脚本和 CI。兼容性引导插件可独立更新，但不能复制 MCP server、Creator Skills 或合同。
+目标是把 CLI 做成**独立安装和升级的本机工具**，按 [Unity CLI 的 MCP/Skill 安装模型](https://docs.unity.com/en-us/unity-cli/replace-mcp-server-unity-cli)提供 `mcp configure`、CLI 内 MCP server、`skill install/refresh/show/list`。Creator Skills 与参考资料随 CLI 版本打包，Skill 安装不依赖 Host 插件市场。CLI 可独立供人、脚本和 CI 使用，也可由支持的 Agent Host 调用。兼容性引导插件可独立更新，但不能复制 MCP server、Creator Skills 或合同。
 
 CLI 分发包应持有本机桥接运维、Creator 扩展安装/更新、命令合同、Creator 命令执行、stdio MCP server、客户端 MCP 配置适配器和 Creator Skills 源。`skill install` 依 Codex/Claude 原生布局安装用户/项目技能；`mcp configure` 通过 Codex/Claude 命令或 Cursor/VS Code JSON 配置注册 server；`catalog --format json` 和 `call --command <id> --input <json> --format json` 仍是内部稳定机器接口。可选 bootstrap 插件只说明如何安装/升级 CLI、安装 Skills 和配置 MCP。
 
@@ -123,35 +122,35 @@ CLI 分发包应持有本机桥接运维、Creator 扩展安装/更新、命令�
 
 ### 项目级工具注册与 Editor 扩展命令
 
-工程可声明 `.cocos-agent/tools.json`，每项含唯一 kebab-case `id`、`title`、`description` 和既有 `commandId`。`project-tools list` / `cocos_project_tools_list` 按当前 Creator 实例重新读取注册文件并返回 SHA-256、内置 schema 与映射命令；`project-tools call` / `cocos_project_tool_call` 先解析别名，再走同一命令校验和 Creator 回执。注册表可以映射 `read` / `plan` 命令；映射到 `write` / `control` 的命令必须在共享合同中声明 Creator 原生审批。MCP 给写别名 destructive 标注，并在工具定义中忽略项目提供的标题和描述。
+工程可声明 `.cocos-creator-cli/tools.json`，每项含唯一 kebab-case `id`、`title`、`description` 和既有 `commandId`。`project-tools list` / `cocos_project_tools_list` 按当前 Creator 实例重新读取注册文件并返回 SHA-256、内置 schema 与映射命令；`project-tools call` / `cocos_project_tool_call` 先解析别名，再走同一命令校验和 Creator 回执。注册表可以映射 `read` / `plan` 命令；映射到 `write` / `control` 的命令必须在共享合同中声明 Creator 原生审批。MCP 给写别名 destructive 标注，并在工具定义中忽略项目提供的标题和描述。
 
 V1 注册表最多 64 KiB/64 项，只允许映射到既有 Creator 合同命令，输入 schema 与访问/审批属性直接继承命令合同。注册表是数据，不能执行项目脚本、扩展回调或 SDK，也不能放宽权限；无 Creator 原生审批的 `write` / `control` 命令拒绝注册。标题/描述和项目回执均按不可信项目数据处理，MCP 工具定义不直接把它们作为指令文本。符号链接、未知字段、重复 ID、未知命令和越权命令均拒绝。项目级 Skills 仍由 Host 按工作流读取，不会因为出现在项目中就获得工具授权。
 
-Creator 项目还可安装独立 Editor 扩展命令 Provider：在扩展 `package.json` 声明 Creator 版本、协议版本、有限输入 schema 和 access；扩展主进程通过 `cocosAgentDescribe` / `cocosAgentInvoke` IPC 响应。Agent 扩展只扫描活动工程 `packages/`、`extensions/` 的直接子包，核对非符号链接入口、描述挑战、命令声明和 provider 指纹。CLI `extension commands list/call` 负责终端发现与调用；MCP `tools/list` 将在线工程命令映射为带工程身份的动态工具，调用前重核工程与 provider 指纹。write/control 需要 Creator 原生审批；输入经 CLI 与 Creator 两侧 schema 校验。扩展运行在 Creator 主进程，合同不提供沙箱或行为真实性证明，必须只调用可信扩展；不确定的写操作不会自动重放。合同和示例见[Provider 合同说明](../../cocos-creator-agent-cli/references/2x/13-agent-command-providers.md)。这一链路目前仅有源码实现与合同测试，Creator 2.4.15 IPC/弹窗实机验收待完成。
+Creator 项目还可安装独立 Editor 扩展命令 Provider：在扩展 `package.json` 声明 Creator 版本、协议版本、有限输入 schema 和 access；扩展主进程通过 IPC 标识 `cocosCreatorCliDescribe` / `cocosCreatorCliInvoke` 响应。扩展只扫描活动工程 `packages/`、`extensions/` 的直接子包，核对非符号链接入口、描述挑战、命令声明和 provider 指纹。CLI `extension commands list/call` 负责终端发现与调用；MCP `tools/list` 将在线工程命令映射为带工程身份的动态工具，调用前重核工程与 provider 指纹。write/control 需要 Creator 原生审批；输入经 CLI 与 Creator 两侧 schema 校验。扩展运行在 Creator 主进程，合同不提供沙箱或行为真实性证明，必须只调用可信扩展；不确定的写操作不会自动重放。合同和示例见[Provider 合同说明](../../cocos-creator-cli/references/2x/13-creator-cli-command-providers.md)。这一链路目前仅有源码实现与合同测试，Creator 2.4.15 IPC/弹窗实机验收待完成。
 
 ### 异步任务与中断恢复
 
-`tasks start` / `cocos_tasks_start` 接收一个已知命令及合同校验过的输入，立即返回 task ID。任务状态、身份、原输入和有界事件轨迹原子写到 `~/.cocos-creator-agent/tasks/<taskId>.json`（目录/文件权限 `0700`/`0600`）；status 响应不暴露原输入，只返回 SHA-256、事件和完成结果。`tasks wait` / `cocos_tasks_wait` 可按 `eventSequence` 等待下一条持久状态事件，最长 30 秒；超时返回当前进度。每个 Creator 实例仍只允许一个活跃命令/任务。
+`tasks start` / `cocos_tasks_start` 接收一个已知命令及合同校验过的输入，立即返回 task ID。任务状态、身份、原输入和有界事件轨迹原子写到 `~/.cocos-creator-cli/tasks/<taskId>.json`（目录/文件权限 `0700`/`0600`）；status 响应不暴露原输入，只返回 SHA-256、事件和完成结果。`tasks wait` / `cocos_tasks_wait` 可按 `eventSequence` 等待下一条持久状态事件，最长 30 秒；超时返回当前进度。每个 Creator 实例仍只允许一个活跃命令/任务。
 
 取消采用协作语义：排队且尚未派发的任务可直接取消；派发后的任务会标记 request 已取消，Creator 原生授权检查会拒绝迟到审批，但无法撤回已经通过审批并开始的写入。脚本创建、节点 `active`、组件挂载和组件标量属性提交分别恢复到对应 reconcile 命令，不重放写入。若结果不确定，状态为 `needs-reconciliation`，不会声称已回滚。
 
 桥接启动时把遗留 `queued`/`running`/`cancel-requested` 转成中断状态，不自动重放。只读命令可以显式 resume；脚本创建 commit 通过原 `operationId` 调用只读 reconcile；其他已派发的 plan/write/control 必须人工核对，不提供自动重试。恢复前校验相同项目绝对路径、CLI/Creator/扩展版本、合同指纹和明确的当前实例 ID。
 
-MCP 当前源码定义 36 个固定工具（3 个基础、25 个 Creator 命令适配、2 个项目工具和 6 个任务生命周期工具）；另在 `tools/list` 时为在线工程发现项目别名与扩展 Provider 命令，合计不超过 128。工具名按工程身份生成，schema/access/审批从实时合同继承；调用时重核工程实例、Provider 指纹或项目注册哈希。扩展 Provider 是 Unity Pipeline 自定义 Editor 命令框架的 Creator 对应接口，不是沙箱。动态 Provider 工具、组件挂载/标量属性工具及任务等待工具仍待桌面 Host 重载和 Creator 2.4.15 实机验收；CLI 等待接口及 Provider schema 校验有本机测试。CLI 用 `cocos-creator-agent catalog` 查看 Creator 固定共享合同，项目 Provider 的实时 schema 从对应 Creator 实例发现；未声明输入拒绝。
+MCP 当前源码定义 36 个固定工具（3 个基础、25 个 Creator 命令适配、2 个项目工具和 6 个任务生命周期工具）；另在 `tools/list` 时为在线工程发现项目别名与扩展 Provider 命令，合计不超过 128。工具名按工程身份生成，schema/access/审批从实时合同继承；调用时重核工程实例、Provider 指纹或项目注册哈希。扩展 Provider 是 Unity Pipeline 自定义 Editor 命令框架的 Creator 对应接口，不是沙箱。动态 Provider 工具、组件挂载/标量属性工具及任务等待工具仍待桌面 Host 重载和 Creator 2.4.15 实机验收；CLI 等待接口及 Provider schema 校验有本机测试。CLI 用 `cocos-creator-cli catalog` 查看 Creator 固定共享合同，项目 Provider 的实时 schema 从对应 Creator 实例发现；未声明输入拒绝。
 
 ## 配对与本机安全边界
 
 - Creator 扩展只在报告版本属于 2.4.1–2.4.16、项目身份有效且扩展版本/合同 SHA 匹配时注册。
-- 服务只监听 IPv4 loopback，生成每次运行随机 bearer token，放在用户目录 `~/.cocos-creator-agent/third-party-bridge.json`；目录和状态文件权限限制为 `0700` / `0600`（系统支持时）。项目目录不保存桥接 token。
+- 服务只监听 IPv4 loopback，生成每次运行随机 bearer token，放在用户目录 `~/.cocos-creator-cli/third-party-bridge.json`；目录和状态文件权限限制为 `0700` / `0600`（系统支持时）。项目目录不保存桥接 token。
 - HTTP 请求要求 bearer token、限制请求体大小、限制单实例并发命令。无效会话、旧合同、断连、实例忙和超时均有错误码；写入和获准操作不会自动重试。
-- CLI 的 `extension install --project-root <absolute-path>` 仅在显式调用时写入项目 `packages/cocos-creator-agent-extension/`，拒绝覆盖既有目录和经过符号链接的 `packages/` 路径。安装后仍须在 Creator 重载项目扩展。
+- CLI 的 `extension install --project-root <absolute-path>` 仅在显式调用时写入项目 `packages/cocos-creator-cli-extension/`，拒绝覆盖既有目录和经过符号链接的 `packages/` 路径。安装后仍须在 Creator 重载项目扩展。
 - 写入审批在 Creator 侧由 `Editor.Dialog.messageBox` 实现，Host MCP 对 commit 同时标注为 destructive。Creator 只接受与保存 plan 完全匹配的 operation ID/hash，用户批准后再执行前态复验。Host 的提示/确认元数据不能单独替代 Creator 确认框。
 - Creator 在弹框关闭后先向桥接核对原 commit 请求是否仍处于活动状态；CLI/Host 断开或请求超时后，晚到的“创建”点击不会继续写入。操作状态保持可 reconcile，不会自动重试。
-- Operation 记录和待提交源码保存在项目外 `~/.cocos-creator-agent/creator-operations/`，目录/文件权限为 `0700` / `0600`；记录绑定项目绝对路径、Creator/扩展/合同版本、operation ID、目标 URL、原态、源 SHA-256、状态和恢复条件。目标资产仍必须由 Creator AssetDB 创建；CLI/MCP 不直接写 `assets/`、`.meta` 或场景序列化文件。
+- Operation 记录和待提交源码保存在项目外 `~/.cocos-creator-cli/creator-operations/`，目录/文件权限为 `0700` / `0600`；记录绑定项目绝对路径、Creator/扩展/合同版本、operation ID、目标 URL、原态、源 SHA-256、状态和恢复条件。目标资产仍必须由 Creator AssetDB 创建；CLI/MCP 不直接写 `assets/`、`.meta` 或场景序列化文件。
 - 当前写入覆盖**创建一个 JS/TS 资源**、**修改一个节点的 `active`**、**挂载一个 Creator 已注册组件**和**设置该组件的一个公开标量属性**；不提供自动删除/反向修改补偿命令。脚本回执含资源 URL、UUID、importer、源/`.meta` 哈希；场景回执含目标身份、前后态及保存请求状态。Creator/桥接超时后必须用原 operation ID reconcile；不会自动重试。场景保存 IPC 没有文档化完成确认，场景回执不等于磁盘持久化证明。
 - 服务不持有或转发模型凭据。
 - 预览启动在 Creator 原生确认后调用官方 `scene:play-on-device` IPC；随后桥接启动独立 Chromium 并绑定活动场景名/UUID。运行时需同时匹配 Creator 提供的 `preview-scene.json` 中场景资源 UUID/名称及游戏根场景名；不匹配或无完整来源就拒绝会话。Chromium 只访问 loopback HTTP 预览，不接收任意 URL。浏览器 Console、异常、截图和输入均绑定 `previewSessionId`；输入限制为 12 个白名单键（每键 1–2000 ms）或 canvas 归一化点击，断言限制为 Console、场景、节点 active/x/y、节点存在及组件简单数据字段。
-- `creator.preview.stop` 仅关闭 Agent 创建的 Chromium 窗口，不会假称关闭 Creator 预览服务；Creator 原生启动的默认浏览器页仍由 Creator/用户控制。截图放在 `~/.cocos-creator-agent/captures/`，并返回路径和 SHA-256，不写项目资源目录。
+- `creator.preview.stop` 仅关闭 Agent 创建的 Chromium 窗口，不会假称关闭 Creator 预览服务；Creator 原生启动的默认浏览器页仍由 Creator/用户控制。截图放在 `~/.cocos-creator-cli/captures/`，并返回路径和 SHA-256，不写项目资源目录。
 - 诊断工具收集 Creator Builder 的 `compile-finished`/`build-finished` 事件、脚本导入失败及 Creator Console renderer 消息。未知事件载荷按有界字段回读；“收到 compile-finished”不等于“构建成功”。
 
 实现依据：Creator 2.4 的[扩展资源管理文档](https://docs.cocos.com/creator/2.4/manual/zh/extension/asset-management.html)说明用 `Editor.assetdb.create` 创建资源和 `scene:stash-and-save` 保存场景；[Scene Script 文档](https://docs.cocos.com/creator/2.4/manual/en/editor/extension/scene-script.html)说明可遍历和修改场景节点；[主进程 `Editor.Dialog` API](https://docs.cocos.com/creator/2.4/manual/zh/extension/api/editor-framework/main/dialog.html)提供原生消息确认框；[Builder API](https://docs.cocos.com/creator/2.4/manual/zh/extension/api/editor-framework/main/builder.html)定义 `compile-finished`/`build-finished` 事件；Creator 2.4 的[浏览器预览](https://docs.cocos.com/creator/2.4/manual/en/editor/preview/browser.html)说明预览控制面。当前新增写入、构建/Console 订阅及预览控制代码仍待 Creator 2.4.15 实机验证。
@@ -160,9 +159,9 @@ MCP 当前源码定义 36 个固定工具（3 个基础、25 个 Creator 命令�
 
 ### 当前基线
 
-- 产品边界：`cocos-creator-agent-cli/` 是独立本机产品，拥有 MCP server、Codex/Claude/Cursor/VS Code 配置适配器、Creator Skills 安装器、Creator 扩展与桥接；`plugins/cocos-creator-agent/` 只保留旧式插件安装的 CLI 引导 Skill。Creator 原生 CocosAgent 已停用并移除，不属于运行依赖。
+- 产品边界：Cocos CLI 是独立本机产品，拥有 MCP server、Codex/Claude/Cursor/VS Code 配置适配器、Creator Skills 安装器、Creator 扩展与桥接。目录、可执行文件和部分 IPC 标识保留历史兼容命名；不存在独立 Creator Agent 产品。
 - 版本基线：历史候选 CLI `0.10.6` / Creator 扩展 `0.6.2` 已有本地包与预览证据；CLI `0.11.0` / Creator 扩展 `0.7.0` 已打成本地 tarball 并安装到全局 CLI。当前候选包为 98 个条目、179,445 字节，SHA-256 `3dddb3a8abde25b2d1d19d99898c8294260d796802d90cb05c0ff77f7ea004c3`。真实 Creator 已完成 `script.modify` 修改及恢复回读，编译仍未确认。空 tank 的 Creator Builder 明确报告没有启动场景；CLI 现返回结构化 Builder 失败码/原因，并保留后续进程超时状态。GitHub Actions 因账户 billing locked 未运行；公开 Release、线上自更新与回滚仍未完成。Creator 固定命令合同只支持 `2.4.15`，CLI 需要 Node.js 20+；预览证据需要本机 Chromium。
-- Skills：51 项 Creator 工作流 Skills 与 1 项 CLI Skill（共 52 项）及 Creator 2.4.x 参考资料已移入 CLI 包作为唯一维护源；CLI `skill install` 安装到 Codex/Claude 原生目录。5 项厂商 SDK Skills 仍在可选包 `plugins/cocos-creator-agent-sdk/`，后续需决定是否让 CLI 安装器也管理可选 SDK 包。
+- Skills：51 项 Creator 工作流 Skills 与 1 项 CLI Skill（共 52 项）及 Creator 2.4.x 参考资料已移入 CLI 包作为唯一维护源；CLI `skill install` 安装到 Codex/Claude 原生目录。5 项厂商 SDK Skills 仍在可选包 `plugins/cocos-creator-cli-sdk/`，后续需决定是否让 CLI 安装器也管理可选 SDK 包。
 - MCP：CLI `mcp serve` 内置 stdio server，`mcp configure/list/status/remove` 负责 Host 注册与检查；无 Provider 时固定目录为 36 项，在线项目别名与 Creator Provider 命令共用总工具数 128 上限。0.10.6 候选包 `initialize`、38 项动态 `tools/list` 和同实例 `cocos_project_info` 实际调用已通过；Codex/Claude 配置均为 `configured`，桌面 Host 会话重载仍待验收。
 - Creator 命令：通用 Creator 扩展命令发现与调用已实现，项目扩展可按共享合同声明有限命令并由 CLI/MCP 薄适配；合同漂移、Provider 重载和中断行为仍需持续验收。5 条只读命令有历史真实回执；源码还提供精确节点读取、脚本创建/修改和节点 active/rename/reparent 修改的计划/提交/恢复、单节点组件挂载和公开标量属性设置计划/提交/恢复、Creator 编译与 Console 诊断、批准启动 Web 预览及浏览器截图/观察/同会话输入断言。`script.modify` 现已在 Creator 2.4.15 实机批准修改并恢复：CLI/MCP 读回源哈希、UUID/importer 和 `.meta` 哈希一致，错误源哈希被拒绝；临时脚本经 Creator 资源管理器删除，AssetDB 查询为 0。编译事件游标仅标识之后观察到的 Creator 事件，不自动归因目标脚本；本轮没有编译回执，编译仍未通过验收。组件挂载拒绝隐式 `requireComponent`；标量写入绑定 Creator 同一扩展会话和具体组件对象 ID；组件构造函数与属性 setter 可能运行项目/引擎代码，Creator 审批框会显示提醒。UI 事件、组件资源引用与对象/数组字段仍无写工具。节点改名和换父仅有源码/合同证据，Creator 实机验收待完成。异步任务持久化并支持取消与显式恢复，写入中断后改走 reconcile、不重放。除本轮 `script.modify` 外，新增固定写入、构建及运行控制命令仍需逐项实机验收。
 - 已验收：历史 0.8.x/0.9.0 本地包与隔离安装；CLI 0.10.6 的 59 项测试与候选 tarball；CLI 0.11.0 本地 tarball/全局安装、Creator 扩展 `0.7.0` 和合同匹配；Creator 2.4.15 `doctor` 9/9 通过、33 条命令可用；CLI/MCP 同一 Creator 实例上的脚本创建、修改、恢复、哈希回读与错误前态拒绝；Provider 动态 MCP 工具、审批取消拒绝和恢复读回；候选 CLI 同一预览会话中的画布聚焦、Space 输入、`counter === 1` 与无错误断言。公开 Release/线上自更新、桌面 Host 新会话工具目录重载、Creator 编译确认和更多固定写入命令仍未完成。详见[本轮完整记录](traces/cocos-cli-0.10.0-goal-20261020.md)。
@@ -188,7 +187,7 @@ MCP 当前源码定义 36 个固定工具（3 个基础、25 个 Creator 命令�
 **P3：运行反馈与同会话复验（同会话基本输入/断言已通过；诊断、构建与故障注入仍需验收）**
 
 - Creator 扩展通过 Builder 与 Editor Console/AssetDB 事件维护有界诊断序列。诊断回执包含来源、时间、序列游标；编译结束事件不代表成功，需查看具体失败日志/导入失败。
-- 经 Creator 原生确认后，`scene:play-on-device` 请求预览；桥接启动单独隔离的 Chromium，并校验运行场景名与 UUID 后返回 `previewSessionId`。本地浏览器需要 Chromium，可配置 `COCOS_CREATOR_AGENT_BROWSER`。
+- 经 Creator 原生确认后，`scene:play-on-device` 请求预览；桥接启动单独隔离的 Chromium，并校验运行场景名与 UUID 后返回 `previewSessionId`。本地浏览器需要 Chromium，可配置 `COCOS_CREATOR_CLI_BROWSER`。
 - 同会话支持 Console/运行状态读取、PNG 截图、refresh、有限键盘和 canvas 点击，以及 scene/node/Console 声明式断言。刷新不创建新 session ID；失去 Creator session 或场景 UUID 对不上时拒绝。
 - CLI `creator watch` 接受最多 32 个工程内文件，稳定改动后刷新原预览会话并重跑同一组 smoke-test 断言，输出 NDJSON 事件。它是运行时持续回归，不是 Creator 单元测试 runner。源码与路径边界测试已通过；0.9.0 本地 tarball 已包含该能力，但公开 Release 状态未核实，也未在 Creator 实机运行。
 - **已通过：** Creator 2.4.15 上候选 CLI 启动 Agent 管理的 Chromium 预览，经 Creator 审批后在同一 session 点击画布、发送 Space；回执断言 `counter === 1` 与 `no-errors` 均通过，截图显示 `Count: 1`。
@@ -199,8 +198,8 @@ MCP 当前源码定义 36 个固定工具（3 个基础、25 个 Creator 命令�
 
 **P4：项目级 Skills 与 Editor 命令扩展（Provider 发现、MCP 暴露及审批调用已实机通过）**
 
-- 已实现源码：`.cocos-agent/tools.json` 可注册合同命令别名；CLI/MCP 发现时返回注册哈希并继承命令 schema、访问级别和审批要求。允许 read/plan 与 Creator 原生审批的 write/control；拒绝自定义 schema、回调代码和未审批副作用。MCP 忽略项目标题/描述，避免把不可信项目文案写入动态工具定义。
-- 已实现源码：Creator 2.4.x（2.4.1–2.4.16）项目扩展可在 `package.json` 声明有限 schema 命令，通过主进程 `cocosAgentDescribe` / `cocosAgentInvoke` IPC 被实时发现和调用；CLI 提供 `extension commands list` / `extension command call`；MCP 为在线项目命令生成动态工具。读/计划/写/控制按 access 分级，写/控制必须在 Creator 原生确认；命令合同、schema、工程路径、provider 指纹在调用前后重核，输入双侧校验，写/控制中断后不重放。
+- 已实现源码：`.cocos-creator-cli/tools.json` 可注册合同命令别名；CLI/MCP 发现时返回注册哈希并继承命令 schema、访问级别和审批要求。允许 read/plan 与 Creator 原生审批的 write/control；拒绝自定义 schema、回调代码和未审批副作用。MCP 忽略项目标题/描述，避免把不可信项目文案写入动态工具定义。
+- 已实现源码：Creator 2.4.x（2.4.1–2.4.16）项目扩展可在 `package.json` 声明有限 schema 命令，通过主进程 `cocosCreatorCliDescribe` / `cocosCreatorCliInvoke` IPC 被实时发现和调用；CLI 提供 `extension commands list` / `extension command call`；MCP 为在线项目命令生成动态工具。读/计划/写/控制按 access 分级，写/控制必须在 Creator 原生确认；命令合同、schema、工程路径、provider 指纹在调用前后重核，输入双侧校验，写/控制中断后不重放。
 - **已通过实机切片：** `tank` 中临时 Provider 经 Creator 扩展加载后由 CLI/MCP 发现；CLI read、Creator 原生审批 write、取消拒绝、MCP 动态工具调用与恢复读回均通过。Provider 指纹、命令目录哈希和每次回执记录在本轮 trace。
 - 待验收：扩展重载、注册变化、provider 冲突/缺失、桥接/Creator 中断。Provider 代码运行在 Creator 主进程，不受 schema sandbox；只能安装并调用可信扩展。项目 Skill 的可信来源与版本/哈希、Codex/Claude 按需加载仍待完善。
 - 验收条件：项目工具和扩展命令能被当前 Creator 实例发现；陈旧指纹、未知工具、未声明输入和未批准副作用拒绝；项目 Skill 与 Provider 声明不能扩大 Host/Creator 权限。
@@ -220,4 +219,4 @@ MCP 当前源码定义 36 个固定工具（3 个基础、25 个 Creator 命令�
 
 CLI 独立包从本地目录与 tarball 安装到隔离 prefix，在同一 prefix 验证升级；MCP 从 CLI 获取唯一命令目录/schema 并委托调用。Codex 与 tank Creator 2.4.15 的只读实机链路已通过。2026-10-21 又完成 Provider 审批/取消/恢复、候选 MCP 动态工具调用、同会话输入断言和脚本源文件修改/恢复。tank 临时脚本及场景样本已由 Creator 清理，AssetDB 查询为空；Creator 项目扩展源文件仍保留本任务的 0.7.0 变更。0.11.0 候选 tarball 尚未公开发布。完整回执见[本轮轨迹](traces/cocos-cli-0.10.0-goal-20261020.md)。
 
-CLI 0.10.0 起增加项目测试计划、Node/Creator Provider/预览适配、JSON/JUnit、目录新增/重命名/删除观察与受影响套件重跑；详见[测试运行器合同](../../cocos-creator-agent-cli/references/2x/14-project-test-runner.md)。历史 CLI 0.10.6 测试 59/59 通过；当前 CLI 0.11.0 工作树测试 67/67 通过。Creator 项目测试计划未在 `tank` 配置，Creator 编译成功、有效项目构建/测试结果仍需实机验收。
+CLI 0.10.0 起增加项目测试计划、Node/Creator Provider/预览适配、JSON/JUnit、目录新增/重命名/删除观察与受影响套件重跑；详见[测试运行器合同](../../cocos-creator-cli/references/2x/14-project-test-runner.md)。历史 CLI 0.10.6 测试 59/59 通过；当前 CLI 0.11.0 工作树测试 67/67 通过。Creator 项目测试计划未在 `tank` 配置，Creator 编译成功、有效项目构建/测试结果仍需实机验收。

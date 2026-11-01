@@ -14,7 +14,7 @@
 
 问题：“我改了邻接引擎源码，为什么现有 Mac 包没变化？” [来源探针](../agent-foundation/probes/stage12-engine-provenance.py)与[结果](../agent-foundation/traces/stage12-engine-provenance.jsonl)使 3.8 的这个**现有包**可判定为内置引擎构建；2.4 缺少来源字段，不能给出同等判定。这个对照检验的是**证据能证明什么**，不能把 3.8 的配置形状套到 2.4。两版都还需要在项目设置中配置对应自定义引擎，并以重新编译、重新构建及新产物标记来验证实际接线；本次未修改项目设置或构建产物。
 
-面向未来 Cocos agent，先按版本和症状分流到扩展、项目构建或引擎运行时，再收集该目标的编辑器设置、构建日志和生成配置。`editor/` 代码是集成证据；宿主缺席时应停止于接口边界。候选流程与验证范围见[阶段 12 记录](../agent-foundation/skills/editor-extension-diagnostics-validation.md)。
+Cocos Creator 扩展与工程诊断先按版本和症状分流到扩展、项目构建或引擎运行时，再收集该目标的编辑器设置、构建日志和生成配置。`editor/` 代码是集成证据；宿主缺席时应停止于接口边界。候选流程与验证范围见[阶段 12 记录](../agent-foundation/skills/editor-extension-diagnostics-validation.md)。
 
 [两版扩展轨迹](../agent-foundation/traces/stage12-editor-extension.jsonl)说明同样创建“菜单 → 扩展消息”时，2.4 的旧包入口和 3.8 的 `contributions` 配置不能互换。两边都已在各自编辑器实测菜单点击与 `ping`；2.4 新目录需完整重开项目才被这次宿主发现，3.8 在已运行编辑器中通过扩展管理器刷新、启用。这里是两个独立观察，不把“2.4 必须重开”推广为所有 2.4 扩展安装方式的规则。
 

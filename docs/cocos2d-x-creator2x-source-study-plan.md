@@ -55,9 +55,9 @@
 
 ## 技能产出规则
 
-- Cocos2d-x 专属专题 Skill 按“一项开发主题一个 `SKILL.md`”组织在 `plugins/cocos2d-x-4/skills/<skill-name>/`，作为后续 Agent 可接入的独立技能源；不放入 `plugins/cocos-agent-2x/skills/`，避免把 C++ 框架工作流混入 Creator 原生 Agent 产品包。当前技能源目录不代表已经完成 Agent 安装、发现或运行时接线。
+- Cocos2d-x 专属专题 Skill 按“一项开发主题一个 `SKILL.md`”组织在 `plugins/cocos2d-x-4/skills/<skill-name>/`，作为独立的引擎专题技能源；与 Cocos CLI 的 Creator 2.x Skills 分开放置，避免混合两套工作流。当前技能源目录不代表已经完成客户端安装、发现或运行时接线。
 - 每个专题 Skill 只负责一个具体开发/诊断任务，必须包含该专题自己的流程图，前置标明 Cocos2d-x 版本、平台范围和证据状态，并链接对应源码地图/验证记录。专题在形成可复核源码地图及验证切片后独立发布；只有静态研究的主题必须明确“未做运行验证”，不得写成已验收。不能以一个通用 Cocos2d-x Skill 或比较 Skill 代替专题技能。
-- 每个已研究的跨引擎专题独立维护一份比较 MD，放在 `docs/comparisons/cocos2d-x-4-vs-creator-2.4/`；它记录双方实现、源码/文档/运行证据、平台差异与未验证项。专题 Skill 是“如何完成 Cocos2d-x 任务”的流程说明，比较 MD 是按需读取的对照资料；Agent 只在跨引擎比较/移植任务中加载相关 MD，不默认加载整套比较文档。无需通用比较 Skill。
+- 每个已研究的跨引擎专题独立维护一份比较 MD，放在 `docs/comparisons/cocos2d-x-4-vs-creator-2.4/`；它记录双方实现、源码/文档/运行证据、平台差异与未验证项。专题 Skill 是“如何完成 Cocos2d-x 任务”的流程说明，比较 MD 是按需读取的对照资料，只在跨引擎比较/移植任务中加载相关 MD，不默认加载整套比较文档。无需通用比较 Skill。
 - 每份 skill 需覆盖一个真实开发任务，至少检查一个正常请求和一个容易误映射或证据不足的请求；记录试用结论和未覆盖平台。
 
 ### Cocos2d-x 专题目录
@@ -80,7 +80,7 @@
 
 - 已确认比较对象为本地 Cocos2d-x 4.0 与 Creator 2.4.15 引擎源码快照；历史 Creator 示例工程和运行轨迹仅作为归档证据，不视为当前工作树可复测工程。
 - 已建立[架构层面对照](comparisons/cocos2d-x-4-vs-creator-2.4.md)及五份按专题拆分的比较 MD；不维护通用比较 Skill。
-- 已按专题建立 Cocos2d-x 技能源 `plugins/cocos2d-x-4/skills/`：项目构建、启动/帧循环、Scene/Node 生命周期、输入事件、资源加载/释放各有独立 Skill。项目构建、启动/首屏和桌面鼠标交互有 macOS 示例运行证据；Scene/Node 生命周期及资源缓存/释放仍是静态源码研究。Agent 的发现/加载集成尚未接线。
+- 已按专题建立 Cocos2d-x 技能源 `plugins/cocos2d-x-4/skills/`：项目构建、启动/帧循环、Scene/Node 生命周期、输入事件、资源加载/释放各有独立 Skill。项目构建、启动/首屏和桌面鼠标交互有 macOS 示例运行证据；Scene/Node 生命周期及资源缓存/释放仍是静态源码研究。这些 Skill 尚未接入客户端发现/加载流程。
 - 阶段 1 的 [Cocos2d-x 启动与帧循环](cocos2d-x/01-startup-and-frame.md) 已完成源码静态追踪；Creator 一侧复用已有[2.4.15 启动研究与 Chrome 预览轨迹](2.x/01-startup-and-frame.md)。
 - 阶段 2 已补 [Cocos2d-x Scene/Node/Component 生命周期源码地图](cocos2d-x/02-objects-and-lifecycle.md)，并确认本地 v4 含有 `Component`/`ComponentContainer`。Creator 2.4.15 对应源码与 Chrome 运行轨迹复用既有[对象与场景研究](2.x/02-objects-and-scenes.md)。两边尚未做相同行为运行对照。
 - 先前发现系统环境缺少 CMake、依赖 payload 与初始化 submodule；随后已在 `/private/tmp` 准备本轮专用 CMake/runtime，恢复构建依赖，并构建、启动 macOS x86_64 `cpp-tests` 与 `HelloCpp`。详细命令、补丁和限制见[Demo 记录](cocos2d-x-creator2x-demo.md)。这是本次对照验证环境，不代表其他机器具备相同构建条件。

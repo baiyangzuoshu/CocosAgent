@@ -1,5 +1,0 @@
-{
-  "name": "cocos-creator-agent",
-  "version": "0.8.0",
-  "description": "Bootstrap Skill for configuring the standalone Cocos Creator CLI MCP server and installing its bundled skills."
-}

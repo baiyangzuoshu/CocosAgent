@@ -7,9 +7,11 @@ Grades: A 32, B 12, C 6, D 2
 
 This is a static structure and token-budget scan. It does not measure skill selection, task success, or Creator runtime behavior.
 
+Historical naming note: this report records the router Skill ID used when generated. The current router ID is `cocos-creator-cli`; `cocos-agent` is not a supported alias.
+
 | Skill | Score | Grade | Static findings |
 | --- | ---: | :---: | --- |
-| cocos-agent | 86 | B | description-trigger-weak, trigger_cost_tokens-budget-high, invoke_cost_tokens-budget-high |
+| cocos-agent (historical ID at report generation; no longer supported) | 86 | B | description-trigger-weak, trigger_cost_tokens-budget-high, invoke_cost_tokens-budget-high |
 | cocos2-animation | 95 | A | description-trigger-weak |
 | cocos2-asset-bundle-content | 86 | B | description-trigger-weak, trigger_cost_tokens-budget-high, invoke_cost_tokens-budget-high |
 | cocos2-audio-configuration | 95 | A | description-trigger-weak |

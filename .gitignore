@@ -7,10 +7,8 @@ dist/
 coverage/
 node_modules/
 **/assistant-runtime/
-/2.4.15NewProject/packages/cocos-agent-bridge/.assistant-runtime.rollback-*/
-/2.4.15NewProject/packages/.cocos-agent-bridge.rollback-*/
 /engine/3.8.7engine/native/simulator/Release/SimulatorApp-Mac.app/
-.cocos-agent/
+.cocos-creator-cli/
 graphify-out/
 .env
 .env.*
@@ -44,4 +42,4 @@ __pycache__/
 # information for Eclipse / Flash Builder.
 
 # Machine-specific generated DeepSeek Harness bundle
-/cocos-creator-agent-cli/.local/
+/cocos-creator-cli/.local/

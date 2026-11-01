@@ -1,14 +1,14 @@
 {
-  "name": "cocos-agent-local",
+  "name": "cocos-creator-cli-local",
   "interface": {
-    "displayName": "Cocos Agent"
+    "displayName": "Cocos CLI"
   },
   "plugins": [
     {
-      "name": "cocos-creator-agent",
+      "name": "cocos-creator-cli-sdk",
       "source": {
         "source": "local",
-        "path": "./cocos-creator-agent"
+        "path": "./cocos-creator-cli-sdk"
       },
       "policy": {
         "installation": "AVAILABLE",

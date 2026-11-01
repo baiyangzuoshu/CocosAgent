@@ -1,6 +1,0 @@
-{
-  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-  "name": "cocos-creator-agent",
-  "version": "0.8.0",
-  "description": "Bootstrap Skill for configuring the standalone Cocos Creator CLI MCP server and installing its bundled skills."
-}

@@ -1,11 +1,11 @@
 # Creator 2.4 domain diagnostics contract
 
-This document defines the read-only `diagnostics check` interface owned by `cocos-creator-agent-cli`. The implementation contract is validated against Creator 2.4.15. The CLI may advertise the repository's supported Creator patch range, but that does not extend the editor/runtime evidence beyond 2.4.15.
+This document defines the read-only `diagnostics check` interface owned by `cocos-creator-cli`. The implementation contract is validated against Creator 2.4.15. The CLI may advertise the repository's supported Creator patch range, but that does not extend the editor/runtime evidence beyond 2.4.15.
 
 ## Command
 
 ```text
-cocos-creator-agent diagnostics check --instance <id> [--domain physics|audio|font|render|all] [--session <preview-session-id>] [--platform web-mobile|web-desktop|android|ios|mac|win32]
+cocos-creator-cli diagnostics check --instance <id> [--domain physics|audio|font|render|all] [--session <preview-session-id>] [--platform web-mobile|web-desktop|android|ios|mac|win32]
 ```
 
 `--domain` defaults to `all`. `all` expands to `physics`, `audio`, `font`, and `render`. `--session` may name only an already-running Preview session bound by the bridge to the same Creator instance, project, and active scene. The command never starts Preview, plays audio, interacts with the game, or writes project files. Without a Preview session, checks needing live state return `inconclusive`.

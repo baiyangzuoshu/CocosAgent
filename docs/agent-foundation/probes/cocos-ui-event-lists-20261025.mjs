@@ -23,7 +23,7 @@ function call(command, input = {}) {
   journal.calls.push(record); save();
   let receipt;
   try {
-    receipt = JSON.parse(execFileSync('cocos-creator-agent', ['call', '--instance', instanceId,
+    receipt = JSON.parse(execFileSync('cocos-creator-cli', ['call', '--instance', instanceId,
       '--command', command, '--input', JSON.stringify(input), '--format', 'json'],
     { encoding: 'utf8', timeout: 65000, maxBuffer: 8 * 1024 * 1024 }));
   } catch (error) { record.failure = String(error.stdout || error.message); save(); throw error; }
