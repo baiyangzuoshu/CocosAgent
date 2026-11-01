@@ -42,3 +42,7 @@ deno task serve
 ~~~
 
 打开 <http://localhost:8000>。
+
+## 同主题课程
+
+- [Cocos2d-x 4.0：节点与场景树](../../learn_cocos2d-4x/s04_node_scene_tree/README.md)
