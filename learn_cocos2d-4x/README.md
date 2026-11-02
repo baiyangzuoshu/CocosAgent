@@ -2,7 +2,7 @@
 
 以仓库中的 `engine/cocos2d-x-4/` 为源码依据，用 C++ 按主题裁出最小课程实现。每课保留对应的源码职责，只去掉当前主题无关的引擎部分，并提供独立代码和准确源码位置。
 
-全版本学习入口：[Cocos2d-x 1.0–4.0 源码演进课程](../learn_cocos2d-x/README.md)。
+同系列历史版本课程：[Cocos2d-x 1.x](../learn_cocos2d-1x/README.md)、[2.x](../learn_cocos2d-2x/README.md)、[3.x](../learn_cocos2d-3x/README.md)。
 
 ## 同主题课程
 
