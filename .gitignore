@@ -43,3 +43,6 @@ __pycache__/
 
 # Machine-specific generated DeepSeek Harness bundle
 /cocos-creator-cli/.local/
+
+# Local generated Cocos2d-x 3.x build output
+/engine/cocos2d-x-3/build/
