@@ -4,6 +4,8 @@
 
 同系列历史版本课程：[Cocos2d-x 1.x](../learn_cocos2d-1x/README.md)、[2.x](../learn_cocos2d-2x/README.md)、[3.x](../learn_cocos2d-3x/README.md)。
 
+- [课程大纲](课程大纲.md)
+
 ## 同主题课程
 
 | 主题 | Cocos2d-x 4.0 | Creator 2.4.15 | Creator 3.8.7 |

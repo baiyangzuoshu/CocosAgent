@@ -20,6 +20,7 @@
 - [第 3 课：Director 初始化与主循环](s03_director_loop/README.md)：由 requestAnimationFrame 驱动 Director。
 - [第 4 课：节点与场景树](s04_node_scene_tree/README.md)：建立节点父子关系并遍历场景树。
 - [第 5 课：本地位置与世界位置](s05_local_world_transform/README.md)：累加父链平移，得到节点的世界位置。
+- [第 6 课：场景加载后的节点激活](s06_node_activation/README.md)：由 NodeActivator 递归更新节点的层级激活状态。
 
 ## 代码结构
 
@@ -52,7 +53,12 @@ learn_2.4cocoscreator/
     ├── deno.json
     ├── index.html
     └── src/cocos2d/core/
-└── s05_local_world_transform/ # 独立的第 5 课工程，含前课功能
+├── s05_local_world_transform/ # 独立的第 5 课工程，含前课功能
+    ├── README.md
+    ├── deno.json
+    ├── index.html
+    └── src/cocos2d/core/
+└── s06_node_activation/       # 独立的第 6 课工程，含前课功能
     ├── README.md
     ├── deno.json
     ├── index.html
