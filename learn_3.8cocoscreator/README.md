@@ -20,6 +20,7 @@
 - [第 4 课：节点与场景树](s04_node_scene_tree/README.md)
 - [第 5 课：本地位置与世界位置](s05_local_world_transform/README.md)
 - [第 6 课：场景激活与节点状态](s06_node_activation/README.md)
+- [第 7 课：组件挂载与生命周期](s07_component_lifecycle/README.md)
 
 ## 目录结构
 
@@ -33,7 +34,8 @@ learn_3.8cocoscreator/
 ├── s03_director_loop/      # Pacer、Game 更新回调和 Director.tick
 ├── s04_node_scene_tree/    # Node 父子关系和 Scene 树
 ├── s05_local_world_transform/ # 本地位置与世界位置
-└── s06_node_activation/      # Scene 与节点的层级激活状态
+├── s06_node_activation/      # Scene 与节点的层级激活状态
+└── s07_component_lifecycle/  # Component 挂载与节点激活回调
 ~~~
 
 每课进入自己的目录，按 README 运行 `deno task check`、`deno task build` 和 `deno task serve`。

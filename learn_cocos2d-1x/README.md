@@ -5,6 +5,7 @@
 版本标记取自 `engine/cocos2d-x-1/CHANGELOG:1`。
 
 - [课程大纲](课程大纲.md)
+- [第 7 课：Node 更新与 Scheduler](s07_node_update_schedule/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 
