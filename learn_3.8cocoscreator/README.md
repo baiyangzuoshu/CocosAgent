@@ -13,7 +13,8 @@
 ## 课程
 
 - [课程大纲](课程大纲.md)
-- [第 0 课：浏览器入口](s00_web_entry/README.md)
+- [运行准备：浏览器宿主](web_host/README.md)
+- [第 0 课：`.meta` 元数据分析](s00_meta_analysis/README.md)
 - [第 1 课：模块导出](s01_module_assembly/README.md)
 - [第 2 课：分阶段启动](s02_game_startup/README.md)
 - [第 3 课：Director 与帧调度](s03_director_loop/README.md)
@@ -30,7 +31,8 @@
 learn_3.8cocoscreator/
 ├── README.md
 ├── 课程大纲.md
-├── s00_web_entry/          # 浏览器加载 TypeScript 入口
+├── web_host/               # 浏览器运行准备，不计课次
+├── s00_meta_analysis/      # 分析编辑器 .meta 与子资源 UUID
 ├── s01_module_assembly/    # exports/base、模块重导出和兼容命名空间
 ├── s02_game_startup/       # Game.init 的阶段 Promise 链
 ├── s03_director_loop/      # Pacer、Game 更新回调和 Director.tick
@@ -42,4 +44,4 @@ learn_3.8cocoscreator/
 └── s09_asset_loading_cache/  # AssetManager 请求和缓存 Asset
 ~~~
 
-每课进入自己的目录，按 README 运行 `deno task check`、`deno task build` 和 `deno task serve`。
+浏览器运行课进入各自目录，按 README 运行 `deno task check`、`deno task build` 和 `deno task serve`。第 0 课的元数据分析使用 `deno task check` 和 `deno task analyze`。

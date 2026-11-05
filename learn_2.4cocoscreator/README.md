@@ -7,14 +7,15 @@
 1. 按编号打开一课，先看本课要解决的问题。
 2. 对照课内列出的 Creator 2.4.15 源码位置。
 3. 直接运行本课目录里的独立代码。
-4. 运行页面，观察本课结果。
+4. 按本课说明观察命令行或页面结果。
 
 每课目录都保存一份完整、可运行的代码快照。后一课从前一课增加一层功能，因此既能单独运行，也能看到架构如何逐步长成。代码目录尽量对应 Creator 源码职责，只裁掉当前 Web 路径无关的代码。
 
 ## 课程目录
 
 - [课程大纲](课程大纲.md)：完整阶段规划与源码文件索引。
-- [第 0 课：浏览器入口](s00_web_entry/README.md)：准备最小浏览器宿主。
+- [运行准备：浏览器宿主](web_host/README.md)：提供后续浏览器运行课使用的最小宿主，不计课次。
+- [第 0 课：`.meta` 元数据分析](s00_meta_analysis/README.md)：从贴图元数据追踪主资源和 SpriteFrame UUID。
 - [第 1 课：模块装配](s01_module_assembly/README.md)：创建 cc 命名空间并注册第一个模块。
 - [第 2 课：游戏启动](s02_game_startup/README.md)：调用 cc.game.run() 并观察引擎启动事件。
 - [第 3 课：Director 初始化与主循环](s03_director_loop/README.md)：由 requestAnimationFrame 驱动 Director。
@@ -31,10 +32,11 @@
 learn_2.4cocoscreator/
 ├── README.md                  # 课程入口
 ├── 课程大纲.md
-├── s00_web_entry/             # 独立的第 0 课工程
+├── web_host/                  # 浏览器宿主准备，不计课次
+├── s00_meta_analysis/         # 独立的第 0 课，分析 .meta 和 UUID
 │   ├── README.md
 │   ├── deno.json
-│   ├── index.html
+│   ├── samples/
 │   └── src/
 ├── s01_module_assembly/       # 独立的第 1 课工程，含前课功能
 │   ├── README.md
@@ -74,6 +76,6 @@ learn_2.4cocoscreator/
 
 ## 运行
 
-进入要学习的课程目录，按该课 README 中的命令检查、构建和运行。每课有自己的 deno.json、index.html 和 src/，不依赖其他课的代码。
+进入要学习的课程目录，按该课 README 中的命令运行。浏览器课有自己的 `deno.json`、`index.html` 和 `src/`；第 0 课是独立的元数据分析脚本。
 
 课程讲义会列出对应的 Creator 源码路径，路径相对于仓库根目录。

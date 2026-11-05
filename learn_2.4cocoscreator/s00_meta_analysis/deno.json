@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "lib": ["deno.ns", "dom"]
+  },
+  "tasks": {
+    "check": "deno check src/main.ts",
+    "analyze": "deno run --allow-read=./samples src/main.ts"
+  }
+}

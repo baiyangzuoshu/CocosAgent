@@ -1,4 +1,4 @@
-# 第 0 课：浏览器入口
+# 运行准备：浏览器宿主
 
 **目标：** 让浏览器运行由 TypeScript 转换的 JavaScript。
 
@@ -20,7 +20,7 @@ deno task serve
 
 ## 源码对照
 
-本课只准备浏览器宿主，尚未实现引擎模块。下一课从以下文件开始：
+这里只准备后续浏览器课程使用的宿主，不计入课次。第 0 课先分析资源身份；第 1 课开始从以下入口装配运行时模块：
 
 - engine/2.4.15engine/index.js
 - engine/2.4.15engine/cocos2d/core/predefine.js

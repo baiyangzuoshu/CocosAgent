@@ -1,0 +1,18 @@
+{
+  "uuid": "6f01cf7f-81bf-4a7e-bd5d-0afc19696480",
+  "importer": "image",
+  "subMetas": {
+    "b47c0": {
+      "uuid": "6f01cf7f-81bf-4a7e-bd5d-0afc19696480@b47c0",
+      "importer": "erp-texture-cube",
+      "subMetas": {
+        "74afd": {
+          "uuid": "6f01cf7f-81bf-4a7e-bd5d-0afc19696480@b47c0@74afd",
+          "importer": "texture-cube-face",
+          "name": "right",
+          "subMetas": {}
+        }
+      }
+    }
+  }
+}
