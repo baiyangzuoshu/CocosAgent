@@ -8,6 +8,7 @@
 - [第 7 课：Component 挂载与生命周期](s07_component_lifecycle/README.md)
 - [第 8 课：Scheduler 驱动组件更新](s08_scheduler_component_update/README.md)
 - [第 9 课：纹理请求与缓存](s09_texture_cache/README.md)
+- [第 10 课：场景遍历与渲染命令提交](s10_render_entry/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 

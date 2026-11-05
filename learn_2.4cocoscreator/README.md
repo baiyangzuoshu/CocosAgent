@@ -25,6 +25,7 @@
 - [第 7 课：组件挂载与生命周期](s07_component_lifecycle/README.md)：观察 `onLoad`、`onEnable`、`onDisable` 的调用顺序。
 - [第 8 课：组件每帧调度](s08_component_scheduling/README.md)：观察 `start`、`update`、`lateUpdate` 的阶段顺序。
 - [第 9 课：资源请求与缓存](s09_asset_loading_cache/README.md)：同一 UUID 的重复请求复用 Asset 对象。
+- [第 10 课：Director 到渲染流程](s10_render_entry/README.md)：活动场景进入 RenderFlow。
 
 ## 代码结构
 
@@ -66,7 +67,8 @@ learn_2.4cocoscreator/
 ├── s06_node_activation/       # 独立的第 6 课工程，含前课功能
 ├── s07_component_lifecycle/   # 独立的第 7 课工程，含前课功能
 ├── s08_component_scheduling/  # 独立的第 8 课工程，含前课功能
-└── s09_asset_loading_cache/   # 独立的第 9 课工程，含前课功能
+├── s09_asset_loading_cache/   # 独立的第 9 课工程，含前课功能
+└── s10_render_entry/          # 独立的第 10 课工程，含前课功能
     ├── README.md
     ├── deno.json
     ├── index.html
