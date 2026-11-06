@@ -1,0 +1,19 @@
+# DeepSeek Harness 逐课复刻
+
+逐课建立一个简化、可运行的 DeepSeek Harness。学习代码按 TypeScript + Deno 组织；目标实现对照工作区中的 [`deepseek-harness`](../../deepseek-harness/README.md) 源码。课程不导入 Harness 包，也不要求真实模型凭据。
+
+## 学习方式
+
+1. 每课先说明问题、源码入口和本课增量。
+2. 每课目录包含完整、独立可运行的代码快照；后一课增加一个机制，不依赖前一课的运行状态。
+3. 运行最小示例，观察结果，再对照 Harness 源码解释调用关系。
+4. 每课写明简化点；示例帮助理解架构，不追求替代完整 Harness。
+
+课程按当前工作区中的 Harness 实现编写。项目处于 developer preview，开始每课时核对源码和文档是否仍对应。源码链接假定 `Cocos_Engine` 与 `deepseek-harness` 位于同一 `WORK` 目录下。
+
+## 课程
+
+- [课程总纲](课程大纲.md)
+- [第 0 课：最小插件启动器](s00_minimal_plugin/README.md)
+
+第 0 课使用 Deno 独立运行 TypeScript 示例。课程代码不启动目标仓库的应用、不修改其文件，也不调用模型。
