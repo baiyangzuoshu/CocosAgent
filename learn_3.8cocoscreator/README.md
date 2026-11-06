@@ -25,6 +25,7 @@
 - [第 8 课：组件每帧调度](s08_component_scheduling/README.md)
 - [第 9 课：资源请求与缓存](s09_asset_loading_cache/README.md)
 - [第 10 课：Director 到渲染入口](s10_render_entry/README.md)
+- [第 11 课：变换脏标记与子树失效](s11_transform_dirty/README.md)
 
 ## 目录结构
 
@@ -43,7 +44,8 @@ learn_3.8cocoscreator/
 ├── s07_component_lifecycle/  # Component 挂载与节点激活回调
 ├── s08_component_scheduling/ # Component 每帧回调调度
 ├── s09_asset_loading_cache/  # AssetManager 请求和缓存 Asset
-└── s10_render_entry/         # Director、Root 和 RenderPipeline 渲染入口
+├── s10_render_entry/         # Director、Root 和 RenderPipeline 渲染入口
+└── s11_transform_dirty/     # 变换脏标记和子树缓存失效
 ~~~
 
 浏览器运行课进入各自目录，按 README 运行 `deno task check`、`deno task build` 和 `deno task serve`。第 0 课的元数据分析使用 `deno task check` 和 `deno task analyze`。
