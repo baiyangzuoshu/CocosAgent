@@ -26,6 +26,7 @@
 - [第 9 课：资源请求与缓存](s09_asset_loading_cache/README.md)
 - [第 10 课：Director 到渲染入口](s10_render_entry/README.md)
 - [第 11 课：变换脏标记与子树失效](s11_transform_dirty/README.md)
+- [第 12 课：四边形几何与 WebGL 提交](s12_sprite_quad/README.md)
 
 ## 目录结构
 
@@ -45,7 +46,8 @@ learn_3.8cocoscreator/
 ├── s08_component_scheduling/ # Component 每帧回调调度
 ├── s09_asset_loading_cache/  # AssetManager 请求和缓存 Asset
 ├── s10_render_entry/         # Director、Root 和 RenderPipeline 渲染入口
-└── s11_transform_dirty/     # 变换脏标记和子树缓存失效
+├── s11_transform_dirty/     # 变换脏标记和子树缓存失效
+└── s12_sprite_quad/         # Sprite 几何数据和 Batcher2D 提交
 ~~~
 
 浏览器运行课进入各自目录，按 README 运行 `deno task check`、`deno task build` 和 `deno task serve`。第 0 课的元数据分析使用 `deno task check` 和 `deno task analyze`。

@@ -27,6 +27,7 @@
 - [第 9 课：资源请求与缓存](s09_asset_loading_cache/README.md)：同一 UUID 的重复请求复用 Asset 对象。
 - [第 10 课：Director 到渲染流程](s10_render_entry/README.md)：活动场景进入 RenderFlow。
 - [第 11 课：渲染脏标记与世界变换](s11_render_flags_dirty/README.md)：只重算发生变化的节点。
+- [第 12 课：四边形几何与 WebGL 提交](s12_sprite_quad/README.md)：把节点组装成 4 个顶点、6 个索引并绘制。
 
 ## 代码结构
 
@@ -70,7 +71,8 @@ learn_2.4cocoscreator/
 ├── s08_component_scheduling/  # 独立的第 8 课工程，含前课功能
 ├── s09_asset_loading_cache/   # 独立的第 9 课工程，含前课功能
 ├── s10_render_entry/          # 独立的第 10 课工程，含前课功能
-└── s11_render_flags_dirty/    # 独立的第 11 课工程，含前课功能
+├── s11_render_flags_dirty/    # 独立的第 11 课工程，含前课功能
+└── s12_sprite_quad/           # 独立的第 12 课工程，含前课功能
     ├── README.md
     ├── deno.json
     ├── index.html

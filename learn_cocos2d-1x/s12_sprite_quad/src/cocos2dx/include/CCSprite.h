@@ -1,0 +1,18 @@
+#pragma once
+
+#include "CCNode.h"
+#include <array>
+
+namespace cocos2d {
+class CCSprite : public CCNode {
+public:
+    using CCNode::CCNode;
+    void draw() const override;
+
+private:
+    struct Vertex { float x, y, u, v; };
+    const std::array<Vertex, 4> _quad{{
+        {-28, -28, 0, 0}, {28, -28, 1, 0}, {-28, 28, 0, 1}, {28, 28, 1, 1},
+    }};
+};
+} // namespace cocos2d
