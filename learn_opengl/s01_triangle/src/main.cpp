@@ -10,6 +10,7 @@ namespace {
 constexpr int kWindowWidth = 800;
 constexpr int kWindowHeight = 600;
 
+// 每个顶点位置直接作为裁剪空间坐标；颜色沿顶点管线传给片段着色器。
 const char* kVertexShaderSource = R"glsl(
 #version 330 core
 layout (location = 0) in vec3 aPosition;
@@ -23,6 +24,7 @@ void main() {
 }
 )glsl";
 
+// 一个片段一个输出颜色。三角形内部的 vertexColor 由光栅化阶段插值。
 const char* kFragmentShaderSource = R"glsl(
 #version 330 core
 in vec3 vertexColor;
@@ -37,6 +39,7 @@ void framebufferSizeCallback(GLFWwindow*, int width, int height) {
     glViewport(0, 0, width, height);
 }
 
+// 编译一个 shader 阶段；失败时输出驱动提供的诊断日志。
 GLuint compileShader(GLenum type, const char* source) {
     const GLuint shader = glCreateShader(type);
     glShaderSource(shader, 1, &source, nullptr);
@@ -61,6 +64,7 @@ GLuint compileShader(GLenum type, const char* source) {
     return shader;
 }
 
+// 把顶点阶段和片段阶段链接成一次绘制可使用的 program。
 GLuint createProgram() {
     const GLuint vertexShader = compileShader(GL_VERTEX_SHADER, kVertexShaderSource);
     if (vertexShader == 0) {
@@ -104,6 +108,7 @@ GLuint createProgram() {
 } // namespace
 
 int main() {
+    // 1. 初始化 GLFW，并创建 OpenGL 3.3 Core Profile 窗口。
     if (glfwInit() != GLFW_TRUE) {
         std::cerr << "Failed to initialize GLFW\n";
         return 1;
@@ -129,6 +134,7 @@ int main() {
         return 1;
     }
 
+    // 2. 先设为当前上下文，再加载 OpenGL 函数入口。
     glfwMakeContextCurrent(window);
     if (gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)) == 0) {
         std::cerr << "Failed to load OpenGL functions with GLAD\n";
@@ -143,6 +149,7 @@ int main() {
     glfwGetFramebufferSize(window, &framebufferWidth, &framebufferHeight);
     framebufferSizeCallback(window, framebufferWidth, framebufferHeight);
 
+    // 3. 每个顶点包含位置 xyz 和颜色 rgb，共六个 float。
     const float vertices[] = {
         // position             // color
         -0.65F, -0.55F, 0.0F,    1.0F, 0.2F, 0.2F,
@@ -155,6 +162,7 @@ int main() {
     glGenVertexArrays(1, &vertexArray);
     glGenBuffers(1, &vertexBuffer);
 
+    // VBO 保存顶点字节；VAO 记录位置和颜色的读取布局。
     glBindVertexArray(vertexArray);
     glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
@@ -173,6 +181,7 @@ int main() {
     glEnableVertexAttribArray(1);
     glBindVertexArray(0);
 
+    // 4. 准备两个 shader 阶段组成的绘制程序。
     const GLuint program = createProgram();
     if (program == 0) {
         glDeleteBuffers(1, &vertexBuffer);
@@ -182,6 +191,7 @@ int main() {
         return 1;
     }
 
+    // 5. 每帧清屏、绑定状态、发出绘制，再交换窗口缓冲。
     while (glfwWindowShouldClose(window) == GLFW_FALSE) {
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
             glfwSetWindowShouldClose(window, GLFW_TRUE);
