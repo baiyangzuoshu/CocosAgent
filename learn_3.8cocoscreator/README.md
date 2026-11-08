@@ -34,6 +34,7 @@
 - [第 17 课：Prefab 实例化](s17_prefab_instantiation/README.md)
 - [第 18 课：组件实例与资源共享](s18_component_asset_sharing/README.md)
 - [第 19 课：实例挂载与组件生命周期](s19_instance_lifecycle/README.md)
+- [第 20 课：节点移除与重新挂载](s20_node_detachment/README.md)
 
 ## 目录结构
 
@@ -61,7 +62,8 @@ learn_3.8cocoscreator/
 ├── s16_event_propagation/     # 捕获、目标和冒泡
 ├── s17_prefab_instantiation/ # Prefab 生成独立节点树
 ├── s18_component_asset_sharing/ # 组件独立、SpriteFrame 共享
-└── s19_instance_lifecycle/     # 实例挂载与组件生命周期
+├── s19_instance_lifecycle/     # 实例挂载与组件生命周期
+└── s20_node_detachment/        # 节点移除与重新挂载
 ~~~
 
 浏览器运行课进入各自目录，按 README 运行 `deno task check`、`deno task build` 和 `deno task serve`。第 0 课的元数据分析使用 `deno task check` 和 `deno task analyze`。
