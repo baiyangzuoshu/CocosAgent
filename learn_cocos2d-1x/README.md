@@ -14,6 +14,7 @@
 - [第 13 课：CCSpriteFrame 保存贴图区域](s13_sprite_frame/README.md)
 - [第 14 课：触摸输入入口](s14_touch_input/README.md)
 - [第 15 课：触摸监听与命中判断](s15_touch_listener/README.md)
+- [第 16 课：触摸认领与吞噬](s16_touch_swallow/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 

@@ -21,6 +21,7 @@
 | 第 13 课：SpriteFrame 与贴图区域 | [本课](s13_sprite_frame_texture/README.md) | [本课](../learn_2.4cocoscreator/s13_sprite_frame_texture/README.md) | [本课](../learn_3.8cocoscreator/s13_sprite_frame_texture/README.md) |
 | 第 14 课：输入与触摸坐标 | [本课](s14_touch_input/README.md) | [本课](../learn_2.4cocoscreator/s14_browser_input/README.md) | [本课](../learn_3.8cocoscreator/s14_browser_input/README.md) |
 | 第 15 课：触摸监听与命中 | [本课](s15_touch_listener/README.md) | [本课](../learn_2.4cocoscreator/s15_node_event_hit/README.md) | [本课](../learn_3.8cocoscreator/s15_node_event_hit/README.md) |
+| 第 16 课：事件传播与触摸吞噬 | [本课](s16_touch_swallow/README.md) | [本课](../learn_2.4cocoscreator/s16_event_propagation/README.md) | [本课](../learn_3.8cocoscreator/s16_event_propagation/README.md) |
 
 历史 Cocos2d-x 同主题：[1.x](../learn_cocos2d-1x/s09_texture_cache/README.md)、[2.x](../learn_cocos2d-2x/s09_texture_cache/README.md)、[3.x](../learn_cocos2d-3x/s09_texture_cache/README.md)。
 
@@ -37,3 +38,5 @@
 历史 Cocos2d-x 第 14 课：[1.x](../learn_cocos2d-1x/s14_touch_input/README.md)、[2.x](../learn_cocos2d-2x/s14_touch_input/README.md)、[3.x](../learn_cocos2d-3x/s14_touch_input/README.md)。
 
 历史 Cocos2d-x 第 15 课：[1.x](../learn_cocos2d-1x/s15_touch_listener/README.md)、[2.x](../learn_cocos2d-2x/s15_touch_listener/README.md)、[3.x](../learn_cocos2d-3x/s15_touch_listener/README.md)。
+
+历史 Cocos2d-x 第 16 课：[1.x](../learn_cocos2d-1x/s16_touch_swallow/README.md)、[2.x](../learn_cocos2d-2x/s16_touch_swallow/README.md)、[3.x](../learn_cocos2d-3x/s16_touch_swallow/README.md)。
