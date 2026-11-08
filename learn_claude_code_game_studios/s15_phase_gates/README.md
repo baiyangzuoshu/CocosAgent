@@ -20,6 +20,10 @@
 
 catalog 定义阶段步骤和可检查产物；`/gate-check` 汇总审查结果。Gate 报告帮助用户作决定，catalog 明确其 verdict 是 advisory，不能误说成系统自动锁死推进。
 
+## 实践
+
+在副本中用 `/settings modes.rigor=standard`，再运行 `/gate-check` 并选择当前阶段。把报告 verdict 和每条证据记入练习记录，对照 `workflow-catalog.yaml` 的 `next_phase`。最后把 rigor 设回 minimal；Gate verdict 是建议，由你决定是否继续。
+
 ## 简化说明
 
 每个阶段有自己的证据和特定 Gate。本课只建立流程图，不对任何实际项目给出通过或失败结论。

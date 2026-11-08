@@ -20,6 +20,10 @@
 
 引擎参考资料是版本化的查阅材料。项目做 API 决策前先核对当前版本资料；版本变更后也要检查 breaking changes，避免把不同补丁版或引擎的结论混用。
 
+## 实践
+
+模板尚未选定引擎时，先并排打开三个引擎目录的 `VERSION.md`，任选一个 API 建议去 `current-best-practices.md` 和 `breaking-changes.md` 中核对。完成第 12 课的 `/setup-engine` 后，再确认根级 `CLAUDE.md` 引入的是哪个版本参考。
+
 ## 简化说明
 
 本课只比较文档，不运行 Godot、Unity 或 Unreal。它们不是 Cocos Creator 的参考资料，不能用于推断 Creator API。

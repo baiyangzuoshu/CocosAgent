@@ -19,6 +19,10 @@
 
 Automation 控制“决策时要不要停下来问”，不决定项目需要多少设计与 QA 工作。即使在 autonomous 模式，配置为 always-ask 的类别仍要等待用户；没有得到回答的问题不能当作批准。
 
+## 实践
+
+在副本中用 `/settings modes.automation=guided`，再调用 `/brainstorm`。观察它怎样处理主要选择和细节建议；退出后将模式设回 `collaborative`，不要把观察结果当作对所有 Skill 的通用证明。
+
 ## 简化说明
 
 不同 Skill 还需按其决策类别应用统一规则。本课比较共享模式，不模拟真实的 AskUserQuestion 交互。

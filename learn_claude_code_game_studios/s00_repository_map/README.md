@@ -30,36 +30,23 @@
 
 继续从 `CLAUDE.md` 的 Technology Stack 核对目标引擎：模板为 Godot 4、Unity 和 Unreal Engine 5 提供专用角色和参考资料。列表没有 Cocos Creator，因此不能把这些规则当作 Creator 插件或 Creator API 的依据。
 
-## 观察二：核对仓库组成
+## 实践一：盘点真实快照
 
-在仓库根目录执行以下命令。它们只读文件并统计当前快照：
+从仓库根目录运行课程自带的盘点程序：
 
 ~~~sh
-cd engine/Claude-Code-Game-Studios
-python3 - <<'PY'
-from pathlib import Path
-import json
-
-agents = list(Path('.claude/agents').rglob('*.md'))
-skills = list(Path('.claude/skills').rglob('SKILL.md'))
-hook_scripts = list(Path('.claude/hooks').glob('*.sh'))
-rules = list(Path('.claude/rules').glob('*.md'))
-settings = json.loads(Path('.claude/settings.json').read_text())
-registered_hooks = sum(
-    len(matcher.get('hooks', []))
-    for event in settings['hooks'].values()
-    for matcher in event
-)
-
-print(f'Agent definitions: {len(agents)}')
-print(f'Skill entry files: {len(skills)}')
-print(f'Registered hook commands: {registered_hooks}')
-print(f'Hook shell files: {len(hook_scripts)}')
-print(f'Path rules: {len(rules)}')
-PY
+python3 learn_claude_code_game_studios/practice/audit_snapshot.py
 ~~~
 
-本地 1.2.0 快照的结果应为：49 个 Agent 定义、74 个 Skill 入口、15 个已注册 Hook 命令、18 个 Hook 目录下的 shell 文件和 14 条 Rule。18 个脚本文件里还包含辅助脚本与可选诊断脚本，所以它不等于设置文件注册的 Hook 命令数。
+程序实际读取 `project.yaml`、`settings.json` 和各目录，不使用写死的计数。当前 1.2.0 快照应显示 49 个 Agent 定义、74 个 Skill 入口、15 个已注册 Hook 命令、18 个 Hook 目录下的 shell 文件和 14 条 Rule。运行输出是当前磁盘清单的证据；它不能证明任何 Agent 或 Hook 在会话中成功运行。
+
+如要盘点其他位置的版本，把源码目录作为参数：
+
+~~~sh
+python3 learn_claude_code_game_studios/practice/audit_snapshot.py /path/to/Claude-Code-Game-Studios
+~~~
+
+## 观察二：把机制和职责对上
 
 ## 观察三：把机制和职责对上
 
@@ -93,11 +80,15 @@ PY
 
 当前快照标记为 CCGS 1.2.0。它是一套面向 Claude Code 的游戏开发流程模板，包含角色、工作流、事件检查、路径规则、引擎资料和框架自测。它不自带一款游戏，也不覆盖 Cocos Creator 的引擎知识。静态阅读可以建立结构图，不能替代对真实会话或游戏构建的观察。
 
+## 实践二：在副本中启动 CCGS
+
+按[实践环境说明](../practice/README.md)创建副本，然后从副本根目录启动 `claude`。观察 SessionStart 输出，再运行 `/help`，记下它建议的下一步。退出后确认实验只发生在 `practice/workspace/`，没有修改 `engine/Claude-Code-Game-Studios/`。
+
 ## 简化说明
 
-- 数量以本地 `project.yaml` 标记的 1.2.0 快照为准；换版本后重新执行统计。
-- 本课只读，不启动 Claude Code，不触发 Hook，也不运行目标游戏。
-- 后续课程逐项解释表格中的机制；本课不展开 74 个 Skill 或 49 个 Agent 的完整定义。
+- 盘点数量来自程序实际读取的本地快照；换版本后重新执行，不把 1.2.0 计数当作永久值。
+- SessionStart 和 `/help` 的结果来自学习者自己的 Claude Code 会话；不同配置和版本可能产生不同输出，应记录实际观察。
+- 后续课程逐项拆解表格中的机制；本课不展开 74 个 Skill 或 49 个 Agent 的完整定义。
 
 ## 自测
 

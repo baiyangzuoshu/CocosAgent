@@ -21,6 +21,10 @@
 
 Story 是一个可追踪的交付单元：文件清单限制改动范围，验收标准定义完成条件，证据记录验证结果。`story-done` 不应把“存在测试文件”说成“测试已通过”。
 
+## 实践
+
+基于副本里的一个 brief 或系统 GDD，依次运行 `/create-stories` 和 `/story-readiness`。检查 Story 的验收标准、依赖、`## Files` 与测试证据字段；先完成 readiness 中的阻塞项，再开始实现。
+
 ## 简化说明
 
 本课只阅读模板和流程合同，不实现游戏 Story。实际检查还受 workflow、QA level、系统 override 和 review mode 影响。

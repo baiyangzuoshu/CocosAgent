@@ -20,9 +20,19 @@
 
 有效配置不是简单读取一个 YAML 文件；它还考虑个人覆盖、兼容旧值、rigor 派生规则和终端默认值。解析结果带来源信息，便于定位为何得到某个值。
 
+## 实践
+
+在副本根目录运行：
+
+~~~sh
+bash .claude/hooks/yaml-helper.sh resolve_config --keys modes.rigor,modes.automation
+~~~
+
+记录两个值和括号里的来源。再运行 `/settings modes.rigor`，对照 Skill 展示的有效值与命令输出。
+
 ## 简化说明
 
-这里只按文档和 helper 的静态规则演算，不创建 `project.local.yaml`，也不修改共享配置。大型 `effects-map.md` 应按设置名读取对应章节，不要整文件读取。
+只在课程副本里写入临时设置，不修改原始源码或共享项目。本课重点是解析优先级；大型 `effects-map.md` 应按设置名读取对应章节，不要整文件读取。
 
 ## 自测
 

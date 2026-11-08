@@ -20,6 +20,10 @@
 
 `studio-tests/` 验证 Agent/Skill 的结构和行为约定；它不运行由这些工具制作的游戏。修改框架后应按改动类型选择静态检查、行为规范或分类 rubric。
 
+## 实践
+
+在副本运行 `/skill-test static help`、`/skill-test spec help`、`/skill-test category help` 和 `/skill-test audit`。将四份结果分别对应到结构、行为规范、分类质量和覆盖率；不要把任何一项报告称为游戏测试。
+
 ## 简化说明
 
 本课阅读测试框架，不实际运行 `/skill-test`。行为规范检查也不等同于对游戏功能的自动化测试。

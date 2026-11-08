@@ -13,7 +13,7 @@
 
 ## 学习方式
 
-每课沿用 `learn_3.8cocoscreator` 的结构：提出问题、定位源码或配置、动手观察、记录可验证结果，并说明简化边界。CCGS 是工作流模板，所以课程练习以读取配置、追踪调用关系和分析产物为主，不伪造一个游戏运行时来替代真实 Claude Code 行为。
+每课沿用 `learn_3.8cocoscreator` 的结构：提出问题、定位源码或配置、运行实践、观察结果，并说明简化边界。实践在隔离的 CCGS 副本中进行：调用真实 Skill、触发真实 Hook、修改副本配置并检查实际产物；不会把静态模拟说成 Claude Code 的运行结果。
 
 课程材料以本地目录 `engine/Claude-Code-Game-Studios/` 为源码对照。该快照的 `project.yaml` 标记框架版本为 1.2.0；版本更新后，需重新核对章节中提到的路径和行为。源码项目由[上游仓库](https://github.com/Donchitos/Claude-Code-Game-Studios)单独维护；若本地没有这个目录，请先取得与课程版本相符的源码快照。
 
@@ -46,7 +46,9 @@
   - [第 18 课：定制 CCGS](s18_customization/README.md)
   - [第 19 课：升级与兼容](s19_upgrading/README.md)
 
-每课都包含源码位置、观察步骤、结果和简化边界；本课程以静态阅读与流程追踪为主，不把模拟行为说成 Claude Code 的运行证据。
+每课都包含源码位置、实践任务、可观察结果和简化边界；课程会同时使用可运行的盘点工具和真实 CCGS Skill，不把模拟行为说成 Claude Code 的运行证据。
+
+开始实践前，按[实践环境说明](practice/README.md)创建隔离副本。课程中的交互命令在副本中运行，原始源码保持只读。
 
 ## 源码入口
 

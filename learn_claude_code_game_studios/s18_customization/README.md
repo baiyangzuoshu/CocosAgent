@@ -20,6 +20,10 @@
 
 CCGS 是可定制模板，但改动需保留职责分层。新增 Skill 不只是增加一个 Markdown 文件：还要考虑索引、依赖、工具权限、合同、测试覆盖和升级维护。
 
+## 实践
+
+只在副本中新增 `.claude/skills/lab-check/SKILL.md`：让它完成一个只读的小检查，写清输入、步骤、允许工具和输出。然后运行 `/skill-test static lab-check`；按报告修正 Skill，并再次运行同一检查。
+
 ## 简化说明
 
 本课只设计改动方案，不编辑 `engine/Claude-Code-Game-Studios/`。具体写入路径和跨文件范围应按任务要求单独处理。

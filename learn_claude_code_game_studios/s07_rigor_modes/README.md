@@ -20,6 +20,16 @@
 
 Rigor 管理工作流的重量。minimal 默认路线用一页 brief、Story 和逐个实现快速进入代码；standard/full 增加设计覆盖、评审与证据。单项显式设置仍能覆盖相应派生值。
 
+## 实践
+
+只在隔离副本中运行 `/settings modes.rigor=standard`，然后执行：
+
+~~~sh
+bash .claude/hooks/yaml-helper.sh resolve_config --keys modes.rigor,modes.workflow,docs.density,qa.level,modes.review_mode,team.size
+~~~
+
+把结果保存下来，再用 `/settings modes.rigor=minimal` 重复一次。比较两组派生值，并确认实际项目的配置文件没有被改动。
+
 ## 简化说明
 
 不同 Skill 对 rigor 的响应细节分散在自己的实现和 effects map 中。本课只比较主路径，不替代某个 Skill 的逐项检查。
