@@ -17,6 +17,7 @@ Creator 3.8.7 的运行时课程使用 TypeScript；本课程沿用其逐课、�
 - [课程大纲](课程大纲.md)
 - [第 1 课：编译、运行与源文件](s01_c_toolchain/README.md)
 - [第 2 课：类型、变量与流程控制](s02_c_types_control/README.md)
+- [第 3 课：函数、作用域与多文件组织](s03_c_functions/README.md)
 
 ## 参考资料
 
