@@ -30,6 +30,7 @@
 - [第 12 课：四边形几何与 WebGL 提交](s12_sprite_quad/README.md)：把节点组装成 4 个顶点、6 个索引并绘制。
 - [第 13 课：SpriteFrame 连接贴图](s13_sprite_frame_texture/README.md)：从图集矩形算出 UV，再由 WebGL 采样贴图。
 - [第 14 课：浏览器输入坐标](s14_browser_input/README.md)
+- [第 15 课：节点命中与事件回调](s15_node_event_hit/README.md)
 
 ## 代码结构
 
@@ -86,7 +87,8 @@ learn_2.4cocoscreator/
 │   ├── index.html
 │   ├── assets/
 │   └── src/cocos2d/core/
-└── s14_browser_input/         # 浏览器输入与画布坐标
+├── s14_browser_input/         # 浏览器输入与画布坐标
+└── s15_node_event_hit/        # 节点命中与事件回调
 ~~~
 
 ## 运行

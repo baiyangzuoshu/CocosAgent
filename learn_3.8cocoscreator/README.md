@@ -29,6 +29,7 @@
 - [第 12 课：四边形几何与 WebGL 提交](s12_sprite_quad/README.md)
 - [第 13 课：SpriteFrame 连接贴图](s13_sprite_frame_texture/README.md)
 - [第 14 课：浏览器输入坐标](s14_browser_input/README.md)
+- [第 15 课：节点命中与事件回调](s15_node_event_hit/README.md)
 
 ## 目录结构
 
@@ -51,7 +52,8 @@ learn_3.8cocoscreator/
 ├── s11_transform_dirty/     # 变换脏标记和子树缓存失效
 ├── s12_sprite_quad/         # Sprite 几何数据和 Batcher2D 提交
 ├── s13_sprite_frame_texture/ # SpriteFrame 区域、UV 和贴图采样
-└── s14_browser_input/        # 浏览器输入与画布坐标
+├── s14_browser_input/        # 浏览器输入与画布坐标
+└── s15_node_event_hit/        # 节点命中与事件回调
 ~~~
 
 浏览器运行课进入各自目录，按 README 运行 `deno task check`、`deno task build` 和 `deno task serve`。第 0 课的元数据分析使用 `deno task check` 和 `deno task analyze`。
