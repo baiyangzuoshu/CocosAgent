@@ -24,6 +24,7 @@
 | 第 16 课：事件传播与触摸吞噬 | [本课](s16_touch_swallow/README.md) | [本课](../learn_2.4cocoscreator/s16_event_propagation/README.md) | [本课](../learn_3.8cocoscreator/s16_event_propagation/README.md) |
 | 第 17 课：可复用场景内容 | [本课](s17_node_factory/README.md) | [Prefab 实例化](../learn_2.4cocoscreator/s17_prefab_instantiation/README.md) | [Prefab 实例化](../learn_3.8cocoscreator/s17_prefab_instantiation/README.md) |
 | 第 18 课：实例数据与资源共享 | [本课](s18_sprite_resource_sharing/README.md) | [本课](../learn_2.4cocoscreator/s18_component_asset_sharing/README.md) | [本课](../learn_3.8cocoscreator/s18_component_asset_sharing/README.md) |
+| 第 19 课：场景挂载与组件生命周期 | [本课](s19_instance_lifecycle/README.md) | [本课](../learn_2.4cocoscreator/s19_instance_lifecycle/README.md) | [本课](../learn_3.8cocoscreator/s19_instance_lifecycle/README.md) |
 
 历史 Cocos2d-x 同主题：[1.x](../learn_cocos2d-1x/s09_texture_cache/README.md)、[2.x](../learn_cocos2d-2x/s09_texture_cache/README.md)、[3.x](../learn_cocos2d-3x/s09_texture_cache/README.md)。
 
@@ -46,3 +47,5 @@
 历史 Cocos2d-x 第 17 课：[1.x](../learn_cocos2d-1x/s17_node_factory/README.md)、[2.x](../learn_cocos2d-2x/s17_node_factory/README.md)、[3.x](../learn_cocos2d-3x/s17_node_factory/README.md)。Cocos2d-x 用节点树构造器复用结构，Creator 使用 Prefab 资源实例化。
 
 历史 Cocos2d-x 第 18 课：[1.x](../learn_cocos2d-1x/s18_sprite_resource_sharing/README.md)、[2.x](../learn_cocos2d-2x/s18_sprite_resource_sharing/README.md)、[3.x](../learn_cocos2d-3x/s18_sprite_resource_sharing/README.md)。1.x/2.x 显示 Sprite 共享纹理；3.x/4.x 显示 SpriteFrame 引用共享。
+
+历史 Cocos2d-x 第 19 课：[1.x](../learn_cocos2d-1x/s19_instance_lifecycle/README.md)、[2.x](../learn_cocos2d-2x/s19_instance_lifecycle/README.md)、[3.x](../learn_cocos2d-3x/s19_instance_lifecycle/README.md)。各代回调时机不同，详见课内源码位置。

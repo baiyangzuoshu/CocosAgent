@@ -17,6 +17,7 @@
 - [第 16 课：触摸认领与吞噬](s16_touch_swallow/README.md)
 - [第 17 课：可复用节点树构造](s17_node_factory/README.md)
 - [第 18 课：Sprite 实例与纹理共享](s18_sprite_resource_sharing/README.md)
+- [第 19 课：组件添加与场景挂载回调](s19_instance_lifecycle/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 
