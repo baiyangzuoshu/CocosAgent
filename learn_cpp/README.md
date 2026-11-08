@@ -2,6 +2,8 @@
 
 本课程先补读引擎源码需要的 C 基础，再学习现代 C++，最后用 Cocos2d-x 4.0 的本地源码练习追踪引擎机制。
 
+C 示例按 C17 编译，C++ 基础示例按 C++17 编译；进入引擎源码阶段后，以目标工程实际使用的标准为准。
+
 Creator 3.8.7 的运行时课程使用 TypeScript；本课程沿用其逐课、独立实现和观察结果的编排方式，C++ 引擎实践以仓库中的 Cocos2d-x 4.0 快照为目标。
 
 ## 学习方式
@@ -20,6 +22,11 @@ Creator 3.8.7 的运行时课程使用 TypeScript；本课程沿用其逐课、�
 - [第 3 课：函数、作用域与多文件组织](s03_c_functions/README.md)
 - [第 4 课：数组与 C 风格字符串](s04_arrays_strings/README.md)
 - [第 5 课：指针、地址与函数参数](s05_pointers_addresses/README.md)
+- [第 6 课：结构体、枚举与结构体指针](s06_struct_enum/README.md)
+- [第 7 课：栈、堆与动态内存](s07_dynamic_memory/README.md)
+- [第 8 课：综合练习——简单对象树](s08_object_tree/README.md)
+- [第 9 课：从 C 过渡到 C++](s09_cpp_transition/README.md)
+- [第 10 课：类型、初始化、const 与引用](s10_cpp_types_references/README.md)
 
 ## 参考资料
 
