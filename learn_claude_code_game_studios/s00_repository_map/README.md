@@ -1,58 +1,111 @@
-# 第 0 课：仓库地图与系统边界
+# 第 0 课：CCGS 是什么，又不是什么
 
-**目标：** 判断 CCGS 提供的是什么、由哪些部分组成，以及它和游戏本体、Cocos Creator 的关系。
+**目标：** 从仓库中的文件和配置出发，判断 Claude Code Game Studios（CCGS）的职责边界，并能解释它怎样组织一次游戏开发任务。
 
-## 本课要回答的问题
+完成本课后，你应该能回答：
 
-1. CCGS 是一个游戏，还是帮助 Claude Code 组织游戏开发的模板？
-2. Agent、Skill、Hook、Rule、`project.yaml` 和 `studio-tests/` 分别解决什么问题？
-3. 哪些说法能从目录结构直接核实，哪些还需要读实现或运行行为？
+1. 这个仓库交付的是游戏、引擎，还是开发工作流？
+2. Agent、Skill、Hook、Rule 和 `project.yaml` 各解决哪一类问题？
+3. 静态文件能证明什么，哪些结论还需要实际运行才能成立？
 
 ## 源码位置
 
-- `engine/Claude-Code-Game-Studios/README.md`：用途、功能数量、引擎覆盖范围和启动方式。
-- `engine/Claude-Code-Game-Studios/CLAUDE.md`：主上下文入口及导入的协作、编码规则。
-- `engine/Claude-Code-Game-Studios/project.yaml`：框架版本和项目配置入口。
-- `engine/Claude-Code-Game-Studios/.claude/settings.json`：权限配置和事件 Hook 注册。
-- `engine/Claude-Code-Game-Studios/.claude/agents/`、`skills/`、`hooks/`、`rules/`：四类主要机制的定义。
-- `engine/Claude-Code-Game-Studios/studio-tests/README.md`：框架自测的对象和覆盖方式。
+| 文件 | 本课关注点 |
+| --- | --- |
+| `engine/Claude-Code-Game-Studios/README.md` | Why This Exists、What's Included、Getting Started、How It Works |
+| `engine/Claude-Code-Game-Studios/CLAUDE.md` | 项目说明入口、引擎选择、协作协议和按需上下文 |
+| `engine/Claude-Code-Game-Studios/project.yaml` | 框架版本和模板当前配置状态 |
+| `engine/Claude-Code-Game-Studios/.claude/settings.json` | 工具权限、事件 Hook 注册和状态栏入口 |
+| `engine/Claude-Code-Game-Studios/.claude/agents/` | 专业角色定义 |
+| `engine/Claude-Code-Game-Studios/.claude/skills/` | 可调用工作流定义 |
+| `engine/Claude-Code-Game-Studios/.claude/hooks/` | 事件处理脚本和辅助脚本 |
+| `engine/Claude-Code-Game-Studios/.claude/rules/` | 路径范围内的规则说明 |
+| `engine/Claude-Code-Game-Studios/studio-tests/README.md` | CCGS 自身的测试对象和入口 |
 
-## 观察步骤
+## 观察一：先辨认交付物
 
-在仓库根目录查看文件数量：
+打开 `README.md`，读 **Why This Exists**、**Does it produce games, or documents?** 和 **Project Structure**。再看 `src/` 和 `production/`：当前快照的 `src/` 只有说明文件和 `.gitkeep`，没有随模板附带一款完整游戏。
+
+据此先写下一个暂定判断：CCGS 是给 Claude Code 项目使用的游戏开发工作流模板；它要帮助用户制作游戏，但模板本身不是游戏引擎或游戏成品。
+
+继续从 `CLAUDE.md` 的 Technology Stack 核对目标引擎：模板为 Godot 4、Unity 和 Unreal Engine 5 提供专用角色和参考资料。列表没有 Cocos Creator，因此不能把这些规则当作 Creator 插件或 Creator API 的依据。
+
+## 观察二：核对仓库组成
+
+在仓库根目录执行以下命令。它们只读文件并统计当前快照：
 
 ~~~sh
 cd engine/Claude-Code-Game-Studios
-rg --files --hidden .claude/agents -g '*.md' | wc -l
-rg --files --hidden .claude/skills -g 'SKILL.md' | wc -l
-rg --files --hidden .claude/hooks -g '*.sh' | wc -l
-rg --files --hidden .claude/rules -g '*.md' | wc -l
+python3 - <<'PY'
+from pathlib import Path
+import json
+
+agents = list(Path('.claude/agents').rglob('*.md'))
+skills = list(Path('.claude/skills').rglob('SKILL.md'))
+hook_scripts = list(Path('.claude/hooks').glob('*.sh'))
+rules = list(Path('.claude/rules').glob('*.md'))
+settings = json.loads(Path('.claude/settings.json').read_text())
+registered_hooks = sum(
+    len(matcher.get('hooks', []))
+    for event in settings['hooks'].values()
+    for matcher in event
+)
+
+print(f'Agent definitions: {len(agents)}')
+print(f'Skill entry files: {len(skills)}')
+print(f'Registered hook commands: {registered_hooks}')
+print(f'Hook shell files: {len(hook_scripts)}')
+print(f'Path rules: {len(rules)}')
+PY
 ~~~
 
-然后对照 `README.md` 的 **What's Included**、**Getting Started**、**How It Works**，以及 `CLAUDE.md` 的 **Collaboration Protocol**。只读清单可以核实定义文件的数量；要判断定义是否正确执行，还要继续读对应的 Skill、Hook 或设置。
+本地 1.2.0 快照的结果应为：49 个 Agent 定义、74 个 Skill 入口、15 个已注册 Hook 命令、18 个 Hook 目录下的 shell 文件和 14 条 Rule。18 个脚本文件里还包含辅助脚本与可选诊断脚本，所以它不等于设置文件注册的 Hook 命令数。
 
-## 观察结果
+## 观察三：把机制和职责对上
 
-本地快照应显示 49 个 Agent 定义、74 个 Skill 入口、18 个 Hook 脚本文件和 14 条 Rule。README 统计的是 15 个事件 Hook；额外脚本包含辅助脚本和诊断脚本，因此两个数字的计数对象不同。
+| 机制 | 去哪里看 | 它回答的问题 | 何时参与工作 |
+| --- | --- | --- | --- |
+| `CLAUDE.md` | 仓库根目录 | 当前项目有哪些重要约定？ | Claude Code 在项目根目录启动会话时 |
+| Agent | `.claude/agents/` | 这项工作由什么领域角色负责？ | 被 Skill 或协调流程委派时 |
+| Skill | `.claude/skills/` | 这类任务按什么步骤完成？ | 用户或 Agent 调用对应命令时 |
+| Hook | `.claude/settings.json` 与 `.claude/hooks/` | 某个工具或会话事件发生时要自动运行什么动作？ | 配置的事件触发时 |
+| Rule | `.claude/rules/` | 处理某类路径时应遵守什么指导？ | 读取路径匹配的文件后作为上下文加载 |
+| 项目配置 | `project.yaml` | 当前团队采用哪些引擎、偏好和流程设置？ | Skill 或 Hook 解析设置时 |
+| Studio Tests | `studio-tests/` | 这套 Agent/Skill 框架自身是否符合约定？ | 运行 `/skill-test` 或 `/skill-improve` 时 |
 
-| 目录或文件 | 主要职责 | 何时生效 |
+这些机制各司其职：Skill 组织步骤，Agent 承担领域角色，Hook 绑定自动事件，Rule 提供匹配路径的上下文，配置决定工作方式；Studio Tests 检查框架自身。它们组合起来支持游戏开发，但不能互相替代。
+
+## 观察四：区分定义和运行证据
+
+把你看到的结论分成三类：
+
+| 证据 | 能证明 | 不能单独证明 |
 | --- | --- | --- |
-| `CLAUDE.md` | 项目级会话说明，并导入协作和编码资料 | Claude Code 从项目根目录启动会话时 |
-| `.claude/agents/` | 专业角色的职责、领域和委派边界 | 任务需要委派给相应 Agent 时 |
-| `.claude/skills/` | 可调用的工作步骤、输入、依赖和产物 | 用户或工作流调用相应 Skill 时 |
-| `.claude/hooks/` + `settings.json` | 对工具或会话事件执行自动检查 | 配置的 Claude Code 事件发生时 |
-| `.claude/rules/` | 按路径加载的编码指导 | 读取匹配路径的文件时作为上下文；不是强制校验 |
-| `project.yaml` | 项目引擎、偏好和工作模式的配置源 | Skill 或 Hook 读取配置时 |
-| `studio-tests/` | 检查 Agent/Skill 框架自身的结构和行为 | 运行 `/skill-test`、`/skill-improve` 时 |
+| README 的功能说明 | 项目如何描述自己的目标和能力 | 每项能力已在当前 Claude Code 版本实际生效 |
+| Agent、Skill、Rule 文件 | 对应定义存在，且写了哪些职责或步骤 | Agent 一定会被选中、模型一定遵从 Rule |
+| `settings.json` 与 Hook 脚本 | 哪些事件注册了脚本，以及脚本静态逻辑 | 某次会话确实触发了脚本，或目标游戏通过了检查 |
+| `studio-tests/` 规范 | 框架计划怎样检查 Agent/Skill | 游戏本身已通过测试 |
+| 游戏运行和保留的 QA 证据 | 对应构建在观察时表现出的行为 | 所有设备、版本和场景均无问题 |
 
-因此，CCGS 是一套为 Claude Code 项目提供的工作流模板，模板本身不附带一个供玩家运行的游戏。它列出的引擎专用资料是 Godot、Unity 和 Unreal；本地 Cocos Creator 源码学习课程与它并非同一个产品或插件。
+这一区分是后续课程的读源码方法：先找定义，再追引用和触发条件；需要运行时结论时，单独取得运行证据。
+
+## 本课结论
+
+当前快照标记为 CCGS 1.2.0。它是一套面向 Claude Code 的游戏开发流程模板，包含角色、工作流、事件检查、路径规则、引擎资料和框架自测。它不自带一款游戏，也不覆盖 Cocos Creator 的引擎知识。静态阅读可以建立结构图，不能替代对真实会话或游戏构建的观察。
 
 ## 简化说明
 
-- 本课只建立静态目录地图，不证明某个 Hook 在特定 Claude Code 版本中已经触发，也不证明 Agent 按描述完成了任务。
-- 计数来自当前本地快照。框架版本可从 `project.yaml` 核对；上游更新后应重新计数。
-- 课程不在这里运行游戏或改造 CCGS。后续章节会按主题读取具体实现和合同。
+- 数量以本地 `project.yaml` 标记的 1.2.0 快照为准；换版本后重新执行统计。
+- 本课只读，不启动 Claude Code，不触发 Hook，也不运行目标游戏。
+- 后续课程逐项解释表格中的机制；本课不展开 74 个 Skill 或 49 个 Agent 的完整定义。
 
 ## 自测
 
-不看上表，分别用一句话解释 Agent、Skill、Hook、Rule 的作用，并指出 `/skill-test` 测试的是 CCGS 还是游戏本身。回答能由本课列出的文件找到依据，即完成本课。
+不看上面的表，完成下面四项：
+
+1. 用一句话说明 CCGS 的交付物，并说明它与游戏成品的关系。
+2. 为“新建一条带规则校验的 Story”分别选择 Skill、Agent、Hook 或 Rule 负责的部分。
+3. 解释为什么 18 个 `.sh` 文件不等于 18 个已注册 Hook 命令。
+4. 说明 `/skill-test` 的结果能否证明某款游戏已运行成功，并指出还需要什么证据。
+
+能用仓库中的文件路径为每个回答找到依据，即完成本课。
