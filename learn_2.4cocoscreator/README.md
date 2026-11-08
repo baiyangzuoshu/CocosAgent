@@ -33,6 +33,7 @@
 - [第 15 课：节点命中与事件回调](s15_node_event_hit/README.md)
 - [第 16 课：节点事件传播](s16_event_propagation/README.md)
 - [第 17 课：Prefab 实例化](s17_prefab_instantiation/README.md)
+- [第 18 课：组件实例与资源共享](s18_component_asset_sharing/README.md)
 
 ## 代码结构
 
@@ -92,7 +93,8 @@ learn_2.4cocoscreator/
 ├── s14_browser_input/         # 浏览器输入与画布坐标
 ├── s15_node_event_hit/        # 节点命中与事件回调
 ├── s16_event_propagation/     # 捕获、目标和冒泡
-└── s17_prefab_instantiation/ # Prefab 生成独立节点树
+├── s17_prefab_instantiation/ # Prefab 生成独立节点树
+└── s18_component_asset_sharing/ # 组件独立、SpriteFrame 共享
 ~~~
 
 ## 运行
