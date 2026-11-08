@@ -12,6 +12,7 @@
 - [第 11 课：不可见节点跳过整棵子树](s11_node_visibility/README.md)
 - [第 12 课：CCSprite 四顶点直接绘制](s12_sprite_quad/README.md)
 - [第 13 课：CCSpriteFrame 保存贴图区域](s13_sprite_frame/README.md)
+- [第 14 课：触摸输入入口](s14_touch_input/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 

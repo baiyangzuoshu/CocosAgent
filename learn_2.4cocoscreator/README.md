@@ -29,6 +29,7 @@
 - [第 11 课：渲染脏标记与世界变换](s11_render_flags_dirty/README.md)：只重算发生变化的节点。
 - [第 12 课：四边形几何与 WebGL 提交](s12_sprite_quad/README.md)：把节点组装成 4 个顶点、6 个索引并绘制。
 - [第 13 课：SpriteFrame 连接贴图](s13_sprite_frame_texture/README.md)：从图集矩形算出 UV，再由 WebGL 采样贴图。
+- [第 14 课：浏览器输入坐标](s14_browser_input/README.md)
 
 ## 代码结构
 
@@ -79,12 +80,13 @@ learn_2.4cocoscreator/
 │   ├── index.html
 │   ├── assets/
 │   └── src/cocos2d/core/
-└── s13_sprite_frame_texture/  # 独立的第 13 课工程，含前课功能
-    ├── README.md
-    ├── deno.json
-    ├── index.html
-    ├── assets/
-    └── src/cocos2d/core/
+├── s13_sprite_frame_texture/  # 独立的第 13 课工程，含前课功能
+│   ├── README.md
+│   ├── deno.json
+│   ├── index.html
+│   ├── assets/
+│   └── src/cocos2d/core/
+└── s14_browser_input/         # 浏览器输入与画布坐标
 ~~~
 
 ## 运行
