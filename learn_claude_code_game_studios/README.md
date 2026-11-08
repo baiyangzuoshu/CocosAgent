@@ -1,6 +1,6 @@
 # Claude Code Game Studios 学习课程
 
-以仓库中的 Claude Code Game Studios（CCGS）快照为材料，逐课读懂它如何把游戏开发工作组织成一套可配置的 Claude Code 工作流。
+以仓库中的 Claude Code Game Studios（CCGS）快照为材料，用 20 课逐层读懂它如何把游戏开发工作组织成一套可配置的 Claude Code 工作流。
 
 ## 学习目标
 
@@ -20,9 +20,33 @@
 ## 课程
 
 - [课程大纲](课程大纲.md)
-- [第 0 课：仓库地图与系统边界](s00_repository_map/README.md)
+- 第 0 阶段：入口与协作基础
+  - [第 0 课：仓库地图与系统边界](s00_repository_map/README.md)
+  - [第 1 课：会话入口与上下文装配](s01_session_context/README.md)
+  - [第 2 课：Agent 角色与责任边界](s02_agent_roles/README.md)
+  - [第 3 课：委派、团队与冲突升级](s03_delegation/README.md)
+- 第 1 阶段：Skill 与项目控制
+  - [第 4 课：Skill 命令的结构](s04_skills/README.md)
+  - [第 5 课：合同、参考资料与脚本](s05_skill_contracts/README.md)
+  - [第 6 课：项目配置解析](s06_config_resolution/README.md)
+  - [第 7 课：Rigor 与工作流档位](s07_rigor_modes/README.md)
+  - [第 8 课：Collaborative、Guided 与 Autonomous](s08_automation_modes/README.md)
+- 第 2 阶段：自动约束与引擎知识
+  - [第 9 课：事件 Hooks](s09_hooks/README.md)
+  - [第 10 课：按路径加载的 Rules](s10_path_rules/README.md)
+  - [第 11 课：引擎参考资料](s11_engine_reference/README.md)
+- 第 3 阶段：游戏开发工作流
+  - [第 12 课：首次启动与项目识别](s12_onboarding/README.md)
+  - [第 13 课：从概念到架构](s13_design_architecture/README.md)
+  - [第 14 课：Story 生命周期](s14_story_lifecycle/README.md)
+  - [第 15 课：阶段、Gate 与推进条件](s15_phase_gates/README.md)
+  - [第 16 课：运行观察与 QA 证据](s16_run_qa_evidence/README.md)
+- 第 4 阶段：维护工作室框架
+  - [第 17 课：测试 Agent 与 Skill](s17_framework_testing/README.md)
+  - [第 18 课：定制 CCGS](s18_customization/README.md)
+  - [第 19 课：升级与兼容](s19_upgrading/README.md)
 
-后续课程按学习顺序规划在大纲中；完成一课后再扩展下一课，避免只凭目录名称推断实现行为。
+每课都包含源码位置、观察步骤、结果和简化边界；本课程以静态阅读与流程追踪为主，不把模拟行为说成 Claude Code 的运行证据。
 
 ## 源码入口
 

@@ -41,7 +41,7 @@ rg --files --hidden .claude/rules -g '*.md' | wc -l
 | `.claude/agents/` | 专业角色的职责、领域和委派边界 | 任务需要委派给相应 Agent 时 |
 | `.claude/skills/` | 可调用的工作步骤、输入、依赖和产物 | 用户或工作流调用相应 Skill 时 |
 | `.claude/hooks/` + `settings.json` | 对工具或会话事件执行自动检查 | 配置的 Claude Code 事件发生时 |
-| `.claude/rules/` | 按文件路径或类型应用的编码约束 | 处理匹配路径的文件时 |
+| `.claude/rules/` | 按路径加载的编码指导 | 读取匹配路径的文件时作为上下文；不是强制校验 |
 | `project.yaml` | 项目引擎、偏好和工作模式的配置源 | Skill 或 Hook 读取配置时 |
 | `studio-tests/` | 检查 Agent/Skill 框架自身的结构和行为 | 运行 `/skill-test`、`/skill-improve` 时 |
 
