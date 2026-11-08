@@ -48,8 +48,6 @@ python3 learn_claude_code_game_studios/practice/audit_snapshot.py /path/to/Claud
 
 ## 观察二：把机制和职责对上
 
-## 观察三：把机制和职责对上
-
 | 机制 | 去哪里看 | 它回答的问题 | 何时参与工作 |
 | --- | --- | --- | --- |
 | `CLAUDE.md` | 仓库根目录 | 当前项目有哪些重要约定？ | Claude Code 在项目根目录启动会话时 |
