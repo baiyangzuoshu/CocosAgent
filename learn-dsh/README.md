@@ -17,5 +17,6 @@
 - [第 0 课：最小插件启动器](s00_minimal_plugin/README.md)
 - [第 1 课：Context 与 Service](s01_context_service/README.md)
 - [第 2 课：依赖注入](s02_injection/README.md)
+- [第 3 课：生命周期与 effect](s03_lifecycle_effects/README.md)
 
 各课使用 Deno 独立运行 TypeScript 示例。课程代码不依赖目标仓库的构建产物、不修改其文件；核心 Agent 示例使用模拟模型。
