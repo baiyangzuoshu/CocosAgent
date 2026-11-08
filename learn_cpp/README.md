@@ -19,6 +19,7 @@ Creator 3.8.7 的运行时课程使用 TypeScript；本课程沿用其逐课、�
 - [第 2 课：类型、变量与流程控制](s02_c_types_control/README.md)
 - [第 3 课：函数、作用域与多文件组织](s03_c_functions/README.md)
 - [第 4 课：数组与 C 风格字符串](s04_arrays_strings/README.md)
+- [第 5 课：指针、地址与函数参数](s05_pointers_addresses/README.md)
 
 ## 参考资料
 
