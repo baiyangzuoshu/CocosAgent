@@ -11,6 +11,7 @@
 - [第 10 课：场景遍历与渲染命令提交](s10_render_entry/README.md)
 - [第 11 课：GlobalZOrder 与命令排序](s11_global_z_order/README.md)
 - [第 12 课：Sprite 三角形命令](s12_sprite_triangles/README.md)
+- [第 13 课：SpriteFrame 与三角形贴图命令](s13_sprite_frame_texture/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 
