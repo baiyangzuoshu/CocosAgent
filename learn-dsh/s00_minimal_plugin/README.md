@@ -57,7 +57,7 @@ deno task run
 
 ## 观察结果
 
-`mount()` 持有加载流程，插件只声明自己的 `name` 和 `apply(ctx)`。Context 是启动器与插件之间传递运行能力的对象。下一课会把单一 `log()` 扩展为可注册和读取的 Service。
+`mount()` 持有加载流程，插件只声明自己的 `name` 和 `apply(ctx)`。Context 是启动器与插件之间传递运行能力的对象。下一课会把单一 `log()` 扩展为可注册和读取的 Service，见[第 1 课](../s01_context_service/README.md)。
 
 ## 简化与边界
 
