@@ -32,6 +32,7 @@
 - [第 14 课：浏览器输入坐标](s14_browser_input/README.md)
 - [第 15 课：节点命中与事件回调](s15_node_event_hit/README.md)
 - [第 16 课：节点事件传播](s16_event_propagation/README.md)
+- [第 17 课：Prefab 实例化](s17_prefab_instantiation/README.md)
 
 ## 代码结构
 
@@ -90,7 +91,8 @@ learn_2.4cocoscreator/
 │   └── src/cocos2d/core/
 ├── s14_browser_input/         # 浏览器输入与画布坐标
 ├── s15_node_event_hit/        # 节点命中与事件回调
-└── s16_event_propagation/     # 捕获、目标和冒泡
+├── s16_event_propagation/     # 捕获、目标和冒泡
+└── s17_prefab_instantiation/ # Prefab 生成独立节点树
 ~~~
 
 ## 运行
