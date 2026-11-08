@@ -6,6 +6,7 @@
 
 - Claude Code 已安装并可启动。
 - Python 3 和 Bash 可用。
+- Git 可用（第 1 课会在隔离副本中初始化 Git 元数据）。
 - 有本地 CCGS 1.2.0 源码目录。默认位置是仓库中的 `engine/Claude-Code-Game-Studios/`；若源码不在此处，把实际路径传给创建脚本。
 
 ## 第一步：检查当前快照
@@ -43,8 +44,8 @@ claude
 
 ## 当前练习
 
-目前只为第 0 课编写了练习步骤。可以运行 `audit_snapshot.py` 盘点源码，创建隔离副本后在其中启动 Claude Code、运行 `/help` 并观察 SessionStart 输出。
+第 0 课通过 `audit_snapshot.py` 盘点快照；第 1 课通过 `trace_session_context.py` 检查启动导入和 Hook 目标，并在临时副本中观察真实 Hook 脚本及 Claude Code 会话。
 
-第 1–19 课目前只有大纲主题；对应的实践步骤会在逐课学习时再编写和验证。
+第 2–19 课目前只有大纲主题；对应的实践步骤会在逐课学习时再编写和验证。
 
 如果没有可用的 Claude Code 运行环境，仍可运行 `audit_snapshot.py` 和 CCGS 自带的只读辅助脚本；需要真实会话行为的观察则记为未执行，不用静态文件代替运行结果。
