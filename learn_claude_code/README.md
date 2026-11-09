@@ -14,6 +14,7 @@
 - [课程大纲](课程大纲.md)
 - [第 00 课：源码快照边界与整体分层](s00_source_boundary/README.md)
 - [第 01 课：CLI 轻量入口与快速分支](s01_cli_bootstrap/README.md)
+- [第 02 课：Commander 参数解析与命令分发](s02_commander_routing/README.md)
 
 ## 课程形式与证据边界
 
