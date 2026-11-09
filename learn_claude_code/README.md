@@ -21,6 +21,7 @@
 - [第 06 课：AppState 与状态订阅](s06_app_state_store/README.md)
 - [第 07 课：Ink 终端界面树与渲染](s07_ink_rendering/README.md)
 - [第 08 课：REPL 建立与首轮会话上下文](s08_repl_initial_context/README.md)
+- [第 09 课：输入缓冲、消息队列与命令入口](s09_input_queue_commands/README.md)
 
 ## 课程形式与证据边界
 
