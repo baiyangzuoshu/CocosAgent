@@ -18,6 +18,7 @@
 - [第 03 课：命令执行前的初始化](s03_init_lifecycle/README.md)
 - [第 04 课：配置、信任、认证与策略边界](s04_config_trust_auth_policy/README.md)
 - [第 05 课：交互、Print、SDK 与 MCP 运行模式](s05_run_modes/README.md)
+- [第 06 课：AppState 与状态订阅](s06_app_state_store/README.md)
 
 ## 课程形式与证据边界
 
