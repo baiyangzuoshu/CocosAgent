@@ -25,5 +25,6 @@
 - [第 8 课：Profile、Bundle 与 patch](s08_profile_bundle_patch/README.md)
 - [第 9 课：CLI 与 Headless 启动](s09_cli_headless_boot/README.md)
 - [第 10 课：Session 事件日志](s10_session_event_log/README.md)
+- [第 11 课：历史投影](s11_history_projection/README.md)
 
 各课使用 Deno 独立运行 TypeScript 示例。课程代码不依赖目标仓库的构建产物、不修改其文件；核心 Agent 示例使用模拟模型。
