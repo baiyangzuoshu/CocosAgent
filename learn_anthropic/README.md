@@ -2,7 +2,7 @@
 
 以 Anthropic 官方网站和 Claude Platform 文档为资料入口，逐课认识 Anthropic 的公司使命、研究与安全治理，以及 Claude 产品和开发者平台。课程解释官方页面、术语和资料之间的关系；不把公司的目标陈述当作独立验证结论，也不把某一时点的模型与产品清单写成长期事实。
 
-课程暂定 **30 课**，编号 `s00`–`s29`。目前已完成第 00–15 课；其余课程按主题逐步展开。
+课程暂定 **30 课**，编号 `s00`–`s29`。目前已完成第 00–16 课；其余课程按主题逐步展开。
 
 ## 学习方式
 
@@ -35,6 +35,7 @@
 - [第 13 课：Claude 当前有哪些产品形态和适用场景？](s13_claude_products_use_cases/README.md)
 - [第 14 课：Claude API 与云平台渠道的文档和责任边界是什么？](s14_api_cloud_channels/README.md)
 - [第 15 课：API Key、工作区和认证如何配合？](s15_api_keys_workspaces_auth/README.md)
+- [第 16 课：如何发出第一个 Messages API 请求？](s16_first_messages_request/README.md)
 
 ## 资料范围
 
