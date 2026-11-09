@@ -43,6 +43,7 @@
 - [第 26 课：对象池预热与首次复用](s26_pool_prewarm/README.md)
 - [第 27 课：对象池低水位补充](s27_pool_low_water_refill/README.md)
 - [第 28 课：对象池 clear 的销毁时机](s28_pool_clear_timing/README.md)
+- [第 29 课：外部引用与对象池清理](s29_pool_external_owner/README.md)
 
 ## 目录结构
 
@@ -79,7 +80,8 @@ learn_3.8cocoscreator/
 ├── s25_pool_capacity_limit/ # 对象池容量上限与超额销毁
 ├── s26_pool_prewarm/       # 对象池预热与首次复用
 ├── s27_pool_low_water_refill/ # 对象池低水位补充
-└── s28_pool_clear_timing/  # 对象池 clear 的销毁时机
+├── s28_pool_clear_timing/  # 对象池 clear 的销毁时机
+└── s29_pool_external_owner/ # 外部引用与对象池清理
 ~~~
 
 浏览器运行课进入各自目录，按 README 运行 `deno task check`、`deno task build` 和 `deno task serve`。第 0 课的元数据分析使用 `deno task check` 和 `deno task analyze`。
