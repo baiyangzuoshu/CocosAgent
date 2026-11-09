@@ -21,6 +21,7 @@
 - [第 20 课：节点退出与重新挂载](s20_node_detachment/README.md)
 - [第 21 课：cleanup 与引用释放](s21_cleanup_and_release/README.md)
 - [第 22 课：节点池复用](s22_node_pool/README.md)
+- [第 23 课：节点池回调与状态重置](s23_node_pool_callbacks/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 
