@@ -37,6 +37,7 @@
 - [第 20 课：节点移除与重新挂载](s20_node_detachment/README.md)
 - [第 21 课：延迟销毁与 onDestroy](s21_deferred_destruction/README.md)
 - [第 22 课：NodePool 节点复用](s22_node_pool/README.md)
+- [第 23 课：NodePool 回收与复用回调](s23_node_pool_callbacks/README.md)
 
 ## 目录结构
 
@@ -67,7 +68,8 @@ learn_3.8cocoscreator/
 ├── s19_instance_lifecycle/     # 实例挂载与组件生命周期
 ├── s20_node_detachment/        # 节点移除与重新挂载
 ├── s21_deferred_destruction/ # 延迟销毁与 onDestroy
-└── s22_node_pool/           # NodePool 节点复用
+├── s22_node_pool/           # NodePool 节点复用
+└── s23_node_pool_callbacks/ # NodePool 回收与复用回调
 ~~~
 
 浏览器运行课进入各自目录，按 README 运行 `deno task check`、`deno task build` 和 `deno task serve`。第 0 课的元数据分析使用 `deno task check` 和 `deno task analyze`。
