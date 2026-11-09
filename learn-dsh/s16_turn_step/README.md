@@ -71,4 +71,4 @@ deno task run
 
 ---
 
-下一课预告：第 17 课「输入准入与 Pre-step」会在 Turn 打开后、Step 开始前处理消息接纳。
+下一课：[输入准入与 Pre-step](../s17_pre_step_admission/README.md) 会在 Turn 打开后、Step 开始前处理消息接纳。
