@@ -45,6 +45,7 @@
 - [第 27 课：对象池低水位补充](s27_pool_low_water_refill/README.md)
 - [第 28 课：对象池 clear 的销毁时机](s28_pool_clear_timing/README.md)
 - [第 29 课：外部引用与对象池清理](s29_pool_external_owner/README.md)
+- [第 30 课：池中节点暂停调度](s30_pool_activity_pause/README.md)
 
 ## 代码结构
 
@@ -116,7 +117,8 @@ learn_2.4cocoscreator/
 ├── s26_pool_prewarm/       # 对象池预热与首次复用
 ├── s27_pool_low_water_refill/ # 对象池低水位补充
 ├── s28_pool_clear_timing/  # 对象池 clear 的销毁时机
-└── s29_pool_external_owner/ # 外部引用与对象池清理
+├── s29_pool_external_owner/ # 外部引用与对象池清理
+└── s30_pool_activity_pause/ # 池中节点暂停调度
 ~~~
 
 ## 运行

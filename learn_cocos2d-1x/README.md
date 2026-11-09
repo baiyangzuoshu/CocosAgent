@@ -28,6 +28,7 @@
 - [第 27 课：对象池低水位补充](s27_pool_low_water_refill/README.md)
 - [第 28 课：对象池 clear 的销毁时机](s28_pool_clear_timing/README.md)
 - [第 29 课：外部引用与对象池清理](s29_pool_external_owner/README.md)
+- [第 30 课：池中节点暂停调度](s30_pool_activity_pause/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 
