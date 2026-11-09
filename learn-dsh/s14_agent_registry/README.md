@@ -69,4 +69,4 @@ deno task run
 
 ---
 
-下一课预告：第 15 课「Agent 生命周期与 Inbox」会继续观察创建、输入排队和关闭过程。
+下一课：[Agent 生命周期与 Inbox](../s15_agent_lifecycle_inbox/README.md) 会继续观察创建、输入排队和关闭过程。
