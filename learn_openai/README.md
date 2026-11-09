@@ -43,7 +43,8 @@ OpenAI 官方资料逐课学习。主线从基础概念进入 API、模型能力
 - [第 19 课：图像生成的返回结构与视频 API 状态](s19_image_and_video_generation/README.md)
 - [第 20 课：Function Calling 怎样从工具请求走到应用执行](s20_function_calling_loop/README.md)
 - [第 21 课：OpenAI 内置工具和自定义函数怎样选择](s21_builtin_tools_vs_functions/README.md)
+- [第 22 课：Web Search 怎样补充实时网页信息](s22_web_search/README.md)
 
 ## 进度
 
-当前学习至第 21 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
+当前学习至第 22 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
