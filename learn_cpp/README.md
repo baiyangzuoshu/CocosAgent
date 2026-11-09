@@ -44,6 +44,7 @@ Creator 3.8.7 的运行时课程使用 TypeScript；本课程沿用其逐课、�
 - [第 25 课：继承与多态](s25_cpp_inheritance_polymorphism/README.md)
 - [第 26 课：模板与泛型编程](s26_cpp_templates_generic/README.md)
 - [第 27 课：错误处理与异常](s27_cpp_errors_exceptions/README.md)
+- [第 28 课：编译、链接与 ODR 综合练习](s28_cpp_build_link_odr/README.md)
 
 ## 参考资料
 
