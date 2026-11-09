@@ -35,7 +35,8 @@ OpenAI 官方资料逐课学习。主线从基础概念进入 API、模型能力
 - [第 11 课：Streaming 与 Background Mode](s11_streaming_background/README.md)
 - [第 12 课：请求失败、限流与 Request ID](s12_errors_rate_limits_request_ids/README.md)
 - [第 13 课：模型怎样接收和理解图片](s13_image_inputs_vision/README.md)
+- [第 14 课：把文件和 PDF 提供给模型](s14_file_inputs_pdf_file_search/README.md)
 
 ## 进度
 
-当前学习至第 13 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
+当前学习至第 14 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
