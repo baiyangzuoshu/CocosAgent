@@ -110,3 +110,8 @@ TeamJournal。
   `maxTasks` 上限。
 - 示例展示一个 Agent 成功 claim、另一成员因 stale revision
   失败；没有并发文件写入或隔离工作区。所有成员仍共享同一检出目录。
+
+---
+
+下一课：[第 28 课「MCP 工具」](../s28_mcp_tools/README.md) 会将 MCP Server
+的工具注册到 Harness ToolRegistry。
