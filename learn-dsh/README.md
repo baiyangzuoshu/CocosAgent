@@ -28,5 +28,6 @@
 - [第 11 课：历史投影](s11_history_projection/README.md)
 - [第 12 课：持久化与恢复](s12_session_persistence/README.md)
 - [第 13 课：查询与上下文压缩](s13_query_compaction/README.md)
+- [第 14 课：Agent 接口与注册表](s14_agent_registry/README.md)
 
 各课使用 Deno 独立运行 TypeScript 示例。课程代码不依赖目标仓库的构建产物、不修改其文件；核心 Agent 示例使用模拟模型。

@@ -75,4 +75,4 @@ deno task run
 
 ---
 
-下一课预告：第 14 课「Agent 接口与注册表」会从消息历史转向运行 Agent 的核心对象。
+下一课：[Agent 接口与注册表](../s14_agent_registry/README.md) 会从消息历史转向运行 Agent 的核心对象。
