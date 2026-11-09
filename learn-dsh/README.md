@@ -36,5 +36,6 @@
 - [第 19 课：LLM 服务与 Provider](s19_llm_service_provider/README.md)
 - [第 20 课：流、取消与失败结算](s20_llm_stream_cancel_settlement/README.md)
 - [第 21 课：Tool Schema 与注册](s21_tool_schema_registration/README.md)
+- [第 22 课：校验与执行流水线](s22_tool_validation_execution/README.md)
 
 各课使用 Deno 独立运行 TypeScript 示例。课程代码不依赖目标仓库的构建产物、不修改其文件；核心 Agent 示例使用模拟模型。

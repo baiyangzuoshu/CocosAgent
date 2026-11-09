@@ -74,4 +74,4 @@ deno task run
 
 ---
 
-下一课预告：第 22 课「校验与执行流水线」将验证模型 arguments 并受控调用注册实现。
+下一课：[第 22 课「校验与执行流水线」](../s22_tool_validation_execution/README.md) 将验证模型 arguments 并受控调用注册实现。
