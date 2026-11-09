@@ -37,6 +37,7 @@ Creator 3.8.7 的运行时课程使用 TypeScript；本课程沿用其逐课、�
 - [第 18 课：对象生命周期与析构函数](s18_cpp_object_lifetime/README.md)
 - [第 19 课：RAII 与资源管理](s19_cpp_raii/README.md)
 - [第 20 课：拷贝构造与拷贝赋值](s20_cpp_copy_semantics/README.md)
+- [第 21 课：移动语义与右值引用](s21_cpp_move_semantics/README.md)
 
 ## 参考资料
 
