@@ -25,6 +25,7 @@
 - [第 24 课：对象池未命中与节点工厂兜底](s24_pool_miss_fallback/README.md)
 - [第 25 课：对象池容量上限与超额节点释放](s25_pool_capacity_limit/README.md)
 - [第 26 课：对象池预热与首次复用](s26_pool_prewarm/README.md)
+- [第 27 课：对象池低水位补充](s27_pool_low_water_refill/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 
