@@ -40,6 +40,7 @@
 | 第 32 课：节点池的后进先出顺序 | [本课](s32_pool_lifo_order/README.md) | [本课](../learn_2.4cocoscreator/s32_pool_lifo_order/README.md) | [本课](../learn_3.8cocoscreator/s32_pool_lifo_order/README.md) |
 | 第 33 课：防止节点重复入池 | [本课](s33_pool_duplicate_put/README.md) | [本课](../learn_2.4cocoscreator/s33_pool_duplicate_put/README.md) | [本课](../learn_3.8cocoscreator/s33_pool_duplicate_put/README.md) |
 | 第 34 课：同一节点跨池共享的风险 | [本课](s34_pool_cross_pool_identity/README.md) | [本课](../learn_2.4cocoscreator/s34_pool_cross_pool_identity/README.md) | [本课](../learn_3.8cocoscreator/s34_pool_cross_pool_identity/README.md) |
+| 第 35 课：限制节点同时归属多个池 | [本课](s35_pool_single_owner/README.md) | [本课](../learn_2.4cocoscreator/s35_pool_single_owner/README.md) | [本课](../learn_3.8cocoscreator/s35_pool_single_owner/README.md) |
 
 历史 Cocos2d-x 同主题：[1.x](../learn_cocos2d-1x/s09_texture_cache/README.md)、[2.x](../learn_cocos2d-2x/s09_texture_cache/README.md)、[3.x](../learn_cocos2d-3x/s09_texture_cache/README.md)。
 
@@ -94,3 +95,5 @@
 历史 Cocos2d-x 第 33 课：[1.x](../learn_cocos2d-1x/s33_pool_duplicate_put/README.md)、[2.x](../learn_cocos2d-2x/s33_pool_duplicate_put/README.md)、[3.x](../learn_cocos2d-3x/s33_pool_duplicate_put/README.md)。
 
 历史 Cocos2d-x 第 34 课：[1.x](../learn_cocos2d-1x/s34_pool_cross_pool_identity/README.md)、[2.x](../learn_cocos2d-2x/s34_pool_cross_pool_identity/README.md)、[3.x](../learn_cocos2d-3x/s34_pool_cross_pool_identity/README.md)。
+
+历史 Cocos2d-x 第 35 课：[1.x](../learn_cocos2d-1x/s35_pool_single_owner/README.md)、[2.x](../learn_cocos2d-2x/s35_pool_single_owner/README.md)、[3.x](../learn_cocos2d-3x/s35_pool_single_owner/README.md)。
