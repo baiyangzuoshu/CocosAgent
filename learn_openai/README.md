@@ -38,7 +38,8 @@ OpenAI 官方资料逐课学习。主线从基础概念进入 API、模型能力
 - [第 14 课：把文件和 PDF 提供给模型](s14_file_inputs_pdf_file_search/README.md)
 - [第 15 课：语音转文字与音频理解](s15_audio_transcription_understanding/README.md)
 - [第 16 课：文字转语音、流式音频与实时语音对话](s16_tts_realtime_voice/README.md)
+- [第 17 课：Embedding 与向量相似度](s17_embeddings_vector_similarity/README.md)
 
 ## 进度
 
-当前学习至第 16 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
+当前学习至第 17 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
