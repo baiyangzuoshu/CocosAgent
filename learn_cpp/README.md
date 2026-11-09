@@ -31,6 +31,7 @@ Creator 3.8.7 的运行时课程使用 TypeScript；本课程沿用其逐课、�
 - [第 12 课：`std::string`、`std::array` 与 `std::vector`](s12_cpp_containers/README.md)
 - [第 13 课：`std::map` 与 `std::set`](s13_cpp_associative_containers/README.md)
 - [第 14 课：迭代器与标准算法](s14_cpp_iterators_algorithms/README.md)
+- [第 15 课：Lambda 表达式](s15_cpp_lambdas/README.md)
 
 ## 参考资料
 
