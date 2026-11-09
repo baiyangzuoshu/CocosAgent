@@ -1,0 +1,6 @@
+{
+  "name": "Hero",
+  "textureUrl": "./assets/hero-atlas.svg",
+  "atlasSize": { "width": 128, "height": 64 },
+  "rect": { "x": 0, "y": 0, "width": 64, "height": 64 }
+}
