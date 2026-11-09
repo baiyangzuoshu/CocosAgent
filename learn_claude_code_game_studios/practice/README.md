@@ -44,8 +44,8 @@ claude
 
 ## 当前练习
 
-第 0 课通过 `audit_snapshot.py` 盘点快照；第 1 课通过 `trace_session_context.py` 检查启动导入和 Hook 目标；第 2 课通过 `inventory_agents.py` 盘点 Agent 定义；第 3 课通过 `trace_team_flow.py` 追踪 `team-*` Skill 的委派角色、并行提示、阶段依赖、门禁和阻塞恢复线索；第 4 课通过 `inspect_skill.py` 查看 Skill frontmatter、标题结构和动态输入线索；第 5 课通过 `trace_skill_dependencies.py` 追踪合同、参考资料和脚本路径；第 6 课在隔离副本中运行 CCGS 的 `yaml-helper.sh resolve_config`，并用 `config-set.sh --dry-run` 预览配置校验。
+第 0 课通过 `audit_snapshot.py` 盘点快照；第 1 课通过 `trace_session_context.py` 检查启动导入和 Hook 目标；第 2 课通过 `inventory_agents.py` 盘点 Agent 定义；第 3 课通过 `trace_team_flow.py` 追踪 `team-*` Skill 的委派角色、并行提示、阶段依赖、门禁和阻塞恢复线索；第 4 课通过 `inspect_skill.py` 查看 Skill frontmatter、标题结构和动态输入线索；第 5 课通过 `trace_skill_dependencies.py` 追踪合同、参考资料和脚本路径；第 6 课在隔离副本中运行 CCGS 的 `yaml-helper.sh resolve_config`，并用 `config-set.sh --dry-run` 预览配置校验；第 7 课通过 `compare_rigor_tiers.py` 在临时配置副本中调用 CCGS 辅助脚本对比三种预设。
 
-第 7–19 课目前只有大纲主题；对应的实践步骤会在逐课学习时再编写和验证。
+第 8–19 课目前只有大纲主题；对应的实践步骤会在逐课学习时再编写和验证。
 
 如果没有可用的 Claude Code 运行环境，仍可运行 `audit_snapshot.py` 和 CCGS 自带的只读辅助脚本；需要真实会话行为的观察则记为未执行，不用静态文件代替运行结果。
