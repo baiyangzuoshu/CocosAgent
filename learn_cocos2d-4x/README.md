@@ -27,6 +27,7 @@
 | 第 19 课：场景挂载与组件生命周期 | [本课](s19_instance_lifecycle/README.md) | [本课](../learn_2.4cocoscreator/s19_instance_lifecycle/README.md) | [本课](../learn_3.8cocoscreator/s19_instance_lifecycle/README.md) |
 | 第 20 课：节点退出与重新挂载 | [本课](s20_node_detachment/README.md) | [本课](../learn_2.4cocoscreator/s20_node_detachment/README.md) | [本课](../learn_3.8cocoscreator/s20_node_detachment/README.md) |
 | 第 21 课：cleanup 与引用释放 | [本课](s21_cleanup_and_release/README.md) | [本课](../learn_2.4cocoscreator/s21_deferred_destruction/README.md) | [本课](../learn_3.8cocoscreator/s21_deferred_destruction/README.md) |
+| 第 22 课：节点池复用 | [本课](s22_node_pool/README.md) | [本课](../learn_2.4cocoscreator/s22_node_pool/README.md) | [本课](../learn_3.8cocoscreator/s22_node_pool/README.md) |
 
 历史 Cocos2d-x 同主题：[1.x](../learn_cocos2d-1x/s09_texture_cache/README.md)、[2.x](../learn_cocos2d-2x/s09_texture_cache/README.md)、[3.x](../learn_cocos2d-3x/s09_texture_cache/README.md)。
 
@@ -55,3 +56,5 @@
 历史 Cocos2d-x 第 20 课：[1.x](../learn_cocos2d-1x/s20_node_detachment/README.md)、[2.x](../learn_cocos2d-2x/s20_node_detachment/README.md)、[3.x](../learn_cocos2d-3x/s20_node_detachment/README.md)。
 
 历史 Cocos2d-x 第 21 课：[1.x](../learn_cocos2d-1x/s21_cleanup_and_release/README.md)、[2.x](../learn_cocos2d-2x/s21_cleanup_and_release/README.md)、[3.x](../learn_cocos2d-3x/s21_cleanup_and_release/README.md)。
+
+历史 Cocos2d-x 第 22 课：[1.x](../learn_cocos2d-1x/s22_node_pool/README.md)、[2.x](../learn_cocos2d-2x/s22_node_pool/README.md)、[3.x](../learn_cocos2d-3x/s22_node_pool/README.md)。
