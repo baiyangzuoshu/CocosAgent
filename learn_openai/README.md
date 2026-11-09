@@ -45,7 +45,8 @@ OpenAI 官方资料逐课学习。主线从基础概念进入 API、模型能力
 - [第 21 课：OpenAI 内置工具和自定义函数怎样选择](s21_builtin_tools_vs_functions/README.md)
 - [第 22 课：Web Search 怎样补充实时网页信息](s22_web_search/README.md)
 - [第 23 课：Code Interpreter 适合哪些文件与计算任务](s23_code_interpreter/README.md)
+- [第 24 课：Computer Use 怎样操作界面](s24_computer_use/README.md)
 
 ## 进度
 
-当前学习至第 23 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
+当前学习至第 24 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
