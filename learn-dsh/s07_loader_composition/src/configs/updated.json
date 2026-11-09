@@ -1,0 +1,5 @@
+[
+  { "id": "logger", "name": "logger" },
+  { "id": "greeting", "name": "greeting", "config": { "message": "hello from v2" } },
+  { "id": "metrics", "name": "metrics", "config": { "label": "request" } }
+]

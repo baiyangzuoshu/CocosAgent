@@ -71,3 +71,5 @@ deno task run
 - 示例实现一个只支持字符串与字符串数组默认值的 Schema，不依赖 Schemastery。
 - Cordis 接受 Standard Schema 验证器，并把校验失败记录为插件 Fiber 的失败；本例捕获错误后继续展示输出，实际 CLI 可能以非零状态退出。
 - 本课不实现 volatile 配置、配置表单或配置变更后的 Fiber 更新。
+
+下一课：[Loader 组合](../s07_loader_composition/README.md) 会用配置项选择插件，并更新运行中的插件树。
