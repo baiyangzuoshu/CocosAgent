@@ -24,6 +24,7 @@
 - [第 09 课：输入缓冲、消息队列与命令入口](s09_input_queue_commands/README.md)
 - [第 10 课：系统提示词与用户上下文](s10_system_prompts_context/README.md)
 - [第 11 课：消息、附件与终端展示](s11_message_attachment_rendering/README.md)
+- [第 12 课：Transcript、会话恢复与历史](s12_transcript_resume_history/README.md)
 
 ## 课程形式与证据边界
 
