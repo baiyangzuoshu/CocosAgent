@@ -107,4 +107,5 @@ deno task run
 
 ---
 
-下一课是「Web Host 与 Client」：把 Agent/Session 事件送到浏览器并呈现流式更新。
+下一课：[第 29 课「Web Host 与 Client」](../s29_web_host_client/README.md) 会把
+Agent/Session 事件送到浏览器并呈现流式更新。
