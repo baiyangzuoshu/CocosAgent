@@ -71,4 +71,4 @@ deno task run
 
 ---
 
-下一课预告：第 19 课「LLM 服务与 Provider」会展示 Fake Provider 如何接入统一模型接口。
+下一课：[LLM 服务与 Provider](../s19_llm_service_provider/README.md) 会展示 Fake Provider 如何接入统一模型接口。

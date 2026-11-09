@@ -33,5 +33,6 @@
 - [第 16 课：Turn 与 Step](s16_turn_step/README.md)
 - [第 17 课：输入准入与 Pre-step](s17_pre_step_admission/README.md)
 - [第 18 课：Prompt 与运行时上下文](s18_prompt_runtime_context/README.md)
+- [第 19 课：LLM 服务与 Provider](s19_llm_service_provider/README.md)
 
 各课使用 Deno 独立运行 TypeScript 示例。课程代码不依赖目标仓库的构建产物、不修改其文件；核心 Agent 示例使用模拟模型。
