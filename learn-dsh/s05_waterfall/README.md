@@ -77,3 +77,5 @@ HELLO
 - 示例只传递一个字符串和一个异步默认处理函数；Cordis 支持多参数事件、`thisArg` 和类型化 `Events`。
 - `next()` 在同一个监听器中最多调用一次；多次调用会抛错，与 Cordis 的限制一致。
 - 示例不实现 Fiber、Context 注入或监听器卸载；这些机制分别见前面的课程。
+
+下一课：[配置与校验](../s06_config_validation/README.md) 会说明插件如何声明运行时配置并在启动前校验。
