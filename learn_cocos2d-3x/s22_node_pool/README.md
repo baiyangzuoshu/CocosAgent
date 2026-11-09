@@ -1,0 +1,25 @@
+# 第 22 课：节点池复用
+
+**目标：** 暂存一个脱离场景的节点，再把同一对象挂回场景。
+
+## 本课增量
+
+`NodePool::put()` 先为池保留一份引用，再以 `cleanup=false` 移除父节点持有；`get()` 把池的引用交还给调用者。示例打印池大小、父节点状态和对象地址是否相同。`clear()` 释放池持有的最后一份引用，节点随之析构。
+
+代码入口：[main.cpp](src/main.cpp)、[NodePool.h](src/game/NodePool.h)、[NodePool.cpp](src/game/NodePool.cpp)、[Node.h](src/cocos/2d/CCNode.h)、[Ref.h](src/cocos/base/CCRef.h).
+
+## 源码位置
+
+- [CCNode.cpp:1044](../../engine/cocos2d-x-3/cocos/2d/CCNode.cpp#L1044) 与 [CCNode.cpp:1126](../../engine/cocos2d-x-3/cocos/2d/CCNode.cpp#L1126)：移除节点时传递 cleanup 参数，并从父节点脱离。
+- [CCRef.cpp:91](../../engine/cocos2d-x-3/cocos/base/CCRef.cpp#L91) 与 [CCRef.cpp:97](../../engine/cocos2d-x-3/cocos/base/CCRef.cpp#L97)：池保留和释放节点引用。
+
+## 简化与运行
+
+本代引擎没有内置 `NodePool`；示例在 `game/` 中实现最小应用层对象池，使用本代 `CCNode` / `Node` 与 `CCObject` / `Ref` 接口。省略动作重置和自动释放池。
+
+~~~sh
+c++ -std=c++11 -Isrc src/main.cpp src/game/NodePool.cpp src/cocos/base/CCRef.cpp src/cocos/2d/CCNode.cpp -o /tmp/cocos2d-x-3-s22
+/tmp/cocos2d-x-3-s22
+~~~
+
+输出中 EnemyA 进入池后仍有效；取回时地址相同；清空池后才看到析构。
