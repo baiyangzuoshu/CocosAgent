@@ -41,7 +41,8 @@ OpenAI 官方资料逐课学习。主线从基础概念进入 API、模型能力
 - [第 17 课：Embedding 与向量相似度](s17_embeddings_vector_similarity/README.md)
 - [第 18 课：File Search、Vector Store 与 RAG](s18_file_search_vector_stores_rag/README.md)
 - [第 19 课：图像生成的返回结构与视频 API 状态](s19_image_and_video_generation/README.md)
+- [第 20 课：Function Calling 怎样从工具请求走到应用执行](s20_function_calling_loop/README.md)
 
 ## 进度
 
-当前学习至第 19 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
+当前学习至第 20 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
