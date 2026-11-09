@@ -32,6 +32,7 @@
 - [第 17 课：工具调用后的模型续跑](s17_tool_call_followup_loop/README.md)
 - [第 18 课：错误、重试、回退与取消](s18_errors_retry_fallback_cancel/README.md)
 - [第 19 课：Token 预算与上下文压缩](s19_token_budget_context_compaction/README.md)
+- [第 20 课：工具注册、Schema 与发现](s20_tool_registry_schema_discovery/README.md)
 
 ## 课程形式与证据边界
 
