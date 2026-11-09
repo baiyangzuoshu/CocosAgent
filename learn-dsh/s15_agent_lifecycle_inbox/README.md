@@ -77,4 +77,4 @@ deno task run
 
 ---
 
-下一课预告：第 16 课「Turn 与 Step」会把当前简化 driver 换成可观察的多步骤回合。
+下一课：[Turn 与 Step](../s16_turn_step/README.md) 会把当前简化 driver 换成可观察的多步骤回合。
