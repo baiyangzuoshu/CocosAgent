@@ -15,6 +15,8 @@
 - [Responsible Scaling Policy](https://www.anthropic.com/responsible-scaling-policy)：风险治理政策及版本更新入口。
 - [Transparency Hub](https://www.anthropic.com/transparency)：模型报告、系统信任与公开承诺的汇总入口。
 - [Claude Platform 文档](https://platform.claude.com/docs)：开发者 Quickstart、API 指南、功能文档和 API Reference。
+- [Models overview](https://platform.claude.com/docs/en/models/overview)：当前模型目录、平台可用情况和模型规格入口。
+- [Tool use with Claude](https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview)：工具类型、执行位置及工具调用流程。
 - [Anthropic News](https://www.anthropic.com/news)：产品、公司、研究和政策相关公告；新闻用于确认发布日期和更新线索，技术细节应回到对应文档。
 
 ## 问题路由
@@ -28,6 +30,28 @@
 | 某个模型经过什么评估？ | Transparency Hub、对应 System Card/Model Report | 阅读能力和安全评估及其方法边界 |
 | Claude API 如何调用？字段是什么？ | Claude Platform 指南与 API Reference | 先学流程，再查精确参数、响应和错误 |
 | 产品或模型现在是否可用？ | 当前产品/模型页面与公告 | 在使用当天核对；不要依赖旧课文中的产品清单 |
+
+## 先判断资料能支持什么结论
+
+看官方资料时，先区分页面的性质，再引用它支持的结论：
+
+| 资料类型 | 可以用来了解 | 不应直接推成 |
+| --- | --- | --- |
+| Company 与首页 | Anthropic 如何介绍使命、组织和价值取向 | 这些目标已经独立证明或在所有场景都已实现 |
+| Research 文章 | 一项研究的问题、方法、实验或观察结果 | 结果自动适用于所有模型、用户和真实环境 |
+| Claude’s Constitution | Anthropic 希望 Claude 遵循的价值和行为方向 | Claude 每次都必然按文本表现 |
+| RSP 与更新记录 | 某个版本的政策框架、要求和公开更新 | 所有安全工作都只由 RSP 覆盖，或未来政策不再变化 |
+| System Card / Model Report | 特定模型的能力、安全评估和部署防护说明 | 其他模型也有相同结果，或评估覆盖了所有风险 |
+| Claude Platform 文档与 API Reference | API 当前公开的接口、参数、事件和平台差异 | 应用已经安全、可靠或适合某个具体业务 |
+| News | 公告发布时间和需要进一步核对的更新线索 | 新闻摘要足以代替政策原文、研究方法或 API Reference |
+
+这是本课程最重要的阅读习惯：把“官方页面写了什么”“页面中的证据具体支持什么”和“我据此做了什么判断”分开记录。
+
+## 当前页面观察
+
+截至 2026-11-09，本次核对的官网首页把 Research、Policy、Commitments、Company、Products、Models、Solutions、Help and security 等放在主导航/页脚体系中；Company 页按 Research、Policy、Product、Operations 介绍团队。Research 页当时列出的团队入口包括 Alignment、Economics、Engineering、Frontier Red Team、Interpretability、Societal Impacts 和 Science。[官网首页](https://www.anthropic.com/) · [Company](https://www.anthropic.com/company) · [Research](https://www.anthropic.com/research)
+
+这些栏目和团队名称是页面快照，不是固定组织定义。后续课程引用某个团队或产品时，应重新打开当前页面核对。
 
 ## 核心地图
 
@@ -48,13 +72,26 @@ Claude Platform 文档
 
 ## 观察练习
 
-以“我想让游戏里的 NPC 查询玩家背包，再生成一句建议”为例，写出三个资料问题：
+以“我想让游戏里的 NPC 查询玩家背包，再生成一句建议”为例，沿下面路径找资料：
 
-1. 需要 Claude API 时，先从 Platform 文档的 Quickstart 和 Messages 指南了解调用流程。
-2. 如果模型需要查询背包，继续读工具调用文档，区分模型提出工具请求与游戏后端执行查询。
-3. 若要判断某个模型是否适合该功能，再查看当前模型页面和对应评估材料；不能只凭首页宣传语下结论。
+1. 从 Claude Platform 的 Quickstart 与 Messages 指南了解应用如何发送一次请求。
+2. 读 Tool Use 文档，了解如何声明 `get_inventory` 这类工具。Claude 返回工具请求后，游戏后端执行背包查询，再把结果发回 API；模型本身不会直接读取游戏数据库。
+3. 若要比较模型，查看当前 Models overview 的模型规格与平台信息，再结合自己的 NPC 样本做评估；不要只凭首页介绍决定。
+4. 查某个字段、响应结构或错误时，转到 API Reference，而不是从新闻稿推测接口行为。
 
-检查结果：每个问题都有对应的一手资料；你能指出哪部分是官方文档事实、哪部分是自己的应用设计判断。
+检查结果：你能画出“游戏后端准备上下文 → 调用 Messages API → 模型返回文本或工具请求 → 应用执行工具并回传结果”的流程，并指出工具权限和背包数据访问由应用控制。
+
+## 课后练习
+
+为下面每个问题挑选一个优先资料入口，并说出该入口能支持的结论：
+
+1. Anthropic 如何描述自己的使命？
+2. Claude 的某一项安全评估得出了什么结果？
+3. 某个模型现在的 API ID、价格和可用平台是什么？
+4. API 请求中某个字段的准确类型和行为是什么？
+5. Anthropic 的 RSP 最近改了什么？
+
+参考路由：Company/Home；对应模型的 System Card 或 Transparency Hub；当前 Models overview；API Reference；RSP 页面和版本更新记录。回答时分别注明官方自述、特定模型评估、当前产品规格、接口定义或政策版本。
 
 ## 本课结论
 
