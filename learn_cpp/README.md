@@ -39,6 +39,7 @@ Creator 3.8.7 的运行时课程使用 TypeScript；本课程沿用其逐课、�
 - [第 20 课：拷贝构造与拷贝赋值](s20_cpp_copy_semantics/README.md)
 - [第 21 课：移动语义与右值引用](s21_cpp_move_semantics/README.md)
 - [第 22 课：指针、动态内存与所有权边界](s22_cpp_pointers_ownership/README.md)
+- [第 23 课：智能指针](s23_cpp_smart_pointers/README.md)
 
 ## 参考资料
 
