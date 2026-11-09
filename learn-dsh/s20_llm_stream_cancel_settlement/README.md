@@ -78,4 +78,4 @@ deno task run
 
 ---
 
-下一课：第 21 课将从模型流中的 tool-call chunk 进入 Tool Schema 与工具注册。
+下一课：[第 21 课「Tool Schema 与注册」](../s21_tool_schema_registration/README.md) 将展示工具定义如何变成模型请求中的参数 schema。
