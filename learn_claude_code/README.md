@@ -20,6 +20,7 @@
 - [第 05 课：交互、Print、SDK 与 MCP 运行模式](s05_run_modes/README.md)
 - [第 06 课：AppState 与状态订阅](s06_app_state_store/README.md)
 - [第 07 课：Ink 终端界面树与渲染](s07_ink_rendering/README.md)
+- [第 08 课：REPL 建立与首轮会话上下文](s08_repl_initial_context/README.md)
 
 ## 课程形式与证据边界
 
