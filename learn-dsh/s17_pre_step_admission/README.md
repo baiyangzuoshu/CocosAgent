@@ -74,4 +74,4 @@ deno task run
 
 ---
 
-下一课预告：第 18 课「Prompt 与运行时上下文」会继续查看模型请求内容如何组装。
+下一课：[Prompt 与运行时上下文](../s18_prompt_runtime_context/README.md) 会继续查看模型请求内容如何组装。
