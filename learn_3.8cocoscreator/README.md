@@ -39,6 +39,7 @@
 - [第 22 课：NodePool 节点复用](s22_node_pool/README.md)
 - [第 23 课：NodePool 回收与复用回调](s23_node_pool_callbacks/README.md)
 - [第 24 课：对象池未命中与 Prefab 兜底](s24_pool_miss_fallback/README.md)
+- [第 25 课：对象池容量上限与超额销毁](s25_pool_capacity_limit/README.md)
 
 ## 目录结构
 
@@ -71,7 +72,8 @@ learn_3.8cocoscreator/
 ├── s21_deferred_destruction/ # 延迟销毁与 onDestroy
 ├── s22_node_pool/           # NodePool 节点复用
 ├── s23_node_pool_callbacks/ # NodePool 回收与复用回调
-└── s24_pool_miss_fallback/  # 对象池未命中与 Prefab 兜底
+├── s24_pool_miss_fallback/  # 对象池未命中与 Prefab 兜底
+└── s25_pool_capacity_limit/ # 对象池容量上限与超额销毁
 ~~~
 
 浏览器运行课进入各自目录，按 README 运行 `deno task check`、`deno task build` 和 `deno task serve`。第 0 课的元数据分析使用 `deno task check` 和 `deno task analyze`。
