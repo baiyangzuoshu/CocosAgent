@@ -44,8 +44,8 @@ claude
 
 ## 当前练习
 
-第 0 课通过 `audit_snapshot.py` 盘点快照；第 1 课通过 `trace_session_context.py` 检查启动导入和 Hook 目标，并在临时副本中观察真实 Hook 脚本及 Claude Code 会话。
+第 0 课通过 `audit_snapshot.py` 盘点快照；第 1 课通过 `trace_session_context.py` 检查启动导入和 Hook 目标；第 2 课通过 `inventory_agents.py` 盘点 Agent 定义，并据此判断任务角色。
 
-第 2–19 课目前只有大纲主题；对应的实践步骤会在逐课学习时再编写和验证。
+第 3–19 课目前只有大纲主题；对应的实践步骤会在逐课学习时再编写和验证。
 
 如果没有可用的 Claude Code 运行环境，仍可运行 `audit_snapshot.py` 和 CCGS 自带的只读辅助脚本；需要真实会话行为的观察则记为未执行，不用静态文件代替运行结果。
