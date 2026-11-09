@@ -27,7 +27,8 @@ OpenAI 官方资料逐课学习。主线从基础概念进入 API、模型能力
 - [第 3 课：Token、上下文窗口与输入/输出长度](s03_tokens_context_window/README.md)
 - [第 4 课：Prompt、指令和消息角色](s04_prompt_instructions_roles/README.md)
 - [第 5 课：如何按任务选择模型](s05_model_selection/README.md)
+- [第 6 课：Project、API Key 和身份验证](s06_projects_keys_authentication/README.md)
 
 ## 进度
 
-当前学习至第 5 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
+当前学习至第 6 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
