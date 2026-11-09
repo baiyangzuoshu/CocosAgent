@@ -24,7 +24,25 @@ OpenAI 官方资料逐课学习。主线从基础概念进入 API、模型能力
 - [第 0 课：OpenAI 官网与文档地图](s00_official_docs_map/README.md)
 - [第 1 课：产品、模型、API、SDK 与应用](s01_system_model_api_sdk_app/README.md)
 - [第 2 课：生成式模型如何从输入生成输出](s02_text_generation_flow/README.md)
+- [第 3 课：Token、上下文窗口与输入/输出长度](s03_tokens_context_window/README.md)
+- [第 4 课：Prompt、指令和消息角色](s04_prompt_instructions_roles/README.md)
+- [第 5 课：如何按任务选择模型](s05_model_selection/README.md)
+- [第 6 课：Project、API Key 和身份验证](s06_projects_keys_authentication/README.md)
+- [第 7 课：发出第一个 Responses API 请求](s07_first_responses_request/README.md)
+- [第 8 课：Responses 请求与返回对象](s08_responses_request_response/README.md)
+- [第 9 课：让模型按 Schema 返回结构化数据](s09_structured_outputs/README.md)
+- [第 10 课：多轮对话怎样保留上下文](s10_conversation_state/README.md)
+- [第 11 课：Streaming 与 Background Mode](s11_streaming_background/README.md)
+- [第 12 课：请求失败、限流与 Request ID](s12_errors_rate_limits_request_ids/README.md)
+- [第 13 课：模型怎样接收和理解图片](s13_image_inputs_vision/README.md)
+- [第 14 课：把文件和 PDF 提供给模型](s14_file_inputs_pdf_file_search/README.md)
+- [第 15 课：语音转文字与音频理解](s15_audio_transcription_understanding/README.md)
+- [第 16 课：文字转语音、流式音频与实时语音对话](s16_tts_realtime_voice/README.md)
+- [第 17 课：Embedding 与向量相似度](s17_embeddings_vector_similarity/README.md)
+- [第 18 课：File Search、Vector Store 与 RAG](s18_file_search_vector_stores_rag/README.md)
+- [第 19 课：图像生成的返回结构与视频 API 状态](s19_image_and_video_generation/README.md)
+- [第 20 课：Function Calling 怎样从工具请求走到应用执行](s20_function_calling_loop/README.md)
 
 ## 进度
 
-当前学习至第 2 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
+当前学习至第 20 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。

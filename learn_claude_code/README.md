@@ -17,6 +17,22 @@
 - [第 02 课：Commander 参数解析与命令分发](s02_commander_routing/README.md)
 - [第 03 课：命令执行前的初始化](s03_init_lifecycle/README.md)
 - [第 04 课：配置、信任、认证与策略边界](s04_config_trust_auth_policy/README.md)
+- [第 05 课：交互、Print、SDK 与 MCP 运行模式](s05_run_modes/README.md)
+- [第 06 课：AppState 与状态订阅](s06_app_state_store/README.md)
+- [第 07 课：Ink 终端界面树与渲染](s07_ink_rendering/README.md)
+- [第 08 课：REPL 建立与首轮会话上下文](s08_repl_initial_context/README.md)
+- [第 09 课：输入缓冲、消息队列与命令入口](s09_input_queue_commands/README.md)
+- [第 10 课：系统提示词与用户上下文](s10_system_prompts_context/README.md)
+- [第 11 课：消息、附件与终端展示](s11_message_attachment_rendering/README.md)
+- [第 12 课：Transcript、会话恢复与历史](s12_transcript_resume_history/README.md)
+- [第 13 课：`query()` 的边界、配置与依赖](s13_query_boundary_config_deps/README.md)
+- [第 14 课：Query 主循环状态机](s14_query_loop_state_machine/README.md)
+- [第 15 课：模型请求与流式 API](s15_model_request_streaming/README.md)
+- [第 16 课：流式消息消费与 UI 事件](s16_stream_message_ui_events/README.md)
+- [第 17 课：工具调用后的模型续跑](s17_tool_call_followup_loop/README.md)
+- [第 18 课：错误、重试、回退与取消](s18_errors_retry_fallback_cancel/README.md)
+- [第 19 课：Token 预算与上下文压缩](s19_token_budget_context_compaction/README.md)
+- [第 20 课：工具注册、Schema 与发现](s20_tool_registry_schema_discovery/README.md)
 
 ## 课程形式与证据边界
 

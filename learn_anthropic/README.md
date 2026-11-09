@@ -2,7 +2,7 @@
 
 以 Anthropic 官方网站和 Claude Platform 文档为资料入口，逐课认识 Anthropic 的公司使命、研究与安全治理，以及 Claude 产品和开发者平台。课程解释官方页面、术语和资料之间的关系；不把公司的目标陈述当作独立验证结论，也不把某一时点的模型与产品清单写成长期事实。
 
-课程暂定 **30 课**，编号 `s00`–`s29`。目前已完成第 00–05 课；其余课程按主题逐步展开。
+课程暂定 **30 课**，编号 `s00`–`s29`。目前已完成第 00–20 课；其余课程按主题逐步展开。
 
 ## 学习方式
 
@@ -25,6 +25,21 @@
 - [第 03 课：公共利益工作与受益领域](s03_public_benefit_areas/README.md)
 - [第 04 课：Anthropic 的研究主题地图](s04_research_map/README.md)
 - [第 05 课：可解释性研究主要试图回答什么问题？](s05_interpretability_questions/README.md)
+- [第 06 课：对齐研究和行为评估如何关联？](s06_alignment_behavior_evaluations/README.md)
+- [第 07 课：Frontier Red Team、经济与社会影响研究](s07_research_domains/README.md)
+- [第 08 课：Claude’s Constitution 是什么类型的文件？](s08_claude_constitution/README.md)
+- [第 09 课：Responsible Scaling Policy 试图处理什么问题？](s09_responsible_scaling_policy/README.md)
+- [第 10 课：如何阅读 Claude 的 System Card 和 Model Report？](s10_system_cards_model_reports/README.md)
+- [第 11 课：Transparency Hub 如何汇总模型信息和公开承诺？](s11_transparency_hub/README.md)
+- [第 12 课：面向用户的 Claude 产品与 Claude Platform 有什么区别？](s12_claude_vs_platform/README.md)
+- [第 13 课：Claude 当前有哪些产品形态和适用场景？](s13_claude_products_use_cases/README.md)
+- [第 14 课：Claude API 与云平台渠道的文档和责任边界是什么？](s14_api_cloud_channels/README.md)
+- [第 15 课：API Key、工作区和认证如何配合？](s15_api_keys_workspaces_auth/README.md)
+- [第 16 课：如何发出第一个 Messages API 请求？](s16_first_messages_request/README.md)
+- [第 17 课：Messages 请求与响应由哪些部分组成？](s17_messages_request_response/README.md)
+- [第 18 课：system 指令、消息角色与上下文如何组织？](s18_system_roles_context/README.md)
+- [第 19 课：多轮对话如何保留或延续状态？](s19_conversation_state/README.md)
+- [第 20 课：工具调用如何形成完整闭环？](s20_tool_use_loop/README.md)
 
 ## 资料范围
 

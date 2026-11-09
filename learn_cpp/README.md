@@ -31,6 +31,22 @@ Creator 3.8.7 的运行时课程使用 TypeScript；本课程沿用其逐课、�
 - [第 12 课：`std::string`、`std::array` 与 `std::vector`](s12_cpp_containers/README.md)
 - [第 13 课：`std::map` 与 `std::set`](s13_cpp_associative_containers/README.md)
 - [第 14 课：迭代器与标准算法](s14_cpp_iterators_algorithms/README.md)
+- [第 15 课：Lambda 表达式](s15_cpp_lambdas/README.md)
+- [第 16 课：`struct`、`class` 与封装](s16_cpp_classes_encapsulation/README.md)
+- [第 17 课：构造函数与初始化](s17_cpp_constructors/README.md)
+- [第 18 课：对象生命周期与析构函数](s18_cpp_object_lifetime/README.md)
+- [第 19 课：RAII 与资源管理](s19_cpp_raii/README.md)
+- [第 20 课：拷贝构造与拷贝赋值](s20_cpp_copy_semantics/README.md)
+- [第 21 课：移动语义与右值引用](s21_cpp_move_semantics/README.md)
+- [第 22 课：指针、动态内存与所有权边界](s22_cpp_pointers_ownership/README.md)
+- [第 23 课：智能指针](s23_cpp_smart_pointers/README.md)
+- [第 24 课：组合与对象关系](s24_cpp_composition_relationships/README.md)
+- [第 25 课：继承与多态](s25_cpp_inheritance_polymorphism/README.md)
+- [第 26 课：模板与泛型编程](s26_cpp_templates_generic/README.md)
+- [第 27 课：错误处理与异常](s27_cpp_errors_exceptions/README.md)
+- [第 28 课：编译、链接与 ODR 综合练习](s28_cpp_build_link_odr/README.md)
+- [第 29 课：Cocos2d-x 源码版本与目录地图](s29_cocos2d_source_version_map/README.md)
+- [第 30 课：工程结构、构建目标与依赖](s30_cocos2d_build_targets_dependencies/README.md)
 
 ## 参考资料
 

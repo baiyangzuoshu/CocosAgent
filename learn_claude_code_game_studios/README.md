@@ -21,9 +21,18 @@
 
 - [20 课课程大纲](课程大纲.md)
 - 已编写：[第 0 课：CCGS 是什么，又不是什么](s00_repository_map/README.md)
-- 当前课程：[第 1 课：会话入口与上下文装配](s01_session_context/README.md)
+- 已编写：[第 1 课：会话入口与上下文装配](s01_session_context/README.md)
+- 已编写：[第 2 课：Agent 角色与责任边界](s02_agent_roles/README.md)
+- 已编写：[第 3 课：委派、并行任务与冲突升级](s03_delegation_and_conflicts/README.md)
+- 已编写：[第 4 课：Skill 命令的结构](s04_skill_structure/README.md)
+- 已编写：[第 5 课：合同、参考资料与脚本](s05_contracts_references_scripts/README.md)
+- 已编写：[第 6 课：项目配置解析](s06_config_resolution/README.md)
+- 已编写：[第 7 课：Rigor 与工作流档位](s07_rigor_and_workflow/README.md)
+- 已编写：[第 8 课：Automation 模式与确认边界](s08_automation_modes/README.md)
+- 已编写：[第 9 课：事件 Hooks](s09_event_hooks/README.md)
+- 当前课程：[第 10 课：路径 Rules](s10_path_rules/README.md)
 
-目前只编写第 0、1 课，第 1 课为当前课程。第 2–19 课先保留在大纲中，之后按顺序逐课学习、实践并编写，不提前生成完整课件。
+目前只编写第 0–10 课，第 10 课为当前课程。第 11–19 课先保留在大纲中，之后按顺序逐课学习、实践并编写，不提前生成完整课件。
 
 开始实践前，按[实践环境说明](practice/README.md)创建隔离副本。课程中的交互命令在副本中运行，原始源码保持只读。
 
