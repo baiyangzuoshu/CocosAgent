@@ -120,3 +120,8 @@ deno task run
   canonical abort 结果；如果原调用 signal 已取消，请求也会被撤回。
 - 示例不重复第 22 课的 schema 校验、参数快照和工具执行器，也不重跑第 23 课的完整
   Agent/LLM turn。
+
+---
+
+下一课：[第 25 课「Shell 执行能力」](../s25_shell_subprocess/README.md)
+会让相同的 Shell 消费者分别使用本地与沙箱执行 Provider。
