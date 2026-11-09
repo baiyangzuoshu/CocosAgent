@@ -30,6 +30,7 @@
 | 第 22 课：节点池复用 | [本课](s22_node_pool/README.md) | [本课](../learn_2.4cocoscreator/s22_node_pool/README.md) | [本课](../learn_3.8cocoscreator/s22_node_pool/README.md) |
 | 第 23 课：节点池回调与状态重置 | [本课](s23_node_pool_callbacks/README.md) | [本课](../learn_2.4cocoscreator/s23_node_pool_callbacks/README.md) | [本课](../learn_3.8cocoscreator/s23_node_pool_callbacks/README.md) |
 | 第 24 课：对象池未命中与节点工厂兜底 | [本课](s24_pool_miss_fallback/README.md) | [本课](../learn_2.4cocoscreator/s24_pool_miss_fallback/README.md) | [本课](../learn_3.8cocoscreator/s24_pool_miss_fallback/README.md) |
+| 第 25 课：对象池容量上限与超额销毁 | [本课](s25_pool_capacity_limit/README.md) | [本课](../learn_2.4cocoscreator/s25_pool_capacity_limit/README.md) | [本课](../learn_3.8cocoscreator/s25_pool_capacity_limit/README.md) |
 
 历史 Cocos2d-x 同主题：[1.x](../learn_cocos2d-1x/s09_texture_cache/README.md)、[2.x](../learn_cocos2d-2x/s09_texture_cache/README.md)、[3.x](../learn_cocos2d-3x/s09_texture_cache/README.md)。
 
@@ -64,3 +65,5 @@
 历史 Cocos2d-x 第 23 课：[1.x](../learn_cocos2d-1x/s23_node_pool_callbacks/README.md)、[2.x](../learn_cocos2d-2x/s23_node_pool_callbacks/README.md)、[3.x](../learn_cocos2d-3x/s23_node_pool_callbacks/README.md)。
 
 历史 Cocos2d-x 第 24 课：[1.x](../learn_cocos2d-1x/s24_pool_miss_fallback/README.md)、[2.x](../learn_cocos2d-2x/s24_pool_miss_fallback/README.md)、[3.x](../learn_cocos2d-3x/s24_pool_miss_fallback/README.md)。
+
+历史 Cocos2d-x 第 25 课：[1.x](../learn_cocos2d-1x/s25_pool_capacity_limit/README.md)、[2.x](../learn_cocos2d-2x/s25_pool_capacity_limit/README.md)、[3.x](../learn_cocos2d-3x/s25_pool_capacity_limit/README.md)。
