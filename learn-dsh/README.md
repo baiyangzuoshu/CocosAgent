@@ -22,5 +22,6 @@
 - [第 5 课：Waterfall](s05_waterfall/README.md)
 - [第 6 课：配置与校验](s06_config_validation/README.md)
 - [第 7 课：Loader 组合](s07_loader_composition/README.md)
+- [第 8 课：Profile、Bundle 与 patch](s08_profile_bundle_patch/README.md)
 
 各课使用 Deno 独立运行 TypeScript 示例。课程代码不依赖目标仓库的构建产物、不修改其文件；核心 Agent 示例使用模拟模型。

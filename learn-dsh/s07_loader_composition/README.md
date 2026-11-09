@@ -93,3 +93,5 @@ deno task run
 - 示例使用 JSON 文件作为配置输入，不解析 YAML；每个文件代表一次配置读取，没有文件监听器。
 - 本课实现的是稳定 `id` 下的配置差异更新。Harness 的代码 HMR 依赖 Node Loader 内部机制；这里仅对照官方 HMR 资料，不声称复刻了模块替换。
 - 配置变化检测用 JSON 序列化比较；Cordis 还会处理插件配置 Schema、依赖状态、分组、服务隔离和更细致的 Fiber 更新。
+
+下一课：[Profile、Bundle 与 patch](../s08_profile_bundle_patch/README.md) 会把多层插件配置组合成一份最终应用树。
