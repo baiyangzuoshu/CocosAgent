@@ -119,3 +119,8 @@ deno task run
   的完整策略解析、平台 runner 选择、拒绝分类、批准后升权重试或逐会话策略。
 - 返回结果压缩为退出码、信号、stdout/stderr 和演示用 sandbox 字段；真实 Shell
   执行句柄还支持后台输出读取与进程观察。
+
+---
+
+下一课：[第 26 课「子 Agent 委派」](../s26_subagent_delegation/README.md)
+会为子任务创建独立 Session，并把完成结果送回父 Agent。
