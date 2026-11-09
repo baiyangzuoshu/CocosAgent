@@ -30,7 +30,8 @@ OpenAI 官方资料逐课学习。主线从基础概念进入 API、模型能力
 - [第 6 课：Project、API Key 和身份验证](s06_projects_keys_authentication/README.md)
 - [第 7 课：发出第一个 Responses API 请求](s07_first_responses_request/README.md)
 - [第 8 课：Responses 请求与返回对象](s08_responses_request_response/README.md)
+- [第 9 课：让模型按 Schema 返回结构化数据](s09_structured_outputs/README.md)
 
 ## 进度
 
-当前学习至第 8 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
+当前学习至第 9 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
