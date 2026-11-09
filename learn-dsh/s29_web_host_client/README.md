@@ -122,3 +122,7 @@ deno task run
   还会处理工具调用、审批、附件、子 Agent、编辑、压缩和其他事件类型。
 - 实例只演示普通 Session 的输出方向；真实 Harness 还有从 Client 到 Host 的
   Remote 调用和上行流。
+
+## 后续
+
+[第 30 课：端到端综合——从 Agent 到 Web UI](../s30_end_to_end/README.md) 会把应用启动、工具回合、Session 事件和 Web 投影组合成一条独立可运行的路径。

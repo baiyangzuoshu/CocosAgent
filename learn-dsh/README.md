@@ -44,5 +44,6 @@
 - [第 27 课：Agent Teams](s27_agent_teams/README.md)
 - [第 28 课：MCP 工具](s28_mcp_tools/README.md)
 - [第 29 课：Web Host 与 Client](s29_web_host_client/README.md)
+- [第 30 课：端到端综合——从 Agent 到 Web UI](s30_end_to_end/README.md)
 
 各课使用 Deno 独立运行 TypeScript 示例。课程代码不依赖目标仓库的构建产物、不修改其文件；核心 Agent 示例使用模拟模型。
