@@ -1,0 +1,25 @@
+#include "cocos2dx/base_nodes/CCNode.h"
+#include <iostream>
+
+using namespace cocos2d;
+
+int main() {
+    auto* scene = new CCNode("MainScene");
+    scene->onEnter();
+
+    std::cout << "\nEnemyA: parent is the only owner\n";
+    auto* enemyA = new CCNode("EnemyA");
+    scene->addChild(enemyA);
+    std::cout << "after addChild retainCount=" << enemyA->retainCount() << "\n";
+    enemyA->release(); // release the creator's reference; the parent still owns it
+    scene->removeChild(enemyA, true); // cleanup, then parent's release reaches zero
+
+    std::cout << "\nEnemyB: creator keeps one reference\n";
+    auto* enemyB = new CCNode("EnemyB");
+    scene->addChild(enemyB);
+    scene->removeChild(enemyB, true);
+    std::cout << "after removeChild retainCount=" << enemyB->retainCount()
+              << "; parent is null=" << std::boolalpha << (enemyB->getParent() == nullptr) << "\n";
+    enemyB->release(); // the final owner decides when the object is destroyed
+    scene->release();
+}
