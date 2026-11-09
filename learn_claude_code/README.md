@@ -27,6 +27,7 @@
 - [第 12 课：Transcript、会话恢复与历史](s12_transcript_resume_history/README.md)
 - [第 13 课：`query()` 的边界、配置与依赖](s13_query_boundary_config_deps/README.md)
 - [第 14 课：Query 主循环状态机](s14_query_loop_state_machine/README.md)
+- [第 15 课：模型请求与流式 API](s15_model_request_streaming/README.md)
 
 ## 课程形式与证据边界
 
