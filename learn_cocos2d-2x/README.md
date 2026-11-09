@@ -30,6 +30,7 @@
 - [第 29 课：外部引用与对象池清理](s29_pool_external_owner/README.md)
 - [第 30 课：池中节点暂停调度](s30_pool_activity_pause/README.md)
 - [第 31 课：回收与清理的区别](s31_pool_cleanup_policy/README.md)
+- [第 32 课：节点池的后进先出顺序](s32_pool_lifo_order/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 
