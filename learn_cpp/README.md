@@ -34,6 +34,7 @@ Creator 3.8.7 的运行时课程使用 TypeScript；本课程沿用其逐课、�
 - [第 15 课：Lambda 表达式](s15_cpp_lambdas/README.md)
 - [第 16 课：`struct`、`class` 与封装](s16_cpp_classes_encapsulation/README.md)
 - [第 17 课：构造函数与初始化](s17_cpp_constructors/README.md)
+- [第 18 课：对象生命周期与析构函数](s18_cpp_object_lifetime/README.md)
 
 ## 参考资料
 
