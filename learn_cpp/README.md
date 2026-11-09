@@ -28,6 +28,7 @@ Creator 3.8.7 的运行时课程使用 TypeScript；本课程沿用其逐课、�
 - [第 9 课：从 C 过渡到 C++](s09_cpp_transition/README.md)
 - [第 10 课：类型、初始化、const 与引用](s10_cpp_types_references/README.md)
 - [第 11 课：函数重载与默认参数](s11_cpp_functions/README.md)
+- [第 12 课：`std::string`、`std::array` 与 `std::vector`](s12_cpp_containers/README.md)
 
 ## 参考资料
 
