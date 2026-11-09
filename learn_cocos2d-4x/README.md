@@ -37,6 +37,7 @@
 | 第 29 课：外部引用与对象池清理 | [本课](s29_pool_external_owner/README.md) | [本课](../learn_2.4cocoscreator/s29_pool_external_owner/README.md) | [本课](../learn_3.8cocoscreator/s29_pool_external_owner/README.md) |
 | 第 30 课：池中节点暂停调度 | [本课](s30_pool_activity_pause/README.md) | [本课](../learn_2.4cocoscreator/s30_pool_activity_pause/README.md) | [本课](../learn_3.8cocoscreator/s30_pool_activity_pause/README.md) |
 | 第 31 课：回收与清理的区别 | [本课](s31_pool_cleanup_policy/README.md) | [本课](../learn_2.4cocoscreator/s31_pool_cleanup_policy/README.md) | [本课](../learn_3.8cocoscreator/s31_pool_cleanup_policy/README.md) |
+| 第 32 课：节点池的后进先出顺序 | [本课](s32_pool_lifo_order/README.md) | [本课](../learn_2.4cocoscreator/s32_pool_lifo_order/README.md) | [本课](../learn_3.8cocoscreator/s32_pool_lifo_order/README.md) |
 
 历史 Cocos2d-x 同主题：[1.x](../learn_cocos2d-1x/s09_texture_cache/README.md)、[2.x](../learn_cocos2d-2x/s09_texture_cache/README.md)、[3.x](../learn_cocos2d-3x/s09_texture_cache/README.md)。
 
@@ -85,3 +86,5 @@
 历史 Cocos2d-x 第 30 课：[1.x](../learn_cocos2d-1x/s30_pool_activity_pause/README.md)、[2.x](../learn_cocos2d-2x/s30_pool_activity_pause/README.md)、[3.x](../learn_cocos2d-3x/s30_pool_activity_pause/README.md)。
 
 历史 Cocos2d-x 第 31 课：[1.x](../learn_cocos2d-1x/s31_pool_cleanup_policy/README.md)、[2.x](../learn_cocos2d-2x/s31_pool_cleanup_policy/README.md)、[3.x](../learn_cocos2d-3x/s31_pool_cleanup_policy/README.md)。
+
+历史 Cocos2d-x 第 32 课：[1.x](../learn_cocos2d-1x/s32_pool_lifo_order/README.md)、[2.x](../learn_cocos2d-2x/s32_pool_lifo_order/README.md)、[3.x](../learn_cocos2d-3x/s32_pool_lifo_order/README.md)。

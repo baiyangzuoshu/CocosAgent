@@ -47,6 +47,7 @@
 - [第 29 课：外部引用与对象池清理](s29_pool_external_owner/README.md)
 - [第 30 课：池中节点暂停调度](s30_pool_activity_pause/README.md)
 - [第 31 课：回收与清理的区别](s31_pool_cleanup_policy/README.md)
+- [第 32 课：节点池的后进先出顺序](s32_pool_lifo_order/README.md)
 
 ## 代码结构
 
@@ -120,7 +121,8 @@ learn_2.4cocoscreator/
 ├── s28_pool_clear_timing/  # 对象池 clear 的销毁时机
 ├── s29_pool_external_owner/ # 外部引用与对象池清理
 ├── s30_pool_activity_pause/ # 池中节点暂停调度
-└── s31_pool_cleanup_policy/ # 回收与清理的区别
+├── s31_pool_cleanup_policy/ # 回收与清理的区别
+└── s32_pool_lifo_order/ # 节点池的后进先出顺序
 ~~~
 
 ## 运行
