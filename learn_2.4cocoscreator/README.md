@@ -39,6 +39,7 @@
 - [第 21 课：延迟销毁与 onDestroy](s21_deferred_destruction/README.md)
 - [第 22 课：NodePool 节点复用](s22_node_pool/README.md)
 - [第 23 课：NodePool 回收与复用回调](s23_node_pool_callbacks/README.md)
+- [第 24 课：对象池未命中与 Prefab 兜底](s24_pool_miss_fallback/README.md)
 
 ## 代码结构
 
@@ -104,7 +105,8 @@ learn_2.4cocoscreator/
 ├── s20_node_detachment/        # 节点移除与重新挂载
 ├── s21_deferred_destruction/ # 延迟销毁与 onDestroy
 ├── s22_node_pool/           # NodePool 节点复用
-└── s23_node_pool_callbacks/ # NodePool 回收与复用回调
+├── s23_node_pool_callbacks/ # NodePool 回收与复用回调
+└── s24_pool_miss_fallback/  # 对象池未命中与 Prefab 兜底
 ~~~
 
 ## 运行
