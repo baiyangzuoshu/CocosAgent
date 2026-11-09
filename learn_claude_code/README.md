@@ -29,6 +29,7 @@
 - [第 14 课：Query 主循环状态机](s14_query_loop_state_machine/README.md)
 - [第 15 课：模型请求与流式 API](s15_model_request_streaming/README.md)
 - [第 16 课：流式消息消费与 UI 事件](s16_stream_message_ui_events/README.md)
+- [第 17 课：工具调用后的模型续跑](s17_tool_call_followup_loop/README.md)
 
 ## 课程形式与证据边界
 
