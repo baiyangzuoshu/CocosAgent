@@ -2,7 +2,7 @@
 
 以 Anthropic 官方网站和 Claude Platform 文档为资料入口，逐课认识 Anthropic 的公司使命、研究与安全治理，以及 Claude 产品和开发者平台。课程解释官方页面、术语和资料之间的关系；不把公司的目标陈述当作独立验证结论，也不把某一时点的模型与产品清单写成长期事实。
 
-课程暂定 **30 课**，编号 `s00`–`s29`。目前已完成第 00–03 课；其余课程按主题逐步展开。
+课程暂定 **30 课**，编号 `s00`–`s29`。目前已完成第 00–04 课；其余课程按主题逐步展开。
 
 ## 学习方式
 
@@ -23,6 +23,7 @@
 - [第 01 课：Anthropic 如何描述自己的使命](s01_company_mission/README.md)
 - [第 02 课：PBC 身份与长期利益信托](s02_pbc_governance/README.md)
 - [第 03 课：公共利益工作与受益领域](s03_public_benefit_areas/README.md)
+- [第 04 课：Anthropic 的研究主题地图](s04_research_map/README.md)
 
 ## 资料范围
 
