@@ -19,5 +19,6 @@
 - [第 2 课：依赖注入](s02_injection/README.md)
 - [第 3 课：生命周期与 effect](s03_lifecycle_effects/README.md)
 - [第 4 课：事件分发](s04_event_dispatch/README.md)
+- [第 5 课：Waterfall](s05_waterfall/README.md)
 
 各课使用 Deno 独立运行 TypeScript 示例。课程代码不依赖目标仓库的构建产物、不修改其文件；核心 Agent 示例使用模拟模型。

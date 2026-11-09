@@ -78,3 +78,5 @@ deno task run
 - EventBus 只包含一种事件和三种 dispatch 方法；Cordis 还提供 `bail` 与 `waterfall`，其中 `waterfall` 在下一课讲解。
 - 教学版没有 TypeScript `Events` 声明合并、事件名类型映射或 Cordis 的 `thisArg`。
 - `emit()` 中异步监听器的错误处理不在本课范围内；核心观察是返回值不等待、不收集。
+
+下一课：[Waterfall](../s05_waterfall/README.md) 会展示监听器怎样包装下游结果或有意短路。
