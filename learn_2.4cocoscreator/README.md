@@ -41,6 +41,7 @@
 - [第 23 课：NodePool 回收与复用回调](s23_node_pool_callbacks/README.md)
 - [第 24 课：对象池未命中与 Prefab 兜底](s24_pool_miss_fallback/README.md)
 - [第 25 课：对象池容量上限与超额销毁](s25_pool_capacity_limit/README.md)
+- [第 26 课：对象池预热与首次复用](s26_pool_prewarm/README.md)
 
 ## 代码结构
 
@@ -108,7 +109,8 @@ learn_2.4cocoscreator/
 ├── s22_node_pool/           # NodePool 节点复用
 ├── s23_node_pool_callbacks/ # NodePool 回收与复用回调
 ├── s24_pool_miss_fallback/  # 对象池未命中与 Prefab 兜底
-└── s25_pool_capacity_limit/ # 对象池容量上限与超额销毁
+├── s25_pool_capacity_limit/ # 对象池容量上限与超额销毁
+└── s26_pool_prewarm/       # 对象池预热与首次复用
 ~~~
 
 ## 运行
