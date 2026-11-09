@@ -67,7 +67,7 @@ deno task run
 [main] publish after unload
 ```
 
-最后一次发布没有触发监听器，说明卸载时取消订阅成功。
+最后一次发布没有触发监听器，说明卸载时取消订阅成功。下一课[事件分发](../s04_event_dispatch/README.md)会比较监听器的同步、并行和串行调用方式。
 
 ## 观察结果
 
