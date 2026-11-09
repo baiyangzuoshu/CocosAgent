@@ -35,6 +35,7 @@
 | 第 27 课：对象池低水位补充 | [本课](s27_pool_low_water_refill/README.md) | [本课](../learn_2.4cocoscreator/s27_pool_low_water_refill/README.md) | [本课](../learn_3.8cocoscreator/s27_pool_low_water_refill/README.md) |
 | 第 28 课：对象池 clear 的销毁时机 | [本课](s28_pool_clear_timing/README.md) | [本课](../learn_2.4cocoscreator/s28_pool_clear_timing/README.md) | [本课](../learn_3.8cocoscreator/s28_pool_clear_timing/README.md) |
 | 第 29 课：外部引用与对象池清理 | [本课](s29_pool_external_owner/README.md) | [本课](../learn_2.4cocoscreator/s29_pool_external_owner/README.md) | [本课](../learn_3.8cocoscreator/s29_pool_external_owner/README.md) |
+| 第 30 课：池中节点暂停调度 | [本课](s30_pool_activity_pause/README.md) | [本课](../learn_2.4cocoscreator/s30_pool_activity_pause/README.md) | [本课](../learn_3.8cocoscreator/s30_pool_activity_pause/README.md) |
 
 历史 Cocos2d-x 同主题：[1.x](../learn_cocos2d-1x/s09_texture_cache/README.md)、[2.x](../learn_cocos2d-2x/s09_texture_cache/README.md)、[3.x](../learn_cocos2d-3x/s09_texture_cache/README.md)。
 
@@ -79,3 +80,5 @@
 历史 Cocos2d-x 第 28 课：[1.x](../learn_cocos2d-1x/s28_pool_clear_timing/README.md)、[2.x](../learn_cocos2d-2x/s28_pool_clear_timing/README.md)、[3.x](../learn_cocos2d-3x/s28_pool_clear_timing/README.md)。
 
 历史 Cocos2d-x 第 29 课：[1.x](../learn_cocos2d-1x/s29_pool_external_owner/README.md)、[2.x](../learn_cocos2d-2x/s29_pool_external_owner/README.md)、[3.x](../learn_cocos2d-3x/s29_pool_external_owner/README.md)。
+
+历史 Cocos2d-x 第 30 课：[1.x](../learn_cocos2d-1x/s30_pool_activity_pause/README.md)、[2.x](../learn_cocos2d-2x/s30_pool_activity_pause/README.md)、[3.x](../learn_cocos2d-3x/s30_pool_activity_pause/README.md)。
