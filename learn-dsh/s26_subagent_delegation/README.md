@@ -102,3 +102,8 @@ Inbox，消费后作为一条新的 user message 进入父 Session。
 - 示例只保留最终文本结果，省略结构化输出、子级继续对话、递归委派、取消、失败恢复、持久化以及资源清理等待。
 - 真实 `SubagentActivation` 还包含 dispose 能力；本课省略它，只展示独立 Session
   和结果回传的核心关系。
+
+---
+
+下一课：[第 27 课「Agent Teams」](../s27_agent_teams/README.md) 会让多个 Agent
+通过根 Session 上的共享任务板认领与完成任务。
