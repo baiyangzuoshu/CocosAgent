@@ -33,7 +33,8 @@ OpenAI 官方资料逐课学习。主线从基础概念进入 API、模型能力
 - [第 9 课：让模型按 Schema 返回结构化数据](s09_structured_outputs/README.md)
 - [第 10 课：多轮对话怎样保留上下文](s10_conversation_state/README.md)
 - [第 11 课：Streaming 与 Background Mode](s11_streaming_background/README.md)
+- [第 12 课：请求失败、限流与 Request ID](s12_errors_rate_limits_request_ids/README.md)
 
 ## 进度
 
-当前学习至第 11 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
+当前学习至第 12 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
