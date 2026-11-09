@@ -48,7 +48,8 @@ OpenAI 官方资料逐课学习。主线从基础概念进入 API、模型能力
 - [第 24 课：Computer Use 怎样操作界面](s24_computer_use/README.md)
 - [第 25 课：MCP 如何把外部工具接入模型工作流](s25_mcp_tools/README.md)
 - [第 26 课：什么样的系统才需要 Agent？](s26_when_to_use_agents/README.md)
+- [第 27 课：Responses API、Agents SDK、Agents API 和 ChatKit 如何选择？](s27_choose_agent_runtime/README.md)
 
 ## 进度
 
-当前学习至第 26 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
+当前学习至第 27 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
