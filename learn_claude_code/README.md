@@ -31,6 +31,7 @@
 - [第 16 课：流式消息消费与 UI 事件](s16_stream_message_ui_events/README.md)
 - [第 17 课：工具调用后的模型续跑](s17_tool_call_followup_loop/README.md)
 - [第 18 课：错误、重试、回退与取消](s18_errors_retry_fallback_cancel/README.md)
+- [第 19 课：Token 预算与上下文压缩](s19_token_budget_context_compaction/README.md)
 
 ## 课程形式与证据边界
 
