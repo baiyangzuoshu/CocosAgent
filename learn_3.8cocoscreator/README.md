@@ -48,6 +48,7 @@
 - [第 31 课：回收与清理的区别](s31_pool_cleanup_policy/README.md)
 - [第 32 课：节点池的后进先出顺序](s32_pool_lifo_order/README.md)
 - [第 33 课：防止节点重复入池](s33_pool_duplicate_put/README.md)
+- [第 34 课：同一节点跨池共享的风险](s34_pool_cross_pool_identity/README.md)
 
 ## 目录结构
 
@@ -89,7 +90,8 @@ learn_3.8cocoscreator/
 ├── s30_pool_activity_pause/ # 池中节点暂停调度
 ├── s31_pool_cleanup_policy/ # 回收与清理的区别
 ├── s32_pool_lifo_order/ # 节点池的后进先出顺序
-└── s33_pool_duplicate_put/ # 防止节点重复入池
+├── s33_pool_duplicate_put/ # 防止节点重复入池
+└── s34_pool_cross_pool_identity/ # 同一节点跨池共享的风险
 ~~~
 
 浏览器运行课进入各自目录，按 README 运行 `deno task check`、`deno task build` 和 `deno task serve`。第 0 课的元数据分析使用 `deno task check` 和 `deno task analyze`。
