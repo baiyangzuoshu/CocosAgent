@@ -36,6 +36,7 @@
 - [第 35 课：限制节点同时归属多个池](s35_pool_single_owner/README.md)
 - [第 36 课：对象池 dispose 后禁止继续使用](s36_pool_dispose/README.md)
 - [第 37 课：区分空池与已关闭池](s37_pool_state_query/README.md)
+- [第 38 课：重复 dispose 保持同一终态](s38_pool_dispose_idempotence/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 

@@ -52,6 +52,7 @@
 - [第 35 课：限制节点同时归属多个池](s35_pool_single_owner/README.md)
 - [第 36 课：对象池 dispose 后禁止继续使用](s36_pool_dispose/README.md)
 - [第 37 课：区分空池与已关闭池](s37_pool_state_query/README.md)
+- [第 38 课：重复 dispose 保持同一终态](s38_pool_dispose_idempotence/README.md)
 
 ## 目录结构
 
@@ -97,7 +98,8 @@ learn_3.8cocoscreator/
 ├── s34_pool_cross_pool_identity/ # 同一节点跨池共享的风险
 ├── s35_pool_single_owner/ # 限制节点同时归属多个池
 ├── s36_pool_dispose/ # 对象池 dispose 后禁止继续使用
-└── s37_pool_state_query/ # 区分空池与已关闭池
+├── s37_pool_state_query/ # 区分空池与已关闭池
+└── s38_pool_dispose_idempotence/ # 重复 dispose 保持同一终态
 ~~~
 
 浏览器运行课进入各自目录，按 README 运行 `deno task check`、`deno task build` 和 `deno task serve`。第 0 课的元数据分析使用 `deno task check` 和 `deno task analyze`。

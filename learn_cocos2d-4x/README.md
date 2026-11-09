@@ -43,6 +43,7 @@
 | 第 35 课：限制节点同时归属多个池 | [本课](s35_pool_single_owner/README.md) | [本课](../learn_2.4cocoscreator/s35_pool_single_owner/README.md) | [本课](../learn_3.8cocoscreator/s35_pool_single_owner/README.md) |
 | 第 36 课：对象池 dispose 后禁止继续使用 | [本课](s36_pool_dispose/README.md) | [本课](../learn_2.4cocoscreator/s36_pool_dispose/README.md) | [本课](../learn_3.8cocoscreator/s36_pool_dispose/README.md) |
 | 第 37 课：区分空池与已关闭池 | [本课](s37_pool_state_query/README.md) | [本课](../learn_2.4cocoscreator/s37_pool_state_query/README.md) | [本课](../learn_3.8cocoscreator/s37_pool_state_query/README.md) |
+| 第 38 课：重复 dispose 保持同一终态 | [本课](s38_pool_dispose_idempotence/README.md) | [本课](../learn_2.4cocoscreator/s38_pool_dispose_idempotence/README.md) | [本课](../learn_3.8cocoscreator/s38_pool_dispose_idempotence/README.md) |
 
 历史 Cocos2d-x 同主题：[1.x](../learn_cocos2d-1x/s09_texture_cache/README.md)、[2.x](../learn_cocos2d-2x/s09_texture_cache/README.md)、[3.x](../learn_cocos2d-3x/s09_texture_cache/README.md)。
 
@@ -103,3 +104,5 @@
 历史 Cocos2d-x 第 36 课：[1.x](../learn_cocos2d-1x/s36_pool_dispose/README.md)、[2.x](../learn_cocos2d-2x/s36_pool_dispose/README.md)、[3.x](../learn_cocos2d-3x/s36_pool_dispose/README.md)。
 
 历史 Cocos2d-x 第 37 课：[1.x](../learn_cocos2d-1x/s37_pool_state_query/README.md)、[2.x](../learn_cocos2d-2x/s37_pool_state_query/README.md)、[3.x](../learn_cocos2d-3x/s37_pool_state_query/README.md)。
+
+历史 Cocos2d-x 第 38 课：[1.x](../learn_cocos2d-1x/s38_pool_dispose_idempotence/README.md)、[2.x](../learn_cocos2d-2x/s38_pool_dispose_idempotence/README.md)、[3.x](../learn_cocos2d-3x/s38_pool_dispose_idempotence/README.md)。

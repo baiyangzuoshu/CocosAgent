@@ -53,6 +53,7 @@
 - [第 35 课：限制节点同时归属多个池](s35_pool_single_owner/README.md)
 - [第 36 课：对象池 dispose 后禁止继续使用](s36_pool_dispose/README.md)
 - [第 37 课：区分空池与已关闭池](s37_pool_state_query/README.md)
+- [第 38 课：重复 dispose 保持同一终态](s38_pool_dispose_idempotence/README.md)
 
 ## 代码结构
 
@@ -132,7 +133,8 @@ learn_2.4cocoscreator/
 ├── s34_pool_cross_pool_identity/ # 同一节点跨池共享的风险
 ├── s35_pool_single_owner/ # 限制节点同时归属多个池
 ├── s36_pool_dispose/ # 对象池 dispose 后禁止继续使用
-└── s37_pool_state_query/ # 区分空池与已关闭池
+├── s37_pool_state_query/ # 区分空池与已关闭池
+└── s38_pool_dispose_idempotence/ # 重复 dispose 保持同一终态
 ~~~
 
 ## 运行
