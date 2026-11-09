@@ -24,7 +24,8 @@ OpenAI 官方资料逐课学习。主线从基础概念进入 API、模型能力
 - [第 0 课：OpenAI 官网与文档地图](s00_official_docs_map/README.md)
 - [第 1 课：产品、模型、API、SDK 与应用](s01_system_model_api_sdk_app/README.md)
 - [第 2 课：生成式模型如何从输入生成输出](s02_text_generation_flow/README.md)
+- [第 3 课：Token、上下文窗口与输入/输出长度](s03_tokens_context_window/README.md)
 
 ## 进度
 
-当前学习至第 2 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
+当前学习至第 3 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
