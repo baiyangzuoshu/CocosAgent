@@ -2,7 +2,7 @@
 
 以 Anthropic 官方网站和 Claude Platform 文档为资料入口，逐课认识 Anthropic 的公司使命、研究与安全治理，以及 Claude 产品和开发者平台。课程解释官方页面、术语和资料之间的关系；不把公司的目标陈述当作独立验证结论，也不把某一时点的模型与产品清单写成长期事实。
 
-课程暂定 **30 课**，编号 `s00`–`s29`。目前已完成第 00–12 课；其余课程按主题逐步展开。
+课程暂定 **30 课**，编号 `s00`–`s29`。目前已完成第 00–13 课；其余课程按主题逐步展开。
 
 ## 学习方式
 
@@ -32,6 +32,7 @@
 - [第 10 课：如何阅读 Claude 的 System Card 和 Model Report？](s10_system_cards_model_reports/README.md)
 - [第 11 课：Transparency Hub 如何汇总模型信息和公开承诺？](s11_transparency_hub/README.md)
 - [第 12 课：面向用户的 Claude 产品与 Claude Platform 有什么区别？](s12_claude_vs_platform/README.md)
+- [第 13 课：Claude 当前有哪些产品形态和适用场景？](s13_claude_products_use_cases/README.md)
 
 ## 资料范围
 
