@@ -70,4 +70,4 @@ deno task run
 
 ---
 
-下一课预告：第 12 课「持久化与恢复」会把 Session 事件写入存储，并从中恢复。
+下一课：[持久化与恢复](../s12_session_persistence/README.md) 会把 Session 事件写入存储，并从中恢复。
