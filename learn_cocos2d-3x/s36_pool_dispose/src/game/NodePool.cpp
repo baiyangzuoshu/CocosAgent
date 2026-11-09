@@ -1,0 +1,55 @@
+#include "NodePool.h"
+#include <algorithm>
+#include <unordered_map>
+
+namespace cocos2d {
+namespace {
+std::unordered_map<Node*, NodePool*>& poolOwners() {
+    static std::unordered_map<Node*, NodePool*> owners;
+    return owners;
+}
+} // namespace
+NodePool::~NodePool() { dispose(); }
+
+void NodePool::put(Node* node) {
+    // This search only covers the current pool instance.
+    // Pointer identity prevents duplicate entries and duplicate pool retains.
+    if (_disposed || !node || std::find(_nodes.begin(), _nodes.end(), node) != _nodes.end()) return;
+    auto& owners = poolOwners();
+    // The shared registry rejects a node held by any other pool instance.
+    if (owners.find(node) != owners.end()) return;
+    node->retain();
+    owners[node] = this;
+    if (auto* parent = node->getParent()) parent->removeChild(node, false);
+    _handler->unuse(node);
+    _nodes.push_back(node);
+}
+
+Node* NodePool::get(int hp) {
+    // vector 尾部保存最近入池的节点，back/pop_back 构成 LIFO。
+    if (_disposed || _nodes.empty()) return nullptr;
+    Node* node = _nodes.back();
+    _nodes.pop_back();
+    auto& owners = poolOwners();
+    auto owner = owners.find(node);
+    if (owner != owners.end() && owner->second == this) owners.erase(owner);
+    _handler->reuse(node, hp);
+    return node;
+}
+
+void NodePool::clear() {
+    auto& owners = poolOwners();
+    for (auto* node : _nodes) {
+        auto owner = owners.find(node);
+        if (owner != owners.end() && owner->second == this) owners.erase(owner);
+        node->release();
+    }
+    _nodes.clear();
+}
+
+void NodePool::dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    clear();
+}
+} // namespace cocos2d

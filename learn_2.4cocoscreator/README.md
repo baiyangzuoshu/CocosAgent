@@ -51,6 +51,7 @@
 - [第 33 课：防止节点重复入池](s33_pool_duplicate_put/README.md)
 - [第 34 课：同一节点跨池共享的风险](s34_pool_cross_pool_identity/README.md)
 - [第 35 课：限制节点同时归属多个池](s35_pool_single_owner/README.md)
+- [第 36 课：对象池 dispose 后禁止继续使用](s36_pool_dispose/README.md)
 
 ## 代码结构
 
@@ -128,7 +129,8 @@ learn_2.4cocoscreator/
 ├── s32_pool_lifo_order/ # 节点池的后进先出顺序
 ├── s33_pool_duplicate_put/ # 防止节点重复入池
 ├── s34_pool_cross_pool_identity/ # 同一节点跨池共享的风险
-└── s35_pool_single_owner/ # 限制节点同时归属多个池
+├── s35_pool_single_owner/ # 限制节点同时归属多个池
+└── s36_pool_dispose/ # 对象池 dispose 后禁止继续使用
 ~~~
 
 ## 运行
