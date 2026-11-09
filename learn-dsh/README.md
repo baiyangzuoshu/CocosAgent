@@ -38,5 +38,6 @@
 - [第 21 课：Tool Schema 与注册](s21_tool_schema_registration/README.md)
 - [第 22 课：校验与执行流水线](s22_tool_validation_execution/README.md)
 - [第 23 课：工具结果与完整回合](s23_tool_round_trip/README.md)
+- [第 24 课：工具调用审批](s24_tool_call_approval/README.md)
 
 各课使用 Deno 独立运行 TypeScript 示例。课程代码不依赖目标仓库的构建产物、不修改其文件；核心 Agent 示例使用模拟模型。
