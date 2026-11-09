@@ -2,7 +2,7 @@
 
 以 Anthropic 官方网站和 Claude Platform 文档为资料入口，逐课认识 Anthropic 的公司使命、研究与安全治理，以及 Claude 产品和开发者平台。课程解释官方页面、术语和资料之间的关系；不把公司的目标陈述当作独立验证结论，也不把某一时点的模型与产品清单写成长期事实。
 
-课程暂定 **30 课**，编号 `s00`–`s29`。目前已完成第 00–08 课；其余课程按主题逐步展开。
+课程暂定 **30 课**，编号 `s00`–`s29`。目前已完成第 00–09 课；其余课程按主题逐步展开。
 
 ## 学习方式
 
@@ -28,6 +28,7 @@
 - [第 06 课：对齐研究和行为评估如何关联？](s06_alignment_behavior_evaluations/README.md)
 - [第 07 课：Frontier Red Team、经济与社会影响研究](s07_research_domains/README.md)
 - [第 08 课：Claude’s Constitution 是什么类型的文件？](s08_claude_constitution/README.md)
+- [第 09 课：Responsible Scaling Policy 试图处理什么问题？](s09_responsible_scaling_policy/README.md)
 
 ## 资料范围
 
