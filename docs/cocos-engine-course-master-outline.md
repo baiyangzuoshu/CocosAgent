@@ -21,7 +21,7 @@
 | 七：Action / Tween | 30–34（第 30–34 课已完成） | 时间推进、间隔与即时动作、组合、缓动和控制 | 用动作或 Tween 驱动节点属性，并能解释它如何进入每帧更新 |
 | 八：UI 结构与交互 | 35–39（第 35–39 课已完成） | Canvas、Widget、Layout、Label、Button | 建立可适配屏幕、可排布、可显示文本并可交互的基础 UI |
 | 九：音频 | 40–42（第 40–42 课已完成） | 资源、播放生命周期、并发与音量控制 | 加载并播放音效或背景音，观察播放、停止和资源生命周期 |
-| 十：2D 物理 | 43–46（第 43–45 课已完成） | 物理世界、刚体与碰撞体、接触、查询与调试 | 让节点参与 2D 模拟并处理碰撞或查询结果 |
+| 十：2D 物理 | 43–46（第 43–46 课已完成） | 物理世界、刚体与碰撞体、接触、查询与调试 | 让节点参与 2D 模拟并处理碰撞或查询结果 |
 | 十一：2D 粒子 | 47–49 | 粒子系统创建、发射与模拟、渲染和结束 | 从配置生成粒子，观察其更新、绘制与回收 |
 | 十二：构建、打包与交付 | 50–53 | 目标配置、代码/资源构建、产物结构、启动与交付 | 从工程配置追到可运行的 Web 目录或原生应用包 |
 
@@ -57,12 +57,12 @@ Cocos2d-x 使用本版本实际提供的 `Layer`、`Menu`、`Label` 或 `ui::Wid
 
 源码入口：Creator 2.4.15 `cocos2d/core/components/CCAudioSource.js`、`cocos2d/audio/CCAudioEngine.js`、`CCAudio.js`；Creator 3.8.7 `cocos/audio/audio-downloader.ts`、`audio-source.ts`、`pal/audio/web/player.ts`；Cocos2d-x 1.x–2.x `CocosDenshion/`，3.x–4.x `cocos/audio/` 和各平台 `AudioEngineImpl`。按版本和目标平台分别说明后端差异。
 
-### 十：2D 物理（第 43–46 课，第 43–45 课已完成）
+### 十：2D 物理（第 43–46 课，已完成）
 
 1. **物理世界（第 43 课已完成）**：世界创建、启用、时间步进和场景更新顺序。六个版本各有独立示例：[Creator 2.4.15](../learn_2.4cocoscreator/s43_physics_world/README.md)、[Creator 3.8.7](../learn_3.8cocoscreator/s43_physics_world/README.md)、[Cocos2d-x 1.x](../learn_cocos2d-1x/s43_physics_world/README.md)、[2.x](../learn_cocos2d-2x/s43_physics_world/README.md)、[3.x](../learn_cocos2d-3x/s43_physics_world/README.md)、[4.x](../learn_cocos2d-4x/s43_physics_world/README.md)。1.x/2.x 由应用层接入独立 Box2D；Creator 与 Cocos2d-x 3.x/4.x 展示引擎自己的 2D 物理接线。
 2. **刚体与碰撞体（第 44 课已完成）**：静态/动态刚体、形状和材质如何映射到节点。六个版本各有独立示例：[Creator 2.4.15](../learn_2.4cocoscreator/s44_rigidbody_collider/README.md)、[Creator 3.8.7](../learn_3.8cocoscreator/s44_rigidbody_collider/README.md)、[Cocos2d-x 1.x](../learn_cocos2d-1x/s44_rigidbody_collider/README.md)、[2.x](../learn_cocos2d-2x/s44_rigidbody_collider/README.md)、[3.x](../learn_cocos2d-3x/s44_rigidbody_collider/README.md)、[4.x](../learn_cocos2d-4x/s44_rigidbody_collider/README.md)。1.x/2.x 由应用直接使用 Box2D；3.x/4.x 的 `PhysicsBody` 通过 Node 组件机制进入 `PhysicsWorld`。
 3. **接触与过滤（第 45 课已完成）**：碰撞过滤决定是否生成接触；监听开关和通知掩码决定是否派发回调；PreSolve 可以临时改变本步响应。六版独立示例：[Creator 2.4.15](../learn_2.4cocoscreator/s45_contact_filter/README.md)、[Creator 3.8.7](../learn_3.8cocoscreator/s45_contact_filter/README.md)、[Cocos2d-x 1.x](../learn_cocos2d-1x/s45_contact_filter/README.md)、[2.x](../learn_cocos2d-2x/s45_contact_filter/README.md)、[3.x](../learn_cocos2d-3x/s45_contact_filter/README.md)、[4.x](../learn_cocos2d-4x/s45_contact_filter/README.md)。1.x/2.x 使用随仓库提供的独立 Box2D；Creator 使用 Box2D；Cocos2d-x 3.x/4.x 使用 Chipmunk。
-4. **查询与调试**：射线或区域查询，以及调试绘制。
+4. **查询与调试（第 46 课已完成）**：射线、区域查询和调试绘制。六版独立示例：[Creator 2.4.15](../learn_2.4cocoscreator/s46_physics_queries/README.md)、[Creator 3.8.7](../learn_3.8cocoscreator/s46_physics_queries/README.md)、[Cocos2d-x 1.x](../learn_cocos2d-1x/s46_physics_queries/README.md)、[2.x](../learn_cocos2d-2x/s46_physics_queries/README.md)、[3.x](../learn_cocos2d-3x/s46_physics_queries/README.md)、[4.x](../learn_cocos2d-4x/s46_physics_queries/README.md)。Creator 查询经 PhysicsManager/PhysicsSystem2D 转发到 Box2D；Cocos2d-x 1.x/2.x 由应用直接查询 Box2D；3.x/4.x 由 PhysicsWorld 查询 Chipmunk。
 
 首轮只覆盖 2D 物理。Creator 2.4.15 入口为 `cocos2d/core/physics/CCPhysicsManager.js`、`CCRigidBody.js`；Creator 3.8.7 为 `cocos/physics-2d/framework/physics-system.ts`、`components/rigid-body-2d.ts`；Cocos2d-x 1.x–2.x 在应用层直接使用仓库附带的独立 Box2D；3.x–4.x 查看各自 `cocos/physics/` 和 Chipmunk 后端。
 
