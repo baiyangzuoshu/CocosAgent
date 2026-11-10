@@ -40,6 +40,7 @@
 - [第 39 课：CCMenuItem 点击交互](s39_button_interaction/README.md)
 - [第 40 课：SimpleAudioEngine 音效资源入口](s40_audio_resource_entry/README.md)
 - [第 41 课：SimpleAudioEngine 音效控制](s41_audio_playback_lifecycle/README.md)
+- [第 42 课：SimpleAudioEngine 音量、循环与卸载](s42_audio_concurrency_control/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 

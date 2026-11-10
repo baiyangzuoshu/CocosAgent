@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>第 42 课：音频并发与控制</title>
+</head>
+<body>
+  <main>
+    <h1>第 42 课：音量、循环与并发</h1>
+    <p>启动循环背景音，再并发两路音效；分别调整音量并观察停止范围。</p>
+    <button id="start-music">启动循环背景音</button>
+    <button id="play-effects">并发播放两路音效</button>
+    <p><label>背景音音量 <input id="music-volume" type="range" min="0" max="1" step="0.1" value="0.4"></label></p>
+    <p><label>音效组音量 <input id="effects-volume" type="range" min="0" max="1" step="0.1" value="0.8"></label></p>
+    <button id="stop-effects">停止全部音效</button>
+    <button id="unload-effects">卸载音效实例</button>
+    <button id="stop-music">停止并卸载背景音</button>
+    <pre id="output">等待操作</pre>
+  </main>
+  <script type="module" src="./dist/src/main.js"></script>
+</body>
+</html>

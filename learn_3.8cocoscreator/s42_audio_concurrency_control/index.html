@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>第 42 课：音频并发与控制</title>
+</head>
+<body>
+  <main>
+    <h1>第 42 课：音量、循环与并发</h1>
+    <p>单个 AudioSource 循环播放背景音；playOneShot 并发短音效并按通道上限淘汰旧实例。</p>
+    <button id="start-music" disabled>启动循环背景音</button>
+    <button id="play-effects" disabled>连续提交四路音效</button>
+    <p><label>背景音量 <input id="music-volume" type="range" min="0" max="1" step="0.1" value="0.4" disabled></label></p>
+    <p><label>音效基础音量 <input id="effects-volume" type="range" min="0" max="1" step="0.1" value="0.8" disabled></label></p>
+    <button id="stop-music" disabled>停止背景音</button>
+    <pre id="output">等待加载</pre>
+  </main>
+  <script type="module" src="./dist/src/main.js"></script>
+</body>
+</html>

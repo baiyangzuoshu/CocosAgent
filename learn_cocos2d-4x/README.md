@@ -47,6 +47,7 @@
 | 第 39 课：Button 交互 | [本课](s39_button_interaction/README.md) | [本课](../learn_2.4cocoscreator/s39_button_interaction/README.md) | [本课](../learn_3.8cocoscreator/s39_button_interaction/README.md) |
 | 第 40 课：音频资源与引擎入口 | [本课](s40_audio_resource_entry/README.md) | [本课](../learn_2.4cocoscreator/s40_audio_resource_entry/README.md) | [本课](../learn_3.8cocoscreator/s40_audio_resource_entry/README.md) |
 | 第 41 课：音频播放生命周期 | [本课](s41_audio_playback_lifecycle/README.md) | [本课](../learn_2.4cocoscreator/s41_audio_playback_lifecycle/README.md) | [本课](../learn_3.8cocoscreator/s41_audio_playback_lifecycle/README.md) |
+| 第 42 课：并发、音量与资源释放 | [本课](s42_audio_concurrency_control/README.md) | [本课](../learn_2.4cocoscreator/s42_audio_concurrency_control/README.md) | [本课](../learn_3.8cocoscreator/s42_audio_concurrency_control/README.md) |
 
 历史 Cocos2d-x 同主题：[1.x](../learn_cocos2d-1x/s09_texture_cache/README.md)、[2.x](../learn_cocos2d-2x/s09_texture_cache/README.md)、[3.x](../learn_cocos2d-3x/s09_texture_cache/README.md)。
 
@@ -115,3 +116,5 @@
 历史 Cocos2d-x 第 40 课：[1.x](../learn_cocos2d-1x/s40_audio_resource_entry/README.md)、[2.x](../learn_cocos2d-2x/s40_audio_resource_entry/README.md)、[3.x](../learn_cocos2d-3x/s40_audio_resource_entry/README.md)。
 
 历史 Cocos2d-x 第 41 课：[1.x](../learn_cocos2d-1x/s41_audio_playback_lifecycle/README.md)、[2.x](../learn_cocos2d-2x/s41_audio_playback_lifecycle/README.md)、[3.x](../learn_cocos2d-3x/s41_audio_playback_lifecycle/README.md)。
+
+历史 Cocos2d-x 第 42 课：[1.x](../learn_cocos2d-1x/s42_audio_concurrency_control/README.md)、[2.x](../learn_cocos2d-2x/s42_audio_concurrency_control/README.md)、[3.x](../learn_cocos2d-3x/s42_audio_concurrency_control/README.md)。

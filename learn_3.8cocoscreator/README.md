@@ -56,6 +56,7 @@
 - [第 39 课：Button 触摸与回调](s39_button_interaction/README.md)
 - [第 40 课：AudioClip 到 PAL AudioPlayer](s40_audio_resource_entry/README.md)
 - [第 41 课：AudioSource 播放生命周期](s41_audio_playback_lifecycle/README.md)
+- [第 42 课：音量、循环与并发](s42_audio_concurrency_control/README.md)
 
 ## 目录结构
 
