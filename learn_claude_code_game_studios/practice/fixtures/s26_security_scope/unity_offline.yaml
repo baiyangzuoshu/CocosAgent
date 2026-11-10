@@ -1,0 +1,10 @@
+project:
+  name: Unity Offline Fixture
+  version: 1.0.0
+engine:
+  name: unity
+  language: csharp
+platform:
+  targets: [desktop]
+  online: false
+  multiplayer: false

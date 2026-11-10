@@ -50,4 +50,6 @@ claude
 
 第 25 课通过 `audit_analytics_contract.py` 审查合成事件定义、NDJSON 日志、A/B 实验窗口与隐私待决项；校验器是课程代码，不连接游戏，也不自动判定合规。
 
+第 26 课通过 `exercise_security_scope.py` 将合成项目配置复制到临时目录，再调用 CCGS 的 `yaml-helper.sh get_yaml_key` 比较未设置与显式 `false` 的网络范围标记，并展示引擎参考覆盖不足时的 NOT ASSESSED 边界。它只做范围观察，不扫描游戏源码、依赖或运行中的游戏，也不代替真实安全审计。
+
 如果没有可用的 Claude Code 运行环境，仍可运行 `audit_snapshot.py` 和 CCGS 自带的只读辅助脚本；需要真实会话行为的观察则记为未执行，不用静态文件代替运行结果。

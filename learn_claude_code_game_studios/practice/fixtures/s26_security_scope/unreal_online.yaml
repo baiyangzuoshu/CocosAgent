@@ -1,0 +1,10 @@
+project:
+  name: Unreal Online Fixture
+  version: 1.0.0
+engine:
+  name: unreal
+  language: cpp
+platform:
+  targets: [desktop]
+  online: true
+  multiplayer: true
