@@ -2,7 +2,7 @@
 
 以 Anthropic 官方网站和 Claude Platform 文档为资料入口，逐课认识 Anthropic 的公司使命、研究与安全治理，以及 Claude 产品和开发者平台。课程解释官方页面、术语和资料之间的关系；不把公司的目标陈述当作独立验证结论，也不把某一时点的模型与产品清单写成长期事实。
 
-课程暂定 **38 课**，编号 `s00`–`s37`。目前已完成第 00–37 课。
+课程暂定 **39 课**，编号 `s00`–`s38`。目前已完成第 00–38 课。
 
 ## 学习方式
 
@@ -57,6 +57,7 @@
 - [第 35 课：Claude Managed Agents Memory Stores 如何让 Agent 跨 Session 记住信息？](s35_agent_memory_stores/README.md)
 - [第 36 课：Claude Managed Agents Skills 如何复用领域工作流？](s36_managed_agent_skills/README.md)
 - [第 37 课：Claude Managed Agents Outcomes 如何把完成条件变成评测循环？](s37_managed_agent_outcomes/README.md)
+- [第 38 课：Claude Managed Agents Permission Policies 如何控制工具调用？](s38_managed_agent_permission_policies/README.md)
 
 ## 资料范围
 
