@@ -1,5 +1,18 @@
 # 第 50 课（ENG22）：物理关节与刚体约束
 
+## 本课代码快照
+
+src/main.cpp 是独立 C++17 教学模型，模拟 joint 进入 PhysicsWorld、等待下一次更新创建约束、锁定期间延迟移除，以及从两个 body 解除关联。模型使用 unique_ptr 明确管理示例对象，不模拟 Chipmunk 求解，也不链接 Cocos2d-x。
+
+~~~sh
+c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror src/main.cpp -o /tmp/learn-cpp-s50
+/tmp/learn-cpp-s50
+~~~
+
+预期观察：约束在 world 更新时创建；关闭 joint collision 只影响相连的两个 body；锁定期间移除先排队，解锁处理后再销毁并清除 body 关联。课程结构参考 [Creator 第 43 课](../../learn_3.8cocoscreator/s43_physics_world/README.md)。
+
+本课模型已按上述命令编译并运行；这只验证课程示例，不代表已构建或运行 Cocos2d-x 工程。示例使用 unique_ptr 只为表达模型自身的持有关系；实际 PhysicsJoint 的裸指针生命周期以本课源码分析为准。
+
 **目标：** 把两个 PhysicsBody 连接成持续约束，读懂关节从构造、排队加入物理世界到移除的生命周期，并理解关节碰撞开关。
 
 ## 本课范围与证据

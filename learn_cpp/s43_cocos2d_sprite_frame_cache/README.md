@@ -1,5 +1,18 @@
 # 第 43 课（ENG15）：SpriteFrameCache 与精灵帧
 
+## 本课代码快照
+
+src/main.cpp 是独立 C++17 教学模型，模拟两个 SpriteFrame 共用图集纹理，以及清空帧缓存后 Sprite 继续持有帧和纹理的关系。它不读取真实 plist，也不链接 Cocos2d-x。
+
+~~~sh
+c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror src/main.cpp -o /tmp/learn-cpp-s43
+/tmp/learn-cpp-s43
+~~~
+
+预期观察：清空帧缓存后，Sprite 持有的帧仍然存活；Sprite 释放后，最后一份纹理引用才消失。课程结构参考 [Creator 第 13 课](../../learn_3.8cocoscreator/s13_sprite_frame_texture/README.md)。
+
+本课模型已按上述命令编译并运行；这只验证课程示例，不代表已构建或运行 Cocos2d-x 工程。
+
 **目标：** 从 atlas plist 追踪 SpriteFrame 的创建、按名称查找、Sprite 使用时的 retain，以及帧缓存和纹理缓存分层清理。
 
 ## 本课范围与证据

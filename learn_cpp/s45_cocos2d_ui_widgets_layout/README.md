@@ -1,5 +1,18 @@
 # 第 45 课（ENG17）：UI 组件与布局
 
+## 本课代码快照
+
+src/main.cpp 是独立 C++17 教学模型，模拟纵向布局根据控件高度、间距与上下边距计算位置，并触发按钮回调。它不绘制界面、不接收平台触摸，也不链接 Cocos2d-x。
+
+~~~sh
+c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror src/main.cpp -o /tmp/learn-cpp-s45
+/tmp/learn-cpp-s45
+~~~
+
+预期观察：三个不同高度的按钮得到 y 坐标 36、0、-36；点击 Settings 后输出回调消息。课程结构参考 [Creator 第 37 课](../../learn_3.8cocoscreator/s37_layout/README.md)。
+
+本课模型已按上述命令编译并运行；这只验证课程示例，不代表已构建或运行 Cocos2d-x 工程。
+
 **目标：** 用 `ui::Layout`、`ui::Text` 和 `ui::Button` 组一个小界面，追踪子控件如何排布，以及按钮触摸如何成为 click 回调。
 
 ## 本课范围与证据

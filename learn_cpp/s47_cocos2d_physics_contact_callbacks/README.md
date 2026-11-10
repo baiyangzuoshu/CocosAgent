@@ -1,5 +1,18 @@
 # 第 47 课（ENG19）：物理组件与碰撞回调
 
+## 本课代码快照
+
+src/main.cpp 是独立 C++17 教学模型，用位掩码模型分开计算碰撞响应和 contact 通知，展示双向匹配条件。它不运行 Chipmunk，也不链接 Cocos2d-x。
+
+~~~sh
+c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror src/main.cpp -o /tmp/learn-cpp-s47
+/tmp/learn-cpp-s47
+~~~
+
+预期观察：只设置一侧 contact-test mask 时不触发通知；双方匹配时触发；即使通知开启，碰撞响应仍可被另一组 mask 关闭。课程结构参考 [Creator 第 45 课](../../learn_3.8cocoscreator/s45_contact_filter/README.md)。
+
+本课模型已按上述命令编译并运行；这只验证课程示例，不代表已构建或运行 Cocos2d-x 工程。
+
 **目标：** 创建一个启用物理世界的场景，把静态地面和动态圆形刚体接到 Node 上，并追踪碰撞响应与碰撞通知各自经过的源码路径。
 
 ## 本课范围与证据

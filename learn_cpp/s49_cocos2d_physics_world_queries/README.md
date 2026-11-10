@@ -1,5 +1,18 @@
 # 第 49 课（ENG21）：物理世界查询——射线、点与区域
 
+## 本课代码快照
+
+src/main.cpp 是独立 C++17 教学模型，用圆形 shape 的简化世界演示线段射线、点查询和矩形 AABB 候选。它不调用 Chipmunk，也不链接 Cocos2d-x。
+
+~~~sh
+c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror src/main.cpp -o /tmp/learn-cpp-s49
+/tmp/learn-cpp-s49
+~~~
+
+预期观察：射线按 fraction 选出最近命中；点查询返回包含该点的 shape；矩形查询可返回包围盒重叠、几何本体却未相交的候选。课程结构参考 [Creator 第 46 课](../../learn_3.8cocoscreator/s46_physics_queries/README.md)。
+
+本课模型已按上述命令编译并运行；这只验证课程示例，不代表已构建或运行 Cocos2d-x 工程。
+
 **目标：** 按需询问 Cocos2d-x 2D `PhysicsWorld` 哪些形状位于一条线段、一个点或一个矩形附近，并区分空间查询结果与第 47 课的碰撞响应/接触通知。
 
 ## 本课范围与证据

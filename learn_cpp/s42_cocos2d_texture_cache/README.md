@@ -1,5 +1,18 @@
 # 第 42 课（ENG14）：TextureCache 与纹理复用
 
+## 本课代码快照
+
+src/main.cpp 是独立 C++17 教学模型，模拟按解析后的完整路径复用纹理，并分别观察缓存和 Sprite 持有纹理的生命周期。它不创建 GPU 纹理，也不链接 Cocos2d-x。
+
+~~~sh
+c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror src/main.cpp -o /tmp/learn-cpp-s42
+/tmp/learn-cpp-s42
+~~~
+
+预期观察：同一路径两次加载得到同一对象；移除缓存键后 Sprite 仍持有旧纹理，再加载会得到新对象。课程结构参考 [Creator 第 13 课](../../learn_3.8cocoscreator/s13_sprite_frame_texture/README.md)。
+
+本课模型已按上述命令编译并运行；这只验证课程示例，不代表已构建或运行 Cocos2d-x 工程。
+
 **目标：** 跟踪图片路径如何成为 `TextureCache` 的键，重复加载何时返回同一 `Texture2D`，以及缓存引用与 Sprite 引用如何共同决定对象能否释放。
 
 ## 本课范围与证据

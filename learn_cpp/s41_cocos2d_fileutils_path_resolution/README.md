@@ -1,5 +1,18 @@
 # 第 41 课（ENG13）：FileUtils 与资源路径解析
 
+## 本课代码快照
+
+src/main.cpp 是独立 C++17 教学模型，模拟文件名映射、搜索路径与分辨率目录的候选顺序，以及成功路径缓存。它不链接 Cocos2d-x。
+
+~~~sh
+c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror src/main.cpp -o /tmp/learn-cpp-s41
+/tmp/learn-cpp-s41
+~~~
+
+预期观察：路径先解析到 themeA；插入 hotfix 搜索路径后，旧缓存仍返回 themeA；清理解析缓存后才改为 hotfix。课程结构参考 [Creator 第 9 课](../../learn_3.8cocoscreator/s09_asset_loading_cache/README.md)。
+
+本课模型已按上述命令编译并运行；这只验证课程示例，不代表已构建或运行 Cocos2d-x 工程。
+
 **目标：** 跟踪一个相对文件名如何经过文件名映射、搜索路径和分辨率目录，解析成实际路径；区分资源读取目录与可写目录。
 
 ## 本课范围与证据

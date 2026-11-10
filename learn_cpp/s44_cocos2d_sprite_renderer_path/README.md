@@ -1,5 +1,18 @@
 # 第 44 课（ENG16）：Sprite 到渲染器的调用路径
 
+## 本课代码快照
+
+src/main.cpp 是独立 C++17 教学模型，模拟 Sprite 提交绘制命令，并按相邻命令的纹理、program 和 blend 状态统计简化批次。它不调用图形 API，不测 GPU draw call，也不链接 Cocos2d-x。
+
+~~~sh
+c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror src/main.cpp -o /tmp/learn-cpp-s44
+/tmp/learn-cpp-s44
+~~~
+
+预期观察：四个节点产生四条命令；中间纹理状态改变后，简化模型分成三个相邻兼容组。兼容组不是实际 draw call 数。课程结构参考 [Creator 第 10 课](../../learn_3.8cocoscreator/s10_render_entry/README.md)。
+
+本课模型已按上述命令编译并运行；这只验证课程示例，不代表已构建或运行 Cocos2d-x 工程。
+
 **目标：** 从一帧开始，追踪场景遍历怎样调用 `Sprite::draw()`，怎样把三角形命令交给 Renderer，再怎样通过图形后端发出绘制请求。
 
 ## 本课范围与证据

@@ -1,5 +1,18 @@
 # 第 48 课（ENG20）：综合练习：启动、交互、资源与渲染
 
+## 本课代码快照
+
+src/main.cpp 是独立 C++17 教学模型，把启动回调、资源解析、纹理缓存、首个 Scene、输入、更新和绘制命令串成一个独立控制台模型；它不创建窗口或运行 Cocos2d-x。
+
+~~~sh
+c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror src/main.cpp -o /tmp/learn-cpp-s48
+/tmp/learn-cpp-s48
+~~~
+
+预期观察：AppDelegate 解析图片并启动首个场景；点击模型中的 Sprite 后，两次帧更新改变位置并提交绘制命令。课程结构参考 [Creator 第 2 课](../../learn_3.8cocoscreator/s02_game_startup/README.md)。
+
+本课模型已按上述命令编译并运行；这只验证课程示例，不代表已构建或运行 Cocos2d-x 工程。
+
 **目标：** 以 Cocos2d-x 4.0 默认 C++ 模板为起点，串起 AppDelegate 启动首个场景、Scheduler 更新节点、鼠标输入改变状态、FileUtils/TextureCache 载入图片，以及 Sprite 命令进入 Renderer 的完整路径。
 
 ## 本课范围与证据

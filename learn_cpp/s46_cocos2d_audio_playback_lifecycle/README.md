@@ -1,5 +1,18 @@
 # 第 46 课（ENG18）：音频播放与资源生命周期
 
+## 本课代码快照
+
+src/main.cpp 是独立 C++17 教学模型，模拟音频文件缓存、播放实例句柄、停止与自然结束。它不会播放声音，也不链接 Cocos2d-x 音频后端。
+
+~~~sh
+c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror src/main.cpp -o /tmp/learn-cpp-s46
+/tmp/learn-cpp-s46
+~~~
+
+预期观察：同一音频资源可对应两个播放句柄；播放实例结束后文件缓存仍存在，直到显式 uncache。课程结构参考 [Creator 第 41 课](../../learn_3.8cocoscreator/s41_audio_playback_lifecycle/README.md)。
+
+本课模型已按上述命令编译并运行；这只验证课程示例，不代表已构建或运行 Cocos2d-x 工程。
+
 **目标：** 跟踪音频路径如何进入 Cocos2d-x 4.0 的平台后端，区分一次播放的 `audioID` 与文件缓存，并掌握停止、清缓存和关闭 AudioEngine 的不同边界。
 
 ## 本课范围与证据
