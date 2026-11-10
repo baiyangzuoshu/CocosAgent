@@ -27,8 +27,9 @@
 - [第 11 课：纹理数据、上传与 UV 坐标](s11_texture_data_uv/README.md)
 - [第 12 课：Sampler 寻址与过滤](s12_sampler_wrap_filter/README.md)
 - [第 13 课：Mipmap 与纹理缩小](s13_mipmap_minification/README.md)
+- [第 14 课：多纹理单元与 shader 组合](s14_multi_texture_blend/README.md)
 
-总纲规划 30 课；目前已实现第 1–13 课，其他课程按学习进度逐课补充。
+总纲规划 30 课；目前已实现第 1–14 课，其他课程按学习进度逐课补充。
 
 ## 技术约定
 
