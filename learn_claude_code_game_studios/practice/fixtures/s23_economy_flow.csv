@@ -1,0 +1,5 @@
+kind,name,amount,occurrences_per_day,unit
+faucet,quest_reward,30,3,gold
+faucet,victory_reward,5,4,gold
+sink,repair,10,2,gold
+sink,crafting,35,1,gold

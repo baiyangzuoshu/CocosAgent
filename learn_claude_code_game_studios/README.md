@@ -1,6 +1,6 @@
 # Claude Code Game Studios 学习课程
 
-课程主体规划为 22 课（第 1–22 课），另设第 0 课导读；以仓库中的 Claude Code Game Studios（CCGS）快照为材料，逐层读懂它如何把游戏开发工作组织成一套可配置的 Claude Code 工作流。
+课程主体规划为 23 课（第 1–23 课），另设第 0 课导读；以仓库中的 Claude Code Game Studios（CCGS）快照为材料，逐层读懂它如何把游戏开发工作组织成一套可配置的 Claude Code 工作流。
 
 ## 学习目标
 
@@ -19,7 +19,7 @@
 
 ## 课程
 
-- [22 课课程大纲（另含第 0 课导读）](课程大纲.md)
+- [23 课课程大纲（另含第 0 课导读）](课程大纲.md)
 - 已编写：[第 0 课：CCGS 是什么，又不是什么](s00_repository_map/README.md)
 - 已编写：[第 1 课：会话入口与上下文装配](s01_session_context/README.md)
 - 已编写：[第 2 课：Agent 角色与责任边界](s02_agent_roles/README.md)
@@ -42,9 +42,10 @@
 - 已编写：[第 19 课：升级与兼容](s19_upgrade_compatibility/README.md)
 - 已编写：[第 20 课：热修复与受控发布](s20_hotfix_and_release/README.md)
 - 已编写：[第 21 课：上线准备与团队发布](s21_launch_readiness_team_release/README.md)
-- 当前课程：[第 22 课：运营活动与内容覆盖审计](s22_live_ops_content_audit/README.md)
+- 已编写：[第 22 课：运营活动与内容覆盖审计](s22_live_ops_content_audit/README.md)
+- 当前课程：[第 23 课：经济系统与平衡检查](s23_economy_balance_check/README.md)
 
-目前已完成第 0 课导读及第 1–21 课；第 22 课为当前课程。
+目前已完成第 0 课导读及第 1–22 课；第 23 课为当前课程。
 
 开始实践前，按[实践环境说明](practice/README.md)创建隔离副本。课程中的交互命令在副本中运行，原始源码保持只读。
 
