@@ -1,0 +1,5 @@
+scenario,fps,frame_ms,draw_calls,memory_mb
+default_warn,55,18.2,230,1940
+local_block,52,19.1,260,2200
+off,52,19.1,260,2200
+unset_budgets,55,18.2,230,1940

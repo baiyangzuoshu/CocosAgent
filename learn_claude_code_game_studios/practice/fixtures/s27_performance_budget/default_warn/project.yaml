@@ -1,0 +1,11 @@
+project:
+  name: Performance Budget Default Warning
+  version: 1.0.0
+engine:
+  name: godot
+  language: gdscript
+performance:
+  target_framerate: 60
+  frame_budget_ms: 16.6
+  draw_call_limit: 200
+  memory_ceiling_mb: 2048
