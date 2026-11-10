@@ -51,7 +51,8 @@ OpenAI 官方资料逐课学习。主线从基础概念进入 API、模型能力
 - [第 27 课：Responses API、Agents SDK、Agents API 和 ChatKit 如何选择？](s27_choose_agent_runtime/README.md)
 - [第 28 课：一个单 Agent 由哪些配置组成？](s28_single_agent_configuration/README.md)
 - [第 29 课：Agent 的运行循环怎样从输入走到最终结果？](s29_agent_run_loop/README.md)
+- [第 30 课：Agent 怎样定义自定义工具并处理执行结果？](s30_agent_custom_tools/README.md)
 
 ## 进度
 
-当前学习至第 29 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
+当前学习至第 30 课。课程顺序会根据理解情况调整；模型名称、价格、可用性和产品状态等易变内容以授课时核对的官方资料为准。
