@@ -58,6 +58,7 @@
 - [第 40 课：AudioClip 与浏览器音频引擎](s40_audio_resource_entry/README.md)
 - [第 41 课：音频播放生命周期](s41_audio_playback_lifecycle/README.md)
 - [第 42 课：音量、循环与并发](s42_audio_concurrency_control/README.md)
+- [第 43 课：物理世界启用与帧步进](s43_physics_world/README.md)
 
 ## 代码结构
 

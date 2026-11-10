@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>第 43 课：启用物理世界与帧步进</title>
+    <style>
+      body { max-width: 720px; margin: 32px auto; padding: 0 16px; font: 16px/1.6 system-ui, sans-serif; }
+      button { margin: 0 8px 12px 0; padding: 8px 12px; }
+      pre { min-height: 220px; padding: 16px; overflow: auto; background: #101820; color: #d8f3dc; }
+    </style>
+  </head>
+  <body>
+    <h1>第 43 课：物理世界</h1>
+    <p>每次推进 0.04 秒；观察组件更新、Scheduler 中的 PhysicsManager、lateUpdate 和渲染顺序。</p>
+    <button id="enable">启用物理</button>
+    <button id="frame">推进一帧（0.04 秒）</button>
+    <pre id="log" aria-live="polite">先启用物理世界，再推进一帧。</pre>
+    <script type="module" src="./dist/src/main.js"></script>
+  </body>
+</html>
