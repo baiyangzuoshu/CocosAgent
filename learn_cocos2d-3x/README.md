@@ -42,6 +42,7 @@
 - [第 41 课：AudioEngine 播放生命周期](s41_audio_playback_lifecycle/README.md)
 - [第 42 课：AudioProfile 并发限制与资源释放](s42_audio_concurrency_control/README.md)
 - [第 43 课：Scene PhysicsWorld 帧步进](s43_physics_world/README.md)
+- [第 44 课：PhysicsBody 与 Node 接线](s44_rigidbody_collider/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 

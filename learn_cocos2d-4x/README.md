@@ -49,6 +49,7 @@
 | 第 41 课：音频播放生命周期 | [本课](s41_audio_playback_lifecycle/README.md) | [本课](../learn_2.4cocoscreator/s41_audio_playback_lifecycle/README.md) | [本课](../learn_3.8cocoscreator/s41_audio_playback_lifecycle/README.md) |
 | 第 42 课：并发、音量与资源释放 | [本课](s42_audio_concurrency_control/README.md) | [本课](../learn_2.4cocoscreator/s42_audio_concurrency_control/README.md) | [本课](../learn_3.8cocoscreator/s42_audio_concurrency_control/README.md) |
 | 第 43 课：物理世界与帧步进 | [本课](s43_physics_world/README.md) | [本课](../learn_2.4cocoscreator/s43_physics_world/README.md) | [本课](../learn_3.8cocoscreator/s43_physics_world/README.md) |
+| 第 44 课：刚体与碰撞形状接线 | [本课](s44_rigidbody_collider/README.md) | [本课](../learn_2.4cocoscreator/s44_rigidbody_collider/README.md) | [本课](../learn_3.8cocoscreator/s44_rigidbody_collider/README.md) |
 
 历史 Cocos2d-x 同主题：[1.x](../learn_cocos2d-1x/s09_texture_cache/README.md)、[2.x](../learn_cocos2d-2x/s09_texture_cache/README.md)、[3.x](../learn_cocos2d-3x/s09_texture_cache/README.md)。
 
@@ -121,3 +122,5 @@
 历史 Cocos2d-x 第 42 课：[1.x](../learn_cocos2d-1x/s42_audio_concurrency_control/README.md)、[2.x](../learn_cocos2d-2x/s42_audio_concurrency_control/README.md)、[3.x](../learn_cocos2d-3x/s42_audio_concurrency_control/README.md)。
 
 历史 Cocos2d-x 第 43 课：[1.x](../learn_cocos2d-1x/s43_physics_world/README.md)、[2.x](../learn_cocos2d-2x/s43_physics_world/README.md)、[3.x](../learn_cocos2d-3x/s43_physics_world/README.md)。
+
+历史 Cocos2d-x 第 44 课：[1.x](../learn_cocos2d-1x/s44_rigidbody_collider/README.md)、[2.x](../learn_cocos2d-2x/s44_rigidbody_collider/README.md)、[3.x](../learn_cocos2d-3x/s44_rigidbody_collider/README.md)。
