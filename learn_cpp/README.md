@@ -62,6 +62,7 @@ Creator 3.8.7 的运行时课程使用 TypeScript；本课程沿用其逐课、�
 - [第 43 课：SpriteFrameCache 与精灵帧](s43_cocos2d_sprite_frame_cache/README.md)
 - [第 44 课：Sprite 到渲染器的调用路径](s44_cocos2d_sprite_renderer_path/README.md)
 - [第 45 课：UI 组件与布局](s45_cocos2d_ui_widgets_layout/README.md)
+- [第 46 课：音频播放与资源生命周期](s46_cocos2d_audio_playback_lifecycle/README.md)
 
 ## 参考资料
 
