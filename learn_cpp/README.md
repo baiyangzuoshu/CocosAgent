@@ -51,6 +51,7 @@ Creator 3.8.7 的运行时课程使用 TypeScript；本课程沿用其逐课、�
 - [第 32 课：Application、AppDelegate 与初始化](s32_cocos2d_app_initialization/README.md)
 - [第 33 课：Director 与场景切换](s33_cocos2d_director_scene_switching/README.md)
 - [第 34 课：帧循环与 Scheduler](s34_cocos2d_frame_loop_scheduler/README.md)
+- [第 35 课：Scene、Node 与场景树](s35_cocos2d_scene_node_tree/README.md)
 
 ## 参考资料
 
