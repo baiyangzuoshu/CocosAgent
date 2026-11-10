@@ -1,6 +1,6 @@
 # Claude Code 源码学习
 
-以 `engine/claude-code-analysis-main/src/` 为源码对象，按职责追踪 Claude Code CLI 的启动、交互、模型请求、工具执行和扩展系统。课程暂定 **30 课**，编号 `s00`–`s29`。
+以 `engine/claude-code-analysis-main/src/` 为源码对象，按职责追踪 Claude Code CLI 的启动、交互、模型请求、工具执行和扩展系统。课程共 **31 课**，编号 `s00`–`s30`。
 
 ## 学习方式
 
@@ -42,6 +42,7 @@
 - [第 27 课：Agent、子任务与团队协作](s27_agent_subtasks_team_collaboration/README.md)
 - [第 28 课：MCP、插件、Skills、Hooks 与斜杠命令](s28_mcp_plugins_skills_hooks_commands/README.md)
 - [第 29 课：端到端追踪与测试接缝](s29_end_to_end_trace_test_seams/README.md)
+- [第 30 课：Print、SDK 与 Remote 会话的执行路径](s30_print_sdk_remote_execution_paths/README.md)
 
 ## 课程形式与证据边界
 
