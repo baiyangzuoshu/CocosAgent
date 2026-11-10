@@ -2,7 +2,7 @@
 
 以 Anthropic 官方网站和 Claude Platform 文档为资料入口，逐课认识 Anthropic 的公司使命、研究与安全治理，以及 Claude 产品和开发者平台。课程解释官方页面、术语和资料之间的关系；不把公司的目标陈述当作独立验证结论，也不把某一时点的模型与产品清单写成长期事实。
 
-课程暂定 **32 课**，编号 `s00`–`s31`。目前已完成第 00–31 课。
+课程暂定 **33 课**，编号 `s00`–`s32`。目前已完成第 00–32 课。
 
 ## 学习方式
 
@@ -51,6 +51,7 @@
 - [第 29 课：如何跟踪 API 版本、模型更新和弃用？](s29_versioning_migrations/README.md)
 - [第 30 课：如何把 Anthropic 官方资料整理成可复查的结论？](s30_official_source_verification/README.md)
 - [第 31 课：MCP Connector 如何把远程工具接入 Messages API？](s31_mcp_connector/README.md)
+- [第 32 课：Claude Managed Agents 如何组织配置、运行环境和会话？](s32_managed_agents_lifecycle/README.md)
 
 ## 资料范围
 
