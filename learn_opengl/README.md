@@ -26,8 +26,9 @@
 - [第 10 课：投影、裁剪空间与视口](s10_projection_clipping_viewport/README.md)
 - [第 11 课：纹理数据、上传与 UV 坐标](s11_texture_data_uv/README.md)
 - [第 12 课：Sampler 寻址与过滤](s12_sampler_wrap_filter/README.md)
+- [第 13 课：Mipmap 与纹理缩小](s13_mipmap_minification/README.md)
 
-总纲规划 30 课；目前已实现第 1–12 课，其他课程按学习进度逐课补充。
+总纲规划 30 课；目前已实现第 1–13 课，其他课程按学习进度逐课补充。
 
 ## 技术约定
 
