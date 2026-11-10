@@ -41,6 +41,7 @@
 - [第 26 课：文件读取、写入、编辑与 Diff](s26_file_read_write_edit_diff/README.md)
 - [第 27 课：Agent、子任务与团队协作](s27_agent_subtasks_team_collaboration/README.md)
 - [第 28 课：MCP、插件、Skills、Hooks 与斜杠命令](s28_mcp_plugins_skills_hooks_commands/README.md)
+- [第 29 课：端到端追踪与测试接缝](s29_end_to_end_trace_test_seams/README.md)
 
 ## 课程形式与证据边界
 
