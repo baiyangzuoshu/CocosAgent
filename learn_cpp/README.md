@@ -65,6 +65,7 @@ Creator 3.8.7 的运行时课程使用 TypeScript；本课程沿用其逐课、�
 - [第 46 课：音频播放与资源生命周期](s46_cocos2d_audio_playback_lifecycle/README.md)
 - [第 47 课：物理组件与碰撞回调](s47_cocos2d_physics_contact_callbacks/README.md)
 - [第 48 课：综合练习：启动、交互、资源与渲染](s48_cocos2d_runtime_integration/README.md)
+- [第 49 课：物理世界查询——射线、点与区域](s49_cocos2d_physics_world_queries/README.md)
 
 ## 参考资料
 
