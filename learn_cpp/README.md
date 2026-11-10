@@ -53,6 +53,7 @@ Creator 3.8.7 的运行时课程使用 TypeScript；本课程沿用其逐课、�
 - [第 34 课：帧循环与 Scheduler](s34_cocos2d_frame_loop_scheduler/README.md)
 - [第 35 课：Scene、Node 与场景树](s35_cocos2d_scene_node_tree/README.md)
 - [第 36 课：变换与坐标关系](s36_cocos2d_node_transforms_coordinates/README.md)
+- [第 37 课：Ref、引用计数与 AutoreleasePool](s37_cocos2d_ref_autorelease_pool/README.md)
 
 ## 参考资料
 
