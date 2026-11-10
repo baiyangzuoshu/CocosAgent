@@ -54,6 +54,7 @@
 - [第 37 课：Layout 水平排布](s37_layout/README.md)
 - [第 38 课：Label 文本更新](s38_label_update/README.md)
 - [第 39 课：Button 触摸与回调](s39_button_interaction/README.md)
+- [第 40 课：AudioClip 与浏览器音频引擎](s40_audio_resource_entry/README.md)
 
 ## 代码结构
 
@@ -134,7 +135,8 @@ learn_2.4cocoscreator/
 ├── s36_widget_alignment/            # Widget 对齐
 ├── s37_layout/                      # Layout 水平排布
 ├── s38_label_update/                # Label 文本更新
-└── s39_button_interaction/          # Button 触摸与回调
+├── s39_button_interaction/          # Button 触摸与回调
+└── s40_audio_resource_entry/        # AudioClip 与音频引擎入口
 ~~~
 
 ## 运行

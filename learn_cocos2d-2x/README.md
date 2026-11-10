@@ -37,6 +37,7 @@
 - [第 37 课：CocoStudio Layout 水平排布](s37_layout/README.md)
 - [第 38 课：CocoStudio Label 文本更新](s38_label_update/README.md)
 - [第 39 课：CocoStudio Button 触摸回调](s39_button_interaction/README.md)
+- [第 40 课：Emscripten 音效路径与 SDL_mixer](s40_audio_resource_entry/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 
