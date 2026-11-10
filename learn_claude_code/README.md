@@ -39,6 +39,7 @@
 - [第 24 课：工具并发与流式执行](s24_tool_concurrency_streaming/README.md)
 - [第 25 课：Bash 命令、安全校验与 Sandbox](s25_bash_safety_sandbox/README.md)
 - [第 26 课：文件读取、写入、编辑与 Diff](s26_file_read_write_edit_diff/README.md)
+- [第 27 课：Agent、子任务与团队协作](s27_agent_subtasks_team_collaboration/README.md)
 
 ## 课程形式与证据边界
 
