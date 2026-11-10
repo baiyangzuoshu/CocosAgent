@@ -28,22 +28,13 @@
 | 第 20 课：节点退出与重新挂载 | [本课](s20_node_detachment/README.md) | [本课](../learn_2.4cocoscreator/s20_node_detachment/README.md) | [本课](../learn_3.8cocoscreator/s20_node_detachment/README.md) |
 | 第 21 课：cleanup 与引用释放 | [本课](s21_cleanup_and_release/README.md) | [本课](../learn_2.4cocoscreator/s21_deferred_destruction/README.md) | [本课](../learn_3.8cocoscreator/s21_deferred_destruction/README.md) |
 | 第 22 课：节点池复用 | [本课](s22_node_pool/README.md) | [本课](../learn_2.4cocoscreator/s22_node_pool/README.md) | [本课](../learn_3.8cocoscreator/s22_node_pool/README.md) |
-| 第 23 课：节点池回调与状态重置 | [本课](s23_node_pool_callbacks/README.md) | [本课](../learn_2.4cocoscreator/s23_node_pool_callbacks/README.md) | [本课](../learn_3.8cocoscreator/s23_node_pool_callbacks/README.md) |
-| 第 24 课：对象池未命中与节点工厂兜底 | [本课](s24_pool_miss_fallback/README.md) | [本课](../learn_2.4cocoscreator/s24_pool_miss_fallback/README.md) | [本课](../learn_3.8cocoscreator/s24_pool_miss_fallback/README.md) |
-| 第 25 课：对象池容量上限与超额销毁 | [本课](s25_pool_capacity_limit/README.md) | [本课](../learn_2.4cocoscreator/s25_pool_capacity_limit/README.md) | [本课](../learn_3.8cocoscreator/s25_pool_capacity_limit/README.md) |
-| 第 26 课：对象池预热与首次复用 | [本课](s26_pool_prewarm/README.md) | [本课](../learn_2.4cocoscreator/s26_pool_prewarm/README.md) | [本课](../learn_3.8cocoscreator/s26_pool_prewarm/README.md) |
-| 第 27 课：对象池低水位补充 | [本课](s27_pool_low_water_refill/README.md) | [本课](../learn_2.4cocoscreator/s27_pool_low_water_refill/README.md) | [本课](../learn_3.8cocoscreator/s27_pool_low_water_refill/README.md) |
-| 第 28 课：对象池 clear 的销毁时机 | [本课](s28_pool_clear_timing/README.md) | [本课](../learn_2.4cocoscreator/s28_pool_clear_timing/README.md) | [本课](../learn_3.8cocoscreator/s28_pool_clear_timing/README.md) |
-| 第 29 课：外部引用与对象池清理 | [本课](s29_pool_external_owner/README.md) | [本课](../learn_2.4cocoscreator/s29_pool_external_owner/README.md) | [本课](../learn_3.8cocoscreator/s29_pool_external_owner/README.md) |
-| 第 30 课：池中节点暂停调度 | [本课](s30_pool_activity_pause/README.md) | [本课](../learn_2.4cocoscreator/s30_pool_activity_pause/README.md) | [本课](../learn_3.8cocoscreator/s30_pool_activity_pause/README.md) |
-| 第 31 课：回收与清理的区别 | [本课](s31_pool_cleanup_policy/README.md) | [本课](../learn_2.4cocoscreator/s31_pool_cleanup_policy/README.md) | [本课](../learn_3.8cocoscreator/s31_pool_cleanup_policy/README.md) |
-| 第 32 课：节点池的后进先出顺序 | [本课](s32_pool_lifo_order/README.md) | [本课](../learn_2.4cocoscreator/s32_pool_lifo_order/README.md) | [本课](../learn_3.8cocoscreator/s32_pool_lifo_order/README.md) |
-| 第 33 课：防止节点重复入池 | [本课](s33_pool_duplicate_put/README.md) | [本课](../learn_2.4cocoscreator/s33_pool_duplicate_put/README.md) | [本课](../learn_3.8cocoscreator/s33_pool_duplicate_put/README.md) |
-| 第 34 课：同一节点跨池共享的风险 | [本课](s34_pool_cross_pool_identity/README.md) | [本课](../learn_2.4cocoscreator/s34_pool_cross_pool_identity/README.md) | [本课](../learn_3.8cocoscreator/s34_pool_cross_pool_identity/README.md) |
-| 第 35 课：限制节点同时归属多个池 | [本课](s35_pool_single_owner/README.md) | [本课](../learn_2.4cocoscreator/s35_pool_single_owner/README.md) | [本课](../learn_3.8cocoscreator/s35_pool_single_owner/README.md) |
-| 第 36 课：对象池 dispose 后禁止继续使用 | [本课](s36_pool_dispose/README.md) | [本课](../learn_2.4cocoscreator/s36_pool_dispose/README.md) | [本课](../learn_3.8cocoscreator/s36_pool_dispose/README.md) |
-| 第 37 课：区分空池与已关闭池 | [本课](s37_pool_state_query/README.md) | [本课](../learn_2.4cocoscreator/s37_pool_state_query/README.md) | [本课](../learn_3.8cocoscreator/s37_pool_state_query/README.md) |
-| 第 38 课：重复 dispose 保持同一终态 | [本课](s38_pool_dispose_idempotence/README.md) | [本课](../learn_2.4cocoscreator/s38_pool_dispose_idempotence/README.md) | [本课](../learn_3.8cocoscreator/s38_pool_dispose_idempotence/README.md) |
+| 第 23 课：对象池复用与未命中兜底 | [本课](s23_pool_reuse_flow/README.md) | [本课](../learn_2.4cocoscreator/s23_pool_reuse_flow/README.md) | [本课](../learn_3.8cocoscreator/s23_pool_reuse_flow/README.md) |
+| 第 24 课：对象池容量与预热补充 | [本课](s24_pool_capacity_strategy/README.md) | [本课](../learn_2.4cocoscreator/s24_pool_capacity_strategy/README.md) | [本课](../learn_3.8cocoscreator/s24_pool_capacity_strategy/README.md) |
+| 第 25 课：清池与节点存活 | [本课](s25_pool_clear_lifetime/README.md) | [本课](../learn_2.4cocoscreator/s25_pool_clear_lifetime/README.md) | [本课](../learn_3.8cocoscreator/s25_pool_clear_lifetime/README.md) |
+| 第 26 课：对象池中的节点运行状态 | [本课](s26_pool_runtime_lifecycle/README.md) | [本课](../learn_2.4cocoscreator/s26_pool_runtime_lifecycle/README.md) | [本课](../learn_3.8cocoscreator/s26_pool_runtime_lifecycle/README.md) |
+| 第 27 课：取出顺序与重复入池保护 | [本课](s27_pool_order_and_duplicates/README.md) | [本课](../learn_2.4cocoscreator/s27_pool_order_and_duplicates/README.md) | [本课](../learn_3.8cocoscreator/s27_pool_order_and_duplicates/README.md) |
+| 第 28 课：节点池所有权与接收结果 | [本课](s28_pool_ownership/README.md) | [本课](../learn_2.4cocoscreator/s28_pool_ownership/README.md) | [本课](../learn_3.8cocoscreator/s28_pool_ownership/README.md) |
+| 第 29 课：对象池关闭与终态 | [本课](s29_pool_disposal/README.md) | [本课](../learn_2.4cocoscreator/s29_pool_disposal/README.md) | [本课](../learn_3.8cocoscreator/s29_pool_disposal/README.md) |
 
 历史 Cocos2d-x 同主题：[1.x](../learn_cocos2d-1x/s09_texture_cache/README.md)、[2.x](../learn_cocos2d-2x/s09_texture_cache/README.md)、[3.x](../learn_cocos2d-3x/s09_texture_cache/README.md)。
 
@@ -75,34 +66,16 @@
 
 历史 Cocos2d-x 第 22 课：[1.x](../learn_cocos2d-1x/s22_node_pool/README.md)、[2.x](../learn_cocos2d-2x/s22_node_pool/README.md)、[3.x](../learn_cocos2d-3x/s22_node_pool/README.md)。
 
-历史 Cocos2d-x 第 23 课：[1.x](../learn_cocos2d-1x/s23_node_pool_callbacks/README.md)、[2.x](../learn_cocos2d-2x/s23_node_pool_callbacks/README.md)、[3.x](../learn_cocos2d-3x/s23_node_pool_callbacks/README.md)。
+历史 Cocos2d-x 第 23 课：[1.x](../learn_cocos2d-1x/s23_pool_reuse_flow/README.md)、[2.x](../learn_cocos2d-2x/s23_pool_reuse_flow/README.md)、[3.x](../learn_cocos2d-3x/s23_pool_reuse_flow/README.md)。
 
-历史 Cocos2d-x 第 24 课：[1.x](../learn_cocos2d-1x/s24_pool_miss_fallback/README.md)、[2.x](../learn_cocos2d-2x/s24_pool_miss_fallback/README.md)、[3.x](../learn_cocos2d-3x/s24_pool_miss_fallback/README.md)。
+历史 Cocos2d-x 第 24 课：[1.x](../learn_cocos2d-1x/s24_pool_capacity_strategy/README.md)、[2.x](../learn_cocos2d-2x/s24_pool_capacity_strategy/README.md)、[3.x](../learn_cocos2d-3x/s24_pool_capacity_strategy/README.md)。
 
-历史 Cocos2d-x 第 25 课：[1.x](../learn_cocos2d-1x/s25_pool_capacity_limit/README.md)、[2.x](../learn_cocos2d-2x/s25_pool_capacity_limit/README.md)、[3.x](../learn_cocos2d-3x/s25_pool_capacity_limit/README.md)。
+历史 Cocos2d-x 第 25 课：[1.x](../learn_cocos2d-1x/s25_pool_clear_lifetime/README.md)、[2.x](../learn_cocos2d-2x/s25_pool_clear_lifetime/README.md)、[3.x](../learn_cocos2d-3x/s25_pool_clear_lifetime/README.md)。
 
-历史 Cocos2d-x 第 26 课：[1.x](../learn_cocos2d-1x/s26_pool_prewarm/README.md)、[2.x](../learn_cocos2d-2x/s26_pool_prewarm/README.md)、[3.x](../learn_cocos2d-3x/s26_pool_prewarm/README.md)。
+历史 Cocos2d-x 第 26 课：[1.x](../learn_cocos2d-1x/s26_pool_runtime_lifecycle/README.md)、[2.x](../learn_cocos2d-2x/s26_pool_runtime_lifecycle/README.md)、[3.x](../learn_cocos2d-3x/s26_pool_runtime_lifecycle/README.md)。
 
-历史 Cocos2d-x 第 27 课：[1.x](../learn_cocos2d-1x/s27_pool_low_water_refill/README.md)、[2.x](../learn_cocos2d-2x/s27_pool_low_water_refill/README.md)、[3.x](../learn_cocos2d-3x/s27_pool_low_water_refill/README.md)。
+历史 Cocos2d-x 第 27 课：[1.x](../learn_cocos2d-1x/s27_pool_order_and_duplicates/README.md)、[2.x](../learn_cocos2d-2x/s27_pool_order_and_duplicates/README.md)、[3.x](../learn_cocos2d-3x/s27_pool_order_and_duplicates/README.md)。
 
-历史 Cocos2d-x 第 28 课：[1.x](../learn_cocos2d-1x/s28_pool_clear_timing/README.md)、[2.x](../learn_cocos2d-2x/s28_pool_clear_timing/README.md)、[3.x](../learn_cocos2d-3x/s28_pool_clear_timing/README.md)。
+历史 Cocos2d-x 第 28 课：[1.x](../learn_cocos2d-1x/s28_pool_ownership/README.md)、[2.x](../learn_cocos2d-2x/s28_pool_ownership/README.md)、[3.x](../learn_cocos2d-3x/s28_pool_ownership/README.md)。
 
-历史 Cocos2d-x 第 29 课：[1.x](../learn_cocos2d-1x/s29_pool_external_owner/README.md)、[2.x](../learn_cocos2d-2x/s29_pool_external_owner/README.md)、[3.x](../learn_cocos2d-3x/s29_pool_external_owner/README.md)。
-
-历史 Cocos2d-x 第 30 课：[1.x](../learn_cocos2d-1x/s30_pool_activity_pause/README.md)、[2.x](../learn_cocos2d-2x/s30_pool_activity_pause/README.md)、[3.x](../learn_cocos2d-3x/s30_pool_activity_pause/README.md)。
-
-历史 Cocos2d-x 第 31 课：[1.x](../learn_cocos2d-1x/s31_pool_cleanup_policy/README.md)、[2.x](../learn_cocos2d-2x/s31_pool_cleanup_policy/README.md)、[3.x](../learn_cocos2d-3x/s31_pool_cleanup_policy/README.md)。
-
-历史 Cocos2d-x 第 32 课：[1.x](../learn_cocos2d-1x/s32_pool_lifo_order/README.md)、[2.x](../learn_cocos2d-2x/s32_pool_lifo_order/README.md)、[3.x](../learn_cocos2d-3x/s32_pool_lifo_order/README.md)。
-
-历史 Cocos2d-x 第 33 课：[1.x](../learn_cocos2d-1x/s33_pool_duplicate_put/README.md)、[2.x](../learn_cocos2d-2x/s33_pool_duplicate_put/README.md)、[3.x](../learn_cocos2d-3x/s33_pool_duplicate_put/README.md)。
-
-历史 Cocos2d-x 第 34 课：[1.x](../learn_cocos2d-1x/s34_pool_cross_pool_identity/README.md)、[2.x](../learn_cocos2d-2x/s34_pool_cross_pool_identity/README.md)、[3.x](../learn_cocos2d-3x/s34_pool_cross_pool_identity/README.md)。
-
-历史 Cocos2d-x 第 35 课：[1.x](../learn_cocos2d-1x/s35_pool_single_owner/README.md)、[2.x](../learn_cocos2d-2x/s35_pool_single_owner/README.md)、[3.x](../learn_cocos2d-3x/s35_pool_single_owner/README.md)。
-
-历史 Cocos2d-x 第 36 课：[1.x](../learn_cocos2d-1x/s36_pool_dispose/README.md)、[2.x](../learn_cocos2d-2x/s36_pool_dispose/README.md)、[3.x](../learn_cocos2d-3x/s36_pool_dispose/README.md)。
-
-历史 Cocos2d-x 第 37 课：[1.x](../learn_cocos2d-1x/s37_pool_state_query/README.md)、[2.x](../learn_cocos2d-2x/s37_pool_state_query/README.md)、[3.x](../learn_cocos2d-3x/s37_pool_state_query/README.md)。
-
-历史 Cocos2d-x 第 38 课：[1.x](../learn_cocos2d-1x/s38_pool_dispose_idempotence/README.md)、[2.x](../learn_cocos2d-2x/s38_pool_dispose_idempotence/README.md)、[3.x](../learn_cocos2d-3x/s38_pool_dispose_idempotence/README.md)。
+历史 Cocos2d-x 第 29 课：[1.x](../learn_cocos2d-1x/s29_pool_disposal/README.md)、[2.x](../learn_cocos2d-2x/s29_pool_disposal/README.md)、[3.x](../learn_cocos2d-3x/s29_pool_disposal/README.md)。

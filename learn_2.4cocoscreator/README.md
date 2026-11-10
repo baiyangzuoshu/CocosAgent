@@ -38,22 +38,13 @@
 - [第 20 课：节点移除与重新挂载](s20_node_detachment/README.md)
 - [第 21 课：延迟销毁与 onDestroy](s21_deferred_destruction/README.md)
 - [第 22 课：NodePool 节点复用](s22_node_pool/README.md)
-- [第 23 课：NodePool 回收与复用回调](s23_node_pool_callbacks/README.md)
-- [第 24 课：对象池未命中与 Prefab 兜底](s24_pool_miss_fallback/README.md)
-- [第 25 课：对象池容量上限与超额销毁](s25_pool_capacity_limit/README.md)
-- [第 26 课：对象池预热与首次复用](s26_pool_prewarm/README.md)
-- [第 27 课：对象池低水位补充](s27_pool_low_water_refill/README.md)
-- [第 28 课：对象池 clear 的销毁时机](s28_pool_clear_timing/README.md)
-- [第 29 课：外部引用与对象池清理](s29_pool_external_owner/README.md)
-- [第 30 课：池中节点暂停调度](s30_pool_activity_pause/README.md)
-- [第 31 课：回收与清理的区别](s31_pool_cleanup_policy/README.md)
-- [第 32 课：节点池的后进先出顺序](s32_pool_lifo_order/README.md)
-- [第 33 课：防止节点重复入池](s33_pool_duplicate_put/README.md)
-- [第 34 课：同一节点跨池共享的风险](s34_pool_cross_pool_identity/README.md)
-- [第 35 课：限制节点同时归属多个池](s35_pool_single_owner/README.md)
-- [第 36 课：对象池 dispose 后禁止继续使用](s36_pool_dispose/README.md)
-- [第 37 课：区分空池与已关闭池](s37_pool_state_query/README.md)
-- [第 38 课：重复 dispose 保持同一终态](s38_pool_dispose_idempotence/README.md)
+- [第 23 课：对象池复用与未命中兜底](s23_pool_reuse_flow/README.md)
+- [第 24 课：对象池容量与预热补充](s24_pool_capacity_strategy/README.md)
+- [第 25 课：清池与节点存活](s25_pool_clear_lifetime/README.md)
+- [第 26 课：对象池中的节点运行状态](s26_pool_runtime_lifecycle/README.md)
+- [第 27 课：取出顺序与重复入池保护](s27_pool_order_and_duplicates/README.md)
+- [第 28 课：节点池所有权与接收结果](s28_pool_ownership/README.md)
+- [第 29 课：对象池关闭与终态](s29_pool_disposal/README.md)
 
 ## 代码结构
 
@@ -119,22 +110,13 @@ learn_2.4cocoscreator/
 ├── s20_node_detachment/        # 节点移除与重新挂载
 ├── s21_deferred_destruction/ # 延迟销毁与 onDestroy
 ├── s22_node_pool/           # NodePool 节点复用
-├── s23_node_pool_callbacks/ # NodePool 回收与复用回调
-├── s24_pool_miss_fallback/  # 对象池未命中与 Prefab 兜底
-├── s25_pool_capacity_limit/ # 对象池容量上限与超额销毁
-├── s26_pool_prewarm/       # 对象池预热与首次复用
-├── s27_pool_low_water_refill/ # 对象池低水位补充
-├── s28_pool_clear_timing/  # 对象池 clear 的销毁时机
-├── s29_pool_external_owner/ # 外部引用与对象池清理
-├── s30_pool_activity_pause/ # 池中节点暂停调度
-├── s31_pool_cleanup_policy/ # 回收与清理的区别
-├── s32_pool_lifo_order/ # 节点池的后进先出顺序
-├── s33_pool_duplicate_put/ # 防止节点重复入池
-├── s34_pool_cross_pool_identity/ # 同一节点跨池共享的风险
-├── s35_pool_single_owner/ # 限制节点同时归属多个池
-├── s36_pool_dispose/ # 对象池 dispose 后禁止继续使用
-├── s37_pool_state_query/ # 区分空池与已关闭池
-└── s38_pool_dispose_idempotence/ # 重复 dispose 保持同一终态
+├── s23_pool_reuse_flow/ # 对象池复用与未命中兜底
+├── s24_pool_capacity_strategy/ # 对象池容量与预热补充
+├── s25_pool_clear_lifetime/ # 清池与节点存活
+├── s26_pool_runtime_lifecycle/ # 对象池中的节点运行状态
+├── s27_pool_order_and_duplicates/ # 取出顺序与重复入池保护
+├── s28_pool_ownership/ # 节点池所有权与接收结果
+└── s29_pool_disposal/ # 对象池关闭与终态
 ~~~
 
 ## 运行
