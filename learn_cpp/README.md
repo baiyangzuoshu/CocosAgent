@@ -47,6 +47,7 @@ Creator 3.8.7 的运行时课程使用 TypeScript；本课程沿用其逐课、�
 - [第 28 课：编译、链接与 ODR 综合练习](s28_cpp_build_link_odr/README.md)
 - [第 29 课：Cocos2d-x 源码版本与目录地图](s29_cocos2d_source_version_map/README.md)
 - [第 30 课：工程结构、构建目标与依赖](s30_cocos2d_build_targets_dependencies/README.md)
+- [第 31 课：平台入口与应用创建](s31_cocos2d_platform_entry/README.md)
 
 ## 参考资料
 
