@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>learn_3.8cocoscreator · 第 33 课：动作组合</title>
+    <style>
+      body { font: 16px sans-serif; background: #171a24; color: #eee; }
+      main { max-width: 720px; margin: 2rem auto; }
+      .track { width: 100%; height: 18px; background: #303648; margin: 1rem 0; }
+      #progress-bar { width: 0; height: 100%; background: #58d6a1; transition: width 80ms linear; }
+      li { margin: .5rem 0; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>第 33 课：动作组合</h1>
+      <p>Spawn 同时运行两条 Sequence；外层 Sequence 等 Spawn 完成后再执行回调。</p>
+      <p>总进度：<span id="elapsed">0.00</span></p>
+      <div class="track"><div id="progress-bar"></div></div>
+      <ul>
+        <li>短分支：<span id="short-state">等待</span></li>
+        <li>长分支：<span id="long-state">等待</span></li>
+        <li>并行组之后：<span id="group-state">等待</span></li>
+      </ul>
+      <ol id="events"></ol>
+    </main>
+    <script type="module" src="./dist/src/main.js"></script>
+  </body>
+</html>
