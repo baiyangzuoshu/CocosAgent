@@ -2,7 +2,7 @@
 
 以 Anthropic 官方网站和 Claude Platform 文档为资料入口，逐课认识 Anthropic 的公司使命、研究与安全治理，以及 Claude 产品和开发者平台。课程解释官方页面、术语和资料之间的关系；不把公司的目标陈述当作独立验证结论，也不把某一时点的模型与产品清单写成长期事实。
 
-课程暂定 **43 课**，编号 `s00`–`s42`。目前已完成第 00–42 课。
+课程暂定 **44 课**，编号 `s00`–`s43`。目前已完成第 00–43 课。
 
 ## 学习方式
 
@@ -62,6 +62,7 @@
 - [第 40 课：Managed Agents 如何把 MCP Server 注册为可控工具？](s40_managed_agents_mcp_connector/README.md)
 - [第 41 课：Managed Agents 如何限制 Web Search 和 Web Fetch 的域名？](s41_managed_agents_web_restrictions/README.md)
 - [第 42 课：Managed Agents 如何挂载 GitHub 仓库并协作改动？](s42_managed_agents_github_access/README.md)
+- [第 43 课：Managed Agents 如何把文件装入 Session 并取回输出？](s43_managed_agents_files/README.md)
 
 ## 资料范围
 
