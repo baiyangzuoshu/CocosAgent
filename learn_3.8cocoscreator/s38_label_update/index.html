@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>第 38 课：Label 文本更新</title>
+  <style>
+    * { box-sizing: border-box; } body { margin: 0; padding: 24px; color: #eef2ff; background: #171a24; font: 15px/1.5 sans-serif; }
+    main { max-width: 680px; margin: auto; } .panel { margin: 16px 0; padding: 16px; border-radius: 8px; background: #222838; }
+    #label { display: inline-block; padding: 10px; color: #b9e8ff; border: 1px solid #58d6a1; font: 24px monospace; }
+    code { color: #b9e8ff; } button { padding: 8px 14px; } #output { white-space: pre-wrap; }
+  </style>
+</head>
+<body><main>
+  <h1>第 38 课：Label 文本如何进入绘制</h1>
+  <p>点击按钮，观察文本先标记渲染数据，再由 RenderFlow 交给 assembler 更新。</p>
+  <section class="panel"><div id="label"></div><p><button id="change">改成 Score 10</button></p></section>
+  <section class="panel"><strong>更新链</strong><p id="pipeline">string setter → render data dirty → render-flow → assembler</p><p id="output"></p></section>
+  <p>固定字宽只用于示意尺寸；页面使用 DOM 表示结果，不是 Creator 引擎渲染。</p>
+  <script type="module" src="./dist/src/main.js"></script>
+</main></body></html>

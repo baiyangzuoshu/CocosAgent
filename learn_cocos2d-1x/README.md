@@ -35,6 +35,7 @@
 - [第 35 课：窗口点坐标与 Layer 根节点](s35_canvas_coordinates/README.md)
 - [第 36 课：CCNode 锚点与应用层对齐](s36_widget_alignment/README.md)
 - [第 37 课：CCMenu 水平排列菜单项](s37_layout/README.md)
+- [第 38 课：CCLabelTTF 文本更新](s38_label_update/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 
