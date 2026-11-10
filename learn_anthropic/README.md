@@ -2,7 +2,7 @@
 
 以 Anthropic 官方网站和 Claude Platform 文档为资料入口，逐课认识 Anthropic 的公司使命、研究与安全治理，以及 Claude 产品和开发者平台。课程解释官方页面、术语和资料之间的关系；不把公司的目标陈述当作独立验证结论，也不把某一时点的模型与产品清单写成长期事实。
 
-课程暂定 **30 课**，编号 `s00`–`s29`。目前已完成第 00–25 课；其余课程按主题逐步展开。
+课程暂定 **30 课**，编号 `s00`–`s29`。目前已完成第 00–26 课；其余课程按主题逐步展开。
 
 ## 学习方式
 
@@ -45,6 +45,7 @@
 - [第 23 课：Streaming、批处理和 Token 计数分别解决什么问题？](s23_streaming_batches_tokens/README.md)
 - [第 24 课：API 错误、重试和速率限制怎样处理？](s24_api_errors_rate_limits/README.md)
 - [第 25 课：如何选择模型和部署平台？](s25_model_and_platform_selection/README.md)
+- [第 26 课：如何建立 Claude 应用的质量评估？](s26_claude_app_evaluation/README.md)
 
 ## 资料范围
 
