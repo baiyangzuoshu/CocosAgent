@@ -17,8 +17,9 @@
 - [第 1 课：画出一个三角形](s01_triangle/README.md)
 - [第 2 课：编译与链接着色器](s02_shader_diagnostics/README.md)
 - [第 3 课：VAO 与顶点属性](s03_vao_attributes/README.md)
+- [第 4 课：VBO 布局与数据上传](s04_vbo_layout/README.md)
 
-总纲规划 30 课；目前已实现第 1–3 课，其他课程按学习进度逐课补充。
+总纲规划 30 课；目前已实现第 1–4 课，其他课程按学习进度逐课补充。
 
 ## 技术约定
 
