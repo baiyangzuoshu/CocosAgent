@@ -39,6 +39,7 @@
 | 第 32 课：即时回调与延迟动作 | [本课](s32_instant_and_delay_actions/README.md) | [本课](../learn_2.4cocoscreator/s32_instant_and_delay_actions/README.md) | [本课](../learn_3.8cocoscreator/s32_instant_and_delay_actions/README.md) |
 | 第 33 课：串行与并行动作 | [本课](s33_action_composition/README.md) | [本课](../learn_2.4cocoscreator/s33_action_composition/README.md) | [本课](../learn_3.8cocoscreator/s33_action_composition/README.md) |
 | 第 34 课：缓动、重复与反向时间 | [本课](s34_action_modifiers/README.md) | [本课](../learn_2.4cocoscreator/s34_action_modifiers/README.md) | [本课](../learn_3.8cocoscreator/s34_action_modifiers/README.md) |
+| 第 35 课：Canvas 与屏幕坐标 | [本课](s35_canvas_coordinates/README.md) | [本课](../learn_2.4cocoscreator/s35_canvas_coordinates/README.md) | [本课](../learn_3.8cocoscreator/s35_canvas_coordinates/README.md) |
 
 历史 Cocos2d-x 同主题：[1.x](../learn_cocos2d-1x/s09_texture_cache/README.md)、[2.x](../learn_cocos2d-2x/s09_texture_cache/README.md)、[3.x](../learn_cocos2d-3x/s09_texture_cache/README.md)。
 
@@ -91,3 +92,5 @@
 历史 Cocos2d-x 第 33 课：[1.x](../learn_cocos2d-1x/s33_action_composition/README.md)、[2.x](../learn_cocos2d-2x/s33_action_composition/README.md)、[3.x](../learn_cocos2d-3x/s33_action_composition/README.md)。
 
 历史 Cocos2d-x 第 34 课：[1.x](../learn_cocos2d-1x/s34_action_modifiers/README.md)、[2.x](../learn_cocos2d-2x/s34_action_modifiers/README.md)、[3.x](../learn_cocos2d-3x/s34_action_modifiers/README.md)。
+
+历史 Cocos2d-x 第 35 课：[1.x](../learn_cocos2d-1x/s35_canvas_coordinates/README.md)、[2.x](../learn_cocos2d-2x/s35_canvas_coordinates/README.md)、[3.x](../learn_cocos2d-3x/s35_canvas_coordinates/README.md)。

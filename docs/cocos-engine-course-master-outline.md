@@ -8,8 +8,8 @@
 
 ## 已完成课程
 
-- Creator 2.4.15、Creator 3.8.7：第 0 课元数据分析、第 1–29 课，以及第 31–34 课。
-- Cocos2d-x 1.x、2.x、3.x、4.x：第 1–29 课，以及第 31–34 课。
+- Creator 2.4.15、Creator 3.8.7：第 0 课元数据分析、第 1–29 课，以及第 31–35 课。
+- Cocos2d-x 1.x、2.x、3.x、4.x：第 1–29 课，以及第 31–35 课。
 - 第 23–29 课已把对象池的一组细碎知识合并为七个递进主题；六个版本仍各有独立代码。
 
 ## 后续阶段
@@ -19,7 +19,7 @@
 | 阶段 | 规划课次 | 范围 | 阶段结果 |
 | --- | --- | --- | --- |
 | 七：Action / Tween | 30–34（第 31–34 课已完成） | 时间推进、间隔与即时动作、组合、缓动和控制 | 用动作或 Tween 驱动节点属性，并能解释它如何进入每帧更新 |
-| 八：UI 结构与交互 | 35–39 | Canvas、Widget、Layout、Label、Button | 建立可适配屏幕、可排布、可显示文本并可交互的基础 UI |
+| 八：UI 结构与交互 | 35–39（第 35 课已完成） | Canvas、Widget、Layout、Label、Button | 建立可适配屏幕、可排布、可显示文本并可交互的基础 UI |
 | 九：音频 | 40–42 | 资源、播放生命周期、并发与音量控制 | 加载并播放音效或背景音，观察播放、停止和资源生命周期 |
 | 十：2D 物理 | 43–46 | 物理世界、刚体与碰撞体、接触、查询与调试 | 让节点参与 2D 模拟并处理碰撞或查询结果 |
 | 十一：2D 粒子 | 47–49 | 粒子系统创建、发射与模拟、渲染和结束 | 从配置生成粒子，观察其更新、绘制与回收 |
@@ -37,9 +37,9 @@ Cocos2d-x 1.x–4.x 的第 6 课已实现 ActionManager、基础间隔动作和 
 
 源码入口：Creator 2.4.15 `engine/2.4.15engine/cocos2d/actions/CCActionManager.js`、`CCActionInterval.js`、`tween.js`；Creator 3.8.7 `engine/3.8.7engine/cocos/tween/`；Cocos2d-x 各版本的 `actions/` 或 `cocos/2d/`。
 
-### 八：UI 结构与交互（第 35–39 课）
+### 八：UI 结构与交互（第 35–39 课，第 35 课已完成）
 
-1. **Canvas 与屏幕坐标**：设计分辨率、视图和 UI 根节点如何接起来。
+1. **Canvas 与屏幕坐标（第 35 课已完成）**：设计分辨率、视图和 UI 根节点如何接起来。六个版本分别维护独立示例：[Creator 2.4.15](../learn_2.4cocoscreator/s35_canvas_coordinates/README.md)、[Creator 3.8.7](../learn_3.8cocoscreator/s35_canvas_coordinates/README.md)、[Cocos2d-x 1.x](../learn_cocos2d-1x/s35_canvas_coordinates/README.md)、[2.x](../learn_cocos2d-2x/s35_canvas_coordinates/README.md)、[3.x](../learn_cocos2d-3x/s35_canvas_coordinates/README.md)、[4.x](../learn_cocos2d-4x/s35_canvas_coordinates/README.md)。
 2. **Widget 对齐**：锚点、父节点尺寸和窗口变化如何影响位置。
 3. **Layout 排布**：子节点如何排列，尺寸何时重新计算。
 4. **Label 显示文本**：文本属性如何进入布局与绘制。

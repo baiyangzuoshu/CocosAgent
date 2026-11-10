@@ -49,6 +49,7 @@
 - [第 32 课：即时回调与延迟动作](s32_instant_and_delay_actions/README.md)
 - [第 33 课：串行与并行动作](s33_action_composition/README.md)
 - [第 34 课：缓动、重复与反向时间](s34_action_modifiers/README.md)
+- [第 35 课：Canvas 与屏幕坐标](s35_canvas_coordinates/README.md)
 
 ## 代码结构
 
@@ -124,7 +125,8 @@ learn_2.4cocoscreator/
 ├── s31_absolute_position_interpolation/ # 时间进度与绝对目标插值
 ├── s32_instant_and_delay_actions/   # 即时回调与延迟动作
 ├── s33_action_composition/          # 串行与并行动作
-└── s34_action_modifiers/            # 缓动、重复与反向时间
+├── s34_action_modifiers/            # 缓动、重复与反向时间
+└── s35_canvas_coordinates/          # Canvas 与屏幕坐标
 ~~~
 
 ## 运行

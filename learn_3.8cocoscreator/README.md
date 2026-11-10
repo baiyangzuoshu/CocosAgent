@@ -48,6 +48,7 @@
 - [第 32 课：即时回调与延迟动作](s32_instant_and_delay_actions/README.md)
 - [第 33 课：串行与并行动作](s33_action_composition/README.md)
 - [第 34 课：缓动、重复与反向时间](s34_action_modifiers/README.md)
+- [第 35 课：Canvas 与屏幕坐标](s35_canvas_coordinates/README.md)
 
 ## 目录结构
 
@@ -89,7 +90,8 @@ learn_3.8cocoscreator/
 ├── s31_absolute_position_interpolation/ # 时间进度与绝对目标插值
 ├── s32_instant_and_delay_actions/   # 即时回调与延迟动作
 ├── s33_action_composition/          # 串行与并行动作
-└── s34_action_modifiers/            # 缓动、重复与反向时间
+├── s34_action_modifiers/            # 缓动、重复与反向时间
+└── s35_canvas_coordinates/          # Canvas 与屏幕坐标
 ~~~
 
 浏览器运行课进入各自目录，按 README 运行 `deno task check`、`deno task build` 和 `deno task serve`。第 0 课的元数据分析使用 `deno task check` 和 `deno task analyze`。

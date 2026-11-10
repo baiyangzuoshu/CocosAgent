@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>第 35 课：Canvas 与屏幕坐标</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px; font: 15px/1.5 sans-serif; color: #eef2ff; background: #171a24; }
+    main { width: min(700px, 100%); margin: auto; }
+    #viewport { position: relative; width: 640px; max-width: 100%; aspect-ratio: 16 / 9; margin: 24px auto; overflow: hidden; background: #292f40; border: 1px solid #74809c; }
+    #design-frame { position: absolute; left: 50%; top: 50%; width: 960px; height: 640px; transform-origin: center; background-color: #1e4961; background-image: linear-gradient(#ffffff14 1px, transparent 1px), linear-gradient(90deg, #ffffff14 1px, transparent 1px); background-size: 80px 80px; border: 2px solid #58d6a1; }
+    #center { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; border-radius: 50%; background: #ffbd59; transform: translate(-50%, -50%); }
+    #origin { position: absolute; left: 0; bottom: 0; padding: 3px 6px; background: #10141d; color: #fff; }
+    #center-label { position: absolute; left: 50%; top: 50%; transform: translate(12px, -22px); white-space: nowrap; }
+    code { color: #b9e8ff; }
+    .metrics { padding: 12px; background: #222838; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>第 35 课：Canvas 与屏幕坐标</h1>
+    <p>设计分辨率 960×640，窗口 1280×720，使用 SHOW_ALL。绿色框是设计坐标区域，灰色两侧是留边。</p>
+    <div id="viewport"><div id="design-frame"><span id="origin">设计坐标原点 (0, 0)</span><span id="center"></span><span id="center-label">Canvas 根节点中心</span></div></div>
+    <div class="metrics">
+      <div>适配缩放：<code id="scale"></code></div>
+      <div>视口矩形：<code id="viewport-rect"></code></div>
+      <div>Canvas 设计尺寸 / 位置：<code id="canvas"></code></div>
+      <div>设计中心映射到窗口：<code id="screen-center"></code></div>
+    </div>
+    <p>本课只实现坐标适配与 UI 根节点关系；CSS 框用于观察留边，不是引擎渲染器。</p>
+  </main>
+  <script type="module" src="./dist/src/main.js"></script>
+</body>
+</html>
