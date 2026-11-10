@@ -36,6 +36,7 @@
 - [第 36 课：ui::Widget 百分比定位](s36_widget_alignment/README.md)
 - [第 37 课：ui::Layout 水平排布](s37_layout/README.md)
 - [第 38 课：ui::Text 与 Label 文本更新](s38_label_update/README.md)
+- [第 39 课：ui::Button 命中与回调](s39_button_interaction/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 

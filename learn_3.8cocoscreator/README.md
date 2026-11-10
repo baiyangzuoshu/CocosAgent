@@ -52,6 +52,7 @@
 - [第 36 课：Widget 对齐](s36_widget_alignment/README.md)
 - [第 37 课：Layout 水平排布](s37_layout/README.md)
 - [第 38 课：Label 文本更新](s38_label_update/README.md)
+- [第 39 课：Button 触摸与回调](s39_button_interaction/README.md)
 
 ## 目录结构
 
@@ -97,7 +98,8 @@ learn_3.8cocoscreator/
 ├── s35_canvas_coordinates/          # Canvas 与屏幕坐标
 ├── s36_widget_alignment/            # Widget 对齐
 ├── s37_layout/                      # Layout 水平排布
-└── s38_label_update/                # Label 文本更新
+├── s38_label_update/                # Label 文本更新
+└── s39_button_interaction/          # Button 触摸与回调
 ~~~
 
 浏览器运行课进入各自目录，按 README 运行 `deno task check`、`deno task build` 和 `deno task serve`。第 0 课的元数据分析使用 `deno task check` 和 `deno task analyze`。

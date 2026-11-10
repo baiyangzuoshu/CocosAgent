@@ -43,6 +43,7 @@
 | 第 36 课：Widget 对齐 | [本课](s36_widget_alignment/README.md) | [本课](../learn_2.4cocoscreator/s36_widget_alignment/README.md) | [本课](../learn_3.8cocoscreator/s36_widget_alignment/README.md) |
 | 第 37 课：Layout 水平排布 | [本课](s37_layout/README.md) | [本课](../learn_2.4cocoscreator/s37_layout/README.md) | [本课](../learn_3.8cocoscreator/s37_layout/README.md) |
 | 第 38 课：Label 文本更新 | [本课](s38_label_update/README.md) | [本课](../learn_2.4cocoscreator/s38_label_update/README.md) | [本课](../learn_3.8cocoscreator/s38_label_update/README.md) |
+| 第 39 课：Button 交互 | [本课](s39_button_interaction/README.md) | [本课](../learn_2.4cocoscreator/s39_button_interaction/README.md) | [本课](../learn_3.8cocoscreator/s39_button_interaction/README.md) |
 
 历史 Cocos2d-x 同主题：[1.x](../learn_cocos2d-1x/s09_texture_cache/README.md)、[2.x](../learn_cocos2d-2x/s09_texture_cache/README.md)、[3.x](../learn_cocos2d-3x/s09_texture_cache/README.md)。
 
@@ -103,3 +104,5 @@
 历史 Cocos2d-x 第 37 课：[1.x](../learn_cocos2d-1x/s37_layout/README.md)、[2.x](../learn_cocos2d-2x/s37_layout/README.md)、[3.x](../learn_cocos2d-3x/s37_layout/README.md)。
 
 历史 Cocos2d-x 第 38 课：[1.x](../learn_cocos2d-1x/s38_label_update/README.md)、[2.x](../learn_cocos2d-2x/s38_label_update/README.md)、[3.x](../learn_cocos2d-3x/s38_label_update/README.md)。
+
+历史 Cocos2d-x 第 39 课：[1.x](../learn_cocos2d-1x/s39_button_interaction/README.md)、[2.x](../learn_cocos2d-2x/s39_button_interaction/README.md)、[3.x](../learn_cocos2d-3x/s39_button_interaction/README.md)。

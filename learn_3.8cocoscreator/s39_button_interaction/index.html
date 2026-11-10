@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第 39 课：Button 触摸与回调</title>
+<style>
+  * { box-sizing: border-box; } body { margin: 0; padding: 24px; color: #eef2ff; background: #171a24; font: 15px/1.5 sans-serif; }
+  main { max-width: 680px; margin: auto; } .panel { margin: 16px 0; padding: 16px; border-radius: 8px; background: #222838; }
+  #button { min-width: 180px; padding: 14px 20px; border: 2px solid #58d6a1; border-radius: 8px; color: #eef2ff; background: #1e4961; font-size: 20px; touch-action: none; }
+  #button[data-state="PRESSED"] { transform: scale(.96); background: #286c75; }
+  #button[data-state="DISABLED"] { opacity: .45; }
+  button.control { margin: 8px 8px 0 0; padding: 8px 12px; }
+  #output { min-height: 72px; white-space: pre-wrap; color: #b9e8ff; }
+</style></head><body><main>
+<h1>第 39 课：Button 触摸、状态与回调</h1>
+<p>按住按钮再松开触发点击。可移动光标观察视觉状态；取消按钮只模拟触摸取消，不触发点击回调。</p>
+<section class="panel"><button id="button" data-state="NORMAL">点击计数：0</button><br>
+<button class="control" id="cancel">模拟按下并取消</button></section>
+<section class="panel"><strong>事件链</strong><p id="pipeline">Node touch event → Button state → clickEvents</p><p id="output"></p></section>
+<p>浏览器输入只模拟 Node 已命中的触摸事件；命中传播、相机和引擎渲染沿用前课，不在本课重做。</p>
+<script type="module" src="./dist/src/main.js"></script></main></body></html>
