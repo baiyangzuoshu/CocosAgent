@@ -21,8 +21,9 @@
 - [第 5 课：EBO 与索引绘制](s05_ebo_indexed_drawing/README.md)
 - [第 6 课：Uniform 与逐帧变化数据](s06_uniform_animation/README.md)
 - [第 7 课：向量、矩阵与齐次坐标](s07_vectors_matrices_homogeneous/README.md)
+- [第 8 课：Model 矩阵与物体变换](s08_model_matrix_transform/README.md)
 
-总纲规划 30 课；目前已实现第 1–7 课，其他课程按学习进度逐课补充。
+总纲规划 30 课；目前已实现第 1–8 课，其他课程按学习进度逐课补充。
 
 ## 技术约定
 
