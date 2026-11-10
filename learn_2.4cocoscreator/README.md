@@ -68,6 +68,7 @@
 - [第 50 课：目标选择与构建入口](s50_build_target_entry/README.md)
 - [第 51 课：代码与引擎构建](s51_code_engine_build/README.md)
 - [第 52 课：资源处理与产物结构](s52_resource_artifacts/README.md)
+- [第 53 课：启动与交付](s53_startup_delivery/README.md)
 
 ## 代码结构
 
