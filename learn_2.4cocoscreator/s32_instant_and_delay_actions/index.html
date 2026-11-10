@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>learn_2.4cocoscreator · 第 32 课：即时回调与延迟动作</title>
+    <style>
+      body { font: 16px sans-serif; background: #171a24; color: #eee; }
+      main { max-width: 720px; margin: 2rem auto; }
+      .track { width: 100%; height: 18px; background: #303648; margin: 1rem 0; }
+      #delay-bar { width: 0; height: 100%; background: #58d6a1; transition: width 80ms linear; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>第 32 课：即时回调与延迟动作</h1>
+      <p>CallFunc 在 ActionManager 首次更新时触发；DelayTime 只推进时间。</p>
+      <p>回调：<span id="callback-state">等待首帧更新</span></p>
+      <p>延迟：<span id="delay-state">0.00</span></p>
+      <div class="track"><div id="delay-bar"></div></div>
+      <p>运行中的动作数：<span id="action-count">2</span></p>
+    </main>
+    <script type="module" src="./dist/src/main.js"></script>
+  </body>
+</html>
