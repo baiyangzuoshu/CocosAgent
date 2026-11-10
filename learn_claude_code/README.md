@@ -36,6 +36,7 @@
 - [第 21 课：权限模式与规则评估](s21_permission_modes_rule_evaluation/README.md)
 - [第 22 课：`canUseTool`、用户确认与权限 UI](s22_can_use_tool_permission_ui/README.md)
 - [第 23 课：工具执行生命周期与 Hooks](s23_tool_execution_lifecycle/README.md)
+- [第 24 课：工具并发与流式执行](s24_tool_concurrency_streaming/README.md)
 
 ## 课程形式与证据边界
 
