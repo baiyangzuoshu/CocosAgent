@@ -28,6 +28,7 @@
 - [第 27 课：取出顺序与重复入池保护](s27_pool_order_and_duplicates/README.md)
 - [第 28 课：节点池所有权与接收结果](s28_pool_ownership/README.md)
 - [第 29 课：对象池关闭与终态](s29_pool_disposal/README.md)
+- [第 30 课：动作更新链（复用第 6 课独立代码）](s06_action_scheduler/README.md)
 - [第 31 课：时间进度与绝对目标插值](s31_absolute_position_interpolation/README.md)
 - [第 32 课：即时回调与延迟动作](s32_instant_and_delay_actions/README.md)
 - [第 33 课：串行与并行动作](s33_action_composition/README.md)

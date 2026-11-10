@@ -18,16 +18,16 @@
 
 | 阶段 | 规划课次 | 范围 | 阶段结果 |
 | --- | --- | --- | --- |
-| 七：Action / Tween | 30–34（第 31–34 课已完成） | 时间推进、间隔与即时动作、组合、缓动和控制 | 用动作或 Tween 驱动节点属性，并能解释它如何进入每帧更新 |
+| 七：Action / Tween | 30–34（第 30–34 课已完成） | 时间推进、间隔与即时动作、组合、缓动和控制 | 用动作或 Tween 驱动节点属性，并能解释它如何进入每帧更新 |
 | 八：UI 结构与交互 | 35–39（第 35–39 课已完成） | Canvas、Widget、Layout、Label、Button | 建立可适配屏幕、可排布、可显示文本并可交互的基础 UI |
 | 九：音频 | 40–42（第 40 课已完成） | 资源、播放生命周期、并发与音量控制 | 加载并播放音效或背景音，观察播放、停止和资源生命周期 |
 | 十：2D 物理 | 43–46 | 物理世界、刚体与碰撞体、接触、查询与调试 | 让节点参与 2D 模拟并处理碰撞或查询结果 |
 | 十一：2D 粒子 | 47–49 | 粒子系统创建、发射与模拟、渲染和结束 | 从配置生成粒子，观察其更新、绘制与回收 |
 | 十二：构建、打包与交付 | 50–53 | 目标配置、代码/资源构建、产物结构、启动与交付 | 从工程配置追到可运行的 Web 目录或原生应用包 |
 
-### 七：Action / Tween（第 30–34 课，第 31–34 课已完成）
+### 七：Action / Tween（第 30–34 课，第 30–34 课已完成）
 
-1. **动作更新链**：目标对象、动作管理器和逐帧推进之间的关系。
+1. **动作更新链（第 30 课已完成）**：目标对象、动作管理器和逐帧推进之间的关系。[Creator 2.4.15](../learn_2.4cocoscreator/s30_action_update_chain/README.md)和[Creator 3.8.7](../learn_3.8cocoscreator/s30_action_update_chain/README.md)各有独立示例；Cocos2d-x 1.x、2.x、3.x、4.x 已由各自第 6 课覆盖，索引分别指向[1.x](../learn_cocos2d-1x/s06_action_scheduler/README.md)、[2.x](../learn_cocos2d-2x/s06_action_scheduler/README.md)、[3.x](../learn_cocos2d-3x/s06_action_scheduler/README.md)、[4.x](../learn_cocos2d-4x/s06_action_scheduler/README.md)的独立代码。
 2. **时间动作（第 31 课已完成）**：持续时间、归一化进度与绝对目标插值；Cocos2d-x 1.x 直接插值，2.x–4.x 由 MoveTo 计算位移并复用 MoveBy。
 3. **即时与延迟动作（第 32 课已完成）**：回调、延迟和完成时机；Cocos2d-x 1.x 在 `startWithTarget` 同步执行 CallFunc，Creator 2.4、3.8 和 Cocos2d-x 2.x–4.x 在动作更新时执行。
 4. **动作组合（第 33 课已完成）**：Sequence 串行动作、Spawn 并行动作、较短分支补时，以及 Tween 链式组合入口。

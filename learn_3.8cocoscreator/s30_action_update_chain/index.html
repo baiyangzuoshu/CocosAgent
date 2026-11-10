@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>learn_3.8cocoscreator · 第 30 课：动作更新链</title>
+    <style>
+      body { font: 16px sans-serif; background: #171a24; color: #eee; }
+      main { max-width: 760px; margin: 2rem auto; padding: 0 1rem; }
+      button { padding: .55rem 1rem; border: 0; border-radius: 5px; background: #58d6a1; color: #15231d; font: inherit; cursor: pointer; }
+      button:disabled { opacity: .55; cursor: wait; }
+      #status, #log { padding: 1rem; background: #222735; border-radius: 6px; }
+      #log { min-height: 9rem; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>第 30 课：动作更新链</h1>
+      <p>启动一个三步探针，观察 Tween、ActionManager、TweenSystem 和 Director 的调用顺序。</p>
+      <button id="start">启动动作</button>
+      <p id="status">等待启动</p>
+      <pre id="log"></pre>
+    </main>
+    <script type="module" src="./dist/src/main.js"></script>
+  </body>
+</html>

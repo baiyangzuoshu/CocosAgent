@@ -35,6 +35,7 @@
 | 第 27 课：取出顺序与重复入池保护 | [本课](s27_pool_order_and_duplicates/README.md) | [本课](../learn_2.4cocoscreator/s27_pool_order_and_duplicates/README.md) | [本课](../learn_3.8cocoscreator/s27_pool_order_and_duplicates/README.md) |
 | 第 28 课：节点池所有权与接收结果 | [本课](s28_pool_ownership/README.md) | [本课](../learn_2.4cocoscreator/s28_pool_ownership/README.md) | [本课](../learn_3.8cocoscreator/s28_pool_ownership/README.md) |
 | 第 29 课：对象池关闭与终态 | [本课](s29_pool_disposal/README.md) | [本课](../learn_2.4cocoscreator/s29_pool_disposal/README.md) | [本课](../learn_3.8cocoscreator/s29_pool_disposal/README.md) |
+| 第 30 课：动作更新链（复用第 6 课代码） | [第 6 课代码](s06_action_scheduler/README.md) | [本课](../learn_2.4cocoscreator/s30_action_update_chain/README.md) | [本课](../learn_3.8cocoscreator/s30_action_update_chain/README.md) |
 | 第 31 课：时间进度与绝对目标插值 | [本课](s31_absolute_position_interpolation/README.md) | [本课](../learn_2.4cocoscreator/s31_absolute_position_interpolation/README.md) | [本课](../learn_3.8cocoscreator/s31_absolute_position_interpolation/README.md) |
 | 第 32 课：即时回调与延迟动作 | [本课](s32_instant_and_delay_actions/README.md) | [本课](../learn_2.4cocoscreator/s32_instant_and_delay_actions/README.md) | [本课](../learn_3.8cocoscreator/s32_instant_and_delay_actions/README.md) |
 | 第 33 课：串行与并行动作 | [本课](s33_action_composition/README.md) | [本课](../learn_2.4cocoscreator/s33_action_composition/README.md) | [本课](../learn_3.8cocoscreator/s33_action_composition/README.md) |
@@ -89,6 +90,8 @@
 历史 Cocos2d-x 第 28 课：[1.x](../learn_cocos2d-1x/s28_pool_ownership/README.md)、[2.x](../learn_cocos2d-2x/s28_pool_ownership/README.md)、[3.x](../learn_cocos2d-3x/s28_pool_ownership/README.md)。
 
 历史 Cocos2d-x 第 29 课：[1.x](../learn_cocos2d-1x/s29_pool_disposal/README.md)、[2.x](../learn_cocos2d-2x/s29_pool_disposal/README.md)、[3.x](../learn_cocos2d-3x/s29_pool_disposal/README.md)。
+
+历史 Cocos2d-x 第 30 课复用第 6 课独立代码：[1.x](../learn_cocos2d-1x/s06_action_scheduler/README.md)、[2.x](../learn_cocos2d-2x/s06_action_scheduler/README.md)、[3.x](../learn_cocos2d-3x/s06_action_scheduler/README.md)。
 
 历史 Cocos2d-x 第 31 课：[1.x](../learn_cocos2d-1x/s31_absolute_position_interpolation/README.md)、[2.x](../learn_cocos2d-2x/s31_absolute_position_interpolation/README.md)、[3.x](../learn_cocos2d-3x/s31_absolute_position_interpolation/README.md)。
 
