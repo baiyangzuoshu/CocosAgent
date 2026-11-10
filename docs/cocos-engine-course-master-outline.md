@@ -66,10 +66,10 @@ Cocos2d-x 使用本版本实际提供的 `Layer`、`Menu`、`Label` 或 `ui::Wid
 
 首轮只覆盖 2D 物理。Creator 2.4.15 入口为 `cocos2d/core/physics/CCPhysicsManager.js`、`CCRigidBody.js`；Creator 3.8.7 为 `cocos/physics-2d/framework/physics-system.ts`、`components/rigid-body-2d.ts`；Cocos2d-x 1.x–2.x 在应用层直接使用仓库附带的独立 Box2D；3.x–4.x 查看各自 `cocos/physics/` 和 Chipmunk 后端。
 
-### 十一：2D 粒子（第 47–49 课，已完成第 47 课）
+### 十一：2D 粒子（第 47–49 课，已完成第 47–48 课）
 
 1. **粒子系统创建（第 47 课已完成）**：发射器配置、贴图和粒子数据从哪里进入运行时。六版独立示例：[Creator 2.4.15](../learn_2.4cocoscreator/s47_particle_system/README.md)、[Creator 3.8.7](../learn_3.8cocoscreator/s47_particle_system/README.md)、[Cocos2d-x 1.x](../learn_cocos2d-1x/s47_particle_system/README.md)、[2.x](../learn_cocos2d-2x/s47_particle_system/README.md)、[3.x](../learn_cocos2d-3x/s47_particle_system/README.md)、[4.x](../learn_cocos2d-4x/s47_particle_system/README.md)。
-2. **粒子模拟**：发射、寿命、速度和每帧状态更新。
+2. **粒子模拟（第 48 课已完成）**：发射、寿命、速度和每帧状态更新。六版独立示例：[Creator 2.4.15](../learn_2.4cocoscreator/s48_particle_simulation/README.md)、[Creator 3.8.7](../learn_3.8cocoscreator/s48_particle_simulation/README.md)、[Cocos2d-x 1.x](../learn_cocos2d-1x/s48_particle_simulation/README.md)、[2.x](../learn_cocos2d-2x/s48_particle_simulation/README.md)、[3.x](../learn_cocos2d-3x/s48_particle_simulation/README.md)、[4.x](../learn_cocos2d-4x/s48_particle_simulation/README.md)。
 3. **粒子绘制与结束**：渲染提交、批处理和粒子清理。
 
 源码入口：Creator 2.4.15 `cocos2d/particle/CCParticleSystem.js`；Creator 3.8.7 `cocos/particle-2d/particle-system-2d.ts`、`particle-simulator-2d.ts`；Cocos2d-x 1.x–2.x `cocos2dx/particle_nodes/`，3.x–4.x `cocos/2d/CCParticleSystem.*`。首轮关注 2D 粒子，3D 粒子另列专题。

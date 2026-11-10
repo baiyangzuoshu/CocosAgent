@@ -46,6 +46,7 @@
 - [第 45 课：Box2D 碰撞过滤与接触监听](s45_contact_filter/README.md)
 - [第 46 课：Box2D 世界查询与调试绘制](s46_physics_queries/README.md)
 - [第 47 课：粒子系统创建与配置](s47_particle_system/README.md)
+- [第 48 课：粒子发射与逐帧模拟](s48_particle_simulation/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 

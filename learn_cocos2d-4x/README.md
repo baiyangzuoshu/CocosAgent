@@ -53,6 +53,7 @@
 | 第 45 课：碰撞过滤、接触通知与响应 | [本课](s45_contact_filter/README.md) | [本课](../learn_2.4cocoscreator/s45_contact_filter/README.md) | [本课](../learn_3.8cocoscreator/s45_contact_filter/README.md) |
 | 第 46 课：物理查询与调试绘制 | [本课](s46_physics_queries/README.md) | [本课](../learn_2.4cocoscreator/s46_physics_queries/README.md) | [本课](../learn_3.8cocoscreator/s46_physics_queries/README.md) |
 | 第 47 课：粒子系统创建与配置 | [本课](s47_particle_system/README.md) | [本课](../learn_2.4cocoscreator/s47_particle_system/README.md) | [本课](../learn_3.8cocoscreator/s47_particle_system/README.md) |
+| 第 48 课：粒子发射与逐帧模拟 | [本课](s48_particle_simulation/README.md) | [本课](../learn_2.4cocoscreator/s48_particle_simulation/README.md) | [本课](../learn_3.8cocoscreator/s48_particle_simulation/README.md) |
 
 历史 Cocos2d-x 同主题：[1.x](../learn_cocos2d-1x/s09_texture_cache/README.md)、[2.x](../learn_cocos2d-2x/s09_texture_cache/README.md)、[3.x](../learn_cocos2d-3x/s09_texture_cache/README.md)。
 
@@ -133,3 +134,5 @@
 历史 Cocos2d-x 第 46 课：[1.x](../learn_cocos2d-1x/s46_physics_queries/README.md)、[2.x](../learn_cocos2d-2x/s46_physics_queries/README.md)、[3.x](../learn_cocos2d-3x/s46_physics_queries/README.md)。
 
 历史 Cocos2d-x 第 47 课：[1.x](../learn_cocos2d-1x/s47_particle_system/README.md)、[2.x](../learn_cocos2d-2x/s47_particle_system/README.md)、[3.x](../learn_cocos2d-3x/s47_particle_system/README.md)。
+
+历史 Cocos2d-x 第 48 课：[1.x](../learn_cocos2d-1x/s48_particle_simulation/README.md)、[2.x](../learn_cocos2d-2x/s48_particle_simulation/README.md)、[3.x](../learn_cocos2d-3x/s48_particle_simulation/README.md)。
