@@ -61,6 +61,7 @@
 - [第 44 课：RigidBody2D 与 Collider2D 接线](s44_rigidbody_collider/README.md)
 - [第 45 课：碰撞分组、接触回调与响应](s45_contact_filter/README.md)
 - [第 46 课：物理查询与调试绘制](s46_physics_queries/README.md)
+- [第 47 课：粒子系统创建与配置](s47_particle_system/README.md)
 
 ## 目录结构
 
