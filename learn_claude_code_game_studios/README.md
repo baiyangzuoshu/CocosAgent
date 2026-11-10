@@ -38,9 +38,10 @@
 - 已编写：[第 15 课：阶段、Gate 与推进条件](s15_phases_gates_advancement/README.md)
 - 已编写：[第 16 课：运行观察与 QA 证据](s16_runtime_observation_qa_evidence/README.md)
 - 已编写：[第 17 课：测试 Agent 与 Skill](s17_testing_agents_and_skills/README.md)
-- 当前课程：[第 18 课：定制 CCGS](s18_customizing_ccgs/README.md)
+- 已编写：[第 18 课：定制 CCGS](s18_customizing_ccgs/README.md)
+- 当前课程：[第 19 课：升级与兼容](s19_upgrade_compatibility/README.md)
 
-目前只编写第 0–18 课，第 18 课为当前课程。第 19 课先保留在大纲中，之后按顺序逐课学习、实践并编写，不提前生成完整课件。
+目前已编写第 0–19 课，共 20 课；第 19 课为当前课程。若后续扩展课程，再按编号逐课编写。
 
 开始实践前，按[实践环境说明](practice/README.md)创建隔离副本。课程中的交互命令在副本中运行，原始源码保持只读。
 
