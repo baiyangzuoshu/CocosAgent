@@ -49,6 +49,7 @@ Creator 3.8.7 的运行时课程使用 TypeScript；本课程沿用其逐课、�
 - [第 30 课：工程结构、构建目标与依赖](s30_cocos2d_build_targets_dependencies/README.md)
 - [第 31 课：平台入口与应用创建](s31_cocos2d_platform_entry/README.md)
 - [第 32 课：Application、AppDelegate 与初始化](s32_cocos2d_app_initialization/README.md)
+- [第 33 课：Director 与场景切换](s33_cocos2d_director_scene_switching/README.md)
 
 ## 参考资料
 
