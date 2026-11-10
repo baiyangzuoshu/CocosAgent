@@ -65,6 +65,7 @@
 - [第 47 课：粒子系统创建与配置](s47_particle_system/README.md)
 - [第 48 课：粒子发射与逐帧模拟](s48_particle_simulation/README.md)
 - [第 49 课：粒子绘制与结束](s49_particle_render_finish/README.md)
+- [第 50 课：目标选择与构建入口](s50_build_target_entry/README.md)
 
 ## 代码结构
 
