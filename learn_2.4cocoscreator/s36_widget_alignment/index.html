@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>第 36 课：Widget 对齐</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px; color: #eef2ff; background: #171a24; font: 15px/1.5 sans-serif; }
+    main { width: min(760px, 100%); margin: auto; }
+    .examples { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 20px 0; }
+    .example { min-width: 0; }
+    .parent { position: relative; width: min(240px, 100%); height: auto; aspect-ratio: 3 / 2; outline: 1px solid #74809c; background: #292f40; }
+    .parent.after { width: min(320px, 100%); aspect-ratio: 16 / 9; }
+    .widget { position: absolute; right: 2.5%; top: 50%; width: 16.667%; height: 10%; transform: translateY(-50%); border: 2px solid #58d6a1; background: #1e4961; display: grid; place-items: center; font-size: 10px; }
+    .parent.after .widget { right: 1.875%; width: 12.5%; height: 8.889%; }
+    code { color: #b9e8ff; }
+    .metrics { padding: 12px; background: #222838; border-radius: 6px; }
+    @media (max-width: 560px) { .examples { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>第 36 课：Widget 对齐</h1>
+    <p>固定右边距 24，垂直居中；父节点从 960×640 变为 1280×720。</p>
+    <div class="examples">
+      <section class="example"><h2>调整前</h2><div class="parent"><div class="widget">Widget</div></div></section>
+      <section class="example"><h2>调整后</h2><div class="parent after"><div class="widget">Widget</div></div></section>
+    </div>
+    <div class="metrics">
+      <div>对齐条件：<code id="rule"></code></div>
+      <div>初始屏幕中心：<code id="before"></code></div>
+      <div>resize 同步阶段：<code id="stale"></code></div>
+      <div>AFTER_UPDATE 后：<code id="after"></code></div>
+    </div>
+    <p>图示按比例绘制；实际结果由 WidgetManager 在更新阶段计算。</p>
+  </main>
+  <script type="module" src="./dist/src/main.js"></script>
+</body>
+</html>

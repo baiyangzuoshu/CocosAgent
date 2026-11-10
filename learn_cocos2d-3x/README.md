@@ -33,6 +33,7 @@
 - [第 33 课：串行与并行动作](s33_action_composition/README.md)
 - [第 34 课：缓动、重复与反向时间](s34_action_modifiers/README.md)
 - [第 35 课：设计分辨率与 Layer 根节点](s35_canvas_coordinates/README.md)
+- [第 36 课：ui::Widget 百分比定位](s36_widget_alignment/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 
