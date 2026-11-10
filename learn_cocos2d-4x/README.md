@@ -56,6 +56,7 @@
 | 第 48 课：粒子发射与逐帧模拟 | [本课](s48_particle_simulation/README.md) | [本课](../learn_2.4cocoscreator/s48_particle_simulation/README.md) | [本课](../learn_3.8cocoscreator/s48_particle_simulation/README.md) |
 | 第 49 课：粒子绘制与结束 | [本课](s49_particle_render_finish/README.md) | [本课](../learn_2.4cocoscreator/s49_particle_render_finish/README.md) | [本课](../learn_3.8cocoscreator/s49_particle_render_finish/README.md) |
 | 第 50 课：目标选择与构建入口 | [本课](s50_build_target_entry/README.md) | [本课](../learn_2.4cocoscreator/s50_build_target_entry/README.md) | [本课](../learn_3.8cocoscreator/s50_build_target_entry/README.md) |
+| 第 51 课：代码与引擎构建 | [本课](s51_code_engine_build/README.md) | [本课](../learn_2.4cocoscreator/s51_code_engine_build/README.md) | [本课](../learn_3.8cocoscreator/s51_code_engine_build/README.md) |
 
 历史 Cocos2d-x 同主题：[1.x](../learn_cocos2d-1x/s09_texture_cache/README.md)、[2.x](../learn_cocos2d-2x/s09_texture_cache/README.md)、[3.x](../learn_cocos2d-3x/s09_texture_cache/README.md)。
 
@@ -142,3 +143,5 @@
 历史 Cocos2d-x 第 49 课：[1.x](../learn_cocos2d-1x/s49_particle_render_finish/README.md)、[2.x](../learn_cocos2d-2x/s49_particle_render_finish/README.md)、[3.x](../learn_cocos2d-3x/s49_particle_render_finish/README.md)。
 
 历史 Cocos2d-x 第 50 课：[1.x](../learn_cocos2d-1x/s50_build_target_entry/README.md)、[2.x](../learn_cocos2d-2x/s50_build_target_entry/README.md)、[3.x](../learn_cocos2d-3x/s50_build_target_entry/README.md)。
+
+历史 Cocos2d-x 第 51 课：[1.x](../learn_cocos2d-1x/s51_code_engine_build/README.md)、[2.x](../learn_cocos2d-2x/s51_code_engine_build/README.md)、[3.x](../learn_cocos2d-3x/s51_code_engine_build/README.md)。
