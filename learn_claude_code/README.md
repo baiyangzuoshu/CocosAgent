@@ -1,6 +1,6 @@
 # Claude Code 源码学习
 
-以 `engine/claude-code-analysis-main/src/` 为源码对象，按职责追踪 Claude Code CLI 的启动、交互、模型请求、工具执行和扩展系统。课程共 **35 课**，编号 `s00`–`s34`。
+以 `engine/claude-code-analysis-main/src/` 为源码对象，按职责追踪 Claude Code CLI 的启动、交互、模型请求、工具执行和扩展系统。课程共 **36 课**，编号 `s00`–`s35`。
 
 ## 学习方式
 
@@ -47,6 +47,7 @@
 - [第 32 课：进程退出、信号与资源清理](s32_process_shutdown_cleanup/README.md)
 - [第 33 课：RemoteIO 的传输选择与 CCR 会话事件](s33_remote_io_transport_event_lifecycle/README.md)
 - [第 34 课：CCR v2 transcript 持久化与恢复回灌](s34_ccr_transcript_persistence_resume/README.md)
+- [第 35 课：Remote Control Bridge 工作轮询与重连](s35_bridge_work_poll_reconnect/README.md)
 
 ## 课程形式与证据边界
 
