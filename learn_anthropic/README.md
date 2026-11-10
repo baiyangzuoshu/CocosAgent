@@ -2,7 +2,7 @@
 
 以 Anthropic 官方网站和 Claude Platform 文档为资料入口，逐课认识 Anthropic 的公司使命、研究与安全治理，以及 Claude 产品和开发者平台。课程解释官方页面、术语和资料之间的关系；不把公司的目标陈述当作独立验证结论，也不把某一时点的模型与产品清单写成长期事实。
 
-课程暂定 **45 课**，编号 `s00`–`s44`。目前已完成第 00–44 课。
+课程暂定 **46 课**，编号 `s00`–`s45`。目前已完成第 00–45 课。
 
 ## 学习方式
 
@@ -64,6 +64,7 @@
 - [第 42 课：Managed Agents 如何挂载 GitHub 仓库并协作改动？](s42_managed_agents_github_access/README.md)
 - [第 43 课：Managed Agents 如何把文件装入 Session 并取回输出？](s43_managed_agents_files/README.md)
 - [第 44 课：Managed Agents 自托管沙箱如何把工具执行移到自有基础设施？](s44_managed_agents_self_hosted_sandbox/README.md)
+- [第 45 课：Managed Agents 自托管 Worker 如何选择轮询、Webhook 与每会话沙箱？](s45_managed_agents_worker_deployment/README.md)
 
 ## 资料范围
 
