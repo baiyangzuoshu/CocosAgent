@@ -34,6 +34,7 @@
 - [第 19 课：Token 预算与上下文压缩](s19_token_budget_context_compaction/README.md)
 - [第 20 课：工具注册、Schema 与发现](s20_tool_registry_schema_discovery/README.md)
 - [第 21 课：权限模式与规则评估](s21_permission_modes_rule_evaluation/README.md)
+- [第 22 课：`canUseTool`、用户确认与权限 UI](s22_can_use_tool_permission_ui/README.md)
 
 ## 课程形式与证据边界
 
