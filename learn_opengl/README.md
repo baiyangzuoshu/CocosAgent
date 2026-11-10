@@ -29,8 +29,9 @@
 - [第 13 课：Mipmap 与纹理缩小](s13_mipmap_minification/README.md)
 - [第 14 课：多纹理单元与 shader 组合](s14_multi_texture_blend/README.md)
 - [第 15 课：Alpha 混合与透明绘制顺序](s15_alpha_blending_order/README.md)
+- [第 16 课：三角形绕序与面剔除](s16_face_culling_winding/README.md)
 
-总纲规划 30 课；目前已实现第 1–15 课，其他课程按学习进度逐课补充。
+总纲规划 30 课；目前已实现第 1–16 课，其他课程按学习进度逐课补充。
 
 ## 技术约定
 
