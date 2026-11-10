@@ -30,9 +30,10 @@
 - 已编写：[第 7 课：Rigor 与工作流档位](s07_rigor_and_workflow/README.md)
 - 已编写：[第 8 课：Automation 模式与确认边界](s08_automation_modes/README.md)
 - 已编写：[第 9 课：事件 Hooks](s09_event_hooks/README.md)
-- 当前课程：[第 10 课：路径 Rules](s10_path_rules/README.md)
+- 已编写：[第 10 课：路径 Rules](s10_path_rules/README.md)
+- 当前课程：[第 11 课：引擎参考资料与版本边界](s11_engine_reference/README.md)
 
-目前只编写第 0–10 课，第 10 课为当前课程。第 11–19 课先保留在大纲中，之后按顺序逐课学习、实践并编写，不提前生成完整课件。
+目前只编写第 0–11 课，第 11 课为当前课程。第 12–19 课先保留在大纲中，之后按顺序逐课学习、实践并编写，不提前生成完整课件。
 
 开始实践前，按[实践环境说明](practice/README.md)创建隔离副本。课程中的交互命令在副本中运行，原始源码保持只读。
 
