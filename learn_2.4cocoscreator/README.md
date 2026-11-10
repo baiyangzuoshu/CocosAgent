@@ -46,6 +46,9 @@
 - [第 28 课：节点池所有权与接收结果](s28_pool_ownership/README.md)
 - [第 29 课：对象池关闭与终态](s29_pool_disposal/README.md)
 - [第 31 课：时间进度与绝对目标插值](s31_absolute_position_interpolation/README.md)
+- [第 32 课：即时回调与延迟动作](s32_instant_and_delay_actions/README.md)
+- [第 33 课：串行与并行动作](s33_action_composition/README.md)
+- [第 34 课：缓动、重复与反向时间](s34_action_modifiers/README.md)
 
 ## 代码结构
 
@@ -118,7 +121,10 @@ learn_2.4cocoscreator/
 ├── s27_pool_order_and_duplicates/ # 取出顺序与重复入池保护
 ├── s28_pool_ownership/ # 节点池所有权与接收结果
 ├── s29_pool_disposal/ # 对象池关闭与终态
-└── s31_absolute_position_interpolation/ # 时间进度与绝对目标插值
+├── s31_absolute_position_interpolation/ # 时间进度与绝对目标插值
+├── s32_instant_and_delay_actions/   # 即时回调与延迟动作
+├── s33_action_composition/          # 串行与并行动作
+└── s34_action_modifiers/            # 缓动、重复与反向时间
 ~~~
 
 ## 运行

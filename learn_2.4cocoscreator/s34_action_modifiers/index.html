@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>learn_2.4cocoscreator · 第 34 课：动作进度修饰</title>
+    <style>
+      body { font: 16px sans-serif; background: #171a24; color: #eee; }
+      main { max-width: 720px; margin: 2rem auto; }
+      .track { width: 100%; height: 18px; background: #303648; margin: .5rem 0 1rem; }
+      .bar { width: 0; height: 100%; background: #58d6a1; transition: width 80ms linear; }
+      #ease-bar { background: #ffbd59; }
+      #repeat-bar { background: #8b8cff; }
+      #reverse-bar { background: #ff7285; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>第 34 课：缓动、重复与反向</h1>
+      <p>动作包装器或 Tween 配置可以改写传给属性插值的时间进度。</p>
+      <p>总时长：<span id="elapsed">0.00 / 1.20 秒</span> · 活动动作：<span id="running-count">4</span></p>
+      <p>线性进度</p><div class="track"><div class="bar" id="linear-bar"></div></div>
+      <p>EaseIn：t²</p><div class="track"><div class="bar" id="ease-bar"></div></div>
+      <p>Repeat：当前轮次 <span id="repeat-index">1 / 3</span></p><div class="track"><div class="bar" id="repeat-bar"></div></div>
+      <p>ReverseTime：从 1 回到 0</p><div class="track"><div class="bar" id="reverse-bar"></div></div>
+    </main>
+    <script type="module" src="./dist/src/main.js"></script>
+  </body>
+</html>

@@ -29,6 +29,9 @@
 - [第 28 课：节点池所有权与接收结果](s28_pool_ownership/README.md)
 - [第 29 课：对象池关闭与终态](s29_pool_disposal/README.md)
 - [第 31 课：时间进度与绝对目标插值](s31_absolute_position_interpolation/README.md)
+- [第 32 课：即时回调与延迟动作](s32_instant_and_delay_actions/README.md)
+- [第 33 课：串行与并行动作](s33_action_composition/README.md)
+- [第 34 课：缓动、重复与反向时间](s34_action_modifiers/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 
