@@ -2,7 +2,7 @@
 
 以 Anthropic 官方网站和 Claude Platform 文档为资料入口，逐课认识 Anthropic 的公司使命、研究与安全治理，以及 Claude 产品和开发者平台。课程解释官方页面、术语和资料之间的关系；不把公司的目标陈述当作独立验证结论，也不把某一时点的模型与产品清单写成长期事实。
 
-课程暂定 **49 课**，编号 `s00`–`s48`。目前已完成第 00–48 课。
+课程暂定 **50 课**，编号 `s00`–`s49`。目前已完成第 00–49 课。
 
 ## 学习方式
 
@@ -68,6 +68,7 @@
 - [第 46 课：自托管 Worker 如何同步 Managed Agents Memory Stores？](s46_managed_agents_self_hosted_memory_sync/README.md)
 - [第 47 课：自托管 Worker 如何把内部服务封装为 Managed Agents Custom Tools？](s47_managed_agents_self_hosted_custom_tools/README.md)
 - [第 48 课：Managed Agents 自托管 Worker 如何监控队列、停止任务并排查故障？](s48_managed_agents_worker_operations/README.md)
+- [第 49 课：自托管 Worker 的工作目录与文件访问范围如何配置？](s49_managed_agents_worker_filesystem/README.md)
 
 ## 资料范围
 
