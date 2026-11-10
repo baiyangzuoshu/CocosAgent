@@ -55,6 +55,7 @@ Creator 3.8.7 的运行时课程使用 TypeScript；本课程沿用其逐课、�
 - [第 36 课：变换与坐标关系](s36_cocos2d_node_transforms_coordinates/README.md)
 - [第 37 课：Ref、引用计数与 AutoreleasePool](s37_cocos2d_ref_autorelease_pool/README.md)
 - [第 38 课：Component 与组件生命周期](s38_cocos2d_component_lifecycle/README.md)
+- [第 39 课：事件分发与输入监听](s39_cocos2d_event_dispatcher_input/README.md)
 
 ## 参考资料
 
