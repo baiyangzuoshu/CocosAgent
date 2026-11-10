@@ -1,0 +1,54 @@
+{
+  "event_naming_convention": "[category].[action].[detail]",
+  "events": [
+    {
+      "name": "tutorial.step.started",
+      "purpose": "Measure entry into each tutorial funnel step.",
+      "fire_condition": "Emit once when the tutorial state machine enters a step for a new attempt.",
+      "required_properties": ["tutorial_id", "step_id", "attempt_id", "pseudonymous_player_id"]
+    },
+    {
+      "name": "tutorial.step.completed",
+      "purpose": "Measure step completion and elapsed time.",
+      "fire_condition": "Emit after the step completion condition is satisfied.",
+      "required_properties": ["tutorial_id", "step_id", "attempt_id", "elapsed_ms", "result"]
+    },
+    {
+      "name": "tutorial.step.abandoned",
+      "purpose": "Locate the tutorial step where an attempt ended early.",
+      "fire_condition": "Emit when an attempt ends before the current step completes.",
+      "required_properties": ["tutorial_id", "step_id", "attempt_id", "pseudonymous_player_id"]
+    }
+  ],
+  "privacy": {
+    "consent_rule": "TBD",
+    "retention_rule": "TBD",
+    "data_minimization_note": "Use pseudonymous player key; do not add direct identifiers without an explicit requirement."
+  },
+  "experiments": [
+    {
+      "name": "tutorial_hint_copy",
+      "hypothesis": "Clearer tutorial hints increase step completion without increasing time to finish.",
+      "target_segment": "new_players",
+      "start_day": 1,
+      "end_day": 14,
+      "assignment_unit": "player",
+      "stable_across_sessions": true,
+      "primary_metric": "tutorial step completion rate",
+      "minimum_sample_size": 1000,
+      "minimum_run_days": 14
+    },
+    {
+      "name": "tutorial_reward_timing",
+      "hypothesis": "Showing the reward earlier increases tutorial completion.",
+      "target_segment": "new_players",
+      "start_day": 7,
+      "end_day": 21,
+      "assignment_unit": "player",
+      "stable_across_sessions": false,
+      "primary_metric": "tutorial completion rate",
+      "minimum_sample_size": 1000,
+      "minimum_run_days": 14
+    }
+  ]
+}

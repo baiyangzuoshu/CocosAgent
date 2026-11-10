@@ -48,4 +48,6 @@ claude
 
 第 17 课通过 inspect_studio_tests.py 盘点 CCGS 自测 catalog、spec 和 category，并调用只读 helper 输出结构观察；第 18 课通过 scaffold_custom_skill.py 在隔离副本中创建 Skill、路径 Rule、spec 和 catalog 登记，并用 helper 盘点 CSV；第 19 课通过 compare_ccgs_upgrade.py 在临时目录运行合成三方差异示例，也可对准备好的 base、local、upstream 目录做只读文件盘点，再依据版本专属升级清单制定迁移方案。该脚本不应用升级、不判断文件能否覆盖；第 20 课通过 exercise_release_guard.py 在临时 Git 仓库运行 CCGS 的 validate-push.sh 与 write-guard.sh，检查受保护分支提示和需要确认的发布动作，不会真正 push、merge 或创建 tag；第 21 课通过 exercise_launch_evidence.py 在两个临时项目中运行 CCGS 的 code-markers.sh 与 bug-stats.sh，对照有证据与无证据时的 NOT READY / NOT ASSESSED 区别。可再于隔离 CCGS 副本中运行真实 `/launch-checklist dry-run`。第 22 课通过 exercise_live_ops_content.py 在临时 Godot 项目中运行 CCGS 的 content-count.sh 和 registry.sh，观察 planned registry 项、引擎目录文件数、覆盖状态和无扫描根时的退出结果；它不会启动真实 Live Ops Agent 或生成赛季方案。第 23 课通过 exercise_economy_balance.py 读取 CCGS 的 registry.sh `get` 结果，并计算可编辑 CSV 中一组 faucet/sink 流量与购买周期；公式范围和经济数据均为合成值，脚本不替代真实 `/balance-check`。第 24 课通过 exercise_bug_triage.py 在临时缺陷目录调用 CCGS 的 bug-stats.sh，观察开放状态、系统热点和 S/P 示例；之后可用事故响应模板写一份隔离的演练记录。
 
+第 25 课通过 `audit_analytics_contract.py` 审查合成事件定义、NDJSON 日志、A/B 实验窗口与隐私待决项；校验器是课程代码，不连接游戏，也不自动判定合规。
+
 如果没有可用的 Claude Code 运行环境，仍可运行 `audit_snapshot.py` 和 CCGS 自带的只读辅助脚本；需要真实会话行为的观察则记为未执行，不用静态文件代替运行结果。

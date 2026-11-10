@@ -1,0 +1,4 @@
+{"event_name":"tutorial.step.started","properties":{"tutorial_id":"intro","step_id":"move","attempt_id":"attempt-001","pseudonymous_player_id":"synthetic-001"}}
+{"event_name":"tutorial.step.completed","properties":{"tutorial_id":"intro","step_id":"move","attempt_id":"attempt-001","elapsed_ms":12400,"email":"player@example.test"}}
+{"event_name":"tutorial.step.abandoned","properties":{"tutorial_id":"intro","step_id":"attack","attempt_id":"attempt-002","pseudonymous_player_id":"synthetic-002"}}
+{"event_name":"tutorial.step.skipped","properties":{"tutorial_id":"intro","step_id":"dodge"}}
