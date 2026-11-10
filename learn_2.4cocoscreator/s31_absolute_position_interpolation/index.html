@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>learn_2.4cocoscreator · 第 31 课：时间进度与绝对目标插值</title>
+    <style>
+      body { font: 16px sans-serif; background: #171a24; color: #eee; }
+      main { max-width: 720px; margin: 2rem auto; }
+      #stage { position: relative; width: 440px; height: 180px; border: 1px solid #67718a; margin: 1rem 0; }
+      .actor { position: absolute; left: 0; width: 24px; height: 24px; border-radius: 5px; }
+      #left-actor { top: 48px; background: #58d6a1; }
+      #right-actor { top: 112px; background: #ffbd59; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>第 31 课：时间进度与绝对目标插值</h1>
+      <p>两个节点从不同起点运行 Tween.to(2, { x: 220 })。</p>
+      <div id="stage">
+        <div id="left-actor" class="actor"></div>
+        <div id="right-actor" class="actor"></div>
+      </div>
+      <pre id="status">等待动作启动……</pre>
+    </main>
+    <script type="module" src="./dist/src/main.js"></script>
+  </body>
+</html>

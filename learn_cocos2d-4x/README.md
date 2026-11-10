@@ -35,6 +35,7 @@
 | 第 27 课：取出顺序与重复入池保护 | [本课](s27_pool_order_and_duplicates/README.md) | [本课](../learn_2.4cocoscreator/s27_pool_order_and_duplicates/README.md) | [本课](../learn_3.8cocoscreator/s27_pool_order_and_duplicates/README.md) |
 | 第 28 课：节点池所有权与接收结果 | [本课](s28_pool_ownership/README.md) | [本课](../learn_2.4cocoscreator/s28_pool_ownership/README.md) | [本课](../learn_3.8cocoscreator/s28_pool_ownership/README.md) |
 | 第 29 课：对象池关闭与终态 | [本课](s29_pool_disposal/README.md) | [本课](../learn_2.4cocoscreator/s29_pool_disposal/README.md) | [本课](../learn_3.8cocoscreator/s29_pool_disposal/README.md) |
+| 第 31 课：时间进度与绝对目标插值 | [本课](s31_absolute_position_interpolation/README.md) | [本课](../learn_2.4cocoscreator/s31_absolute_position_interpolation/README.md) | [本课](../learn_3.8cocoscreator/s31_absolute_position_interpolation/README.md) |
 
 历史 Cocos2d-x 同主题：[1.x](../learn_cocos2d-1x/s09_texture_cache/README.md)、[2.x](../learn_cocos2d-2x/s09_texture_cache/README.md)、[3.x](../learn_cocos2d-3x/s09_texture_cache/README.md)。
 
@@ -79,3 +80,5 @@
 历史 Cocos2d-x 第 28 课：[1.x](../learn_cocos2d-1x/s28_pool_ownership/README.md)、[2.x](../learn_cocos2d-2x/s28_pool_ownership/README.md)、[3.x](../learn_cocos2d-3x/s28_pool_ownership/README.md)。
 
 历史 Cocos2d-x 第 29 课：[1.x](../learn_cocos2d-1x/s29_pool_disposal/README.md)、[2.x](../learn_cocos2d-2x/s29_pool_disposal/README.md)、[3.x](../learn_cocos2d-3x/s29_pool_disposal/README.md)。
+
+历史 Cocos2d-x 第 31 课：[1.x](../learn_cocos2d-1x/s31_absolute_position_interpolation/README.md)、[2.x](../learn_cocos2d-2x/s31_absolute_position_interpolation/README.md)、[3.x](../learn_cocos2d-3x/s31_absolute_position_interpolation/README.md)。
