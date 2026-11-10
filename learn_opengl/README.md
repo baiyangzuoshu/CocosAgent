@@ -33,8 +33,9 @@
 - [第 17 课：深度缓冲与深度测试](s17_depth_buffer_test/README.md)
 - [第 18 课：模板测试与遮罩](s18_stencil_mask/README.md)
 - [第 19 课：法线与漫反射](s19_normals_diffuse/README.md)
+- [第 20 课：镜面高光与 Phong/Blinn-Phong](s20_specular_phong_blinn/README.md)
 
-总纲规划 30 课；目前已实现第 1–19 课，其他课程按学习进度逐课补充。
+总纲规划 30 课；目前已实现第 1–20 课，其他课程按学习进度逐课补充。
 
 ## 技术约定
 
