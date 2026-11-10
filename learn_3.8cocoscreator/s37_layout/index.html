@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>第 37 课：Layout 水平排布</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px; color: #eef2ff; background: #171a24; font: 15px/1.5 sans-serif; }
+    main { width: min(760px, 100%); margin: auto; }
+    .rows { display: grid; gap: 18px; margin: 20px 0; }
+    .row { position: relative; height: 56px; margin: auto; outline: 1px solid #74809c; background: #292f40; }
+    .item { position: absolute; top: 8px; height: 40px; transform: translateX(-50%); border: 2px solid #58d6a1; background: #1e4961; display: grid; place-items: center; font-size: 12px; }
+    .pending { border-style: dashed; border-color: #ffcc66; }
+    code { color: #b9e8ff; }
+    .metrics { padding: 12px; background: #222838; border-radius: 6px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>第 37 课：Layout 水平排布</h1>
+    <p>Layout 监听子项变化并标脏；默认等 AFTER_UPDATE 重算，也可以主动调用 updateLayout。</p>
+    <div class="rows">
+      <section><h2>三项完成排布</h2><div class="row" id="initial"></div></section>
+      <section><h2>添加第四项，更新前</h2><div class="row" id="stale"></div></section>
+      <section><h2>AFTER_UPDATE 后</h2><div class="row" id="updated"></div></section>
+    </div>
+    <div class="metrics" id="output"></div>
+    <p>图示按布局坐标绘制；不是 Creator 引擎渲染画面。</p>
+  </main>
+  <script type="module" src="./dist/src/main.js"></script>
+</body>
+</html>
