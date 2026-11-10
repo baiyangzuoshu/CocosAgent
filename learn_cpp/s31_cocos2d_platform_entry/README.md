@@ -2,6 +2,24 @@
 
 **目标：** 从默认 C++ 模板的 CMake 平台分支出发，找到桌面、iOS 和 Android 的启动入口，并说明各平台怎样创建 `AppDelegate`，再通过 `Application::getInstance()` 取得应用对象。
 
+## 本课代码快照
+
+src/main.cpp 独立模拟桌面 main 与 Android JNI 钩子两种入口。两个路径最终都通过 Application::getInstance() 调用 AppDelegate 的启动回调；它不冒充真实平台入口或 JNI 实现。
+
+源码： [src/main.cpp](src/main.cpp)；课程结构参考 [Creator 第 2 课](../../learn_3.8cocoscreator/s02_game_startup/README.md)。
+
+在本课目录编译并运行：
+
+~~~sh
+c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror src/main.cpp -o /tmp/learn-cpp-s31
+/tmp/learn-cpp-s31
+/tmp/learn-cpp-s31 android
+~~~
+
+预期观察：默认路径先显示 desktop main，android 参数路径显示 Android JNI hook；两条路径都会进入 Application::run 和 AppDelegate 回调。
+
+本次已用 Apple Clang 21 按 C++17 严格警告选项编译并运行该教学示例；这验证的是独立课程代码，不是 Cocos2d-x 引擎运行。
+
 ## 本课范围
 
 观察对象是本地 `engine/cocos2d-x-4/templates/cpp-template-default/`。本课从模板目标选择一路跟到平台入口、应用对象和 `Application::run()` 的回调边界；`AppDelegate` 如何配置 Director、创建首个场景留到 ENG04，帧循环留到 ENG06。

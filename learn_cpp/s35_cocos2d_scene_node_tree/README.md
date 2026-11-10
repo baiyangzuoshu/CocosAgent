@@ -2,9 +2,26 @@
 
 **目标：** 创建简单的父子节点层级，理解 `Scene` 与 `Node` 的关系，并按本地源码解释节点树如何搜索和遍历。
 
+## 本课代码快照
+
+src/main.cpp 用 unique_ptr 表示父节点拥有子节点，用非拥有 parent 指针向上查询，并递归打印树。该模型便于观察节点关系，不替代 Cocos2d-x Node/Ref。
+
+源码： [src/main.cpp](src/main.cpp)；课程结构参考 [Creator 第 4 课](../../learn_3.8cocoscreator/s04_node_scene_tree/README.md)。
+
+在本课目录编译并运行：
+
+~~~sh
+c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror src/main.cpp -o /tmp/learn-cpp-s35
+/tmp/learn-cpp-s35
+~~~
+
+预期观察：输出 Scene → World → Player → Weapon 和 Scene → UI；最后显示 Weapon 的父节点是 Player。
+
+本次已用 Apple Clang 21 按 C++17 严格警告选项编译并运行该教学示例；这验证的是独立课程代码，不是 Cocos2d-x 引擎运行。
+
 ## 本课范围
 
-本课依据仓库中的 Cocos2d-x 4.0 源码做静态分析，聚焦 `Scene`/`Node` 树、子节点访问、局部 Z 顺序和访问流程。坐标变换留到 ENG08，引用计数与 AutoreleasePool 留到 ENG09，Component 留到 ENG10。本课未构建或运行示例工程。
+本课依据仓库中的 Cocos2d-x 4.0 源码做静态分析，聚焦 `Scene`/`Node` 树、子节点访问、局部 Z 顺序和访问流程。坐标变换留到 ENG08，引用计数与 AutoreleasePool 留到 ENG09，Component 留到 ENG10。本课没有构建或运行 Cocos2d-x 工程。
 
 ## Scene 是 Node 树的根
 

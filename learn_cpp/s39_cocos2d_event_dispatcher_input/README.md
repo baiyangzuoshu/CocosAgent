@@ -2,9 +2,26 @@
 
 **目标：** 根据 Cocos2d-x 4.0 本地源码，跟踪输入事件如何选中监听器、触摸如何被认领和吞掉，以及监听器何时暂停或移除。
 
+## 本课代码快照
+
+src/main.cpp 按显式优先级尝试两个触摸监听器，将世界坐标减去节点原点后做本地矩形命中；未命中的监听器返回 false，命中的 Player 返回 true 并认领本次触摸。
+
+源码： [src/main.cpp](src/main.cpp)；课程结构参考 [Creator 第 15 课](../../learn_3.8cocoscreator/s15_node_event_hit/README.md)。
+
+在本课目录编译并运行：
+
+~~~sh
+c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror src/main.cpp -o /tmp/learn-cpp-s39
+/tmp/learn-cpp-s39
+~~~
+
+预期观察：outside touch 没有 listener 认领；player touch 转换为本地 (5, 5)，命中 Player 并停止后续派发。真实优先级和事件清理以 EventDispatcher 源码为准。
+
+本次已用 Apple Clang 21 按 C++17 严格警告选项编译并运行该教学示例；这验证的是独立课程代码，不是 Cocos2d-x 引擎运行。
+
 ## 本课范围与证据
 
-本课聚焦 C++ `EventDispatcher`、`EventListener` 和单点触摸回调。结论依据仓库中的 Cocos2d-x 4.0 源码及官方 v4 事件指南；没有构建或运行工程。平台输入适配和移动设备触摸验证不在本课证据范围内。
+本课聚焦 C++ `EventDispatcher`、`EventListener` 和单点触摸回调。源码结论依据仓库中的 Cocos2d-x 4.0 和官方 v4 事件指南；独立模型已运行，Cocos2d-x 工程未构建或运行。平台输入适配和移动设备触摸验证不在本课证据范围内。
 
 ## 事件从平台到回调
 

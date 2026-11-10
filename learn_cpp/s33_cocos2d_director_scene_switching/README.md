@@ -2,11 +2,28 @@
 
 **目标：** 从本地 `CCDirector` 的场景栈和待切换指针出发，比较启动、压栈、替换、弹栈和退出的行为，并追踪切换在帧流程中的落点。
 
+## 本课代码快照
+
+src/main.cpp 用独立的 Director 和 Scene 模型演示 run、push、drawScene 检查待切换状态以及 pop 返回栈顶场景。共享指针只是演示栈持有对象，不等同于 Cocos2d-x 的 Vector/Ref 所有权实现。
+
+源码： [src/main.cpp](src/main.cpp)；课程结构参考 [Creator 第 3 课](../../learn_3.8cocoscreator/s03_director_loop/README.md)。
+
+在本课目录编译并运行：
+
+~~~sh
+c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror src/main.cpp -o /tmp/learn-cpp-s33
+/tmp/learn-cpp-s33
+~~~
+
+预期观察：push B 后、下一次 drawScene 前 running 仍为 A；切换点才出现 A.onExit 与 B.onEnter。对照本地 CCDirector.cpp 核验真实清理规则。
+
+本次已用 Apple Clang 21 按 C++17 严格警告选项编译并运行该教学示例；这验证的是独立课程代码，不是 Cocos2d-x 引擎运行。
+
 ## 本课范围
 
 观察对象是本地 Cocos2d-x 4.0 的 `cocos/base/CCDirector.h` 与 `CCDirector.cpp`。本课解释 Director 如何选出当前 Scene、何时执行切换以及不同 API 对旧 Scene 的清理策略；不展开 Node 子节点生命周期，也不验证运行时画面或具体转场效果。
 
-结论来自静态源码。本课没有构建或运行示例；Scene 回调的真实时序、转场效果和对象析构时点不能仅凭本课推定。
+结论来自静态源码；本课没有构建或运行 Cocos2d-x 工程。课程模型的输出仅演示排队切换，真实 Scene 回调时序、转场效果和对象析构时点仍需目标工程验证。
 
 ## Director 维护的场景状态
 

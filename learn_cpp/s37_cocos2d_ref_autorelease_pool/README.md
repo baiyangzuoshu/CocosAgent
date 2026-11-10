@@ -2,9 +2,26 @@
 
 **目标：** 根据本地 Cocos2d-x 4.0 源码追踪对象引用计数、自动释放队列和最终析构，避免把“离开作用域”“移出场景树”和“对象销毁”当作同一件事。
 
+## 本课代码快照
+
+src/main.cpp 是 intrusive reference count 与 autorelease pool 的独立小模型：创建时计数为 1，Parent 持有后增加为 2，pool 清理后降为 1，Parent 移除后降为 0 并析构。它演示引用账本，不是 Cocos2d-x Ref 的实现副本。
+
+源码： [src/main.cpp](src/main.cpp)；课程结构参考 [Creator 第 19 课](../../learn_3.8cocoscreator/s19_instance_lifecycle/README.md)。
+
+在本课目录编译并运行：
+
+~~~sh
+c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror src/main.cpp -o /tmp/learn-cpp-s37
+/tmp/learn-cpp-s37
+~~~
+
+预期观察：按顺序看到 1 → 2 → 1，最终打印 destroy Sprite。再对照本地 Ref、AutoreleasePool 和 Node 的 retain/release。
+
+本次已用 Apple Clang 21 按 C++17 严格警告选项编译并运行该教学示例；这验证的是独立课程代码，不是 Cocos2d-x 引擎运行。
+
 ## 本课范围
 
-本课只研究继承 `cocos2d::Ref` 的 C++ 对象，以及 `AutoreleasePool` 如何延迟执行 `release()`。Scene/Node 的父子关系见 ENG07；本课用它作所有权例子，不展开组件回调或 Creator 的延迟销毁机制。本课为静态源码分析，未构建或运行示例。
+本课只研究继承 `cocos2d::Ref` 的 C++ 对象，以及 `AutoreleasePool` 如何延迟执行 `release()`。Scene/Node 的父子关系见 ENG07；本课用它作所有权例子，不展开组件回调或 Creator 的延迟销毁机制。源码结论是静态追踪；独立模型已在本机运行，但没有构建或运行 Cocos2d-x 工程。
 
 ## Ref 的基本规则
 
@@ -92,7 +109,7 @@ node->release();              // 1 -> 0，最后一份引用释放时析构
 
 - 引用账本只画出示例中的引擎持有关系；脚本绑定、Lua/JavaScript 代理、其他容器和用户手动 retain 都可能增加引用。
 - 调试断言受 `COCOS2D_DEBUG` 等构建配置影响；不能依靠断言替代正确的 retain/release 配对。
-- 本课从静态实现说明对象存活规则；没有运行析构日志或构建目标平台，最终回收时点需在具体工程和配置中验证。
+- 本课从静态实现说明 Cocos2d-x 对象存活规则；模型析构日志已运行观察，但没有验证目标平台上的实际析构回收时点。
 
 ## 参考资料
 

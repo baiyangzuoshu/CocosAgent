@@ -2,9 +2,26 @@
 
 **目标：** 根据本地 Cocos2d-x 4.0 源码，追踪 Component 从创建、挂到 Node、进入与更新，到移除和释放的路径。
 
+## 本课代码快照
+
+src/main.cpp 展示本地源码中的动态挂载边界：先挂载的组件收到 onAdd、onEnter、update 和 Node 退出时的 onExit；运行中的 Node 再添加组件只收到 onAdd，移除它时收到 onRemove，不补调 onEnter/onExit。模型用 unique_ptr 管理示例组件。
+
+源码： [src/main.cpp](src/main.cpp)；课程结构参考 [Creator 第 7 课](../../learn_3.8cocoscreator/s07_component_lifecycle/README.md)。
+
+在本课目录编译并运行：
+
+~~~sh
+c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror src/main.cpp -o /tmp/learn-cpp-s38
+/tmp/learn-cpp-s38
+~~~
+
+预期观察：Movement 依次 attached、node entered、update、node exited；LateAdded 只输出 attached 和 component removed。它对应本地 ComponentContainer 的动态 add/remove 行为；组件更新顺序仍以源码为准。
+
+本次已用 Apple Clang 21 按 C++17 严格警告选项编译并运行该教学示例；这验证的是独立课程代码，不是 Cocos2d-x 引擎运行。
+
 ## 本课范围
 
-本课只描述本地 C++ `Component`、`ComponentContainer` 与 `Node` 的接线。Cocos2d-x 4.0 有 Component 系统；它不是 Creator 2.4.15 的编辑器序列化或 JavaScript 组件调度实现。本课为静态源码分析，未构建或运行工程。
+本课只描述本地 C++ `Component`、`ComponentContainer` 与 `Node` 的接线。Cocos2d-x 4.0 有 Component 系统；它不是 Creator 2.4.15 的编辑器序列化或 JavaScript 组件调度实现。独立模型已运行，Cocos2d-x 工程仍未构建或运行。
 
 ## Component 由 Node 的容器管理
 
@@ -50,7 +67,7 @@ Component* found = node->getComponent("meter");
 
 `ComponentContainer::add()` 的实现只做容器登记、retain、设置 owner 和 `onAdd()`；它不判断 owner 是否已经 running，也不补调 `onEnter()`。因此在 Node 已经运行后添加组件时，不能仅凭容器代码假定新组件立即收到 `onEnter()`。
 
-同样，`ComponentContainer::remove()` 只调用 `onRemove()`，不会先补调 `onExit()`。Node 正常退出时才会通过 `ComponentContainer::onExit()` 通知当时仍在容器中的组件。动态挂载/移除的回调设计要按这段本地实现处理；本课没有运行验证具体目标的回调日志。
+同样，`ComponentContainer::remove()` 只调用 `onRemove()`，不会先补调 `onExit()`。Node 正常退出时才会通过 `ComponentContainer::onExit()` 通知当时仍在容器中的组件。动态挂载/移除的回调设计要按这段本地实现处理；模型日志已观察，本地引擎源码路径尚未在目标工程运行验证。
 
 ## 组件所有权与对象释放
 

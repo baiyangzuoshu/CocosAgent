@@ -2,9 +2,26 @@
 
 **目标：** 从 `Node::runAction()` 追踪一个动作如何进入 `ActionManager`、被 `Scheduler` 逐帧推进、修改 Node 状态，并在完成、暂停或停止时清理。
 
+## 本课代码快照
+
+src/main.cpp 提供独立的 MoveBy、FadeTo、Call、Sequence、Spawn 和 ActionManager 小模型。ActionManager 用 deltaTime 推进时间线并修改 NodeState；它用于观察动作组合，不链接 Cocos2d-x。
+
+源码： [src/main.cpp](src/main.cpp)；课程结构参考 [Creator 第 33 课](../../learn_3.8cocoscreator/s33_action_composition/README.md)。
+
+在本课目录编译并运行：
+
+~~~sh
+c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror src/main.cpp -o /tmp/learn-cpp-s40
+/tmp/learn-cpp-s40
+~~~
+
+预期观察：前一秒先移动，之后移动与淡出并行，最后只触发一次 sequence complete。对照本地 ActionManager 和各 Action 的真实更新实现。
+
+本次已用 Apple Clang 21 按 C++17 严格警告选项编译并运行该教学示例；这验证的是独立课程代码，不是 Cocos2d-x 引擎运行。
+
 ## 本课范围与证据
 
-本课根据仓库中的 Cocos2d-x 4.0 源码说明原生 C++ 动作路径，并用 `MoveBy`、`MoveTo`、`DelayTime` 和 `Sequence` 组成一个小例子。课程只做静态源码追踪，没有构建或运行工程；脚本绑定可能在回调处增加额外逻辑。
+本课根据仓库中的 Cocos2d-x 4.0 源码说明原生 C++ 动作路径，并用 `MoveBy`、`MoveTo`、`DelayTime` 和 `Sequence` 组成一个小例子。独立模型已运行；Cocos2d-x 工程仍未构建或运行，脚本绑定可能在回调处增加额外逻辑。
 
 ## 一帧中的动作路径
 

@@ -2,6 +2,24 @@
 
 **目标：** 沿着 `Application::run()` 进入默认模板的 `AppDelegate::applicationDidFinishLaunching()`，梳理 Director、GLView、设计分辨率与首个 Scene 的初始化顺序。
 
+## 本课代码快照
+
+src/main.cpp 独立模拟 AppDelegate 取得 Director、复用或创建 GLView、配置显示并交付首个 Scene。它把初始化顺序变成可观察输出，不链接 Cocos2d-x。
+
+源码： [src/main.cpp](src/main.cpp)；课程结构参考 [Creator 第 2 课](../../learn_3.8cocoscreator/s02_game_startup/README.md)。
+
+在本课目录编译并运行：
+
+~~~sh
+c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror src/main.cpp -o /tmp/learn-cpp-s32
+/tmp/learn-cpp-s32
+/tmp/learn-cpp-s32 existing-view
+~~~
+
+预期观察：默认路径显示 AppDelegate 创建 GLView；existing-view 参数显示复用 platform GLView。两条路径最后都把 HelloWorld 交给 Director。
+
+本次已用 Apple Clang 21 按 C++17 严格警告选项编译并运行该教学示例；这验证的是独立课程代码，不是 Cocos2d-x 引擎运行。
+
 ## 本课范围
 
 本课基于本地 Cocos2d-x 4.0 的默认 C++ 模板。它从平台已创建或准备创建 `Application` 的位置继续，跟到首个 Scene 交给 Director；不展开 Director 内部场景切换规则（ENG05），也不展开平台帧循环（ENG06）。

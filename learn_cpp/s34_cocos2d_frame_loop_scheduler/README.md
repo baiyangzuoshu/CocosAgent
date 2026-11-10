@@ -2,6 +2,23 @@
 
 **目标：** 从平台调用 `Director::mainLoop()` 开始，读出一帧的更新和渲染顺序，并区分逐帧更新、间隔定时器、暂停与时间缩放。
 
+## 本课代码快照
+
+src/main.cpp 用固定 deltaTime 推进 Scheduler 和 Director，按 poll events、Scheduler、Scene update、render、autorelease pool 的顺序输出。计时器是演示模型，未模拟真实平台帧时钟。
+
+源码： [src/main.cpp](src/main.cpp)；课程结构参考 [Creator 第 3 课](../../learn_3.8cocoscreator/s03_director_loop/README.md)。
+
+在本课目录编译并运行：
+
+~~~sh
+c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror src/main.cpp -o /tmp/learn-cpp-s34
+/tmp/learn-cpp-s34
+~~~
+
+预期观察：每帧都打印固定阶段；半秒回调在累计 deltaTime 到达间隔时触发。对照本地各平台 Application 与 CCDirector 的真实帧流程。
+
+本次已用 Apple Clang 21 按 C++17 严格警告选项编译并运行该教学示例；这验证的是独立课程代码，不是 Cocos2d-x 引擎运行。
+
 ## 本课范围
 
 观察对象是本地 Cocos2d-x 4.0 的 `CCDirector` 和 `Scheduler`。第 31 课已经定位平台入口；本课集中看平台如何进入 Director、Director 如何调用 Scheduler，以及 Scheduler 如何组织回调。本课是静态源码分析，没有构建或运行平台工程。

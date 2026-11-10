@@ -8,21 +8,29 @@
 - 哪些目录属于引擎核心，哪些目录提供扩展、第三方依赖、测试和项目模板？
 - 当前证据能证明什么，哪些构建或运行状态还没有验证？
 
-## 代码结构
+## 本课代码快照
 
-本课不添加引擎代码。观察对象是仓库内的 `engine/cocos2d-x-4/`：
+本课新增 [src/main.cpp](src/main.cpp)：一个独立 C++17 源码地图检查器，读取 CHANGELOG 和版本宏，再检查核心、扩展、依赖、测试、模板、工具及文档目录。它只读本地源码树，不修改引擎文件。
+
+代码结构与课程形式参考 [Creator 第 0 课](../../learn_3.8cocoscreator/s00_meta_analysis/README.md)：
 
 ~~~text
-engine/cocos2d-x-4/
-├── cocos/       # 引擎核心模块
-├── extensions/  # 扩展模块
-├── external/    # 第三方依赖与版本信息
-├── tests/       # C++、Lua 和性能测试工程
-├── templates/   # C++ 与 Lua 项目模板
-├── tools/       # 控制台、绑定生成和开发工具
-├── docs/        # 架构、发布与开发文档
-└── CMakeLists.txt
+s29_cocos2d_source_version_map/
+├── README.md
+└── src/
+    └── main.cpp
 ~~~
+
+在本课目录编译并运行：
+
+~~~sh
+c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror src/main.cpp -o /tmp/learn-cpp-s29
+/tmp/learn-cpp-s29 ../../engine/cocos2d-x-4
+~~~
+
+程序打印版本标记、`COCOS2D_VERSION` 行和目录是否存在。目录存在只是源码地图证据，不表示依赖已经准备或工程已能构建。
+
+本次已用 Apple Clang 21 按 C++17 严格警告选项编译并运行该检查器；它只验证检查器，不构成引擎构建或运行证据。
 
 ## 本地版本证据
 
@@ -48,7 +56,7 @@ engine/cocos2d-x-4/
 
 - [`engine/cocos2d-x-4/.gitmodules`](../../engine/cocos2d-x-4/.gitmodules) 列出上游的 `cocos2d-console`、`bindings-generator` 和 `ccs-res` 子模块路径。本轮观察到这些目录没有文件；不要据 `.gitmodules` 文件存在就认为子模块已初始化。
 - 上游 [`README.md`](../../engine/cocos2d-x-4/README.md) 要求准备依赖并更新子模块。执行构建前应重新核对工具链、依赖和子模块状态；本课不运行 `download-deps.py`、不初始化子模块，也不改全局环境。
-- 本课证据是**本地文档、源码和 Git 记录的静态检查**。没有进行 CMake 配置、编译、测试或目标平台运行，因此不形成构建或运行时验收结论。
+- 引擎证据是**本地文档、源码和 Git 记录的静态检查**。本次没有对 Cocos2d-x 工程进行 CMake 配置、编译、测试或目标平台运行；上面的检查器不形成引擎构建或运行时验收结论。
 - 后续课程会从工程结构和构建目标开始，再逐步追踪平台入口、应用初始化、场景和渲染；本课只定位地图，不把入口调用链提前当作已验证事实。
 
 ## 动手练习

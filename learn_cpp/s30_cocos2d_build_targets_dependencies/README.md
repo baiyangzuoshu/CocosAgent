@@ -2,6 +2,33 @@
 
 **目标：** 从本地 CMake 文件读出 Cocos2d-x 4.0 的主要构建目标，理解源码目录如何进入目标，以及内部库、平台库、预编译依赖和子模块各自处于什么位置。
 
+## 本课代码快照
+
+src/main.cpp、src/engine.cpp 和 src/engine.hpp 组成一个最小 CMake 项目。engine_core 编译为库，game 作为可执行目标链接它；这段代码帮助读懂目标依赖，不是引擎真实构建配置。示例需要 CMake 3.16 或更新版本。
+
+~~~text
+s30_cocos2d_build_targets_dependencies/
+├── CMakeLists.txt
+└── src/
+    ├── engine.cpp
+    ├── engine.hpp
+    └── main.cpp
+~~~
+
+源码： [CMakeLists.txt](CMakeLists.txt)、[src/main.cpp](src/main.cpp)、[src/engine.cpp](src/engine.cpp)、[src/engine.hpp](src/engine.hpp)；课程结构参考 [Creator 第 1 课](../../learn_3.8cocoscreator/s01_module_assembly/README.md)。
+
+在本课目录编译并运行：
+
+~~~sh
+cmake -S . -B /tmp/learn-cpp-s30
+cmake --build /tmp/learn-cpp-s30
+/tmp/learn-cpp-s30/game
+~~~
+
+预期观察：程序输出 game executable uses engine_core library。再对照本地 CMake 中 cocos2d、external、cpp-tests 和 HelloCpp 的真实目标接线。
+
+src/*.cpp 已用 Apple Clang 21 按 C++17 严格警告选项直接编译并运行；当前环境没有 CMake，因此 CMakeLists.txt 的目标配置尚未执行。
+
 ## 本课问题
 
 - 顶层 CMake 如何把引擎、测试工程和 C++ 模板接入同一构建树？
@@ -67,7 +94,7 @@ flowchart TD
 ## 简化说明
 
 - Mermaid 图是从当前快照的 CMake 接线归纳出来的静态视图。实际生成的目标图和源文件列表会随平台、构建选项和 CMake 版本而变化。
-- CMake 中声明了目标、依赖或工具要求，不表示本课已配置、编译、测试或运行它们；本课没有这些构建/运行证据。
+- 本次没有为真实 Cocos2d-x 工程执行 CMake 配置、编译、测试或运行。上方教学项目的 C++ 文件已直接编译运行，但因当前环境没有 CMake，尚未生成或验证它的 CMake 目标图。
 - 版本元数据出现不同标记时，只记录观察到的内容；不能据此单独判定依赖损坏或兼容。
 
 ## 参考资料

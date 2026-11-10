@@ -2,9 +2,26 @@
 
 **目标：** 区分节点局部、父节点和世界坐标，说明父级变换如何影响子节点，并使用 Cocos2d-x 的坐标转换接口。
 
+## 本课代码快照
+
+src/main.cpp 实现二维仿射矩阵的平移、旋转、缩放、矩阵合成与逆变换。父级矩阵左乘子级矩阵，再分别把点转换到世界空间和转换回来。
+
+源码： [src/main.cpp](src/main.cpp)；课程结构参考 [Creator 第 5 课](../../learn_3.8cocoscreator/s05_local_world_transform/README.md)。
+
+在本课目录编译并运行：
+
+~~~sh
+c++ -std=c++17 -Wall -Wextra -Wpedantic -Werror src/main.cpp -o /tmp/learn-cpp-s36
+/tmp/learn-cpp-s36
+~~~
+
+预期观察：子节点原点转换到世界坐标为 (100.00, 70.00)，世界点逆变换回本地后为 (1.00, 0.00)。
+
+本次已用 Apple Clang 21 按 C++17 严格警告选项编译并运行该教学示例；这验证的是独立课程代码，不是 Cocos2d-x 引擎运行。
+
 ## 本课范围
 
-本课依据仓库中的 Cocos2d-x 4.0 `Node` 源码做静态分析。重点是 position、scale、rotation、anchor point 如何进入节点变换矩阵，以及节点空间和世界空间之间的转换。场景树结构见 ENG07；本课没有构建或运行示例工程。
+本课依据仓库中的 Cocos2d-x 4.0 `Node` 源码做静态分析。重点是 position、scale、rotation、anchor point 如何进入节点变换矩阵，以及节点空间和世界空间之间的转换。场景树结构见 ENG07；本课没有构建或运行 Cocos2d-x 工程。
 
 ## 三种坐标空间
 
