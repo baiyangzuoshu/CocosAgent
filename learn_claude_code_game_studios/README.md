@@ -32,9 +32,10 @@
 - 已编写：[第 9 课：事件 Hooks](s09_event_hooks/README.md)
 - 已编写：[第 10 课：路径 Rules](s10_path_rules/README.md)
 - 已编写：[第 11 课：引擎参考资料与版本边界](s11_engine_reference/README.md)
-- 当前课程：[第 12 课：首次启动与项目识别](s12_first_start_and_project_identification/README.md)
+- 已编写：[第 12 课：首次启动与项目识别](s12_first_start_and_project_identification/README.md)
+- 当前课程：[第 13 课：从概念到架构](s13_concept_to_architecture/README.md)
 
-目前只编写第 0–12 课，第 12 课为当前课程。第 13–19 课先保留在大纲中，之后按顺序逐课学习、实践并编写，不提前生成完整课件。
+目前只编写第 0–13 课，第 13 课为当前课程。第 14–19 课先保留在大纲中，之后按顺序逐课学习、实践并编写，不提前生成完整课件。
 
 开始实践前，按[实践环境说明](practice/README.md)创建隔离副本。课程中的交互命令在副本中运行，原始源码保持只读。
 
