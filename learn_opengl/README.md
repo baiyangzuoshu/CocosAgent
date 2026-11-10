@@ -32,8 +32,9 @@
 - [第 16 课：三角形绕序与面剔除](s16_face_culling_winding/README.md)
 - [第 17 课：深度缓冲与深度测试](s17_depth_buffer_test/README.md)
 - [第 18 课：模板测试与遮罩](s18_stencil_mask/README.md)
+- [第 19 课：法线与漫反射](s19_normals_diffuse/README.md)
 
-总纲规划 30 课；目前已实现第 1–18 课，其他课程按学习进度逐课补充。
+总纲规划 30 课；目前已实现第 1–19 课，其他课程按学习进度逐课补充。
 
 ## 技术约定
 
