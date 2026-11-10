@@ -66,6 +66,7 @@
 - [第 49 课：粒子绘制与结束](s49_particle_render_finish/README.md)
 - [第 50 课：目标选择与构建入口](s50_build_target_entry/README.md)
 - [第 51 课：代码与引擎构建](s51_code_engine_build/README.md)
+- [第 52 课：资源处理与产物结构](s52_resource_artifacts/README.md)
 
 ## 目录结构
 

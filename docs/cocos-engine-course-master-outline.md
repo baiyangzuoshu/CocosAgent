@@ -8,8 +8,8 @@
 
 ## 已完成课程
 
-- Creator 2.4.15、Creator 3.8.7：第 0 课元数据分析、第 1–29 课，以及第 31–51 课。
-- Cocos2d-x 1.x、2.x、3.x、4.x：第 1–29 课，以及第 31–51 课。
+- Creator 2.4.15、Creator 3.8.7：第 0 课元数据分析、第 1–29 课，以及第 31–52 课。
+- Cocos2d-x 1.x、2.x、3.x、4.x：第 1–29 课，以及第 31–52 课。
 - 第 23–29 课已把对象池的一组细碎知识合并为七个递进主题；六个版本仍各有独立代码。
 
 ## 后续阶段
@@ -23,7 +23,7 @@
 | 九：音频 | 40–42（第 40–42 课已完成） | 资源、播放生命周期、并发与音量控制 | 加载并播放音效或背景音，观察播放、停止和资源生命周期 |
 | 十：2D 物理 | 43–46（第 43–46 课已完成） | 物理世界、刚体与碰撞体、接触、查询与调试 | 让节点参与 2D 模拟并处理碰撞或查询结果 |
 | 十一：2D 粒子 | 47–49（第 47–49 课已完成） | 粒子系统创建、发射与模拟、渲染和结束 | 从配置生成粒子，观察其更新、绘制与回收 |
-| 十二：构建、打包与交付 | 50–53（第 50–51 课已完成） | 目标配置、代码/资源构建、产物结构、启动与交付 | 从工程配置追到可运行的 Web 目录或原生应用包 |
+| 十二：构建、打包与交付 | 50–53（第 50–52 课已完成） | 目标配置、代码/资源构建、产物结构、启动与交付 | 从工程配置追到可运行的 Web 目录或原生应用包 |
 
 ### 七：Action / Tween（第 30–34 课，第 30–34 课已完成）
 
@@ -74,11 +74,11 @@ Cocos2d-x 使用本版本实际提供的 `Layer`、`Menu`、`Label` 或 `ui::Wid
 
 源码入口：Creator 2.4.15 `cocos2d/particle/CCParticleSystem.js`；Creator 3.8.7 `cocos/particle-2d/particle-system-2d.ts`、`particle-simulator-2d.ts`；Cocos2d-x 1.x–2.x `cocos2dx/particle_nodes/`，3.x–4.x `cocos/2d/CCParticleSystem.*`。首轮关注 2D 粒子，3D 粒子另列专题。
 
-### 十二：构建、打包与交付（第 50–53 课，第 50–51 课已完成）
+### 十二：构建、打包与交付（第 50–53 课，第 50–52 课已完成）
 
 1. **目标与构建入口（第 50 课已完成）**：先固定版本、目标平台、Debug/Release 模式和工程入口。六版独立示例：[Creator 2.4.15](../learn_2.4cocoscreator/s50_build_target_entry/README.md)、[Creator 3.8.7](../learn_3.8cocoscreator/s50_build_target_entry/README.md)、[Cocos2d-x 1.x](../learn_cocos2d-1x/s50_build_target_entry/README.md)、[2.x](../learn_cocos2d-2x/s50_build_target_entry/README.md)、[3.x](../learn_cocos2d-3x/s50_build_target_entry/README.md)、[4.x](../learn_cocos2d-4x/s50_build_target_entry/README.md)。Creator 3.8.7 只做源码映射和课程示例，不做编辑器构建/运行验收。
 2. **代码与引擎构建（第 51 课已完成）**：Creator 2.4.15 用 Browserify 等工具生成引擎 bundle；Creator 3.8.7 以内部构建常量选择运行时分支；Cocos2d-x 1.x–2.x 由 Make 生成引擎库并链接游戏，3.x–4.x 由 CMake 组织引擎和游戏目标。六版独立示例：[Creator 2.4.15](../learn_2.4cocoscreator/s51_code_engine_build/README.md)、[Creator 3.8.7](../learn_3.8cocoscreator/s51_code_engine_build/README.md)、[Cocos2d-x 1.x](../learn_cocos2d-1x/s51_code_engine_build/README.md)、[2.x](../learn_cocos2d-2x/s51_code_engine_build/README.md)、[3.x](../learn_cocos2d-3x/s51_code_engine_build/README.md)、[4.x](../learn_cocos2d-4x/s51_code_engine_build/README.md)。Creator 3.8.7 仅静态映射，不做编辑器构建或运行验收。
-3. **资源处理与产物结构**：资源如何进入 Web 输出或原生 `Resources`，生成配置和清单承担什么职责。
+3. **资源处理与产物结构（第 52 课已完成）**：Creator Bundle 元数据映射导入/原生文件地址；Cocos2d-x 1.x/2.x 从 `Resources` 与搜索路径定位文件，3.x 复制资源，4.x 通过同步目标更新运行目录。六版独立示例：[Creator 2.4.15](../learn_2.4cocoscreator/s52_resource_artifacts/README.md)、[Creator 3.8.7](../learn_3.8cocoscreator/s52_resource_artifacts/README.md)、[Cocos2d-x 1.x](../learn_cocos2d-1x/s52_resource_artifacts/README.md)、[2.x](../learn_cocos2d-2x/s52_resource_artifacts/README.md)、[3.x](../learn_cocos2d-3x/s52_resource_artifacts/README.md)、[4.x](../learn_cocos2d-4x/s52_resource_artifacts/README.md)。Creator 完整编辑器资源导入/构建流程不在本地引擎源码中；Creator 3.8.7 仅做静态映射。
 4. **启动与交付**：从生成物追踪运行时启动；区分 Web 静态部署、缓存更新和原生应用包。
 
 Creator 2.4.15 首轮只研究与 Web 浏览器目标一致的构建输出。Creator 的完整 Editor Builder 不在本地引擎源码中；课程从公开构建入口、引擎宏/启动代码和可检查的输出分别说明证据，不能声称还原闭源 Builder 的全部步骤。Creator 3.8.7 暂列在总纲，当前不执行构建或实机验收。
