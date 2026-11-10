@@ -39,6 +39,7 @@
 - [第 38 课：ui::Text 与 Label 文本更新](s38_label_update/README.md)
 - [第 39 课：ui::Button 命中与回调](s39_button_interaction/README.md)
 - [第 40 课：AudioEngine 文件路径到平台实现](s40_audio_resource_entry/README.md)
+- [第 41 课：AudioEngine 播放生命周期](s41_audio_playback_lifecycle/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 

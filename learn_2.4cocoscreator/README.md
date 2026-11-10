@@ -56,6 +56,7 @@
 - [第 38 课：Label 文本更新](s38_label_update/README.md)
 - [第 39 课：Button 触摸与回调](s39_button_interaction/README.md)
 - [第 40 课：AudioClip 与浏览器音频引擎](s40_audio_resource_entry/README.md)
+- [第 41 课：音频播放生命周期](s41_audio_playback_lifecycle/README.md)
 
 ## 代码结构
 
