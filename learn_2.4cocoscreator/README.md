@@ -60,6 +60,7 @@
 - [第 42 课：音量、循环与并发](s42_audio_concurrency_control/README.md)
 - [第 43 课：物理世界启用与帧步进](s43_physics_world/README.md)
 - [第 44 课：RigidBody 与 Collider 接线](s44_rigidbody_collider/README.md)
+- [第 45 课：碰撞分组、接触回调与响应](s45_contact_filter/README.md)
 
 ## 代码结构
 
