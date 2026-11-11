@@ -42,8 +42,9 @@
 - [第 26 课：Shadow Mapping](s26_shadow_mapping/README.md)
 - [第 27 课：全屏后处理与多 Pass](s27_fullscreen_post_processing/README.md)
 - [第 28 课：HDR 与 Bloom](s28_hdr_bloom/README.md)
+- [第 29 课：Instanced Drawing](s29_instanced_drawing/README.md)
 
-总纲规划 30 课；目前已实现第 1–28 课，其他课程按学习进度逐课补充。
+总纲规划 30 课；目前已实现第 1–29 课，其他课程按学习进度逐课补充。
 
 ## 技术约定
 
