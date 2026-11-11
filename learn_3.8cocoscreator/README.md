@@ -72,6 +72,7 @@
 - [第 55 课：3D 物理世界与帧步进](s55_physics3d_world_step/README.md)：静态映射 PhysicsSystem 的固定子步。
 - [第 56 课：CameraComponent 到 Root 渲染管线](s56_camera_root/README.md)：沿 3.8 的 RenderWindow、RenderScene 和 RenderPipeline 路径。
 - [第 57 课：SceneCulling 与 RenderQueue](s57_scene_culling_queue/README.md)：按相机裁剪模型，再排序不透明/透明 Pass。
+- [第 58 课：Sprite assembler 与 RenderData 刷新](s58_sprite_render_data/README.md)：追踪 UIRendererManager 与 Batcher2D 的职责。
 
 ## 目录结构
 
