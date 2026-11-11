@@ -1,0 +1,6 @@
+project:
+  name: Asset Audit Fixture
+  version: 1.0.0
+engine:
+  name: godot
+  language: gdscript

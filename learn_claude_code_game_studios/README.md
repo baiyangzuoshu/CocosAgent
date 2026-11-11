@@ -1,6 +1,6 @@
 # Claude Code Game Studios 学习课程
 
-课程主体规划为 27 课（第 1–27 课），另设第 0 课导读；以仓库中的 Claude Code Game Studios（CCGS）快照为材料，逐层读懂它如何把游戏开发工作组织成一套可配置的 Claude Code 工作流。
+课程主体规划为 28 课（第 1–28 课），另设第 0 课导读；以仓库中的 Claude Code Game Studios（CCGS）快照为材料，逐层读懂它如何把游戏开发工作组织成一套可配置的 Claude Code 工作流。
 
 ## 学习目标
 
@@ -19,7 +19,7 @@
 
 ## 课程
 
-- [27 课课程大纲（另含第 0 课导读）](课程大纲.md)
+- [28 课课程大纲（另含第 0 课导读）](课程大纲.md)
 - 已编写：[第 0 课：CCGS 是什么，又不是什么](s00_repository_map/README.md)
 - 已编写：[第 1 课：会话入口与上下文装配](s01_session_context/README.md)
 - 已编写：[第 2 课：Agent 角色与责任边界](s02_agent_roles/README.md)
@@ -47,9 +47,10 @@
 - 已编写：[第 24 课：Bug 分诊与线上事故复盘](s24_bug_triage_incident_review/README.md)
 - 已编写：[第 25 课：分析埋点契约与 A/B 实验](s25_analytics_event_experiment/README.md)
 - 已编写：[第 26 课：安全审计的范围与证据](s26_security_audit_scope/README.md)
-- 当前课程：[第 27 课：性能预算与证据强度](s27_performance_budget_evidence/README.md)
+- 已编写：[第 27 课：性能预算与证据强度](s27_performance_budget_evidence/README.md)
+- 当前课程：[第 28 课：资产审计与证据边界](s28_asset_audit_evidence/README.md)
 
-目前已完成第 0 课导读及第 1–26 课；第 27 课为当前课程。
+目前已完成第 0 课导读及第 1–27 课；第 28 课为当前课程。
 
 开始实践前，按[实践环境说明](practice/README.md)创建隔离副本。课程中的交互命令在副本中运行，原始源码保持只读。
 

@@ -54,4 +54,6 @@ claude
 
 第 27 课通过 `exercise_performance_budget.py` 在临时项目副本中调用 CCGS 的 `yaml-helper.sh get_effective_yaml_key` 和 `resolve_config`，比较合成样例值与性能预算，并观察默认 `warn`、本地 `block` 覆盖、`off` 及未设预算的差异。样例值不是游戏或目标设备测量；脚本不运行游戏、不读取 Profiler 导出，也不代替真实 `/perf-profile`。
 
+第 28 课通过 `exercise_asset_audit.py` 在临时 Godot 项目中运行 CCGS 的只读 `asset-scan.sh`，检查合成 PNG 的文件名、尺寸、字节预算及 `res://` 引用，并对比空资产目录的 `scanned 0` / `hits -` 输出。helper 只输出 TSV 观察值，不生成 `/asset-audit` 的最终 verdict。
+
 如果没有可用的 Claude Code 运行环境，仍可运行 `audit_snapshot.py` 和 CCGS 自带的只读辅助脚本；需要真实会话行为的观察则记为未执行，不用静态文件代替运行结果。
