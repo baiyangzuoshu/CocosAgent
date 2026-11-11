@@ -77,6 +77,7 @@
 - [第 59 课：MeshBuffer 上传顶点与索引](s59_mesh_buffer_upload/README.md)：沿 2.4 的 WebGL VB/IB 与 InputAssembler 路径。
 - [第 60 课：Material、Effect 与 Pass](s60_material_effect_pass/README.md)：从 EffectAsset 解析绘制状态，并由 WebGL 应用混合设置。
 - [第 61 课：ProgramLib 宏变体与 Uniform](s61_program_lib_variants/README.md)：按 Pass 宏生成并缓存 WebGL 程序，再应用属性参数。
+- [第 62 课：ModelBatcher 与 flush 边界](s62_model_batch_flush/README.md)：按材质哈希、裁剪掩码和 MeshBuffer 容量结束批次。
 
 ## 代码结构
 

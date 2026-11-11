@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>第 62 课：Creator 2.4 ModelBatcher 合批</title>
+    <style>
+      body { margin: 2rem; color: #e8edf2; background: #17212b; font: 16px/1.6 system-ui, sans-serif; }
+      pre { padding: 1rem; border-radius: 8px; background: #0c1218; white-space: pre-wrap; }
+      canvas { width: 1px; height: 1px; }
+    </style>
+  </head>
+  <body>
+    <h1>第 62 课：ModelBatcher 与 flush 边界</h1>
+    <p>观察相同材质组件何时共享批次，以及材质、裁剪掩码和缓冲容量何时触发 flush。</p>
+    <pre id="log"></pre>
+    <script type="module" src="./dist/src/main.js"></script>
+  </body>
+</html>

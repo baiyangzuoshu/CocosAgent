@@ -58,6 +58,7 @@
 - [第 59 课：1.x TextureAtlas 顶点缓冲更新](s59_atlas_vbo_upload/README.md)
 - [第 60 课：1.x Sprite 混合与贴图状态](s60_sprite_blend_texture/README.md)
 - [第 61 课：1.x 固定管线绘制输入](s61_fixed_function_inputs/README.md)
+- [第 62 课：1.x SpriteBatchNode 与 TextureAtlas](s62_texture_atlas_batch/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 
