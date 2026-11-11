@@ -77,6 +77,7 @@
 - [第 60 课：MaterialInstance 与 Pass 状态](s60_material_instance/README.md)：跟踪 Renderer 按需创建实例和覆盖状态。
 - [第 61 课：ProgramLib 与 WebGL2 Shader](s61_shader_variant_programlib/README.md)：生成 GFX Shader 变体，并观察 GPU 程序的惰性创建。
 - [第 62 课：Batcher2D 与 DrawBatch](s62_batcher2d_flush/README.md)：按 RenderData、材质和模板阶段结束当前批次。
+- [第 63 课：MeshRenderer 创建 Model/SubModel](s63_mesh_model_submodels/README.md)：按子网格/材质槽建立模型对象并挂入 RenderScene。
 
 ## 目录结构
 

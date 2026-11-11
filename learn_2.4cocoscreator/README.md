@@ -78,6 +78,7 @@
 - [第 60 课：Material、Effect 与 Pass](s60_material_effect_pass/README.md)：从 EffectAsset 解析绘制状态，并由 WebGL 应用混合设置。
 - [第 61 课：ProgramLib 宏变体与 Uniform](s61_program_lib_variants/README.md)：按 Pass 宏生成并缓存 WebGL 程序，再应用属性参数。
 - [第 62 课：ModelBatcher 与 flush 边界](s62_model_batch_flush/README.md)：按材质哈希、裁剪掩码和 MeshBuffer 容量结束批次。
+- [第 63 课：MeshRendererAssembler 处理子网格](s63_mesh_renderer_assembler/README.md)：追踪 Mesh 子网格进入 MeshBuffer 或直接提交 InputAssembler。
 
 ## 代码结构
 

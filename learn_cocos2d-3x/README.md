@@ -59,6 +59,7 @@
 - [第 60 课：3.x Material 层级 RenderState](s60_material_render_state/README.md)
 - [第 61 课：3.x GLProgramState 保存并应用 Uniform](s61_glprogram_state_uniforms/README.md)
 - [第 62 课：3.x SpriteBatchNode 与 BatchCommand](s62_sprite_batch_command/README.md)
+- [第 63 课：3.x Sprite3D 到 MeshCommand](s63_sprite3d_mesh_command/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 
