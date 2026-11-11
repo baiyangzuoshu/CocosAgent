@@ -1,6 +1,6 @@
 # Claude Code 源码学习
 
-以 `engine/claude-code-analysis-main/src/` 为源码对象，按职责追踪 Claude Code CLI 的启动、交互、模型请求、工具执行和扩展系统。课程共 **39 课**，编号 `s00`–`s38`。
+以 `engine/claude-code-analysis-main/src/` 为源码对象，按职责追踪 Claude Code CLI 的启动、交互、模型请求、工具执行和扩展系统。课程共 **40 课**，编号 `s00`–`s39`。
 
 ## 学习方式
 
@@ -51,6 +51,7 @@
 - [第 36 课：Bridge 入站消息解析、路由与 UUID 去重](s36_bridge_ingress_message_dedup/README.md)
 - [第 37 课：Bridge 服务端控制请求与响应策略](s37_bridge_server_control_responses/README.md)
 - [第 38 课：Bridge 远端消息入队与附件处理](s38_bridge_inbound_prompt_attachments/README.md)
+- [第 39 课：Bridge CCR v2 Worker 状态与事件确认](s39_bridge_v2_worker_state_delivery/README.md)
 
 ## 课程形式与证据边界
 
