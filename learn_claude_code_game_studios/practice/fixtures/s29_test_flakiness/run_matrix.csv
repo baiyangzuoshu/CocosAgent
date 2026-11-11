@@ -1,0 +1,7 @@
+test_id,run_1,run_2,run_3,run_4,run_5
+test_timing_sensitive,FAIL,FAIL,PASS,PASS,PASS
+test_physics_tolerance,PASS,FAIL,PASS,PASS,PASS
+test_scene_race,PASS,FAIL,,,
+test_always_red,FAIL,FAIL,FAIL,FAIL,FAIL
+test_skip_only,SKIP,SKIP,SKIP,SKIP,SKIP
+test_stable_menu,PASS,PASS,PASS,PASS,PASS

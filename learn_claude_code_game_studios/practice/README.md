@@ -56,4 +56,6 @@ claude
 
 第 28 课通过 `exercise_asset_audit.py` 在临时 Godot 项目中运行 CCGS 的只读 `asset-scan.sh`，检查合成 PNG 的文件名、尺寸、字节预算及 `res://` 引用，并对比空资产目录的 `scanned 0` / `hits -` 输出。helper 只输出 TSV 观察值，不生成 `/asset-audit` 的最终 verdict。
 
+第 29 课通过 `exercise_test_flakiness.py` 将合成 CSV 历史转成临时 JUnit XML，再调用 CCGS 的只读 `flaky-stats.sh`，观察按测试汇总的通过/失败/跳过、失败率 tier、少于三次结果时的 suspected，以及空结果文件的退出码。练习不运行游戏测试、不核验代码提交是否相同，也不执行 Skill 的原因分析和 quarantine 写入流程。
+
 如果没有可用的 Claude Code 运行环境，仍可运行 `audit_snapshot.py` 和 CCGS 自带的只读辅助脚本；需要真实会话行为的观察则记为未执行，不用静态文件代替运行结果。
