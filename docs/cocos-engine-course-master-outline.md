@@ -11,7 +11,7 @@
 - Creator 2.4.15、Creator 3.8.7：第 0 课元数据分析、第 1–29 课，以及第 31–55 课。
 - Cocos2d-x 1.x、2.x、3.x、4.x：第 1–29 课，以及第 31–53 课。
 - 第 23–29 课已把对象池的一组细碎知识合并为七个递进主题；六个版本仍各有独立代码。
-- 六个版本的渲染深化第 56–59 课已完成，各版本沿自己的渲染链路维护独立代码。
+- 六个版本的渲染深化第 56–60 课已完成，各版本沿自己的渲染链路维护独立代码。
 
 ## 后续阶段
 
@@ -27,8 +27,8 @@
 | 十二：构建、打包与交付 | 50–53（第 50–53 课已完成） | 目标配置、代码/资源构建、产物结构、启动与交付 | 从工程配置追到可运行的 Web 目录或原生应用包 |
 | 十三：Web 缓存与版本更新 | 54（第 54 课已完成） | 浏览器缓存重验证、版本化资源 URL、发布切换与回滚 | 让入口发现新版本，并复用不可变资源 |
 | 十四：Creator 3D 物理 | 55（第 55 课已完成） | Director 接入 3D 物理系统、World 固定步进 | 观察每帧时间如何变成物理子步 |
-| 十五：Creator 渲染系统深化 | 56–65（56–59 已完成，60–65 规划中） | Camera 与可见性、渲染数据、材质和着色器、缓冲区、2D 合批、3D 模型、管线提交与离屏渲染 | 从场景组件追踪到 GPU 绘制与 RenderTexture |
-| 十六：Cocos2d-x 渲染深化 | 56–65（56–59 已完成，60–65 规划中） | 相机、可见性与排序、Sprite 数据、GPU 缓冲、渲染状态、Shader、合批、3D 边界、设备提交与 RenderTexture | 串起 1.x–4.x 绘制架构的演进 |
+| 十五：Creator 渲染系统深化 | 56–65（56–60 已完成，61–65 规划中） | Camera 与可见性、渲染数据、材质和着色器、缓冲区、2D 合批、3D 模型、管线提交与离屏渲染 | 从场景组件追踪到 GPU 绘制与 RenderTexture |
+| 十六：Cocos2d-x 渲染深化 | 56–65（56–60 已完成，61–65 规划中） | 相机、可见性与排序、Sprite 数据、GPU 缓冲、渲染状态、Shader、合批、3D 边界、设备提交与 RenderTexture | 串起 1.x–4.x 绘制架构的演进 |
 
 ### 七：Action / Tween（第 30–34 课，第 30–34 课已完成）
 
@@ -100,7 +100,7 @@ Cocos2d-x 1.x–4.x 分别沿各自版本的工程模板、构建脚本、平台
 
 源码和研究入口：Creator 2.4.15 `engine/2.4.15engine/gulp/util/utils.js`、`predefine.js`、`cocos2d/core/CCGame.js`、`CCSys.js`，以及 [发布与原生研究](2.x/10-publishing-and-native.md)；该引擎目录不包含完整 Creator Builder。Cocos2d-x 4.x 从 `engine/cocos2d-x-4/templates/cpp-template-default/`、CMake 配置和[项目构建边界](cocos2d-x-creator2x-source-study-plan.md)入手；该仓库当前 macOS x86_64 构建证据不能外推到其他平台。其他版本在对应课程 README 中列明本地版本源码和平台工程入口。
 
-### 十五：Creator 渲染系统深化（第 56–59 课已完成，60–65 课规划中）
+### 十五：Creator 渲染系统深化（第 56–60 课已完成，61–65 课规划中）
 
 Creator 2.4.15 的第 10–13 课已经搭出最小 Sprite 绘制链；新阶段继续追踪更完整的 Web 渲染职责，不重复四边形与 UV 入门。Creator 2.4.15 以 Web 浏览器路径实现；Creator 3.8.7 按其源码结构做独立示例和静态映射，不强行套用 2.4 的类名。第 59 课分别沿 2.4 MeshBuffer.uploadData → WebGL VB/IB → InputAssembler，以及 3.8 LinearBufferAccessor → MeshBuffer → GFX Buffer 路径；两课共享概念，但接口和对象职责不合并。
 
@@ -110,7 +110,7 @@ Creator 2.4.15 的第 10–13 课已经搭出最小 Sprite 绘制链；新阶段
 | 57 | 相机可见性裁剪与排序 | 对照 Creator 2.4 的 View/stage 与 3.8 的 SceneCulling/RenderQueue |
 | 58 | Sprite 几何数据更新 | 对照 2.4 assembler/RenderFlow 与 3.8 UIRendererManager/Batcher2D |
 | 59 | 顶点/索引缓冲与 GPU 上传 | 分别追踪 Creator 2.4 WebGL VB/IB 与 3.8 GFX Buffer 更新路径 |
-| 60 | Material、Effect、Technique 与 Pass | 说明材质资源如何确定 Effect 和绘制状态 |
+| 60 | 材质与绘制状态 | 2.4 展示 Effect/Technique/Pass 到 WebGL；3.8 展示 Renderer 按需创建 MaterialInstance 并覆盖 Pass 状态 |
 | 61 | Shader 程序、宏、属性与 Uniform | 追踪 Shader 变体生成及绘制参数绑定 |
 | 62 | 2D/UI 合批与 flush 条件 | 观察相邻组件何时合并，何时拆批 |
 | 63 | MeshRenderer 到 Model/SubModel | 追踪网格子网格与材质槽如何变为渲染模型 |
@@ -119,7 +119,7 @@ Creator 2.4.15 的第 10–13 课已经搭出最小 Sprite 绘制链；新阶段
 
 每课的版本专属源码路径和实现边界见 [Creator 2.4.15 课程大纲](../learn_2.4cocoscreator/课程大纲.md) 与 [Creator 3.8.7 课程大纲](../learn_3.8cocoscreator/课程大纲.md)；专题资料见 [2.4.15 图形渲染](2.x/06-graphics-rendering.md) 与 [3.8.7 图形渲染](3.x/06-graphics-rendering.md)。
 
-### 十六：Cocos2d-x 渲染深化（第 56–59 课已完成，60–65 课规划中）
+### 十六：Cocos2d-x 渲染深化（第 56–60 课已完成，61–65 课规划中）
 
 Cocos2d-x 1.x–4.x 的第 10–13 课已覆盖场景访问、可见性/排序、Sprite 几何和纹理区域。深化阶段沿各版本自己的源码继续：1.x/2.x 主要是 Node 访问期间直接调用 OpenGL；3.x 引入 Renderer 与渲染命令队列；4.0 再把命令提交接到可替换的渲染后端。相同课号表示主题并行，代码和 API 按版本分别维护。
 
@@ -129,7 +129,7 @@ Cocos2d-x 1.x–4.x 的第 10–13 课已覆盖场景访问、可见性/排序�
 | 57 | Node 访问顺序与相机过滤 | 对照旧版直接遍历绘制与 3.x/4.0 的相机筛选、GlobalZ 命令队列 |
 | 58 | Sprite 几何属性更新 | 对照 1.x/2.x quad 与 TextureAtlas、3.x/4.0 三角形命令输入 |
 | 59 | 顶点/索引数据进入各版本图形缓冲 | 说明各版本如何从 CPU 图元进入各自的 OpenGL 或 backend 缓冲 |
-| 60 | Material、RenderState 与 Pass | 说明各版本如何表达一次绘制的状态 |
+| 60 | 各版本绘制状态 | 1.x/2.x 沿 Sprite 直接绘制；3.x 沿继承式 RenderState；4.0 合并 StateBlock 到 backend PipelineDescriptor |
 | 61 | Shader 程序与参数绑定 | 对照固定管线、GLProgram、GLProgramState 和后端 ProgramState |
 | 62 | 2D 合批与批次边界 | 对照 SpriteBatchNode、TextureAtlas 与 Renderer 批次 |
 | 63 | 3D Model/网格绘制边界 | 追踪 3.x/4.0 的 Sprite3D、MeshCommand；旧版明确真实能力范围 |

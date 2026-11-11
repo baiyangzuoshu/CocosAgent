@@ -74,6 +74,7 @@
 - [第 57 课：SceneCulling 与 RenderQueue](s57_scene_culling_queue/README.md)：按相机裁剪模型，再排序不透明/透明 Pass。
 - [第 58 课：Sprite assembler 与 RenderData 刷新](s58_sprite_render_data/README.md)：追踪 UIRendererManager 与 Batcher2D 的职责。
 - [第 59 课：MeshBuffer 更新 GFX Buffer](s59_mesh_buffer_upload/README.md)：沿 LinearBufferAccessor、GFX 与 WebGL Buffer 路径。
+- [第 60 课：MaterialInstance 与 Pass 状态](s60_material_instance/README.md)：跟踪 Renderer 按需创建实例和覆盖状态。
 
 ## 目录结构
 

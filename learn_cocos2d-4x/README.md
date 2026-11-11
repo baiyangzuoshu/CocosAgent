@@ -84,6 +84,8 @@
 
 各课程独立阅读和运行；表格用于快速打开同主题内容。
 
+本课程第 60 课：[StateBlock 合并到 backend 管线描述](s60_backend_pipeline_state/README.md)。
+
 历史 Cocos2d-x 第 14 课：[1.x](../learn_cocos2d-1x/s14_touch_input/README.md)、[2.x](../learn_cocos2d-2x/s14_touch_input/README.md)、[3.x](../learn_cocos2d-3x/s14_touch_input/README.md)。
 
 历史 Cocos2d-x 第 15 课：[1.x](../learn_cocos2d-1x/s15_touch_listener/README.md)、[2.x](../learn_cocos2d-2x/s15_touch_listener/README.md)、[3.x](../learn_cocos2d-3x/s15_touch_listener/README.md)。

@@ -56,6 +56,7 @@
 - [第 57 课：1.x 子节点 Z 顺序与访问顺序](s57_node_draw_order/README.md)
 - [第 58 课：1.x Sprite quad 属性更新](s58_sprite_quad_update/README.md)
 - [第 59 课：1.x TextureAtlas 顶点缓冲更新](s59_atlas_vbo_upload/README.md)
+- [第 60 课：1.x Sprite 混合与贴图状态](s60_sprite_blend_texture/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 

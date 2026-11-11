@@ -56,6 +56,7 @@
 - [第 57 课：3.x 相机过滤与 GlobalZ 命令队列](s57_node_render_order/README.md)
 - [第 58 课：3.x Sprite 几何更新与 GL 命令](s58_sprite_quad_update/README.md)
 - [第 59 课：3.x Renderer 汇总并上传顶点](s59_renderer_vertex_upload/README.md)
+- [第 60 课：3.x Material 层级 RenderState](s60_material_render_state/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 
