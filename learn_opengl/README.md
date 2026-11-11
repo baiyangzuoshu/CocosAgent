@@ -37,8 +37,9 @@
 - [第 21 课：材质参数与 Pass](s21_material_parameters_pass/README.md)
 - [第 22 课：多光源与衰减](s22_multi_light_attenuation/README.md)
 - [第 23 课：线性颜色、sRGB 与 Gamma 校正](s23_linear_color_srgb_gamma/README.md)
+- [第 24 课：Cubemap、天空盒与环境采样](s24_cubemap_skybox_environment_sampling/README.md)
 
-总纲规划 30 课；目前已实现第 1–23 课，其他课程按学习进度逐课补充。
+总纲规划 30 课；目前已实现第 1–24 课，其他课程按学习进度逐课补充。
 
 ## 技术约定
 
