@@ -1,94 +1,47 @@
-# Cocos CLI for Cocos Creator
+# Cocos 与工程技术学习仓库
 
-这是面向 Cocos Creator 的本机命令行工具，可直接在终端使用，也可连接 Codex、Claude Code、Cursor、VS Code 或 DeepSeek Harness。它提供 MCP 工具、Creator 工作流 Skills 和项目扩展管理。统一命令为 `cocos-creator-cli`。
+本仓库汇集源码学习课程、独立练习和对应的本地源码快照。当前工作树以课程资料为主；每条课程线的版本、依赖和运行方法以该目录的 `README.md` 为准。
 
-当前编辑器连接与项目操作支持 **Cocos Creator 2.4.1–2.4.16**。启动新编辑器或执行构建/编译时，自动按 2.4.16、2.4.15、2.4.14……2.4.1 的顺序优先使用已安装版本中最高的补丁版；已打开的受支持实例会复用，传入 `--creator` 时使用指定安装。Creator 3.8 不在当前支持范围内。实机验收证据目前仍以 2.4.15 为准。
+## 课程入口
 
-## 环境要求
+### Cocos 与图形
 
-- Node.js 20 或更高版本。
-- 要使用编辑器连接能力，准备一个 Creator 2.4.1–2.4.16 工程和对应版本的编辑器。CLI 的 Creator 编辑器发现与启动支持 macOS、Windows。
-- Codex、Claude Code 等 Agent Host 是可选的；不使用 Host 时仍可直接运行 CLI 命令。
+| 课程 | 内容 |
+| --- | --- |
+| [Cocos Creator 2.4.15](learn_2.4cocoscreator/README.md) | 以 Web 运行时为主，逐课追踪引擎机制并搭建精简实现。 |
+| [Cocos Creator 3.8.7](learn_3.8cocoscreator/README.md) | 以 Web 运行时为主，按源码职责学习 3.8.7 引擎。 |
+| [Cocos2d-x 1.x](learn_cocos2d-1x/README.md) | 基于仓库中的 1.x 源码快照学习。 |
+| [Cocos2d-x 2.x](learn_cocos2d-2x/README.md) | 基于仓库中的 2.x 源码快照学习。 |
+| [Cocos2d-x 3.x](learn_cocos2d-3x/README.md) | 基于仓库中的 3.x 源码快照学习。 |
+| [Cocos2d-x 4.0](learn_cocos2d-4x/README.md) | 基于仓库中的 4.0 源码快照学习。 |
+| [C 与 C++](learn_cpp/README.md) | 从 C 基础、现代 C++ 学到 Cocos2d-x 源码阅读。 |
+| [OpenGL](learn_opengl/README.md) | 用独立练习学习现代 OpenGL，并与 Cocos 引擎渲染源码对照。 |
 
-## 安装
+### AI 与开发工具
 
-CLI 当前发布版本为 `1.0.3`，通过 GitHub Release 分发，不从 npm 公共 registry 安装。
+| 课程 | 内容 |
+| --- | --- |
+| [OpenAI 官方资料](learn_openai/README.md) | 按主题学习 OpenAI API、模型能力和开发工具。 |
+| [Anthropic 官方资料](learn_anthropic/README.md) | 学习 Anthropic、Claude 产品与开发者平台资料。 |
+| [Claude Code](learn_claude_code/README.md) | 根据仓库中的源码快照追踪 CLI 启动、请求、工具和扩展。 |
+| [Claude Code Game Studios](learn_claude_code_game_studios/README.md) | 学习该仓库快照中的游戏开发工作流与配置。 |
+| [DeepSeek Harness](learn-dsh/README.md) | 用 TypeScript 与 Deno 逐课搭建简化的 Harness 示例。 |
 
-### macOS / Linux 终端
+## 课程规划与研究资料
 
-```sh
-VERSION="1.0.3"
-npm install --global "https://github.com/baiyangzuoshu/CocosAgent/releases/download/cocos-creator-cli-v${VERSION}/cocos-creator-cli-v${VERSION}.tgz"
-```
+- [Cocos 引擎课程总纲](docs/cocos-engine-course-master-outline.md)：Creator 2.4.15、Creator 3.8.7 与 Cocos2d-x 1.x–4.x 的课程索引和规划。
+- [Creator 2.x/3.x 源码研究计划](docs/source-study-plan.md)：版本专题和跨版本对照的研究方法。
+- [Cocos2d-x 4.0 与 Creator 2.4.15 对照计划](docs/cocos2d-x-creator2x-source-study-plan.md)：跨引擎研究范围与证据口径。
+- `docs/2.x/`、`docs/3.x/`、`docs/cocos2d-x/`：按引擎版本整理的专题资料。
+- `docs/comparisons/`、`docs/diagrams/`：跨版本专题对照和流程图。
+- `docs/agent-foundation/`：Creator 工具接入与 CLI 相关的研究记录；阅读时请区分历史设计资料和当前工作树中的实现。
 
-### Windows PowerShell
+## 本地源码
 
-```powershell
-$Version = "1.0.3"
-npm install --global "https://github.com/baiyangzuoshu/CocosAgent/releases/download/cocos-creator-cli-v$Version/cocos-creator-cli-v$Version.tgz"
-```
+`engine/` 保存课程引用的源码快照，包括 Creator 2.4.15、Creator 3.8.7、Cocos2d-x 1.x–4.x，以及 Claude Code 相关材料。以对应课程 README 标注的版本和路径为准；不要把某一快照中的结论直接推广到其他版本。
 
-确认安装：
+## 从这里开始
 
-```sh
-cocos-creator-cli version --format json
-cocos-creator-cli --help
-```
-
-检查更新或安装最新发布版：
-
-```sh
-cocos-creator-cli self-update --check
-cocos-creator-cli self-update
-```
-
-## 发布 CLI
-
-GitHub Actions 当前不可用时，可在本机通过 CLI 包的一键发布脚本完成测试、打包、校验和 GitHub Release 上传。先把版本提交推送到 `main`，然后在仓库根目录运行：
-
-```sh
-npm --prefix cocos-creator-cli run release:dry-run
-npm --prefix cocos-creator-cli run release:publish
-```
-
-首次使用前需确认 SSH 443 和 `gh auth status` 均已通过。普通 `git push` 不会自动触发后台发布；发布命令会在本机自动完成后续步骤。详情见 [CLI 发布说明](cocos-creator-cli/README.md#publish-a-cli-release)。
-
-## 连接 Agent Host
-
-以 Codex 为例，先预览将要安装的 Skills 和 MCP 配置，再执行安装：
-
-```sh
-cocos-creator-cli skill install codex --dry-run
-cocos-creator-cli skill install codex
-cocos-creator-cli mcp configure codex --dry-run
-cocos-creator-cli mcp configure codex
-```
-
-配置完成后重启 Codex。使用 Claude Code 时，把上述两个命令里的 `codex` 换成 `claude-code`。MCP 配置还支持 `cursor`、`vscode` 和 `deepseek-harness`；CLI 的 Creator Skills 安装器支持 Codex、Claude Code 和 DeepSeek Harness。
-
-不使用 Host 时可直接查看能力目录或 CLI 命令：
-
-```sh
-cocos-creator-cli catalog --format json
-cocos-creator-cli help
-```
-
-## 连接 Creator 工程
-
-每次准备打开或切换工程前，先在 Cocos Dashboard 核对工程名称、绝对路径、Creator 版本和打开状态。将 CLI 扩展安装到目标工程后，如果工程已经打开，请在 Creator 中重新加载；如果工程尚未打开，可用 `project open` 启动它：
-
-```sh
-cocos-creator-cli extension install --project-root "/absolute/path/to/project"
-cocos-creator-cli project open --project-root "/absolute/path/to/project"
-cocos-creator-cli instances list
-cocos-creator-cli doctor --project-root "/absolute/path/to/project"
-```
-
-`instances list` 用于确认已连接的编辑器实例；后续命令应使用它返回的准确 `instanceId`。`doctor` 只做诊断，不会启动已停止的 bridge。
-
-会修改工程或控制编辑器的操作，需要你明确执行对应的 commit 命令；Creator 不会再弹出确认框。执行前请核对工程身份和操作计划。
-
-## 更多文档
-
-- [CLI 完整手册](cocos-creator-cli/README.md)：命令、MCP 配置、Skills、项目扩展和更新说明。
-- [第三方接入说明](docs/agent-foundation/cocos-creator-third-party-integration-mvp-0.1.md)：Host 配置、MCP 与 Creator 扩展命令 Provider。
+1. 选择上方课程，从该课程的 `README.md` 进入。
+2. 按课程大纲顺序阅读；每课列出的源码路径、依赖和运行说明优先于仓库级概述。
+3. 做跨版本比较时，分别确认两边的源码版本、平台和证据，再阅读对应比较资料。
