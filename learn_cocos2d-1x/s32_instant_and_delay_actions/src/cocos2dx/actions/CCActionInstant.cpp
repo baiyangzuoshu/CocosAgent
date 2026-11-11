@@ -1,7 +1,5 @@
 #include "cocos2dx/actions/CCActionInstant.h"
 
-#include <utility>
-
 namespace cocos2d {
 
 void CCActionInstant::step(ccTime) {

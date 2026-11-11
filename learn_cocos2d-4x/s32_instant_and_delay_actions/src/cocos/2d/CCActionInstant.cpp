@@ -1,7 +1,5 @@
 #include "cocos/2d/CCActionInstant.h"
 
-#include <utility>
-
 namespace cocos2d {
 
 void ActionInstant::startWithTarget(Node* target) {

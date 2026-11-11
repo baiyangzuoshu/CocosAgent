@@ -12,4 +12,12 @@ Action* Node::runAction(Action* action) {
     return action;
 }
 
+float Node::getPositionX() const {
+    return _positionX;
+}
+
+void Node::setPositionX(float x) {
+    _positionX = x;
+}
+
 } // namespace cocos2d

@@ -10,7 +10,7 @@ Node 分别运行一个 CallFunc 和一个 1 秒 DelayTime。浏览器显示回�
 
 - 引擎 [CCActionInstant.step](<../../engine/2.4.15engine/cocos2d/actions/CCActionInstant.js#L45>) 调用 `update(1)`；[CallFunc.update](<../../engine/2.4.15engine/cocos2d/actions/CCActionInstant.js#L520>) 执行回调。
 - 引擎 [DelayTime.update](<../../engine/2.4.15engine/cocos2d/actions/CCActionInterval.js#L2404>) 不修改属性；父类 `step/isDone` 推进和判断时间。
-- 引擎 [ActionManager.update](<../../engine/2.4.15engine/cocos2d/actions/CCActionManager.js#L468>) 逐帧执行动作并移除已完成动作；[CCDirector 初始化 ActionManager](<../../engine/2.4.15engine/cocos2d/core/CCDirector.js#L158>) 并将其接入帧循环。
+- 引擎 [ActionManager.update](<../../engine/2.4.15engine/cocos2d/actions/CCActionManager.js#L197>) 逐帧执行动作并移除已完成动作；[CCDirector 初始化 ActionManager](<../../engine/2.4.15engine/cocos2d/core/CCDirector.js#L158>) 并将其接入帧循环。
 
 ## 代码与运行
 

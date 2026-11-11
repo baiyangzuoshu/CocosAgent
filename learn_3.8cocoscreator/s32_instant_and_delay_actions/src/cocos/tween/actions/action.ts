@@ -1,5 +1,5 @@
 export interface ActionTarget {
-  readonly name: string;
+  x: number;
 }
 
 export abstract class Action {

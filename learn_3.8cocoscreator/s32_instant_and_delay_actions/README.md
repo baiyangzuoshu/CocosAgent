@@ -8,10 +8,10 @@ Node 分别运行一个 CallFunc 和一个 1 秒 DelayTime。浏览器显示回�
 
 ## 源码位置
 
-- 引擎 [ActionInstant.step](<../../engine/3.8.7engine/cocos/tween/actions/action-instant.ts#L42>) 调用 `update(1)`；[CallFunc.update](<../../engine/3.8.7engine/cocos/tween/actions/action-instant.ts#L326>) 执行回调。
-- 引擎 [ActionInterval.step](<../../engine/3.8.7engine/cocos/tween/actions/action-interval.ts#L134>) 推进时间；[DelayTime.update](<../../engine/3.8.7engine/cocos/tween/actions/action-interval.ts#L959>) 不修改目标属性。
-- 引擎 [ActionManager.update](<../../engine/3.8.7engine/cocos/tween/actions/action-manager.ts#L479>) 管理并更新动作；[TweenSystem.update](<../../engine/3.8.7engine/cocos/tween/tween-system.ts#L76>) 接入系统更新。
-- Tween 公共入口的 [delay](<../../engine/3.8.7engine/cocos/tween/tween.ts#L555>) 和 [call](<../../engine/3.8.7engine/cocos/tween/tween.ts#L572>) 最终建立相应的间隔与即时动作；本课直接加入 ActionManager，省去链式 API。
+- 引擎 `cocos/tween/actions/action-instant.ts`：`ActionInstant.step` 在动作更新时调用 `update(1)`；`CallFunc.update` 执行回调。
+- 引擎 `cocos/tween/actions/action-interval.ts`：`ActionInterval.step/isDone` 推进并检查时间；`DelayTime.update` 不修改目标属性。
+- 引擎 `cocos/tween/actions/action-manager.ts` 与 `cocos/tween/tween-system.ts`：管理动作并接入系统更新。
+- Tween 公共入口 `cocos/tween/tween.ts` 的 `call/delay` 最终也建立相应的即时/间隔动作；本课直接加入 ActionManager，省去链式 API。
 
 ## 代码与运行
 

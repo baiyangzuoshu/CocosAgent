@@ -29,4 +29,26 @@ protected:
     void update(float progress) override;
 };
 
+class CCMoveBy : public CCActionInterval {
+public:
+    CCMoveBy(float duration, float deltaX);
+    void startWithTarget(CCNode* target) override;
+
+protected:
+    void update(float progress) override;
+
+protected:
+    float _startX = 0.0f;
+    float _deltaX;
+};
+
+class CCMoveTo : public CCMoveBy {
+public:
+    CCMoveTo(float duration, float endX);
+    void startWithTarget(CCNode* target) override;
+
+private:
+    float _endX;
+};
+
 } // namespace cocos2d

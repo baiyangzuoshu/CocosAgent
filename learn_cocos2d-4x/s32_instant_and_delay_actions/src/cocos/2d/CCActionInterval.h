@@ -29,4 +29,26 @@ protected:
     void update(float progress) override;
 };
 
+class MoveBy : public ActionInterval {
+public:
+    MoveBy(float duration, float deltaX);
+    void startWithTarget(Node* target) override;
+
+protected:
+    void update(float progress) override;
+
+protected:
+    float _startX = 0.0f;
+    float _deltaX;
+};
+
+class MoveTo : public MoveBy {
+public:
+    MoveTo(float duration, float endX);
+    void startWithTarget(Node* target) override;
+
+private:
+    float _endX;
+};
+
 } // namespace cocos2d

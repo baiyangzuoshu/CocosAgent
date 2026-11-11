@@ -1,4 +1,6 @@
 #include "cocos2dx/actions/CCActionInterval.h"
+#include "cocos2dx/base_nodes/CCNode.h"
+
 #include <algorithm>
 #include <limits>
 
@@ -39,6 +41,37 @@ CCDelayTime::CCDelayTime(float duration)
 
 void CCDelayTime::update(float) {
     // DelayTime only waits; it does not modify the target.
+}
+
+CCMoveBy::CCMoveBy(float duration, float deltaX)
+    : CCActionInterval(duration), _deltaX(deltaX) {
+}
+
+void CCMoveBy::startWithTarget(CCNode* target) {
+    CCActionInterval::startWithTarget(target);
+    _startX = target->getPositionX();
+}
+
+void CCMoveBy::update(float progress) {
+    if (_target) {
+        _target->setPositionX(_startX + _deltaX * progress);
+    }
+}
+
+CCMoveTo::CCMoveTo(float duration, float endX)
+    : CCActionInterval(duration), _endX(endX) {
+}
+
+void CCMoveTo::startWithTarget(CCNode* target) {
+    CCActionInterval::startWithTarget(target);
+    _startX = target->getPositionX();
+    _deltaX = _endX - _startX;
+}
+
+void CCMoveTo::update(float progress) {
+    if (_target) {
+        _target->setPositionX(_startX + _deltaX * progress);
+    }
 }
 
 } // namespace cocos2d

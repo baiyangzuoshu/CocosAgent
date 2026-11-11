@@ -19,7 +19,7 @@ const director = new Director();
 const tweenSystem = new TweenSystem();
 director.registerSystem(tweenSystem);
 
-const node = new Node("Demo");
+const node = new Node("Demo", 0);
 const delay = new DelayTime(1);
 tweenSystem.ActionManager.addAction(new CallFunc(() => {
   callbackState.textContent = "已在首帧 TweenSystem.update 中执行";

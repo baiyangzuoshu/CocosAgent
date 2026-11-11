@@ -5,6 +5,7 @@ export default class CCNode implements CCActionTarget {
   constructor(
     readonly name: string,
     private readonly director: CCDirector,
+    public x: number,
   ) {}
 
   runAction(action: CCAction): void {

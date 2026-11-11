@@ -12,4 +12,12 @@ CCAction* CCNode::runAction(CCAction* action) {
     return action;
 }
 
+float CCNode::getPositionX() const {
+    return _positionX;
+}
+
+void CCNode::setPositionX(float x) {
+    _positionX = x;
+}
+
 } // namespace cocos2d

@@ -15,7 +15,7 @@ const delayBar = requireElement<HTMLDivElement>("#delay-bar");
 const actionCount = requireElement<HTMLSpanElement>("#action-count");
 
 const director = new CCDirector();
-const node = new CCNode("Demo", director);
+const node = new CCNode("Demo", director, 0);
 const delay = new CCDelayTime(1);
 
 node.runAction(new CCCallFunc(() => {
