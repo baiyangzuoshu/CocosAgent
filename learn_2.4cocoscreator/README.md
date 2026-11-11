@@ -72,6 +72,7 @@
 - [第 54 课：Web 缓存与版本更新](s54_web_cache_versioning/README.md)：重新验证发布清单，并切换版本化资源目录。
 - [第 55 课：3D 物理世界与帧步进](s55_physics3d_world_step/README.md)：观察 Director 如何调度 3D PhysicsWorld。
 - [第 56 课：Camera 配置转成渲染 View](s56_camera_view/README.md)：沿 2.4 的 RendererCamera、View 和 ForwardRenderer 路径。
+- [第 57 课：Camera cullingMask 与绘制阶段](s57_camera_culling_queue/README.md)：按 View 筛选模型，再区分 opaque/transparent 阶段。
 
 ## 代码结构
 

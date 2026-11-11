@@ -99,14 +99,14 @@ Cocos2d-x 1.x–4.x 分别沿各自版本的工程模板、构建脚本、平台
 
 源码和研究入口：Creator 2.4.15 `engine/2.4.15engine/gulp/util/utils.js`、`predefine.js`、`cocos2d/core/CCGame.js`、`CCSys.js`，以及 [发布与原生研究](2.x/10-publishing-and-native.md)；该引擎目录不包含完整 Creator Builder。Cocos2d-x 4.x 从 `engine/cocos2d-x-4/templates/cpp-template-default/`、CMake 配置和[项目构建边界](cocos2d-x-creator2x-source-study-plan.md)入手；该仓库当前 macOS x86_64 构建证据不能外推到其他平台。其他版本在对应课程 README 中列明本地版本源码和平台工程入口。
 
-### 十五：Creator 渲染系统深化（第 56 课已完成，57–65 课规划中）
+### 十五：Creator 渲染系统深化（第 56–57 课已完成，58–65 课规划中）
 
 Creator 2.4.15 的第 10–13 课已经搭出最小 Sprite 绘制链；新阶段继续追踪更完整的 Web 渲染职责，不重复四边形与 UV 入门。Creator 2.4.15 以 Web 浏览器路径实现；Creator 3.8.7 按其源码结构做独立示例和静态映射，不强行套用 2.4 的类名。
 
 | 课 | 新增主题 | 阶段结果 |
 | --- | --- | --- |
 | 56 | Camera、视口与渲染视图 | 说明相机配置如何形成一次渲染视图 |
-| 57 | 可见性、裁剪与渲染队列 | 追踪对象如何被筛选、排序并进入绘制队列 |
+| 57 | 相机可见性裁剪与排序 | 对照 Creator 2.4 的 View/stage 与 3.8 的 SceneCulling/RenderQueue |
 | 58 | 渲染组件、RenderData 与 assembler | 从组件脏状态追到可提交的几何数据 |
 | 59 | 顶点/索引缓冲与 GPU 上传 | 解释 CPU 几何数据如何进入图形缓冲 |
 | 60 | Material、Effect、Technique 与 Pass | 说明材质资源如何确定 Effect 和绘制状态 |
@@ -118,14 +118,14 @@ Creator 2.4.15 的第 10–13 课已经搭出最小 Sprite 绘制链；新阶段
 
 每课的版本专属源码路径和实现边界见 [Creator 2.4.15 课程大纲](../learn_2.4cocoscreator/课程大纲.md) 与 [Creator 3.8.7 课程大纲](../learn_3.8cocoscreator/课程大纲.md)；专题资料见 [2.4.15 图形渲染](2.x/06-graphics-rendering.md) 与 [3.8.7 图形渲染](3.x/06-graphics-rendering.md)。
 
-### 十六：Cocos2d-x 渲染深化（第 56 课已完成，57–65 课规划中）
+### 十六：Cocos2d-x 渲染深化（第 56–57 课已完成，58–65 课规划中）
 
 Cocos2d-x 1.x–4.x 的第 10–13 课已覆盖场景访问、可见性/排序、Sprite 几何和纹理区域。深化阶段沿各版本自己的源码继续：1.x/2.x 主要是 Node 访问期间直接调用 OpenGL；3.x 引入 Renderer 与渲染命令队列；4.0 再把命令提交接到可替换的渲染后端。相同课号表示主题并行，代码和 API 按版本分别维护。
 
 | 课 | 新增主题 | 阶段结果 |
 | --- | --- | --- |
 | 56 | Camera、视口与投影矩阵 | 追踪 Director/GLView 到相机坐标和最终视口 |
-| 57 | Node 可见性与绘制顺序 | 对照子节点访问顺序、GlobalZOrder 与相机筛选 |
+| 57 | Node 访问顺序与相机过滤 | 对照旧版直接遍历绘制与 3.x/4.0 的相机筛选、GlobalZ 命令队列 |
 | 58 | Sprite 几何数据与更新 | 从 quad 基础扩展到顶点属性和数据刷新时机 |
 | 59 | 顶点/索引缓冲与 TextureAtlas | 追踪 CPU 图元数据如何组成 GPU 绘制输入 |
 | 60 | Material、RenderState 与 Pass | 说明各版本如何表达一次绘制的状态 |

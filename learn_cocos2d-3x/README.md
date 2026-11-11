@@ -53,6 +53,7 @@
 - [第 52 课：资源处理与产物结构](s52_resource_artifacts/README.md)
 - [第 53 课：启动与交付](s53_startup_delivery/README.md)
 - [第 56 课：3.x Camera 驱动渲染循环](s56_camera_viewport/README.md)
+- [第 57 课：3.x 相机过滤与 GlobalZ 命令队列](s57_node_render_order/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 
