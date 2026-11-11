@@ -8,7 +8,7 @@
 
 ## 已完成课程
 
-- Creator 2.4.15、Creator 3.8.7：第 0 课元数据分析、第 1–29 课，以及第 31–54 课。
+- Creator 2.4.15、Creator 3.8.7：第 0 课元数据分析、第 1–29 课，以及第 31–55 课。
 - Cocos2d-x 1.x、2.x、3.x、4.x：第 1–29 课，以及第 31–53 课。
 - 第 23–29 课已把对象池的一组细碎知识合并为七个递进主题；六个版本仍各有独立代码。
 
@@ -25,6 +25,7 @@
 | 十一：2D 粒子 | 47–49（第 47–49 课已完成） | 粒子系统创建、发射与模拟、渲染和结束 | 从配置生成粒子，观察其更新、绘制与回收 |
 | 十二：构建、打包与交付 | 50–53（第 50–53 课已完成） | 目标配置、代码/资源构建、产物结构、启动与交付 | 从工程配置追到可运行的 Web 目录或原生应用包 |
 | 十三：Web 缓存与版本更新 | 54（第 54 课已完成） | 浏览器缓存重验证、版本化资源 URL、发布切换与回滚 | 让入口发现新版本，并复用不可变资源 |
+| 十四：Creator 3D 物理 | 55（第 55 课已完成） | Director 接入 3D 物理系统、World 固定步进 | 观察每帧时间如何变成物理子步 |
 
 ### 七：Action / Tween（第 30–34 课，第 30–34 课已完成）
 
@@ -88,6 +89,10 @@ Creator 2.4.15 首轮只研究与 Web 浏览器目标一致的构建输出。Cre
 
 Creator 2.4.15 追踪 Config 和 URL Transformer 如何组成带版本的资源 URL，并用可重新验证的发布清单切换到新版本目录；Nginx 示例为版本目录设置长缓存，旧目录用于回滚。Creator 3.8.7 仅做同类源码静态映射和课程代码示例，不执行编辑器构建或实机验收。两版课程各有独立代码：[Creator 2.4.15](../learn_2.4cocoscreator/s54_web_cache_versioning/README.md)、[Creator 3.8.7](../learn_3.8cocoscreator/s54_web_cache_versioning/README.md)。Cocos2d-x 1.x–4.x 面向原生应用和资源交付，不纳入浏览器 HTTP 缓存专题。
 
+### 十四：Creator 3D 物理（第 55 课，已完成）
+
+Creator 2.4.15 从 Director 调度进入 `Physics3DManager`，以默认固定步长调用选定的 `PhysicsWorld`；本课代码模拟 Cannon World 的同步、步进和事件顺序。Creator 3.8.7 从 Director 初始化后的 `PhysicsSystem` 注册，沿 `postUpdate` 的累积器和最大子步数推进 World；这里只做静态源码映射与独立课程代码，不执行编辑器构建或实机验收。两版代码分别见 [Creator 2.4.15](../learn_2.4cocoscreator/s55_physics3d_world_step/README.md) 和 [Creator 3.8.7](../learn_3.8cocoscreator/s55_physics3d_world_step/README.md)。
+
 Cocos2d-x 1.x–4.x 分别沿各自版本的工程模板、构建脚本、平台入口和资源目录追踪；不能把 4.x 的 CMake 路径套到旧版。第一轮每版只选有明确工具链和输出证据的一个目标平台，其他平台另列，不从一次桌面构建推断移动端或商店包状态。
 
 源码和研究入口：Creator 2.4.15 `engine/2.4.15engine/gulp/util/utils.js`、`predefine.js`、`cocos2d/core/CCGame.js`、`CCSys.js`，以及 [发布与原生研究](2.x/10-publishing-and-native.md)；该引擎目录不包含完整 Creator Builder。Cocos2d-x 4.x 从 `engine/cocos2d-x-4/templates/cpp-template-default/`、CMake 配置和[项目构建边界](cocos2d-x-creator2x-source-study-plan.md)入手；该仓库当前 macOS x86_64 构建证据不能外推到其他平台。其他版本在对应课程 README 中列明本地版本源码和平台工程入口。
@@ -100,7 +105,7 @@ Cocos2d-x 1.x–4.x 分别沿各自版本的工程模板、构建脚本、平台
 - 打包课程先固定引擎补丁版、目标平台、构建模式和工程身份；运行构建前核对工具链与 SDK，下载依赖、安装工具或改全局环境前先取得授权。
 - 构建日志、生成物检查和目标运行时验收分开记录；未实际构建的平台保持未验证状态。
 - 每个课程 README 记录本课目标、源码文件与关键函数、独立代码入口、可观察结果和简化点。
-- 本总纲只规划 2D UI、音频、2D 物理和 2D 粒子。3D 物理、3D 粒子、动画状态机和平台专项以后按需扩展。
+- 本总纲已加入 Creator 3D 物理世界与帧步进入口；刚体/碰撞体、3D 粒子、动画状态机和平台专项按需扩展。
 
 ## 各版本课程入口
 

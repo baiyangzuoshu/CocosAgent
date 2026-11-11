@@ -69,6 +69,7 @@
 - [第 52 课：资源处理与产物结构](s52_resource_artifacts/README.md)
 - [第 53 课：启动与交付](s53_startup_delivery/README.md)
 - [第 54 课：Web 缓存与版本更新](s54_web_cache_versioning/README.md)：静态映射 URL 版本规则与部署层切换。
+- [第 55 课：3D 物理世界与帧步进](s55_physics3d_world_step/README.md)：静态映射 PhysicsSystem 的固定子步。
 
 ## 目录结构
 
