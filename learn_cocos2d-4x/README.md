@@ -62,6 +62,7 @@
 | 第 56 课：Camera 与视口路径 | [本课](s56_camera_viewport/README.md) | [本课](../learn_2.4cocoscreator/s56_camera_view/README.md) | [本课](../learn_3.8cocoscreator/s56_camera_root/README.md) |
 | 第 57 课：相机裁剪与绘制顺序 | [本课](s57_node_render_order/README.md) | [本课](../learn_2.4cocoscreator/s57_camera_culling_queue/README.md) | [本课](../learn_3.8cocoscreator/s57_scene_culling_queue/README.md) |
 | 第 58 课：Sprite 几何数据更新 | [本课](s58_sprite_quad_update/README.md) | [本课](../learn_2.4cocoscreator/s58_sprite_render_data/README.md) | [本课](../learn_3.8cocoscreator/s58_sprite_render_data/README.md) |
+| 第 59 课：顶点/索引数据上传 | [本课](s59_backend_buffer_update/README.md) | [本课](../learn_2.4cocoscreator/s59_mesh_buffer_upload/README.md) | [本课](../learn_3.8cocoscreator/s59_mesh_buffer_upload/README.md) |
 
 历史 Cocos2d-x 同主题：[1.x](../learn_cocos2d-1x/s09_texture_cache/README.md)、[2.x](../learn_cocos2d-2x/s09_texture_cache/README.md)、[3.x](../learn_cocos2d-3x/s09_texture_cache/README.md)。
 
@@ -78,6 +79,8 @@
 历史 Cocos2d-x 第 57 课：[1.x](../learn_cocos2d-1x/s57_node_draw_order/README.md)、[2.x](../learn_cocos2d-2x/s57_node_draw_order/README.md)、[3.x](../learn_cocos2d-3x/s57_node_render_order/README.md)。
 
 历史 Cocos2d-x 第 58 课：[1.x](../learn_cocos2d-1x/s58_sprite_quad_update/README.md)、[2.x](../learn_cocos2d-2x/s58_sprite_quad_update/README.md)、[3.x](../learn_cocos2d-3x/s58_sprite_quad_update/README.md)。
+
+历史 Cocos2d-x 第 59 课：[1.x](../learn_cocos2d-1x/s59_atlas_vbo_upload/README.md)、[2.x](../learn_cocos2d-2x/s59_atlas_vbo_upload/README.md)、[3.x](../learn_cocos2d-3x/s59_renderer_vertex_upload/README.md)。
 
 各课程独立阅读和运行；表格用于快速打开同主题内容。
 

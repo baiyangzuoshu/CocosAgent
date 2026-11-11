@@ -74,6 +74,7 @@
 - [第 56 课：Camera 配置转成渲染 View](s56_camera_view/README.md)：沿 2.4 的 RendererCamera、View 和 ForwardRenderer 路径。
 - [第 57 课：Camera cullingMask 与绘制阶段](s57_camera_culling_queue/README.md)：按 View 筛选模型，再区分 opaque/transparent 阶段。
 - [第 58 课：Sprite assembler 更新 RenderData](s58_sprite_render_data/README.md)：从顶点脏标记追到 RenderFlow 和 Batcher。
+- [第 59 课：MeshBuffer 上传顶点与索引](s59_mesh_buffer_upload/README.md)：沿 2.4 的 WebGL VB/IB 与 InputAssembler 路径。
 
 ## 代码结构
 
