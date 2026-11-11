@@ -70,6 +70,7 @@
 - [第 53 课：启动与交付](s53_startup_delivery/README.md)
 - [第 54 课：Web 缓存与版本更新](s54_web_cache_versioning/README.md)：静态映射 URL 版本规则与部署层切换。
 - [第 55 课：3D 物理世界与帧步进](s55_physics3d_world_step/README.md)：静态映射 PhysicsSystem 的固定子步。
+- [第 56 课：CameraComponent 到 Root 渲染管线](s56_camera_root/README.md)：沿 3.8 的 RenderWindow、RenderScene 和 RenderPipeline 路径。
 
 ## 目录结构
 
