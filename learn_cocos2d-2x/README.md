@@ -57,6 +57,7 @@
 - [第 58 课：2.x Sprite quad 更新到 TextureAtlas](s58_sprite_quad_update/README.md)
 - [第 59 课：2.x TextureAtlas VAO/VBO 上传](s59_atlas_vbo_upload/README.md)
 - [第 60 课：2.x Sprite 绘制状态准备](s60_sprite_draw_state/README.md)
+- [第 61 课：2.x GLProgram、ShaderCache 与 Uniform](s61_glprogram_uniforms/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 

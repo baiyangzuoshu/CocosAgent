@@ -76,6 +76,7 @@
 - [第 58 课：Sprite assembler 更新 RenderData](s58_sprite_render_data/README.md)：从顶点脏标记追到 RenderFlow 和 Batcher。
 - [第 59 课：MeshBuffer 上传顶点与索引](s59_mesh_buffer_upload/README.md)：沿 2.4 的 WebGL VB/IB 与 InputAssembler 路径。
 - [第 60 课：Material、Effect 与 Pass](s60_material_effect_pass/README.md)：从 EffectAsset 解析绘制状态，并由 WebGL 应用混合设置。
+- [第 61 课：ProgramLib 宏变体与 Uniform](s61_program_lib_variants/README.md)：按 Pass 宏生成并缓存 WebGL 程序，再应用属性参数。
 
 ## 代码结构
 
