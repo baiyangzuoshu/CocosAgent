@@ -78,6 +78,8 @@
 - [第 61 课：ProgramLib 与 WebGL2 Shader](s61_shader_variant_programlib/README.md)：生成 GFX Shader 变体，并观察 GPU 程序的惰性创建。
 - [第 62 课：Batcher2D 与 DrawBatch](s62_batcher2d_flush/README.md)：按 RenderData、材质和模板阶段结束当前批次。
 - [第 63 课：MeshRenderer 创建 Model/SubModel](s63_mesh_model_submodels/README.md)：按子网格/材质槽建立模型对象并挂入 RenderScene。
+- [第 64 课：Root 到 WebGL2 PrimaryCommandBuffer](s64_gfx_primary_command_buffer/README.md)：沿默认管线追踪 WebGL2 即时 draw 与 Queue 统计汇总。
+- [第 65 课：RenderTexture 与 RenderWindow](s65_render_window_target/README.md)：由 Camera 切换 RenderWindow，再采样颜色附件。
 
 ## 目录结构
 

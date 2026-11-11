@@ -27,8 +27,8 @@
 | 十二：构建、打包与交付 | 50–53（第 50–53 课已完成） | 目标配置、代码/资源构建、产物结构、启动与交付 | 从工程配置追到可运行的 Web 目录或原生应用包 |
 | 十三：Web 缓存与版本更新 | 54（第 54 课已完成） | 浏览器缓存重验证、版本化资源 URL、发布切换与回滚 | 让入口发现新版本，并复用不可变资源 |
 | 十四：Creator 3D 物理 | 55（第 55 课已完成） | Director 接入 3D 物理系统、World 固定步进 | 观察每帧时间如何变成物理子步 |
-| 十五：Creator 渲染系统深化 | 56–65（56–61 已完成，62–65 规划中） | Camera 与可见性、渲染数据、材质和着色器、缓冲区、2D 合批、3D 模型、管线提交与离屏渲染 | 从各版场景组件追踪到各自的 GPU 绘制路径 |
-| 十六：Cocos2d-x 渲染深化 | 56–65（56–61 已完成，62–65 规划中） | 相机、可见性与排序、Sprite 数据、GPU 缓冲、渲染状态、程序与参数、合批、3D 边界、设备提交与 RenderTexture | 按各版自己的绘制架构继续学习 |
+| 十五：Creator 渲染系统深化 | 56–65（56–65 已完成） | Camera 与可见性、渲染数据、材质和着色器、缓冲区、2D 合批、3D 模型、管线提交与离屏渲染 | 2.4 用 Camera FrameBuffer；3.8 用 Camera/RenderWindow/GFX Framebuffer |
+| 十六：Cocos2d-x 渲染深化 | 56–65（56–65 已完成） | 相机、可见性与排序、Sprite 数据、GPU 缓冲、渲染状态、程序与参数、合批、3D 边界、设备提交与 RenderTexture | 1.x/2.x 手动 GL FBO 作用域；3.x 队列回调绑定 GL FBO；4.0 通过 backend render pass 附件 |
 
 ### 七：Action / Tween（第 30–34 课，第 30–34 课已完成）
 
@@ -100,7 +100,7 @@ Cocos2d-x 1.x–4.x 分别沿各自版本的工程模板、构建脚本、平台
 
 源码和研究入口：Creator 2.4.15 `engine/2.4.15engine/gulp/util/utils.js`、`predefine.js`、`cocos2d/core/CCGame.js`、`CCSys.js`，以及 [发布与原生研究](2.x/10-publishing-and-native.md)；该引擎目录不包含完整 Creator Builder。Cocos2d-x 4.x 从 `engine/cocos2d-x-4/templates/cpp-template-default/`、CMake 配置和[项目构建边界](cocos2d-x-creator2x-source-study-plan.md)入手；该仓库当前 macOS x86_64 构建证据不能外推到其他平台。其他版本在对应课程 README 中列明本地版本源码和平台工程入口。
 
-### 十五：Creator 渲染系统深化（第 56–63 课已完成，64–65 课规划中）
+### 十五：Creator 渲染系统深化（第 56–65 课已完成）
 
 Creator 2.4.15 的第 10–13 课已经搭出最小 Sprite 绘制链；新阶段继续追踪更完整的 Web 渲染职责，不重复四边形与 UV 入门。Creator 2.4.15 以 Web 浏览器路径实现；Creator 3.8.7 按其源码结构做独立示例和静态映射，不强行套用 2.4 的类名。第 59 课分别沿 2.4 MeshBuffer.uploadData → WebGL VB/IB → InputAssembler，以及 3.8 LinearBufferAccessor → MeshBuffer → GFX Buffer 路径；两课共享概念，但接口和对象职责不合并。
 
@@ -114,12 +114,12 @@ Creator 2.4.15 的第 10–13 课已经搭出最小 Sprite 绘制链；新阶段
 | 61 | ProgramLib 宏变体、Shader 属性与 Uniform | 2.4 沿 ProgramLib 到 WebGL 程序与 Pass 属性；3.8 沿 ProgramLib 到 GFX Shader 和 WebGL2 惰性程序创建，各有独立代码 |
 | 62 | 2D/UI 合批与 flush 条件 | 2.4 沿 ModelBatcher/材质哈希/cullingMask/MeshBuffer 容量；3.8 沿 Batcher2D/RenderData dataHash/Material/stencil stage，各有独立代码 |
 | 63 | MeshRenderer 与网格提交路径 | 2.4 由 MeshRendererAssembler 遍历子网格并写 MeshBuffer/InputAssembler；3.8 由 ModelRenderer 建立 Model/SubModel 并挂入 RenderScene，各按本版源码实现 |
-| 64 | 渲染管线、命令记录与设备提交 | 从阶段/队列追到 GFX draw 提交 |
-| 65 | RenderTexture 与离屏 Camera | 将一台相机的输出写入纹理并供后续绘制 |
+| 64 | 渲染管线到图形 API 提交 | Creator 2.4 沿 ForwardRenderer/BaseRenderer 直接调用 WebGL Device；3.8 默认管线沿 Root/RenderPipeline/ForwardStage 到 GFX，WebGL2 PrimaryCommandBuffer.draw 即时发 GL 调用 |
+| 65 | Camera 离屏目标与后续采样 | Creator 2.4 Camera 将 GFX FrameBuffer 交给 View；3.8 Camera 切换到 RenderTexture.window，RenderWindow 提供 GFX Framebuffer/颜色纹理，各自保持本版入口 |
 
 每课的版本专属源码路径和实现边界见 [Creator 2.4.15 课程大纲](../learn_2.4cocoscreator/课程大纲.md) 与 [Creator 3.8.7 课程大纲](../learn_3.8cocoscreator/课程大纲.md)；专题资料见 [2.4.15 图形渲染](2.x/06-graphics-rendering.md) 与 [3.8.7 图形渲染](3.x/06-graphics-rendering.md)。
 
-### 十六：Cocos2d-x 渲染深化（第 56–63 课已完成，64–65 课规划中）
+### 十六：Cocos2d-x 渲染深化（第 56–65 课已完成）
 
 Cocos2d-x 1.x–4.x 的第 10–13 课已覆盖场景访问、可见性/排序、Sprite 几何和纹理区域。深化阶段沿各版本自己的源码继续：1.x/2.x 主要是 Node 访问期间直接调用 OpenGL；3.x 引入 Renderer 与渲染命令队列；4.0 再把命令提交接到可替换的渲染后端。相同课号表示主题并行，代码和 API 按版本分别维护。
 
@@ -133,8 +133,8 @@ Cocos2d-x 1.x–4.x 的第 10–13 课已覆盖场景访问、可见性/排序�
 | 61 | 程序对象与 Uniform 参数 | 1.x 固定管线输入边界；2.x CCShaderCache/CCGLProgram；3.x GLProgramState/UniformValue；4.0 backend ProgramCache/ProgramState，各自按本版源码实现 |
 | 62 | 2D 合批与批次边界 | 1.x 同纹理 quad 插入 TextureAtlas；2.x 按 zOrder 重排 atlas quad；3.x 封装为 BatchCommand；4.0 按 material ID 合并相邻三角形命令，各自走本版渲染路径 |
 | 63 | 网格输入与提交边界 | 1.x CCGrid3D 固定管线变形纹理网格；2.x CCGrid3D 加 Shader 后仍直接绘制；3.x Sprite3D/Mesh 生成 GL MeshCommand；4.0 按 Material Pass 生成 backend MeshCommand，各自沿本版渲染路径 |
-| 64 | 渲染器到图形设备的提交 | 对比直接 OpenGL、3.x 命令执行和 4.0 后端 CommandBuffer |
-| 65 | RenderTexture 与离屏绘制 | 将场景写入纹理，再把结果接回后续绘制 |
+| 64 | 各版本的图形 API 提交 | 1.x/2.x Node.visit 中 Sprite 直接调用 OpenGL；3.x Renderer 排序并执行 GL MeshCommand；4.0 Renderer 经 backend CommandBuffer 调用对应 GL/Metal 实现 |
+| 65 | 各版离屏目标与回屏绘制 | 1.x/2.x begin/end 手动绑定 FBO；3.x begin/end 排入 Group/Callback 命令后直接绑定 GL FBO；4.0 回调更新 RenderPassDescriptor 并由 backend CommandBuffer 应用附件 |
 
 每课的源码入口见 [Cocos2d-x 1.x](../learn_cocos2d-1x/课程大纲.md)、[2.x](../learn_cocos2d-2x/课程大纲.md)、[3.x](../learn_cocos2d-3x/课程大纲.md) 与 [4.0](../learn_cocos2d-4x/课程大纲.md) 大纲。
 

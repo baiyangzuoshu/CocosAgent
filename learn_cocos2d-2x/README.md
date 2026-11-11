@@ -60,6 +60,8 @@
 - [第 61 课：2.x GLProgram、ShaderCache 与 Uniform](s61_glprogram_uniforms/README.md)
 - [第 62 课：2.x SpriteBatchNode 排序与图集重排](s62_texture_atlas_reorder/README.md)
 - [第 63 课：2.x CCGrid3D 与模型渲染边界](s63_grid3d_shader_pipeline/README.md)
+- [第 64 课：2.x Shader Sprite 直接绘制](s64_shader_scene_gl/README.md)
+- [第 65 课：2.x RenderTexture 与矩阵栈](s65_kazmath_fbo_scope/README.md)
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 

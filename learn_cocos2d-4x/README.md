@@ -92,6 +92,10 @@
 
 本课程第 63 课：[Sprite3D 与多 Pass MeshCommand](s63_sprite3d_pass_commands/README.md)。
 
+本课程第 64 课：[Renderer 到 backend CommandBuffer](s64_backend_command_buffer/README.md)。
+
+本课程第 65 课：[RenderTexture backend 目标](s65_backend_render_target/README.md)。
+
 历史 Cocos2d-x 第 14 课：[1.x](../learn_cocos2d-1x/s14_touch_input/README.md)、[2.x](../learn_cocos2d-2x/s14_touch_input/README.md)、[3.x](../learn_cocos2d-3x/s14_touch_input/README.md)。
 
 历史 Cocos2d-x 第 15 课：[1.x](../learn_cocos2d-1x/s15_touch_listener/README.md)、[2.x](../learn_cocos2d-2x/s15_touch_listener/README.md)、[3.x](../learn_cocos2d-3x/s15_touch_listener/README.md)。
