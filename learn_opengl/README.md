@@ -40,8 +40,9 @@
 - [第 24 课：Cubemap、天空盒与环境采样](s24_cubemap_skybox_environment_sampling/README.md)
 - [第 25 课：Framebuffer 与 Render-to-Texture](s25_framebuffer_render_to_texture/README.md)
 - [第 26 课：Shadow Mapping](s26_shadow_mapping/README.md)
+- [第 27 课：全屏后处理与多 Pass](s27_fullscreen_post_processing/README.md)
 
-总纲规划 30 课；目前已实现第 1–26 课，其他课程按学习进度逐课补充。
+总纲规划 30 课；目前已实现第 1–27 课，其他课程按学习进度逐课补充。
 
 ## 技术约定
 
