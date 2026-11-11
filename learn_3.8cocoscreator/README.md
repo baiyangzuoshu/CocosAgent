@@ -68,6 +68,7 @@
 - [第 51 课：代码与引擎构建](s51_code_engine_build/README.md)
 - [第 52 课：资源处理与产物结构](s52_resource_artifacts/README.md)
 - [第 53 课：启动与交付](s53_startup_delivery/README.md)
+- [第 54 课：Web 缓存与版本更新](s54_web_cache_versioning/README.md)：静态映射 URL 版本规则与部署层切换。
 
 ## 目录结构
 

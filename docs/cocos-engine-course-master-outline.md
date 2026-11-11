@@ -8,8 +8,8 @@
 
 ## 已完成课程
 
-- Creator 2.4.15、Creator 3.8.7：第 0 课元数据分析、第 1–29 课，以及第 31–52 课。
-- Cocos2d-x 1.x、2.x、3.x、4.x：第 1–29 课，以及第 31–52 课。
+- Creator 2.4.15、Creator 3.8.7：第 0 课元数据分析、第 1–29 课，以及第 31–54 课。
+- Cocos2d-x 1.x、2.x、3.x、4.x：第 1–29 课，以及第 31–53 课。
 - 第 23–29 课已把对象池的一组细碎知识合并为七个递进主题；六个版本仍各有独立代码。
 
 ## 后续阶段
@@ -23,7 +23,8 @@
 | 九：音频 | 40–42（第 40–42 课已完成） | 资源、播放生命周期、并发与音量控制 | 加载并播放音效或背景音，观察播放、停止和资源生命周期 |
 | 十：2D 物理 | 43–46（第 43–46 课已完成） | 物理世界、刚体与碰撞体、接触、查询与调试 | 让节点参与 2D 模拟并处理碰撞或查询结果 |
 | 十一：2D 粒子 | 47–49（第 47–49 课已完成） | 粒子系统创建、发射与模拟、渲染和结束 | 从配置生成粒子，观察其更新、绘制与回收 |
-| 十二：构建、打包与交付 | 50–53（第 50–52 课已完成） | 目标配置、代码/资源构建、产物结构、启动与交付 | 从工程配置追到可运行的 Web 目录或原生应用包 |
+| 十二：构建、打包与交付 | 50–53（第 50–53 课已完成） | 目标配置、代码/资源构建、产物结构、启动与交付 | 从工程配置追到可运行的 Web 目录或原生应用包 |
+| 十三：Web 缓存与版本更新 | 54（第 54 课已完成） | 浏览器缓存重验证、版本化资源 URL、发布切换与回滚 | 让入口发现新版本，并复用不可变资源 |
 
 ### 七：Action / Tween（第 30–34 课，第 30–34 课已完成）
 
@@ -82,6 +83,10 @@ Cocos2d-x 使用本版本实际提供的 `Layer`、`Menu`、`Label` 或 `ui::Wid
 4. **启动与交付（第 53 课已完成）**：Creator 2.4 Web 从静态入口进入 cc.game.run，初始化回调加载启动场景；入口更新和版本化资源缓存属于部署策略。Creator 3.8.7 只静态映射 Game.init、Game.run 与首帧加载场景回调。Cocos2d-x 1.x–4.x 从平台 main 进入 Application，再由 AppDelegate 启动首个 Scene，原生 app 与资源随平台目标交付。六版独立示例：[Creator 2.4.15](../learn_2.4cocoscreator/s53_startup_delivery/README.md)、[Creator 3.8.7](../learn_3.8cocoscreator/s53_startup_delivery/README.md)、[Cocos2d-x 1.x](../learn_cocos2d-1x/s53_startup_delivery/README.md)、[2.x](../learn_cocos2d-2x/s53_startup_delivery/README.md)、[3.x](../learn_cocos2d-3x/s53_startup_delivery/README.md)、[4.x](../learn_cocos2d-4x/s53_startup_delivery/README.md)。
 
 Creator 2.4.15 首轮只研究与 Web 浏览器目标一致的构建输出。Creator 的完整 Editor Builder 不在本地引擎源码中；课程从公开构建入口、引擎宏/启动代码和可检查的输出分别说明证据，不能声称还原闭源 Builder 的全部步骤。Creator 3.8.7 暂列在总纲，当前不执行构建或实机验收。
+
+### 十三：Web 缓存与版本更新（第 54 课，已完成）
+
+Creator 2.4.15 追踪 Config 和 URL Transformer 如何组成带版本的资源 URL，并用可重新验证的发布清单切换到新版本目录；Nginx 示例为版本目录设置长缓存，旧目录用于回滚。Creator 3.8.7 仅做同类源码静态映射和课程代码示例，不执行编辑器构建或实机验收。两版课程各有独立代码：[Creator 2.4.15](../learn_2.4cocoscreator/s54_web_cache_versioning/README.md)、[Creator 3.8.7](../learn_3.8cocoscreator/s54_web_cache_versioning/README.md)。Cocos2d-x 1.x–4.x 面向原生应用和资源交付，不纳入浏览器 HTTP 缓存专题。
 
 Cocos2d-x 1.x–4.x 分别沿各自版本的工程模板、构建脚本、平台入口和资源目录追踪；不能把 4.x 的 CMake 路径套到旧版。第一轮每版只选有明确工具链和输出证据的一个目标平台，其他平台另列，不从一次桌面构建推断移动端或商店包状态。
 
