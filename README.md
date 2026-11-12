@@ -17,6 +17,12 @@
 | [C 与 C++](learn_cpp/README.md) | 从 C 基础、现代 C++ 学到 Cocos2d-x 源码阅读。 |
 | [OpenGL](learn_opengl/README.md) | 用独立练习学习现代 OpenGL，并与 Cocos 引擎渲染源码对照。 |
 
+### 其他游戏引擎
+
+| 课程 | 内容 |
+| --- | --- |
+| [Godot 4.8.0 beta](learn_godot/README.md) | 对照本地 Godot 源码快照，用 C++ 源码追踪和最小 Godot/GDScript 实验学习引擎架构。 |
+
 ### AI 与开发工具
 
 | 课程 | 内容 |
@@ -38,7 +44,7 @@
 
 ## 本地源码
 
-`engine/` 保存课程引用的源码快照，包括 Creator 2.4.15、Creator 3.8.7、Cocos2d-x 1.x–4.x，以及 Claude Code 相关材料。以对应课程 README 标注的版本和路径为准；不要把某一快照中的结论直接推广到其他版本。
+`engine/` 保存课程引用的源码快照，包括 Creator 2.4.15、Creator 3.8.7、Cocos2d-x 1.x–4.x、Godot 4.8.0 beta，以及 Claude Code 相关材料。以对应课程 README 标注的版本和路径为准；不要把某一快照中的结论直接推广到其他版本。
 
 ## 从这里开始
 
