@@ -1,0 +1,2 @@
+#include "ParticleStudy.h"
+namespace cocos2d { void ParticleStudy::run() { std::vector<Particle> particles{{0.4f,1.0f,0.0f,0.0f,2.0f,1.0f},{0.9f,1.0f,1.0f,0.0f,1.0f,1.0f}}; for(auto& p:particles){p.age+=0.2f;p.x+=p.vx*0.2f;} particles.erase(std::remove_if(particles.begin(),particles.end(),[](const Particle& p){return p.age>=p.life;}),particles.end()); std::cout << "alive after update=" << particles.size() << "\n"; } }

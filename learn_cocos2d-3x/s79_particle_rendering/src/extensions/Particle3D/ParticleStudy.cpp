@@ -1,0 +1,2 @@
+#include "ParticleStudy.h"
+namespace cocos2d { void ParticleStudy::run() { std::vector<Particle> particles{{0,1,1,1,0,0.5f},{0,1,3,3,0,1}}; std::vector<float> vertices; for(const auto& p:particles){vertices.insert(vertices.end(),{p.x-p.size,p.y-p.size,p.x+p.size,p.y-p.size,p.x+p.size,p.y+p.size,p.x-p.size,p.y+p.size});} std::cout << "Particle3DRender billboards=" << particles.size() << " vertices=" << vertices.size()/2 << "\n"; } }

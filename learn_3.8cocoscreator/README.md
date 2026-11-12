@@ -81,6 +81,24 @@
 - [第 64 课：Root 到 WebGL2 PrimaryCommandBuffer](s64_gfx_primary_command_buffer/README.md)：沿默认管线追踪 WebGL2 即时 draw 与 Queue 统计汇总。
 - [第 65 课：RenderTexture 与 RenderWindow](s65_render_window_target/README.md)：由 Camera 切换 RenderWindow，再采样颜色附件。
 
+## 第 66–80 课：物理、动画与 3D 粒子
+
+- [第 66 课：Creator 3.8.7 刚体生命周期与节点同步](s66_rigidbody_sync/README.md)
+- [第 67 课：Creator 3.8.7 碰撞体形状与物理材质](s67_collider_shapes/README.md)
+- [第 68 课：Creator 3.8.7 接触事件与碰撞过滤](s68_contact_filter/README.md)
+- [第 69 课：Creator 3.8.7 射线与物理查询](s69_physics_queries/README.md)
+- [第 70 课：Creator 3.8.7 约束接口与后端能力边界](s70_constraint_boundary/README.md)
+- [第 71 课：Creator 3.8.7 动画资源与片段](s71_animation_clip/README.md)
+- [第 72 课：Creator 3.8.7 播放状态与时间推进](s72_animation_playback/README.md)
+- [第 73 课：Creator 3.8.7 关键帧采样与属性写回](s73_animation_sampling/README.md)
+- [第 74 课：Creator 3.8.7 动画事件与完成回调](s74_animation_events/README.md)
+- [第 75 课：Creator 3.8.7 动画组合与过渡](s75_animation_transition/README.md)
+- [第 76 课：Creator 3.8.7 粒子系统配置与发射器](s76_particle_emission/README.md)
+- [第 77 课：Creator 3.8.7 粒子模拟与生命周期](s77_particle_simulation/README.md)
+- [第 78 课：Creator 3.8.7 粒子属性模块与曲线](s78_particle_modules/README.md)
+- [第 79 课：Creator 3.8.7 粒子渲染与批次](s79_particle_rendering/README.md)
+- [第 80 课：Creator 3.8.7 停止发射与资源回收](s80_particle_lifecycle/README.md)
+
 ## 目录结构
 
 ~~~text
@@ -128,7 +146,47 @@ learn_3.8cocoscreator/
 ├── s37_layout/                      # Layout 水平排布
 ├── s38_label_update/                # Label 文本更新
 ├── s39_button_interaction/          # Button 触摸与回调
-└── s40_audio_resource_entry/        # AudioClip 与音频引擎入口
+├── s40_audio_resource_entry/  # 第 40 课：AudioClip 到 PAL AudioPlayer
+├── s41_audio_playback_lifecycle/  # 第 41 课：AudioSource 播放生命周期
+├── s42_audio_concurrency_control/  # 第 42 课：AudioSource 音量与 one-shot 并发
+├── s43_physics_world/  # 第 43 课：PhysicsSystem2D 的帧步进
+├── s44_rigidbody_collider/  # 第 44 课：RigidBody2D 与 Collider2D 怎样进入后端
+├── s45_contact_filter/  # 第 45 课：碰撞分组、接触回调与响应
+├── s46_physics_queries/  # 第 46 课：物理查询与调试绘制
+├── s47_particle_system/  # 第 47 课：粒子系统创建与配置
+├── s48_particle_simulation/  # 第 48 课：粒子发射与逐帧模拟
+├── s49_particle_render_finish/  # 第 49 课：粒子绘制与结束
+├── s50_build_target_entry/  # 第 50 课：目标选择与构建入口
+├── s51_code_engine_build/  # 第 51 课：代码与引擎构建
+├── s52_resource_artifacts/  # 第 52 课：资源处理与产物结构
+├── s53_startup_delivery/  # 第 53 课：启动与交付
+├── s54_web_cache_versioning/  # 第 54 课：Web 缓存与版本更新
+├── s55_physics3d_world_step/  # 第 55 课：3D 物理世界与帧步进
+├── s56_camera_root/  # 第 56 课：CameraComponent 到 Root 渲染管线
+├── s57_scene_culling_queue/  # 第 57 课：SceneCulling 与 opaque/transparent RenderQueue
+├── s58_sprite_render_data/  # 第 58 课：Sprite assembler 与 RenderData 刷新
+├── s59_mesh_buffer_upload/  # 第 59 课：Creator 3.8 MeshBuffer 更新 GFX Buffer
+├── s60_material_instance/  # 第 60 课：Creator 3.8 MaterialInstance 与 Pass 状态
+├── s61_shader_variant_programlib/  # 第 61 课：Creator 3.8 ProgramLib 与 WebGL2 Shader
+├── s62_batcher2d_flush/  # 第 62 课：Creator 3.8 Batcher2D 与 DrawBatch
+├── s63_mesh_model_submodels/  # 第 63 课：Creator 3.8 MeshRenderer 创建 Model/SubModel
+├── s64_gfx_primary_command_buffer/  # 第 64 课：Creator 3.8 Root 到 WebGL2 PrimaryCommandBuffer
+├── s65_render_window_target/  # 第 65 课：Creator 3.8 RenderTexture 与 RenderWindow
+├── s66_rigidbody_sync/  # 第 66 课：Creator 3.8.7 刚体生命周期与节点同步
+├── s67_collider_shapes/  # 第 67 课：Creator 3.8.7 碰撞体形状与物理材质
+├── s68_contact_filter/  # 第 68 课：Creator 3.8.7 接触事件与碰撞过滤
+├── s69_physics_queries/  # 第 69 课：Creator 3.8.7 射线与物理查询
+├── s70_constraint_boundary/  # 第 70 课：Creator 3.8.7 约束接口与后端能力边界
+├── s71_animation_clip/  # 第 71 课：Creator 3.8.7 动画资源与片段
+├── s72_animation_playback/  # 第 72 课：Creator 3.8.7 播放状态与时间推进
+├── s73_animation_sampling/  # 第 73 课：Creator 3.8.7 关键帧采样与属性写回
+├── s74_animation_events/  # 第 74 课：Creator 3.8.7 动画事件与完成回调
+├── s75_animation_transition/  # 第 75 课：Creator 3.8.7 动画组合与过渡
+├── s76_particle_emission/  # 第 76 课：Creator 3.8.7 粒子系统配置与发射器
+├── s77_particle_simulation/  # 第 77 课：Creator 3.8.7 粒子模拟与生命周期
+├── s78_particle_modules/  # 第 78 课：Creator 3.8.7 粒子属性模块与曲线
+├── s79_particle_rendering/  # 第 79 课：Creator 3.8.7 粒子渲染与批次
+└── s80_particle_lifecycle/  # 第 80 课：Creator 3.8.7 停止发射与资源回收
 ~~~
 
 浏览器运行课进入各自目录，按 README 运行 `deno task check`、`deno task build` 和 `deno task serve`。第 0 课的元数据分析使用 `deno task check` 和 `deno task analyze`。

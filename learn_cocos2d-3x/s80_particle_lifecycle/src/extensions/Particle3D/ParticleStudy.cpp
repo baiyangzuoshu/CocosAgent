@@ -1,0 +1,2 @@
+#include "ParticleStudy.h"
+namespace cocos2d { void ParticleStudy::run() { bool emitting=true; std::vector<Particle> particles{{0.4f,1,0,0,2,1},{0.9f,1,0,0,1,1}}; emitting=false; for(auto& p:particles)p.age+=0.2f; particles.erase(std::remove_if(particles.begin(),particles.end(),[](const Particle& p){return p.age>=p.life;}),particles.end()); bool released=!emitting&&particles.empty(); std::cout << "emitting=" << emitting << " alive=" << particles.size() << " released=" << released << "\n"; } }

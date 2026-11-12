@@ -82,6 +82,24 @@
 - [第 64 课：ForwardRenderer 到 WebGL Device](s64_forward_renderer_device/README.md)：追踪阶段绘制项经 BaseRenderer 后直接提交 WebGL。
 - [第 65 课：Camera 输出到 RenderTexture](s65_camera_render_texture/README.md)：将 Camera 输出写入 GFX FrameBuffer，再由 Sprite 采样。
 
+## 第 66–80 课：物理、动画与 3D 粒子
+
+- [第 66 课：Creator 2.4.15 刚体生命周期与节点同步](s66_rigidbody_sync/README.md)
+- [第 67 课：Creator 2.4.15 碰撞体形状与物理材质](s67_collider_shapes/README.md)
+- [第 68 课：Creator 2.4.15 接触事件与碰撞过滤](s68_contact_filter/README.md)
+- [第 69 课：Creator 2.4.15 射线与物理查询](s69_physics_queries/README.md)
+- [第 70 课：Creator 2.4.15 约束接口与后端能力边界](s70_constraint_boundary/README.md)
+- [第 71 课：Creator 2.4.15 动画资源与片段](s71_animation_clip/README.md)
+- [第 72 课：Creator 2.4.15 播放状态与时间推进](s72_animation_playback/README.md)
+- [第 73 课：Creator 2.4.15 关键帧采样与属性写回](s73_animation_sampling/README.md)
+- [第 74 课：Creator 2.4.15 动画事件与完成回调](s74_animation_events/README.md)
+- [第 75 课：Creator 2.4.15 动画组合与过渡](s75_animation_transition/README.md)
+- [第 76 课：Creator 2.4.15 粒子系统配置与发射器](s76_particle_emission/README.md)
+- [第 77 课：Creator 2.4.15 粒子模拟与生命周期](s77_particle_simulation/README.md)
+- [第 78 课：Creator 2.4.15 粒子属性模块与曲线](s78_particle_modules/README.md)
+- [第 79 课：Creator 2.4.15 粒子渲染与批次](s79_particle_rendering/README.md)
+- [第 80 课：Creator 2.4.15 停止发射与资源回收](s80_particle_lifecycle/README.md)
+
 ## 代码结构
 
 ~~~text
@@ -163,7 +181,47 @@ learn_2.4cocoscreator/
 ├── s37_layout/                      # Layout 水平排布
 ├── s38_label_update/                # Label 文本更新
 ├── s39_button_interaction/          # Button 触摸与回调
-└── s40_audio_resource_entry/        # AudioClip 与音频引擎入口
+├── s40_audio_resource_entry/  # 第 40 课：AudioClip 进入浏览器音频引擎
+├── s41_audio_playback_lifecycle/  # 第 41 课：音频播放生命周期
+├── s42_audio_concurrency_control/  # 第 42 课：音量、循环与并发
+├── s43_physics_world/  # 第 43 课：启用物理世界与帧步进
+├── s44_rigidbody_collider/  # 第 44 课：RigidBody 与 Collider 怎样挂到 Node
+├── s45_contact_filter/  # 第 45 课：碰撞分组、接触回调与响应
+├── s46_physics_queries/  # 第 46 课：物理查询与调试绘制
+├── s47_particle_system/  # 第 47 课：粒子系统创建与配置
+├── s48_particle_simulation/  # 第 48 课：粒子发射与逐帧模拟
+├── s49_particle_render_finish/  # 第 49 课：粒子绘制与结束
+├── s50_build_target_entry/  # 第 50 课：目标选择与构建入口
+├── s51_code_engine_build/  # 第 51 课：代码与引擎构建
+├── s52_resource_artifacts/  # 第 52 课：资源处理与产物结构
+├── s53_startup_delivery/  # 第 53 课：启动与交付
+├── s54_web_cache_versioning/  # 第 54 课：Web 缓存与版本更新
+├── s55_physics3d_world_step/  # 第 55 课：3D 物理世界与帧步进
+├── s56_camera_view/  # 第 56 课：Camera 配置转成渲染 View
+├── s57_camera_culling_queue/  # 第 57 课：Camera cullingMask 与绘制阶段
+├── s58_sprite_render_data/  # 第 58 课：Sprite assembler 更新 RenderData
+├── s59_mesh_buffer_upload/  # 第 59 课：Creator 2.4 MeshBuffer 上传
+├── s60_material_effect_pass/  # 第 60 课：Creator 2.4 Material、Effect 与 Pass
+├── s61_program_lib_variants/  # 第 61 课：Creator 2.4 ProgramLib 宏变体与 Uniform
+├── s62_model_batch_flush/  # 第 62 课：Creator 2.4 ModelBatcher 与 flush 边界
+├── s63_mesh_renderer_assembler/  # 第 63 课：Creator 2.4 MeshRendererAssembler 处理子网格
+├── s64_forward_renderer_device/  # 第 64 课：Creator 2.4 ForwardRenderer 到 WebGL Device
+├── s65_camera_render_texture/  # 第 65 课：Creator 2.4 Camera 输出到 RenderTexture
+├── s66_rigidbody_sync/  # 第 66 课：Creator 2.4.15 刚体生命周期与节点同步
+├── s67_collider_shapes/  # 第 67 课：Creator 2.4.15 碰撞体形状与物理材质
+├── s68_contact_filter/  # 第 68 课：Creator 2.4.15 接触事件与碰撞过滤
+├── s69_physics_queries/  # 第 69 课：Creator 2.4.15 射线与物理查询
+├── s70_constraint_boundary/  # 第 70 课：Creator 2.4.15 约束接口与后端能力边界
+├── s71_animation_clip/  # 第 71 课：Creator 2.4.15 动画资源与片段
+├── s72_animation_playback/  # 第 72 课：Creator 2.4.15 播放状态与时间推进
+├── s73_animation_sampling/  # 第 73 课：Creator 2.4.15 关键帧采样与属性写回
+├── s74_animation_events/  # 第 74 课：Creator 2.4.15 动画事件与完成回调
+├── s75_animation_transition/  # 第 75 课：Creator 2.4.15 动画组合与过渡
+├── s76_particle_emission/  # 第 76 课：Creator 2.4.15 粒子系统配置与发射器
+├── s77_particle_simulation/  # 第 77 课：Creator 2.4.15 粒子模拟与生命周期
+├── s78_particle_modules/  # 第 78 课：Creator 2.4.15 粒子属性模块与曲线
+├── s79_particle_rendering/  # 第 79 课：Creator 2.4.15 粒子渲染与批次
+└── s80_particle_lifecycle/  # 第 80 课：Creator 2.4.15 停止发射与资源回收
 ~~~
 
 ## 运行

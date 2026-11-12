@@ -175,3 +175,20 @@
 历史 Cocos2d-x 第 52 课：[1.x](../learn_cocos2d-1x/s52_resource_artifacts/README.md)、[2.x](../learn_cocos2d-2x/s52_resource_artifacts/README.md)、[3.x](../learn_cocos2d-3x/s52_resource_artifacts/README.md)。
 
 历史 Cocos2d-x 第 53 课：[1.x](../learn_cocos2d-1x/s53_startup_delivery/README.md)、[2.x](../learn_cocos2d-2x/s53_startup_delivery/README.md)、[3.x](../learn_cocos2d-3x/s53_startup_delivery/README.md)。
+## 第 66–80 课：物理、动画与 3D 粒子
+
+- [第 66 课：Cocos2d-x 4.0 刚体生命周期与节点同步](s66_rigidbody_sync/README.md)
+- [第 67 课：Cocos2d-x 4.0 碰撞体形状与物理材质](s67_collider_shapes/README.md)
+- [第 68 课：Cocos2d-x 4.0 接触事件与碰撞过滤](s68_contact_filter/README.md)
+- [第 69 课：Cocos2d-x 4.0 射线与物理查询](s69_physics_queries/README.md)
+- [第 70 课：Cocos2d-x 4.0 约束接口与后端能力边界](s70_constraint_boundary/README.md)
+- [第 71 课：Cocos2d-x 4.0 动画资源与片段](s71_animation_clip/README.md)
+- [第 72 课：Cocos2d-x 4.0 播放状态与时间推进](s72_animation_playback/README.md)
+- [第 73 课：Cocos2d-x 4.0 关键帧采样与属性写回](s73_animation_sampling/README.md)
+- [第 74 课：Cocos2d-x 4.0 动画事件与完成回调](s74_animation_events/README.md)
+- [第 75 课：Cocos2d-x 4.0 动画组合与过渡](s75_animation_transition/README.md)
+- [第 76 课：Cocos2d-x 4.0 粒子系统配置与发射器](s76_particle_emission/README.md)
+- [第 77 课：Cocos2d-x 4.0 粒子模拟与生命周期](s77_particle_simulation/README.md)
+- [第 78 课：Cocos2d-x 4.0 粒子属性模块与曲线](s78_particle_modules/README.md)
+- [第 79 课：Cocos2d-x 4.0 粒子渲染与批次](s79_particle_rendering/README.md)
+- [第 80 课：Cocos2d-x 4.0 停止发射与资源回收](s80_particle_lifecycle/README.md)

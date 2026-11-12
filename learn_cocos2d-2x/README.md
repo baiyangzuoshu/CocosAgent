@@ -62,6 +62,16 @@
 - [第 63 课：2.x CCGrid3D 与模型渲染边界](s63_grid3d_shader_pipeline/README.md)
 - [第 64 课：2.x Shader Sprite 直接绘制](s64_shader_scene_gl/README.md)
 - [第 65 课：2.x RenderTexture 与矩阵栈](s65_kazmath_fbo_scope/README.md)
+## 第 66–80 课：物理、动画与 3D 粒子
+
+- [第 71 课：Cocos2d-x 2.x 动画资源与片段](s71_animation_clip/README.md)
+- [第 72 课：Cocos2d-x 2.x 播放状态与时间推进](s72_animation_playback/README.md)
+- [第 73 课：Cocos2d-x 2.x 关键帧采样与属性写回](s73_animation_sampling/README.md)
+- [第 74 课：Cocos2d-x 2.x 动画事件与完成回调](s74_animation_events/README.md)
+- [第 75 课：Cocos2d-x 2.x 动画组合与过渡](s75_animation_transition/README.md)
+
+本地快照不含引擎内置 3D 物理或 3D 粒子模块，因此本课程只列出第 71–75 课动画专题。
+
 - 每课位于独立的 `sNN_主题/` 目录，含源码、源码位置、简化说明和编译命令。
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 
