@@ -9,6 +9,17 @@ description: Use when creating, reading, or modifying a Cocos Creator 2.4.x comp
 
 Create, inspect, or modify a Cocos Creator 2.4.x JavaScript or TypeScript component script.
 
+## Bounded source-only path
+
+For one explicitly identified script and a localized logic change that does not depend on Creator APIs, decorators, lifecycle behavior, serialization, or editor state:
+
+1. Read applicable repository instructions and only the project metadata needed to satisfy their version requirements.
+2. Inspect the target script and the named test or call site; do not enumerate the project or inspect unrelated assets.
+3. Edit the source with Host file tools. Do not invoke the Creator script planning/commit flow for plain file-only logic changes.
+4. Run the user-specified or repository-required check once. Use the diff and that check as verification; reread the full file only if the diff or failure leaves uncertainty.
+
+Use the full workflow below when Creator-specific APIs, lifecycle, decorators, asset identity, compilation, editor state, or runtime behavior affect correctness.
+
 ## Workflow
 
 1. Identify the exact project root from the Host workspace and verify the Creator patch from project metadata or an editor integration. Determine the active scene/target only through tools that report it; never infer it from a neighboring project.

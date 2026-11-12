@@ -84,9 +84,38 @@ test('MCP advertises listChanged and notifies after dynamic command tools change
   assert.equal(initialized.capabilities.tools.listChanged, true);
   mcp.notify('notifications/initialized');
   const first = await mcp.request('tools/list');
+  assert.equal(first.tools.length, 1, 'The bootstrap list should expose only the selector.');
+  assert.deepEqual(first.tools.map((tool) => tool.name), [
+    'cocos_tools_select',
+  ]);
   assert.equal(first.tools.some((tool) => tool.name === 'cocos_project_info'), false);
-  const vcsPlan = first.tools.find((tool) => tool.name === 'cocos_vcs_workflow_plan');
-  const vcsApply = first.tools.find((tool) => tool.name === 'cocos_vcs_workflow_apply');
+  const hiddenCloudCall = await mcp.request('tools/call', { name: 'cocos_cloud_actions_runs', arguments: {} });
+  assert.equal(hiddenCloudCall.isError, true);
+  assert.match(hiddenCloudCall.content[0].text, /COCOS_TOOLSET_NOT_SELECTED/);
+  const hiddenTaskStart = await mcp.request('tools/call', { name: 'cocos_tasks_start', arguments: {
+    instanceId: '22222222-2222-4222-8222-222222222222', command: 'creator.project.info', input: {},
+  } });
+  assert.equal(hiddenTaskStart.isError, true);
+  assert.match(hiddenTaskStart.content[0].text, /COCOS_TOOLSET_NOT_SELECTED/);
+  const hiddenTaskList = await mcp.request('tools/call', { name: 'cocos_tasks_list', arguments: {} });
+  assert.equal(hiddenTaskList.isError, true);
+  assert.match(hiddenTaskList.content[0].text, /COCOS_TOOLSET_NOT_SELECTED/);
+  const invalidSelection = await mcp.request('tools/call', { name: 'cocos_tools_select', arguments: {
+    toolsets: ['cloud', 'cloud'],
+  } });
+  assert.equal(invalidSelection.isError, true);
+  assert.match(invalidSelection.content[0].text, /COCOS_TOOLSET_SELECTION_INVALID/);
+
+  const select = (toolsets) => mcp.request('tools/call', { name: 'cocos_tools_select', arguments: { toolsets } });
+  const selected = await select(['vcs', 'cloud']);
+  assert.equal(selected.isError, false);
+  assert.equal(selected.content[0].text, '"ok"');
+  assert.ok(mcp.notifications.some((message) => message.method === 'notifications/tools/list_changed'));
+  let listed = await mcp.request('tools/list');
+  assert.equal(listed.tools.length, 9);
+  assert.equal(listed.tools.some((tool) => tool.name === 'cocos_tasks_list'), false);
+  let vcsPlan = listed.tools.find((tool) => tool.name === 'cocos_vcs_workflow_plan');
+  let vcsApply = listed.tools.find((tool) => tool.name === 'cocos_vcs_workflow_apply');
   assert.equal(vcsPlan.annotations.readOnlyHint, true);
   assert.equal(vcsApply.annotations.destructiveHint, true);
   assert.ok(vcsPlan.inputSchema.properties.operation.enum.includes('fetch'));
@@ -97,12 +126,12 @@ test('MCP advertises listChanged and notifies after dynamic command tools change
   assert.equal(missingClose.isError, true);
   assert.match(missingClose.content[0].text, /VCS_EDITOR_CLOSED_REQUIRED/);
   for (const name of ['cocos_cloud_actions_workflows', 'cocos_cloud_actions_runs', 'cocos_cloud_actions_jobs', 'cocos_cloud_actions_artifacts']) {
-    const tool = first.tools.find((item) => item.name === name);
+    const tool = listed.tools.find((item) => item.name === name);
     assert.ok(tool, `Expected ${name} in tools/list`);
     assert.equal(tool.annotations.readOnlyHint, true);
   }
   for (const name of ['cocos_cloud_actions_dispatch', 'cocos_cloud_actions_cancel']) {
-    const tool = first.tools.find((item) => item.name === name);
+    const tool = listed.tools.find((item) => item.name === name);
     assert.ok(tool, `Expected ${name} in tools/list`);
     assert.equal(tool.annotations.readOnlyHint, false);
     assert.equal(tool.annotations.destructiveHint, true);
@@ -117,7 +146,7 @@ test('MCP advertises listChanged and notifies after dynamic command tools change
     '--status', 'completed', '--page', '2', '--per-page', '5', '--format', 'json',
   ]);
 
-  const artifactTool = first.tools.find((tool) => tool.name === 'cocos_cloud_actions_artifacts');
+  const artifactTool = listed.tools.find((tool) => tool.name === 'cocos_cloud_actions_artifacts');
   assert.equal(artifactTool.inputSchema.required.includes('runId'), true);
   await mcp.request('tools/call', { name: 'cocos_cloud_actions_artifacts', arguments: {
     repository: 'acme/game', runId: 42, page: 2, perPage: 5,
@@ -141,14 +170,33 @@ test('MCP advertises listChanged and notifies after dynamic command tools change
     'cloud', 'actions', 'cancel', '--run', '99', '--repository', 'acme/game', '--format', 'json',
   ]);
 
+  const reset = await select([]);
+  assert.equal(reset.isError, false);
+  listed = await mcp.request('tools/list');
+  assert.equal(listed.tools.length, 1);
+  assert.equal(listed.tools.some((tool) => tool.name === 'cocos_cloud_actions_runs'), false);
+  const staleCloudCall = await mcp.request('tools/call', { name: 'cocos_cloud_actions_runs', arguments: {} });
+  assert.equal(staleCloudCall.isError, true);
+  assert.match(staleCloudCall.content[0].text, /COCOS_TOOLSET_NOT_SELECTED/);
+
+  await select(['tasks']);
+  listed = await mcp.request('tools/list');
+  assert.equal(listed.tools.length, 7);
+  assert.ok(listed.tools.some((tool) => tool.name === 'cocos_tasks_list'));
+  assert.ok(listed.tools.some((tool) => tool.name === 'cocos_tasks_resume'));
+  assert.equal(listed.tools.some((tool) => tool.name === 'cocos_tasks_start'), false);
+
+  await select(['project']);
   fs.writeFileSync(statePath, JSON.stringify({ commands: [{ id: 'creator.project.info',
     description: 'Read the selected Creator project identity.', access: 'read', input: {
       type: 'object', properties: {}, additionalProperties: false,
     } }] }));
+  const changeCount = mcp.notifications.filter((message) => message.method === 'notifications/tools/list_changed').length;
   const deadline = Date.now() + 6000;
-  while (Date.now() < deadline && !mcp.notifications.some((message) => message.method === 'notifications/tools/list_changed'))
+  while (Date.now() < deadline
+    && mcp.notifications.filter((message) => message.method === 'notifications/tools/list_changed').length <= changeCount)
     await delay(25);
-  assert.ok(mcp.notifications.some((message) => message.method === 'notifications/tools/list_changed'),
+  assert.ok(mcp.notifications.filter((message) => message.method === 'notifications/tools/list_changed').length > changeCount,
     `Expected tools/list_changed notification; stderr: ${mcp.stderr}`);
   const refreshed = await mcp.request('tools/list');
   assert.equal(refreshed.tools.some((tool) => tool.name === 'cocos_project_info'), true);

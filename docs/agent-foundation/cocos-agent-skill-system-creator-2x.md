@@ -15,7 +15,7 @@
 
 ## 路由 Skill
 
-入口 `cocos-agent` 先确认当前 Host 工作区与目标 Creator 工程身份，再检查可用工具，随后只读一个最匹配的领域路由和必要专项 Skill。它不得假设某个 MCP、CLI、Creator 扩展或项目 API 已安装；没有 Creator-aware 工具时，明确指出编辑器状态/序列化资源哪些不能安全改动，并给出手动 Creator 步骤。
+入口 `cocos-agent` 先确认当前 Host 工作区与目标 Creator 工程身份，再检查可用工具，随后只读一个最匹配的领域路由和必要专项 Skill。使用 CLI MCP 时，路由后通过 `cocos_tools_select` 选择完成当前任务所需的最小工具组，等 `tools/list_changed` 后再读取工具 Schema；选择会替换旧集合，空集合恢复仅含选择器的引导列表。任务恢复工具仅在选择 `tasks` 组后暴露。它不得假设某个 MCP、CLI、Creator 扩展或项目 API 已安装；没有 Creator-aware 工具时，明确指出编辑器状态/序列化资源哪些不能安全改动，并给出手动 Creator 步骤。
 
 | 领域路由 | 分发范围 |
 | --- | --- |
@@ -74,3 +74,4 @@
 2. 旧式 `plugins/cocos-creator-agent/` 仅保留兼容引导 Skill；MCP server、Creator 工作流 Skills、桥接与命令合同由独立 CLI 包维护。
 3. 当前功能基线、发布命令和不支持边界以 [CLI README](../../cocos-creator-agent-cli/README.md) 为准；组件逐字段接口/实机状态以 [Creator 2.4.15 UI 验收矩阵](cocos-cli-ui-acceptance-matrix-2.4.15.md) 为准。源码支持不等于目标平台和运行时行为已验收。
 4. Prefab 源编辑和场景实例 Apply/Revert 分别记录；直接删除既有组件目前只对可还原的末尾 `cc.BlockInputEvents` 实机通过。完整记录见 [Prefab 子树与组件验收](cocos-cli-prefab-subtree-acceptance-20261024.md) 和 [Prefab Apply/Revert 验收](traces/cocos-creator-cli-prefab-instance-apply-revert-acceptance-20261025.md)。其他既有组件删除、任意组件引用恢复和剩余 UI 字段/平台行为继续列为待办。
+5. 后续 CocosAgent 开发以“同一任务达到同一结果时实际总 Token 更少”为唯一衡量标准；结果一致仅作为比较前提。配对方案见 [CocosAgent Token 效率配对基准](cocos-agent-token-efficiency-benchmark-0.1.md)。原生 Agent 的历史优化数据不能代表现行 CLI/第三方 Host 产品。

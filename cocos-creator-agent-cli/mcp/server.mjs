@@ -34,6 +34,9 @@ let toolRefreshPromise = null;
 let refreshTimer = null;
 let initialized = false;
 let hasServedToolsList = false;
+let activeToolsets = new Set();
+let toolsetRevision = 0;
+let cachedToolsetRevision = -1;
 const configuredRefreshInterval = Number(process.env.COCOS_MCP_TOOL_REFRESH_INTERVAL_MS);
 const TOOL_REFRESH_INTERVAL_MS = Number.isInteger(configuredRefreshInterval)
   && configuredRefreshInterval >= 1000 && configuredRefreshInterval <= 300000 ? configuredRefreshInterval : 15000;
@@ -347,11 +350,111 @@ const infrastructureTools = [
   },
 ];
 
-async function getTools() {
+const TOOLSET_NAMES = ['project', 'assets', 'scripts', 'scene', 'prefab', 'runtime', 'extensions', 'vcs', 'cloud', 'tasks'];
+const CREATOR_TOOLSETS = ['project', 'assets', 'scripts', 'scene', 'prefab', 'runtime', 'extensions'];
+const SHARED_TOOLSETS = new Map([
+  ['cocos_capabilities_list', CREATOR_TOOLSETS],
+  ['cocos_instances_list', [...CREATOR_TOOLSETS, 'tasks']],
+  ['cocos_asset_search', ['assets', 'scene', 'prefab']],
+  ['cocos_asset_references', ['assets', 'scene', 'prefab']],
+  ['cocos_script_read', ['scripts', 'scene']],
+  ['cocos_diagnostics_read', ['scripts', 'runtime']],
+  ['cocos_diagnostics_snapshot', ['scene', 'runtime']],
+  ['cocos_scene_snapshot', ['scene', 'prefab']],
+  ['cocos_scene_node_read', ['scene', 'prefab']],
+  ['cocos_scene_diff', ['scene', 'prefab']],
+]);
+const CREATOR_COMMAND_PREFIXES = [
+  ['creator.project.', 'project'],
+  ['creator.asset.', 'assets'],
+  ['creator.script.', 'scripts'],
+  ['creator.scene.', 'scene'],
+  ['creator.prefab.', 'prefab'],
+  ['creator.preview.', 'runtime'],
+  ['creator.diagnostics.', 'runtime'],
+  ['creator.editor.', 'extensions'],
+  ['creator.extension.', 'extensions'],
+];
+const toolsetSelectionTool = {
+  name: 'cocos_tools_select',
+  description: 'Select task tool groups; replaces prior selection. [] resets to this selector only. Triggers tools/list_changed.',
+  inputSchema: { type: 'object', required: ['toolsets'], properties: {
+    toolsets: { type: 'array', items: { type: 'string', enum: TOOLSET_NAMES }, uniqueItems: true },
+  }, additionalProperties: false },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+};
+
+function toolsetForCommand(commandId) {
+  if (typeof commandId !== 'string') return null;
+  return CREATOR_COMMAND_PREFIXES.find(([prefix]) => commandId.startsWith(prefix))?.[1] || null;
+}
+
+function toolsetsForTool(name) {
+  if (name === 'cocos_tools_select') return [];
+  if (name === 'cocos_tasks_start') return CREATOR_TOOLSETS;
+  if (name === 'cocos_cli_status') return ['project'];
+  if (name === 'cocos_project_info' || name === 'cocos_project_search') return ['project'];
+  if (name.startsWith('cocos_tasks_')) return ['tasks'];
+  const shared = SHARED_TOOLSETS.get(name);
+  if (shared) return shared;
+  if (/^cocos_project_[0-9a-f]{10}_/.test(name) || name.startsWith('cocos_ext_')) return ['extensions'];
+  if (name.startsWith('cocos_runtime_')) return ['runtime'];
+  if (name === 'cocos_project_tools_list' || name === 'cocos_project_tool_call') return ['extensions'];
+  if (name.startsWith('cocos_asset_')) return ['assets'];
+  if (name.startsWith('cocos_script_')) return ['scripts'];
+  if (name.startsWith('cocos_scene_')) return ['scene'];
+  if (name.startsWith('cocos_prefab_')) return ['prefab'];
+  if (name.startsWith('cocos_diagnostics_') || name.startsWith('cocos_preview_')) return ['runtime'];
+  if (name.startsWith('cocos_editor_eval')) return ['extensions'];
+  if (name.startsWith('cocos_vcs_workflow_')) return ['vcs'];
+  if (name.startsWith('cocos_cloud_actions_')) return ['cloud'];
+  if (name === 'cocos_runtime_sessions_list' || name === 'cocos_runtime_commands_list') return ['runtime'];
+  return null;
+}
+
+function isToolEnabled(name, selectedToolsets = activeToolsets) {
+  if (name === 'cocos_tools_select') return true;
+  const groups = toolsetsForTool(name);
+  return Array.isArray(groups) && groups.some((group) => selectedToolsets.has(group));
+}
+
+function enabledCommandToolset(commandId) {
+  const group = toolsetForCommand(commandId);
+  return group && activeToolsets.has(group) ? group : null;
+}
+
+async function selectToolsets(args) {
+  if (!args || typeof args !== 'object' || Array.isArray(args)
+    || Object.keys(args).length !== 1 || !Array.isArray(args.toolsets)
+    || args.toolsets.length > TOOLSET_NAMES.length
+    || args.toolsets.some((item) => typeof item !== 'string' || !TOOLSET_NAMES.includes(item))
+    || new Set(args.toolsets).size !== args.toolsets.length) {
+    throw new Error('COCOS_TOOLSET_SELECTION_INVALID');
+  }
+  activeToolsets = new Set(args.toolsets);
+  toolsetRevision += 1;
+  await refreshTools({ notify: true });
+  return 'ok';
+}
+
+async function getTools(selectedToolsets = activeToolsets) {
   const nextProjectToolAdapters = new Map();
   const nextExtensionCommandAdapters = new Map();
   const nextRuntimeCommandAdapters = new Map();
-  const tools = [...infrastructureTools];
+  const tools = [toolsetSelectionTool, ...infrastructureTools.filter((tool) => {
+    const groups = toolsetsForTool(tool.name);
+    if (groups === null) {
+      process.stderr.write(`MCP tool omitted: no task-toolset mapping for ${tool.name}\n`);
+      return false;
+    }
+    return isToolEnabled(tool.name, selectedToolsets);
+  })];
+  if (!selectedToolsets.size || !CREATOR_TOOLSETS.some((group) => selectedToolsets.has(group))) {
+    projectToolAdapters = nextProjectToolAdapters;
+    extensionCommandAdapters = nextExtensionCommandAdapters;
+    runtimeCommandAdapters = nextRuntimeCommandAdapters;
+    return tools;
+  }
   let catalog;
   try { catalog = await invokeCliJson(['catalog']); }
   catch (error) {
@@ -364,6 +467,12 @@ async function getTools() {
   if (!catalog || !Array.isArray(catalog.commands)) throw new Error('COCOS_CLI_CATALOG_INVALID');
   const commands = new Map(catalog.commands.map((command) => [command.id, command]));
   for (const { commandId, name } of commandToolAdapters) {
+    const group = toolsetForCommand(commandId);
+    if (!group) {
+      process.stderr.write(`MCP command omitted: no task-toolset mapping for ${commandId}\n`);
+      continue;
+    }
+    if (!selectedToolsets.has(group)) continue;
     const command = commands.get(commandId);
     if (!command) continue;
     tools.push({
@@ -375,7 +484,7 @@ async function getTools() {
       annotations: commandAnnotations(command.access),
     });
   }
-  try {
+  if (selectedToolsets.has('extensions')) try {
     const live = await invokeCliJson(['instances', 'list']);
     for (const instance of (Array.isArray(live.instances) ? live.instances : []).slice(0, 16)) {
       if (typeof instance.instanceId !== 'string' || typeof instance.projectRoot !== 'string') continue;
@@ -398,7 +507,7 @@ async function getTools() {
   } catch (error) {
     process.stderr.write(`Creator extension command discovery unavailable: ${error.message}\n`);
   }
-  try {
+  if (selectedToolsets.has('extensions')) try {
     const live = await invokeCliJson(['instances', 'list']);
     const seen = new Set();
     for (const instance of (Array.isArray(live.instances) ? live.instances : []).slice(0, 16)) {
@@ -423,7 +532,7 @@ async function getTools() {
   } catch (error) {
     process.stderr.write(`Project tool discovery unavailable: ${error.message}\n`);
   }
-  try {
+  if (selectedToolsets.has('runtime')) try {
     const live = await invokeCliJson(['runtime', 'sessions', 'list']);
     for (const session of (Array.isArray(live.sessions) ? live.sessions : []).slice(0, 16)) {
       if (typeof session.previewSessionId !== 'string' || typeof session.projectRoot !== 'string'
@@ -463,19 +572,32 @@ async function getTools() {
 }
 
 async function refreshTools({ notify = false } = {}) {
-  if (toolRefreshPromise) return toolRefreshPromise;
-  toolRefreshPromise = (async () => {
-    const next = await getTools();
+  if (toolRefreshPromise) {
+    await toolRefreshPromise;
+    if (cachedToolsetRevision !== toolsetRevision) return refreshTools({ notify });
+    return cachedTools;
+  }
+  const requestedRevision = toolsetRevision;
+  const selectedToolsets = new Set(activeToolsets);
+  const refresh = (async () => {
+    const next = await getTools(selectedToolsets);
     const fingerprint = createHash('sha256').update(JSON.stringify(next)).digest('hex');
     const changed = cachedToolFingerprint !== null && fingerprint !== cachedToolFingerprint;
     cachedTools = next;
     cachedToolFingerprint = fingerprint;
+    cachedToolsetRevision = requestedRevision;
     if (changed && notify && initialized && hasServedToolsList)
       write({ jsonrpc: '2.0', method: 'notifications/tools/list_changed' });
     return cachedTools;
   })();
-  try { return await toolRefreshPromise; }
-  finally { toolRefreshPromise = null; }
+  let trackedRefresh;
+  trackedRefresh = refresh.finally(() => {
+    if (toolRefreshPromise === trackedRefresh) toolRefreshPromise = null;
+  });
+  toolRefreshPromise = trackedRefresh;
+  const tools = await trackedRefresh;
+  if (cachedToolsetRevision !== toolsetRevision) return refreshTools({ notify });
+  return tools;
 }
 
 function startToolRefresh() {
@@ -489,6 +611,10 @@ function startToolRefresh() {
 }
 
 async function handleTool(name, args = {}, signal) {
+  if (name === 'cocos_tools_select') return selectToolsets(args);
+  if (!isToolEnabled(name)) throw new Error('COCOS_TOOLSET_NOT_SELECTED: call cocos_tools_select for the task-relevant tool group, then reload tools/list.');
+  if (name === 'cocos_tasks_start' && !enabledCommandToolset(args.command))
+    throw new Error('COCOS_TASK_COMMAND_NOT_ENABLED: select the tool group that owns this Creator command first.');
   if (name === 'cocos_vcs_workflow_plan' || name === 'cocos_vcs_workflow_apply') {
     const cliArgs = ['vcs', args.operation, '--git-root', args.gitRoot, '--project-root', args.projectRoot];
     for (const [key, flag] of [['target', '--target'], ['createBranch', '--create'], ['remote', '--remote']]) {
@@ -667,7 +793,7 @@ async function handle(message) {
     }
     if (message.method === 'ping') { if (hasId) write({ jsonrpc: '2.0', id, result: {} }); return; }
     if (message.method === 'tools/list') {
-      const tools = await refreshTools();
+      const tools = cachedTools || await refreshTools();
       hasServedToolsList = true;
       if (initialized) startToolRefresh();
       write({ jsonrpc: '2.0', id, result: { tools } });
