@@ -1,0 +1,47 @@
+name: 🔗 GHA
+on: [push, pull_request]
+
+concurrency:
+  group: ci-${{github.actor}}-${{github.head_ref || github.run_number}}-${{github.ref}}-runner
+  cancel-in-progress: true
+
+jobs:
+  static-checks:
+    if: ${{ !vars.DISABLE_GODOT_CI }}
+    name: 📊 Static
+    uses: ./.github/workflows/static_checks.yml
+
+  android-build:
+    name: 🤖 Android
+    needs: static-checks
+    uses: ./.github/workflows/android_builds.yml
+
+  ios-build:
+    name: 🍏 iOS
+    needs: static-checks
+    uses: ./.github/workflows/ios_builds.yml
+
+  javascript-build:
+    name: 🌐 JavaScript
+    needs: static-checks
+    uses: ./.github/workflows/javascript_builds.yml
+
+  linux-build:
+    name: 🐧 Linux
+    needs: static-checks
+    uses: ./.github/workflows/linux_builds.yml
+
+  macos-build:
+    name: 🍎 macOS
+    needs: static-checks
+    uses: ./.github/workflows/macos_builds.yml
+
+  server-build:
+    name: ☁ Server
+    needs: static-checks
+    uses: ./.github/workflows/server_builds.yml
+
+  windows-build:
+    name: 🏁 Windows
+    needs: static-checks
+    uses: ./.github/workflows/windows_builds.yml
