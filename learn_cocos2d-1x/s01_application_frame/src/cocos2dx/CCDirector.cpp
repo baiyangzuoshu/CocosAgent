@@ -6,11 +6,20 @@
 namespace cocos2d {
 
 CCDirector::CCDirector()
-: _runningScene(nullptr), _frame(0) {
+: _frame(0) {
+}
+
+CCDirector::~CCDirector() = default;
+
+CCDirector* CCDirector::sharedDirector() {
+    static CCDirector director;
+    return &director;
 }
 
 void CCDirector::runWithScene(CCScene* scene) {
-    _runningScene = scene;
+    if (_runningScene.get() != scene) {
+        _runningScene.reset(scene);
+    }
 }
 
 void CCDirector::drawScene() {

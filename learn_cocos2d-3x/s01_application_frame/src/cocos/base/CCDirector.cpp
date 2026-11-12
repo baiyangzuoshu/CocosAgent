@@ -6,11 +6,20 @@
 namespace cocos2d {
 
 Director::Director()
-: _runningScene(nullptr), _deltaTime(0.0f), _frame(0) {
+: _deltaTime(0.0f), _frame(0) {
+}
+
+Director::~Director() = default;
+
+Director* Director::getInstance() {
+    static Director director;
+    return &director;
 }
 
 void Director::runWithScene(Scene* scene) {
-    _runningScene = scene;
+    if (_runningScene.get() != scene) {
+        _runningScene.reset(scene);
+    }
 }
 
 void Director::mainLoop(float dt) {

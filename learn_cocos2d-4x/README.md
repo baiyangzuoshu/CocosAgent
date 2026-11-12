@@ -10,6 +10,9 @@
 
 | 主题 | Cocos2d-x 4.0 | Creator 2.4.15 | Creator 3.8.7 |
 | --- | --- | --- | --- |
+| 第 1 课：Application 启动与帧循环 | [本课](s01_application_frame/README.md) | — | — |
+| 第 2 课：对象引用与回收 | [本课](s02_object_reference/README.md) | — | — |
+| 第 3 课：Scene/Node 生命周期 | [本课](s03_node_scene_lifecycle/README.md) | — | — |
 | 第 4 课：节点与场景树 | [本课](s04_node_scene_tree/README.md) | [本课](../learn_2.4cocoscreator/s04_node_scene_tree/README.md) | [本课](../learn_3.8cocoscreator/s04_node_scene_tree/README.md) |
 | 第 5 课：本地位置与世界位置 | [本课](s05_local_world_transform/README.md) | [本课](../learn_2.4cocoscreator/s05_local_world_transform/README.md) | [本课](../learn_3.8cocoscreator/s05_local_world_transform/README.md) |
 | 第 7 课：组件挂载与生命周期 | [本课](s07_component_lifecycle/README.md) | [本课](../learn_2.4cocoscreator/s07_component_lifecycle/README.md) | [本课](../learn_3.8cocoscreator/s07_component_lifecycle/README.md) |
@@ -63,6 +66,8 @@
 | 第 57 课：相机裁剪与绘制顺序 | [本课](s57_node_render_order/README.md) | [本课](../learn_2.4cocoscreator/s57_camera_culling_queue/README.md) | [本课](../learn_3.8cocoscreator/s57_scene_culling_queue/README.md) |
 | 第 58 课：Sprite 几何数据更新 | [本课](s58_sprite_quad_update/README.md) | [本课](../learn_2.4cocoscreator/s58_sprite_render_data/README.md) | [本课](../learn_3.8cocoscreator/s58_sprite_render_data/README.md) |
 | 第 59 课：顶点/索引数据上传 | [本课](s59_backend_buffer_update/README.md) | [本课](../learn_2.4cocoscreator/s59_mesh_buffer_upload/README.md) | [本课](../learn_3.8cocoscreator/s59_mesh_buffer_upload/README.md) |
+
+前 3 课的 Cocos2d-x 历史版本：[1.x](../learn_cocos2d-1x/README.md)、[2.x](../learn_cocos2d-2x/README.md)、[3.x](../learn_cocos2d-3x/README.md)。各版本的 Director、场景工厂和内存管理接口以本版课程为准。
 
 历史 Cocos2d-x 同主题：[1.x](../learn_cocos2d-1x/s09_texture_cache/README.md)、[2.x](../learn_cocos2d-2x/s09_texture_cache/README.md)、[3.x](../learn_cocos2d-3x/s09_texture_cache/README.md)。
 

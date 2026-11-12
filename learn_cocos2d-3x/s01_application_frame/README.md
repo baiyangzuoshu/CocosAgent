@@ -4,6 +4,8 @@
 
 ## 源码位置
 
+- `engine/cocos2d-x-3/cocos/base/CCDirector.cpp:101`：`Director::getInstance()` 返回 Director 单例。
+- `engine/cocos2d-x-3/cocos/2d/CCScene.cpp:132`：`Scene::create()` 初始化并 autorelease 新场景。
 - `engine/cocos2d-x-3/cocos/base/CCDirector.cpp:252`：Director::drawScene()：驱动每帧更新与场景访问。
 - `engine/cocos2d-x-3/cocos/base/CCDirector.cpp:850`：Director::runWithScene()：设置首个场景。
 - `engine/cocos2d-x-3/cocos/base/CCDirector.cpp:1464`：Director::mainLoop()：一帧的统一入口。
@@ -13,7 +15,7 @@
 
 ## 本课代码
 
-代码放在 `src/`，目录按 `engine/cocos2d-x-3/` 镜像。平台帧循环进入 `mainLoop()`，Director 再调用 `drawScene()`。`main.cpp` 用固定三帧模拟平台循环；`Scene` 只保留 `visit()` 以标记场景绘制阶段。
+代码放在 `src/`，目录按 `engine/cocos2d-x-3/` 镜像。`main.cpp` 通过 `Director::getInstance()` 取得 Director，用 `Scene::create()` 创建首个场景，再调用 `runWithScene()`；平台帧循环通过 `mainLoop()` 推进，固定模拟三帧。本课删去了 `Ref`/autorelease pool，因此精简版 Director 用 `std::unique_ptr` 持有运行中的场景，代替完整引擎里的场景栈对 autorelease 场景的引用持有。`Scene` 只保留 `visit()` 以标记场景绘制阶段。
 
 ## 观察结果
 

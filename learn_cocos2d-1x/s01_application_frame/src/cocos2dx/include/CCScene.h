@@ -4,6 +4,8 @@ namespace cocos2d {
 
 class CCScene {
 public:
+    static CCScene* node();
+
     void visit() const;
 };
 

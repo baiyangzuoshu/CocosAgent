@@ -4,6 +4,10 @@
 
 namespace cocos2d {
 
+CCScene* CCScene::create() {
+    return new CCScene();
+}
+
 void CCScene::visit() const {
     std::cout << "visit current scene\n";
 }
