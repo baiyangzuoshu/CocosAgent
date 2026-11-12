@@ -16,7 +16,7 @@
 
 ## 已完成阶段与后续专题
 
-第 1–80 课中各版本实际具备的主题均已落地。下表汇总阶段和版本范围；Spine 骨骼动画列为下一组源码研究计划，平台与运行时专项再按目标选择。
+第 1–88 课中各版本实际具备的主题均已落地。Spine 课程覆盖 Creator 2.4/3.8 与 Cocos2d-x 2.x/3.x/4.0；1.x 快照没有 Spine 模块。平台与运行时专项再按目标选择。
 
 | 阶段 | 课次范围 | 范围 | 阶段结果 |
 | --- | --- | --- | --- |
@@ -33,7 +33,7 @@
 | 十七：3D 物理深化 | 66–70（已完成） | 刚体、形状、过滤、查询和约束边界 | Creator 2.4/3.8 与 Cocos2d-x 3.x/4.0；x1/x2 无内置模块 |
 | 十八：动画播放与状态 | 71–75（已完成） | 片段、播放、采样、事件、切换 | 六个版本独立实现，按各自帧动画、Action、Animation 或骨骼系统讲解 |
 | 十九：3D 粒子 | 76–80（已完成） | 发射、模拟、粒子模块、渲染和生命周期 | Creator 2.4/3.8 与 Cocos2d-x 3.x/4.0；x1/x2 无内置模块 |
-| 二十：Spine 2D 骨骼动画 | 81–88（计划） | 资源版本、数据与实例、轨道混合、骨骼更新、附件几何、渲染提交、事件与生命周期 | Creator 2.4/3.8 与 Cocos2d-x 2.x/3.x/4.0；1.x 快照无 Spine 模块 |
+| 二十：Spine 2D 骨骼动画 | 81–88（已完成） | 资源版本、数据与实例、轨道混合、骨骼更新、附件几何、渲染提交、事件与生命周期 | Creator 2.4/3.8 与 Cocos2d-x 2.x/3.x/4.0；1.x 快照无 Spine 模块 |
 
 ### 七：Action / Tween（第 30–34 课，第 30–34 课已完成）
 
@@ -147,7 +147,7 @@ Cocos2d-x 1.x–4.x 的第 10–13 课已覆盖场景访问、可见性/排序�
 
 ## 第 65 课之后课程与后续专题
 
-第 66–80 课均已按版本源码实现独立示例；第 81–88 课是待开展的 Spine 研究计划。相同课号只组织学习主题，不表示各版本使用相同 API。
+第 66–88 课均已按版本源码实现独立示例；Spine 课程覆盖 Creator 2.4/3.8 和 Cocos2d-x 2.x/3.x/4.0。相同课号只组织学习主题，不表示各版本使用相同 API。
 
 ### 十七：3D 物理深化（第 66–70 课，已完成）
 
@@ -185,7 +185,7 @@ Cocos2d-x 1.x–4.x 的第 10–13 课已覆盖场景访问、可见性/排序�
 
 版本范围：Creator 2.4.15 `cocos2d/core/3d/particle/`、Creator 3.8.7 `cocos/particle/`、Cocos2d-x 3.x/4.0 `extensions/Particle3D/`。Creator 3.8.7 的 CPU/GPU 粒子实现单独追踪；Cocos2d-x 1.x/2.x 已在第 47–49 课覆盖其 2D 粒子，本地源码中没有对应的 3D 粒子模块，不为保持课号一致而虚构实现。
 
-### 二十：Spine 2D 骨骼动画（第 81–88 课，计划）
+### 二十：Spine 2D 骨骼动画（第 81–88 课，已完成）
 
 | 课 | 主题 | 研究问题 |
 | --- | --- | --- |
@@ -209,7 +209,7 @@ Cocos2d-x 1.x–4.x 的第 10–13 课已覆盖场景访问、可见性/排序�
 | Cocos2d-x 3.x | `engine/cocos2d-x-3/cocos/editor-support/spine/`：`SkeletonAnimation.cpp`、`SkeletonRenderer.cpp`、`SkeletonBatch.cpp`、`SkeletonClipping.c` | 研究 C Runtime、Renderer 命令/批次和网格裁剪；沿本版 OpenGL Renderer 路径实现独立示例。 |
 | Cocos2d-x 4.0 | `engine/cocos2d-x-4/cocos/editor-support/spine/`：`SkeletonAnimation.cpp`、`SkeletonRenderer.cpp`、`v3/SkeletonBatch.cpp`、`v4/SkeletonBatch.cpp` | 分开记录 v3/v4 Runtime 的 API 与批次，再追踪 Cocos2d-x 4.0 Renderer/backend 接线，不复用 3.x 结论。 |
 
-每个版本各建独立课程代码，不共享渲染实现。开始第 81 课前，先记录本地 Runtime 的精确版本、资产导出格式和许可边界；Spine 数据的主/次版本需要与 Runtime 匹配，参见 [Spine 官方版本说明](https://en.esotericsoftware.com/spine-versioning)。Creator 2.4 的缓存模式能力差异可参见 [Creator 2.4 Spine 组件手册](https://docs.cocos.com/creator/2.4/manual/en/components/spine.html)。实现前按各版本目录里的许可文件核对 Spine Runtime 和素材的使用范围；若快照没有完整许可信息，课程示例就只模拟职责，不复制第三方 Runtime 或演示素材。
+每个版本各有独立课程代码，不共享渲染实现。课程 README 按本地 Runtime 源码标出解析、更新、绘制和回收位置，并区分编辑器导入检查与浏览器/原生运行时行为。Spine 数据的导出版本需要与 Runtime 匹配，参见 [Spine 官方版本说明](https://en.esotericsoftware.com/spine-versioning)；Creator 2.4 缓存模式能力差异参见 [Creator 2.4 Spine 组件手册](https://docs.cocos.com/creator/2.4/manual/en/components/spine.html)。课程代码模拟源码职责，不复制第三方 Runtime 或演示素材。
 
 ### 后续专题：平台与运行时专项
 
@@ -223,7 +223,7 @@ Cocos2d-x 1.x–4.x 的第 10–13 课已覆盖场景访问、可见性/排序�
 - 打包课程先固定引擎补丁版、目标平台、构建模式和工程身份；运行构建前核对工具链与 SDK，下载依赖、安装工具或改全局环境前先取得授权。
 - 构建日志、生成物检查和目标运行时验收分开记录；未实际构建的平台保持未验证状态。
 - 每个课程 README 记录本课目标、源码文件与关键函数、独立代码入口、可观察结果和简化点。
-- 第 66–80 课已完成：3D 物理、动画与 3D 粒子；Cocos2d-x 1.x/2.x 的能力边界分别按本地源码记录。第 81–88 课计划研究 Spine；Cocos2d-x 1.x 快照没有 Spine 模块。
+- 第 66–80 课已完成：3D 物理、动画与 3D 粒子；Cocos2d-x 1.x/2.x 的能力边界分别按本地源码记录。第 81–88 课已完成 Spine 研究；Cocos2d-x 1.x 快照没有 Spine 模块，因此不创建伪课程。
 
 ## 各版本课程入口
 

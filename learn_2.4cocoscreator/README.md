@@ -221,8 +221,29 @@ learn_2.4cocoscreator/
 ├── s77_particle_simulation/  # 第 77 课：Creator 2.4.15 粒子模拟与生命周期
 ├── s78_particle_modules/  # 第 78 课：Creator 2.4.15 粒子属性模块与曲线
 ├── s79_particle_rendering/  # 第 79 课：Creator 2.4.15 粒子渲染与批次
-└── s80_particle_lifecycle/  # 第 80 课：Creator 2.4.15 停止发射与资源回收
+├── s80_particle_lifecycle/  # 第 80 课：Creator 2.4.15 停止发射与资源回收
+├── s81_spine_runtime_compatibility/  # 第 81 课：Creator 2.4.15 Runtime 与导出资源版本兼容
+├── s82_spine_data_instance/  # 第 82 课：Creator 2.4.15 SkeletonData、Atlas 与实例所有权
+├── s83_spine_animation_state/  # 第 83 课：Creator 2.4.15 AnimationState、轨道与混合
+├── s84_spine_pose_update/  # 第 84 课：Creator 2.4.15 帧更新、骨骼层级与约束
+├── s85_spine_slots_attachments/  # 第 85 课：Creator 2.4.15 Skin、Slot、Attachment 与绘制顺序
+├── s86_spine_mesh_clipping/  # 第 86 课：Creator 2.4.15 网格附件、Deform 与 Clipping
+├── s87_spine_render_submission/  # 第 87 课：Creator 2.4.15 引擎渲染接线与批次
+└── s88_spine_events_lifecycle/  # 第 88 课：Creator 2.4.15 事件、调试观察与退出清理
 ~~~
+
+## Spine 2D 骨骼动画（第 81–88 课）
+
+- [第 81 课：Creator 2.4.15 Runtime 与导出资源版本兼容](s81_spine_runtime_compatibility/README.md)
+- [第 82 课：Creator 2.4.15 SkeletonData、Atlas 与实例所有权](s82_spine_data_instance/README.md)
+- [第 83 课：Creator 2.4.15 AnimationState、轨道与混合](s83_spine_animation_state/README.md)
+- [第 84 课：Creator 2.4.15 帧更新、骨骼层级与约束](s84_spine_pose_update/README.md)
+- [第 85 课：Creator 2.4.15 Skin、Slot、Attachment 与绘制顺序](s85_spine_slots_attachments/README.md)
+- [第 86 课：Creator 2.4.15 网格附件、Deform 与 Clipping](s86_spine_mesh_clipping/README.md)
+- [第 87 课：Creator 2.4.15 引擎渲染接线与批次](s87_spine_render_submission/README.md)
+- [第 88 课：Creator 2.4.15 事件、调试观察与退出清理](s88_spine_events_lifecycle/README.md)
+
+Creator 课程以 Web 浏览器运行时为范围；每课代码独立，并标出对应引擎源码位置。
 
 ## 运行
 

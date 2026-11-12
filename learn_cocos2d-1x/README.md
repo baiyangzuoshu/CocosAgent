@@ -76,3 +76,7 @@
 - 课程代码不依赖其他课程，也不依赖完整 Cocos2d-x 工程构建产物。
 
 本目录只研究 `1.0.1-x-0.13.0-beta` 这份本地快照；其他代际的课程分别维护。
+
+## Spine 课程边界
+
+本地快照没有 Spine Runtime，因此不含第 81–88 课；各版本课程范围见 [总纲](../docs/cocos-engine-course-master-outline.md)。

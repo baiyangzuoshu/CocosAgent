@@ -192,3 +192,16 @@
 - [第 78 课：Cocos2d-x 4.0 粒子属性模块与曲线](s78_particle_modules/README.md)
 - [第 79 课：Cocos2d-x 4.0 粒子渲染与批次](s79_particle_rendering/README.md)
 - [第 80 课：Cocos2d-x 4.0 停止发射与资源回收](s80_particle_lifecycle/README.md)
+
+## Spine 2D 骨骼动画（第 81–88 课）
+
+- [第 81 课：Cocos2d-x 4.0 Runtime 与导出资源版本兼容](s81_spine_runtime_compatibility/README.md)
+- [第 82 课：Cocos2d-x 4.0 SkeletonData、Atlas 与实例所有权](s82_spine_data_instance/README.md)
+- [第 83 课：Cocos2d-x 4.0 AnimationState、轨道与混合](s83_spine_animation_state/README.md)
+- [第 84 课：Cocos2d-x 4.0 帧更新、骨骼层级与约束](s84_spine_pose_update/README.md)
+- [第 85 课：Cocos2d-x 4.0 Skin、Slot、Attachment 与绘制顺序](s85_spine_slots_attachments/README.md)
+- [第 86 课：Cocos2d-x 4.0 网格附件、Deform 与 Clipping](s86_spine_mesh_clipping/README.md)
+- [第 87 课：Cocos2d-x 4.0 引擎渲染接线与批次](s87_spine_render_submission/README.md)
+- [第 88 课：Cocos2d-x 4.0 事件、调试观察与退出清理](s88_spine_events_lifecycle/README.md)
+
+每课含独立 C++11 示例、版本对应的源码路径和编译命令。Cocos2d-x 1.x 快照没有 Spine 模块，因此不创建同名课程。
