@@ -8,6 +8,7 @@
 - [第 0 课：源码快照与目录地图](s00_source_map/README.md)
 - [第 1 课：平台启动代码到 `Main`](s01_platform_entry/README.md)
 - [第 2 课：`Main::setup()` 参数解析、项目路径和启动模式](s02_main_setup/README.md)
+- [第 3 课：ClassDB 注册及服务器初始化](s03_engine_server_init/README.md)
 
 每课列出源码文件与关键调用、独立实验、可观察结果和简化范围；编辑器、导出和目标平台结果分别记录。
 

@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=2]
+
+[ext_resource path="res://server_probe.gd" type="Script" id=1]
+
+[node name="S03ServerProbe" type="Node"]
+script = ExtResource( 1 )
