@@ -11,6 +11,7 @@
 - [第 1 课：平台入口如何进入 `Main`](s01_platform_entry/README.md)
 - [第 2 课：`Main::setup()` 初始化与参数流](s02_main_setup/README.md)
 - [第 3 课：引擎类型注册与服务器初始化](s03_engine_initialization/README.md)
+- [第 4 课：`MainLoop` 与 `SceneTree` 的创建和启动](s04_main_loop_creation/README.md)
 
 每课列出源码文件、关键调用、实验入口、观察结果、简化点和验证环境。静态源码、编辑器运行、构建和目标平台证据分别记录。
 
