@@ -16,7 +16,7 @@
 
 ## 已完成阶段与后续专题
 
-第 1–88 课中各版本实际具备的主题均已落地。Spine 课程覆盖 Creator 2.4/3.8 与 Cocos2d-x 2.x/3.x/4.0；1.x 快照没有 Spine 模块。平台与运行时专项再按目标选择。
+第 1–88 课中各版本实际具备的主题均已落地。Shader 编写与接入计划为第 89–95 课，代码尚未实现；Cocos2d-x 1.x 固定管线，不安排 Shader 实现课。平台与运行时专项再按目标选择。
 
 | 阶段 | 课次范围 | 范围 | 阶段结果 |
 | --- | --- | --- | --- |
@@ -34,6 +34,7 @@
 | 十八：动画播放与状态 | 71–75（已完成） | 片段、播放、采样、事件、切换 | 六个版本独立实现，按各自帧动画、Action、Animation 或骨骼系统讲解 |
 | 十九：3D 粒子 | 76–80（已完成） | 发射、模拟、粒子模块、渲染和生命周期 | Creator 2.4/3.8 与 Cocos2d-x 3.x/4.0；x1/x2 无内置模块 |
 | 二十：Spine 2D 骨骼动画 | 81–88（已完成） | 资源版本、数据与实例、轨道混合、骨骼更新、附件几何、渲染提交、事件与生命周期 | Creator 2.4/3.8 与 Cocos2d-x 2.x/3.x/4.0；1.x 快照无 Spine 模块 |
+| 二十一：Shader 编写与接入 | 89–95（计划） | Shader 阶段、顶点输入与坐标、纹理采样、Uniform、透明混合、宏变体和 Sprite 接入 | Creator 2.4/3.8 与 Cocos2d-x 2.x/3.x/4.0 各走本版路径；1.x 固定管线，不安排 Shader 实现 |
 
 ### 七：Action / Tween（第 30–34 课，第 30–34 课已完成）
 
@@ -147,7 +148,7 @@ Cocos2d-x 1.x–4.x 的第 10–13 课已覆盖场景访问、可见性/排序�
 
 ## 第 65 课之后课程与后续专题
 
-第 66–88 课均已按版本源码实现独立示例；Spine 课程覆盖 Creator 2.4/3.8 和 Cocos2d-x 2.x/3.x/4.0。相同课号只组织学习主题，不表示各版本使用相同 API。
+第 66–88 课均已按版本源码实现独立示例；Spine 课程覆盖 Creator 2.4/3.8 和 Cocos2d-x 2.x/3.x/4.0。第 89–95 课为 Shader 编写与接入计划，尚未实现。相同课号只组织学习主题，不表示各版本使用相同 API。
 
 ### 十七：3D 物理深化（第 66–70 课，已完成）
 
@@ -211,6 +212,33 @@ Cocos2d-x 1.x–4.x 的第 10–13 课已覆盖场景访问、可见性/排序�
 
 每个版本各有独立课程代码，不共享渲染实现。课程 README 按本地 Runtime 源码标出解析、更新、绘制和回收位置，并区分编辑器导入检查与浏览器/原生运行时行为。Spine 数据的导出版本需要与 Runtime 匹配，参见 [Spine 官方版本说明](https://en.esotericsoftware.com/spine-versioning)；Creator 2.4 缓存模式能力差异参见 [Creator 2.4 Spine 组件手册](https://docs.cocos.com/creator/2.4/manual/en/components/spine.html)。课程代码模拟源码职责，不复制第三方 Runtime 或演示素材。
 
+### 二十一：Shader 编写与接入（第 89–95 课，计划）
+
+第 60 课已讲 Material、Effect、Pass；第 61 课已讲程序变体、ProgramLib/ProgramState 与 Uniform 的引擎组织。本阶段转向 Shader 作者视角：写顶点/片元逻辑，给它传参数，再观察它如何影响最终 Sprite 像素。七课按一个最小 2D Shader 逐步增加能力，不重复讲程序缓存和渲染队列。
+
+| 课 | 主题 | 核心问题 |
+| --- | --- | --- |
+| 89 | Shader 源码与阶段 | 本版从哪里读取 Shader 源码，顶点阶段和片元阶段各自负责什么？ |
+| 90 | 顶点输入与坐标变换 | 位置、UV、顶点色如何从顶点输入变成裁剪空间位置？ |
+| 91 | 插值、纹理采样与片元颜色 | 顶点阶段输出如何插值到片元，UV 如何采样纹理并形成颜色？ |
+| 92 | 自定义 Uniform 与材质参数 | 游戏侧如何更新时间、强度或颜色，并让 Shader 在绘制时读取？ |
+| 93 | Alpha、预乘色与混合 | 片元输出和顶点色如何经过透明度及 Blend 状态成为屏幕颜色？ |
+| 94 | 宏变体与平台边界 | 宏、精度、Shader 语法和图形后端差异如何影响同一效果？ |
+| 95 | Sprite 接入与调试 | 如何把自定义 Shader 接到 Sprite，沿本版渲染路径定位编译或输出错误？ |
+
+| 版本 | 本地源码入口 | 课程实现边界 |
+| --- | --- | --- |
+| Creator 2.4.15 | `engine/2.4.15engine/cocos2d/core/assets/material/effect-parser.ts`、`cocos2d/renderer/core/program-lib.js`、`cocos2d/renderer/build/chunks/shader/`、`pass.js`、`base-renderer.js`、`gfx/device.js` | 以 WebGL 1 为目标，沿本版 Effect 解析、Shader chunks、Pass 和 Device；不套用 3.8 Effect YAML 细节。 |
+| Creator 3.8.7 | `engine/3.8.7engine/editor/assets/effects/for2d/builtin-sprite.effect`、`builtin-unlit.effect`、`cocos/render-scene/core/program-lib.ts`、`program-utils.ts`、`cocos/gfx/webgl2/webgl2-shader.ts` | Web 侧研究 `.effect` 中的 GLSL 和 WebGL2 编译路径；不把可选原生/WebGPU 后端当作本课运行证据。 |
+| Cocos2d-x 1.x | `engine/cocos2d-x-1/cocos2dx/sprite_nodes/CCSprite.cpp`、`textures/CCTextureAtlas.cpp` | 没有引擎 Shader/GLProgram 层；沿既有固定管线课程理解可编程 Shader 的版本边界，不创建伪实现。 |
+| Cocos2d-x 2.x | `engine/cocos2d-x-2/cocos2dx/shaders/CCGLProgram.cpp`、`CCShaderCache.cpp`、`cocos2dx/sprite_nodes/CCSprite.cpp`、`samples/Cpp/TestCpp/Resources/Shaders/` | 沿直接 OpenGL 和 GLProgram 研究 GLSL；不引入 3.x Renderer 命令队列。 |
+| Cocos2d-x 3.x | `engine/cocos2d-x-3/cocos/renderer/CCGLProgram.cpp`、`CCGLProgramState.cpp`、`CCGLProgramCache.cpp`、`tests/cpp-tests/Resources/Shaders/` | 沿 GLProgram/GLProgramState 与 OpenGL Renderer 接入；不套用 4.0 backend ProgramState。 |
+| Cocos2d-x 4.0 | `engine/cocos2d-x-4/cocos/renderer/backend/Program.cpp`、`ProgramState.cpp`、`ShaderModule.cpp`、`opengl/ShaderModuleGL.cpp`、`metal/ShaderModuleMTL.mm` | 沿 backend Program/ProgramState，分别说明 OpenGL 与 Metal 模块路径；不把 3.x GLProgram API 外推到 4.0。 |
+
+版本资料：[Creator 2.4 材质系统](https://docs.cocos.com/creator/2.4/manual/en/material-system/overview.html)、[Creator 3.8 自定义 Effect](https://docs.cocos.com/creator/3.8/manual/en/shader/write-effect-overview.html)、[Cocos2d-x Shader 与材质](https://docs.cocos2d-x/manual/en/advanced_topics/shaders.html)、[Cocos2d-x 4 升级指南](https://docs.cocos2d-x/v4/manual/en/upgradeGuide/)。
+
+目前仅登记课程范围，不创建第 89–95 课代码目录；开始逐课实现时，每个具备 Shader 的版本各自建立独立代码和源码对照，1.x 保持能力边界说明。
+
 ### 后续专题：平台与运行时专项
 
 第 50–53 课已覆盖通用构建、资源产物和启动交付。后续可按需要选择 Web、桌面、移动端或原生专项；开始前先选定引擎补丁版本、目标平台和工具链，再按实际源码与可运行证据确定主题，避免重复讲通用打包流程。
@@ -223,7 +251,7 @@ Cocos2d-x 1.x–4.x 的第 10–13 课已覆盖场景访问、可见性/排序�
 - 打包课程先固定引擎补丁版、目标平台、构建模式和工程身份；运行构建前核对工具链与 SDK，下载依赖、安装工具或改全局环境前先取得授权。
 - 构建日志、生成物检查和目标运行时验收分开记录；未实际构建的平台保持未验证状态。
 - 每个课程 README 记录本课目标、源码文件与关键函数、独立代码入口、可观察结果和简化点。
-- 第 66–80 课已完成：3D 物理、动画与 3D 粒子；Cocos2d-x 1.x/2.x 的能力边界分别按本地源码记录。第 81–88 课已完成 Spine 研究；Cocos2d-x 1.x 快照没有 Spine 模块，因此不创建伪课程。
+- 第 66–80 课已完成：3D 物理、动画与 3D 粒子；Cocos2d-x 1.x/2.x 的能力边界分别按本地源码记录。第 81–88 课已完成 Spine 研究；Cocos2d-x 1.x 快照没有 Spine 模块，因此不创建伪课程。第 89–95 课 Shader 专题已规划，课程代码待逐课实现。
 
 ## 各版本课程入口
 
