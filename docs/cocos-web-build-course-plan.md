@@ -22,7 +22,7 @@
 - 2.4 `Texture/HelloWorld.png.meta` 展示贴图主 UUID、SpriteFrame 子 UUID 和 `rawTextureUuid`；3.8 模型 `.FBX.meta` 展示主资源及多个导入子资源。两者用于从源文件追到场景引用和构建索引。
 - 2.4 的配置键包含 `uuids`、`paths`、`scenes`、`packs`、`deps`、`redirect`、`versions`；3.8 另有 `extensionMap`、`dependencyRelationships`、`hasPreloadScript` 等字段。本专题以当前构建文件为准，不把字段差异抹平。
 
-## 课程序列（第 89–94 课）
+## 课程序列（第 89–94 课，已落地）
 
 | 课 | 主题 | 本课问题 | 独立代码增量与证据 |
 | --- | --- | --- | --- |
@@ -33,7 +33,7 @@
 | 93 | Bundle 索引与文件 URL | `paths`/UUID/版本/扩展名如何定位 `import` 或 `native` 文件？打包配置如何影响输出结构？ | 分别实现本版 Config 和 URL 组合模型；用真实 Bundle 配置与文件名核对，包含 3.8 的配置差异。 |
 | 94 | 从场景到浏览器资源请求 | 首场景中的一项资源如何从 UUID 走到 Network 请求、Asset 对象和依赖缓存？ | 分别完成 2.4、3.8 的端到端追踪；记录浏览器 Network/Console 和场景结果，区分静态文件与运行时证据。 |
 
-每课都在 `learn_2.4cocoscreator/` 与 `learn_3.8cocoscreator/` 下各有独立 README 和完整 TS 代码快照。第 89–94 课按顺序增加能力；源码位置、观察结果和简化范围分别按版本记录。
+每课都在 `learn_2.4cocoscreator/` 与 `learn_3.8cocoscreator/` 下各有独立 README 和完整 TS 代码快照。第 89–94 课按顺序增加能力；源码位置、观察结果和简化范围分别按版本记录。12 份课程均已通过 `deno task check` 与 `deno task build`。课程代码的输出是职责模型；Creator 工程的实际 Network 请求仍须按第 94 课说明单独观察。
 
 ## 源码对照入口
 
@@ -55,8 +55,9 @@
 - 第 54 课继续讲 HTTP 缓存和版本发布策略；本专题只解释引擎资源版本字段如何参与查找，不展开部署缓存策略。
 - 课程不修改样例工程、构建输出或 `engine/` 快照；用户需要在编辑器改变 Bundle 配置或重建时，再明确执行对应操作。
 
-## 落地顺序
+## 完成记录
 
-1. 先完成第 89 课，冻结两版当前构建输出清单和源码对照图。
-2. 第 90 课核实 `.meta`、场景引用和 Bundle 配置来源；对 3.8 `BundleMain` 未出现在当前构建中的原因，以工程设置/日志证据为准。
-3. 再逐课建立两版的独立 TS 代码，最后通过 Web 浏览器观察第 94 课完整请求链。
+1. 第 89 课记录两版当前 Web 构建输出，并分别标注对应 Runtime 源码职责。
+2. 第 90–91 课从 `.meta` 与序列化引用建立主/子资源 UUID 和依赖关系。
+3. 第 92–93 课分别模拟两版 AssetManager 管线、Config 索引与 URL 组合；使用真实输出核对 pack/native 地址。
+4. 第 94 课串接场景、pack、依赖和 Asset/文件缓存。课程模型已执行；实际 Creator 浏览器请求按本课 README 中的本地服务步骤观察，不把静态映射当作 Network 实测。

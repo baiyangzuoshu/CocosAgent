@@ -1,0 +1,20 @@
+const BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const GROUP = ["", "", "", ""];
+const UUID_TEMPLATE = [...GROUP, ...GROUP, "-", ...GROUP, "-", ...GROUP, "-", ...GROUP, "-", ...GROUP, ...GROUP, ...GROUP];
+const HEX = "0123456789abcdef";
+const POSITIONS = UUID_TEMPLATE.flatMap((value, index) => value === "-" ? [] : [index]);
+
+export function decodeUuid(compressed: string): string {
+  if (compressed.length !== 22) return compressed;
+  const output = [...UUID_TEMPLATE];
+  output[0] = compressed[0];
+  output[1] = compressed[1];
+  let cursor = 2;
+  for (let index = 2; index < 22; index += 2) {
+    const lhs = BASE64.indexOf(compressed[index]);
+    const rhs = BASE64.indexOf(compressed[index + 1]);
+    const values = [lhs >> 2, ((lhs & 3) << 2) | (rhs >> 4), rhs & 15];
+    for (const value of values) output[POSITIONS[cursor++]] = HEX[value];
+  }
+  return output.join("");
+}

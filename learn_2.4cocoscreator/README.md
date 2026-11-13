@@ -229,7 +229,13 @@ learn_2.4cocoscreator/
 ├── s85_spine_slots_attachments/  # 第 85 课：Creator 2.4.15 Skin、Slot、Attachment 与绘制顺序
 ├── s86_spine_mesh_clipping/  # 第 86 课：Creator 2.4.15 网格附件、Deform 与 Clipping
 ├── s87_spine_render_submission/  # 第 87 课：Creator 2.4.15 引擎渲染接线与批次
-└── s88_spine_events_lifecycle/  # 第 88 课：Creator 2.4.15 事件、调试观察与退出清理
+├── s88_spine_events_lifecycle/  # 第 88 课：Creator 2.4.15 事件、调试观察与退出清理
+├── s89_web_build_output_map/    # 第 89 课：Web 构建产物地图
+├── s90_meta_asset_identity/     # 第 90 课：.meta 与资源身份
+├── s91_asset_dependency_graph/  # 第 91 课：Asset 引用与依赖图
+├── s92_asset_manager_pipeline/  # 第 92 课：AssetManager 加载管线
+├── s93_bundle_config_urls/      # 第 93 课：Bundle 索引与文件 URL
+└── s94_web_asset_request/       # 第 94 课：从场景到 Web 资源请求
 ~~~
 
 ## Spine 2D 骨骼动画（第 81–88 课）
@@ -242,6 +248,15 @@ learn_2.4cocoscreator/
 - [第 86 课：Creator 2.4.15 网格附件、Deform 与 Clipping](s86_spine_mesh_clipping/README.md)
 - [第 87 课：Creator 2.4.15 引擎渲染接线与批次](s87_spine_render_submission/README.md)
 - [第 88 课：Creator 2.4.15 事件、调试观察与退出清理](s88_spine_events_lifecycle/README.md)
+
+## Web 资源导入与打包（第 89–94 课）
+
+- [第 89 课：Web 构建产物地图](s89_web_build_output_map/README.md)
+- [第 90 课：`.meta` 与资源身份](s90_meta_asset_identity/README.md)
+- [第 91 课：Asset 引用与依赖图](s91_asset_dependency_graph/README.md)
+- [第 92 课：AssetManager 加载管线](s92_asset_manager_pipeline/README.md)
+- [第 93 课：Bundle 索引与文件 URL](s93_bundle_config_urls/README.md)
+- [第 94 课：从场景到 Web 资源请求](s94_web_asset_request/README.md)
 
 Creator 课程以 Web 浏览器运行时为范围；每课代码独立，并标出对应引擎源码位置。
 
