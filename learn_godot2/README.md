@@ -12,6 +12,7 @@
 - [第 4 课：`Main::start()`、主场景装载与主循环创建](s04_main_start_scene/README.md)
 - [第 5 课：`Main::iteration()` 的固定步进与帧绘制](s05_main_iteration/README.md)
 - [第 6 课：`SceneTree::iteration()` 与 idle 更新](s06_scenetree_iteration/README.md)
+- [第 7 课：`Object` 实例 ID 与 `Reference` 引用计数](s07_object_lifetime/README.md)
 
 每课将列出源码文件与关键调用、实验工程、可观察结果和简化边界。运行验证只针对明确记录的 Godot 2.1 工具和平台。
 

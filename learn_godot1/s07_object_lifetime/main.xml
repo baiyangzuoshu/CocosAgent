@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<resource_file type="PackedScene" subresource_count="2" version="1.1" version_name="Godot Engine v1.1.stable">
+	<ext_resource path="res://lifetime_probe.gd" type="GDScript"></ext_resource>
+	<main_resource>
+		<dictionary name="_bundled" shared="false">
+			<string> "names" </string>
+			<string_array len="3">
+				<string> "Node" </string>
+				<string> "S07LifetimeProbe" </string>
+				<string> "script/script" </string>
+			</string_array>
+			<string> "version" </string>
+			<int> 1 </int>
+			<string> "conn_count" </string>
+			<int> 0 </int>
+			<string> "node_count" </string>
+			<int> 1 </int>
+			<string> "variants" </string>
+			<array len="1" shared="false">
+				<resource resource_type="GDScript" path="res://lifetime_probe.gd"></resource>
+			</array>
+			<string> "nodes" </string>
+			<int_array len="9"> -1, -1, 0, 1, -1, 1, 2, 0, 0 </int_array>
+			<string> "conns" </string>
+			<int_array len="0"></int_array>
+		</dictionary>
+	</main_resource>
+</resource_file>
