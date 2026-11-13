@@ -11,6 +11,7 @@
 - [第 3 课：`Main::setup2()` 与场景/服务器注册](s03_main_setup2/README.md)
 - [第 4 课：`Main::start()` 装载主场景与创建主循环](s04_runtime_start/README.md)
 - [第 5 课：`Main::iteration()` 的固定步进与帧提交](s05_main_iteration/README.md)
+- [第 6 课：`SceneTree` 更新、输入路由与退出](s06_scene_main_loop/README.md)
 
 每课将列出源码文件与关键调用、实验工程、可观察结果和简化边界。Godot 1.1 的运行时版本查询能力与新版本不同；版本确认以源码元数据和本代工具为准。
 

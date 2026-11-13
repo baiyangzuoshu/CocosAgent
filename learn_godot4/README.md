@@ -13,6 +13,7 @@
 - [第 3 课：引擎类型注册与服务器初始化](s03_engine_initialization/README.md)
 - [第 4 课：`MainLoop` 与 `SceneTree` 的创建和启动](s04_main_loop_creation/README.md)
 - [第 5 课：`Main::iteration()` 的物理 tick、process 与绘制](s05_main_iteration/README.md)
+- [第 6 课：`SceneTree::physics_process()` 与 `process()`](s06_scene_tree_iteration/README.md)
 
 每课列出源码文件、关键调用、实验入口、观察结果、简化点和验证环境。静态源码、编辑器运行、构建和目标平台证据分别记录。
 
