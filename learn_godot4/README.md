@@ -15,6 +15,7 @@
 - [第 5 课：`Main::iteration()` 的物理 tick、process 与绘制](s05_main_iteration/README.md)
 - [第 6 课：`SceneTree::physics_process()` 与 `process()`](s06_scene_tree_iteration/README.md)
 - [第 7 课：`ObjectID` 与 `RefCounted` 生命周期](s07_object_lifetime/README.md)
+- [第 8 课：`ClassDB` 类型注册与动态实例化](s08_classdb_registration/README.md)
 
 每课列出源码文件、关键调用、实验入口、观察结果、简化点和验证环境。静态源码、编辑器运行、构建和目标平台证据分别记录。
 

@@ -13,6 +13,7 @@
 - [第 5 课：`Main::iteration()` 的帧时钟、物理步与绘制](s05_main_iteration/README.md)
 - [第 6 课：`SceneTree::iteration()` 与 idle 更新](s06_scenetree_iteration/README.md)
 - [第 7 课：`ObjectDB`、实例 ID 与 `Reference` 销毁](s07_object_lifetime/README.md)
+- [第 8 课：`ClassDB` 类型注册与动态实例化](s08_classdb_registration/README.md)
 
 每课列出源码文件与关键调用、独立实验、可观察结果和简化范围；编辑器、导出和目标平台结果分别记录。
 
