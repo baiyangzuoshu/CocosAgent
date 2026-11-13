@@ -16,7 +16,7 @@
 
 ## 已完成阶段与后续专题
 
-第 1–88 课中各版本实际具备的主题均已落地。Spine 覆盖 Creator 2.4/3.8 和 Cocos2d-x 2.x/3.x/4.0；Cocos2d-x 1.x 快照没有 Spine 模块。Creator Web 构建产物分析保留在第 89–94 课讨论稿；Shader 编写与接入顺延为第 95–101 课计划，代码尚未实现。
+第 1–88 课中各版本实际具备的主题均已落地。Spine 覆盖 Creator 2.4/3.8 和 Cocos2d-x 2.x/3.x/4.0；Cocos2d-x 1.x 快照没有 Spine 模块。Creator Web 资源导入、打包与运行时课程已细化为第 89–94 课，逐课代码待实现；Shader 编写与接入为第 95–101 课计划。
 
 | 阶段 | 课次范围 | 范围 | 阶段结果 |
 | --- | --- | --- | --- |
@@ -34,7 +34,7 @@
 | 十八：动画播放与状态 | 71–75（已完成） | 片段、播放、采样、事件、切换 | 六个版本独立实现，按各自帧动画、Action、Animation 或骨骼系统讲解 |
 | 十九：3D 粒子 | 76–80（已完成） | 发射、模拟、粒子模块、渲染和生命周期 | Creator 2.4/3.8 与 Cocos2d-x 3.x/4.0；x1/x2 无内置模块 |
 | 二十：Spine 2D 骨骼动画 | 81–88（已完成） | 资源版本、数据与实例、轨道混合、骨骼更新、附件几何、渲染提交、事件与生命周期 | Creator 2.4/3.8 与 Cocos2d-x 2.x/3.x/4.0；1.x 快照无 Spine 模块 |
-| 二十一：Creator Web 构建产物分析 | 89–94（讨论稿） | 编辑器 Web 构建、资源/Bundle、业务脚本、引擎装配、浏览器入口 | Creator 2.4 与 3.8 分开研究；计划详见 [Web 构建课程草案](cocos-web-build-course-plan.md) |
+| 二十一：Creator Web 资源导入与打包 | 89–94（计划已细化） | 构建产物、`.meta` 与 UUID、Asset、AssetManager、Bundle 索引、浏览器请求 | Creator 2.4 与 3.8 各有独立 TypeScript 课程代码；计划详见 [Web 资源打包课程计划](cocos-web-build-course-plan.md) |
 | 二十二：Shader 编写与接入 | 95–101（计划） | Shader 阶段、顶点输入与坐标、纹理采样、Uniform、透明混合、宏变体和 Sprite 接入 | Creator 2.4/3.8 与 Cocos2d-x 2.x/3.x/4.0 各走本版路径；1.x 固定管线，不安排 Shader 实现 |
 
 ### 七：Action / Tween（第 30–34 课，第 30–34 课已完成）
@@ -149,7 +149,7 @@ Cocos2d-x 1.x–4.x 的第 10–13 课已覆盖场景访问、可见性/排序�
 
 ## 第 65 课之后课程与后续专题
 
-第 66–88 课均已按版本源码实现独立示例；Spine 课程覆盖 Creator 2.4/3.8 和 Cocos2d-x 2.x/3.x/4.0。Creator Web 构建产物分析保留为第 89–94 课讨论稿；第 95–101 课为 Shader 编写与接入计划，尚未实现。相同课号只组织学习主题，不表示各版本使用相同 API。
+第 66–88 课均已按版本源码实现独立示例；Spine 课程覆盖 Creator 2.4/3.8 和 Cocos2d-x 2.x/3.x/4.0。Creator Web 资源导入与打包已列入第 89–94 课，逐课代码待实现；第 95–101 课为 Shader 编写与接入计划，尚未实现。相同课号只组织学习主题，不表示各版本使用相同 API。
 
 ### 十七：3D 物理深化（第 66–70 课，已完成）
 
@@ -213,9 +213,9 @@ Cocos2d-x 1.x–4.x 的第 10–13 课已覆盖场景访问、可见性/排序�
 
 每个版本各有独立课程代码，不共享渲染实现。课程 README 按本地 Runtime 源码标出解析、更新、绘制和回收位置，并区分编辑器导入检查与浏览器/原生运行时行为。Spine 数据的导出版本需要与 Runtime 匹配，参见 [Spine 官方版本说明](https://en.esotericsoftware.com/spine-versioning)；Creator 2.4 缓存模式能力差异参见 [Creator 2.4 Spine 组件手册](https://docs.cocos.com/creator/2.4/manual/en/components/spine.html)。课程代码模拟源码职责，不复制第三方 Runtime 或演示素材。
 
-### 二十一：Creator Web 构建产物分析（第 89–94 课，讨论稿）
+### 二十一：Creator Web 资源导入、打包与运行时（第 89–94 课，计划已细化）
 
-两版 Creator 的 Web 构建课程草案保留在独立计划文档中；课程证据区分编辑器实际构建、引擎静态源码和浏览器运行观察。讨论稿尚未同步到各版本课程入口，详见 [Creator Web 构建产物分析课程计划](cocos-web-build-course-plan.md)。
+两版 `NewProject` 已有 Web 构建输出。课程依次观察产物地图、`.meta` 资源身份、Asset 引用与依赖、AssetManager 加载管线、Bundle 索引和浏览器完整请求；2.4 与 3.8 的 Bundle 配置方式分别记录。3.8 当前产物没有 `BundleMain`，课程以工程设置和构建日志查原因，不从目录 `.meta` 猜测。每课分别建立独立 TypeScript 代码；详细课纲与源码文件见 [Creator Web 资源导入、打包与运行时课程计划](cocos-web-build-course-plan.md)。
 
 ### 二十二：Shader 编写与接入（第 95–101 课，计划）
 
@@ -256,7 +256,7 @@ Cocos2d-x 1.x–4.x 的第 10–13 课已覆盖场景访问、可见性/排序�
 - 打包课程先固定引擎补丁版、目标平台、构建模式和工程身份；运行构建前核对工具链与 SDK，下载依赖、安装工具或改全局环境前先取得授权。
 - 构建日志、生成物检查和目标运行时验收分开记录；未实际构建的平台保持未验证状态。
 - 每个课程 README 记录本课目标、源码文件与关键函数、独立代码入口、可观察结果和简化点。
-- 第 66–80 课已完成：3D 物理、动画与 3D 粒子；Cocos2d-x 1.x/2.x 的能力边界分别按本地源码记录。第 81–88 课已完成 Spine 研究；Cocos2d-x 1.x 快照没有 Spine 模块，因此不创建伪课程。第 89–94 课 Creator Web 构建产物分析仍为讨论稿；第 95–101 课 Shader 专题已规划，课程代码待逐课实现。
+- 第 66–80 课已完成：3D 物理、动画与 3D 粒子；Cocos2d-x 1.x/2.x 的能力边界分别按本地源码记录。第 81–88 课已完成 Spine 研究；Cocos2d-x 1.x 快照没有 Spine 模块，因此不创建伪课程。第 89–94 课 Creator Web 资源导入与打包已列出逐课目标，代码待逐课实现；第 95–101 课 Shader 专题已规划。
 
 ## 各版本课程入口
 

@@ -1,54 +1,62 @@
-# Creator Web 构建产物分析课程计划（讨论稿）
+# Creator Web 资源导入、打包与运行时课程计划
 
-## 目标与版本边界
+本专题从工程资源出发，沿 `.meta` 身份、编辑器构建结果、Bundle 配置，追到 Web 运行时的 `Asset` 与 `AssetManager`。目标是理解职责和数据如何交接，不复刻闭源 Builder，也不把构建产物误当作引擎源码。
 
-本专题沿着 Creator 项目从编辑器工程到浏览器运行目录的路径，观察资源如何进入 Web 产物、业务脚本如何编译并由引擎运行时载入，以及首场景如何启动。
+## 版本与证据边界
 
-| 项目 | 样例工程标记 | 课程源码基线 | 说明 |
+| 项目 | 样例/编辑器版本 | 源码基线 | Web 输出 |
 | --- | --- | --- | --- |
-| Creator 2.4 | 2.4.15 | Creator 2.4.15 | 使用 [2.4NewProject](../2.4NewProject/README.md) 中的场景、JavaScript 组件和贴图。 |
-| Creator 3.x | 3.8.8 | Creator 3.8.7 | 保留 [3.8NewProject](../3.8NewProject/package.json) 的 3.8.8 工程标记；引擎源码解释以仓库 3.8.7 快照为准，并在每课注明编辑器输出版本。 |
+| Creator 2.4 | 2.4.15 | `engine/2.4.15engine/` | `2.4NewProject/build/web-mobile/` |
+| Creator 3.8 | 3.8.8 | `engine/3.8.7engine/` | `3.8NewProject/build/web-mobile/` |
 
-课程主题限定为 **业务脚本与引擎运行时的构建关系**。不把业务脚本描述成直接并入原始引擎源码，也不覆盖修改引擎源码后制作自定义引擎的流程。
+- 两份样例都已有 Web 构建，本专题先读取现有输出，不重复构建。实际浏览器加载结果须在对应课程中另行观察。
+- `.meta`、场景序列化文件和 `build/web-mobile/` 是样例工程/编辑器输出证据；AssetDB 导入器与完整 Builder 不属于本地运行时源码快照。
+- `engine/` 仅用于追踪运行时职责；课程 TS 代码每课独立，目录与职责尽量映射到本版本源码，并明确删去的旁支。
+- 2.4 与 3.8 的文件名和配置字段不强求一致。样例使用 Creator 3.8.8，源码说明限定在本仓库 3.8.7 快照。
 
-## 课程证据规则
+## 已观察到的构建事实
 
-- **编辑器构建证据：** 记录 Creator 编辑器版本、Web 目标、Debug/Release 配置、构建日志和实际输出目录。构建器不在本地引擎源码快照内，因此不从运行时源码推断完整编辑器构建步骤。
-- **引擎源码证据：** 说明构建产物运行后，Bundle 配置、资源 URL、引擎初始化和业务脚本接入分别由哪些引擎模块负责。Creator 2.4.15 与 3.8.7 分开引用本版本源码。
-- **浏览器运行证据：** 用 Network、Console 和场景可见结果核实入口加载、脚本执行、资源请求及首场景启动。静态代码分析不替代浏览器验证。
-- `engine/` 上游快照只作研究依据；课程计划不修改引擎源码。
+- 2.4 输出包含 `assets/main`、`assets/internal` 和 `assets/BundleMain`。Bundle 配置文件为 `config.<hash>.json`；`src/settings.f161e.js` 记录启动场景和各 Bundle 版本。
+- 3.8 输出当前包含 `assets/main` 和 `assets/internal`，没有 `assets/BundleMain`。`src/settings.json` 记录 `projectBundles`、`bundleVers` 等设置。现有输出能证明本次构建结果，不能单凭它解释 Bundle 为什么未生成。
+- 2.4 `assets/BundleMain.meta` 有 `isBundle: true`；3.8 的同名目录 `.meta` 没有 Bundle 配置数据。Creator 3.8 手册说明 Bundle 配置从 3.8 起移至“项目设置 → Bundle 配置”，所以要从 3.8 工程配置和构建日志继续核实，不能把两版 `.meta` 当成同一种 Bundle 配置。
+- 2.4 `Texture/HelloWorld.png.meta` 展示贴图主 UUID、SpriteFrame 子 UUID 和 `rawTextureUuid`；3.8 模型 `.FBX.meta` 展示主资源及多个导入子资源。两者用于从源文件追到场景引用和构建索引。
+- 2.4 的配置键包含 `uuids`、`paths`、`scenes`、`packs`、`deps`、`redirect`、`versions`；3.8 另有 `extensionMap`、`dependencyRelationships`、`hasPreloadScript` 等字段。本专题以当前构建文件为准，不把字段差异抹平。
 
-## 课程序列草案
+## 课程序列（第 89–94 课）
 
-课程编号从现有第 88 课之后继续。两版本使用同一组学习问题，但保留独立的源码路径、构建输出和实现说明。
-
-| 课 | 主题 | 需要回答的问题 | 主要证据与源码入口 |
+| 课 | 主题 | 本课问题 | 独立代码增量与证据 |
 | --- | --- | --- | --- |
-| 89 | Web 构建基线与产物地图 | 项目配置、目标平台和构建模式如何对应到输出目录？输出中有哪些入口、脚本、配置和资源文件？ | 两个样例工程的项目设置与编辑器构建结果；按实际构建记录输出树，不预设产物文件名。 |
-| 90 | 资源身份、引用与导入结果 | `.meta` UUID 如何关联场景、Prefab 和资源依赖？哪些信息来自编辑器导入，哪些由运行时读取？ | 场景/资源序列化文件和构建产物；对照本地 `.meta` 与场景 UUID 引用。 |
-| 91 | Bundle 与 Web 资源布局 | 资源如何分到 Bundle、导入数据与原生资源目录？运行时如何依据索引、UUID、版本和扩展名定位文件？ | Creator 2.4.15 `cocos2d/core/asset-manager/config.js`、`urlTransformer.js`；Creator 3.8.7 `cocos/asset/asset-manager/config.ts`、`url-transformer.ts`；编辑器输出用于确认实际布局。 |
-| 92 | 业务脚本编译与项目代码产物 | 2.4 JavaScript 与 3.x TypeScript 业务脚本经过构建后变成什么输出？组件如何被注册并与场景中的脚本引用对应？ | 样例工程脚本、场景/Prefab 脚本 UUID、构建结果和浏览器执行结果；输出文件名、拆分和压缩情况以实际构建为准。 |
-| 93 | 引擎运行时与业务脚本的装配 | 引擎运行时由哪些模块和构建常量决定？它如何提供组件、资源和场景运行环境，并载入项目代码？业务代码和引擎代码在产物中的边界是什么？ | Creator 2.4.15 `gulp/tasks/engine.js`、`gulp/util/create-bundler.js` 及 `CCGame.js`；Creator 3.8.7 `@types/consts.d.ts`、`cocos/game/game.ts`。结合 92 课的实际输出核实两者装配方式。 |
-| 94 | 页面入口、首场景与构建模式对照 | 浏览器从页面入口如何进入引擎初始化、项目脚本执行、资源加载和首场景？Debug 与 Release 的输出及运行结果有何差异？ | 构建输出、浏览器 Network/Console、首场景观察；Web 缓存与发布切换策略沿用第 54 课，不重复讲解。 |
+| 89 | Web 构建产物地图 | 页面入口、引擎脚本、项目脚本、Bundle 配置和资源文件分别在哪里？ | 分别为 2.4/3.8 写一份输出清单模型；读取两份现有 `build/web-mobile/` 和启动设置。 |
+| 90 | `.meta`、Asset 身份与导入设置 | 源文件、主 UUID、子资源 UUID、导入器设置和场景引用如何对应？Bundle 配置在两版中保存在哪里？ | 分别建模 2.4 贴图子资源与 3.8 FBX 子资源；对照各自 `.meta`、场景文件和 3.8 项目 Bundle 配置。 |
+| 91 | `Asset`、序列化引用与依赖 | 场景中的 UUID 怎样变成资源对象和依赖边？`import` 数据与 `native` 文件各是什么？ | 分别模拟一个场景到 Prefab/贴图子资源的引用图，并映射实际 Bundle 输出。 |
+| 92 | `AssetManager` 加载管线 | `Bundle.load` 如何经过请求预处理、查配置、下载、解析、反序列化、依赖加载和缓存？预加载完成了什么？ | 按本版源码职责搭建精简的 `preprocess → load` 管线，明确 preload 只走下载管线。 |
+| 93 | Bundle 索引与文件 URL | `paths`/UUID/版本/扩展名如何定位 `import` 或 `native` 文件？打包配置如何影响输出结构？ | 分别实现本版 Config 和 URL 组合模型；用真实 Bundle 配置与文件名核对，包含 3.8 的配置差异。 |
+| 94 | 从场景到浏览器资源请求 | 首场景中的一项资源如何从 UUID 走到 Network 请求、Asset 对象和依赖缓存？ | 分别完成 2.4、3.8 的端到端追踪；记录浏览器 Network/Console 和场景结果，区分静态文件与运行时证据。 |
 
-## 样例工程准备建议
+每课都在 `learn_2.4cocoscreator/` 与 `learn_3.8cocoscreator/` 下各有独立 README 和完整 TS 代码快照。第 89–94 课按顺序增加能力；源码位置、观察结果和简化范围分别按版本记录。
 
-- 2.4 工程已有 `HelloWorld.js`、场景和贴图，可作为业务脚本与资源跟踪的起点。
-- 3.8 工程目前以 3D 场景、模型、材质和贴图为主；为覆盖业务脚本构建，应在 Creator 3.8.8 编辑器中增加一个最小 TypeScript 组件并挂到场景节点。由编辑器生成和维护其 `.meta`、UUID 与场景引用。
-- 为观察资源筛选与 Bundle 边界，两个工程都适合准备一项场景实际引用的资源、一项未引用资源，以及一项单独 Bundle 资源。版本间不强求二进制产物相同，只对比各自的身份、依赖和运行时解析流程。
-- 2.4 与 3.8.8 的 Web 构建分别由对应编辑器执行。报告中并列记录“样例工程/编辑器版本”和“用于源码解释的引擎快照版本”，避免把 3.8.8 构建结果说成 3.8.7 编辑器实测。
+## 源码对照入口
 
-## 与现有课程的关系
+| 主题 | Creator 2.4.15 | Creator 3.8.7 |
+| --- | --- | --- |
+| `Asset` 对象 | `cocos2d/core/assets/CCAsset.js` | `cocos/asset/assets/asset.ts` |
+| AssetManager 与 Bundle | `cocos2d/core/asset-manager/CCAssetManager.js`、`bundle.js` | `cocos/asset/asset-manager/asset-manager.ts`、`bundle.ts` |
+| Config 与 URL | `cocos2d/core/asset-manager/config.js`、`urlTransformer.js` | `cocos/asset/asset-manager/config.ts`、`url-transformer.ts` |
+| 请求、解析与依赖 | `preprocess.js`、`load.js`、`fetch.js`、`parser.js`、`deserialize.js`、`depend-util.js` | `preprocess.ts`、`load.ts`、`fetch.ts`、`parser.ts`、`deserialize.ts`、`depend-util.ts` |
 
-现有第 50–53 课继续承担构建入口、运行时资源 URL、启动流程和交付的源码职责模型；本专题补充真实编辑器构建输出的观察与对照。第 54 课继续覆盖 Web 缓存与版本更新。
+上游研究资料：[Creator 2.x 资源身份、加载与释放](2.x/04-assets-and-loading.md)、[Creator 3.x 资源身份、加载与释放](3.x/04-assets-and-loading.md)。这些资料已分析运行时资源生命周期；本专题新增重点是拿实际 Web 构建配置和文件验证每一环的数据映射。
 
-- [总课程大纲](cocos-engine-course-master-outline.md)
-- [Creator 2.4.15 第 51–52 课](../learn_2.4cocoscreator/s51_code_engine_build/README.md)
-- [Creator 3.8.7 第 51–52 课](../learn_3.8cocoscreator/s51_code_engine_build/README.md)
+编辑器工作流基线：[Creator 2.4 资源工作流](https://docs.cocos.com/creator/2.4/manual/zh/asset-workflow/)、[Creator 2.4 Asset Manager](https://docs.cocos.com/creator/2.4/manual/zh/asset-manager/)、[Creator 2.4 Asset Bundle](https://docs.cocos.com/creator/2.4/manual/zh/asset-manager/bundle.html)；[Creator 3.8 资源工作流](https://docs.cocos.com/creator/3.8/manual/zh/asset/asset-workflow.html)、[Creator 3.8 Asset Manager](https://docs.cocos.com/creator/3.8/manual/zh/asset/asset-manager.html)、[Creator 3.8 Asset Bundle](https://docs.cocos.com/creator/3.8/manual/zh/asset/bundle.html)。手册用于确认编辑器约定，具体构建结果仍以两个本地样例为证。
+
+## 与既有课程的边界
+
+- 第 0 课讲 `.meta` UUID 与子资源；第 9 课讲单 UUID 请求和缓存；第 52 课用占位 UUID 演示 Bundle 文件 URL。新课在此基础上使用两份真实构建输出，不重讲同一份简化模型。
+- 第 50–53 课继续讲通用目标、引擎/业务代码构建、资源结构和启动；本专题集中研究资源身份、AssetManager、Bundle 与实际文件的映射。
+- 第 54 课继续讲 HTTP 缓存和版本发布策略；本专题只解释引擎资源版本字段如何参与查找，不展开部署缓存策略。
+- 课程不修改样例工程、构建输出或 `engine/` 快照；用户需要在编辑器改变 Bundle 配置或重建时，再明确执行对应操作。
 
 ## 落地顺序
 
-1. 先在两个对应 Creator 编辑器中分别构建 Web Debug 与 Release，保存版本、构建选项、日志和输出文件树。
-2. 从样例场景追踪脚本、资源 UUID 与 Bundle 输出，再按运行时源码解释加载和解析职责。
-3. 根据实际产物固定每课的文件名、目录、浏览器请求和截图；未由本地快照或编辑器构建验证的部分明确标注。
-4. 讨论稿确定后，再将课程条目同步到总纲和两个版本的课程入口，并逐课编写 README 与独立观察代码。
+1. 先完成第 89 课，冻结两版当前构建输出清单和源码对照图。
+2. 第 90 课核实 `.meta`、场景引用和 Bundle 配置来源；对 3.8 `BundleMain` 未出现在当前构建中的原因，以工程设置/日志证据为准。
+3. 再逐课建立两版的独立 TS 代码，最后通过 Web 浏览器观察第 94 课完整请求链。
