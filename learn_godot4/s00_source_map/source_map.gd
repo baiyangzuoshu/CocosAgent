@@ -1,9 +1,9 @@
 extends Node
 
 const SNAPSHOT_MAJOR := 4
-const SNAPSHOT_MINOR := 8
-const SNAPSHOT_PATCH := 0
-const SNAPSHOT_STATUS := "beta"
+const SNAPSHOT_MINOR := 7
+const SNAPSHOT_PATCH := 3
+const SNAPSHOT_STATUS := "rc"
 
 func _ready() -> void:
 	var version_info: Dictionary = Engine.get_version_info()
@@ -14,7 +14,7 @@ func _ready() -> void:
 		str(version_info.get("status", "unknown")),
 	]
 
-	print("源码快照：Godot 4.8.0 beta")
+	print("源码快照：Godot 4.7.3-rc")
 	print("本机运行时：", version_info.get("string", runtime_version))
 	print("运行时版本字段：", runtime_version)
 	print("版本字段匹配：", _matches_snapshot(version_info))
