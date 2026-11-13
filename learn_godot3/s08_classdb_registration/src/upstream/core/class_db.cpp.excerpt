@@ -1,0 +1,12 @@
+/* Godot 3 source excerpts.
+/* Upstream: engine/godot-3.6/core/class_db.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 491-494 */
+bool ClassDB::class_exists(const StringName &p_class) {
+	OBJTYPE_RLOCK;
+	return classes.has(p_class);
+}

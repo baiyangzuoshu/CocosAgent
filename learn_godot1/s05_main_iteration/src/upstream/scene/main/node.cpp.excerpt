@@ -1,0 +1,30 @@
+/* Godot 1 source excerpts.
+/* Upstream: engine/godot-1.1/scene/main/node.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 52-73 */
+				Variant::CallError err;
+				get_script_instance()->call_multilevel(SceneStringNames::get_singleton()->_process,ptr,1);
+			}
+		} break;
+		case NOTIFICATION_FIXED_PROCESS: {
+
+			if (get_script_instance()) {
+
+				Variant time=get_fixed_process_delta_time();
+				const Variant*ptr[1]={&time};
+				Variant::CallError err;
+				get_script_instance()->call_multilevel(SceneStringNames::get_singleton()->_fixed_process,ptr,1);
+			}
+
+		} break;
+		case NOTIFICATION_ENTER_TREE: {
+
+			if (data.pause_mode==PAUSE_MODE_INHERIT) {
+
+				if (data.parent)
+					data.pause_owner=data.parent->data.pause_owner;
+				else

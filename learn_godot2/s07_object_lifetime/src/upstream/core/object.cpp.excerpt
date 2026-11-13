@@ -1,0 +1,67 @@
+/* Godot 2 source excerpts.
+/* Upstream: engine/godot-2.1/core/object.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 257-265 */
+bool Object::_predelete() {
+
+	_predelete_ok = 1;
+	notification(NOTIFICATION_PREDELETE, true);
+	if (_predelete_ok) {
+		_type_ptr = NULL; //must restore so destructors can access type ptr correctly
+	}
+	return _predelete_ok;
+}
+
+/* Upstream lines 1718-1724 */
+Object::Object() {
+
+	_type_ptr = NULL;
+	_block_signals = false;
+	_predelete_ok = 0;
+	_instance_ID = 0;
+	_instance_ID = ObjectDB::add_instance(this);
+
+/* Upstream lines 1739-1777 */
+Object::~Object() {
+
+	if (script_instance)
+		memdelete(script_instance);
+	script_instance = NULL;
+
+	List<Connection> sconnections;
+	const StringName *S = NULL;
+
+	while ((S = signal_map.next(S))) {
+
+		Signal *s = &signal_map[*S];
+
+		ERR_EXPLAIN("Attempt to delete an object in the middle of a signal emission from it");
+		ERR_CONTINUE(s->lock > 0);
+
+		for (int i = 0; i < s->slot_map.size(); i++) {
+
+			sconnections.push_back(s->slot_map.getv(i).conn);
+		}
+	}
+
+	for (List<Connection>::Element *E = sconnections.front(); E; E = E->next()) {
+
+		Connection &c = E->get();
+		ERR_CONTINUE(c.source != this); //bug?
+
+		this->disconnect(c.signal, c.target, c.method);
+	}
+
+	while (connections.size()) {
+
+		Connection c = connections.front()->get();
+		c.source->disconnect(c.signal, c.target, c.method);
+	}
+
+	ObjectDB::remove_instance(this);
+	_instance_ID = 0;
+	_predelete_ok = 2;

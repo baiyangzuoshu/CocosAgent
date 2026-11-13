@@ -31,3 +31,13 @@ godot -path .
 ## 简化与边界
 
 实验不覆盖 `WeakRef`、循环引用、线程安全策略和 Node 的 `queue_free()`。Godot 2.1 保留大写 `get_instance_ID()`、`ObjectTypeDB`、`Reference` 和文本场景格式；本课尚未运行。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [object.cpp](src/upstream/core/object.cpp.excerpt) | godot-2.1/core/object.cpp | 257-265, 1718-1724, 1739-1777 |
+| [reference.cpp](src/upstream/core/reference.cpp.excerpt) | godot-2.1/core/reference.cpp | 65-80 |
+| [reference.h](src/upstream/core/reference.h.excerpt) | godot-2.1/core/reference.h | 281-304 |

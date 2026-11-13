@@ -1,0 +1,34 @@
+/* Godot 2 source excerpts.
+/* Upstream: engine/godot-2.1/main/main.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1010-1010 */
+bool Main::start() {
+
+/* Upstream lines 1124-1130 */
+	if (script == "" && game_path == "" && String(GLOBAL_DEF("application/main_scene", "")) != "") {
+		game_path = GLOBAL_DEF("application/main_scene", "");
+	}
+
+	MainLoop *main_loop = NULL;
+	if (editor) {
+		main_loop = memnew(SceneTree);
+
+/* Upstream lines 1420-1428 */
+				Node *scene = NULL;
+				Ref<PackedScene> scenedata = ResourceLoader::load(local_game_path);
+				if (scenedata.is_valid())
+					scene = scenedata->instance();
+
+				ERR_EXPLAIN("Failed loading scene: " + local_game_path);
+				ERR_FAIL_COND_V(!scene, false)
+				//sml->get_root()->add_child(scene);
+				sml->add_current_scene(scene);
+
+/* Upstream lines 1478-1480 */
+	OS::get_singleton()->set_main_loop(main_loop);
+
+	return true;

@@ -1,0 +1,14 @@
+/* Godot 1 source excerpts.
+/* Upstream: engine/godot-1.1/main/main.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 117-117 */
+	OS::get_singleton()->print(VERSION_FULL_NAME" (c) 2008-2015 Juan Linietsky, Ariel Manzur.\n");
+
+/* Upstream lines 911-913 */
+		} else if ((args[i]=="-script" || args[i]=="-s") && i <(args.size()-1)) {
+
+			script=args[i+1];

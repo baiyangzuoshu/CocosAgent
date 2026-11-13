@@ -1,0 +1,27 @@
+/* Godot 3 source excerpts.
+/* Upstream: engine/godot-3.6/modules/gdscript/gdscript.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 60-78 */
+void GDScriptNativeClass::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("new"), &GDScriptNativeClass::_new);
+}
+
+Variant GDScriptNativeClass::_new() {
+	Object *o = instance();
+	ERR_FAIL_COND_V_MSG(!o, Variant(), "Class type: '" + String(name) + "' is not instantiable.");
+
+	Reference *ref = Object::cast_to<Reference>(o);
+	if (ref) {
+		return REF(ref);
+	} else {
+		return o;
+	}
+}
+
+Object *GDScriptNativeClass::instance() {
+	return ClassDB::instance(name);
+}

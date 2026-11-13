@@ -1,0 +1,44 @@
+/* Godot Godot 1.1 source excerpts.
+/* Upstream: engine/godot-1.1/modules/gdscript/gd_functions.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 500-520 */
+		case TYPE_CONVERT: {
+			VALIDATE_ARG_COUNT(2);
+			VALIDATE_ARG_NUM(1);
+			int type=*p_args[1];
+			if (type<0 || type>=Variant::VARIANT_MAX) {
+
+				ERR_PRINT("Invalid type argument to convert()");
+				r_ret=Variant::NIL;
+
+			} else {
+
+
+				r_ret=Variant::construct(Variant::Type(type),p_args,1,r_error);
+			}
+		} break;
+		case TYPE_OF: {
+
+			VALIDATE_ARG_COUNT(1);
+			r_ret = p_args[0]->get_type();
+
+		} break;
+
+/* Upstream lines 608-620 */
+		case VAR_TO_STR: {
+			VALIDATE_ARG_COUNT(1);
+			r_ret=p_args[0]->get_construct_string();
+		} break;
+		case STR_TO_VAR: {
+			VALIDATE_ARG_COUNT(1);
+			if (p_args[0]->get_type()!=Variant::STRING) {
+				r_error.error=Variant::CallError::CALL_ERROR_INVALID_ARGUMENT;
+				r_error.argument=0;
+				r_error.expected=Variant::STRING;
+				r_ret=Variant();
+				return;
+			}

@@ -1,0 +1,61 @@
+/* Godot 4 source excerpts.
+/* Upstream: engine/godot-4.7/servers/register_server_types.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 146-170 */
+void register_server_types() {
+	OS::get_singleton()->benchmark_begin_measure("Servers", "Register Extensions");
+
+	shader_types = memnew(ShaderTypes);
+
+	GDREGISTER_CLASS(TextServerManager);
+	GDREGISTER_ABSTRACT_CLASS(TextServer);
+	GDREGISTER_CLASS(TextServerExtension);
+	GDREGISTER_CLASS(TextServerDummy);
+
+	GDREGISTER_NATIVE_STRUCT(Glyph, "int start = -1;int end = -1;uint8_t count = 0;uint8_t repeat = 1;uint16_t flags = 0;float x_off = 0.f;float y_off = 0.f;float advance = 0.f;RID font_rid;int font_size = 0;int32_t index = 0");
+	GDREGISTER_NATIVE_STRUCT(CaretInfo, "Rect2 leading_caret;Rect2 trailing_caret;TextServer::Direction leading_direction;TextServer::Direction trailing_direction");
+
+	Engine::get_singleton()->add_singleton(Engine::Singleton("TextServerManager", TextServerManager::get_singleton(), "TextServerManager"));
+
+	OS::get_singleton()->set_has_server_feature_callback(has_server_feature_callback);
+
+	GDREGISTER_ABSTRACT_CLASS(AccessibilityServer);
+	GDREGISTER_ABSTRACT_CLASS(DisplayServer);
+	GDREGISTER_ABSTRACT_CLASS(RenderingServer);
+	GDREGISTER_CLASS(AudioServer);
+
+	GDREGISTER_CLASS(NativeMenu);
+
+	GDREGISTER_CLASS(CameraServer);
+
+/* Upstream lines 393-418 */
+void register_server_singletons() {
+	OS::get_singleton()->benchmark_begin_measure("Servers", "Register Singletons");
+
+	Engine::get_singleton()->add_singleton(Engine::Singleton("AccessibilityServer", AccessibilityServer::get_singleton(), "AccessibilityServer"));
+	Engine::get_singleton()->add_singleton(Engine::Singleton("AudioServer", AudioServer::get_singleton(), "AudioServer"));
+	Engine::get_singleton()->add_singleton(Engine::Singleton("CameraServer", CameraServer::get_singleton(), "CameraServer"));
+	Engine::get_singleton()->add_singleton(Engine::Singleton("DisplayServer", DisplayServer::get_singleton(), "DisplayServer"));
+	Engine::get_singleton()->add_singleton(Engine::Singleton("NativeMenu", NativeMenu::get_singleton(), "NativeMenu"));
+	Engine::get_singleton()->add_singleton(Engine::Singleton("RenderingServer", RenderingServer::get_singleton(), "RenderingServer"));
+#ifndef NAVIGATION_2D_DISABLED
+	Engine::get_singleton()->add_singleton(Engine::Singleton("NavigationServer2D", NavigationServer2D::get_singleton(), "NavigationServer2D"));
+#endif // NAVIGATION_2D_DISABLED
+#ifndef NAVIGATION_3D_DISABLED
+	Engine::get_singleton()->add_singleton(Engine::Singleton("NavigationServer3D", NavigationServer3D::get_singleton(), "NavigationServer3D"));
+#endif // NAVIGATION_3D_DISABLED
+#ifndef PHYSICS_2D_DISABLED
+	Engine::get_singleton()->add_singleton(Engine::Singleton("PhysicsServer2D", PhysicsServer2D::get_singleton(), "PhysicsServer2D"));
+#endif // PHYSICS_2D_DISABLED
+#ifndef PHYSICS_3D_DISABLED
+	Engine::get_singleton()->add_singleton(Engine::Singleton("PhysicsServer3D", PhysicsServer3D::get_singleton(), "PhysicsServer3D"));
+#endif // PHYSICS_3D_DISABLED
+#ifndef XR_DISABLED
+	Engine::get_singleton()->add_singleton(Engine::Singleton("XRServer", XRServer::get_singleton(), "XRServer"));
+#endif // XR_DISABLED
+
+	OS::get_singleton()->benchmark_end_measure("Servers", "Register Singletons");

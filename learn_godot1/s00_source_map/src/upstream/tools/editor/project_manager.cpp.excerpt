@@ -1,0 +1,9 @@
+/* Godot 1 source excerpts.
+/* Upstream: engine/godot-1.1/tools/editor/project_manager.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 840-840 */
+	l->set_text("v"VERSION_MKSTRING);

@@ -1,0 +1,10 @@
+/* Godot 4 source excerpts.
+/* Upstream: engine/godot-4.7/core/core_bind.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1959-1960 */
+Dictionary Engine::get_version_info() const {
+	return ::Engine::get_singleton()->get_version_info();

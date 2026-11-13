@@ -1,0 +1,9 @@
+/* Godot 3 source excerpts.
+/* Upstream: engine/godot-3.6/scene/main/node.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 3132-3132 */
+	ClassDB::bind_method(D_METHOD("get_tree"), &Node::get_tree);

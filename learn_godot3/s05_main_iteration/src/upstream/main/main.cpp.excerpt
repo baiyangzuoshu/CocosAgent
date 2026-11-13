@@ -1,0 +1,150 @@
+/* Godot 3 source excerpts.
+/* Upstream: engine/godot-3.6/main/main.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 2304-2359 */
+bool Main::iteration() {
+	//for now do not error on this
+	//ERR_FAIL_COND_V(iterating, false);
+
+	iterating++;
+
+	// ticks may become modified later on, and we want to store the raw measured
+	// value for profiling.
+	uint64_t raw_ticks_at_start = OS::get_singleton()->get_ticks_usec();
+
+#ifdef TOOLS_ENABLED
+	uint64_t ticks = raw_ticks_at_start;
+#else
+	// we can either sync the delta from here, or later in the iteration
+	uint64_t ticks_difference = raw_ticks_at_start - frame_delta_sync_time;
+
+	// if we are syncing at start or if frame_delta_sync_time is being initialized
+	// or a large gap has happened between the last delta_sync_time and now
+	if (!delta_sync_after_draw || (ticks_difference > 100000)) {
+		frame_delta_sync_time = raw_ticks_at_start;
+	}
+	uint64_t ticks = frame_delta_sync_time;
+#endif
+
+	Engine::get_singleton()->_frame_ticks = ticks;
+	main_timer_sync.set_cpu_ticks_usec(ticks);
+	main_timer_sync.set_fixed_fps(fixed_fps);
+
+	uint64_t ticks_elapsed = ticks - last_ticks;
+
+	int physics_fps = Engine::get_singleton()->get_iterations_per_second();
+	float frame_slice = 1.0 / physics_fps;
+
+	float time_scale = Engine::get_singleton()->get_time_scale();
+
+	MainFrameTime advance = main_timer_sync.advance(frame_slice, physics_fps);
+	double step = advance.idle_step;
+	double scaled_step = step * time_scale;
+
+	VisualServer::get_singleton()->sync_and_halt();
+
+	Engine::get_singleton()->_frame_step = step;
+	Engine::get_singleton()->_physics_interpolation_fraction = advance.interpolation_fraction;
+
+	uint64_t physics_process_ticks = 0;
+	uint64_t idle_process_ticks = 0;
+
+	frame += ticks_elapsed;
+
+	last_ticks = ticks;
+
+	static const int max_physics_steps = 8;
+	if (fixed_fps == -1 && advance.physics_steps > max_physics_steps) {
+		step -= (advance.physics_steps - max_physics_steps) * frame_slice;
+		advance.physics_steps = max_physics_steps;
+	}
+
+/* Upstream lines 2363-2410 */
+	for (int iters = 0; iters < advance.physics_steps; ++iters) {
+		if (InputDefault::get_singleton()->is_using_input_buffering() && agile_input_event_flushing) {
+			InputDefault::get_singleton()->flush_buffered_events();
+		}
+
+		Engine::get_singleton()->_in_physics = true;
+		Engine::get_singleton()->_physics_frames++;
+
+		uint64_t physics_begin = OS::get_singleton()->get_ticks_usec();
+
+		// Prepare the fixed timestep interpolated nodes
+		// BEFORE they are updated by the physics,
+		// otherwise the current and previous transforms
+		// may be the same, and no interpolation takes place.
+		OS::get_singleton()->get_main_loop()->iteration_prepare();
+
+		Physics2DServer::get_singleton()->sync();
+
+		VisualServer::get_singleton()->thaw();
+
+		PhysicsServer::get_singleton()->flush_queries();
+		Physics2DServer::get_singleton()->flush_queries();
+
+		if (OS::get_singleton()->get_main_loop()->iteration(frame_slice * time_scale)) {
+			exit = true;
+			Engine::get_singleton()->_in_physics = false;
+			break;
+		}
+
+		NavigationServer::get_singleton_mut()->process(frame_slice * time_scale);
+		message_queue->flush();
+
+		VisualServer::get_singleton()->sync_and_halt();
+
+		PhysicsServer::get_singleton()->step(frame_slice * time_scale);
+
+		Physics2DServer::get_singleton()->end_sync();
+		Physics2DServer::get_singleton()->step(frame_slice * time_scale);
+
+		message_queue->flush();
+
+		OS::get_singleton()->get_main_loop()->iteration_end();
+
+		physics_process_ticks = MAX(physics_process_ticks, OS::get_singleton()->get_ticks_usec() - physics_begin); // keep the largest one for reference
+		physics_process_max = MAX(OS::get_singleton()->get_ticks_usec() - physics_begin, physics_process_max);
+
+		Engine::get_singleton()->_in_physics = false;
+	}
+
+/* Upstream lines 2420-2453 */
+	if (OS::get_singleton()->get_main_loop()->idle(step * time_scale)) {
+		exit = true;
+	}
+	visual_server_callbacks->flush();
+
+	// Ensure that VisualServer is kept up to date at least once with any ordering changes
+	// of canvas items before a render.
+	// This ensures this will be done at least once in apps that create their own MainLoop.
+	Viewport::flush_canvas_parents_dirty_order();
+
+	message_queue->flush();
+
+	VisualServer::get_singleton()->sync(); //sync if still drawing from previous frames.
+
+	if (OS::get_singleton()->can_draw() && VisualServer::get_singleton()->is_render_loop_enabled()) {
+		if ((!force_redraw_requested) && OS::get_singleton()->is_in_low_processor_usage_mode()) {
+			// We can choose whether to redraw as a result of any redraw request, or redraw only for vital requests.
+			VisualServer::ChangedPriority priority = (OS::get_singleton()->is_update_pending() ? VisualServer::CHANGED_PRIORITY_ANY : VisualServer::CHANGED_PRIORITY_HIGH);
+
+			// Determine whether the scene has changed, to know whether to draw.
+			// If it has changed, inform the update pending system so it can keep
+			// particle systems etc updating when running in vital updates only mode.
+			bool has_changed = VisualServer::get_singleton()->has_changed(priority);
+			OS::get_singleton()->set_update_pending(has_changed);
+
+			if (has_changed) {
+				VisualServer::get_singleton()->draw(true, scaled_step); // flush visual commands
+				Engine::get_singleton()->frames_drawn++;
+			}
+		} else {
+			VisualServer::get_singleton()->draw(true, scaled_step); // flush visual commands
+			Engine::get_singleton()->frames_drawn++;
+			force_redraw_requested = false;
+		}

@@ -1,0 +1,123 @@
+/* Godot 2 source excerpts.
+/* Upstream: engine/godot-2.1/main/main.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 869-884 */
+Error Main::setup2(Thread::ID p_main_tid_override) {
+
+	if (p_main_tid_override) {
+		Thread::_main_thread_id = p_main_tid_override;
+	}
+
+	OS::get_singleton()->initialize(video_mode, video_driver_idx, audio_driver_idx);
+	if (init_use_custom_pos) {
+		OS::get_singleton()->set_window_position(init_custom_pos);
+	}
+
+	OS::get_singleton()->set_use_vsync(use_vsync);
+
+	register_core_singletons();
+
+	MAIN_PRINT("Main: Setup Logo");
+
+/* Upstream lines 904-973 */
+	MAIN_PRINT("Main: Load Remaps");
+
+	path_remap->load_remaps();
+
+	if (show_logo) { //boot logo!
+		String boot_logo_path = GLOBAL_DEF("application/boot_splash", String());
+		bool boot_logo_scale = GLOBAL_DEF("application/boot_splash_fullsize", true);
+		Globals::get_singleton()->set_custom_property_info("application/boot_splash", PropertyInfo(Variant::STRING, "application/boot_splash", PROPERTY_HINT_FILE, "*.png"));
+
+		Image boot_logo;
+
+		boot_logo_path = boot_logo_path.strip_edges();
+
+		if (boot_logo_path != String() /*&& FileAccess::exists(boot_logo_path)*/) {
+			print_line("Boot splash path: " + boot_logo_path);
+			Error err = boot_logo.load(boot_logo_path);
+			if (err)
+				ERR_PRINTS("Non-existing or invalid boot splash at: " + boot_logo_path + ". Loading default splash.");
+		}
+
+		if (!boot_logo.empty()) {
+			OS::get_singleton()->_msec_splash = OS::get_singleton()->get_ticks_msec();
+			Color clear = GLOBAL_DEF("render/default_clear_color", Color(0.3, 0.3, 0.3));
+			VisualServer::get_singleton()->set_default_clear_color(clear);
+			Color boot_bg = GLOBAL_DEF("application/boot_bg_color", clear);
+			VisualServer::get_singleton()->set_boot_image(boot_logo, boot_bg, boot_logo_scale);
+#ifndef TOOLS_ENABLED
+//no tools, so free the boot logo (no longer needed)
+//	Globals::get_singleton()->set("application/boot_logo",Image());
+#endif
+
+		} else {
+#ifndef NO_DEFAULT_BOOT_LOGO
+
+			MAIN_PRINT("Main: Create bootsplash");
+			Image splash(boot_splash_png);
+
+			MAIN_PRINT("Main: ClearColor");
+			VisualServer::get_singleton()->set_default_clear_color(boot_splash_bg_color);
+			MAIN_PRINT("Main: Image");
+			VisualServer::get_singleton()->set_boot_image(splash, boot_splash_bg_color, false);
+#endif
+		}
+
+		Image icon(app_icon_png);
+		OS::get_singleton()->set_icon(icon);
+	}
+
+	MAIN_PRINT("Main: DCC");
+	VisualServer::get_singleton()->set_default_clear_color(GLOBAL_DEF("render/default_clear_color", Color(0.3, 0.3, 0.3)));
+	MAIN_PRINT("Main: END");
+
+	GLOBAL_DEF("application/icon", String());
+	Globals::get_singleton()->set_custom_property_info("application/icon", PropertyInfo(Variant::STRING, "application/icon", PROPERTY_HINT_FILE, "*.png,*.webp"));
+
+	if (bool(GLOBAL_DEF("display/emulate_touchscreen", false))) {
+		if (!OS::get_singleton()->has_touchscreen_ui_hint() && Input::get_singleton() && !editor) {
+			//only if no touchscreen ui hint, set emulation
+			InputDefault *id = Input::get_singleton()->cast_to<InputDefault>();
+			if (id)
+				id->set_emulate_touch(true);
+		}
+	}
+
+	MAIN_PRINT("Main: Load Remaps");
+
+	MAIN_PRINT("Main: Load Scene Types");
+
+	register_scene_types();
+	register_server_types();
+
+/* Upstream lines 983-1007 */
+	MAIN_PRINT("Main: Load Scripts, Modules, Drivers");
+
+	register_module_types();
+	register_driver_types();
+
+	ScriptServer::init_languages();
+
+	MAIN_PRINT("Main: Load Translations");
+
+	translation_server->setup(); //register translations, load them, etc.
+	if (locale != "") {
+
+		translation_server->set_locale(locale);
+	}
+	translation_server->load_translations();
+
+	if (use_debug_profiler && script_debugger) {
+		script_debugger->profiling_start();
+	}
+	_start_success = true;
+	locale = String();
+
+	MAIN_PRINT("Main: Done");
+
+	return OK;

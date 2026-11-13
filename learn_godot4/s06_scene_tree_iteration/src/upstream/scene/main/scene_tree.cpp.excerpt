@@ -1,0 +1,259 @@
+/* Godot 4 source excerpts.
+/* Upstream: engine/godot-4.7/scene/main/scene_tree.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 639-671 */
+bool SceneTree::physics_process(double p_time) {
+	current_frame++;
+
+	flush_transform_notifications();
+
+	if (MainLoop::physics_process(p_time)) {
+		_quit = true;
+	}
+	physics_process_time = p_time;
+
+	emit_signal(SNAME("physics_frame"));
+
+#if !defined(PHYSICS_2D_DISABLED) || !defined(PHYSICS_3D_DISABLED)
+	call_group(SNAME("_picking_viewports"), SNAME("_process_picking"));
+#endif // !defined(PHYSICS_2D_DISABLED) || !defined(PHYSICS_3D_DISABLED)
+
+	_process(true);
+
+	_flush_ugc();
+	MessageQueue::get_singleton()->flush(); //small little hack
+
+	process_timers(p_time, true); //go through timers
+	process_tweens(p_time, true);
+
+	flush_transform_notifications();
+
+	// This should happen last because any processing that deletes something beforehand might expect the object to be removed in the same frame.
+	_flush_delete_queue();
+
+	_call_idle_callbacks();
+
+	return _quit;
+}
+
+/* Upstream lines 688-790 */
+bool SceneTree::process(double p_time) {
+	// First pass of scene tree fixed timestep interpolation.
+	if (get_scene_tree_fti().is_enabled()) {
+		// Special, we need to ensure RenderingServer is up to date
+		// with *all* the pending xforms *before* updating it during
+		// the FTI update.
+		// If this is not done, we can end up with a deferred `set_transform()`
+		// overwriting the interpolated xform in the server.
+		flush_transform_notifications();
+		get_scene_tree_fti().frame_update(get_root(), true);
+	}
+
+	if (MainLoop::process(p_time)) {
+		_quit = true;
+	}
+
+	process_time = p_time;
+
+	if (multiplayer_poll) {
+		multiplayer->poll();
+		for (KeyValue<NodePath, Ref<MultiplayerAPI>> &E : custom_multiplayers) {
+			E.value->poll();
+		}
+	}
+
+	emit_signal(SNAME("process_frame"));
+
+	MessageQueue::get_singleton()->flush(); //small little hack
+
+	flush_transform_notifications();
+
+	_process(false);
+
+	_flush_ugc();
+	MessageQueue::get_singleton()->flush(); //small little hack
+	flush_transform_notifications(); //transforms after world update, to avoid unnecessary enter/exit notifications
+
+	if (unlikely(pending_new_scene_id.is_valid())) {
+		_flush_scene_change();
+	}
+
+	process_timers(p_time, false); //go through timers
+	process_tweens(p_time, false);
+
+	flush_transform_notifications(); // Additional transforms after timers update.
+
+	// This should happen last because any processing that deletes something beforehand might expect the object to be removed in the same frame.
+	_flush_delete_queue();
+
+	_flush_accessibility_changes();
+
+	_call_idle_callbacks();
+
+#ifdef TOOLS_ENABLED
+#ifndef _3D_DISABLED
+	if (Engine::get_singleton()->is_editor_hint()) {
+		String env_path = GLOBAL_GET("rendering/environment/defaults/default_environment");
+		env_path = env_path.strip_edges(); // User may have added a space or two.
+
+		bool can_load = true;
+		if (env_path.begins_with("uid://")) {
+			// If an uid path, ensure it is mapped to a resource which could not be
+			// the case if the editor is still scanning the filesystem.
+			ResourceUID::ID id = ResourceUID::get_singleton()->text_to_id(env_path);
+			can_load = ResourceUID::get_singleton()->has_id(id);
+			if (can_load) {
+				env_path = ResourceUID::get_singleton()->get_id_path(id);
+			}
+		}
+
+		if (can_load) {
+			String cpath;
+			Ref<Environment> fallback = get_root()->get_world_3d()->get_fallback_environment();
+			if (fallback.is_valid()) {
+				cpath = fallback->get_path();
+			}
+			if (cpath != env_path) {
+				if (!env_path.is_empty()) {
+					fallback = ResourceLoader::load(env_path);
+					if (fallback.is_null()) {
+						//could not load fallback, set as empty
+						ProjectSettings::get_singleton()->set("rendering/environment/defaults/default_environment", "");
+					}
+				} else {
+					fallback.unref();
+				}
+				get_root()->get_world_3d()->set_fallback_environment(fallback);
+			}
+		}
+	}
+#endif // _3D_DISABLED
+#endif // TOOLS_ENABLED
+
+	// Second pass of scene tree fixed timestep interpolation.
+	// ToDo: Possibly needs another flush_transform_notifications here
+	// depending on whether there are side effects to _call_idle_callbacks().
+	get_scene_tree_fti().frame_update(get_root(), false);
+
+	if (_physics_interpolation_enabled) {
+		RenderingServer::get_singleton()->pre_draw(true);
+	}
+
+	return _quit;
+
+/* Upstream lines 855-891 */
+void SceneTree::finalize() {
+	_flush_delete_queue();
+
+	_flush_ugc();
+
+	if (root) {
+		root->_set_tree(nullptr);
+		root->_propagate_after_exit_tree();
+		memdelete(root); //delete root
+		root = nullptr;
+
+		// In case deletion of some objects was queued when destructing the `root`.
+		// E.g. if `queue_free()` was called for some node outside the tree when handling NOTIFICATION_PREDELETE for some node in the tree.
+		_flush_delete_queue();
+	}
+
+	MainLoop::finalize();
+
+	// Cleanup timers.
+	for (Ref<SceneTreeTimer> &timer : timers) {
+		timer->release_connections();
+	}
+	timers.clear();
+
+	// Cleanup tweens.
+	for (Ref<Tween> &tween : tweens) {
+		tween->clear();
+	}
+	tweens.clear();
+}
+
+void SceneTree::quit(int p_exit_code) {
+	_THREAD_SAFE_METHOD_
+
+	OS::get_singleton()->set_exit_code(p_exit_code);
+	_quit = true;
+}
+
+/* Upstream lines 1244-1315 */
+void SceneTree::_process(bool p_physics) {
+	if (process_groups_dirty) {
+		{
+			// First, remove dirty groups.
+			// This needs to be done when not processing to avoid problems.
+			ProcessGroup **pg_ptr = (ProcessGroup **)process_groups.ptr(); // discard constness.
+			uint32_t pg_count = process_groups.size();
+
+			for (uint32_t i = 0; i < pg_count; i++) {
+				if (pg_ptr[i]->removed) {
+					// Replace removed with last.
+					pg_ptr[i] = pg_ptr[pg_count - 1];
+					// Retry
+					i--;
+					pg_count--;
+				}
+			}
+			if (pg_count != process_groups.size()) {
+				process_groups.resize(pg_count);
+			}
+		}
+		{
+			// Then, re-sort groups.
+			process_groups.sort_custom<ProcessGroupSort>();
+		}
+
+		process_groups_dirty = false;
+	}
+
+	// Cache the group count, because during processing new groups may be added.
+	// They will be added at the end, hence for consistency they will be ignored by this process loop.
+	// No group will be removed from the array during processing (this is done earlier in this function by marking the groups dirty).
+	uint32_t group_count = process_groups.size();
+
+	if (group_count == 0) {
+		return;
+	}
+
+	process_last_pass++; // Increment pass
+	uint32_t from = 0;
+	uint32_t process_count = 0;
+	nodes_removed_on_group_call_lock++;
+
+	int current_order = process_groups[0]->owner ? process_groups[0]->owner->data.process_thread_group_order : 0;
+	bool current_threaded = process_groups[0]->owner ? process_groups[0]->owner->data.process_thread_group == Node::PROCESS_THREAD_GROUP_SUB_THREAD : false;
+
+	for (uint32_t i = 0; i <= group_count; i++) {
+		int order = i < group_count && process_groups[i]->owner ? process_groups[i]->owner->data.process_thread_group_order : 0;
+		bool threaded = i < group_count && process_groups[i]->owner ? process_groups[i]->owner->data.process_thread_group == Node::PROCESS_THREAD_GROUP_SUB_THREAD : false;
+
+		if (i == group_count || current_order != order || current_threaded != threaded) {
+			if (process_count > 0) {
+				// Proceed to process the group.
+				bool using_threads = process_groups[from]->owner && process_groups[from]->owner->data.process_thread_group == Node::PROCESS_THREAD_GROUP_SUB_THREAD && !node_threading_disabled;
+
+				if (using_threads) {
+					local_process_group_cache.clear();
+				}
+				for (uint32_t j = from; j < i; j++) {
+					if (process_groups[j]->last_pass == process_last_pass) {
+						if (using_threads) {
+							local_process_group_cache.push_back(process_groups[j]);
+						} else {
+							_process_group(process_groups[j], p_physics);
+						}
+					}
+				}
+
+				if (using_threads) {
+					WorkerThreadPool::GroupID id = WorkerThreadPool::get_singleton()->add_template_group_task(this, &SceneTree::_process_groups_thread, p_physics, local_process_group_cache.size(), -1, true);
+					WorkerThreadPool::get_singleton()->wait_for_group_task_completion(id);
+				}

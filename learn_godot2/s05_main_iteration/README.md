@@ -32,3 +32,12 @@ godot -path .
 ## 简化与边界
 
 不修改 physics tick、time scale、目标 FPS 或低处理器占用设置，不覆盖各平台不同的事件循环。Godot 2.1 使用 `SceneTree::iteration()`、`idle()`、`VisualServer` 与 `_fixed_process`；本课尚未运行项目。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-2.1/main/main.cpp | 1494-1520, 1523-1550, 1557-1583 |
+| [node.cpp](src/upstream/scene/main/node.cpp.excerpt) | godot-2.1/scene/main/node.cpp | 52-73 |

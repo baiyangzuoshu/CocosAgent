@@ -1,0 +1,33 @@
+/* Godot 4 source excerpts.
+/* Upstream: engine/godot-4.7/core/core_bind.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1599-1623 */
+bool ClassDB::class_exists(const StringName &p_class) const {
+	return ::ClassDB::class_exists(p_class);
+}
+
+bool ClassDB::is_parent_class(const StringName &p_class, const StringName &p_inherits) const {
+	return ::ClassDB::is_parent_class(p_class, p_inherits);
+}
+
+bool ClassDB::can_instantiate(const StringName &p_class) const {
+	return ::ClassDB::can_instantiate(p_class);
+}
+
+Variant ClassDB::instantiate(const StringName &p_class) const {
+	Object *obj = ::ClassDB::instantiate(p_class);
+	if (!obj) {
+		return Variant();
+	}
+
+	RefCounted *r = Object::cast_to<RefCounted>(obj);
+	if (r) {
+		return Ref<RefCounted>(r);
+	} else {
+		return obj;
+	}
+}

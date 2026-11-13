@@ -37,3 +37,16 @@ godot --path .
 ## 简化与边界
 
 本课聚焦 macOS 普通桌面 AppKit 路径。`godot_main_macos.mm` 的 mode 分流、`OS_MacOS_Headless::run()` 和 `OS_MacOS_Embedded::run()` 是不同入口分支，实验不覆盖它们；其他操作系统也有各自的平台启动文件。此实验尚未运行。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-4.7/main/main.cpp | 1035-1068, 4013-4017, 4760-4768 |
+| [godot_application_delegate.mm](src/upstream/platform/macos/godot_application_delegate.mm.excerpt) | godot-4.7/platform/macos/godot_application_delegate.mm | 142-143 |
+| [godot_main_macos.mm](src/upstream/platform/macos/godot_main_macos.mm.excerpt) | godot-4.7/platform/macos/godot_main_macos.mm | 41-141 |
+| [os_macos.mm](src/upstream/platform/macos/os_macos.mm.excerpt) | godot-4.7/platform/macos/os_macos.mm | 1107-1109, 1119-1138 |
+| [node.cpp](src/upstream/scene/main/node.cpp.excerpt) | godot-4.7/scene/main/node.cpp | 255-280, 3363-3381 |
+| [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp.excerpt) | godot-4.7/scene/main/scene_tree.cpp | 586-591 |

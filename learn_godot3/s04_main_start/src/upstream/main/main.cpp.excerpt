@@ -1,0 +1,63 @@
+/* Godot 3 source excerpts.
+/* Upstream: engine/godot-3.6/main/main.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1682-1682 */
+bool Main::start() {
+
+/* Upstream lines 1859-1867 */
+	if (script == "" && game_path == "" && String(GLOBAL_DEF("application/run/main_scene", "")) != "") {
+		game_path = GLOBAL_DEF("application/run/main_scene", "");
+	}
+
+	MainLoop *main_loop = nullptr;
+	if (editor) {
+		main_loop = memnew(SceneTree);
+	};
+	String main_loop_type = GLOBAL_DEF("application/run/main_loop_type", "SceneTree");
+
+/* Upstream lines 1927-1948 */
+	if (!main_loop && main_loop_type == "") {
+		main_loop_type = "SceneTree";
+	}
+
+	if (!main_loop) {
+		if (!ClassDB::class_exists(main_loop_type)) {
+			OS::get_singleton()->alert("Error: MainLoop type doesn't exist: " + main_loop_type);
+			return false;
+		} else {
+			Object *ml = ClassDB::instance(main_loop_type);
+			ERR_FAIL_COND_V_MSG(!ml, false, "Can't instance MainLoop type.");
+
+			main_loop = Object::cast_to<MainLoop>(ml);
+			if (!main_loop) {
+				memdelete(ml);
+				ERR_FAIL_V_MSG(false, "Invalid MainLoop type.");
+			}
+		}
+	}
+
+	if (main_loop->is_class("SceneTree")) {
+		SceneTree *sml = Object::cast_to<SceneTree>(main_loop);
+
+/* Upstream lines 2193-2206 */
+		if (!project_manager && !editor) { // game
+
+			// Load SSL Certificates from Project Settings (or builtin).
+			Crypto::load_default_certificates(GLOBAL_DEF("network/ssl/certificates", ""));
+
+			if (game_path != "") {
+				Node *scene = nullptr;
+				Ref<PackedScene> scenedata = ResourceLoader::load(local_game_path);
+				if (scenedata.is_valid()) {
+					scene = scenedata->instance();
+				}
+
+				ERR_FAIL_COND_V_MSG(!scene, false, "Failed loading scene: " + local_game_path);
+				sml->add_current_scene(scene);
+
+/* Upstream lines 2259-2259 */
+	OS::get_singleton()->set_main_loop(main_loop);

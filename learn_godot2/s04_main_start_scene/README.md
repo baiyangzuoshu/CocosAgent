@@ -36,3 +36,13 @@ godot -path .
 ## 简化与边界
 
 只走 `engine.cfg` 指定的默认主场景，不覆盖命令行场景参数、自定义 MainLoop、编辑器或 Project Manager 路径。Godot 2.1 使用 `PackedScene::instance()` 和 format 1 场景；本课尚未用旧版工具运行。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-2.1/main/main.cpp | 1010-1010, 1124-1130, 1420-1428, 1478-1480 |
+| [node.cpp](src/upstream/scene/main/node.cpp.excerpt) | godot-2.1/scene/main/node.cpp | 2126-2126 |
+| [scene_main_loop.cpp](src/upstream/scene/main/scene_main_loop.cpp.excerpt) | godot-2.1/scene/main/scene_main_loop.cpp | 461-470, 1042-1045, 1592-1592 |

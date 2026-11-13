@@ -1,0 +1,25 @@
+/* Godot 1 source excerpts.
+/* Upstream: engine/godot-1.1/core/os/main_loop.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 71-87 */
+void MainLoop::init() {
+
+	if (init_script.is_valid())
+		set_script(init_script.get_ref_ptr());
+
+	if (get_script_instance())
+		get_script_instance()->call("init");
+
+}
+bool MainLoop::iteration(float p_time) {
+
+	if (get_script_instance())
+		return get_script_instance()->call("iteration",p_time);
+
+	return false;
+
+}

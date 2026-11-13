@@ -1,0 +1,28 @@
+/* Godot 2 source excerpts.
+/* Upstream: engine/godot-2.1/scene/main/node.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1911-1930 */
+void Node::_set_tree(SceneTree *p_tree) {
+
+	SceneTree *tree_changed_a = NULL;
+	SceneTree *tree_changed_b = NULL;
+
+	//	ERR_FAIL_COND(p_scene && data.parent && !data.parent->data.scene); //nobug if both are null
+
+	if (data.tree) {
+		_propagate_exit_tree();
+
+		tree_changed_a = data.tree;
+	}
+
+	data.tree = p_tree;
+
+	if (data.tree) {
+
+		_propagate_enter_tree();
+		if (!data.parent || data.parent->data.ready_notified) { // No parent (root) or parent ready
+			_propagate_ready(); //reverse_notification(NOTIFICATION_READY);

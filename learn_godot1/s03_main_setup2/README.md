@@ -36,3 +36,13 @@ godot -path .
 ## 简化与边界
 
 只追踪桌面项目运行中与场景、服务器、GDScript 相关的第二阶段顺序，不涵盖编辑器专有类型、其他平台分支或每个服务的内部实现。Godot 1.1 的项目设置在 `setup()` 中读取；不能把这一职责改写成由 `setup2()` 首次加载。本课为静态源码追踪，项目尚未运行。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-1.1/main/main.cpp | 778-784, 792-835, 837-856, 869-874 |
+| [register_server_types.cpp](src/upstream/servers/register_server_types.cpp.excerpt) | godot-1.1/servers/register_server_types.cpp | 39-66 |
+| [visual_server.cpp](src/upstream/servers/visual_server.cpp.excerpt) | godot-1.1/servers/visual_server.cpp | 562-562 |

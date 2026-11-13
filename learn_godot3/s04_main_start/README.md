@@ -36,3 +36,13 @@ godot --path .
 ## 简化与边界
 
 实验仅走项目设置中的默认 `SceneTree` 和主场景，不覆盖脚本型 MainLoop、编辑器、自定义命令行场景及其他平台的 `OS::run()` 实现。Godot 3.6 使用 `VisualServer`、`PackedScene::instance()` 和 format 2 场景；本课未运行。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-3.6/main/main.cpp | 1682-1682, 1859-1867, 1927-1948, 2193-2206, 2259-2259 |
+| [node.cpp](src/upstream/scene/main/node.cpp.excerpt) | godot-3.6/scene/main/node.cpp | 3132-3132 |
+| [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp.excerpt) | godot-3.6/scene/main/scene_tree.cpp | 521-525, 2119-2119 |

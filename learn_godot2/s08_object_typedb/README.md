@@ -36,3 +36,17 @@ godot -path .
 ## 简化与边界
 
 只使用场景内置类，不覆盖模块按编译选项增删类型、兼容类型回退或 ObjectTypeDB 的方法/属性绑定。Godot 2.1 使用 `ObjectTypeDB`、`ObjectTypeDB::instance()` 和 GDScript 全局 `type_exists()`；本课依据静态源码，尚未运行实验。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [object.cpp](src/upstream/core/object.cpp.excerpt) | godot-2.1/core/object.cpp | 1527-1531 |
+| [object_type_db.cpp](src/upstream/core/object_type_db.cpp.excerpt) | godot-2.1/core/object_type_db.cpp | 269-294, 296-317 |
+| [object_type_db.h](src/upstream/core/object_type_db.h.excerpt) | godot-2.1/core/object_type_db.h | 192-201 |
+| [gd_functions.cpp](src/upstream/modules/gdscript/gd_functions.cpp.excerpt) | godot-2.1/modules/gdscript/gd_functions.cpp | 92-92 |
+| [gd_script.cpp](src/upstream/modules/gdscript/gd_script.cpp.excerpt) | godot-2.1/modules/gdscript/gd_script.cpp | 64-87 |
+| [node_2d.h](src/upstream/scene/2d/node_2d.h.excerpt) | godot-2.1/scene/2d/node_2d.h | 36-38 |
+| [register_scene_types.cpp](src/upstream/scene/register_scene_types.cpp.excerpt) | godot-2.1/scene/register_scene_types.cpp | 240-294 |

@@ -1,0 +1,38 @@
+/* Godot 4 source excerpts.
+/* Upstream: engine/godot-4.7/core/object/ref_counted.h
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 199-228 */
+	void unref() {
+		// TODO: this should be moved to mutexes, since this engine does not really
+		// do a lot of referencing on references and stuff
+		// mutexes will avoid more crashes?
+
+		if (reference) {
+			// NOTE: `reinterpret_cast` is "safe" here because we know `T` has simple linear
+			// inheritance to `RefCounted`. This guarantees that `T * == `RefCounted *`, which
+			// allows us to declare `Ref<T>` with forward declared `T` types.
+			if (reinterpret_cast<RefCounted *>(reference)->unreference()) {
+				memdelete(reinterpret_cast<RefCounted *>(reference));
+			}
+			reference = nullptr;
+		}
+	}
+
+	template <typename... VarArgs>
+	void instantiate(VarArgs... p_params) {
+		Ref<T> ref = memnew(T(p_params...));
+		// Appropriate the new Ref, and if the previous one was set, free it.
+		SWAP(reference, ref.reference);
+	}
+
+	uint32_t hash() const { return HashMapHasherDefault::hash(reference); }
+
+	Ref() = default;
+
+	~Ref() {
+		unref();
+	}

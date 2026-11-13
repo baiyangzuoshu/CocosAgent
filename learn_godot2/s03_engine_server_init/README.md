@@ -36,3 +36,14 @@ godot -path .
 ## 简化与边界
 
 本课不展开每个服务的后端选择、线程模型和渲染提交，也不将 2.1 的 `Globals`/`ObjectTypeDB` 用新版本 `Engine`/`ClassDB` 术语替代。项目尚未用 Godot 2.1 工具运行，文中行为依据静态源码。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-2.1/main/main.cpp | 869-884, 904-973, 983-1007 |
+| [register_server_types.cpp](src/upstream/servers/register_server_types.cpp.excerpt) | godot-2.1/servers/register_server_types.cpp | 59-86 |
+| [visual_server.cpp](src/upstream/servers/visual_server.cpp.excerpt) | godot-2.1/servers/visual_server.cpp | 541-541 |
+| [visual_server.h](src/upstream/servers/visual_server.h.excerpt) | godot-2.1/servers/visual_server.h | 1100-1114 |

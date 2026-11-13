@@ -49,3 +49,16 @@
 ## 简化与边界
 
 项目配置和场景格式都按 Godot 2.1 快照组织。不要用 Godot 3/4 的 `Engine.get_version_info()`、`project.godot` 或新版场景格式解释本实验。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [core_bind.cpp](src/upstream/core/bind/core_bind.cpp.excerpt) | godot-2.1/core/bind/core_bind.cpp | 1020-1023 |
+| [os.cpp](src/upstream/core/os/os.cpp.excerpt) | godot-2.1/core/os/os.cpp | 528-547 |
+| [version.h](src/upstream/core/version.h.excerpt) | godot-2.1/core/version.h | 31-38 |
+| [methods.py](src/upstream/methods.py.excerpt) | godot-2.1/methods.py | 1089-1109 |
+| [scene_format_text.cpp](src/upstream/scene/resources/scene_format_text.cpp.excerpt) | godot-2.1/scene/resources/scene_format_text.cpp | 37-37, 1321-1339 |
+| [version.py](src/upstream/version.py.excerpt) | godot-2.1/version.py | 1-6 |

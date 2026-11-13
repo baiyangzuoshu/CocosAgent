@@ -1,0 +1,90 @@
+/* Godot Godot 3.6 source excerpts.
+/* Upstream: engine/godot-3.6/core/object.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 819-900 */
+Variant Object::callv(const StringName &p_method, const Array &p_args) {
+	const Variant **argptrs = nullptr;
+
+	if (p_args.size() > 0) {
+		argptrs = (const Variant **)alloca(sizeof(Variant *) * p_args.size());
+		for (int i = 0; i < p_args.size(); i++) {
+			argptrs[i] = &p_args[i];
+		}
+	}
+
+	Variant::CallError ce;
+	Variant ret = call(p_method, argptrs, p_args.size(), ce);
+	if (ce.error != Variant::CallError::CALL_OK) {
+		ERR_FAIL_V_MSG(Variant(), "Error calling method from 'callv': " + Variant::get_call_error_text(this, p_method, argptrs, p_args.size(), ce) + ".");
+	}
+	return ret;
+}
+
+Variant Object::call(const StringName &p_name, VARIANT_ARG_DECLARE) {
+	VARIANT_ARGPTRS;
+
+	int argc = 0;
+	for (int i = 0; i < VARIANT_ARG_MAX; i++) {
+		if (argptr[i]->get_type() == Variant::NIL) {
+			break;
+		}
+		argc++;
+	}
+
+	Variant::CallError error;
+
+	Variant ret = call(p_name, argptr, argc, error);
+	return ret;
+}
+
+void Object::call_multilevel(const StringName &p_name, VARIANT_ARG_DECLARE) {
+	VARIANT_ARGPTRS;
+
+	int argc = 0;
+	for (int i = 0; i < VARIANT_ARG_MAX; i++) {
+		if (argptr[i]->get_type() == Variant::NIL) {
+			break;
+		}
+		argc++;
+	}
+
+	//Variant::CallError error;
+	call_multilevel(p_name, argptr, argc);
+}
+
+Variant Object::call(const StringName &p_method, const Variant **p_args, int p_argcount, Variant::CallError &r_error) {
+	r_error.error = Variant::CallError::CALL_OK;
+
+	if (p_method == CoreStringNames::get_singleton()->_free) {
+//free must be here, before anything, always ready
+#ifdef DEBUG_ENABLED
+		if (p_argcount != 0) {
+			r_error.argument = 0;
+			r_error.error = Variant::CallError::CALL_ERROR_TOO_MANY_ARGUMENTS;
+			return Variant();
+		}
+		if (Object::cast_to<Reference>(this)) {
+			r_error.argument = 0;
+			r_error.error = Variant::CallError::CALL_ERROR_INVALID_METHOD;
+			ERR_FAIL_V_MSG(Variant(), "Can't 'free' a reference.");
+		}
+
+		if (_lock_index.get() > 1) {
+			r_error.argument = 0;
+			r_error.error = Variant::CallError::CALL_ERROR_INVALID_METHOD;
+			ERR_FAIL_V_MSG(Variant(), "Object is locked and can't be freed.");
+		}
+
+#endif
+		//must be here, must be before everything,
+		memdelete(this);
+		r_error.error = Variant::CallError::CALL_OK;
+		return Variant();
+	}
+
+	Variant ret;
+	OBJ_DEBUG_LOCK

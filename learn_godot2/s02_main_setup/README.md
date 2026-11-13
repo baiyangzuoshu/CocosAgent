@@ -36,3 +36,12 @@ godot -path . --course-probe
 ## 简化与边界
 
 实验用单个未知选项隔离参数转交行为，不展开音视频驱动、远程调试、导出或编辑器参数。项目使用 Godot 2.1 的 `engine.cfg` 和 format 1 场景；本文仅完成静态源码与文件结构核对，未运行旧版工具。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [core_bind.cpp](src/upstream/core/bind/core_bind.cpp.excerpt) | godot-2.1/core/bind/core_bind.cpp | 426-432 |
+| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-2.1/main/main.cpp | 199-245, 253-253, 560-580, 649-676, 1010-1010 |

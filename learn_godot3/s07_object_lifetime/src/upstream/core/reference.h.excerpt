@@ -1,0 +1,30 @@
+/* Godot 3 source excerpts.
+/* Upstream: engine/godot-3.6/core/reference.h
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 252-273 */
+	void unref() {
+		//TODO this should be moved to mutexes, since this engine does not really
+		// do a lot of referencing on references and stuff
+		// mutexes will avoid more crashes?
+
+		if (reference && reference->unreference()) {
+			memdelete(reference);
+		}
+		reference = nullptr;
+	}
+
+	void instance() {
+		ref(memnew(T));
+	}
+
+	Ref() {
+		reference = nullptr;
+	}
+
+	~Ref() {
+		unref();
+	}

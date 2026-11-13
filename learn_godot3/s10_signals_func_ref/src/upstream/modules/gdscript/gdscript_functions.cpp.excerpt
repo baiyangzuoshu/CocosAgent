@@ -1,0 +1,40 @@
+/* Godot Godot 3.6 source excerpts.
+/* Upstream: engine/godot-3.6/modules/gdscript/gdscript_functions.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 592-615 */
+			VALIDATE_ARG_COUNT(2);
+			if (p_args[0]->get_type() != Variant::OBJECT) {
+				r_error.error = Variant::CallError::CALL_ERROR_INVALID_ARGUMENT;
+				r_error.argument = 0;
+				r_error.expected = Variant::OBJECT;
+				r_ret = Variant();
+				return;
+			}
+			if (p_args[1]->get_type() != Variant::STRING && p_args[1]->get_type() != Variant::NODE_PATH) {
+				r_error.error = Variant::CallError::CALL_ERROR_INVALID_ARGUMENT;
+				r_error.argument = 1;
+				r_error.expected = Variant::STRING;
+				r_ret = Variant();
+				return;
+			}
+
+			Ref<FuncRef> fr = memnew(FuncRef);
+
+			fr->set_instance(*p_args[0]);
+			fr->set_function(*p_args[1]);
+
+			r_ret = fr;
+
+		} break;
+
+/* Upstream lines 1760-1766 */
+		} break;
+		case FUNC_FUNCREF: {
+			MethodInfo mi("funcref", PropertyInfo(Variant::OBJECT, ARGNAME("instance")), PropertyInfo(Variant::STRING, ARGNAME("funcname")));
+			mi.return_val.type = Variant::OBJECT;
+			mi.return_val.class_name = "FuncRef";
+			return mi;

@@ -60,3 +60,19 @@
 ## 简化与边界
 
 本课不编译 Godot 引擎，也不推断本机可执行文件来自 `engine/godot-4.7/`。版本字段只能确认版本号和状态；若要确认二进制与源码提交完全一致，还需比对构建信息或提交标识。本课的目录职责是导航提示，具体实现以对应版本源码为准。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [engine.cpp](src/upstream/core/config/engine.cpp.excerpt) | godot-4.7/core/config/engine.cpp | 153-174 |
+| [core_bind.cpp](src/upstream/core/core_bind.cpp.excerpt) | godot-4.7/core/core_bind.cpp | 1959-1960 |
+| [core_builders.py](src/upstream/core/core_builders.py.excerpt) | godot-4.7/core/core_builders.py | 17-34 |
+| [register_core_types.cpp](src/upstream/core/register_core_types.cpp.excerpt) | godot-4.7/core/register_core_types.cpp | 364-369 |
+| [version.h](src/upstream/core/version.h.excerpt) | godot-4.7/core/version.h | 33-33 |
+| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-4.7/main/main.cpp | 1035-1035 |
+| [methods.py](src/upstream/methods.py.excerpt) | godot-4.7/methods.py | 136-165 |
+| [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp.excerpt) | godot-4.7/scene/main/scene_tree.cpp | 688-688 |
+| [version.py](src/upstream/version.py.excerpt) | godot-4.7/version.py | 1-9 |

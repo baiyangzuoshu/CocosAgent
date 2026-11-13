@@ -1,0 +1,32 @@
+/* Godot 2 source excerpts.
+/* Upstream: engine/godot-2.1/core/reference.h
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 281-304 */
+	void unref() {
+		//TODO this should be moved to mutexes, since this engine does not really
+		// do a lot of referencing on references and stuff
+		// mutexes will avoid more crashes?
+
+		if (reference && reference->unreference()) {
+
+			memdelete(reference);
+		}
+		reference = NULL;
+	}
+
+	void instance() {
+		ref(memnew(T));
+	}
+
+	Ref() {
+
+		reference = NULL;
+	}
+
+	~Ref() {
+
+		unref();

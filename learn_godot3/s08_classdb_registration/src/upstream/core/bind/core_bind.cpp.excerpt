@@ -1,0 +1,28 @@
+/* Godot 3 source excerpts.
+/* Upstream: engine/godot-3.6/core/bind/core_bind.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 2949-2968 */
+bool _ClassDB::class_exists(const StringName &p_class) const {
+	return ClassDB::class_exists(p_class);
+}
+bool _ClassDB::is_parent_class(const StringName &p_class, const StringName &p_inherits) const {
+	return ClassDB::is_parent_class(p_class, p_inherits);
+}
+bool _ClassDB::can_instance(const StringName &p_class) const {
+	return ClassDB::can_instance(p_class);
+}
+Variant _ClassDB::instance(const StringName &p_class) const {
+	Object *obj = ClassDB::instance(p_class);
+	if (!obj) {
+		return Variant();
+	}
+
+	Reference *r = Object::cast_to<Reference>(obj);
+	if (r) {
+		return REF(r);
+	} else {
+		return obj;

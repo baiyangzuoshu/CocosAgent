@@ -1,0 +1,36 @@
+/* Godot 2 source excerpts.
+/* Upstream: engine/godot-2.1/platform/osx/os_osx.mm
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1952-1979 */
+void OS_OSX::run() {
+
+	force_quit = false;
+
+	if (!main_loop)
+		return;
+
+	main_loop->init();
+
+	if (zoomed) {
+		zoomed = false;
+		set_window_fullscreen(true);
+	}
+
+	//uint64_t last_ticks=get_ticks_usec();
+
+	//int frames=0;
+	//uint64_t frame=0;
+
+	while (!force_quit) {
+
+		process_events(); // get rid of pending events
+		last_id = joystick_osx->process_joysticks(last_id);
+		if (Main::iteration() == true)
+			break;
+	};
+
+	main_loop->finish();

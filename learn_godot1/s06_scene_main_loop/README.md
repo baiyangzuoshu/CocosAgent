@@ -33,3 +33,12 @@ godot -path .
 ## 简化与边界
 
 不细分 Viewport 的 GUI 命中和未处理事件行为，也不测试 OS 窗口关闭、暂停或平台事件队列。`SceneTree` 类名与 `scene_main_loop.cpp` 文件名均为 Godot 1.1 快照事实；本课尚未运行项目。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [node.cpp](src/upstream/scene/main/node.cpp.excerpt) | godot-1.1/scene/main/node.cpp | 451-455 |
+| [scene_main_loop.cpp](src/upstream/scene/main/scene_main_loop.cpp.excerpt) | godot-1.1/scene/main/scene_main_loop.cpp | 336-463, 481-504, 506-546, 548-576 |

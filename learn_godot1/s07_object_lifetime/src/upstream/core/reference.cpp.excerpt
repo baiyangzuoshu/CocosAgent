@@ -1,0 +1,23 @@
+/* Godot 1 source excerpts.
+/* Upstream: engine/godot-1.1/core/reference.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 66-80 */
+void Reference::reference(){
+
+	refcount.ref();
+
+}
+bool Reference::unreference(){
+
+	return refcount.unref();
+}
+
+Reference::Reference() {
+
+	refcount.init();
+	refcount_init.init();
+}

@@ -1,0 +1,21 @@
+/* Godot 1 source excerpts.
+/* Upstream: engine/godot-1.1/scene/main/scene_main_loop.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 465-478 */
+void SceneTree::init() {
+
+	//_quit=false;
+	accept_quit=true;
+	initialized=true;
+	input_handled=false;
+
+
+	editor_hint=false;
+	pause=false;
+
+	root->_set_tree(this);
+	MainLoop::init();

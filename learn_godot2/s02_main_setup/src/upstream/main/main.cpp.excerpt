@@ -1,0 +1,114 @@
+/* Godot 2 source excerpts.
+/* Upstream: engine/godot-2.1/main/main.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 199-245 */
+Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_phase) {
+
+	RID_OwnerBase::init_rid();
+
+	OS::get_singleton()->initialize_core();
+	ObjectTypeDB::init();
+
+	MAIN_PRINT("Main: Initialize CORE");
+
+	register_core_types();
+	register_core_driver_types();
+
+	MAIN_PRINT("Main: Initialize Globals");
+
+	Thread::_main_thread_id = Thread::get_caller_ID();
+
+	globals = memnew(Globals);
+	input_map = memnew(InputMap);
+
+	path_remap = memnew(PathRemap);
+	translation_server = memnew(TranslationServer);
+	performance = memnew(Performance);
+	globals->add_singleton(Globals::Singleton("Performance", performance));
+
+	GLOBAL_DEF("application/crash_handler_message", String("Please include this when reporting the bug on https://github.com/godotengine/godot/issues"));
+
+	MAIN_PRINT("Main: Parse CMDLine");
+
+	/* argument parsing and main creation */
+	List<String> args;
+	List<String> main_args;
+
+	for (int i = 0; i < argc; i++) {
+
+		args.push_back(String::utf8(argv[i]));
+	}
+
+	List<String>::Element *I = args.front();
+
+	I = args.front();
+
+	while (I) {
+
+		I->get() = unescape_cmdline(I->get().strip_escapes());
+		//		print_line("CMD: "+I->get());
+		I = I->next();
+	}
+
+/* Upstream lines 253-253 */
+	String game_path = ".";
+
+/* Upstream lines 560-580 */
+			OS::get_singleton()->disable_crash_handler();
+		} else {
+
+			//test for game path
+			bool gpfound = false;
+
+			if (!I->get().begins_with("-") && game_path == "") {
+				DirAccess *da = DirAccess::open(I->get());
+				if (da != NULL) {
+					game_path = I->get();
+					gpfound = true;
+					memdelete(da);
+				}
+			}
+
+			if (!gpfound) {
+				main_args.push_back(I->get());
+			}
+		}
+
+		I = N;
+
+/* Upstream lines 649-676 */
+	if (globals->setup(game_path, main_pack) != OK) {
+
+#ifdef TOOLS_ENABLED
+		editor = false;
+#else
+		OS::get_singleton()->print("error: Couldn't load game path '%s'\n", game_path.ascii().get_data());
+
+		goto error;
+#endif
+	}
+
+	if (editor) {
+		main_args.push_back("-editor");
+		init_maximized = true;
+		use_custom_res = false;
+	}
+
+	if (bool(Globals::get_singleton()->get("application/disable_stdout"))) {
+		quiet_stdout = true;
+	}
+	if (bool(Globals::get_singleton()->get("application/disable_stderr"))) {
+		_print_error_enabled = false;
+	};
+
+	if (quiet_stdout)
+		_print_line_enabled = false;
+
+	OS::get_singleton()->set_cmdline(execpath, main_args);
+
+/* Upstream lines 1010-1010 */
+bool Main::start() {

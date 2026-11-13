@@ -1,0 +1,23 @@
+/* Godot 2 source excerpts.
+/* Upstream: engine/godot-2.1/servers/visual_server.h
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1100-1114 */
+	enum RenderInfo {
+
+		INFO_OBJECTS_IN_FRAME,
+		INFO_VERTICES_IN_FRAME,
+		INFO_MATERIAL_CHANGES_IN_FRAME,
+		INFO_SHADER_CHANGES_IN_FRAME,
+		INFO_SURFACE_CHANGES_IN_FRAME,
+		INFO_DRAW_CALLS_IN_FRAME,
+		INFO_USAGE_VIDEO_MEM_TOTAL,
+		INFO_VIDEO_MEM_USED,
+		INFO_TEXTURE_MEM_USED,
+		INFO_VERTEX_MEM_USED,
+	};
+
+	virtual int get_render_info(RenderInfo p_info) = 0;

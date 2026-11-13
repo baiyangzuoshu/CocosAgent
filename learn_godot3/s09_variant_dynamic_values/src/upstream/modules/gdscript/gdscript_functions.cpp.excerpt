@@ -1,0 +1,58 @@
+/* Godot Godot 3.6 source excerpts.
+/* Upstream: engine/godot-3.6/modules/gdscript/gdscript_functions.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 616-638 */
+		case TYPE_CONVERT: {
+			VALIDATE_ARG_COUNT(2);
+			VALIDATE_ARG_NUM(1);
+			int type = *p_args[1];
+			if (type < 0 || type >= Variant::VARIANT_MAX) {
+				r_ret = RTR("Invalid type argument to convert(), use TYPE_* constants.");
+				r_error.error = Variant::CallError::CALL_ERROR_INVALID_ARGUMENT;
+				r_error.argument = 0;
+				r_error.expected = Variant::INT;
+				return;
+
+			} else {
+				r_ret = Variant::construct(Variant::Type(type), p_args, 1, r_error);
+			}
+		} break;
+		case TYPE_OF: {
+			VALIDATE_ARG_COUNT(1);
+			r_ret = p_args[0]->get_type();
+
+		} break;
+		case TYPE_EXISTS: {
+			VALIDATE_ARG_COUNT(1);
+			r_ret = ClassDB::class_exists(*p_args[0]);
+
+/* Upstream lines 1768-1779 */
+		case TYPE_CONVERT: {
+			MethodInfo mi("convert", PropertyInfo(Variant::NIL, ARGNAME("what"), PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_NIL_IS_VARIANT), PropertyInfo(Variant::INT, ARGNAME("type")));
+			mi.return_val.type = Variant::NIL;
+			mi.return_val.usage |= PROPERTY_USAGE_NIL_IS_VARIANT;
+			return mi;
+		} break;
+		case TYPE_OF: {
+			MethodInfo mi("typeof", PropertyInfo(Variant::NIL, ARGNAME("what"), PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_NIL_IS_VARIANT));
+			mi.return_val.type = Variant::INT;
+			return mi;
+
+		} break;
+
+/* Upstream lines 1859-1869 */
+		case VAR_TO_STR: {
+			MethodInfo mi("var2str", PropertyInfo(Variant::NIL, ARGNAME("var"), PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_NIL_IS_VARIANT));
+			mi.return_val.type = Variant::STRING;
+			return mi;
+		} break;
+		case STR_TO_VAR: {
+			MethodInfo mi(Variant::NIL, "str2var", PropertyInfo(Variant::STRING, ARGNAME("string")));
+			mi.return_val.type = Variant::NIL;
+			mi.return_val.usage |= PROPERTY_USAGE_NIL_IS_VARIANT;
+			return mi;
+		} break;

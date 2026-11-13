@@ -1,0 +1,33 @@
+/* Godot 4 source excerpts.
+/* Upstream: engine/godot-4.7/platform/macos/os_macos.mm
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1107-1109 */
+void OS_MacOS_NSApp::run() {
+	[NSApp run]; // Note: this call will never return. Use `OS_MacOS_NSApp::cleanup()` for cleanup.
+}
+
+/* Upstream lines 1119-1138 */
+void OS_MacOS_NSApp::start_main() {
+	Error err;
+	@autoreleasepool {
+		err = Main::setup(execpath, argc, argv);
+	}
+
+	if (err == OK) {
+		main_started = true;
+
+		int ret;
+		@autoreleasepool {
+			ret = Main::start();
+		}
+		if (ret == EXIT_SUCCESS) {
+			if (main_loop) {
+				@autoreleasepool {
+					main_loop->initialize();
+				}
+				DisplayServer *ds = DisplayServer::get_singleton();
+				DisplayServerMacOS *ds_mac = Object::cast_to<DisplayServerMacOS>(ds);

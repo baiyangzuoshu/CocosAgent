@@ -36,3 +36,18 @@ godot --path .
 ## 简化与边界
 
 只检查一个内置 C++ 类，不枚举完整 ClassDB，也不讨论 GDNative 注册、编辑器类、脚本全局类和属性/方法绑定细节。Godot 3.6 使用 `ClassDB.instance()`；本课依据静态源码，尚未运行实验。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [core_bind.cpp](src/upstream/core/bind/core_bind.cpp.excerpt) | godot-3.6/core/bind/core_bind.cpp | 2949-2968 |
+| [class_db.cpp](src/upstream/core/class_db.cpp.excerpt) | godot-3.6/core/class_db.cpp | 491-494 |
+| [class_db.h](src/upstream/core/class_db.h.excerpt) | godot-3.6/core/class_db.h | 165-181 |
+| [object.cpp](src/upstream/core/object.cpp.excerpt) | godot-3.6/core/object.cpp | 1673-1675 |
+| [gdscript.cpp](src/upstream/modules/gdscript/gdscript.cpp.excerpt) | godot-3.6/modules/gdscript/gdscript.cpp | 60-78 |
+| [node_2d.cpp](src/upstream/scene/2d/node_2d.cpp.excerpt) | godot-3.6/scene/2d/node_2d.cpp | 382-430 |
+| [node_2d.h](src/upstream/scene/2d/node_2d.h.excerpt) | godot-3.6/scene/2d/node_2d.h | 37-37 |
+| [register_scene_types.cpp](src/upstream/scene/register_scene_types.cpp.excerpt) | godot-3.6/scene/register_scene_types.cpp | 250-287 |

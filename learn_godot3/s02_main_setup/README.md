@@ -36,3 +36,14 @@ godot --path . --course-probe
 ## 简化与边界
 
 只验证一个未知选项的转交路径，不把它当作自定义 CLI 框架，也不覆盖导出、编辑器、远程文件系统或其他平台参数。Godot 3.6 的旧场景和 `VisualServer` 等边界不套用到 Godot 4。本课完成静态源码和项目文件核对，尚未运行。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [core_bind.cpp](src/upstream/core/bind/core_bind.cpp.excerpt) | godot-3.6/core/bind/core_bind.cpp | 573-580 |
+| [os.cpp](src/upstream/core/os/os.cpp.excerpt) | godot-3.6/core/os/os.cpp | 503-506 |
+| [os.h](src/upstream/core/os/os.h.excerpt) | godot-3.6/core/os/os.h | 386-386 |
+| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-3.6/main/main.cpp | 418-461, 481-481, 982-984, 1018-1028, 1357-1361 |

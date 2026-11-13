@@ -1,0 +1,9 @@
+/* Godot 4 source excerpts.
+/* Upstream: engine/godot-4.7/servers/rendering/rendering_server.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 3511-3511 */
+	ClassDB::bind_method(D_METHOD("get_rendering_info", "info"), &RenderingServer::get_rendering_info);

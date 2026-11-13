@@ -1,0 +1,30 @@
+/* Godot 1 source excerpts.
+/* Upstream: engine/godot-1.1/scene/main/scene_main_loop.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 465-477 */
+void SceneTree::init() {
+
+	//_quit=false;
+	accept_quit=true;
+	initialized=true;
+	input_handled=false;
+
+
+	editor_hint=false;
+	pause=false;
+
+	root->_set_tree(this);
+	MainLoop::init();
+
+/* Upstream lines 1042-1045 */
+void SceneTree::add_current_scene(Node * p_current) {
+
+	current_scene=p_current;
+	root->add_child(p_current);
+
+/* Upstream lines 1098-1098 */
+	ObjectTypeDB::bind_method(_MD("get_current_scene:Node"),&SceneTree::get_current_scene);

@@ -1,0 +1,10 @@
+/* Godot 1 source excerpts.
+/* Upstream: engine/godot-1.1/core/typedefs.h
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 44-45 */
+#define VERSION_MKSTRING _MKSTR(VERSION_MAJOR)"."_MKSTR(VERSION_MINOR)"."_MKSTR(VERSION_STATUS)"."_MKSTR(VERSION_REVISION)
+#define VERSION_FULL_NAME _MKSTR(VERSION_NAME)" v"VERSION_MKSTRING

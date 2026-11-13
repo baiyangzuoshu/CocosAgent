@@ -32,3 +32,12 @@ godot --path .
 ## 简化与边界
 
 不调整 physics tick、fixed FPS、time scale、delta 同步策略或 low-processor 模式；也不测量物理服务器耗时与 GPU 帧时间。Godot 3.6 的 `VisualServer`、`MainFrameTime` 和 8 步上限是本快照实现，本课未运行。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-3.6/main/main.cpp | 2304-2359, 2363-2410, 2420-2453 |
+| [node.cpp](src/upstream/scene/main/node.cpp.excerpt) | godot-3.6/scene/main/node.cpp | 50-70 |

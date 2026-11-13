@@ -1,0 +1,14 @@
+/* Godot 4 source excerpts.
+/* Upstream: engine/godot-4.7/scene/main/scene_tree.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 586-591 */
+void SceneTree::initialize() {
+	GodotProfileZone("SceneTree::initialize");
+	ERR_FAIL_NULL(root);
+	MainLoop::initialize();
+	root->_set_tree(this);
+}

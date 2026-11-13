@@ -1,0 +1,43 @@
+/* Godot 3 source excerpts.
+/* Upstream: engine/godot-3.6/core/object.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 388-395 */
+bool Object::_predelete() {
+	_predelete_ok = 1;
+	notification(NOTIFICATION_PREDELETE, true);
+	if (_predelete_ok) {
+		_class_ptr = nullptr; //must restore so destructors can access class ptr correctly
+	}
+	return _predelete_ok;
+}
+
+/* Upstream lines 1747-1747 */
+	ClassDB::add_virtual_method("Object", MethodInfo("free"), false);
+
+/* Upstream lines 1931-1952 */
+Object::Object() {
+	_class_ptr = nullptr;
+	_block_signals = false;
+	_predelete_ok = 0;
+	_instance_id = 0;
+	_instance_id = ObjectDB::add_instance(this);
+	_can_translate = true;
+	_is_queued_for_deletion = false;
+	_emitting = false;
+	memset(_script_instance_bindings, 0, sizeof(void *) * MAX_SCRIPT_INSTANCE_BINDINGS);
+	script_instance = nullptr;
+	_rc.store(nullptr, std::memory_order_release);
+#ifdef TOOLS_ENABLED
+
+	_edited = false;
+	_edited_version = 0;
+#endif
+
+#ifdef DEBUG_ENABLED
+	_lock_index.init(1);
+#endif
+}

@@ -1,0 +1,46 @@
+/* Godot 3 source excerpts.
+/* Upstream: engine/godot-3.6/scene/register_scene_types.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 250-287 */
+void register_scene_types() {
+	SceneStringNames::create();
+
+	OS::get_singleton()->yield(); //may take time to init
+
+	Node::init_node_hrcr();
+
+#ifdef MODULE_FREETYPE_ENABLED
+	resource_loader_dynamic_font.instance();
+	ResourceLoader::add_resource_format_loader(resource_loader_dynamic_font);
+#endif // MODULE_FREETYPE_ENABLED
+
+	resource_loader_stream_texture.instance();
+	ResourceLoader::add_resource_format_loader(resource_loader_stream_texture);
+
+	resource_loader_texture_layered.instance();
+	ResourceLoader::add_resource_format_loader(resource_loader_texture_layered);
+
+	resource_saver_text.instance();
+	ResourceSaver::add_resource_format_saver(resource_saver_text, true);
+
+	resource_loader_text.instance();
+	ResourceLoader::add_resource_format_loader(resource_loader_text, true);
+
+	resource_saver_shader.instance();
+	ResourceSaver::add_resource_format_saver(resource_saver_shader, true);
+
+	resource_loader_shader.instance();
+	ResourceLoader::add_resource_format_loader(resource_loader_shader, true);
+
+	resource_loader_bmfont.instance();
+	ResourceLoader::add_resource_format_loader(resource_loader_bmfont, true);
+
+	OS::get_singleton()->yield(); //may take time to init
+
+	ClassDB::register_class<Object>();
+
+	ClassDB::register_class<Node>();

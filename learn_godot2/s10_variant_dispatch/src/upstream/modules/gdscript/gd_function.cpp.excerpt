@@ -1,0 +1,37 @@
+/* Godot Godot 2.1 source excerpts.
+/* Upstream: engine/godot-2.1/modules/gdscript/gd_function.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 312-340 */
+				CHECK_SPACE(5);
+
+				bool valid;
+				Variant::Operator op = (Variant::Operator)_code_ptr[ip + 1];
+				ERR_BREAK(op >= Variant::OP_MAX);
+
+				GET_VARIANT_PTR(a, 2);
+				GET_VARIANT_PTR(b, 3);
+				GET_VARIANT_PTR(dst, 4);
+
+#ifdef DEBUG_ENABLED
+				Variant ret;
+				Variant::evaluate(op, *a, *b, ret, valid);
+#else
+				Variant::evaluate(op, *a, *b, *dst, valid);
+#endif
+
+				if (!valid) {
+#ifdef DEBUG_ENABLED
+
+					if (ret.get_type() == Variant::STRING) {
+						//return a string when invalid with the error
+						err_text = ret;
+						err_text += " in operator '" + Variant::get_operator_name(op) + "'.";
+					} else {
+						err_text = "Invalid operands '" + Variant::get_type_name(a->get_type()) + "' and '" + Variant::get_type_name(b->get_type()) + "' in operator '" + Variant::get_operator_name(op) + "'.";
+					}
+#endif
+					break;

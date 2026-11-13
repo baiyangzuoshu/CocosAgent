@@ -35,3 +35,15 @@ godot --path .
 ## 简化与边界
 
 本课只追踪 macOS 桌面入口，不推断 Android、iOS、Web 等平台都经过相同的原生 `main()` 文件。只观察一条启动路径，不展开 `Main::setup()`、服务器初始化或帧循环；这些内容由 S02 及后续课程分别追踪。此实验尚未运行。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-3.6/main/main.cpp | 418-437, 1682-1682 |
+| [godot_main_osx.mm](src/upstream/platform/osx/godot_main_osx.mm.excerpt) | godot-3.6/platform/osx/godot_main_osx.mm | 38-78 |
+| [os_osx.mm](src/upstream/platform/osx/os_osx.mm.excerpt) | godot-3.6/platform/osx/os_osx.mm | 3442-3474 |
+| [node.cpp](src/upstream/scene/main/node.cpp.excerpt) | godot-3.6/scene/main/node.cpp | 2868-2885 |
+| [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp.excerpt) | godot-3.6/scene/main/scene_tree.cpp | 521-526 |

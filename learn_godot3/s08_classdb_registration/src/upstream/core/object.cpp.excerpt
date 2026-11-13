@@ -1,0 +1,11 @@
+/* Godot 3 source excerpts.
+/* Upstream: engine/godot-3.6/core/object.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1673-1675 */
+void Object::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("get_class"), &Object::get_class);
+	ClassDB::bind_method(D_METHOD("is_class", "class"), &Object::is_class);

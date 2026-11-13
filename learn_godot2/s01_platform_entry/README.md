@@ -35,3 +35,15 @@ godot -path .
 ## 简化与边界
 
 本课选择 macOS 入口作代表，不覆盖其他平台适配器。2.1 使用 `engine.cfg`、`application/main_scene` 和 `PackedScene::instance()` 一代场景机制；不要用后续版本的 `project.godot` 或 `instantiate()` 命名解释它。运行结果需记录实际 Godot 工具版本；旧版引擎运行验证尚未执行。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-2.1/main/main.cpp | 199-209, 1010-1010 |
+| [godot_main_osx.mm](src/upstream/platform/osx/godot_main_osx.mm.excerpt) | godot-2.1/platform/osx/godot_main_osx.mm | 38-87 |
+| [os_osx.mm](src/upstream/platform/osx/os_osx.mm.excerpt) | godot-2.1/platform/osx/os_osx.mm | 1952-1979 |
+| [node.cpp](src/upstream/scene/main/node.cpp.excerpt) | godot-2.1/scene/main/node.cpp | 1911-1930 |
+| [scene_main_loop.cpp](src/upstream/scene/main/scene_main_loop.cpp.excerpt) | godot-2.1/scene/main/scene_main_loop.cpp | 461-471 |

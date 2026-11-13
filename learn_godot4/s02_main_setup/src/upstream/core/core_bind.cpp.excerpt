@@ -1,0 +1,26 @@
+/* Godot 4 source excerpts.
+/* Upstream: engine/godot-4.7/core/core_bind.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 518-535 */
+Vector<String> OS::get_cmdline_args() {
+	List<String> cmdline = ::OS::get_singleton()->get_cmdline_args();
+	Vector<String> cmdlinev;
+	for (const String &E : cmdline) {
+		cmdlinev.push_back(E);
+	}
+
+	return cmdlinev;
+}
+
+Vector<String> OS::get_cmdline_user_args() {
+	List<String> cmdline = ::OS::get_singleton()->get_cmdline_user_args();
+	Vector<String> cmdlinev;
+	for (const String &E : cmdline) {
+		cmdlinev.push_back(E);
+	}
+
+	return cmdlinev;

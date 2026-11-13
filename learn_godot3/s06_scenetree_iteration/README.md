@@ -32,3 +32,12 @@ godot --path .
 ## 简化与边界
 
 不更改 pause、physics tick、Tween、Timer 或 physics interpolation 设置，不模拟输入事件和多人轮询。这里只依据 Godot 3.6 SceneTree 与 Node 源码；本课未运行。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [node.cpp](src/upstream/scene/main/node.cpp.excerpt) | godot-3.6/scene/main/node.cpp | 50-70 |
+| [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp.excerpt) | godot-3.6/scene/main/scene_tree.cpp | 578-609, 621-733, 762-805 |

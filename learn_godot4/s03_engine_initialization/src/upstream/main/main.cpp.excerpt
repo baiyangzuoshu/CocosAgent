@@ -1,0 +1,90 @@
+/* Godot 4 source excerpts.
+/* Upstream: engine/godot-4.7/main/main.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1016-1032 */
+ * The initialization is typically done in 3 steps (with the setup2 step triggered either
+ * automatically by setup, or manually in the platform's main).
+ *
+ * - setup(execpath, argc, argv, p_second_phase) is the main entry point for all platforms,
+ *   responsible for the initialization of all low level singletons and core types, and parsing
+ *   command line arguments to configure things accordingly.
+ *   If p_second_phase is true, it will chain into setup2() (default behavior). This is
+ *   disabled on some platforms (Android, iOS) which trigger the second step in their own time.
+ *
+ * - setup2(p_main_tid_override) registers high level servers and singletons, displays the
+ *   boot splash, then registers higher level types (scene, editor, etc.).
+ *
+ * - start() is the last step and that's where command line tools can run, or the main loop
+ *   can be created eventually and the project settings put into action. That's also where
+ *   the editor node is created, if relevant.
+ *   start() does it own argument parsing for a subset of the command line arguments described
+ *   in help, it's a bit messy and should be globalized with the setup() parsing somehow.
+
+/* Upstream lines 3033-3041 */
+Error Main::setup2(bool p_show_boot_logo) {
+	GodotProfileZone("setup2");
+	OS::get_singleton()->benchmark_begin_measure("Startup", "Main::Setup2");
+
+	Thread::make_main_thread(); // Make whatever thread call this the main thread.
+	set_current_thread_safe_for_nodes(true);
+
+	// Don't use rich formatting to prevent ANSI escape codes from being written to log files.
+	print_header(false);
+
+/* Upstream lines 3212-3229 */
+	physics_server_2d_manager = memnew(PhysicsServer2DManager);
+#endif // PHYSICS_2D_DISABLED
+
+#ifndef NAVIGATION_2D_DISABLED
+	NavigationServer2DManager::initialize_server_manager();
+#endif // NAVIGATION_2D_DISABLED
+#ifndef NAVIGATION_3D_DISABLED
+	NavigationServer3DManager::initialize_server_manager();
+#endif // NAVIGATION_3D_DISABLED
+
+	register_server_types();
+	{
+		OS::get_singleton()->benchmark_begin_measure("Servers", "Modules and Extensions");
+
+		initialize_modules(MODULE_INITIALIZATION_LEVEL_SERVERS);
+		GDExtensionManager::get_singleton()->initialize_extensions(GDExtension::INITIALIZATION_LEVEL_SERVERS);
+
+		OS::get_singleton()->benchmark_end_measure("Servers", "Modules and Extensions");
+
+/* Upstream lines 3776-3795 */
+
+#ifndef NAVIGATION_3D_DISABLED
+	NavigationServer3DManager::initialize_server();
+#endif // NAVIGATION_3D_DISABLED
+#ifndef NAVIGATION_2D_DISABLED
+	NavigationServer2DManager::initialize_server();
+#endif // NAVIGATION_2D_DISABLED
+
+	register_scene_types();
+	register_driver_types();
+
+	register_scene_singletons();
+
+	{
+		OS::get_singleton()->benchmark_begin_measure("Scene", "Modules and Extensions");
+
+		initialize_modules(MODULE_INITIALIZATION_LEVEL_SCENE);
+		GDExtensionManager::get_singleton()->initialize_extensions(GDExtension::INITIALIZATION_LEVEL_SCENE);
+
+		OS::get_singleton()->benchmark_end_measure("Scene", "Modules and Extensions");
+
+/* Upstream lines 3858-3867 */
+	camera_server = CameraServer::create();
+
+	MAIN_PRINT("Main: Load Physics");
+
+	initialize_physics();
+
+	register_server_singletons();
+
+	// This loads global classes, so it must happen before custom loaders and savers are registered
+	ScriptServer::init_languages();

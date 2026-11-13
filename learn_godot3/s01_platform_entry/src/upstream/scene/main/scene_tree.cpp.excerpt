@@ -1,0 +1,14 @@
+/* Godot 3 source excerpts.
+/* Upstream: engine/godot-3.6/scene/main/scene_tree.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 521-526 */
+void SceneTree::init() {
+	ERR_FAIL_COND(!root);
+	initialized = true;
+	root->_set_tree(this);
+	MainLoop::init();
+}

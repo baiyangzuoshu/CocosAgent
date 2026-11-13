@@ -1,0 +1,44 @@
+/* Godot 1 source excerpts.
+/* Upstream: engine/godot-1.1/scene/register_scene_types.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 231-266 */
+void register_scene_types() {
+
+	SceneStringNames::create();
+
+	OS::get_singleton()->yield(); //may take time to init
+
+	Node::init_node_hrcr();
+
+	resource_loader_image = memnew( ResourceFormatLoaderImage );
+	ResourceLoader::add_resource_format_loader( resource_loader_image );
+
+	resource_loader_wav = memnew( ResourceFormatLoaderWAV );
+	ResourceLoader::add_resource_format_loader( resource_loader_wav );
+
+	resource_loader_bitmap = memnew( ResourceFormatLoaderBitMap );
+	ResourceLoader::add_resource_format_loader( resource_loader_bitmap );
+
+#ifdef TOOLS_ENABLED
+
+	//scene first!
+
+#endif
+
+	resource_loader_theme = memnew( ResourceFormatLoaderTheme );
+	ResourceLoader::add_resource_format_loader( resource_loader_theme );
+
+	resource_loader_shader = memnew( ResourceFormatLoaderShader );
+	ResourceLoader::add_resource_format_loader( resource_loader_shader );
+
+	make_default_theme();
+
+	OS::get_singleton()->yield(); //may take time to init
+
+	ObjectTypeDB::register_type<Object>();
+
+	ObjectTypeDB::register_type<Node>();

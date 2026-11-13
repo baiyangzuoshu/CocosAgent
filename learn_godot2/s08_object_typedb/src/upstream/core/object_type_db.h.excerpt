@@ -1,0 +1,18 @@
+/* Godot 2 source excerpts.
+/* Upstream: engine/godot-2.1/core/object_type_db.h
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 192-201 */
+	template <class T>
+	static void register_type() {
+
+		GLOBAL_LOCK_FUNCTION;
+		T::initialize_type();
+		TypeInfo *t = types.getptr(T::get_type_static());
+		ERR_FAIL_COND(!t);
+		t->creation_func = &creator<T>;
+		T::register_custom_data_to_otdb();
+	}

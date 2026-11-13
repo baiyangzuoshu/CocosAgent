@@ -1,0 +1,49 @@
+/* Godot Godot 2.1 source excerpts.
+/* Upstream: engine/godot-2.1/modules/gdscript/gd_functions.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 507-530 */
+		case TYPE_CONVERT: {
+			VALIDATE_ARG_COUNT(2);
+			VALIDATE_ARG_NUM(1);
+			int type = *p_args[1];
+			if (type < 0 || type >= Variant::VARIANT_MAX) {
+
+				r_ret = RTR("Invalid type argument to convert(), use TYPE_* constants.");
+				r_error.error = Variant::CallError::CALL_ERROR_INVALID_ARGUMENT;
+				r_error.argument = 0;
+				r_error.expected = Variant::INT;
+				return;
+
+			} else {
+
+				r_ret = Variant::construct(Variant::Type(type), p_args, 1, r_error);
+			}
+		} break;
+		case TYPE_OF: {
+
+			VALIDATE_ARG_COUNT(1);
+			r_ret = p_args[0]->get_type();
+
+		} break;
+		case TYPE_EXISTS: {
+
+/* Upstream lines 621-635 */
+		case VAR_TO_STR: {
+			VALIDATE_ARG_COUNT(1);
+			String vars;
+			VariantWriter::write_to_string(*p_args[0], vars);
+			r_ret = vars;
+		} break;
+		case STR_TO_VAR: {
+			VALIDATE_ARG_COUNT(1);
+			if (p_args[0]->get_type() != Variant::STRING) {
+				r_error.error = Variant::CallError::CALL_ERROR_INVALID_ARGUMENT;
+				r_error.argument = 0;
+				r_error.expected = Variant::STRING;
+				r_ret = Variant();
+				return;
+			}

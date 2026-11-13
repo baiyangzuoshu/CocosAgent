@@ -1,0 +1,12 @@
+/* Godot 1 source excerpts.
+/* Upstream: engine/godot-1.1/scene/main/node.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 451-455 */
+void Node::set_process_input(bool p_enable) {
+
+	if (p_enable==data.input)
+		return;

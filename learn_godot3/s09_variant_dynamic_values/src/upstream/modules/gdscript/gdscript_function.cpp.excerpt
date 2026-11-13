@@ -1,0 +1,58 @@
+/* Godot Godot 3.6 source excerpts.
+/* Upstream: engine/godot-3.6/modules/gdscript/gdscript_function.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 432-455 */
+				bool valid;
+				Variant::Operator op = (Variant::Operator)_code_ptr[ip + 1];
+				GD_ERR_BREAK(op >= Variant::OP_MAX);
+
+				GET_VARIANT_PTR(a, 2);
+				GET_VARIANT_PTR(b, 3);
+				GET_VARIANT_PTR(dst, 4);
+
+#ifdef DEBUG_ENABLED
+
+				Variant ret;
+				Variant::evaluate(op, *a, *b, ret, valid);
+#else
+				Variant::evaluate(op, *a, *b, *dst, valid);
+#endif
+#ifdef DEBUG_ENABLED
+				if (!valid) {
+					if (ret.get_type() == Variant::STRING) {
+						//return a string when invalid with the error
+						err_text = ret;
+						err_text += " in operator '" + Variant::get_operator_name(op) + "'.";
+					} else {
+						err_text = "Invalid operands '" + Variant::get_type_name(a->get_type()) + "' and '" + Variant::get_type_name(b->get_type()) + "' in operator '" + Variant::get_operator_name(op) + "'.";
+					}
+
+/* Upstream lines 947-970 */
+			OPCODE(OPCODE_CONSTRUCT) {
+				CHECK_SPACE(2);
+				Variant::Type t = Variant::Type(_code_ptr[ip + 1]);
+				int argc = _code_ptr[ip + 2];
+				CHECK_SPACE(argc + 2);
+				Variant **argptrs = call_args;
+				for (int i = 0; i < argc; i++) {
+					GET_VARIANT_PTR(v, 3 + i);
+					argptrs[i] = v;
+				}
+
+				GET_VARIANT_PTR(dst, 3 + argc);
+				Variant::CallError err;
+				*dst = Variant::construct(t, (const Variant **)argptrs, argc, err);
+
+#ifdef DEBUG_ENABLED
+				if (err.error != Variant::CallError::CALL_OK) {
+					err_text = _get_call_error(err, "'" + Variant::get_type_name(t) + "' constructor", (const Variant **)argptrs);
+					OPCODE_BREAK;
+				}
+#endif
+
+				ip += 4 + argc;
+				//construct a basic type

@@ -56,3 +56,16 @@ godot -path . -s res://source_map.gd
 ## 简化与边界
 
 本课不编译引擎、不生成二进制场景，也不验证各平台构建。版本显示只用于确认运行二进制报告的版本字符串；若要对齐某个源码提交，还需要构建信息或提交标识。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [main_loop.cpp](src/upstream/core/os/main_loop.cpp.excerpt) | godot-1.1/core/os/main_loop.cpp | 71-87 |
+| [typedefs.h](src/upstream/core/typedefs.h.excerpt) | godot-1.1/core/typedefs.h | 44-45 |
+| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-1.1/main/main.cpp | 117-117, 911-913 |
+| [methods.py](src/upstream/methods.py.excerpt) | godot-1.1/methods.py | 1085-1102 |
+| [project_manager.cpp](src/upstream/tools/editor/project_manager.cpp.excerpt) | godot-1.1/tools/editor/project_manager.cpp | 840-840 |
+| [version.py](src/upstream/version.py.excerpt) | godot-1.1/version.py | 1-7 |

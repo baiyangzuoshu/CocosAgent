@@ -33,3 +33,12 @@ godot --path .
 ## 简化与边界
 
 不改变 physics tick rate、最大 physics steps、time scale、固定 FPS 或渲染模式。Godot 4.7 使用 `physics_process/process`、`RenderingServer` 与本代 `MainFrameTime`；本课依据静态源码，尚未运行。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-4.7/main/main.cpp | 4921-4959, 4970-5053, 5062-5097, 5112-5112 |
+| [node.cpp](src/upstream/scene/main/node.cpp.excerpt) | godot-4.7/scene/main/node.cpp | 90-108 |

@@ -36,3 +36,12 @@ godot -- --course-probe
 ## 简化与边界
 
 仅观察一条无值用户参数的路径，不处理脚本参数转义、平台注入参数或编辑器启动参数。项目路径使用当前目录默认值，规避源码中按构建选项控制的 `--path`。本文依据静态 Godot 4.7 源码，实验尚未运行。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [core_bind.cpp](src/upstream/core/core_bind.cpp.excerpt) | godot-4.7/core/core_bind.cpp | 518-535 |
+| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-4.7/main/main.cpp | 1016-1032, 1035-1068, 1768-1785, 2069-2073, 2106-2108 |

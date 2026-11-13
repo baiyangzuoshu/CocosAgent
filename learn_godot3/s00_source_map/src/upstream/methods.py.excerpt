@@ -1,0 +1,25 @@
+# Godot 3 source excerpts.
+# Upstream: engine/godot-3.6/methods.py
+# Original line ranges are copied from the local source snapshot.
+# Study excerpt; not a standalone compilation unit.
+# Copyright and license notice: Godot Engine; see ../../../SOURCE_LICENSE.txt.
+
+# Upstream lines 235-252
+    f = open("core/version_generated.gen.h", "w")
+    f.write(
+        """/* THIS FILE IS GENERATED DO NOT EDIT */
+#ifndef VERSION_GENERATED_GEN_H
+#define VERSION_GENERATED_GEN_H
+#define VERSION_SHORT_NAME "{short_name}"
+#define VERSION_NAME "{name}"
+#define VERSION_MAJOR {major}
+#define VERSION_MINOR {minor}
+#define VERSION_PATCH {patch}
+#define VERSION_STATUS "{status}"
+#define VERSION_BUILD "{build}"
+#define VERSION_MODULE_CONFIG "{module_config}"
+#define VERSION_YEAR {year}
+#define VERSION_WEBSITE "{website}"
+#define VERSION_DOCS_BRANCH "{docs_branch}"
+#define VERSION_DOCS_URL "https://docs.godotengine.org/en/" VERSION_DOCS_BRANCH
+#endif // VERSION_GENERATED_GEN_H

@@ -36,3 +36,12 @@ godot -path . --course-probe
 ## 简化与边界
 
 实验只使用一个不带值的未知选项，避免把位置参数误作场景路径。`Main::start()` 还会解析它自己的选项子集；不同平台入口可能过滤或附加系统参数。本文依据静态的 Godot 1.1 快照，未运行此项目，也不据此断言本机 Godot 工具与快照构建一致。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [core_bind.cpp](src/upstream/core/bind/core_bind.cpp.excerpt) | godot-1.1/core/bind/core_bind.cpp | 352-358 |
+| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-1.1/main/main.cpp | 176-210, 230-230, 494-512, 586-609, 880-880 |

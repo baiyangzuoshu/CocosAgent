@@ -36,3 +36,13 @@ godot -path .
 ## 简化与边界
 
 本实验不传入命令行场景覆盖路径，也不配置自定义 `MainLoop`、autoload 或编辑器模式，只观察项目配置指定的默认主场景。Godot 1.1 的 `SceneTree`、XML `PackedScene` 与 `instance()` 是本代实现；本文尚未运行项目。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-1.1/main/main.cpp | 880-880, 993-1001, 1244-1252, 1299-1301 |
+| [node.cpp](src/upstream/scene/main/node.cpp.excerpt) | godot-1.1/scene/main/node.cpp | 1850-1850 |
+| [scene_main_loop.cpp](src/upstream/scene/main/scene_main_loop.cpp.excerpt) | godot-1.1/scene/main/scene_main_loop.cpp | 465-477, 1042-1045, 1098-1098 |

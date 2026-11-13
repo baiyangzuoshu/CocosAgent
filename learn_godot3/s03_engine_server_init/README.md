@@ -36,3 +36,14 @@ godot --path .
 ## 简化与边界
 
 只比较一个基础场景类和一个服务器类，并读取一项统计；没有检查每个条件编译分支或平台后端。Godot 3.6 保留 `VisualServer` / `ClassDB` 命名，不外推为 Godot 4 的注册时序。本课尚未运行。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [core_bind.cpp](src/upstream/core/bind/core_bind.cpp.excerpt) | godot-3.6/core/bind/core_bind.cpp | 2949-2950 |
+| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-3.6/main/main.cpp | 1422-1477, 1501-1506, 1615-1633, 1648-1657 |
+| [register_server_types.cpp](src/upstream/servers/register_server_types.cpp.excerpt) | godot-3.6/servers/register_server_types.cpp | 110-124, 211-220 |
+| [visual_server.cpp](src/upstream/servers/visual_server.cpp.excerpt) | godot-3.6/servers/visual_server.cpp | 2286-2286 |

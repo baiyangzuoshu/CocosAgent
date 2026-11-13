@@ -1,0 +1,61 @@
+/* Godot 4 source excerpts.
+/* Upstream: engine/godot-4.7/scene/register_scene_types.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 390-442 */
+void register_scene_types() {
+	OS::get_singleton()->benchmark_begin_measure("Scene", "Register Types");
+
+	SceneStringNames::create();
+
+	OS::get_singleton()->yield(); // may take time to init
+
+	Node::init_node_hrcr();
+
+	if constexpr (GD_IS_CLASS_ENABLED(CompressedTexture2D)) {
+		resource_loader_stream_texture.instantiate();
+		ResourceLoader::add_resource_format_loader(resource_loader_stream_texture);
+	}
+
+	if constexpr (GD_IS_CLASS_ENABLED(TextureLayered)) {
+		resource_loader_texture_layered.instantiate();
+		ResourceLoader::add_resource_format_loader(resource_loader_texture_layered);
+	}
+
+	if constexpr (GD_IS_CLASS_ENABLED(Texture3D)) {
+		resource_loader_texture_3d.instantiate();
+		ResourceLoader::add_resource_format_loader(resource_loader_texture_3d);
+	}
+
+	resource_saver_text.instantiate();
+	ResourceSaver::add_resource_format_saver(resource_saver_text, true);
+
+	resource_loader_text.instantiate();
+	ResourceLoader::add_resource_format_loader(resource_loader_text, true);
+
+	if constexpr (GD_IS_CLASS_ENABLED(Shader)) {
+		resource_saver_shader.instantiate();
+		ResourceSaver::add_resource_format_saver(resource_saver_shader, true);
+
+		resource_loader_shader.instantiate();
+		ResourceLoader::add_resource_format_loader(resource_loader_shader, true);
+	}
+
+	if constexpr (GD_IS_CLASS_ENABLED(ShaderInclude)) {
+		resource_saver_shader_include.instantiate();
+		ResourceSaver::add_resource_format_saver(resource_saver_shader_include, true);
+
+		resource_loader_shader_include.instantiate();
+		ResourceLoader::add_resource_format_loader(resource_loader_shader_include, true);
+	}
+
+	OS::get_singleton()->yield(); // may take time to init
+
+	GDREGISTER_CLASS(Node);
+	GDREGISTER_CLASS(MissingNode);
+	GDREGISTER_ABSTRACT_CLASS(InstancePlaceholder);
+
+	GDREGISTER_ABSTRACT_CLASS(CanvasItem);

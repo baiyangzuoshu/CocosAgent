@@ -1,0 +1,13 @@
+/* Godot 2 source excerpts.
+/* Upstream: engine/godot-2.1/core/object.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1527-1531 */
+void Object::_bind_methods() {
+
+	ObjectTypeDB::bind_method(_MD("get_type"), &Object::get_type);
+	ObjectTypeDB::bind_method(_MD("is_type", "type"), &Object::is_type);
+	ObjectTypeDB::bind_method(_MD("set", "property", "value"), &Object::_set_bind);

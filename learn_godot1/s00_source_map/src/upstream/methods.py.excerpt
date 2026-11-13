@@ -1,0 +1,25 @@
+# Godot 1 source excerpts.
+# Upstream: engine/godot-1.1/methods.py
+# Original line ranges are copied from the local source snapshot.
+# Study excerpt; not a standalone compilation unit.
+# Copyright and license notice: Godot Engine; see ../../../SOURCE_LICENSE.txt.
+
+# Upstream lines 1085-1102
+def update_version():
+
+	rev = "custom_build"
+
+	if (os.getenv("BUILD_REVISION")!=None):
+		rev=os.getenv("BUILD_REVISION")
+		print("Using custom revision: "+rev)
+	import version
+
+
+	f=open("core/version.h","wb")
+	f.write("#define VERSION_SHORT_NAME "+str(version.short_name)+"\n")
+	f.write("#define VERSION_NAME "+str(version.name)+"\n")
+	f.write("#define VERSION_MAJOR "+str(version.major)+"\n")
+	f.write("#define VERSION_MINOR "+str(version.minor)+"\n")
+	f.write("#define VERSION_REVISION "+str(rev)+"\n")
+	f.write("#define VERSION_STATUS "+str(version.status)+"\n")
+	f.close()

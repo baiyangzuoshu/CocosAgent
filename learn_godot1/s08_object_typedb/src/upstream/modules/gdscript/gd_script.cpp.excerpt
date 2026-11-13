@@ -1,0 +1,35 @@
+/* Godot 1 source excerpts.
+/* Upstream: engine/godot-1.1/modules/gdscript/gd_script.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1422-1448 */
+void GDNativeClass::_bind_methods() {
+
+	ObjectTypeDB::bind_method(_MD("new"),&GDNativeClass::_new);
+
+}
+
+Variant GDNativeClass::_new() {
+
+	Object *o = instance();
+	if (!o) {
+		ERR_EXPLAIN("Class type: '"+String(name)+"' is not instantiable.");
+		ERR_FAIL_COND_V(!o,Variant());
+	}
+
+	Reference *ref = o->cast_to<Reference>();
+	if (ref) {
+		return REF(ref);
+	} else {
+		return o;
+	}
+
+}
+
+Object *GDNativeClass::instance() {
+
+	return ObjectTypeDB::instance(name);
+}

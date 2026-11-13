@@ -1,0 +1,93 @@
+/* Godot 4 source excerpts.
+/* Upstream: engine/godot-4.7/main/main.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1016-1032 */
+ * The initialization is typically done in 3 steps (with the setup2 step triggered either
+ * automatically by setup, or manually in the platform's main).
+ *
+ * - setup(execpath, argc, argv, p_second_phase) is the main entry point for all platforms,
+ *   responsible for the initialization of all low level singletons and core types, and parsing
+ *   command line arguments to configure things accordingly.
+ *   If p_second_phase is true, it will chain into setup2() (default behavior). This is
+ *   disabled on some platforms (Android, iOS) which trigger the second step in their own time.
+ *
+ * - setup2(p_main_tid_override) registers high level servers and singletons, displays the
+ *   boot splash, then registers higher level types (scene, editor, etc.).
+ *
+ * - start() is the last step and that's where command line tools can run, or the main loop
+ *   can be created eventually and the project settings put into action. That's also where
+ *   the editor node is created, if relevant.
+ *   start() does it own argument parsing for a subset of the command line arguments described
+ *   in help, it's a bit messy and should be globalized with the setup() parsing somehow.
+
+/* Upstream lines 1035-1068 */
+Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_phase) {
+	GodotProfileZone("setup");
+	Thread::make_main_thread();
+	set_current_thread_safe_for_nodes(true);
+
+	OS::get_singleton()->initialize();
+
+	CoreGlobals::print_ready = true;
+
+#if !defined(OVERRIDE_PATH_ENABLED) && !defined(TOOLS_ENABLED)
+	String old_cwd = OS::get_singleton()->get_cwd();
+#if defined(MACOS_ENABLED) || defined(APPLE_EMBEDDED_ENABLED)
+	String new_cwd = OS::get_singleton()->get_bundle_resource_dir();
+	if (new_cwd.is_empty() || !new_cwd.is_absolute_path()) {
+		new_cwd = OS::get_singleton()->get_executable_path().get_base_dir();
+	}
+#else
+	String new_cwd = OS::get_singleton()->get_executable_path().get_base_dir();
+#endif
+	if (!new_cwd.is_empty()) {
+		OS::get_singleton()->set_cwd(new_cwd);
+	}
+#endif
+
+	// Benchmark tracking must be done after `OS::get_singleton()->initialize()` as on some
+	// platforms, it's used to set up the time utilities.
+	OS::get_singleton()->benchmark_begin_measure("Startup", "Main::Setup");
+
+	engine = memnew(Engine);
+
+	MAIN_PRINT("Main: Initialize CORE");
+
+	register_core_types();
+	register_core_driver_types();
+
+/* Upstream lines 1768-1785 */
+		} else if (arg == "--path") { // set path of project to start or edit
+#if defined(OVERRIDE_PATH_ENABLED)
+			if (N) {
+				String p = N->get();
+				if (OS::get_singleton()->set_cwd(p) != OK) {
+					OS::get_singleton()->print("Invalid project path specified: \"%s\", aborting.\n", p.utf8().get_data());
+					goto error;
+				}
+				N = N->next();
+			} else {
+				OS::get_singleton()->print("Missing relative or absolute path, aborting.\n");
+				goto error;
+			}
+#else
+			ERR_PRINT(
+					"`--path` was specified on the command line, but this Godot binary was compiled without support for path overrides. Aborting.\n"
+					"To be able to use it, use the `disable_path_overrides=no` SCons option when compiling Godot.\n");
+			goto error;
+
+/* Upstream lines 2069-2073 */
+		} else if (arg == "--" || arg == "++") {
+			adding_user_args = true;
+		} else {
+			main_args.push_back(arg);
+		}
+
+/* Upstream lines 2106-2108 */
+	OS::get_singleton()->_in_editor = editor;
+	if (globals->setup(project_path, main_pack, false, editor) == OK) {
+#ifdef TOOLS_ENABLED

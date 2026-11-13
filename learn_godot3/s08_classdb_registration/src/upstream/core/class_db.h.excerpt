@@ -1,0 +1,25 @@
+/* Godot 3 source excerpts.
+/* Upstream: engine/godot-3.6/core/class_db.h
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 165-181 */
+	template <class T>
+	static void _add_class() {
+		_add_class2(T::get_class_static(), T::get_parent_class_static());
+	}
+
+	template <class T>
+	static void register_class() {
+		GLOBAL_LOCK_FUNCTION;
+		static_assert(TypesAreSame<typename T::self_type, T>::value, "Class not declared properly, please use GDCLASS.");
+		T::initialize_class();
+		ClassInfo *t = classes.getptr(T::get_class_static());
+		ERR_FAIL_COND(!t);
+		t->creation_func = &creator<T>;
+		t->exposed = true;
+		t->class_ptr = T::get_class_ptr_static();
+		T::register_custom_data_to_otdb();
+	}

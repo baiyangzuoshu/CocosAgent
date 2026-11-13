@@ -36,3 +36,17 @@ godot --path .
 ## 简化与边界
 
 实验只检查内置 Node2D，不覆盖 GDExtension 类创建回调、全局脚本类的加载分支、编辑器类型或抽象类实例化失败路径。Godot 4.7 使用 `can_instantiate()` 和 `instantiate()`；Godot 3 的 `can_instance()` / `instance()` 命名不沿用到本代。本课依据静态源码，尚未运行实验。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [core_bind.cpp](src/upstream/core/core_bind.cpp.excerpt) | godot-4.7/core/core_bind.cpp | 1599-1623 |
+| [class_db.cpp](src/upstream/core/object/class_db.cpp.excerpt) | godot-4.7/core/object/class_db.cpp | 525-528, 842-865 |
+| [class_db.h](src/upstream/core/object/class_db.h.excerpt) | godot-4.7/core/object/class_db.h | 244-257 |
+| [object.cpp](src/upstream/core/object/object.cpp.excerpt) | godot-4.7/core/object/object.cpp | 1837-1839 |
+| [node_2d.cpp](src/upstream/scene/2d/node_2d.cpp.excerpt) | godot-4.7/scene/2d/node_2d.cpp | 461-504 |
+| [node_2d.h](src/upstream/scene/2d/node_2d.h.excerpt) | godot-4.7/scene/2d/node_2d.h | 35-36 |
+| [register_scene_types.cpp](src/upstream/scene/register_scene_types.cpp.excerpt) | godot-4.7/scene/register_scene_types.cpp | 390-442 |

@@ -31,3 +31,14 @@ godot --path .
 ## 简化与边界
 
 不演示 `WeakRef`、引用循环、脚本实例绑定计数或多线程析构。Godot 3.6 使用 `Reference`、`ObjectID`、`ClassDB` 与 GDScript `free()` 虚方法；本课尚未运行。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [object.cpp](src/upstream/core/object.cpp.excerpt) | godot-3.6/core/object.cpp | 388-395, 1747-1747, 1931-1952 |
+| [object.h](src/upstream/core/object.h.excerpt) | godot-3.6/core/object.h | 604-604 |
+| [reference.cpp](src/upstream/core/reference.cpp.excerpt) | godot-3.6/core/reference.cpp | 57-96 |
+| [reference.h](src/upstream/core/reference.h.excerpt) | godot-3.6/core/reference.h | 252-273 |

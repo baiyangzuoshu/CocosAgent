@@ -1,0 +1,12 @@
+/* Godot 2 source excerpts.
+/* Upstream: engine/godot-2.1/core/bind/core_bind.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1020-1023 */
+Dictionary _OS::get_engine_version() const {
+
+	return OS::get_singleton()->get_engine_version();
+}

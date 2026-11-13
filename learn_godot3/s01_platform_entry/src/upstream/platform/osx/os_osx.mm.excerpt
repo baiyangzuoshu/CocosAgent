@@ -1,0 +1,41 @@
+/* Godot 3 source excerpts.
+/* Upstream: engine/godot-3.6/platform/osx/os_osx.mm
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 3442-3474 */
+void OS_OSX::run() {
+	force_quit = false;
+
+	if (!main_loop) {
+		return;
+	}
+
+	main_loop->init();
+
+	if (zoomed) {
+		zoomed = false;
+		set_window_fullscreen(true);
+	}
+
+	CFRunLoopObserverRef pre_wait_observer = CFRunLoopObserverCreate(kCFAllocatorDefault, kCFRunLoopBeforeWaiting, true, 0, &pre_wait_observer_cb, nullptr);
+	CFRunLoopAddObserver(CFRunLoopGetCurrent(), pre_wait_observer, kCFRunLoopCommonModes);
+
+	bool quit = false;
+
+	while (!force_quit && !quit) {
+		@try {
+			process_events(); // get rid of pending events
+			joypad_osx->process_joypads();
+
+			if (Main::iteration()) {
+				quit = true;
+			}
+		} @catch (NSException *exception) {
+			ERR_PRINT("NSException: " + String::utf8([exception reason].UTF8String));
+		}
+	};
+
+	CFRunLoopRemoveObserver(CFRunLoopGetCurrent(), pre_wait_observer, kCFRunLoopCommonModes);

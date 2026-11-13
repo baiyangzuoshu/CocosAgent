@@ -1,0 +1,27 @@
+/* Godot 2 source excerpts.
+/* Upstream: engine/godot-2.1/scene/main/scene_main_loop.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 461-470 */
+void SceneTree::init() {
+
+	//_quit=false;
+	initialized = true;
+	input_handled = false;
+
+	pause = false;
+
+	root->_set_tree(this);
+	MainLoop::init();
+
+/* Upstream lines 1042-1045 */
+		} else {
+			//will need black bars
+			viewport_size = desired_res;
+			screen_size.x = video_mode.y * viewport_aspect;
+
+/* Upstream lines 1592-1592 */
+	ObjectTypeDB::bind_method(_MD("get_current_scene:Node"), &SceneTree::get_current_scene);

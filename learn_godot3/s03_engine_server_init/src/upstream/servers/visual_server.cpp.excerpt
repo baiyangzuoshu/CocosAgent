@@ -1,0 +1,9 @@
+/* Godot 3 source excerpts.
+/* Upstream: engine/godot-3.6/servers/visual_server.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 2286-2286 */
+	ClassDB::bind_method(D_METHOD("get_render_info", "info"), &VisualServer::get_render_info);

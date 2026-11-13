@@ -35,3 +35,15 @@ godot -path .
 ## 简化与边界
 
 本课只追踪 macOS 桌面入口。Android、Web、Windows 等平台拥有不同的启动适配层，不能把这里的 `main()` 实现套到所有平台。`main.xml` 按 Godot 1.1 的 XML `PackedScene` 格式手工缩减；本课未使用旧版引擎运行验证，实际运行前请使用 Godot 1.1 工具。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-1.1/main/main.cpp | 176-185, 880-880 |
+| [godot_main_osx.mm](src/upstream/platform/osx/godot_main_osx.mm.excerpt) | godot-1.1/platform/osx/godot_main_osx.mm | 37-85 |
+| [os_osx.mm](src/upstream/platform/osx/os_osx.mm.excerpt) | godot-1.1/platform/osx/os_osx.mm | 1513-1540 |
+| [node.cpp](src/upstream/scene/main/node.cpp.excerpt) | godot-1.1/scene/main/node.cpp | 1675-1695 |
+| [scene_main_loop.cpp](src/upstream/scene/main/scene_main_loop.cpp.excerpt) | godot-1.1/scene/main/scene_main_loop.cpp | 465-478 |

@@ -1,0 +1,71 @@
+/* Godot Godot 2.1 source excerpts.
+/* Upstream: engine/godot-2.1/core/variant_op.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 238-300 */
+void Variant::evaluate(const Operator &p_op, const Variant &p_a, const Variant &p_b, Variant &r_ret, bool &r_valid) {
+
+	r_valid = true;
+
+	switch (p_op) {
+
+		case OP_EQUAL: {
+
+			if ((int(p_a.type) * int(p_b.type)) == 0) {
+				//null case is an exception, one of both is null
+				if (p_a.type == p_b.type) //null against null is true
+					_RETURN(true);
+				//only against object is allowed
+				if (p_a.type == Variant::OBJECT) {
+					_RETURN(p_a._get_obj().obj == NULL);
+				} else if (p_b.type == Variant::OBJECT) {
+					_RETURN(p_b._get_obj().obj == NULL);
+				}
+				//otherwise, always false
+				_RETURN(false);
+			}
+
+			switch (p_a.type) {
+
+				case NIL: {
+
+					_RETURN(p_b.type == NIL || (p_b.type == Variant::OBJECT && !p_b._get_obj().obj));
+				} break;
+
+					DEFAULT_OP_NUM(==, BOOL, _bool);
+					DEFAULT_OP_NUM(==, INT, _int);
+					DEFAULT_OP_NUM(==, REAL, _real);
+					DEFAULT_OP_STR(==, STRING, String);
+					DEFAULT_OP_LOCALMEM(==, VECTOR2, Vector2);
+					DEFAULT_OP_LOCALMEM(==, RECT2, Rect2);
+					DEFAULT_OP_PTRREF(==, MATRIX32, _matrix32);
+					DEFAULT_OP_LOCALMEM(==, VECTOR3, Vector3);
+					DEFAULT_OP_LOCALMEM(==, PLANE, Plane);
+					DEFAULT_OP_LOCALMEM(==, QUAT, Quat);
+					DEFAULT_OP_PTRREF(==, _AABB, _aabb);
+					DEFAULT_OP_PTRREF(==, MATRIX3, _matrix3);
+					DEFAULT_OP_PTRREF(==, TRANSFORM, _transform);
+
+					DEFAULT_OP_LOCALMEM(==, COLOR, Color);
+					DEFAULT_OP_PTRREF(==, IMAGE, _image);
+					DEFAULT_OP_STR(==, NODE_PATH, NodePath);
+					DEFAULT_OP_LOCALMEM(==, _RID, RID);
+				case OBJECT: {
+
+					if (p_b.type == OBJECT)
+						_RETURN((p_a._get_obj().obj == p_b._get_obj().obj));
+					if (p_b.type == NIL)
+						_RETURN(!p_a._get_obj().obj);
+				} break;
+					DEFAULT_OP_PTRREF(==, INPUT_EVENT, _input_event);
+
+				case DICTIONARY: {
+
+					if (p_b.type != DICTIONARY)
+						_RETURN(false);
+
+					const Dictionary *arr_a = reinterpret_cast<const Dictionary *>(p_a._data._mem);
+					const Dictionary *arr_b = reinterpret_cast<const Dictionary *>(p_b._data._mem);

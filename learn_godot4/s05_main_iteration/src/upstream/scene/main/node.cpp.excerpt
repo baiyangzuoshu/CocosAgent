@@ -1,0 +1,27 @@
+/* Godot 4 source excerpts.
+/* Upstream: engine/godot-4.7/scene/main/node.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 90-108 */
+					}
+					if (child_node->is_part_of_edited_scene()) {
+						continue;
+					}
+					AccessibilityServer::get_singleton()->update_add_child(ae, child_node->get_accessibility_element());
+				}
+			}
+		} break;
+
+		case NOTIFICATION_PROCESS: {
+			GDVIRTUAL_CALL(_process, get_process_delta_time());
+		} break;
+
+		case NOTIFICATION_PHYSICS_PROCESS: {
+			GDVIRTUAL_CALL(_physics_process, get_physics_process_delta_time());
+		} break;
+
+		case NOTIFICATION_ENTER_TREE: {
+			ERR_FAIL_NULL(get_viewport());

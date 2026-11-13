@@ -1,0 +1,29 @@
+/* Godot 3 source excerpts.
+/* Upstream: engine/godot-3.6/scene/main/node.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 50-70 */
+int Node::orphan_node_count = 0;
+
+void Node::_notification(int p_notification) {
+	switch (p_notification) {
+		case NOTIFICATION_PROCESS: {
+			if (get_script_instance()) {
+				Variant time = get_process_delta_time();
+				const Variant *ptr[1] = { &time };
+				get_script_instance()->call_multilevel(SceneStringNames::get_singleton()->_process, ptr, 1);
+			}
+		} break;
+		case NOTIFICATION_PHYSICS_PROCESS: {
+			if (get_script_instance()) {
+				Variant time = get_physics_process_delta_time();
+				const Variant *ptr[1] = { &time };
+				get_script_instance()->call_multilevel(SceneStringNames::get_singleton()->_physics_process, ptr, 1);
+			}
+
+		} break;
+		case NOTIFICATION_ENTER_TREE: {
+			ERR_FAIL_COND(!get_viewport());

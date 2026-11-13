@@ -1,0 +1,82 @@
+/* Godot Godot 1.1 source excerpts.
+/* Upstream: engine/godot-1.1/core/variant.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 197-270 */
+bool Variant::can_convert(Variant::Type p_type_from,Variant::Type p_type_to) {
+
+	if (p_type_from==p_type_to)
+		return true;
+	if (p_type_to==NIL && p_type_from!=NIL) //nil can convert to anything
+		return true;
+
+	if (p_type_from == NIL) {
+		return (p_type_to == OBJECT);
+	};
+
+	const Type *valid_types=NULL;
+	const Type *invalid_types=NULL;
+
+	switch(p_type_to) {
+		case BOOL: {
+
+			static const Type valid[]={
+				INT,
+				REAL,
+				STRING,
+				NIL,
+			};
+
+			valid_types=valid;
+		} break;
+		case INT: {
+
+			static const Type valid[]={
+				BOOL,
+				REAL,
+				STRING,
+				NIL,
+			};
+
+			valid_types=valid;
+
+		} break;
+		case REAL: {
+
+			static const Type valid[]={
+				BOOL,
+				INT,
+				STRING,
+				NIL,
+			};
+
+			valid_types=valid;
+
+		} break;
+		case STRING: {
+
+
+			static const Type invalid[]={
+				OBJECT,
+				IMAGE,
+				NIL
+			};
+
+			invalid_types=invalid;
+		} break;
+		case MATRIX32: {
+
+
+			static const Type valid[]={
+				TRANSFORM,
+				NIL
+			};
+
+			valid_types=valid;
+		} break;
+		case QUAT: {
+
+			static const Type valid[]={

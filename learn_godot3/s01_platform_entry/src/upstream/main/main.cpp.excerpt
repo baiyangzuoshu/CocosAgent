@@ -1,0 +1,31 @@
+/* Godot 3 source excerpts.
+/* Upstream: engine/godot-3.6/main/main.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 418-437 */
+Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_phase) {
+#if defined(DEBUG_ENABLED) && !defined(NO_THREADS)
+	check_lockless_atomics();
+#endif
+
+	RID_OwnerBase::init_rid();
+
+	OS::get_singleton()->initialize_core();
+
+	// Benchmark tracking must be done after `OS::get_singleton()->initialize_core()` as on some
+	// platforms, it's used to set up the time utilities.
+	OS::get_singleton()->benchmark_begin_measure("startup_begin");
+
+	engine = memnew(Engine);
+
+	MAIN_PRINT("Main: Initialize CORE");
+	OS::get_singleton()->benchmark_begin_measure("core");
+
+	register_core_types();
+	register_core_driver_types();
+
+/* Upstream lines 1682-1682 */
+bool Main::start() {

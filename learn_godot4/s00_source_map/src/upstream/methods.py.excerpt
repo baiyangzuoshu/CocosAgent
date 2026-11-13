@@ -1,0 +1,37 @@
+# Godot 4 source excerpts.
+# Upstream: engine/godot-4.7/methods.py
+# Original line ranges are copied from the local source snapshot.
+# Study excerpt; not a standalone compilation unit.
+# Copyright and license notice: Godot Engine; see ../../../SOURCE_LICENSE.txt.
+
+# Upstream lines 136-165
+def get_version_info(module_version_string="", silent=False):
+    build_name = "custom_build"
+    if os.getenv("BUILD_NAME") is not None:
+        build_name = str(os.getenv("BUILD_NAME"))
+        if not silent:
+            print_info(f"Using custom build name: '{build_name}'.")
+
+    import version
+
+    version_info = {
+        "short_name": str(version.short_name),
+        "name": str(version.name),
+        "major": int(version.major),
+        "minor": int(version.minor),
+        "patch": int(version.patch),
+        "status": str(version.status),
+        "build": str(build_name),
+        "module_config": str(version.module_config) + module_version_string,
+        "website": str(version.website),
+        "docs_branch": str(version.docs),
+    }
+
+    # For dev snapshots (alpha, beta, RC, etc.) we do not commit status change to Git,
+    # so this define provides a way to override it without having to modify the source.
+    if os.getenv("GODOT_VERSION_STATUS") is not None:
+        version_info["status"] = str(os.getenv("GODOT_VERSION_STATUS"))
+        if not silent:
+            print_info(f"Using version status '{version_info['status']}', overriding the original '{version.status}'.")
+
+    return version_info

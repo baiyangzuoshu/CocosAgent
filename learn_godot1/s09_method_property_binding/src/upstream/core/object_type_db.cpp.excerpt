@@ -1,0 +1,73 @@
+/* Godot Godot 1.1 source excerpts.
+/* Upstream: engine/godot-1.1/core/object_type_db.cpp
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 637-701 */
+bool ObjectTypeDB::set_property(Object* p_object,const StringName& p_property, const Variant& p_value) {
+
+
+	TypeInfo *type=types.getptr(p_object->get_type_name());
+	TypeInfo *check=type;
+	while(check) {
+		const PropertySetGet *psg = check->property_setget.getptr(p_property);
+		if (psg) {
+
+			if (!psg->setter)
+				return true; //return true but do nothing
+
+			if (psg->index>=0) {
+				Variant index=psg->index;
+				const Variant* arg[2]={&index,&p_value};
+				Variant::CallError ce;
+				p_object->call(psg->setter,arg,2,ce);
+
+			} else {
+				const Variant* arg[1]={&p_value};
+				Variant::CallError ce;
+				if (psg->_setptr) {
+					psg->_setptr->call(p_object,arg,1,ce);
+				} else {
+					p_object->call(psg->setter,arg,1,ce);
+				}
+			}
+			return true;
+		}
+
+		check=check->inherits_ptr;
+	}
+
+	return false;
+}
+bool ObjectTypeDB::get_property(Object* p_object,const StringName& p_property, Variant& r_value) {
+
+	TypeInfo *type=types.getptr(p_object->get_type_name());
+	TypeInfo *check=type;
+	while(check) {
+		const PropertySetGet *psg = check->property_setget.getptr(p_property);
+		if (psg) {
+			if (!psg->getter)
+				return true; //return true but do nothing
+
+			if (psg->index>=0) {
+				Variant index=psg->index;
+				const Variant* arg[1]={&index};
+				Variant::CallError ce;
+				r_value = p_object->call(psg->getter,arg,1,ce);
+
+			} else {
+
+				Variant::CallError ce;
+				if (psg->_getptr) {
+
+					r_value = psg->_getptr->call(p_object,NULL,0,ce);
+				} else {
+					r_value = p_object->call(psg->getter,NULL,0,ce);
+				}
+			}
+			return true;
+		}
+
+		const int *c =check->constant_map.getptr(p_property);

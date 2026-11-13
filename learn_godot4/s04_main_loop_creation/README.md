@@ -36,3 +36,13 @@ godot
 ## 简化与边界
 
 实验使用当前目录中的项目配置和默认 `SceneTree`，不传命令行覆盖路径，不处理脚本型 MainLoop、编辑器或自定义运行工具。Godot 4.7 的 `instantiate()`、ClassDB 和 SceneTree 初始化顺序不外推到旧代。本课依据静态源码，尚未运行。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-4.7/main/main.cpp | 4013-4013, 4335-4346, 4360-4438, 4753-4768 |
+| [node.cpp](src/upstream/scene/main/node.cpp.excerpt) | godot-4.7/scene/main/node.cpp | 3868-3868 |
+| [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp.excerpt) | godot-4.7/scene/main/scene_tree.cpp | 586-591, 1954-1954 |

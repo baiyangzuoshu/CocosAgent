@@ -1,0 +1,10 @@
+/* Godot 4 source excerpts.
+/* Upstream: engine/godot-4.7/platform/macos/godot_application_delegate.mm
+/* Original line ranges are copied from the local source snapshot.
+/* Study excerpt; not a standalone compilation unit.
+/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 142-143 */
+- (void)applicationDidFinishLaunching:(NSNotification *)notification {
+	os_mac->start_main();

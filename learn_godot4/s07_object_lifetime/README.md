@@ -32,3 +32,13 @@ godot --path .
 ## 简化与边界
 
 不直接操作 `ObjectID` 位域，不演示 `WeakRef`、引用循环或多线程销毁。Godot 4.7 将 `Reference` 更名为 `RefCounted`，并使用带 validator 的 ObjectDB 槽位；本课未运行。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [object.cpp](src/upstream/core/object/object.cpp.excerpt) | godot-4.7/core/object/object.cpp | 171-185, 1920-1920, 2284-2295, 2451-2492 |
+| [ref_counted.cpp](src/upstream/core/object/ref_counted.cpp.excerpt) | godot-4.7/core/object/ref_counted.cpp | 74-126 |
+| [ref_counted.h](src/upstream/core/object/ref_counted.h.excerpt) | godot-4.7/core/object/ref_counted.h | 199-228 |

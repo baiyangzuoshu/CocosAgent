@@ -52,3 +52,17 @@
 ## 简化与边界
 
 本课不编译 Godot 引擎，不检查二进制哈希或构建提交。GDScript 只观察本机引擎暴露的版本信息；C++ 调用链以 `engine/godot-3.6/` 快照为准。
+
+## 本课 C++ 源码摘录
+
+课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+
+| 课内摘录 | Godot 源文件 | 上游行段 |
+| --- | --- | --- |
+| [core_bind.cpp](src/upstream/core/bind/core_bind.cpp.excerpt) | godot-3.6/core/bind/core_bind.cpp | 3212-3214 |
+| [engine.cpp](src/upstream/core/engine.cpp.excerpt) | godot-3.6/core/engine.cpp | 89-109 |
+| [register_core_types.cpp](src/upstream/core/register_core_types.cpp.excerpt) | godot-3.6/core/register_core_types.cpp | 261-274 |
+| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-3.6/main/main.cpp | 418-418 |
+| [methods.py](src/upstream/methods.py.excerpt) | godot-3.6/methods.py | 235-252 |
+| [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp.excerpt) | godot-3.6/scene/main/scene_tree.cpp | 578-578 |
+| [version.py](src/upstream/version.py.excerpt) | godot-3.6/version.py | 1-10 |
