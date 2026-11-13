@@ -251,6 +251,15 @@ learn_2.4cocoscreator/
 
 ## Web 资源导入与打包（第 89–94 课）
 
+这 6 课是一条连续的数据链，不是 6 个互不相关的名词：
+
+~~~text
+build 文件地图 → .meta 资源身份 → 场景依赖 → AssetManager 加载
+                                     → Bundle 查索引和 URL → 浏览器取文件
+~~~
+
+建议按顺序学：先在第 89 课认文件，再用第 90 课看 UUID 从哪里来；第 91 课把引用连成依赖；第 92 课看谁负责下载和创建 Asset；第 93 课手算地址；第 94 课把整条链跑一遍。每课 README 都列了“从哪个真实文件开始看”和示例省略了什么。
+
 - [第 89 课：Web 构建产物地图](s89_web_build_output_map/README.md)
 - [第 90 课：`.meta` 与资源身份](s90_meta_asset_identity/README.md)
 - [第 91 课：Asset 引用与依赖图](s91_asset_dependency_graph/README.md)

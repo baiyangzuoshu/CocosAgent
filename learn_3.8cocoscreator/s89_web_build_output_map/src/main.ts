@@ -1,4 +1,4 @@
-import { currentWebBuild } from "./cocos/asset/asset-manager/BundleOutputMap.ts";
+import { currentWebBuild } from "./example-build.ts";
 
 const output = document.querySelector<HTMLPreElement>("#log");
 if (!output) throw new Error("找不到 #log");

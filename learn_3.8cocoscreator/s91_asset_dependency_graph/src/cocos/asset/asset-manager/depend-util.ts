@@ -3,6 +3,22 @@ export interface DependencyEdge {
   dependency: string;
 }
 
+export function collectUuidReferences(value: unknown): string[] {
+  const references = new Set<string>();
+  const visit = (current: unknown): void => {
+    if (Array.isArray(current)) {
+      current.forEach(visit);
+      return;
+    }
+    if (!current || typeof current !== "object") return;
+    const record = current as Record<string, unknown>;
+    if (typeof record.__uuid__ === "string") references.add(record.__uuid__);
+    Object.values(record).forEach(visit);
+  };
+  visit(value);
+  return [...references];
+}
+
 export class DependencyGraph {
   private readonly outgoing = new Map<string, string[]>();
 

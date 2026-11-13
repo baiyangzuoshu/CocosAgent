@@ -2,6 +2,26 @@
 
 本专题从工程资源出发，沿 `.meta` 身份、编辑器构建结果、Bundle 配置，追到 Web 运行时的 `Asset` 与 `AssetManager`。目标是理解职责和数据如何交接，不复刻闭源 Builder，也不把构建产物误当作引擎源码。
 
+## 先看整条链
+
+~~~text
+源文件 + .meta
+  → 编辑器识别主资源和子资源 UUID
+  → 场景/Prefab 保存 UUID 引用
+  → 构建输出 Bundle config、import pack、native 文件
+  → AssetManager 用 Config 把请求转成文件 URL
+  → 浏览器取得文件，解析依赖，创建并缓存 Asset
+~~~
+
+学习时把这四个词分开：
+
+- **UUID：** 资源身份，不是 URL。
+- **URL：** 浏览器请求的文件地址。
+- **文件：** import pack 或 native 数据；一个 pack 可能含多个资源。
+- **Asset：** 解析后在运行时使用和缓存的对象。
+
+所以一个文件可以装多个 Asset；一个 Asset 也可能依赖多个文件。课程从这条区别展开。
+
 ## 版本与证据边界
 
 | 项目 | 样例/编辑器版本 | 源码基线 | Web 输出 |
@@ -33,7 +53,7 @@
 | 93 | Bundle 索引与文件 URL | `paths`/UUID/版本/扩展名如何定位 `import` 或 `native` 文件？打包配置如何影响输出结构？ | 分别实现本版 Config 和 URL 组合模型；用真实 Bundle 配置与文件名核对，包含 3.8 的配置差异。 |
 | 94 | 从场景到浏览器资源请求 | 首场景中的一项资源如何从 UUID 走到 Network 请求、Asset 对象和依赖缓存？ | 分别完成 2.4、3.8 的端到端追踪；记录浏览器 Network/Console 和场景结果，区分静态文件与运行时证据。 |
 
-每课都在 `learn_2.4cocoscreator/` 与 `learn_3.8cocoscreator/` 下各有独立 README 和完整 TS 代码快照。第 89–94 课按顺序增加能力；源码位置、观察结果和简化范围分别按版本记录。12 份课程均已通过 `deno task check` 与 `deno task build`。课程代码的输出是职责模型；Creator 工程的实际 Network 请求仍须按第 94 课说明单独观察。
+每课都在 `learn_2.4cocoscreator/` 与 `learn_3.8cocoscreator/` 下各有独立 README 和完整 TS 代码快照。第 89–94 课按顺序增加能力；源码位置、观察结果和简化范围分别按版本记录。课程代码的输出是职责模型；Creator 工程的实际 Network 请求按第 94 课说明单独观察。
 
 ## 源码对照入口
 

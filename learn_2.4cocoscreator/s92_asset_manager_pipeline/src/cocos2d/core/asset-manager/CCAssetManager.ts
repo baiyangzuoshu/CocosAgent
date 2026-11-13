@@ -1,28 +1,36 @@
-import { type AssetFile, Fetcher } from "./fetch.ts";
+import type { AssetFile } from "./fetch.ts";
 import { Loader } from "./load.ts";
 import { Pipeline } from "./pipeline.ts";
 import { CCAsset } from "../assets/CCAsset.ts";
 
 export class CCAssetManager {
-  readonly pipeline = new Pipeline(["preprocess", "load"]);
-  readonly fetchPipeline = new Pipeline(["preprocess", "fetch"]);
-  readonly transformPipeline = new Pipeline(["parse", "combine"]);
+  readonly pipeline: Pipeline;
+  readonly fetchPipeline: Pipeline;
   readonly assets = new Map<string, CCAsset>();
   readonly downloaded = new Map<string, AssetFile>();
+  private readonly loader: Loader;
 
-  constructor(private readonly files: Map<string, AssetFile>, readonly trace: string[]) {}
+  constructor(files: Map<string, AssetFile>, readonly trace: string[]) {
+    this.loader = new Loader(files, this.downloaded, this.assets, trace);
+    this.pipeline = new Pipeline("load", [
+      { name: "preprocess", run: (task) => this.loader.preprocess(task) },
+      { name: "load", run: (task) => this.loader.load(task) },
+    ], trace);
+    this.fetchPipeline = new Pipeline("preload", [
+      { name: "preprocess", run: (task) => this.loader.preprocess(task) },
+      { name: "fetch", run: (task) => this.loader.fetch(task) },
+    ], trace);
+  }
 
   async preloadAny(uuid: string): Promise<AssetFile> {
-    this.trace.push(`pipeline: ${this.fetchPipeline.describe()}`);
-    this.trace.push(`preprocess ${uuid}`);
-    const file = await new Fetcher(this.files, this.trace).fetch(uuid);
-    this.downloaded.set(uuid, file);
-    return file;
+    const result = await this.fetchPipeline.run(uuid);
+    if (!result.file) throw new Error(`预加载没有返回文件: ${uuid}`);
+    return result.file;
   }
 
   async loadAny(uuid: string): Promise<CCAsset> {
-    this.trace.push(`pipeline: ${this.pipeline.describe()}`);
-    this.trace.push(`preprocess ${uuid}`);
-    return new Loader(this.files, this.downloaded, this.assets, this.trace).load(uuid);
+    const result = await this.pipeline.run(uuid);
+    if (!result.asset) throw new Error(`加载没有返回 Asset: ${uuid}`);
+    return result.asset;
   }
 }

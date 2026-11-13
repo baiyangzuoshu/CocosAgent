@@ -1,9 +1,10 @@
 export class CCAsset {
-  loaded = true;
+  loaded = false;
 
   constructor(readonly _uuid: string, readonly data: Record<string, unknown>) {}
 
   onLoad(): void {
-    // 资源加载完成钩子；不是 Component.onLoad。
+    // Asset 加载完成钩子；不是 Component.onLoad。
+    this.loaded = true;
   }
 }

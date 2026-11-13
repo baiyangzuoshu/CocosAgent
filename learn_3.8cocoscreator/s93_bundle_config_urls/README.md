@@ -1,27 +1,58 @@
-# 第 93 课：Bundle 索引与文件 URL
+# 第 93 课：Bundle Config 如何找到文件
 
-**本课问题：** Creator 3.8 如何把 UUID 索引、pack 和 native 文件转成地址？
+**本课目标：** 从首场景名出发，沿 Config 索引找到 UUID、pack 和最终 URL；再把 Mesh 子资源映射到 native 文件。
 
-## 本课内容
+## 先认 Config 里的几张表
 
-使用当前主 Bundle 配置中的 scene 索引和 pack 表，得到实际序列化包地址；再把 FBX Mesh 的压缩 UUID 解码成子资源 UUID，并定位实际 `.bin` 文件。3.8 的 UUID 解码会保留 `@子 ID` 后缀。
+| 字段 | 作用 |
+| --- | --- |
+| scenes | 场景名 → uuids 数组位置 |
+| uuids | 位置 → UUID；发布配置里的 UUID 可能被压缩 |
+| paths | 可寻址资源路径 → UUID 位置和类型 |
+| packs | pack UUID → 它包含的 UUID |
+| versions | 某些构建给资源或 pack 的版本哈希 |
 
-## 源码位置
+3.8 的 Config 还处理 extensionMap、redirect 等字段。本课先走当前构建需要的最短路径。
 
-- `engine/3.8.7engine/cocos/asset/asset-manager/config.ts:244-268`：Config 初始化索引与扩展名。
-- `engine/3.8.7engine/cocos/asset/asset-manager/config.ts:272-328`：路径与场景查找。
-- `engine/3.8.7engine/cocos/asset/asset-manager/url-transformer.ts:190-224`：选择 import/native 基址并组合 URL。
-- `engine/3.8.7engine/cocos/core/utils/decode-uuid.ts`：解码 UUID 并保留子资源后缀。
-- 实际文件位于 `3.8NewProject/build/web-mobile/assets/`；这里仅记录当前构建证据。
+## 手算首场景地址
 
-## 独立代码
+1. settings.json 的 launchScene 是 db://assets/scene/main.scene。
+2. main config 的 scenes 把它映射到位置 4。
+3. uuids[4] 是压缩 UUID；解码后得到场景 UUID。
+4. packs 中 0693a7d89 包含位置 4，因此场景数据在这个 pack。
+5. 当前 main Bundle 的 import 文件没有版本后缀。
 
-- [UUID 解码](src/cocos/core/utils/decode-uuid.ts)
-- [Bundle Config](src/cocos/asset/asset-manager/config.ts)
-- [URL 转换](src/cocos/asset/asset-manager/url-transformer.ts)
-- [浏览器运行入口](src/main.ts)
+所以地址是：
 
-## 运行
+~~~text
+/assets/main/import/06/0693a7d89.json
+~~~
+
+## 手算 Mesh native 地址
+
+Prefab 的 _mesh 字段引用 compressedUUID@18751。解码器先还原 UUID 主体，再原样保留 @18751 子资源 ID。选 nativeBase，目录取完整资源 ID 的前两位，扩展名为 .bin。
+
+~~~text
+/assets/main/native/e3/e3553cad-2f15-4293-859a-8f43c780f289@18751.bin
+~~~
+
+## URL 的拼法
+
+~~~text
+Bundle 基址 / import 或 native / UUID 前两位 / UUID + 可选版本 + 扩展名
+~~~
+
+pack 路径用 pack UUID；单资源路径用 Asset UUID。两者不要混用。当前构建 versions 为空，因此 main Bundle 的这些地址没有版本后缀。
+
+## 对照代码和源码
+
+- Config.getSceneIndex / getUuid / getPack：查场景索引、解 UUID、查 pack。
+- decodeUuid：恢复 UUID，并保留 @ 子资源 ID。
+- url-transformer.combine / packPath：分别拼单资源和 pack URL。
+- 本课的构建数据摘录在 `src/example-config.ts`，`src/main.ts` 只负责按步骤查询并显示结果。
+- 引擎源码：engine/3.8.7engine/cocos/asset/asset-manager/config.ts、url-transformer.ts、core/utils/decode-uuid.ts。
+
+运行后按“场景名 → 索引 → UUID → pack → URL”顺序逐行核对。不要一开始就把压缩 UUID、完整 UUID、pack UUID 当成同一字符串。
 
 ~~~sh
 deno task check
@@ -29,4 +60,6 @@ deno task build
 deno task serve
 ~~~
 
-示例只读取所需的当前配置片段，不重建 Creator Bundle。
+## 本课边界
+
+代码只建当前样例需要的 Config 字段，不实现全部 Bundle 重定向、扩展名、Cconb 和 URL 覆盖规则。下一课把地址映射、依赖图和缓存串起来。
