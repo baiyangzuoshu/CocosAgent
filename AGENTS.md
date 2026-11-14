@@ -8,7 +8,7 @@
 | --- | --- |
 | 修改 Cocos Creator 课程 | 先读 [课程总纲](docs/cocos-engine-course-master-outline.md) 和对应课程 `README.md`；再读目标课程及相邻课程，保持版本和课程结构一致。 |
 | 研究 Creator 引擎源码 | 先确认版本，再读 `engine/2.4.15engine/` 或 `engine/3.8.7engine/` 中对应源码，以及 `docs/2.x/` 或 `docs/3.x/` 的相关专题。 |
-| 修改或研究 Godot 课程 | 先读 `learn_godot/README.md` 和 `learn_godot/课程大纲.md`，再按 `engine/godot-master/version.py` 确认快照版本并核对对应 C++ 源码。 |
+| 修改或研究 Godot 课程 | 先读对应的 `learn_godot<主版本>/README.md` 和 `课程大纲.md`，再核对配套 `engine/godot-<版本>/version.py` 与 C++ 源码；跨版本比较分别建立各版本事实。 |
 | 修改或研究 Cocos2d-x 课程 | 先读对应的 `learn_cocos2d-<版本>/README.md`，再核对 `engine/cocos2d-x-<版本>/` 和 `docs/cocos2d-x/` 中的资料。 |
 | 跨 Creator / Cocos2d-x 版本比较 | 先分别建立各版本的源码事实；再只读 `docs/comparisons/` 中与当前主题对应的资料。 |
 | C/C++ 或 OpenGL 练习 | 先读 `learn_cpp/README.md` 或 `learn_opengl/README.md`，按课程说明确认本机工具链和依赖。 |
@@ -20,7 +20,7 @@
 ## 仓库级约束
 
 - **范围：** 只修改本次任务涉及的课程、资料或源码。不要顺手扩展到其他课程系列；跨版本同步仅在任务明确要求时进行。
-- **版本：** 以课程 README 和本地快照标注为准。Creator 快照为 2.4.15 和 3.8.7；Godot 快照版本以 `engine/godot-master/version.py` 为准（当前标记为 4.8.0 beta）；Cocos2d-x 按 1.x–4.x 分目录保存。先确认版本再引用 API 或描述行为，不把一个版本的结论外推到其他版本。
+- **版本：** 以课程 README 和本地快照标注为准。Creator 快照为 2.4.15 和 3.8.7；Godot 快照为 1.1、2.1.7-rc、3.6.4-rc、4.7.3-rc；Cocos2d-x 按 1.x–4.x 分目录保存。先确认版本再引用 API 或描述行为，不把一个版本的结论外推到其他版本。
 - **源码与证据：** `engine/` 中的上游快照是课程研究依据。除非任务明确要求修改引擎源码，否则不要改动快照。说明结论时区分官方文档、静态源码、构建/测试、编辑器和目标运行时证据；标明版本、平台及尚未验证的部分。
 - **课程示例：** 遵循对应课程自己的目录结构与运行方式。Creator 资源、场景和 Prefab 保留编辑器生成的 `.meta`、UUID 与引用；不要把 `library/`、`temp/`、`local/`、`build/` 等缓存或产物当作源文件。
 - **外部准备：** 构建或运行前先核对课程要求的工具链、SDK、依赖和子模块。下载依赖、安装工具或修改全局环境前先取得用户授权。

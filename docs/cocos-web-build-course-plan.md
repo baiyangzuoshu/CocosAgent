@@ -49,7 +49,7 @@
 | 89 | Web 构建产物地图 | 页面入口、引擎脚本、项目脚本、Bundle 配置和资源文件分别在哪里？ | 分别为 2.4/3.8 写一份输出清单模型；读取两份现有 `build/web-mobile/` 和启动设置。 |
 | 90 | `.meta`、Asset 身份与导入设置 | 源文件、主 UUID、子资源 UUID、导入器设置和场景引用如何对应？Bundle 配置在两版中保存在哪里？ | 分别建模 2.4 贴图子资源与 3.8 FBX 子资源；对照各自 `.meta`、场景文件和 3.8 项目 Bundle 配置。 |
 | 91 | `Asset`、序列化引用与依赖 | 场景中的 UUID 怎样变成资源对象和依赖边？`import` 数据与 `native` 文件各是什么？ | 分别模拟一个场景到 Prefab/贴图子资源的引用图，并映射实际 Bundle 输出。 |
-| 92 | `AssetManager` 加载管线 | `Bundle.load` 如何经过请求预处理、查配置、下载、解析、反序列化、依赖加载和缓存？预加载完成了什么？ | 按本版源码职责搭建精简的 `preprocess → load` 管线，明确 preload 只走下载管线。 |
+| 92 | `AssetManager` 加载管线 | `Bundle.load` 如何经过请求预处理、查配置、下载、解析、反序列化、依赖加载和缓存？预加载完成了什么？ | 按本版源码职责搭建精简管线：preload 走 `preprocess → fetch` 并递归预取依赖、不创建 Asset；load 走 `preprocess → load`，解析依赖并创建缓存 Asset。 |
 | 93 | Bundle 索引与文件 URL | `paths`/UUID/版本/扩展名如何定位 `import` 或 `native` 文件？打包配置如何影响输出结构？ | 分别实现本版 Config 和 URL 组合模型；用真实 Bundle 配置与文件名核对，包含 3.8 的配置差异。 |
 | 94 | 从场景到浏览器资源请求 | 首场景中的一项资源如何从 UUID 走到 Network 请求、Asset 对象和依赖缓存？ | 分别完成 2.4、3.8 的端到端追踪；记录浏览器 Network/Console 和场景结果，区分静态文件与运行时证据。 |
 
