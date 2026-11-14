@@ -1,66 +1,59 @@
-# 第 92 课：AssetManager 加载管线
+# 第 92 课：AssetManager 下载什么、创建什么
 
-**本课目标：** 读懂 load 与 preload 的区别，并追踪一个 UUID 如何变成可使用的 Asset 对象。
+**本课目标：** 理解 `preload` 和 `load` 的差别，并能区分“文件已下载”和“Asset 对象已创建”。本例继续使用 `SceneAsset → SpriteFrame → Texture2D`。
 
-## 先看两条管线
+## 先记住两种缓存
 
-~~~text
-完整加载：preprocess → load
-                         ├─ 查 Asset 缓存
-                         ├─ 取得文件（可能已下载）
-                         ├─ 解析 import 数据
-                         ├─ 加载依赖
-                         └─ 反序列化、onLoad、写入 Asset 缓存
+| 缓存 | 缓存的东西 | 本课的观察值 |
+| --- | --- | --- |
+| 下载文件缓存 | 浏览器取得的文件内容 | 一个 import pack + 一个 PNG，共 2 个 URL |
+| Asset 缓存 | 解析后可供引擎使用的对象 | SceneAsset、SpriteFrame、Texture2D，共 3 个 UUID |
 
-预加载：  preprocess → fetch
-                         └─ 取得文件，不创建 Asset 对象
-~~~
+为什么文件是 2 个、Asset 是 3 个？SceneAsset 和 SpriteFrame 是两个不同 UUID，但本次构建把它们打进同一个 import pack；Texture2D 的 PNG 是另一个文件。文件和 Asset 不是一回事。
 
-这里的 preprocess 是整理请求；fetch 是拿到文件内容；parser.parse(import) 是解析下载的资源数据。它们不是同一件事。第 93 课才会继续讲 UUID、版本如何组成最终 URL。
+## `preload` 只准备数据，`load` 才创建对象
 
-## 用本课样例走一次
+课程代码把两条管线写在 `src/cocos2d/core/asset-manager/CCAssetManager.ts`：
 
-1. 根资源是 BundleMain 的 label.prefab。
-2. preloadAny 只把根资源文件放进 downloaded 文件缓存。
-3. 此时 assets 里还没有 Prefab 对象，所以“文件已下载”不等于“资源已加载”。
-4. loadAny 进入完整管线，解析 Prefab 数据，发现它依赖 SpriteFrame。
-5. 依赖也完成加载后，才创建 Prefab Asset、调用资源 onLoad 并缓存。
-6. 再次 loadAny 同 UUID，直接复用同一个 Asset 对象。
+```text
+preload: preprocess → fetch
+load:    preprocess → load
+```
 
-## 代码目录各自负责什么
+按页面运行顺序理解：
 
-| 文件 | 职责 |
-| --- | --- |
-| CCAssetManager.ts | 选择完整加载或仅下载的管线 |
-| pipeline.ts | 按顺序执行阶段 |
-| fetch.ts | 从课程内存文件表取得文件，模拟下载边界 |
-| parser.ts | 把 import JSON 字符串解析成普通数据对象 |
-| depend-util.ts | 从数据里找出依赖 UUID |
-| deserialize.ts | 把解析数据包装成运行时 Asset |
-| load.ts | 缓存检查、依赖递归、反序列化和 Asset 缓存 |
+1. `src/main.ts` 对场景 UUID 调用 `preloadAny()`。
+2. `preprocess()` 用 UUID 找到本课的 `AssetRecord`，得到类型和 URL。真实 Runtime 会经 Config/URL 转换构造 RequestItem；本课把结果提前写在记录里。
+3. `fetchTree()` 取得 Scene 所在的 import pack。它读取课程样例中摘录的依赖字段，继续确认 SpriteFrame 和 Texture2D 需要准备哪些文件。
+4. Scene 与 SpriteFrame 的 URL 相同，因此文件缓存只取一次；Texture2D 指向 PNG，再取一次。
+5. 此时 `downloaded.size` 是 2，`assets.size` 是 0：只有文件准备好了，还没有 Asset 对象。
+6. `main.ts` 再调用 `loadAny()`。Loader 读取当前 UUID 对应的序列化条目，递归 load 依赖，最后创建并缓存 Texture2D、SpriteFrame、SceneAsset。
+7. 第二次 load 同一个场景 UUID，先命中 Asset 缓存，直接返回之前的 SceneAsset。
 
-`src/example-files.ts` 是输入文件表，`src/main.ts` 只负责先 preload 再 load。阅读时从入口追到 `CCAssetManager.ts`，然后按表里的职责进入具体模块；不要把样例输入误认为 AssetManager 实现。
+页面结果应是：**preload 后 2 个文件 / 0 个 Asset；load 后 2 个文件 / 3 个 Asset；再次 load 复用同一场景对象。**
 
-## 跑代码时观察什么
+## 代码文件按调用顺序读
 
-~~~sh
-deno task check
-deno task build
-deno task serve
-~~~
+1. `src/example-files.ts`：真实 UUID、URL 和依赖的课堂摘录；同时用小 Map 假造 pack 内的资源条目。
+2. `CCAssetManager.ts`：组装 `fetchPipeline` 与 `pipeline`，对外提供 preload/load。
+3. `pipeline.ts`：按顺序调用每个 stage。它传递的 `PipelineTask` 保存 UUID、查到的记录、文件或 Asset。
+4. `load.ts`：`preprocess()` 查记录；`fetchTree()` 递归准备文件；`load()` 读取数据、递归依赖并创建 Asset。
+5. `fetch.ts`：只负责从课堂 Map 取文件并按 URL 去重。
+6. `parser.ts`、`depend-util.ts`、`deserialize.ts`：分别示范读取条目、找依赖、创建对象。
 
-页面先显示 preload 后 Asset 缓存为 false，再显示完整加载得到 Prefab、重复请求复用对象。执行记录中，fetch 在 parser.parse(import) 之前发生，依赖 SpriteFrame 也会被加载。
+`example-files.ts` 不是 Creator 构建文件：真实 pack 的二进制/序列化格式已简化成 `UUID → 字符串`。这是为了让你能看清 Loader 的职责交接；第 94 课会再把它与实际 Web 请求区分开。
 
-本课的 Fetcher 读取内存 Map，不访问真实 HTTP；它只隔离模块职责。真实 Bundle 配置和 URL 在第 93 课看。
+## 对照 Creator 2.4.15 Runtime
 
-## 源码对照
+- [CCAssetManager.js](../../engine/2.4.15engine/cocos2d/core/asset-manager/CCAssetManager.js)：AssetManager 如何组装加载管线。
+- [preprocess.js](../../engine/2.4.15engine/cocos2d/core/asset-manager/preprocess.js) 与 [request-item.js](../../engine/2.4.15engine/cocos2d/core/asset-manager/request-item.js)：UUID 怎样成为带有请求类型和 ID 的 RequestItem。
+- [fetch.js](../../engine/2.4.15engine/cocos2d/core/asset-manager/fetch.js)、[pack-manager.js](../../engine/2.4.15engine/cocos2d/core/asset-manager/pack-manager.js)：文件取得、依赖预取、pack 拆分和文件缓存。
+- [load.js](../../engine/2.4.15engine/cocos2d/core/asset-manager/load.js)：解析、`loadDepends()` 和 Asset 缓存。
 
-- engine/2.4.15engine/cocos2d/core/asset-manager/CCAssetManager.js：pipeline 是 preprocess → load，fetchPipeline 是 preprocess → fetch。
-- engine/2.4.15engine/cocos2d/core/asset-manager/load.js：loadOneAssetPipeline 先取得文件，再解析并处理依赖。
-- 同一文件的 loadDepends 处理依赖，成功后调用 Asset.onLoad 并写缓存。
+真实 Runtime 的文件缓存按 RequestItem.id（UUID 加 `@import`/`@native` 类型）组织；PackManager 会把一个下载到的 pack 拆成多个资源条目。本课为了讲清“下载文件”和“创建 Asset”的区别，按 URL 统计下载文件。两种缓存的键不同，不要把课程 Map 当成 Runtime 缓存实现。
 
-注意：2.4 的 onLoad 是资源加载完成回调，不是组件生命周期课中的 Component.onLoad。
+## 学完后自查
 
-## 本课边界
+为什么 preload 结束时没有 SceneAsset？为什么两个 import UUID 只产生一个文件 URL？用自己的话说出 `preprocess → fetch → parse/dependencies → deserialize/cache` 各负责哪一步。下一课单独手算 UUID 到 URL。
 
-省略 RequestItem 归一化、错误重试、并发队列、压缩包解包和浏览器 HTTP 缓存。下一课补上 Bundle Config，让请求不再直接拿 UUID 查内存文件表。
+运行方式：在本课目录执行 `deno task check`、`deno task build`、`deno task serve`。

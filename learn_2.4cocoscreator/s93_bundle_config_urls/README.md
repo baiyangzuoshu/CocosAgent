@@ -1,66 +1,61 @@
-# 第 93 课：Bundle Config 如何找到文件
+# 第 93 课：从 Bundle Config 算出文件 URL
 
-**本课目标：** 从场景名或资源路径出发，沿 Config 索引找到 UUID、pack 和最终 URL。
+**本课目标：** 手工从 2.4 的 Bundle config 算出场景 pack 和 PNG 的 URL。先明确：UUID 是身份，URL 是文件地址；它们不是同一个字符串。
 
-## 先认 Config 里的四张表
+## 先看 config 是一组索引表
 
-| 字段 | 作用 |
-| --- | --- |
-| scenes | 场景名 → UUID 数组位置 |
-| uuids | 位置 → UUID；发布构建中 UUID 可能是压缩字符串 |
-| packs | pack UUID → 它包含的 UUID 数组位置 |
-| versions | 资源或 pack → 文件版本哈希 |
+打开 `2.4NewProject/build/web-mobile/assets/main/config.a9f01.json`，本课只需要四个字段：
 
-path 表用于按项目路径找 Asset；scenes 表用于按场景名找 SceneAsset。查到 UUID 后，pack 和版本表才能继续给出文件位置。
+| 字段 | 怎么读 | 用途 |
+| --- | --- | --- |
+| `scenes` | 场景工程路径 → `uuids` 数组下标 | 找首场景下标 |
+| `uuids` | 下标 → UUID（发布时可能压缩） | 取资源身份 |
+| `packs` | pack UUID → 它包含的数组下标 | 判断资源是否打进 pack |
+| `versions` | 文件身份 → 版本后缀 | 组成带版本的文件名 |
 
-## 手算两个真实地址
+这里的下标是连接几张表的“行号”。例如 `scenes` 返回 `0`，表示下一步去读 `uuids[0]`，不是 UUID 本身。
 
-**首场景：**
+## 手算首场景的 pack URL
 
-1. settings 的 launchScene 是 db://assets/Scene/helloworld.fire。
-2. main config 的 scenes 把这个场景映射到 uuids[0]。
-3. 解码 uuids[0] 得到 SceneAsset UUID。
-4. packs 中 05dd1dc0e 包含索引 0，所以场景序列化数据在这个 pack。
-5. versions.import 中 05dd1dc0e 对应版本 29693。
+跟着真实 `config.a9f01.json` 做一遍：
 
-因此文件地址是：
+1. `scenes["db://assets/Scene/helloworld.fire"]` 得到下标 `0`。
+2. `uuids[0]` 是压缩场景 UUID。运行时 config 会解码它；课程代码在 `Config.getUuid()` 中做这一步。
+3. 查 `packs`，发现 `05dd1dc0e` 的数组包含下标 `0`，所以场景数据在这个 pack。
+4. `versions.import` 中 `05dd1dc0e` 后面的值是 `29693`，它作为版本后缀。
+5. 拼出：`/assets/main/import/05/05dd1dc0e.29693.json`。
 
-~~~text
-/assets/main/import/05/05dd1dc0e.29693.json
-~~~
+拆开这个地址看：`assets/main` 是 Bundle 目录，`import` 是资源数据类型，`05` 是 pack UUID 的前两位目录，`05dd1dc0e` 是 pack UUID，`.29693` 是版本号，`.json` 是本版 pack 文件格式。
 
-**BundleMain 的 label.prefab：**
+## 再手算一个 PNG URL
 
-paths 中 label 对应 uuids[0]；版本表给这个资源 e273f。把 Bundle 基址、import 目录、UUID 前两位目录、UUID、版本和扩展名拼起来，得到 label.prefab 文件地址。
+`uuids[1]` 是 HelloWorld.png 对应的 Texture2D UUID。查 `versions.native`，索引 `1` 对应版本 `a4b27`。它不是 pack，因此拼单资源地址：
 
-## URL 的拼法
+```text
+/assets/main/native/6a/
+6aa0aa6a-ebee-4155-a088-a687a6aadec4.a4b27.png
+```
 
-~~~text
-Bundle 基址 / import 或 native / UUID 前两位 / UUID + 版本 + 扩展名
-~~~
+注意：场景引用的是 SpriteFrame 子 UUID；这里请求 PNG 用的是 Texture2D 主 UUID。第 90 课已说明两者由 `rawTextureUuid` 连接。
 
-贴图是 native 文件，所以选 nativeBase 并使用 .png。pack 是一组资源的合并文件，所以文件名使用 pack UUID，而不是某个单独 Asset UUID。
+## 按代码顺序读
 
-## UUID 为什么要解码
+1. `src/example-config.ts`：只摘取本课需要的数组和表；完整 config 不必抄进课堂代码。
+2. `config.ts`：`getScene()`、`getUuid()`、`getPack()`、`getVersion()` 分别完成上面的查表步骤。
+3. `decodeUuid.ts`：把发布配置中的压缩 UUID 解回完整身份。
+4. `urlTransformer.ts`：`packPath()` 和 `combine()` 将查到的值拼成 URL。
+5. `src/main.ts`：打印每个中间值，便于逐步和 config 文件比对。
 
-发布配置为了减小体积，会把 UUID 压缩成 22 个字符。运行时解码后才能用完整 UUID 查 Asset、依赖和缓存。解码示例只保留 Creator 2.4 的格式，不处理无关的数据校验和调试分支。
+课程代码不是 Creator 的完整 Config：它省略重定向、扩展名规则和其他请求类型，只保留本例走到的字段。
 
-## 对照代码和源码
+## 对照 2.4.15 Runtime 源码
 
-- Config.getSceneIndex / getPathEntry / getPack / getVersion：分别查场景、路径、pack、版本。
-- decodeUuid：把压缩 UUID 还原成完整 UUID。
-- urlTransformer.combine / packPath：选择 import/native 基址并拼接路径。
-- 本课的构建数据摘录在 `src/example-config.ts`，`src/main.ts` 只负责按步骤查询并显示结果。
-- 引擎源码：engine/2.4.15engine/cocos2d/core/asset-manager/config.js、urlTransformer.js、pack-manager.js。
+- [config.js](../../engine/2.4.15engine/cocos2d/core/asset-manager/config.js)：看 `_initScene()`、`_initUuid()`、`_initPackage()`、`_initVersion()` 如何准备查询表。
+- [urlTransformer.js](../../engine/2.4.15engine/cocos2d/core/asset-manager/urlTransformer.js)：看 `parse()` 怎样找资源地址、`combine()` 怎样组成 URL。
+- [helper.js](../../engine/2.4.15engine/cocos2d/core/asset-manager/helper.js)：搜索 `decodeUuid`。
 
-运行后不要只看最后一行 URL。按上面的步骤逐个核对索引、UUID、pack 和版本，这样遇到地址不一致时能定位是哪张表查错。
+## 学完后自查
 
-~~~sh
-deno task check
-deno task build
-deno task serve
-~~~
+不看课程输出，自己从 `scenes` 查到 pack UUID，再用 `versions.import` 拼出文件名。然后解释：为什么场景的 import pack URL 不等于场景 UUID？下一课会观察真实浏览器请求。
 
-## 本课边界
-
-代码只建了当前构建所需的最小 Config 字段，不实现全部重定向、资源类型、字体和压缩包规则。下一课把地址映射、依赖图和文件/Asset 缓存串起来。
+运行方式：在本课目录执行 `deno task check`、`deno task build`、`deno task serve`。

@@ -210,3 +210,17 @@
 - [第 88 课：Cocos2d-x 4.0 事件、调试观察与退出清理](s88_spine_events_lifecycle/README.md)
 
 每课含独立 C++11 示例、版本对应的源码路径和编译命令。Cocos2d-x 1.x 快照没有 Spine 模块，因此不创建同名课程。
+
+## Shader 编写与接入（第 95–101 课，已完成）
+
+本专题按 Cocos2d-x 4.0 的源码路径独立实现。七课从两段 Shader 开始，逐步加入顶点输入、纹理、Uniform、Alpha、宏变体，最后追到 Sprite 绘制。
+
+本系列每课有独立 C++11 小程序和本版源码路径。小程序用数据和日志解释职责，不创建真实 OpenGL/Metal 上下文。
+
+- [第 95 课：Shader 源码与阶段](s95_shader_stages/README.md)
+- [第 96 课：顶点输入与坐标变换](s96_vertex_inputs/README.md)
+- [第 97 课：插值、纹理采样与片元颜色](s97_texture_sampling/README.md)
+- [第 98 课：自定义 Uniform 与材质参数](s98_shader_uniforms/README.md)
+- [第 99 课：Alpha、预乘色与混合](s99_alpha_blending/README.md)
+- [第 100 课：Shader 变体与平台边界](s100_shader_variants/README.md)
+- [第 101 课：Sprite 接入与调试](s101_sprite_effect_debug/README.md)

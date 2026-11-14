@@ -1,24 +1,37 @@
+import { Bundle } from "./bundle.ts";
+import { BundleConfig } from "./config.ts";
 import { Fetcher } from "./fetch.ts";
-import { LoadPipeline } from "./load.ts";
+import { Loader } from "./load.ts";
 import { Parser } from "./parser.ts";
-import type { AssetRecord } from "./types.ts";
+import { Pipeline } from "./pipeline.ts";
+import type { AssetFile, BundleConfigData, PipelineTask } from "./types.ts";
+import { Asset } from "../assets/asset.ts";
 
-/** 对外提供 load；内部把职责交给 Fetcher、Parser 和 LoadPipeline。 */
+/** AssetManager 组装 Bundle、请求管线、文件缓存和 Asset 缓存。 */
 export class AssetManager {
   readonly trace: string[] = [];
-  private readonly fetcher = new Fetcher(this.trace);
-  private readonly parser = new Parser(this.trace);
-  private readonly pipeline: LoadPipeline;
+  readonly assets = new Map<string, Asset>();
+  readonly downloaded = new Map<string, AssetFile>();
+  readonly config: BundleConfig;
+  readonly bundle: Bundle;
+  private readonly pipeline: Pipeline;
 
-  constructor(records: Map<string, AssetRecord>) {
-    this.pipeline = new LoadPipeline(records, this.fetcher, this.parser, this.trace);
+  constructor(configData: BundleConfigData, files: Map<string, AssetFile>) {
+    this.config = new BundleConfig(configData);
+    const fetcher = new Fetcher(files, this.downloaded, this.trace);
+    const parser = new Parser(this.trace);
+    const loader = new Loader(this.config, fetcher, parser, this.assets, this.trace);
+    this.pipeline = new Pipeline(loader, this.trace);
+    this.bundle = new Bundle(this.config, (uuid) => this.loadAny(uuid), this.trace);
   }
 
-  get assets() {
-    return this.pipeline.assets;
+  async loadAny(uuid: string): Promise<Asset> {
+    const result: PipelineTask = await this.pipeline.run(uuid);
+    if (!result.asset) throw new Error("load 管线没有返回 Asset: " + uuid);
+    return result.asset;
   }
 
-  load(uuid: string) {
-    return this.pipeline.load(uuid);
+  loadScene(path: string): Promise<Asset> {
+    return this.bundle.loadScene(path);
   }
 }

@@ -1,8 +1,9 @@
-import type { AssetFile } from "./fetch.ts";
+import type { AssetFile, AssetRecord } from "./types.ts";
 import type { Asset } from "../assets/asset.ts";
 
 export interface PipelineTask {
   uuid: string;
+  record?: AssetRecord;
   file?: AssetFile;
   asset?: Asset;
 }
@@ -21,9 +22,9 @@ export class Pipeline {
 
   async run(uuid: string): Promise<PipelineTask> {
     let task: PipelineTask = { uuid };
-    this.trace.push(`pipeline ${this.name}: ${this.describe()}`);
+    this.trace.push("pipeline " + this.name + ": " + this.describe());
     for (const stage of this.stages) {
-      this.trace.push(`stage ${stage.name}: ${task.uuid}`);
+      this.trace.push("stage " + stage.name + ": " + task.uuid);
       task = await stage.run(task);
     }
     return task;

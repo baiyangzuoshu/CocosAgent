@@ -1,59 +1,44 @@
-# 第 91 课：Asset 引用与依赖图
+# 第 91 课：从场景和 Prefab 画出依赖
 
-**本课目标：** 从 Scene 和 Prefab 的序列化数据提取 UUID 引用，分清直接依赖和递归依赖。
+**本课目标：** 看懂 `main.scene` 为什么会继续需要 soldier Prefab，以及 Prefab 为什么会继续需要 Mesh。这里只讲 Asset 之间的关系，不计算 URL。
 
-## 先理解箭头方向
+## 先从真实文件各取一条引用
 
-图里的 A → B 表示：加载 A 时，A 需要资源 B。它不是节点层级关系，也不是“B 文件放在 A 文件夹里”。
+打开 `3.8NewProject/assets/scene/main.scene`，搜索 Prefab UUID `cfc53c4e-7956-482b-aebc-3fb1dcd36eef`。它出现在 `$[45].asset.__uuid__`，表示场景里的 PrefabInfo 引用了 soldier Prefab。
 
-本课只追 soldier 这一条链：
+再打开 `3.8NewProject/assets/model/helloWorld/soldier.prefab`，搜索 Mesh UUID `e3553cad-2f15-4293-859a-8f43c780f289@18751`。它出现在 `$[4]._mesh.__uuid__`，表示这个对象的 MeshRenderer 引用了 Mesh 子资源。
 
-~~~text
-main.scene 的 PrefabInfo.asset.__uuid__
-SceneAsset ─────────────────────────────→ Prefab
-soldier.prefab 的 MeshRenderer._mesh.__uuid__
-Prefab ─────────────────────────────────→ FBX Mesh 子资源 @18751
-~~~
+```text
+main.scene 的 PrefabInfo.asset.__uuid__ → soldier Prefab
+soldier.prefab 的 MeshRenderer._mesh.__uuid__ → soldier Mesh @18751
 
-Prefab 的 Mesh UUID 来自 FBX 导入产生的子资源。它不是 FBX 主资源，也不是 Prefab UUID。
+SceneAsset → Prefab → Mesh
+```
 
-## 逐步对应真实文件
+这说明加载场景时不能只准备 SceneAsset：场景还会用 Prefab，Prefab 还会用 Mesh。Asset 依赖是“对象需要对象”的关系，不等于“一条边对应一个文件请求”。Scene 与 Prefab 后面会证明可以共用一个 import pack。
 
-1. 在 assets/scene/main.scene 找 PrefabInfo 的 asset.__uuid__，选中 soldier 的 Prefab UUID。
-2. 在 assets/model/helloWorld/soldier.prefab 搜索 _mesh.__uuid__。
-3. 在 soldier.FBX.meta 的 subMetas["18751"] 确认这个 UUID 对应 gltf-mesh。
-4. 把场景和 Prefab 两个引用连起来，得到 SceneAsset → Prefab → Mesh。
-5. 递归加载场景时，需要把这条链上的资源都解析成运行时 Asset 对象。
+## 为什么看 `__uuid__`，不追 `__id__`
 
-## Asset 是什么
+序列化文件里的 `__uuid__` 指向另一个 Asset；`__id__` 指向同一份 JSON 数组里的对象。课程的 `serializedSceneReference`、`serializedMeshReference` 是从真实文件摘出的最小片段，所以代码可直接演示外部引用，而不必先实现 Creator 的整套反序列化格式。
 
-Asset 是运行时可使用的对象，例如 SceneAsset、Prefab、Mesh。它与磁盘文件不是一回事：Prefab 和 Scene 的序列化数据可能放在同一个 import pack，而 Mesh 的二进制数据在 native 文件中。
+## 按代码的执行顺序读
 
-Asset 的 refCount 用来跟踪资源对象被保留的引用，不表示网络请求次数。本课手动 addRef 一次只是展示字段；真实引用由加载、节点和资源释放流程协同管理。
+1. `src/example-dependencies.ts` 放两段字段：Scene → Prefab，以及 Prefab → Mesh。
+2. `collectUuidReferences()` 从每段字段中提取 `__uuid__`。
+3. `DependencyGraph.add(owner, dependency)` 记录“谁需要谁”。
+4. `DependencyGraph.collect(sceneUuid)` 从 SceneAsset 出发递归访问依赖。输出应包含 soldier Prefab 和 Mesh `@18751`。
+5. `src/main.ts` 用资源名显示边；需要核对真实身份时，查看 `example-dependencies.ts` 中的完整 UUID。
 
-## 代码怎么做
+本课模型没有打开/解析完整 `main.scene`、Prefab 或 Mesh 文件；这些文件字段已先手动摘录。请把它当作读依赖算法的窗口，不要把这段代码当成 Creator 场景加载器。
 
-- collectUuidReferences 递归访问对象，只收集 __uuid__ 外部资源引用。
-- __id__ 代表同一份序列化文件内部的对象连接，本课不把它当成另一个 Asset。
-- DependencyGraph.add 保存一条依赖边；collect 从 Scene 开始递归走图。
-- 示例是从实际 Scene/Prefab 摘出的最小字段，不解析完整的场景或 Prefab 文件。
+## 对照 3.8.7 Runtime 源码
 
-`src/example-dependencies.ts` 放场景/Prefab 序列化片段；`src/cocos/asset/asset-manager/depend-util.ts` 提取 UUID 引用；`src/main.ts` 组图并遍历。建议依次读数据、提取函数、图遍历调用。
+- [depend-util.ts](../../engine/3.8.7engine/cocos/asset/asset-manager/depend-util.ts)：从 `parse()`、`_parseDepsFromJson()` 看序列化数据如何变成依赖列表。
+- [load.ts](../../engine/3.8.7engine/cocos/asset/asset-manager/load.ts)：看 `loadDepends()` 如何加载已发现的依赖。
+- [asset.ts](../../engine/3.8.7engine/cocos/asset/assets/asset.ts)：Asset 基类；本课不展开资源释放和引用计数。
 
-运行：
+## 学完后自查
 
-~~~sh
-deno task check
-deno task build
-deno task serve
-~~~
+如果删掉 Prefab → Mesh 这条边，递归结果会少哪个 Asset？为什么 `@18751` 仍属于 UUID 的一部分？下一课看 AssetManager 怎样预取和创建这些 Asset。
 
-页面先看每一条引用来自哪个序列化字段，再看从 Scene 出发能到达哪些 Asset。
-
-## 源码对照
-
-- engine/3.8.7engine/cocos/asset/asset-manager/depend-util.ts：_parseDepsFromJson、getDeps 解析并缓存 UUID 依赖。
-- engine/3.8.7engine/cocos/asset/asset-manager/load.ts：loadDepends 加载依赖。
-- engine/3.8.7engine/cocos/asset/assets/asset.ts：运行时 Asset 基类。
-
-下一课会让 AssetManager 按依赖图执行加载，而不只是打印这张图。
+运行方式：在本课目录执行 `deno task check`、`deno task build`、`deno task serve`。

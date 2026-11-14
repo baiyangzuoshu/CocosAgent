@@ -1,22 +1,19 @@
-import type { AssetRecord } from "./types.ts";
+import type { AssetFile, RequestItem } from "./types.ts";
 
-/** import pack 和 native 文件走不同的解析分支。 */
+/** 从文件中按 UUID 取出一个资源条目；import 与 native 使用不同读法。 */
 export class Parser {
-  private readonly parsedImportUrls = new Set<string>();
-
   constructor(private readonly trace: string[]) {}
 
-  parse(record: AssetRecord): void {
-    if (record.fileKind === "import") {
-      if (this.parsedImportUrls.has(record.url)) {
-        this.trace.push(`从已解析的 pack 取出: ${record.type}`);
-      } else {
-        this.trace.push(`解析 import pack: ${record.url}`);
-        this.parsedImportUrls.add(record.url);
-      }
-      return;
+  parse(request: RequestItem, file: AssetFile): Record<string, unknown> {
+    const entry = file.resources.get(request.uuid);
+    if (entry === undefined) throw new Error("文件中没有 UUID: " + request.uuid);
+
+    if (request.type === "import") {
+      this.trace.push("parser.parse(import): " + request.uuid);
+      return JSON.parse(entry) as Record<string, unknown>;
     }
 
-    this.trace.push(`解析 native ${record.type}: ${record.url}`);
+    this.trace.push("parser.parse(native): " + request.record.type);
+    return { name: entry };
   }
 }

@@ -1,65 +1,61 @@
-# 第 93 课：Bundle Config 如何找到文件
+# 第 93 课：从 Bundle Config 算出文件 URL
 
-**本课目标：** 从首场景名出发，沿 Config 索引找到 UUID、pack 和最终 URL；再把 Mesh 子资源映射到 native 文件。
+**本课目标：** 手工从 Creator 3.8 的 config 算出首场景 pack 和 Mesh 文件的 URL。UUID 是资源身份，URL 是文件地址；不要把它们当成同一件事。
 
-## 先认 Config 里的几张表
+## 先看 config 怎样连接几张表
 
-| 字段 | 作用 |
-| --- | --- |
-| scenes | 场景名 → uuids 数组位置 |
-| uuids | 位置 → UUID；发布配置里的 UUID 可能被压缩 |
-| paths | 可寻址资源路径 → UUID 位置和类型 |
-| packs | pack UUID → 它包含的 UUID |
-| versions | 某些构建给资源或 pack 的版本哈希 |
+打开 `3.8NewProject/build/web-mobile/assets/main/config.json`：
 
-3.8 的 Config 还处理 extensionMap、redirect 等字段。本课先走当前构建需要的最短路径。
+| 字段 | 怎么读 | 用途 |
+| --- | --- | --- |
+| `scenes` | 场景工程路径 → `uuids` 数组下标 | 找首场景下标 |
+| `uuids` | 下标 → 压缩 UUID | 取资源身份 |
+| `packs` | pack UUID → 它包含的 `uuids` 下标 | 判断资源在哪个 pack |
+| `versions` | import/native 文件的版本数组 | 组成可选版本后缀 |
+| `paths` | Bundle 内资源路径 → 下标及类型信息 | 通过名字查找普通资源 |
 
-## 手算首场景地址
+下标只是几张表之间传递的“行号”。它既不是 UUID，也不是文件名。
 
-1. settings.json 的 launchScene 是 db://assets/scene/main.scene。
-2. main config 的 scenes 把它映射到位置 4。
-3. uuids[4] 是压缩 UUID；解码后得到场景 UUID。
-4. packs 中 0693a7d89 包含位置 4，因此场景数据在这个 pack。
-5. 当前 main Bundle 的 import 文件没有版本后缀。
+## 手算首场景的地址
 
-所以地址是：
+1. `scenes["db://assets/scene/main.scene"]` 得到下标 `4`。
+2. 读取 `uuids[4]`，得到压缩 UUID；运行时 `Config` 会把它解码成完整 UUID。
+3. 在 `packs` 中找到包含下标 `4` 的 `0693a7d89`。也就是说场景序列化数据位于这个 pack。
+4. 当前 `versions.import` 为空，所以本例没有版本后缀。
+5. 拼出 `/assets/main/import/06/0693a7d89.json`。
 
-~~~text
-/assets/main/import/06/0693a7d89.json
-~~~
+`assets/main` 是 Bundle 根目录，`import` 表示序列化数据，`06` 是 pack UUID 的前两位目录，`0693a7d89` 是 pack UUID。注意文件名不是场景 UUID：一个 pack 可以包含许多 Asset。
 
-## 手算 Mesh native 地址
+## 手算 Mesh 子资源地址
 
-Prefab 的 _mesh 字段引用 compressedUUID@18751。解码器先还原 UUID 主体，再原样保留 @18751 子资源 ID。选 nativeBase，目录取完整资源 ID 的前两位，扩展名为 .bin。
+FBX `.meta` 中的 Mesh UUID 是 `e3553cad-2f15-4293-859a-8f43c780f289@18751`。当前构建的 `config.uuids[51]` 保存它的压缩形式：
 
-~~~text
-/assets/main/native/e3/e3553cad-2f15-4293-859a-8f43c780f289@18751.bin
-~~~
+```text
+压缩 UUID：e3VTytLxVCk4Waj0PHgPKJ@18751
+解码 UUID：e3553cad-2f15-4293-859a-8f43c780f289@18751
+文件 URL： /assets/main/native/e3/e3553cad-2f15-4293-859a-8f43c780f289@18751.bin
+```
 
-## URL 的拼法
+`@18751` 是 Mesh 子资源身份的一部分，解码时必须保留。因为它是独立 native 文件，所以地址使用 `native` 目录和 `.bin` 后缀，不经过 import pack 查找。
 
-~~~text
-Bundle 基址 / import 或 native / UUID 前两位 / UUID + 可选版本 + 扩展名
-~~~
+## 按代码顺序读
 
-pack 路径用 pack UUID；单资源路径用 Asset UUID。两者不要混用。当前构建 versions 为空，因此 main Bundle 的这些地址没有版本后缀。
+1. `src/example-config.ts`：场景索引和 Mesh 压缩 UUID 来自真实 config；为易读只摘了相关字段。
+2. `config.ts`：`getScene()` 查场景下标，`getPack()` 查包；`getPathIndex()` 展示路径表。
+3. `decode-uuid.ts`：还原压缩 UUID，并保留 `@18751`。
+4. `url-transformer.ts`：`packPath()` 拼 pack 路径，`combine()` 拼 Mesh 的单文件路径。
+5. `src/main.ts`：打印每一步的中间值，和 config.json 对照。
 
-## 对照代码和源码
+本课只实现样例用到的字段，不是完整 Bundle Config。3.8 的项目样例由 Creator 3.8.8 构建；下面的 Runtime 源码快照是 3.8.7。
 
-- Config.getSceneIndex / getUuid / getPack：查场景索引、解 UUID、查 pack。
-- decodeUuid：恢复 UUID，并保留 @ 子资源 ID。
-- url-transformer.combine / packPath：分别拼单资源和 pack URL。
-- 本课的构建数据摘录在 `src/example-config.ts`，`src/main.ts` 只负责按步骤查询并显示结果。
-- 引擎源码：engine/3.8.7engine/cocos/asset/asset-manager/config.ts、url-transformer.ts、core/utils/decode-uuid.ts。
+## 对照 3.8.7 Runtime 源码
 
-运行后按“场景名 → 索引 → UUID → pack → URL”顺序逐行核对。不要一开始就把压缩 UUID、完整 UUID、pack UUID 当成同一字符串。
+- [config.ts](../../engine/3.8.7engine/cocos/asset/asset-manager/config.ts)：看 `_initUuid()`、`_initScene()`、`_initPackage()`。
+- [url-transformer.ts](../../engine/3.8.7engine/cocos/asset/asset-manager/url-transformer.ts)：看 `parse()` 和 `combine()`。
+- [helper.ts](../../engine/3.8.7engine/cocos/asset/asset-manager/helper.ts)：看 UUID 压缩/解码辅助逻辑。
 
-~~~sh
-deno task check
-deno task build
-deno task serve
-~~~
+## 学完后自查
 
-## 本课边界
+自己从场景路径查到数组下标、pack UUID 和最终 URL；再解释 Mesh 为什么直接用子资源 UUID 组成 native URL。下一课会把这些地址与实际 Network 请求对上。
 
-代码只建当前样例需要的 Config 字段，不实现全部 Bundle 重定向、扩展名、Cconb 和 URL 覆盖规则。下一课把地址映射、依赖图和缓存串起来。
+运行方式：在本课目录执行 `deno task check`、`deno task build`、`deno task serve`。

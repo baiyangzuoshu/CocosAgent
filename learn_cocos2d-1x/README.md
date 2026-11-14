@@ -80,3 +80,7 @@
 ## Spine 课程边界
 
 本地快照没有 Spine Runtime，因此不含第 81–88 课；各版本课程范围见 [总纲](../docs/cocos-engine-course-master-outline.md)。
+
+## Shader 能力边界
+
+本地 1.x 快照沿固定管线直接提交 Sprite 顶点、纹理和混合状态，没有后续版本的 Shader/Program 管理层。因此第 95–101 课不在 1.x 建立伪实现；跨版本专题和能力边界见[总纲](../docs/cocos-engine-course-master-outline.md)。

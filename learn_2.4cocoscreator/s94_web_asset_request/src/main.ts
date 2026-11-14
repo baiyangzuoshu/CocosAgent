@@ -1,17 +1,18 @@
 import { CCAssetManager } from "./cocos2d/core/asset-manager/CCAssetManager.ts";
-import { assetRecords, sceneUuidForExample } from "./example-assets.ts";
+import { bundleConfigData, exampleFiles } from "./example-assets.ts";
 
 const output = document.querySelector<HTMLPreElement>("#log");
 if (!output) throw new Error("找不到 #log");
 
-// main 只负责组装本课示例并发起入口请求；加载细节在 AssetManager 模块。
-const manager = new CCAssetManager(assetRecords);
-const firstLoad = await manager.load(sceneUuidForExample);
-const secondLoad = await manager.load(sceneUuidForExample);
+// 从场景工程路径进入：Bundle 查 UUID，AssetManager 再走 load 管线。
+const manager = new CCAssetManager(bundleConfigData, exampleFiles);
+const scenePath = "db://assets/Scene/helloworld.fire";
+const firstLoad = await manager.loadScene(scenePath);
+const secondLoad = await manager.loadScene(scenePath);
 
 output.textContent = [
   "Creator 2.4.15 · 从场景递归加载资源",
-  "首场景: db://assets/Scene/helloworld.fire",
+  "入口: Bundle.loadScene(" + scenePath + ")",
   "",
   `课程模型的文件 GET 数: ${manager.trace.filter((line) => line.startsWith("GET ")).length}`,
   `Asset 对象数: ${manager.assets.size}`,

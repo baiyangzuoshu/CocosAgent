@@ -1,55 +1,46 @@
-# 第 90 课：.meta、UUID 与资源身份
+# 第 90 课：从 `.meta` 找到资源身份
 
-**本课目标：** 看懂一个图片源文件为什么能对应多个运行时资源，以及场景引用的是哪一个 UUID。
+**本课目标：** 解释场景里 Sprite 保存的 UUID 属于哪一个资源，并沿它找到实际 PNG。先只追 `HelloWorld.png` 这一张图。
 
-## 先区分三样东西
+## 先看工程中的两份文件
 
-- **源文件：** 美术导入的 HelloWorld.png。
-- **Asset 身份：** Creator 用 UUID 标识导入后的资源；文件名和路径用于编辑器管理，运行时引用依靠 UUID。
-- **子资源：** 一个源文件可导入出多个可单独引用的资源，例如图片对应的 SpriteFrame。
+打开 `2.4NewProject/assets/Texture/HelloWorld.png.meta`，只抄这三项：
 
-所以“一个文件”不一定等于“一个 Asset”。
-
-## 2.4 样例：PNG 和 SpriteFrame
-
-看 2.4NewProject/assets/Texture/HelloWorld.png.meta 中这三处：
-
-| 字段 | 样例值 | 含义 |
+| 字段 | 当前值 | 代表什么 |
 | --- | --- | --- |
-| uuid | 6aa0aa6a-ebee-4155-a088-a687a6aadec4 | PNG 导入后的贴图主资源 UUID |
-| subMetas.HelloWorld.uuid | 31bc895a-c003-4566-a9f3-2e54ae1c17dc | 从 PNG 导入出的 SpriteFrame UUID |
-| subMetas.HelloWorld.rawTextureUuid | 6aa0aa6a-ebee-4155-a088-a687a6aadec4 | 这个 SpriteFrame 使用哪张主贴图 |
+| 顶层 `uuid` | `6aa0aa6a-ebee-4155-a088-a687a6aadec4` | PNG 导入后 Texture2D 主资源的身份 |
+| `subMetas.HelloWorld.uuid` | `31bc895a-c003-4566-a9f3-2e54ae1c17dc` | 这张图导出的 SpriteFrame 子资源身份 |
+| `subMetas.HelloWorld.rawTextureUuid` | `6aa0aa6a-ebee-4155-a088-a687a6aadec4` | SpriteFrame 使用的底层 Texture2D 身份 |
 
-再看 Scene/helloworld.fire 里的 _spriteFrame.__uuid__。场景记录的是 31bc...，也就是 SpriteFrame 子资源，不是 PNG 主 UUID。
+再打开 `2.4NewProject/assets/Scene/helloworld.fire`，搜索 `_spriteFrame`。场景里保存的是 `31bc895a-c003-4566-a9f3-2e54ae1c17dc`，因此这个 Sprite 引用的是 **SpriteFrame 子资源**，不是 PNG 主资源。
 
-~~~text
-HelloWorld.png.meta
-  PNG 主资源：6aa0...
-  └─ SpriteFrame 子资源：31bc...
-       └─ rawTextureUuid 指回 PNG 主资源：6aa0...
+```text
+helloworld.fire 的 _spriteFrame.__uuid__
+  = .meta 的 subMetas.HelloWorld.uuid       → SpriteFrame
 
-helloworld.fire 的 Sprite._spriteFrame
-  └─ __uuid__ = 31bc...
-~~~
+subMetas.HelloWorld.rawTextureUuid
+  = .meta 顶层 uuid                         → Texture2D → PNG
+```
 
-2.4 的 Bundle 目录也有 .meta。样例 BundleMain.meta 中 isBundle 为 true，表示该目录被编辑器作为 Bundle 处理。这是编辑器工程数据，不是浏览器运行时的资源文件。
+读这两条等号时，先比较字符串是否完全相同。它们回答两个不同问题：场景要哪个 SpriteFrame？这个 SpriteFrame 又用哪张纹理？
 
-## 运行代码时看什么
+## 本课代码实际做了什么
 
-代码用从上述文件摘出的最小字段构造一个 AssetMeta 对象，再用 findSource 查 UUID 属于主资源还是子资源。它是字段查找练习，不是 Creator 的完整 .meta 解析器。
+打开 `src/example-meta.ts`，会看到同样三项字段被手工抄进 TypeScript。打开 `src/main.ts`：它拿场景中的 UUID 调用 `findSource()`。`AssetMeta.ts` 只做两次比较：先和顶层 `uuid` 比，再和每个子资源的 `uuid` 比。因此本例会把场景 UUID 识别为 `子资源 HelloWorld (sprite-frame)`。
 
-`src/example-meta.ts` 只放本课摘录的 UUID 与字段；`src/cocos2d/core/assets/AssetMeta.ts` 实现查询；`src/main.ts` 把两者连起来并显示结果。可以从 `main.ts` 的 `findSource` 调用跳进查询函数，再回到 `example-meta.ts` 看输入字段。
+你可以把 `main.ts` 传入的 UUID 改成顶层 UUID，再运行页面；结果会变成 `主资源 texture`。这不是 Creator 正在导入 PNG，而是一个小型“UUID 属于谁”的查表练习。
 
-~~~sh
-deno task check
-deno task build
-deno task serve
-~~~
+## `.meta` 不会由浏览器读取
 
-页面中先看 SpriteFrame/Mesh UUID，再看它们的父源资源。注意 .meta 是编辑器导入数据；构建后，运行时主要查 Bundle config，不会到浏览器里读取工程 .meta。
+`.meta` 是编辑器导入工程资源时使用的数据。运行时读的是构建生成的 Bundle config；所以不要在 `build/web-mobile/` 里寻找同一份 `.meta`。本地 Runtime 快照也不含完整 Editor AssetDB 导入器。
 
-## 源码对照与下一课
+- [2.4.15 Runtime `config.js`](../../engine/2.4.15engine/cocos2d/core/asset-manager/config.js)：从 `_initUuid()` 看构建后的 UUID 索引。
+- 工程证据：`2.4NewProject/assets/Texture/HelloWorld.png.meta`、`2.4NewProject/assets/Scene/helloworld.fire`。
 
-- 样例数据：2.4NewProject/assets/Texture/HelloWorld.png.meta、2.4NewProject/assets/Scene/helloworld.fire。
-- 引擎索引：engine/2.4.15engine/cocos2d/core/asset-manager/config.js 的 _initUuid、_initPath、_initScene。
-下一课会把这些引用画成图，并解释加载一个 Asset 时为什么还要处理它依赖的资源。
+`2.4NewProject/assets/BundleMain.meta` 中的 `isBundle` 是另一个例子：它是目录的编辑器配置，不是上面这张图的身份信息；生成的 Bundle config 才是 Runtime 的索引。
+
+## 学完后自查
+
+闭上文件，回答：场景引用的 UUID 是 PNG 主 UUID 还是 SpriteFrame 子 UUID？`rawTextureUuid` 指向哪一个？下一课把这两种引用画成 Asset 依赖。
+
+运行方式：在本课目录执行 `deno task check`、`deno task build`、`deno task serve`。

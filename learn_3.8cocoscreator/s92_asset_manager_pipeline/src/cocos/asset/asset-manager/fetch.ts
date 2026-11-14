@@ -1,16 +1,24 @@
-export interface AssetFile {
-  uuid: string;
-  json: string;
-}
+import type { AssetFile, AssetRecord } from "./types.ts";
 
 export class Fetcher {
-  constructor(private readonly files: Map<string, AssetFile>, private readonly trace: string[]) {}
+  constructor(
+    private readonly files: Map<string, AssetFile>,
+    private readonly downloaded: Map<string, AssetFile>,
+    private readonly trace: string[],
+  ) {}
 
-  async fetch(uuid: string): Promise<AssetFile> {
-    this.trace.push(`fetch ${uuid}`);
+  async fetch(record: AssetRecord): Promise<AssetFile> {
+    const cached = this.downloaded.get(record.url);
+    if (cached) {
+      this.trace.push("文件缓存命中 " + record.url);
+      return cached;
+    }
+
+    this.trace.push("GET " + record.url);
     await Promise.resolve();
-    const file = this.files.get(uuid);
-    if (!file) throw new Error(`找不到下载文件 ${uuid}`);
+    const file = this.files.get(record.url);
+    if (!file) throw new Error("找不到文件 " + record.url);
+    this.downloaded.set(record.url, file);
     return file;
   }
 }

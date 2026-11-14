@@ -235,7 +235,14 @@ learn_2.4cocoscreator/
 ├── s91_asset_dependency_graph/  # 第 91 课：Asset 引用与依赖图
 ├── s92_asset_manager_pipeline/  # 第 92 课：AssetManager 加载管线
 ├── s93_bundle_config_urls/      # 第 93 课：Bundle 索引与文件 URL
-└── s94_web_asset_request/       # 第 94 课：从场景到 Web 资源请求
+├── s94_web_asset_request/       # 第 94 课：从场景到 Web 资源请求
+├── s95_shader_stages/           # 第 95 课：Shader 源码与阶段
+├── s96_vertex_inputs/           # 第 96 课：顶点输入与坐标变换
+├── s97_texture_sampling/        # 第 97 课：插值、纹理采样与片元颜色
+├── s98_shader_uniforms/         # 第 98 课：自定义 Uniform 与材质参数
+├── s99_alpha_blending/           # 第 99 课：Alpha、预乘色与混合
+├── s100_shader_variants/         # 第 100 课：宏变体与平台边界
+└── s101_sprite_effect_debug/     # 第 101 课：Sprite 接入与调试
 ~~~
 
 ## Spine 2D 骨骼动画（第 81–88 课）
@@ -251,14 +258,33 @@ learn_2.4cocoscreator/
 
 ## Web 资源导入与打包（第 89–94 课）
 
-这 6 课是一条连续的数据链，不是 6 个互不相关的名词：
+这 6 课一直追同一个实际例子：场景里的 Sprite 怎样找到 HelloWorld.png，并在浏览器运行时取得它。先把四种东西分开：
 
 ~~~text
-build 文件地图 → .meta 资源身份 → 场景依赖 → AssetManager 加载
-                                     → Bundle 查索引和 URL → 浏览器取文件
+工程源文件                    构建输出                       浏览器运行时
+helloworld.fire ─┐           config：UUID → 文件索引       URL 请求文件
+HelloWorld.png ──┼─构建→     import：序列化资源数据   →   解析成 Asset 对象
+HelloWorld.png.meta ┘        native：PNG 文件               场景使用 Asset
 ~~~
 
-建议按顺序学：先在第 89 课认文件，再用第 90 课看 UUID 从哪里来；第 91 课把引用连成依赖；第 92 课看谁负责下载和创建 Asset；第 93 课手算地址；第 94 课把整条链跑一遍。每课 README 都列了“从哪个真实文件开始看”和示例省略了什么。
+| 名称 | 这里指什么 | 本例中的东西 |
+| --- | --- | --- |
+| `.meta` | 编辑器给工程资源保存的导入信息；不是浏览器请求的文件 | PNG 主 UUID、SpriteFrame 子 UUID |
+| UUID | 资源的身份编号 | 场景引用的 SpriteFrame UUID |
+| config | 构建生成的索引表；告诉运行时 UUID 对应哪个 pack 或文件 | `assets/main/config.*.json` |
+| URL | 浏览器实际请求的文件地址 | import pack 地址、PNG 地址 |
+| Asset | 文件解析后在内存中供引擎使用的对象 | `SceneAsset`、`SpriteFrame`、`Texture2D` |
+
+阅读顺序是：89 先认输出文件；90 找 UUID 的来历；91 从场景引用画出依赖；92 看下载和创建 Asset 的职责；93 手动算出文件地址；94 把它们串起来，并在 Network 面板观察真实请求。每课的“课程代码”只演示本课负责的一步，真实字段来源和简化范围都写在课文里。
+
+本版实际关系是：**`helloworld.fire` 引用 SpriteFrame；SpriteFrame 的 `rawTextureUuid` 再指向 Texture2D；构建把序列化数据放进 import pack，把 PNG 放进 native 文件。** 请先在 `2.4NewProject/assets/` 找源文件，再看 `2.4NewProject/build/web-mobile/` 的构建结果。课程代码中的日志是教学模型输出，不是 Creator 运行日志。
+
+- 第 89 课回答“构建目录里有哪些文件”。
+- 第 90 课回答“场景保存的 SpriteFrame UUID 从哪里来”。
+- 第 91 课回答“加载场景还需要哪些 Asset”。
+- 第 92 课回答“文件怎样变成并缓存为 Asset 对象”。
+- 第 93 课回答“Bundle Config 怎样把 UUID 变成 URL”。
+- 第 94 课把前面几步连起来，并教你在浏览器 Network 面板观察真实请求。
 
 - [第 89 课：Web 构建产物地图](s89_web_build_output_map/README.md)
 - [第 90 课：`.meta` 与资源身份](s90_meta_asset_identity/README.md)
@@ -267,7 +293,21 @@ build 文件地图 → .meta 资源身份 → 场景依赖 → AssetManager 加�
 - [第 93 课：Bundle 索引与文件 URL](s93_bundle_config_urls/README.md)
 - [第 94 课：从场景到 Web 资源请求](s94_web_asset_request/README.md)
 
-Creator 课程以 Web 浏览器运行时为范围；每课代码独立，并标出对应引擎源码位置。
+Creator 课程以 Web 浏览器运行时为范围；每课代码独立，并标出对应引擎源码位置。编辑器导入器和完整 Builder 不在本地 Runtime 快照中，因此课程会明确标出“工程文件事实”“构建输出事实”和“Runtime 源码行为”，不把它们混成一个步骤。
+
+## Shader 编写与接入（第 95–101 课，已完成）
+
+本专题按 Creator 2.4.15 的源码路径独立实现。七课从两段 Shader 开始，逐步加入顶点输入、纹理、Uniform、Alpha、宏变体，最后追到 Sprite 绘制。
+
+本系列以 WebGL 1 为运行目标；每课是独立 TypeScript/浏览器示例，画布运行真实 WebGL Shader。
+
+- [第 95 课：Shader 源码与阶段](s95_shader_stages/README.md)
+- [第 96 课：顶点输入与坐标变换](s96_vertex_inputs/README.md)
+- [第 97 课：插值、纹理采样与片元颜色](s97_texture_sampling/README.md)
+- [第 98 课：自定义 Uniform 与材质参数](s98_shader_uniforms/README.md)
+- [第 99 课：Alpha、预乘色与混合](s99_alpha_blending/README.md)
+- [第 100 课：宏变体与平台边界](s100_shader_variants/README.md)
+- [第 101 课：Sprite 接入与调试](s101_sprite_effect_debug/README.md)
 
 ## 运行
 

@@ -1,88 +1,78 @@
-# 第 94 课：从首场景走到 Web 资源
+# 第 94 课：从场景路径追到浏览器文件
 
-**本课目标：** 把 89–93 课的输出文件、Asset 身份、依赖、加载管线和 URL 串成一次完整的场景加载。
+**本课目标：** 把前 89–93 课接成一条可解释的链：输入场景路径，找到 UUID，生成 RequestItem，取得文件，读出依赖，创建 Asset。读完后你应能分清每一步的输入和输出。
 
-## 先弄清楚这五个名词
+## 先看全链，再读代码
 
-| 名词 | 本课里是什么 | 例子 |
+```text
+场景路径
+  → Bundle Config 查到 SceneAsset UUID
+  → RequestItem 带上 UUID、import/native 类型和 URL
+  → Fetcher 按 URL 取得文件
+  → Parser 从 pack 中取出当前 UUID 的序列化条目
+  → depend-util 找到 SpriteFrame / Texture2D UUID
+  → 递归创建 Texture2D、SpriteFrame、SceneAsset 并按 UUID 缓存
+```
+
+当前例子里的实际关系是：SceneAsset 和 SpriteFrame 在同一个 import pack；Texture2D 指向另一个 PNG 文件。因此最终是 **2 个文件 URL、3 个 Asset 对象**。
+
+## 从入口逐步追踪
+
+### 1. Bundle 把场景名字变成 UUID
+
+在 `src/main.ts`，入口是 `manager.loadScene("db://assets/Scene/helloworld.fire")`。`Bundle.loadScene()` 用这个场景路径查 `BundleConfig`，得到 SceneAsset UUID。场景路径是工程资源名，UUID 才是运行时资源身份。
+
+这份小例子用 `example-assets.ts` 直接保存第 93 课查表后的结果。真实 config 的 `scenes → uuids → packs/versions` 过程已经在第 93 课逐步手算；本课把查找结果接入加载流程。
+
+### 2. preprocess 为请求补齐信息
+
+`Preprocessor` 用 UUID 取得 AssetRecord，再生成 RequestItem。RequestItem 包含 UUID、`import`/`native` 类型和文件 URL。这里的 UUID 回答“要哪个 Asset”，URL 回答“去哪里取文件”。
+
+### 3. Fetcher 取得文件，不创建 Asset
+
+SceneAsset 的请求 URL 是 import pack；SpriteFrame 的 UUID 也指向同一个 URL，因此第二次不再记录一个新 GET。Texture2D 的 URL 指向 native PNG，会产生另一个 GET。`downloaded` 只存文件；此时 Asset 还没创建。
+
+### 4. Parser 和依赖工具取出资源
+
+import 文件里有多个 UUID 条目。Parser 按当前 RequestItem 的 UUID 取一个条目并解析 JSON；`collectDependencies()` 递归找 `__uuid__`，所以先从 Scene 找到 SpriteFrame，再从 SpriteFrame 找到 Texture2D。`__id__` 是文件内部引用，不作为外部 Asset 依赖。
+
+### 5. 依赖先完成，当前 Asset 后创建
+
+Loader 递归处理依赖，先得到 Texture2D，再得到 SpriteFrame，最后得到 SceneAsset；每个对象完成后放进 `assets`，键是 UUID。第二次加载同一场景时先检查 Asset 缓存，所以返回同一个 SceneAsset。
+
+## 本课代码与源码职责对应
+
+| 本课文件 | 它做什么 | Creator 2.4.15 Runtime 对照 |
 | --- | --- | --- |
-| UUID | 运行时识别某个 Asset 的身份 | SceneAsset、SpriteFrame、Texture2D 各有一个 |
-| URL | 浏览器取得文件的位置 | `.../import/05/05dd1dc0e.29693.json` |
-| import pack | 存放序列化 Asset 数据的构建文件 | Scene 与 SpriteFrame 共用一个 pack |
-| native 文件 | 由专用解析器读取的文件 | Texture2D 的 PNG |
-| Asset 对象 | 加载后可被场景使用的运行时对象 | `CCAsset` 的课程简化版 |
+| `CCAssetManager.ts` | 组装 Config、Bundle、缓存和加载管线 | `CCAssetManager.js` |
+| `bundle.ts`、`config.ts` | 场景名查 UUID | `asset-manager/bundle.js`、`config.js` |
+| `preprocess.ts`、`request-item.ts` | UUID 形成请求项 | `preprocess.js`、`request-item.js` |
+| `fetch.ts` | 取得文件 | `fetch.js`、`downloader.js` |
+| `parser.ts`、`depend-util.ts` | 解析资源条目、提取 UUID 依赖 | `parser.js`、`depend-util.js` |
+| `pipeline.ts`、`load.ts`、`deserialize.ts` | 串接阶段；递归加载、创建和缓存 Asset | `pipeline.js`、`load.js`、`deserialize.js` |
+| `CCAsset.ts` | 课程中的最小 Asset 对象 | `assets/CCAsset.js` |
 
-UUID、URL、文件、Asset 对象在流程中相连，但不是同一个东西。比如两个 UUID 可以落在同一个 pack URL 里，加载后仍然是两个 Asset 对象。
+这些源码文件都可从下方链接打开。课程结构保留“Bundle → Config → RequestItem → Fetch/Parse → Dependencies → Asset”的职责边界，只删去并发队列、错误重试、完整序列化兼容和网络实现。
 
-## 一次 load 如何流过代码
+## 看代码结果时不要混淆两种证据
 
-先从 `src/main.ts` 的 `manager.load(sceneUuidForExample)` 开始，沿调用顺序读：
+课程页面显示的 `GET` 来自本课 `Fetcher` 对文件 Map 的模拟，不是浏览器 Network 记录。要看真实请求，在终端进入 `2.4NewProject/build/web-mobile/`，运行：
 
-~~~text
-main.ts
-  └─ CCAssetManager.load(uuid)                  对外入口
-       └─ LoadPipeline.load(uuid)               管理顺序和 Asset 缓存
-            ├─ Fetcher.fetch(record)             取得文件，按 URL 去重
-            ├─ Parser.parse(record)              区分 import pack / native
-            ├─ 对每个 dependency 递归 load      先准备依赖
-            └─ new CCAsset(...)                  创建并按 UUID 缓存
-~~~
+```sh
+python3 -m http.server 8104 --bind 127.0.0.1
+```
 
-照这个顺序观察页面日志：
+浏览器打开 `http://127.0.0.1:8104`，在开发者工具 Network 面板过滤 `assets/main`。找到 import pack 和 PNG 请求后，把地址与第 93 课算出的 URL 对比。启动页面还会请求引擎、internal 等文件，因此 Network 总请求数不会等于本课模型的 2。
 
-1. 场景 UUID 没有 Asset 缓存，先从 `example-assets.ts` 找到它的记录。
-2. `Fetcher` 请求 import pack。SpriteFrame 也指向同一个 pack URL，因此不会再次 GET。
-3. `Parser` 标记 pack 已处理；继续加载场景记录中的 SpriteFrame 依赖。
-4. SpriteFrame 的依赖指向 Texture2D。Texture2D 使用 native PNG URL，Fetcher 为它发起第二个 GET。
-5. 依赖加载完成后，递归逐层创建并缓存 Texture2D、SpriteFrame、SceneAsset。
-6. 再次 load 同一个场景 UUID，会在 `LoadPipeline` 开头命中 Asset 对象缓存。
+## 源码入口
 
-结果是 **2 个不同文件 URL、3 个 Asset 对象**。缓存文件并没有把两个 Asset 合成一个对象。
+- [Bundle `loadScene()`](../../engine/2.4.15engine/cocos2d/core/asset-manager/bundle.js)
+- [Config 查表](../../engine/2.4.15engine/cocos2d/core/asset-manager/config.js) 与 [URL 生成](../../engine/2.4.15engine/cocos2d/core/asset-manager/urlTransformer.js)
+- [RequestItem](../../engine/2.4.15engine/cocos2d/core/asset-manager/request-item.js)、[fetch](../../engine/2.4.15engine/cocos2d/core/asset-manager/fetch.js)、[pack-manager](../../engine/2.4.15engine/cocos2d/core/asset-manager/pack-manager.js)
+- [依赖解析](../../engine/2.4.15engine/cocos2d/core/asset-manager/depend-util.js)、[load](../../engine/2.4.15engine/cocos2d/core/asset-manager/load.js)、[deserialize](../../engine/2.4.15engine/cocos2d/core/asset-manager/deserialize.js)
 
-## 代码目录：每个文件只做一件事
+## 学完后自查
 
-| 文件 | 读它时要回答的问题 | 对应源码职责 |
-| --- | --- | --- |
-| `src/main.ts` | 从哪个 UUID 开始？结果显示在哪里？ | 课程入口 |
-| `src/example-assets.ts` | 真实工程里有哪些 UUID、依赖边和文件 URL？ | 从构建配置、场景和 `.meta` 摘出的样例数据 |
-| `src/cocos2d/core/asset-manager/types.ts` | 一条资源记录保存哪些信息？ | 请求/资源描述数据 |
-| `src/cocos2d/core/asset-manager/CCAssetManager.ts` | 外部如何发起 load？ | `CCAssetManager.js` 的门面职责 |
-| `src/cocos2d/core/asset-manager/load.ts` | 缓存、递归、对象创建的顺序是什么？ | `load.js` |
-| `src/cocos2d/core/asset-manager/fetch.ts` | 文件 URL 如何去重？ | `fetch.js` 的加载边界；真实文件 I/O 在 `downloader.js` |
-| `src/cocos2d/core/asset-manager/parser.ts` | import 与 native 为什么分开？ | `parser.js` 的解析职责模型 |
-| `src/cocos2d/core/assets/CCAsset.ts` | 加载完成后缓存的对象是什么？ | `CCAsset.js` |
+不用看页面，按顺序讲出“场景路径、UUID、URL、文件、Asset”分别在何时出现。然后解释为什么两个 import Asset 可以共用一次文件下载，而 Asset 缓存仍然有两个对象。
 
-这里把示例数据放在 `example-assets.ts`，把处理流程放在引擎职责目录里。读代码时先读入口，再进 `load.ts`，需要看文件时跳到 `fetch.ts`，遇到解析再读 `parser.ts`。
-
-## 这份示例有意简化了什么
-
-- `example-assets.ts` 的依赖边已从 `.fire` 和 `.meta` 整理好；本课不会重新解析这些文件。
-- `Fetcher` 用内存 Set 模拟按 URL 缓存，没有发真实 HTTP 请求。
-- `Parser` 只记录“pack 已解析”的状态，没有反序列化真实 JSON 或 PNG。
-- `CCAsset` 只保留 UUID 和类型，完整 Asset 还有引用计数、销毁和序列化状态。
-- 没有实现并发去重、循环依赖保护、错误重试和 HTTP 缓存。
-
-所以本课的日志是**课程模型的流程记录**，不是 Creator 引擎的运行日志，也不是浏览器 Network 面板的实测结果。
-
-## 运行并核对真实构建
-
-先运行课程模型：
-
-~~~sh
-deno task check
-deno task build
-deno task serve
-~~~
-
-再单独观察 `2.4NewProject/build/web-mobile/`：运行 `python3 -m http.server 8104 --bind 127.0.0.1`，打开 `http://127.0.0.1:8104` 和浏览器 Network 面板，过滤 `assets/main`。找到 import pack 和 native PNG 请求后，与 `example-assets.ts` 中的 URL 核对。两者是不同页面：课程页面解释职责顺序，Creator 构建页提供真实请求证据。
-
-## 引擎源码位置
-
-- `engine/2.4.15engine/cocos2d/core/asset-manager/bundle.js`：`Bundle.loadScene` 从场景名进入加载流程。
-- `engine/2.4.15engine/cocos2d/core/asset-manager/config.js`、`urlTransformer.js`：配置查找和 URL 形成。
-- `engine/2.4.15engine/cocos2d/core/asset-manager/pack-manager.js`：处理合并 pack。
-- `engine/2.4.15engine/cocos2d/core/asset-manager/fetch.js`、`downloader.js`、`parser.js`：从缓存/依赖处理到实际下载和资源解析。
-- `engine/2.4.15engine/cocos2d/core/asset-manager/load.js`、`depend-util.js`：解析依赖、递归加载和缓存。
-- `engine/2.4.15engine/cocos2d/core/assets/CCAsset.js`：Asset 对象。
-
-本课只把相关职责重排成容易单步阅读的 TypeScript 模型，不是 Creator 运行时的逐行移植。引擎快照也不含完整 Editor Builder。
+运行方式：在本课目录执行 `deno task check`、`deno task build`、`deno task serve`。

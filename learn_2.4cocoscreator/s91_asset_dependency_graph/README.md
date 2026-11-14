@@ -1,59 +1,47 @@
-# 第 91 课：Asset 引用与依赖图
+# 第 91 课：从场景引用画出依赖
 
-**本课目标：** 从序列化数据和 .meta 字段提取资源引用，分清“场景直接引用谁”和“加载场景最终需要谁”。
+**本课目标：** 看懂“场景依赖 SpriteFrame，SpriteFrame 依赖 Texture2D”这句话是从哪些字段读出来的。这里先不计算 URL，也不讨论下载顺序。
 
-## 先理解箭头方向
+## 先从真实字段画两条边
 
-图里的 A → B 表示：加载 A 时，A 需要资源 B。它不是父子节点关系，也不是“B 文件放在 A 文件夹里”。
+第 90 课确认了场景中的 `_spriteFrame.__uuid__` 是 SpriteFrame 子资源 UUID。现在再读 `.meta` 中的 `rawTextureUuid`：
 
-2.4 样例里有两条不同来源的依赖：
+```text
+helloworld.fire:  _spriteFrame.__uuid__ = 31bc...17dc
+HelloWorld.png.meta: rawTextureUuid     = 6aa0...a6a
 
-~~~text
-helloworld.fire 中 Sprite._spriteFrame.__uuid__
-SceneAsset ───────────────────────────────→ SpriteFrame
-SpriteFrame 的 .meta rawTextureUuid
-SpriteFrame ─────────────────────────────→ Texture2D
-~~~
+SceneAsset → SpriteFrame → Texture2D
+```
 
-Scene 直接引用 SpriteFrame；SpriteFrame 再依赖 PNG 主贴图。Scene 文件里出现的 UUID 只是第一条边，不能代表完整的递归依赖。
+箭头表示“要使用左边这个资源，还需要右边这个资源”。它不表示文件路径，也不表示这两个 Asset 一定各自发出一次网络请求；第 92、93 课才讨论文件和 URL。
 
-## 逐步对应真实文件
+## 场景里的两个引用字段
 
-1. 在 assets/Scene/helloworld.fire 搜索 _spriteFrame，里面的 __uuid__ 是 SpriteFrame UUID。
-2. 在 assets/Texture/HelloWorld.png.meta 找 subMetas.HelloWorld。
-3. 该子资源的 rawTextureUuid 指回 PNG 主资源 UUID。
-4. 把两条边连起来，得到 SceneAsset → SpriteFrame → Texture2D。
-5. 递归加载时要先取得这些依赖，场景对象才能拿到实际资源对象。
+- `__uuid__` 是外部 Asset 的 UUID。这里 `_spriteFrame.__uuid__` 指向另一个资源文件/资源条目。
+- `__id__` 是同一个 `.fire` 序列化文件中的对象编号。它用于把文件内部的节点、组件互相接起来，不是新的 Asset UUID。
 
-## Asset 是什么
+因此本课不能把所有数字都当依赖。本地 `depend-util.js` 会递归检查序列化数据中的 UUID 引用；本课只取其中与图片有关的字段，避免把整份场景文件搬进示例。
 
-Asset 是运行时可使用的对象，例如 SceneAsset、SpriteFrame、Texture2D。它与磁盘上的 JSON/PNG 文件不是同一层概念：一个 import pack 可以保存多个 Asset 的序列化内容，PNG 则是 native 文件。
+## 按代码的执行顺序读
 
-Asset 的 refCount 用于跟踪资源对象被保留的引用，不表示 HTTP 请求次数。本课只调用一次 addRef 展示这个字段，实际引用的建立和释放由引擎加载、节点和资源释放流程协同完成。
+1. `src/example-dependencies.ts` 里的 `serializedSpriteReference` 是从场景 Sprite 组件摘出的最小字段；`spriteFrameMeta` 是 `.meta` 中的纹理引用。
+2. `collectUuidReferences()` 遍历这个小对象，只返回 `__uuid__` 的值。输入是 SpriteFrame UUID，所以得到第一条边 `SceneAsset → SpriteFrame`。
+3. `DependencyGraph.add()` 把“拥有引用的资源 UUID”和“被引用 UUID”存起来。
+4. 第二次 `add()` 用 `rawTextureUuid` 建立 `SpriteFrame → Texture2D`。
+5. `collect(sceneUuid)` 从场景 UUID 开始沿边递归，结果应按 `SceneAsset → SpriteFrame → Texture2D` 到达两个依赖。
 
-## 代码怎么做
+课程代码对的是抽取后的片段，不是完整 `.fire` 解析器。实际字段来源请回到 `helloworld.fire` 和 `HelloWorld.png.meta` 核对。
 
-- collectUuidReferences 只从对象中找 __uuid__，模拟从场景序列化对象提取外部资源引用。
-- rawTextureUuid 来自 .meta，不是场景里的 __uuid__，所以代码单独把它加成第二条依赖边。
-- DependencyGraph.collect 从根 UUID 沿边往下走，返回所有直接和间接依赖。
-- 示例中的对象是从真实文件摘出的最小片段，不会读取或完整解析 .fire/.meta。
+## 对照 2.4.15 Runtime 源码
 
-`src/example-dependencies.ts` 放序列化片段与 `.meta` 依赖字段；`src/cocos2d/core/asset-manager/depend-util.ts` 提取引用；`src/main.ts` 组图并遍历。建议依次读数据、提取函数、图遍历调用。
+- [depend-util.js](../../engine/2.4.15engine/cocos2d/core/asset-manager/depend-util.js)：从 `parse()` 进入，继续看 `_parseDepsFromJson()` 如何递归收集引用。
+- [load.js](../../engine/2.4.15engine/cocos2d/core/asset-manager/load.js)：看 `loadDepends()` 如何把已发现的依赖加入加载流程。
+- [CCAsset.js](../../engine/2.4.15engine/cocos2d/core/assets/CCAsset.js)：Asset 自身的数据与引用计数；本课不模拟引用计数释放。
 
-运行：
+引擎对循环依赖、重复 UUID、native 依赖等还有处理。本课图只表达当前例子的两个 Asset 依赖。
 
-~~~sh
-deno task check
-deno task build
-deno task serve
-~~~
+## 学完后自查
 
-页面先看两条边，再看递归结果。若递归结果只有 SpriteFrame，没有 Texture2D，说明第二条边没有连上。
+如果删除 `rawTextureUuid` 这条边，为什么从场景递归就到不了 Texture2D？用一句话区分“Asset 依赖”和“请求文件”。下一课看 AssetManager 怎样执行这些依赖。
 
-## 源码对照
-
-- engine/2.4.15engine/cocos2d/core/asset-manager/depend-util.js：_parseDepsFromJson 和 getDepends 收集资源依赖。
-- engine/2.4.15engine/cocos2d/core/asset-manager/load.js：loadDepends 加载依赖并把引用写回对象。
-- engine/2.4.15engine/cocos2d/core/assets/CCAsset.js：Asset 对象和引用计数相关字段。
-
-下一课会让 AssetManager 按依赖图执行加载，而不只是打印这张图。
+运行方式：在本课目录执行 `deno task check`、`deno task build`、`deno task serve`。

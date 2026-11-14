@@ -7,21 +7,25 @@ if (!output) throw new Error("找不到 #log");
 
 const scene = new Asset(sceneUuid, "SceneAsset");
 const soldierPrefab = new Asset(prefabUuid, "Prefab");
-const soldierMesh = new Asset(meshUuid, "Mesh");
 const graph = new DependencyGraph();
 
 for (const uuid of collectUuidReferences(serializedSceneReference)) graph.add(scene.uuid, uuid);
-
 for (const uuid of collectUuidReferences(serializedMeshReference)) graph.add(soldierPrefab.uuid, uuid);
-soldierMesh.addRef();
+
+const names = new Map<string, string>([
+  [scene.uuid, "SceneAsset"],
+  [soldierPrefab.uuid, "soldier Prefab"],
+  [meshUuid, "soldier Mesh @18751"],
+]);
+const nameOf = (uuid: string): string => names.get(uuid) ?? uuid;
 
 output.textContent = [
   "Creator 3.8 Asset 依赖模型",
-  ...graph.edges().map(({ owner, dependency }) => `${owner} → ${dependency}`),
+  ...graph.edges().map(({ owner, dependency }) => nameOf(owner) + " → " + nameOf(dependency)),
   "",
-  `Scene 中找到 Prefab UUID: ${collectUuidReferences(serializedSceneReference).join(", ")}`,
-  `Prefab 中找到 Mesh UUID: ${collectUuidReferences(serializedMeshReference).join(", ")}`,
-  `场景递归依赖: ${graph.collect(scene.uuid).join(" → ")}`,
-  `Mesh Asset.refCount: ${soldierMesh.refCount}`,
-  "FBX 主 UUID 与 @子 ID 组合后，指向独立 Mesh 子资源。",
+  "Scene 中找到 Prefab: " + collectUuidReferences(serializedSceneReference).map(nameOf).join(", "),
+  "Prefab 中找到 Mesh: " + collectUuidReferences(serializedMeshReference).map(nameOf).join(", "),
+  "从 Scene 递归可达: " + [scene.uuid, ...graph.collect(scene.uuid)].map(nameOf).join(" → "),
+  "先看资源名和箭头，再回 example-dependencies.ts 对照完整 UUID。",
+  "完整 Mesh UUID: " + meshUuid,
 ].join("\n");

@@ -1,88 +1,78 @@
-# 第 94 课：从首场景走到 Web 资源
+# 第 94 课：从场景路径追到浏览器文件
 
-**本课目标：** 把 89–93 课的输出文件、Asset 身份、依赖、加载管线和 URL 串成一次完整的场景加载。
+**本课目标：** 把前 89–93 课接成一条可解释的链：输入场景路径，找到 UUID，生成 RequestItem，取得文件，读出依赖，创建 Asset。读完后你应能分清每一步的输入和输出。
 
-## 先弄清楚这五个名词
+## 先看全链，再读代码
 
-| 名词 | 本课里是什么 | 例子 |
+```text
+场景路径
+  → Bundle Config 查到 SceneAsset UUID
+  → RequestItem 带上 UUID、import/native 类型和 URL
+  → Fetcher 按 URL 取得文件
+  → Parser 从 pack 中取出当前 UUID 的序列化条目
+  → depend-util 找到 Prefab / Mesh UUID
+  → 递归创建 Mesh、Prefab、SceneAsset 并按 UUID 缓存
+```
+
+当前例子里 SceneAsset 和 Prefab 是两个 Asset，但在同一个 import pack；Mesh `@18751` 是另一个 native 文件。因此最终是 **2 个文件 URL、3 个 Asset 对象**。
+
+## 从入口逐步追踪
+
+### 1. Bundle 把场景名字变成 UUID
+
+`src/main.ts` 调用 `manager.loadScene("db://assets/scene/main.scene")`。`Bundle.loadScene()` 通过 `BundleConfig` 查到 SceneAsset UUID。场景路径是工程里的名字，UUID 才是运行时资源身份。
+
+`example-assets.ts` 保存第 93 课查表后的结果；第 93 课已逐步说明如何从真实 config 的 `scenes → uuids → packs` 得出结果。本课重点是把结果传给加载管线。
+
+### 2. preprocess 生成 RequestItem
+
+`Preprocessor` 用 UUID 查 AssetRecord，生成带有 UUID、`import`/`native` 类型和 URL 的 RequestItem。UUID 回答“加载哪个 Asset”；URL 回答“去哪里取文件”。
+
+### 3. Fetcher 取得文件
+
+SceneAsset 和 Prefab 的 URL 相同，Fetcher 只记录一次 pack GET。Mesh 的 URL 指向 `.bin` 文件，单独产生一个 GET。此时 `downloaded` 里有两个文件，`assets` 还没有对象。
+
+### 4. Parser 取当前 UUID 的条目
+
+import pack 可以包含多个 UUID。Parser 按 RequestItem 中的 UUID 从 pack 里取出对应场景或 Prefab 条目；它不是每次都把整个 pack 当成一个 Asset。native 分支在本课只用文件名表示 Mesh 数据。
+
+### 5. 依赖工具发现引用，Loader 递归创建
+
+`collectDependencies()` 从 Scene 序列化片段找到 Prefab UUID，再从 Prefab 片段找到 Mesh UUID。Loader 递归处理依赖，先创建 Mesh，再创建 Prefab，最后创建 SceneAsset。每个 Asset 进入按 UUID 索引的对象缓存；第二次加载场景时直接命中 SceneAsset。
+
+## 本课代码与源码职责对应
+
+| 本课文件 | 它做什么 | Creator 3.8.7 Runtime 对照 |
 | --- | --- | --- |
-| UUID | 运行时识别某个 Asset 的身份 | SceneAsset、Prefab、Mesh 各有一个 |
-| URL | 浏览器取得文件的位置 | `.../import/06/0693a7d89.json` |
-| import pack | 存放序列化 Asset 数据的构建文件 | Scene 与 Prefab 共用一个 pack |
-| native 文件 | 由专用解析器读取的文件 | Mesh 子资源的二进制文件 |
-| Asset 对象 | 加载后可被场景使用的运行时对象 | `Asset` 的课程简化版 |
+| `asset-manager.ts` | 组装 Config、Bundle、缓存和加载管线 | `asset-manager.ts` |
+| `bundle.ts`、`config.ts` | 场景名查 UUID | `asset-manager/bundle.ts`、`config.ts` |
+| `preprocess.ts`、`request-item.ts` | UUID 形成请求项 | `preprocess.ts`、`request-item.ts` |
+| `fetch.ts` | 取得文件 | `fetch.ts`、`downloader.ts` |
+| `parser.ts`、`depend-util.ts` | 读取资源条目、提取 UUID 依赖 | `parser.ts`、`depend-util.ts` |
+| `pipeline.ts`、`load.ts`、`deserialize.ts` | 串接阶段；递归加载、创建和缓存 Asset | `pipeline.ts`、`load.ts`、`deserialize.ts` |
+| `asset.ts` | 本课最小 Asset 对象 | `assets/asset.ts` |
 
-UUID、URL、文件、Asset 对象在流程中相连，但不是同一个东西。比如两个 UUID 可以落在同一个 pack URL 里，加载后仍然是两个 Asset 对象。
+课程代码保留 Runtime 的职责分层，只省去完整 Bundle Config 数据、并发队列、错误重试、反序列化格式兼容和真实网络实现。样例由 Creator 3.8.8 构建，本地 Runtime 快照是 3.8.7。
 
-## 一次 load 如何流过代码
+## 课程日志和浏览器 Network 是两种证据
 
-先从 `src/main.ts` 的 `manager.load(sceneUuidForExample)` 开始，沿调用顺序读：
+课程页面的 `GET` 是 Fetcher 对文件 Map 的模拟。观察实际请求时，在终端进入 `3.8NewProject/build/web-mobile/`，运行：
 
-~~~text
-main.ts
-  └─ AssetManager.load(uuid)                    对外入口
-       └─ LoadPipeline.load(uuid)               管理顺序和 Asset 缓存
-            ├─ Fetcher.fetch(record)             取得文件，按 URL 去重
-            ├─ Parser.parse(record)              区分 import pack / native
-            ├─ 对每个 dependency 递归 load      先准备依赖
-            └─ new Asset(...)                    创建并按 UUID 缓存
-~~~
+```sh
+python3 -m http.server 8105 --bind 127.0.0.1
+```
 
-照这个顺序观察页面日志：
+浏览器打开 `http://127.0.0.1:8105`，在 Network 面板过滤 `assets/main`。将场景 pack 和 Mesh 文件请求与第 93 课算出的 URL 比较。启动页面还会请求引擎、internal 和其他场景资源，所以实际请求总数不会是 2。
 
-1. 场景 UUID 没有 Asset 缓存，先从 `example-assets.ts` 找到它的记录。
-2. `Fetcher` 请求 import pack。Prefab 也指向同一个 pack URL，因此不会再次 GET。
-3. `Parser` 标记 pack 已处理；继续加载场景记录中的 Prefab 依赖。
-4. Prefab 的依赖指向 Mesh。Mesh 使用 native URL，Fetcher 为它发起第二个 GET。
-5. 依赖加载完成后，递归逐层创建并缓存 Mesh、Prefab、SceneAsset。
-6. 再次 load 同一个场景 UUID，会在 `LoadPipeline` 开头命中 Asset 对象缓存。
+## 源码入口
 
-结果是 **2 个不同文件 URL、3 个 Asset 对象**。缓存文件并没有把两个 Asset 合成一个对象。
+- [Bundle `loadScene()`](../../engine/3.8.7engine/cocos/asset/asset-manager/bundle.ts)
+- [Config 查表](../../engine/3.8.7engine/cocos/asset/asset-manager/config.ts) 与 [URL 生成](../../engine/3.8.7engine/cocos/asset/asset-manager/url-transformer.ts)
+- [RequestItem](../../engine/3.8.7engine/cocos/asset/asset-manager/request-item.ts)、[fetch](../../engine/3.8.7engine/cocos/asset/asset-manager/fetch.ts)、[pack-manager](../../engine/3.8.7engine/cocos/asset/asset-manager/pack-manager.ts)
+- [依赖解析](../../engine/3.8.7engine/cocos/asset/asset-manager/depend-util.ts)、[load](../../engine/3.8.7engine/cocos/asset/asset-manager/load.ts)、[deserialize](../../engine/3.8.7engine/cocos/asset/asset-manager/deserialize.ts)
 
-## 代码目录：每个文件只做一件事
+## 学完后自查
 
-| 文件 | 读它时要回答的问题 | 对应源码职责 |
-| --- | --- | --- |
-| `src/main.ts` | 从哪个 UUID 开始？结果显示在哪里？ | 课程入口 |
-| `src/example-assets.ts` | 真实工程里有哪些 UUID、依赖边和文件 URL？ | 从构建配置、场景和 Prefab 摘出的样例数据 |
-| `src/cocos/asset/asset-manager/types.ts` | 一条资源记录保存哪些信息？ | 请求/资源描述数据 |
-| `src/cocos/asset/asset-manager/asset-manager.ts` | 外部如何发起 load？ | `asset-manager.ts` 的门面职责 |
-| `src/cocos/asset/asset-manager/load.ts` | 缓存、递归、对象创建的顺序是什么？ | `load.ts` |
-| `src/cocos/asset/asset-manager/fetch.ts` | 文件 URL 如何去重？ | `fetch.ts` 的加载边界；真实文件 I/O 在 `downloader.ts` |
-| `src/cocos/asset/asset-manager/parser.ts` | import 与 native 为什么分开？ | `parser.ts` 的解析职责模型 |
-| `src/cocos/asset/assets/asset.ts` | 加载完成后缓存的对象是什么？ | `asset.ts` |
+不用看代码，依次说出“场景路径、UUID、URL、文件、Asset”分别在什么时候出现。再解释为什么 SceneAsset 和 Prefab 是两个 Asset，却可以只共用一个 import pack 请求。
 
-这里把示例数据放在 `example-assets.ts`，把处理流程放在引擎职责目录里。读代码时先读入口，再进 `load.ts`，需要看文件时跳到 `fetch.ts`，遇到解析再读 `parser.ts`。
-
-## 这份示例有意简化了什么
-
-- `example-assets.ts` 的依赖边已从场景和 Prefab 整理好；本课不会重新解析它们。
-- `Fetcher` 用内存 Set 模拟按 URL 缓存，没有发真实 HTTP 请求。
-- `Parser` 只记录“pack 已解析”的状态，没有反序列化真实 JSON 或 Mesh 文件。
-- `Asset` 只保留 UUID 和类型，完整 Asset 还有引用计数、销毁和序列化状态。
-- 没有实现并发去重、循环依赖保护、错误重试和 HTTP 缓存。
-
-所以本课的日志是**课程模型的流程记录**，不是 Creator 引擎的运行日志，也不是浏览器 Network 面板的实测结果。
-
-## 运行并核对真实构建
-
-先运行课程模型：
-
-~~~sh
-deno task check
-deno task build
-deno task serve
-~~~
-
-再单独观察 `3.8NewProject/build/web-mobile/`：运行 `python3 -m http.server 8105 --bind 127.0.0.1`，打开 `http://127.0.0.1:8105` 和浏览器 Network 面板，过滤 `assets/main`。找到 import pack 和 native Mesh 请求后，与 `example-assets.ts` 中的 URL 核对。两者是不同页面：课程页面解释职责顺序，Creator 构建页提供真实请求证据。样例由 Creator 3.8.8 构建，源码对应仓库 3.8.7 快照。
-
-## 引擎源码位置
-
-- `engine/3.8.7engine/cocos/asset/asset-manager/bundle.ts`：`Bundle.loadScene` 从场景名进入加载流程。
-- `engine/3.8.7engine/cocos/asset/asset-manager/config.ts`、`url-transformer.ts`：配置查找和 URL 形成。
-- `engine/3.8.7engine/cocos/asset/asset-manager/pack-manager.ts`：处理合并 pack。
-- `engine/3.8.7engine/cocos/asset/asset-manager/fetch.ts`、`downloader.ts`、`parser.ts`：从缓存/依赖处理到实际下载和资源解析。
-- `engine/3.8.7engine/cocos/asset/asset-manager/load.ts`、`depend-util.ts`：解析依赖、递归加载和缓存。
-- `engine/3.8.7engine/cocos/asset/assets/asset.ts`：Asset 对象。
-
-本课只把相关职责重排成容易单步阅读的 TypeScript 模型，不是 Creator 运行时的逐行移植。引擎快照也不含完整 Editor Builder。
+运行方式：在本课目录执行 `deno task check`、`deno task build`、`deno task serve`。

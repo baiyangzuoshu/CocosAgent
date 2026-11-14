@@ -1,10 +1,37 @@
-export type ResourceFileKind = "import" | "native";
+import type { CCAsset } from "../assets/CCAsset.ts";
 
-/** 本课从 Bundle Config 中摘出的单个资源记录。 */
+export type FileKind = "import" | "native";
+
+/** Bundle Config 已解析出的一个 UUID 记录；URL 来自第 93 课的查表结果。 */
 export interface AssetRecord {
   uuid: string;
   type: string;
-  dependencies: string[];
   url: string;
-  fileKind: ResourceFileKind;
+  fileKind: FileKind;
+}
+
+/** 教学用文件：一个 import pack 可以包含多个 UUID 条目。 */
+export interface AssetFile {
+  url: string;
+  resources: Map<string, string>;
+}
+
+export interface BundleConfigData {
+  scenes: Record<string, string>;
+  assets: Map<string, AssetRecord>;
+}
+
+export interface PipelineTask {
+  uuid: string;
+  request?: RequestItem;
+  file?: AssetFile;
+  asset?: CCAsset;
+}
+
+export interface RequestItem {
+  id: string;
+  uuid: string;
+  type: FileKind;
+  url: string;
+  record: AssetRecord;
 }
