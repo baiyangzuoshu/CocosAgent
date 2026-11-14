@@ -1,0 +1,2 @@
+6eb44227474694932b3ad8f093b032f47f95f1c1ed364c742a3662bd33044ef7  upstream/scene/main/viewport.cpp
+48b5ead083050c90441cc532506279852cab9cda86473fcc63090d3476ba7ec3  upstream/scene/gui/control.cpp

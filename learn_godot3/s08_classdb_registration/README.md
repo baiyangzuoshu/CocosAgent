@@ -42,16 +42,14 @@
 
 ## GDScript 源码复刻
 
-S08 Godot 3.6: ClassDB maps registered native classes to creators and bound metadata.
+`src/source_replay.gd` 按本课列出的 C++ 入口重建关键数据结构、条件分支和状态更新。它是可逐步阅读的教学移植，不是完整引擎替身；模型函数表会标明直接对应的源码行为和仅用于组织输入/输出的脚手架。平台、线程、对象分配和服务器副作用仍由真实引擎处理。
 
-source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
-
-| GDScript 函数 | 复刻步骤 |
-| --- | --- |
-| _register_class() | 将类型名、父类和创建资格写入类型表 |
-| _can_instance() | 检查类型父链、创建工厂或是否可实例化 |
-| _instance() | 检查类型父链、创建工厂或是否可实例化 |
-| _base_chain() | 检查类型父链、创建工厂或是否可实例化 |
+| 模型函数 | C++ 源码对照或脚手架性质 | 复现的状态与分支 |
+| --- | --- | --- |
+| `_register_class()` | `ClassDB::register_class / GDREGISTER_CLASS` | 登记 ClassDB 类型、继承和创建元数据。 |
+| `_can_instance()` | `ClassDB::can_instance` | 检查类型表与原生 creator 是否允许实例化。 |
+| `_instance()` | `ClassDB::instance / GDScriptNativeClass::instance` | 按类型表中的 creator 产生实例记录。 |
+| `_base_chain()` | `ClassDB::is_parent_class` | 沿 ClassDB 父类关系构造继承链。 |
 
 ## 最小 Godot/GDScript 实验
 

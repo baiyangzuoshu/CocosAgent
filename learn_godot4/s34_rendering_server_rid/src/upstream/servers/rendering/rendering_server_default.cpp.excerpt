@@ -1,0 +1,41 @@
+/*
+ * Godot 4 source excerpt.
+ * Upstream: engine/godot-4.7/servers/rendering/rendering_server_default.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 52-68 */
+
+void RenderingServerDefault::_free(RID p_rid) {
+	if (unlikely(p_rid.is_null())) {
+		return;
+	}
+	if (RSG::utilities->free(p_rid)) {
+		return;
+	}
+	if (RSG::canvas->free(p_rid)) {
+		return;
+	}
+	if (RSG::viewport->free(p_rid)) {
+		return;
+	}
+	if (RSG::scene->free(p_rid)) {
+		return;
+	}
+}
+
+/* Upstream lines 443-453 */
+
+void RenderingServerDefault::draw(bool p_present, double frame_step) {
+	ERR_FAIL_COND_MSG(!Thread::is_main_thread(), "Manually triggering the draw function from the RenderingServer can only be done on the main thread. Call this function from the main thread or use call_deferred().");
+	// Needs to be done before changes is reset to 0, to not force the editor to redraw.
+	RS::get_singleton()->emit_signal(SNAME("frame_pre_draw"));
+	changes = 0;
+	if (create_thread) {
+		command_queue.push(this, &RenderingServerDefault::_draw, p_present, frame_step);
+	} else {
+		_draw(p_present, frame_step);
+	}
+}

@@ -1,0 +1,2 @@
+513b9efe70b2003b1ff3e451ac1b07527c3054b1eb81a0faab2ffe3eec0b6286  upstream/scene/2d/canvas_item.cpp
+e28f31a4923ccf80e9036aa89fd083f38e671b023b1bc949b56850b5d185ca57  upstream/servers/visual/visual_server_canvas.cpp

@@ -1,0 +1,60 @@
+/*
+ * Godot 3 source excerpt.
+ * Upstream: engine/godot-3.6/drivers/gles3/rasterizer_gles3.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 194-221 */
+
+void RasterizerGLES3::begin_frame(double frame_step) {
+	time_total += frame_step * time_scale;
+
+	if (frame_step == 0) {
+		//to avoid hiccups
+		frame_step = 0.001;
+	}
+
+	double time_roll_over = GLOBAL_GET("rendering/limits/time/time_rollover_secs");
+	time_total = Math::fmod(time_total, time_roll_over);
+
+	storage->frame.time[0] = time_total;
+	storage->frame.time[1] = Math::fmod(time_total, 3600);
+	storage->frame.time[2] = Math::fmod(time_total, 900);
+	storage->frame.time[3] = Math::fmod(time_total, 60);
+	storage->frame.count++;
+	storage->frame.delta = frame_step;
+
+	storage->update_dirty_resources();
+
+	storage->info.render_final = storage->info.render;
+	storage->info.render.reset();
+	storage->info.render.shader_compiles_in_progress_count = ShaderGLES3::active_compiles_count;
+
+	ShaderGLES3::current_frame = storage->frame.count;
+
+	scene->iteration();
+}
+
+/* Upstream lines 408-426 */
+
+void RasterizerGLES3::end_frame(bool p_swap_buffers) {
+	if (OS::get_singleton()->is_layered_allowed()) {
+		if (!OS::get_singleton()->get_window_per_pixel_transparency_enabled()) {
+			//clear alpha
+			glColorMask(false, false, false, true);
+			glClearColor(0, 0, 0, 1);
+			glClear(GL_COLOR_BUFFER_BIT);
+			glColorMask(true, true, true, true);
+		}
+	}
+
+	ShaderGLES3::advance_async_shaders_compilation();
+
+	if (p_swap_buffers) {
+		OS::get_singleton()->swap_buffers();
+	} else {
+		glFinish();
+	}
+}

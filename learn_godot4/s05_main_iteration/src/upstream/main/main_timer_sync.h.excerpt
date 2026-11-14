@@ -6,7 +6,9 @@
  * Copyright and license notice: Godot Engine; see course-root SOURCE_LICENSE.txt.
  */
 
+
 /* Upstream lines 35-40 */
+
 struct MainFrameTime {
 	double process_step; // delta time to advance during process()
 	int physics_steps; // number of times to iterate the physics engine
@@ -14,7 +16,7 @@ struct MainFrameTime {
 
 	void clamp_process_step(double min_process_step, double max_process_step);
 
-/* Upstream lines 93-144 */
+/* Upstream lines 94-145 */
 
 	// logical game time since last physics timestep
 	double time_accum = 0;
@@ -67,3 +69,4 @@ public:
 
 	// advance one frame, return timesteps to take
 	MainFrameTime advance(double p_physics_step, int p_physics_ticks_per_second);
+};

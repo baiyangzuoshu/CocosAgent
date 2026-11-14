@@ -1,0 +1,27 @@
+/*
+ * Godot 3 source excerpt.
+ * Upstream: engine/godot-3.6/scene/gui/control.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1834-1842 */
+
+void Control::set_focus_mode(FocusMode p_focus_mode) {
+	ERR_FAIL_INDEX((int)p_focus_mode, 3);
+
+	if (is_inside_tree() && p_focus_mode == FOCUS_NONE && data.focus_mode != FOCUS_NONE && has_focus()) {
+		release_focus();
+	}
+
+	data.focus_mode = p_focus_mode;
+}
+
+/* Upstream lines 2170-2174 */
+
+void Control::accept_event() {
+	if (is_inside_tree()) {
+		get_viewport()->_gui_accept_event();
+	}
+}

@@ -10,20 +10,23 @@
 
 ## C++ 源码追踪
 
-源码依据：`engine/godot-3.6/`（Godot 3.6 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
+源码依据：`engine/godot-3.6/`。以下路径相对于该快照目录；准确原文见后续摘录表。
 
-~~~text
-typeof/convert → gdscript_functions → Variant::construct/can_convert；Object.callv(Array) → Object::call → ScriptInstance 或 ClassDB MethodBind
-~~~
-- `engine/godot-3.6/core/variant.h:58-110`：本课追踪摘录。
-- `engine/godot-3.6/core/variant.cpp:162-210`：本课追踪摘录。
-- `engine/godot-3.6/core/variant_call.cpp:1217-1285`：本课追踪摘录。
-- `engine/godot-3.6/core/object.cpp:819-900`：本课追踪摘录。
-- `engine/godot-3.6/modules/gdscript/gdscript_function.cpp:432-455`：本课追踪摘录。
-- `engine/godot-3.6/modules/gdscript/gdscript_function.cpp:947-970`：本课追踪摘录。
-- `engine/godot-3.6/modules/gdscript/gdscript_functions.cpp:616-638`：本课追踪摘录。
-- `engine/godot-3.6/modules/gdscript/gdscript_functions.cpp:1768-1779`：本课追踪摘录。
-- `engine/godot-3.6/modules/gdscript/gdscript_functions.cpp:1859-1869`：本课追踪摘录。
+```text
+typeof/convert → Variant::Type / Variant::construct
+operator bytecode → Variant::evaluate
+Object::callv(Array) → Object::call → ScriptInstance / ClassDB MethodBind
+var2str → VariantWriter
+```
+
+- `modules/gdscript/gdscript_function.cpp:432-455`：运算 opcode 读取两个 Variant，再调用 `Variant::evaluate()`；非法操作数走运行时错误分支。
+- `modules/gdscript/gdscript_function.cpp:947-970`：构造 opcode 读取目标 `Variant::Type` 和参数数，调用 `Variant::construct()`。
+- `core/variant.cpp:162-210`、`core/variant_call.cpp:1217-1285`：判断可转换类型并执行构造函数选择。
+- `modules/gdscript/gdscript_functions.cpp:616-638`：`typeof()` 读取 Variant 标签，`convert()` 转到 Variant 构造路径。
+- `core/object.cpp:819-900`：`Object::callv()` 建立参数指针，再由 `Object::call()` 分派脚本或 ClassDB 方法。
+- `modules/gdscript/gdscript_functions.cpp:1859-1869`：`var2str/str2var` 的脚本函数签名；实际文本转换由 Variant 序列化代码处理。
+
+GDScript 模型分开保留标签、转换、运算和对象方法调用；真实探针分别调用 `typeof/convert`、`var2str/str2var` 与动态方法。
 
 ## 本课源码复刻
 
@@ -40,17 +43,15 @@ typeof/convert → gdscript_functions → Variant::construct/can_convert；Objec
 
 ## GDScript 源码复刻
 
-S09 Godot 3.6: Variant tags and convert/evaluate stay separate from Object::callv.
+`src/source_replay.gd` 按本课列出的 C++ 入口重建关键数据结构、条件分支和状态更新。它是可逐步阅读的教学移植，不是完整引擎替身；模型函数表会标明直接对应的源码行为和仅用于组织输入/输出的脚手架。平台、线程、对象分配和服务器副作用仍由真实引擎处理。
 
-source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
-
-| GDScript 函数 | 复刻步骤 |
-| --- | --- |
-| _variant() | 维护 Variant 类型标签并执行构造/转换/序列化分支 |
-| _convert() | 维护 Variant 类型标签并执行构造/转换/序列化分支 |
-| _evaluate_add() | 维护 Variant 类型标签并执行构造/转换/序列化分支 |
-| _object_callv() | 更新本课状态并向后续步骤传递结果 |
-| _variant_to_text() | 维护 Variant 类型标签并执行构造/转换/序列化分支 |
+| 模型函数 | C++ 源码对照或脚手架性质 | 复现的状态与分支 |
+| --- | --- | --- |
+| `_variant()` | `Variant typed value` | 保留 Variant 类型标签和值，区别标签与承载值。 |
+| `_convert()` | `Variant::can_convert / Variant::construct` | 按本课子集执行类型转换并保留错误/目标类型。 |
+| `_evaluate_add()` | `GDScriptFunction operator opcode → Variant::evaluate` | 模拟运算 opcode 选择的 Variant 加法分支。 |
+| `_object_callv()` | `Object::callv → Object::call / MethodBind` | 对照该函数附近的 C++ 摘录，观察输入字段如何改变模型状态。 |
+| `_variant_to_text()` | `Variant::get_construct_string / var2str` | 将 Variant 值交给文本表示路径。 |
 
 ## 最小 Godot/GDScript 实验
 

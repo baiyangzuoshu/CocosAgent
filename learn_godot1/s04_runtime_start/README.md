@@ -35,15 +35,15 @@
 
 ## GDScript 源码复刻
 
-S04 Godot 1.1: XML PackedScene::instance() is a new node tree, not the resource.
+`run()` 同时走资源存在和资源缺失两条路径：成功时从同一份 PackedScene 创建两棵独立节点树，将第一棵加入 SceneTree，并记录 enter-tree/READY 顺序；加载失败时返回空值，不得改动 `current_scene`.
 
-source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
+`src/source_replay.gd` 按本课列出的 C++ 入口重建关键数据结构、条件分支和状态更新。它是可逐步阅读的教学移植，不是完整引擎替身；模型函数表会标明直接对应的源码行为和仅用于组织输入/输出的脚手架。平台、线程、对象分配和服务器副作用仍由真实引擎处理。
 
-| GDScript 函数 | 复刻步骤 |
-| --- | --- |
-| _load_main_scene() | 检查主场景资源是否可加载并保留资源格式 |
-| _instance_packed_scene() | 从共享 PackedScene 描述创建独立节点实例 |
-| _install_scene_tree() | 安装 current_scene 并记录 ENTER_TREE/READY 顺序 |
+| 模型函数 | C++ 源码对照或脚手架性质 | 复现的状态与分支 |
+| --- | --- | --- |
+| `_load_main_scene()` | `Main::start / ResourceLoader::load` | 按项目主场景路径模拟 ResourceLoader 返回的 PackedScene。 |
+| `_instance_packed_scene()` | `PackedScene::instance` | 从共享场景资源创建独立节点实例；资源加载失败时返回空值并阻止安装。 |
+| `_install_scene_tree()` | `SceneTree::add_current_scene / SceneTree::init` | 仅对成功实例设置当前场景，并演示 parent-first enter-tree 与 child-first READY 顺序。 |
 
 ## 最小 Godot/GDScript 实验
 

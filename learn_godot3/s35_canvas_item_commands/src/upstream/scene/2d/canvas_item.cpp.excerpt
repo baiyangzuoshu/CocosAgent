@@ -1,0 +1,78 @@
+/*
+ * Godot 3 source excerpt.
+ * Upstream: engine/godot-3.6/scene/2d/canvas_item.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 665-676 */
+
+void CanvasItem::update() {
+	if (!is_inside_tree()) {
+		return;
+	}
+	if (pending_update) {
+		return;
+	}
+
+	pending_update = true;
+
+	MessageQueue::get_singleton()->push_call(this, "_update_callback");
+}
+
+/* Upstream lines 815-867 */
+
+void CanvasItem::draw_rect(const Rect2 &p_rect, const Color &p_color, bool p_filled, float p_width, bool p_antialiased) {
+	ERR_FAIL_COND_MSG(!drawing, "Drawing is only allowed inside NOTIFICATION_DRAW, _draw() function or 'draw' signal.");
+
+	if (p_filled) {
+		if (p_width != 1.0) {
+			WARN_PRINT("The draw_rect() \"width\" argument has no effect when \"filled\" is \"true\".");
+		}
+
+		if (p_antialiased) {
+			WARN_PRINT("The draw_rect() \"antialiased\" argument has no effect when \"filled\" is \"true\".");
+		}
+
+		VisualServer::get_singleton()->canvas_item_add_rect(canvas_item, p_rect, p_color);
+	} else {
+		// Thick lines are offset depending on their width to avoid partial overlapping.
+		// Thin lines don't require an offset, so don't apply one in this case
+		float offset;
+		if (p_width >= 2) {
+			offset = p_width / 2.0;
+		} else {
+			offset = 0.0;
+		}
+
+		VisualServer::get_singleton()->canvas_item_add_line(
+				canvas_item,
+				p_rect.position + Size2(-offset, 0),
+				p_rect.position + Size2(p_rect.size.width + offset, 0),
+				p_color,
+				p_width,
+				p_antialiased);
+		VisualServer::get_singleton()->canvas_item_add_line(
+				canvas_item,
+				p_rect.position + Size2(p_rect.size.width, offset),
+				p_rect.position + Size2(p_rect.size.width, p_rect.size.height - offset),
+				p_color,
+				p_width,
+				p_antialiased);
+		VisualServer::get_singleton()->canvas_item_add_line(
+				canvas_item,
+				p_rect.position + Size2(p_rect.size.width + offset, p_rect.size.height),
+				p_rect.position + Size2(-offset, p_rect.size.height),
+				p_color,
+				p_width,
+				p_antialiased);
+		VisualServer::get_singleton()->canvas_item_add_line(
+				canvas_item,
+				p_rect.position + Size2(0, p_rect.size.height - offset),
+				p_rect.position + Size2(0, offset),
+				p_color,
+				p_width,
+				p_antialiased);
+	}
+}

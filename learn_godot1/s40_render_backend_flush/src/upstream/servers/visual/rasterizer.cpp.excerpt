@@ -1,0 +1,14 @@
+/*
+ * Godot 1 source excerpt.
+ * Upstream: engine/godot-1.1/servers/visual/rasterizer.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 598-601 */
+
+void Rasterizer::flush_frame() {
+
+	//not really necesary to implement
+}

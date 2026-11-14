@@ -1,0 +1,25 @@
+/*
+ * Godot 2 source excerpt.
+ * Upstream: engine/godot-2.1/scene/gui/control.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1500-1506 */
+
+void Control::set_focus_mode(FocusMode p_focus_mode) {
+
+	if (is_inside_tree() && p_focus_mode == FOCUS_NONE && data.focus_mode != FOCUS_NONE && has_focus())
+		release_focus();
+
+	data.focus_mode = p_focus_mode;
+}
+
+/* Upstream lines 1797-1801 */
+
+void Control::accept_event() {
+
+	if (is_inside_tree())
+		get_viewport()->_gui_accept_event();
+}

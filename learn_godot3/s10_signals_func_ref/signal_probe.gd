@@ -6,7 +6,9 @@ func _ready():
 	# Run the lesson's miniature source replica before probing the real engine API.
 	var replay = load("res://src/source_replay.gd").new()
 	replay.run()
-	connect("score_changed", self, "_on_score_changed")
+	var first_status = connect("score_changed", self, "_on_score_changed")
+	var duplicate_status = connect("score_changed", self, "_on_score_changed")
+	print("S10 connect status (first, duplicate): ", first_status, ", ", duplicate_status)
 	emit_signal("score_changed", 7)
 	var callback = funcref(self, "_double_score")
 	print("S10 FuncRef valid: ", callback.is_valid())

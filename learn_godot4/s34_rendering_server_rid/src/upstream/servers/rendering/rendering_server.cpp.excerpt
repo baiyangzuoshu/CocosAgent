@@ -1,0 +1,13 @@
+/*
+ * Godot 4 source excerpt.
+ * Upstream: engine/godot-4.7/servers/rendering/rendering_server.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 47-49 */
+
+RenderingServer *RenderingServer::get_singleton() {
+	return singleton;
+}

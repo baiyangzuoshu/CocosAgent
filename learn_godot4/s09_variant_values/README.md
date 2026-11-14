@@ -10,19 +10,21 @@
 
 ## C++ 源码追踪
 
-源码依据：`engine/godot-4.7/`（Godot 4.7 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
+源码依据：`engine/godot-4.7/`。以下路径相对于该快照目录；准确原文见后续摘录表。
 
-~~~text
-Variant::Type → can_convert_strict/construct → typeof/type_string/type_convert → var_to_str/str_to_var → VariantWriter/Parser
-~~~
-- `engine/godot-4.7/core/variant/variant.h:96-145`：本课追踪摘录。
-- `engine/godot-4.7/core/variant/variant.cpp:189-228`：本课追踪摘录。
-- `engine/godot-4.7/core/variant/variant_construct.cpp:264-289`：本课追踪摘录。
-- `engine/godot-4.7/core/variant/variant_utility.cpp:845-933`：本课追踪摘录。
-- `engine/godot-4.7/core/variant/variant_utility.cpp:1037-1053`：本课追踪摘录。
-- `engine/godot-4.7/core/variant/variant_utility.cpp:1747-1765`：本课追踪摘录。
-- `engine/godot-4.7/core/object/object.cpp:750-765`：本课追踪摘录。
-- `engine/godot-4.7/core/object/object.cpp:768-850`：本课追踪摘录。
+```text
+Variant::Type → can_convert_strict/construct → type_convert
+Object::callv(Array) → Object::callp → ScriptInstance / ClassDB MethodBind
+var_to_str → VariantWriter；str_to_var → VariantParser
+```
+
+- `core/variant/variant.h:96-145`：Godot 4.7 的 `Variant::Type` 已包含 `FLOAT`、`VECTOR2I`、`CALLABLE` 与 typed packed arrays。
+- `core/variant/variant.cpp:189-228`、`532-862`、`variant_construct.cpp:264-289`：宽松/严格转换表与构造器候选检查分开；strict 构造按参数数和严格类型匹配候选，字符串数字不会按 strict 表转为数值。
+- `core/variant/variant_utility.cpp:845-933`：`typeof()` 与 `type_convert()` 使用本代 Variant 类型枚举；`type_convert()` 的实际转换不等同于构造器选择。
+- `core/object/object.cpp:750-850`：`Object::callv()` 组装参数指针并进入 `callp()`；脚本实例未命中后再查 ClassDB MethodBind。
+- `core/variant/variant_utility.cpp:1037-1053`、`1747-1765`：`var_to_str/str_to_var` 绑定 `VariantWriter` 与 `VariantParser`。
+
+实验分别观察类型、类型转换、文本往返和动态对象调用；模型不把这些入口合并成单一“Variant 转换”。
 
 ## 本课源码复刻
 
@@ -31,24 +33,23 @@ Variant::Type → can_convert_strict/construct → typeof/type_string/type_conve
 | 阅读顺序 | 完整上游副本 | 原始行号摘录 | 上游快照路径 |
 | --- | --- | --- | --- |
 | 1 | [object.cpp](src/upstream/core/object/object.cpp) | [750-765 ; 768-850](src/upstream/core/object/object.cpp.excerpt) | engine/godot-4.7/core/object/object.cpp |
-| 2 | [variant.cpp](src/upstream/core/variant/variant.cpp) | [189-228](src/upstream/core/variant/variant.cpp.excerpt) | engine/godot-4.7/core/variant/variant.cpp |
+| 2 | [variant.cpp](src/upstream/core/variant/variant.cpp) | [189-228 ; 532-862](src/upstream/core/variant/variant.cpp.excerpt) | engine/godot-4.7/core/variant/variant.cpp |
 | 3 | [variant.h](src/upstream/core/variant/variant.h) | [96-145](src/upstream/core/variant/variant.h.excerpt) | engine/godot-4.7/core/variant/variant.h |
 | 4 | [variant_construct.cpp](src/upstream/core/variant/variant_construct.cpp) | [264-289](src/upstream/core/variant/variant_construct.cpp.excerpt) | engine/godot-4.7/core/variant/variant_construct.cpp |
 | 5 | [variant_utility.cpp](src/upstream/core/variant/variant_utility.cpp) | [845-933 ; 1037-1053 ; 1747-1765](src/upstream/core/variant/variant_utility.cpp.excerpt) | engine/godot-4.7/core/variant/variant_utility.cpp |
 
 ## GDScript 源码复刻
 
-S09 Godot 4.7: strict Variant construction, utility text round-trip, Object::callp.
+`src/source_replay.gd` 按本课列出的 C++ 入口重建关键数据结构、条件分支和状态更新。它是可逐步阅读的教学移植，不是完整引擎替身；模型函数表会标明直接对应的源码行为和仅用于组织输入/输出的脚手架。平台、线程、对象分配和服务器副作用仍由真实引擎处理。
 
-source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
-
-| GDScript 函数 | 复刻步骤 |
-| --- | --- |
-| _construct() | 维护 Variant 类型标签并执行构造/转换/序列化分支 |
-| _is_integer() | 维护 Variant 类型标签并执行构造/转换/序列化分支 |
-| _var_to_str() | 维护 Variant 类型标签并执行构造/转换/序列化分支 |
-| _str_to_var() | 维护 Variant 类型标签并执行构造/转换/序列化分支 |
-| _object_callp() | 更新本课状态并向后续步骤传递结果 |
+| 模型函数 | C++ 源码对照或脚手架性质 | 复现的状态与分支 |
+| --- | --- | --- |
+| `_construct()` | `Variant::construct` | 按目标 Variant 类型匹配构造或转换路径。 |
+| `_can_convert_strict()` | `Variant::can_convert_strict` | 按目标类型的严格兼容表判断构造参数，不把 String 当数字自动转换。 |
+| `_type_convert()` | `VariantUtilityFunctions::type_convert` | 模拟面向脚本的 type_convert utility；与构造器 strict 匹配分开。 |
+| `_var_to_str()` | `VariantUtilityFunctions::var_to_str / VariantWriter::write_to_string` | 序列化 Variant 值到文本。 |
+| `_str_to_var()` | `VariantUtilityFunctions::str_to_var / VariantParser::parse` | 解析文本并恢复 Variant 值。 |
+| `_object_callp()` | `Object::callv → Object::callp → ClassDB::get_method` | 把参数数组转给 Object::callp/MethodBind。 |
 
 ## 最小 Godot/GDScript 实验
 

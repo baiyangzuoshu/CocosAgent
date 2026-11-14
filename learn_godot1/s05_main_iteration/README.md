@@ -14,12 +14,14 @@
 
 以下路径相对于 `engine/godot-1.1/` 快照根目录：
 
-- `main/main.cpp:1315-1338`：`Main::iteration()` 用 OS tick 计算 `step`，按 `iterations_per_second` 得到固定片长，并累计 `time_accum`；单次大步长限制到固定片长的 8 倍。
+- `main/main.cpp:1315-1338`：`Main::iteration()` 用 OS tick 计算 `step`，按 `iterations_per_second` 得到 `frame_slice`，先把 `step` 限制到 8 个片长，再累加 `time_accum`。
 - `main/main.cpp:1341-1366`：对每个固定片长先同步/刷新物理查询，调用 `MainLoop::iteration()`，再推进 3D/2D PhysicsServer 并冲刷消息队列。
 - `main/main.cpp:1372-1400`：固定步之后调用 `MainLoop::idle(step)`；可绘制时调用 `VisualServer::draw()`，不可绘制时 `flush()`，随后更新 AudioServer。
 - `scene/main/node.cpp:52-73`、`1892-1893`：SceneTree 驱动 Node 的 `_process` / `_fixed_process` 虚方法；Node 暴露 `set_process()` 与 `set_fixed_process()` 开关。
 
 调用摘要：平台调用 `Main::iteration()` → 累计经过时间 → 零次或多次固定 `MainLoop::iteration()` / 物理服务器步进 → 一次 `MainLoop::idle()` → VisualServer 绘制或刷新。
+
+逐段核对时留意两个条件：循环使用严格的 `time_accum > frame_slice`；传给 idle 的是本帧被截断后的 `step`，不是固定循环结束后的余数。模型用 `0.055s` 和 `0.020s` 演示两次固定步后留下 `0.015s`；`0.300s` 输入先截到 `0.160s`，严格大于条件会留下恰好一个 `frame_slice`。
 
 ## 本课源码复刻
 
@@ -32,15 +34,13 @@
 
 ## GDScript 源码复刻
 
-S05 Godot 1.1: fixed slice accumulator → MainLoop iteration/idle → VisualServer.
+`src/source_replay.gd` 按本课列出的 C++ 入口重建关键数据结构、条件分支和状态更新。它是可逐步阅读的教学移植，不是完整引擎替身；模型函数表会标明直接对应的源码行为和仅用于组织输入/输出的脚手架。平台、线程、对象分配和服务器副作用仍由真实引擎处理。
 
-source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
-
-| GDScript 函数 | 复刻步骤 |
-| --- | --- |
-| _advance_clock() | 累计经过时间并计算固定步数、process delta 和余量 |
-| _fixed_iteration() | 逐个执行固定物理阶段并记录服务器同步顺序 |
-| _idle_and_submit() | 执行一次 process/idle 并记录 draw 或 sync 提交 |
+| 模型函数 | C++ 源码对照或脚手架性质 | 复现的状态与分支 |
+| --- | --- | --- |
+| `_advance_clock()`、`_run_fixed_loop()` | `Main::iteration` 的 tick 截断、累加器与严格固定循环 | 保留 8 片长截断、每次循环减去一片长，以及主循环请求退出时提前跳出而不减片长的分支。 |
+| `_fixed_iteration()` | `Main::iteration` 固定循环主体 | 按顺序记录 PhysicsServer/Physics2DServer 同步与 query flush、`MainLoop::iteration`、消息队列、服务器 step。 |
+| `_idle_and_submit()` | `Main::iteration` idle、draw/flush 与 AudioServer 尾段 | idle 使用本帧截断后的 step；区分低处理器模式、场景未变、不可绘制和正常绘制。 |
 
 ## 最小 Godot/GDScript 实验
 
@@ -56,7 +56,7 @@ godot -path .
 
 ## 简化与边界
 
-实验不更改 time scale、iterations per second、低处理器占用模式或目标 FPS，也不模拟平台事件循环和渲染后端。Godot 1.1 使用 `MainLoop::iteration/idle`、`VisualServer` 和 `_fixed_process`；本课尚未运行项目。
+模型逐段移植本课摘录中的计时、退出门控和 draw/flush 分支；OS tick、真实 PhysicsServer/VisualServer 副作用、目标 FPS 和平台事件循环仍由真实引擎负责。Godot 1.1 使用 `MainLoop::iteration/idle`、`VisualServer` 和 `_fixed_process`；本课尚未运行项目。
 
 ## 下一课
 

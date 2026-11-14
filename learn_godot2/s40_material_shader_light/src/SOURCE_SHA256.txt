@@ -1,0 +1,3 @@
+0029a9dea40c696446fe6243927ca43afb2d88390ca6f0950a899b82842bee3b  upstream/scene/resources/material.cpp
+547a0256be39a6316b3eaff2341e970669edc5f469de5f0ae716931873295142  upstream/scene/3d/light.cpp
+e1a4dd16c93e0233dfb95e6ffd8d12902da77df907d5d96de6242c5a542c57b6  upstream/servers/visual/visual_server_raster.cpp

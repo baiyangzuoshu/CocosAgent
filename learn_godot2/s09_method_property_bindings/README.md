@@ -10,18 +10,21 @@
 
 ## C++ 源码追踪
 
-源码依据：`engine/godot-2.1/`（Godot 2.1 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
+源码依据：`engine/godot-2.1/`。以下路径相对于该快照目录；准确原文见后续摘录表。
 
-~~~text
-Node2D::_bind_methods → ObjectTypeDB 方法/属性注册 → Object::set/get → ObjectTypeDB 属性访问 → Object::callv → MethodBind
-~~~
-- `engine/godot-2.1/scene/2d/node_2d.cpp:398-455`：本课追踪摘录。
-- `engine/godot-2.1/core/object_type_db.cpp:614-701`：本课追踪摘录。
-- `engine/godot-2.1/core/object.cpp:305-398`：本课追踪摘录。
-- `engine/godot-2.1/core/object.cpp:652-670`：本课追踪摘录。
-- `engine/godot-2.1/core/object.cpp:797-859`：本课追踪摘录。
-- `engine/godot-2.1/core/object.cpp:1527-1534`：本课追踪摘录。
-- `engine/godot-2.1/core/object.cpp:1594-1597`：本课追踪摘录。
+```text
+Node2D::_bind_methods / ADD_PROPERTY
+  → Object::set/get
+  → ObjectTypeDB::set_property/get_property
+  → Object::callv/call → MethodBind
+```
+
+- `scene/2d/node_2d.cpp:360-405` **`Node2D::_bind_methods()`**：注册位置方法，并把 `transform/pos` 属性接到 `set_pos/get_pos`。
+- `core/object.cpp` 的 `Object::set()` / `Object::get()`：先询问脚本实例，再将内建属性交给类型数据库。
+- `core/object_type_db.cpp:637-701` **`ObjectTypeDB::set_property()` / `get_property()`**：沿父类元数据查找属性，并通过 setter/getter 更新或读取值。
+- `core/object.cpp:685-704`、`835-897` **`Object::callv()` / `Object::call()`**：将 Array 变成 Variant 参数数组，脚本未处理的方法再进入 MethodBind。
+
+模型把类型表、属性表、参数数量校验和方法调用分开；真实探针通过 Godot 2.1 的位置属性 API 观察读写结果。
 
 ## 本课源码复刻
 
@@ -35,17 +38,15 @@ Node2D::_bind_methods → ObjectTypeDB 方法/属性注册 → Object::set/get �
 
 ## GDScript 源码复刻
 
-S09 Godot 2.1: ObjectTypeDB property metadata delegates to MethodBind callv.
+`src/source_replay.gd` 按本课列出的 C++ 入口重建关键数据结构、条件分支和状态更新。它是可逐步阅读的教学移植，不是完整引擎替身；模型函数表会标明直接对应的源码行为和仅用于组织输入/输出的脚手架。平台、线程、对象分配和服务器副作用仍由真实引擎处理。
 
-source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
-
-| GDScript 函数 | 复刻步骤 |
-| --- | --- |
-| _register_method() | 登记 MethodBind 参数数、getter/setter 或属性路径 |
-| _register_property() | 登记 MethodBind 参数数、getter/setter 或属性路径 |
-| _callv() | 通过绑定表动态调用方法或访问属性 |
-| _get_property() | 通过绑定表动态调用方法或访问属性 |
-| _set_property() | 通过绑定表动态调用方法或访问属性 |
+| 模型函数 | C++ 源码对照或脚手架性质 | 复现的状态与分支 |
+| --- | --- | --- |
+| `_register_method()` | `ObjectTypeDB::bind_method / MethodBind` | 登记方法名、参数个数与原生处理函数。 |
+| `_register_property()` | `Node2D::_bind_methods / ADD_PROPERTY` | 登记属性名以及 setter/getter 方法名。 |
+| `_callv()` | `Object::callv → Object::call → MethodBind::call` | 校验参数并把动态参数转到对应 MethodBind/脚本方法。 |
+| `_get_property()` | `Object::get → ObjectTypeDB::get_property` | 通过属性元数据的 getter MethodBind 取值。 |
+| `_set_property()` | `Object::set → ObjectTypeDB::set_property` | 通过属性元数据的 setter MethodBind 写值。 |
 
 ## 最小 Godot/GDScript 实验
 

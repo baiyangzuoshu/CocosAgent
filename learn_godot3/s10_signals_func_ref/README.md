@@ -10,16 +10,20 @@
 
 ## C++ 源码追踪
 
-源码依据：`engine/godot-3.6/`（Godot 3.6 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
+源码依据：`engine/godot-3.6/`。以下路径相对于该快照目录；准确原文见后续摘录表。
 
-~~~text
-Object::connect(signal,target,method) → 连接表 → emit_signal → 目标方法；funcref → FuncRef(ObjectID,function) → call_func → Object::call
-~~~
-- `engine/godot-3.6/core/object.cpp:1172-1265`：本课追踪摘录。
-- `engine/godot-3.6/core/object.cpp:1452-1510`：本课追踪摘录。
-- `engine/godot-3.6/core/func_ref.cpp:33-101`：本课追踪摘录。
-- `engine/godot-3.6/modules/gdscript/gdscript_functions.cpp:592-615`：本课追踪摘录。
-- `engine/godot-3.6/modules/gdscript/gdscript_functions.cpp:1760-1766`：本课追踪摘录。
+```text
+Object::connect(signal, target, method) → connection list
+  → Object::emit_signal → Object::call
+funcref → FuncRef(ObjectID, function) → call_func → ObjectDB lookup → Object::call
+```
+
+- `core/object.cpp:1172-1265` **`Object::emit_signal()`**：按 signal 取连接并把发射参数与连接绑定参数交给目标方法。
+- `core/object.cpp:1452-1510` **`Object::connect()`**：检查 signal/target/method 组合及连接标志，再保存连接信息。
+- `core/func_ref.cpp:33-101` **`FuncRef::call_func()` / `call_funcv()`**：FuncRef 保存对象引用和函数名，调用时解析对象并执行方法。
+- `modules/gdscript/gdscript_functions.cpp:592-615`、`1760-1766`：`funcref()` 创建脚本可见 FuncRef，并绑定 `call_func` 接口。
+
+模型显式表现重复连接拒绝、发射参数转发与 FuncRef 的 ObjectID 查找；不模拟线程组和 deferred 连接。
 
 ## 本课源码复刻
 
@@ -33,20 +37,18 @@ Object::connect(signal,target,method) → 连接表 → emit_signal → 目标�
 
 ## GDScript 源码复刻
 
-S10 Godot 3.6: legacy object/method connection and FuncRef(ObjectID, function).
+`src/source_replay.gd` 按本课列出的 C++ 入口重建关键数据结构、条件分支和状态更新。它是可逐步阅读的教学移植，不是完整引擎替身；模型函数表会标明直接对应的源码行为和仅用于组织输入/输出的脚手架。平台、线程、对象分配和服务器副作用仍由真实引擎处理。
 
-source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
-
-| GDScript 函数 | 复刻步骤 |
-| --- | --- |
-| _connect() | 登记回调并按目标 ID、方法和参数调用目标 |
-| _emit() | 登记回调并按目标 ID、方法和参数调用目标 |
-| _call_func() | 登记回调并按目标 ID、方法和参数调用目标 |
-| _call_object() | 登记回调并按目标 ID、方法和参数调用目标 |
+| 模型函数 | C++ 源码对照或脚手架性质 | 复现的状态与分支 |
+| --- | --- | --- |
+| `_connect()` | `Object::connect / connection table duplicate checks` | 检查重复目标后把 signal 与回调元数据登记到连接表。 |
+| `_emit()` | `Object::emit_signal → target Object::call` | 为匹配 signal 取连接项并同步调用目标回调。 |
+| `_call_func()` | `FuncRef::call_func / call_funcv` | 从 FuncRef 保存的 ObjectID/函数名发起调用。 |
+| `_call_object()` | `ObjectDB::get_instance → Object::call` | 按 ObjectID 找目标对象，再模拟 Object::call/callp。 |
 
 ## 最小 Godot/GDScript 实验
 
-连接并发射自定义 signal，再创建 FuncRef 调用该脚本方法，比较信号参数与显式参数。
+尝试重复连接同一 signal/target/method，发射自定义 signal，再创建 FuncRef 调用脚本方法，比较连接错误、参数转发和显式调用。
 
 实验工程文件：
 
@@ -62,7 +64,7 @@ source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中
 godot --path .
 ~~~
 
-**预期观察：** 先看到 signal 接收函数日志，再看到 FuncRef.call_func 计算结果；两条路径最终都会调用目标对象方法。
+**预期观察：** 第一次 connect 成功、重复连接返回错误；随后看到 signal 接收函数日志和 FuncRef.call_func 结果，两条路径都进入目标对象方法。
 
 **动手改一处：** 将 signal 参数改为两个值，并将 FuncRef 指向另一个方法，比较连接参数转发与 `call_func()` 参数传递。
 

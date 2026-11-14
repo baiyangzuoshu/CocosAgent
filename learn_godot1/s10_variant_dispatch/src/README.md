@@ -14,7 +14,7 @@
 | 2 | [variant_call.cpp](upstream/core/variant_call.cpp) | [921-1015](upstream/core/variant_call.cpp.excerpt) | engine/godot-1.1/core/variant_call.cpp |
 | 3 | [variant_op.cpp](upstream/core/variant_op.cpp) | [219-280](upstream/core/variant_op.cpp.excerpt) | engine/godot-1.1/core/variant_op.cpp |
 | 4 | [gd_functions.cpp](upstream/modules/gdscript/gd_functions.cpp) | [500-520 ; 608-620](upstream/modules/gdscript/gd_functions.cpp.excerpt) | engine/godot-1.1/modules/gdscript/gd_functions.cpp |
-| 5 | [gd_script.cpp](upstream/modules/gdscript/gd_script.cpp) | [327-350](upstream/modules/gdscript/gd_script.cpp.excerpt) | engine/godot-1.1/modules/gdscript/gd_script.cpp |
+| 5 | [gd_script.cpp](upstream/modules/gdscript/gd_script.cpp) | [328-351](upstream/modules/gdscript/gd_script.cpp.excerpt) | engine/godot-1.1/modules/gdscript/gd_script.cpp |
 
 ## GDScript 复刻
 

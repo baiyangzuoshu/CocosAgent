@@ -6,6 +6,36 @@
  * Copyright and license notice: Godot Engine; see course-root SOURCE_LICENSE.txt.
  */
 
+/* Upstream lines 293-320 */
+float MainTimerSync::get_physics_jitter_fix() {
+	return Engine::get_singleton()->get_physics_jitter_fix();
+}
+
+// gets our best bet for the average number of physics steps per render frame
+// return value: number of frames back this data is consistent
+int MainTimerSync::get_average_physics_steps(float &p_min, float &p_max) {
+	p_min = typical_physics_steps[0];
+	p_max = p_min + 1;
+
+	for (int i = 1; i < CONTROL_STEPS; ++i) {
+		const float typical_lower = typical_physics_steps[i];
+		const float current_min = typical_lower / (i + 1);
+		if (current_min > p_max) {
+			return i; // bail out if further restrictions would void the interval
+		} else if (current_min > p_min) {
+			p_min = current_min;
+		}
+		const float current_max = (typical_lower + 1) / (i + 1);
+		if (current_max < p_min) {
+			return i;
+		} else if (current_max < p_max) {
+			p_max = current_max;
+		}
+	}
+
+	return CONTROL_STEPS;
+}
+
 /* Upstream lines 322-403 */
 // advance physics clock by p_idle_step, return appropriate number of steps to simulate
 MainFrameTime MainTimerSync::advance_core(float p_frame_slice, int p_iterations_per_second, float p_idle_step) {

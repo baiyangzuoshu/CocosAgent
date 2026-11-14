@@ -1,0 +1,80 @@
+/*
+ * Godot 3 source excerpt.
+ * Upstream: engine/godot-3.6/servers/visual/visual_server_scene.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1803-1822 */
+
+int VisualServerScene::_cull_convex_from_point(Scenario *p_scenario, const Transform &p_cam_transform, const CameraMatrix &p_cam_projection, const Vector<Plane> &p_convex, Instance **p_result_array, int p_result_max, int32_t &r_previous_room_id_hint, uint32_t p_mask) {
+	int res = -1;
+	if (p_scenario->_portal_renderer.is_active()) {
+		// Note that the portal renderer ASSUMES that the planes exactly match the convention in
+		// CameraMatrix of enum Planes (6 planes, in order, near, far etc)
+		// If this is not the case, it should not be used.
+		res = p_scenario->_portal_renderer.cull_convex(p_cam_transform, p_cam_projection, p_convex, (VSInstance **)p_result_array, p_result_max, p_mask, r_previous_room_id_hint);
+	}
+
+	// fallback to BVH  / octree if portals not active
+	if (res == -1) {
+		res = p_scenario->sps->cull_convex(p_convex, p_result_array, p_result_max, p_mask);
+
+		// Opportunity for occlusion culling on the main scene. This will be a noop if no occluders.
+		if (p_scenario->_portal_renderer.occlusion_is_active()) {
+			res = p_scenario->_portal_renderer.occlusion_cull(p_cam_transform, p_cam_projection, p_convex, (VSInstance **)p_result_array, res);
+		}
+	}
+	return res;
+}
+
+/* Upstream lines 2754-2800 */
+
+void VisualServerScene::render_camera(RID p_camera, RID p_scenario, Size2 p_viewport_size, RID p_shadow_atlas) {
+// render to mono camera
+#ifndef _3D_DISABLED
+
+	Camera *camera = camera_owner.getornull(p_camera);
+	ERR_FAIL_COND(!camera);
+
+	/* STEP 1 - SETUP CAMERA */
+	CameraMatrix camera_matrix;
+	bool ortho = false;
+
+	switch (camera->type) {
+		case Camera::ORTHOGONAL: {
+			camera_matrix.set_orthogonal(
+					camera->size,
+					p_viewport_size.width / (float)p_viewport_size.height,
+					camera->znear,
+					camera->zfar,
+					camera->vaspect);
+			ortho = true;
+		} break;
+		case Camera::PERSPECTIVE: {
+			camera_matrix.set_perspective(
+					camera->fov,
+					p_viewport_size.width / (float)p_viewport_size.height,
+					camera->znear,
+					camera->zfar,
+					camera->vaspect);
+			ortho = false;
+
+		} break;
+		case Camera::FRUSTUM: {
+			camera_matrix.set_frustum(
+					camera->size,
+					p_viewport_size.width / (float)p_viewport_size.height,
+					camera->offset,
+					camera->znear,
+					camera->zfar,
+					camera->vaspect);
+			ortho = false;
+		} break;
+	}
+
+	_prepare_scene(camera->transform, camera_matrix, ortho, camera->env, camera->visible_layers, p_scenario, p_shadow_atlas, RID(), camera->previous_room_id_hint);
+	_render_scene(camera->transform, camera_matrix, 0, ortho, camera->env, p_scenario, p_shadow_atlas, RID(), -1);
+#endif
+}

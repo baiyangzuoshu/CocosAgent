@@ -1,0 +1,2 @@
+ea051c1d54375e4e6211fa91eb20586c567348a6b66a70fb0c767a123db62596  upstream/scene/3d/camera.cpp
+c4aa2e31210779880d56cc0161f29461c95aa00da3d48c80c8bad229c41cbe3d  upstream/servers/visual/visual_server_scene.cpp

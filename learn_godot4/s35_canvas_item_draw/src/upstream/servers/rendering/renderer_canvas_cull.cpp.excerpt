@@ -1,0 +1,176 @@
+/*
+ * Godot 4 source excerpt.
+ * Upstream: engine/godot-4.7/servers/rendering/renderer_canvas_cull.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1300-1465 */
+
+void RendererCanvasCull::canvas_item_add_rect(RID p_item, const Rect2 &p_rect, const Color &p_color, bool p_antialiased) {
+	Item *canvas_item = canvas_item_owner.get_or_null(p_item);
+	ERR_FAIL_NULL(canvas_item);
+
+	// Adjust the rectangle size to account for the antialiasing width.
+	const Rect2 &rect_adjusted = p_antialiased ? p_rect.grow(-FEATHER_SIZE * 0.25f) : p_rect;
+
+	Item::CommandRect *rect = canvas_item->alloc_command<Item::CommandRect>();
+	ERR_FAIL_NULL(rect);
+	rect->modulate = p_color;
+	rect->rect = rect_adjusted;
+
+	// Add feathers.
+	if (p_antialiased) {
+		float border_size = FEATHER_SIZE;
+
+		const real_t size = MIN(rect_adjusted.size.width, rect_adjusted.size.height);
+		if (0.0f <= size && size < 1.0f) {
+			border_size *= size;
+		}
+
+		const Vector2 vec_down = Vector2(0.0f, rect_adjusted.size.height);
+		const Vector2 vec_right = Vector2(rect_adjusted.size.width, 0.0f);
+
+		const Vector2 begin_left = rect_adjusted.position;
+		const Vector2 begin_right = rect_adjusted.position + vec_down;
+		const Vector2 end_left = rect_adjusted.position + vec_right;
+		const Vector2 end_right = rect_adjusted.position + rect_adjusted.size;
+
+		const Vector2 dir = Vector2(0.0f, -1.0f);
+		const Vector2 dir2 = Vector2(-1.0f, 0.0f);
+		const Vector2 border = dir * border_size;
+		const Vector2 border2 = dir2 * border_size;
+
+		Color transparent = Color(p_color, 0.0);
+
+		{
+			Item::CommandPrimitive *left_border = canvas_item->alloc_command<Item::CommandPrimitive>();
+			ERR_FAIL_NULL(left_border);
+
+			left_border->points[0] = begin_left;
+			left_border->points[1] = begin_left + border;
+			left_border->points[2] = end_left + border;
+			left_border->points[3] = end_left;
+
+			left_border->colors[0] = p_color;
+			left_border->colors[1] = transparent;
+			left_border->colors[2] = transparent;
+			left_border->colors[3] = p_color;
+
+			left_border->point_count = 4;
+		}
+		{
+			Item::CommandPrimitive *right_border = canvas_item->alloc_command<Item::CommandPrimitive>();
+			ERR_FAIL_NULL(right_border);
+
+			right_border->points[0] = begin_right;
+			right_border->points[1] = begin_right - border;
+			right_border->points[2] = end_right - border;
+			right_border->points[3] = end_right;
+
+			right_border->colors[0] = p_color;
+			right_border->colors[1] = transparent;
+			right_border->colors[2] = transparent;
+			right_border->colors[3] = p_color;
+
+			right_border->point_count = 4;
+		}
+		{
+			Item::CommandPrimitive *top_border = canvas_item->alloc_command<Item::CommandPrimitive>();
+			ERR_FAIL_NULL(top_border);
+
+			top_border->points[0] = begin_left;
+			top_border->points[1] = begin_left + border2;
+			top_border->points[2] = begin_right + border2;
+			top_border->points[3] = begin_right;
+
+			top_border->colors[0] = p_color;
+			top_border->colors[1] = transparent;
+			top_border->colors[2] = transparent;
+			top_border->colors[3] = p_color;
+
+			top_border->point_count = 4;
+		}
+		{
+			Item::CommandPrimitive *bottom_border = canvas_item->alloc_command<Item::CommandPrimitive>();
+			ERR_FAIL_NULL(bottom_border);
+
+			bottom_border->points[0] = end_left;
+			bottom_border->points[1] = end_left - border2;
+			bottom_border->points[2] = end_right - border2;
+			bottom_border->points[3] = end_right;
+
+			bottom_border->colors[0] = p_color;
+			bottom_border->colors[1] = transparent;
+			bottom_border->colors[2] = transparent;
+			bottom_border->colors[3] = p_color;
+
+			bottom_border->point_count = 4;
+		}
+		{
+			Item::CommandPrimitive *top_left_corner = canvas_item->alloc_command<Item::CommandPrimitive>();
+			ERR_FAIL_NULL(top_left_corner);
+
+			top_left_corner->points[0] = begin_left;
+			top_left_corner->points[1] = begin_left + border2;
+			top_left_corner->points[2] = begin_left + border + border2;
+			top_left_corner->points[3] = begin_left + border;
+
+			top_left_corner->colors[0] = p_color;
+			top_left_corner->colors[1] = transparent;
+			top_left_corner->colors[2] = transparent;
+			top_left_corner->colors[3] = transparent;
+
+			top_left_corner->point_count = 4;
+		}
+		{
+			Item::CommandPrimitive *top_right_corner = canvas_item->alloc_command<Item::CommandPrimitive>();
+			ERR_FAIL_NULL(top_right_corner);
+
+			top_right_corner->points[0] = begin_right;
+			top_right_corner->points[1] = begin_right + border2;
+			top_right_corner->points[2] = begin_right - border + border2;
+			top_right_corner->points[3] = begin_right - border;
+
+			top_right_corner->colors[0] = p_color;
+			top_right_corner->colors[1] = transparent;
+			top_right_corner->colors[2] = transparent;
+			top_right_corner->colors[3] = transparent;
+
+			top_right_corner->point_count = 4;
+		}
+		{
+			Item::CommandPrimitive *bottom_left_corner = canvas_item->alloc_command<Item::CommandPrimitive>();
+			ERR_FAIL_NULL(bottom_left_corner);
+
+			bottom_left_corner->points[0] = end_left;
+			bottom_left_corner->points[1] = end_left - border2;
+			bottom_left_corner->points[2] = end_left + border - border2;
+			bottom_left_corner->points[3] = end_left + border;
+
+			bottom_left_corner->colors[0] = p_color;
+			bottom_left_corner->colors[1] = transparent;
+			bottom_left_corner->colors[2] = transparent;
+			bottom_left_corner->colors[3] = transparent;
+
+			bottom_left_corner->point_count = 4;
+		}
+		{
+			Item::CommandPrimitive *bottom_right_corner = canvas_item->alloc_command<Item::CommandPrimitive>();
+			ERR_FAIL_NULL(bottom_right_corner);
+
+			bottom_right_corner->points[0] = end_right;
+			bottom_right_corner->points[1] = end_right - border2;
+			bottom_right_corner->points[2] = end_right - border - border2;
+			bottom_right_corner->points[3] = end_right - border;
+
+			bottom_right_corner->colors[0] = p_color;
+			bottom_right_corner->colors[1] = transparent;
+			bottom_right_corner->colors[2] = transparent;
+			bottom_right_corner->colors[3] = transparent;
+
+			bottom_right_corner->point_count = 4;
+		}
+	}
+}

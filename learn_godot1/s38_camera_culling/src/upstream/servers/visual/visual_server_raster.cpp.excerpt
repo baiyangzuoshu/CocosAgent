@@ -1,0 +1,46 @@
+/*
+ * Godot 1 source excerpt.
+ * Upstream: engine/godot-1.1/servers/visual/visual_server_raster.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1394-1403 */
+
+void VisualServerRaster::camera_set_perspective(RID p_camera,float p_fovy_degrees, float p_z_near, float p_z_far) {
+	VS_CHANGED
+	Camera *camera = camera_owner.get( p_camera );
+	ERR_FAIL_COND(!camera);
+	camera->type=Camera::PERSPECTIVE;
+	camera->fov=p_fovy_degrees;
+	camera->znear=p_z_near;
+	camera->zfar=p_z_far;
+	
+}
+
+/* Upstream lines 2656-2678 */
+
+Vector<RID> VisualServerRaster::instances_cull_convex(const Vector<Plane>& p_convex,  RID p_scenario) const{
+
+	Vector<RID> instances;
+	Scenario *scenario=scenario_owner.get(p_scenario);
+	ERR_FAIL_COND_V(!scenario,instances);	
+	const_cast<VisualServerRaster*>(this)->_update_instances(); // check dirty instances before culling
+	
+	int culled=0;
+	Instance *cull[1024];	
+	
+
+	culled=scenario->octree.cull_convex(p_convex,cull,1024);
+	
+	for (int i=0;i<culled;i++) {
+	
+		Instance *instance=cull[i];
+		ERR_CONTINUE(!instance);		
+		instances.push_back(instance->self);
+	}
+	
+	return instances;
+
+}

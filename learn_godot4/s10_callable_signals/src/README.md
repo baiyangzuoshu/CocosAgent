@@ -10,7 +10,7 @@
 
 | 阅读顺序 | 完整上游副本 | 原始行号摘录 | 上游快照路径 |
 | --- | --- | --- | --- |
-| 1 | [object.cpp](upstream/core/object/object.cpp) | [1179-1221 ; 1233-1315 ; 1518-1580](upstream/core/object/object.cpp.excerpt) | engine/godot-4.7/core/object/object.cpp |
+| 1 | [object.cpp](upstream/core/object/object.cpp) | [768-850 ; 1179-1221 ; 1233-1315 ; 1518-1583](upstream/core/object/object.cpp.excerpt) | engine/godot-4.7/core/object/object.cpp |
 | 2 | [callable.cpp](upstream/core/variant/callable.cpp) | [44-87](upstream/core/variant/callable.cpp.excerpt) | engine/godot-4.7/core/variant/callable.cpp |
 | 3 | [variant.h](upstream/core/variant/variant.h) | [922-940](upstream/core/variant/variant.h.excerpt) | engine/godot-4.7/core/variant/variant.h |
 

@@ -1,0 +1,42 @@
+/*
+ * Godot 4 source excerpt.
+ * Upstream: engine/godot-4.7/scene/gui/container.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 94-109 */
+
+void Container::_sort_children() {
+	if (!is_inside_tree()) {
+		pending_sort = false;
+		return;
+	}
+
+	update_minimum_size();
+
+	notification(NOTIFICATION_PRE_SORT_CHILDREN);
+	emit_signal(SceneStringName(pre_sort_children));
+
+	notification(NOTIFICATION_SORT_CHILDREN);
+	emit_signal(SceneStringName(sort_children));
+	pending_sort = false;
+	layout_pending_finish();
+}
+
+/* Upstream lines 158-170 */
+
+void Container::queue_sort() {
+	if (!is_inside_tree()) {
+		return;
+	}
+
+	if (pending_sort) {
+		return;
+	}
+
+	layout_pending_start();
+	callable_mp(this, &Container::_sort_children).call_deferred();
+	pending_sort = true;
+}

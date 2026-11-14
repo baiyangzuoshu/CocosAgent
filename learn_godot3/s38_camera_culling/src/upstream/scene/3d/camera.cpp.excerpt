@@ -1,0 +1,73 @@
+/*
+ * Godot 3 source excerpt.
+ * Upstream: engine/godot-3.6/scene/3d/camera.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 80-111 */
+
+void Camera::_update_camera() {
+	if (!is_inside_tree()) {
+		return;
+	}
+
+	if (!is_physics_interpolated_and_enabled()) {
+		VisualServer::get_singleton()->camera_set_transform(camera, get_camera_transform());
+	} else {
+		// Ideally we shouldn't be moving a physics interpolated camera within a frame,
+		// because it will break smooth interpolation, but it may occur on e.g. level load.
+		if (!Engine::get_singleton()->is_in_physics_frame() && camera.is_valid()) {
+			_physics_interpolation_ensure_transform_calculated(true);
+			VisualServer::get_singleton()->camera_set_transform(camera, _interpolation_data.camera_xform_interpolated);
+		}
+	}
+
+	// here goes listener stuff
+	/*
+	if (viewport_ptr && is_inside_scene() && is_current())
+		get_viewport()->_camera_transform_changed_notify();
+	*/
+
+	if (get_tree()->is_node_being_edited(this) || !is_current()) {
+		return;
+	}
+
+	get_viewport()->_camera_transform_changed_notify();
+
+	if (get_world().is_valid()) {
+		get_world()->_update_camera(this);
+	}
+}
+
+/* Upstream lines 283-296 */
+
+void Camera::set_perspective(float p_fovy_degrees, float p_z_near, float p_z_far) {
+	if (!force_change && fov == p_fovy_degrees && p_z_near == near && p_z_far == far && mode == PROJECTION_PERSPECTIVE) {
+		return;
+	}
+
+	fov = p_fovy_degrees;
+	near = p_z_near;
+	far = p_z_far;
+	mode = PROJECTION_PERSPECTIVE;
+
+	VisualServer::get_singleton()->camera_set_perspective(camera, fov, near, far);
+	update_gizmo();
+	force_change = false;
+}
+
+/* Upstream lines 342-352 */
+
+void Camera::make_current() {
+	current = true;
+
+	if (!is_inside_tree()) {
+		return;
+	}
+
+	get_viewport()->_camera_set(this);
+
+	//get_scene()->call_group(SceneMainLoop::GROUP_CALL_REALTIME,camera_group,"_camera_make_current",this);
+}

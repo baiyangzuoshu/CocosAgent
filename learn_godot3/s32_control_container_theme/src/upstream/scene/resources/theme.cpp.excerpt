@@ -1,0 +1,46 @@
+/*
+ * Godot 3 source excerpt.
+ * Upstream: engine/godot-3.6/scene/resources/theme.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 839-874 */
+
+void Theme::set_theme_item(DataType p_data_type, const StringName &p_name, const StringName &p_theme_type, const Variant &p_value) {
+	switch (p_data_type) {
+		case DATA_TYPE_COLOR: {
+			ERR_FAIL_COND_MSG(p_value.get_type() != Variant::COLOR, "Theme item's data type (Color) does not match Variant's type (" + Variant::get_type_name(p_value.get_type()) + ").");
+
+			Color color_value = p_value;
+			set_color(p_name, p_theme_type, color_value);
+		} break;
+		case DATA_TYPE_CONSTANT: {
+			ERR_FAIL_COND_MSG(p_value.get_type() != Variant::INT, "Theme item's data type (int) does not match Variant's type (" + Variant::get_type_name(p_value.get_type()) + ").");
+
+			int constant_value = p_value;
+			set_constant(p_name, p_theme_type, constant_value);
+		} break;
+		case DATA_TYPE_FONT: {
+			ERR_FAIL_COND_MSG(p_value.get_type() != Variant::OBJECT, "Theme item's data type (Object) does not match Variant's type (" + Variant::get_type_name(p_value.get_type()) + ").");
+
+			Ref<Font> font_value = Object::cast_to<Font>(p_value);
+			set_font(p_name, p_theme_type, font_value);
+		} break;
+		case DATA_TYPE_ICON: {
+			ERR_FAIL_COND_MSG(p_value.get_type() != Variant::OBJECT, "Theme item's data type (Object) does not match Variant's type (" + Variant::get_type_name(p_value.get_type()) + ").");
+
+			Ref<Texture> icon_value = Object::cast_to<Texture>(p_value);
+			set_icon(p_name, p_theme_type, icon_value);
+		} break;
+		case DATA_TYPE_STYLEBOX: {
+			ERR_FAIL_COND_MSG(p_value.get_type() != Variant::OBJECT, "Theme item's data type (Object) does not match Variant's type (" + Variant::get_type_name(p_value.get_type()) + ").");
+
+			Ref<StyleBox> stylebox_value = Object::cast_to<StyleBox>(p_value);
+			set_stylebox(p_name, p_theme_type, stylebox_value);
+		} break;
+		case DATA_TYPE_MAX:
+			break; // Can't happen, but silences warning.
+	}
+}

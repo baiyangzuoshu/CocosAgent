@@ -1,0 +1,6 @@
+config_version=6
+
+[application]
+
+config/name="Godot 3 S35 CanvasItem 命令缓存和绘制提交"
+run/main_scene="res://main.tscn"

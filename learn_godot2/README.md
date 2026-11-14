@@ -2,13 +2,13 @@
 
 源码依据：`engine/godot-2.1/`，版本标记为 `2.1.7-rc`。使用 engine.cfg、文本 .tscn、ObjectTypeDB 与旧版 GDScript API。
 
-本课程的已编写范围为 S00–S30。每课都是独立项目，按“问题 → C++ 调用链 → 上游源码摘录 → 最小 GDScript 实验 → 观察与边界”阅读。
+本课程的已编写范围为 S00–S40。每课都是独立项目，按“问题 → C++ 调用链 → 上游源码摘录 → 最小 GDScript 实验 → 观察与边界”阅读。
 
-S00–S10 与 S21–S30 在 `src/upstream/` 保留完整上游 C++ 文件和原始行号摘录；S00–S10 的完整副本另由各课 `src/SOURCE_SHA256.txt` 校验。S11–S20 仍以原文摘录为主。S00–S10 与 S21–S30 的 `src/source_replay.gd` 按本代 C++ 路径复刻状态变化并保留版本边界。完整源码依据仍是只读 `engine/` 快照，许可文本见 [SOURCE_LICENSE.txt](SOURCE_LICENSE.txt)。
+S00–S10 与 S21–S40 在 `src/upstream/` 保留完整上游 C++ 文件和原始行号摘录；S00–S10 的完整副本另由各课 `src/SOURCE_SHA256.txt` 校验。S11–S20 仍以原文摘录为主。S00–S10 与 S21–S40 的 `src/source_replay.gd` 按本代 C++ 路径复刻状态变化并保留版本边界。完整源码依据仍是只读 `engine/` 快照，许可文本见 [SOURCE_LICENSE.txt](SOURCE_LICENSE.txt)。
 
 ## 课程入口
 
-- [S00–S30 课程大纲](课程大纲.md)
+- [S00–S40 课程大纲](课程大纲.md)
 - [第 0 课：源码快照与目录地图](./s00_source_map/README.md)
 - [第 1 课：平台 `main()` 到 `Main`](./s01_platform_entry/README.md)
 - [第 2 课：命令行、项目路径与 `Main::setup()`](./s02_main_setup/README.md)
@@ -41,6 +41,17 @@ S00–S10 与 S21–S30 在 `src/upstream/` 保留完整上游 C++ 文件和原�
 - [第 28 课：平台事件到 InputEvent 的构造路径](./s28_input_event_creation/README.md)
 - [第 29 课：InputMap 动作绑定与状态查询](./s29_input_map_actions/README.md)
 - [第 30 课：Node 输入、未处理输入与传播顺序](./s30_node_input_flow/README.md)
+
+- [第 31 课：Viewport 路由、坐标与输入捕获](./s31_viewport_dispatch/README.md)
+- [第 32 课：Control 命中、焦点导航与 GUI 事件](./s32_control_focus_gui/README.md)
+- [第 33 课：锚点、容器、尺寸约束与主题](./s33_gui_layout_theme/README.md)
+- [第 34 课：场景节点到 VisualServer 的职责边界](./s34_visual_server_boundary/README.md)
+- [第 35 课：RID 创建、更新和释放的生命周期](./s35_rid_lifetime/README.md)
+- [第 36 课：CanvasItem 的绘制命令与画布提交](./s36_canvas_item_submit/README.md)
+- [第 37 课：2D Canvas、相机和画布变换](./s37_canvas_2d_camera/README.md)
+- [第 38 课：3D 实例注册与 VisualServer 场景接口](./s38_visual_instance_3d/README.md)
+- [第 39 课：相机可见性、裁剪和场景遍历](./s39_camera_visibility/README.md)
+- [第 40 课：材质、shader、灯光与绘制状态](./s40_material_shader_light/README.md)
 
 ## 阅读与运行
 

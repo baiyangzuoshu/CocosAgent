@@ -1,0 +1,6 @@
+config_version=6
+
+[application]
+
+config/name="Godot 3 S36 2D Canvas、排序、变换与可见性"
+run/main_scene="res://main.tscn"

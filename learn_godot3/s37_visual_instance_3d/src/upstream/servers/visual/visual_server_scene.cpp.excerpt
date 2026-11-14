@@ -1,0 +1,295 @@
+/*
+ * Godot 3 source excerpt.
+ * Upstream: engine/godot-3.6/servers/visual/visual_server_scene.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 486-494 */
+
+RID VisualServerScene::instance_create() {
+	Instance *instance = memnew(Instance);
+	ERR_FAIL_COND_V(!instance, RID());
+
+	RID instance_rid = instance_owner.make_rid(instance);
+	instance->self = instance_rid;
+
+	return instance_rid;
+}
+
+/* Upstream lines 496-658 */
+
+void VisualServerScene::instance_set_base(RID p_instance, RID p_base) {
+	Instance *instance = instance_owner.get(p_instance);
+	ERR_FAIL_COND(!instance);
+
+	Scenario *scenario = instance->scenario;
+
+	if (instance->base_type != VS::INSTANCE_NONE) {
+		//free anything related to that base
+
+		VSG::storage->instance_remove_dependency(instance->base, instance);
+
+		if (instance->base_type == VS::INSTANCE_GI_PROBE) {
+			//if gi probe is baking, wait until done baking, else race condition may happen when removing it
+			//from octree
+			InstanceGIProbeData *gi_probe = static_cast<InstanceGIProbeData *>(instance->base_data);
+
+			//make sure probes are done baking
+			while (!probe_bake_list.empty()) {
+				OS::get_singleton()->delay_usec(1);
+			}
+			//make sure this one is done baking
+
+			while (gi_probe->dynamic.updating_stage == GI_UPDATE_STAGE_LIGHTING) {
+				//wait until bake is done if it's baking
+				OS::get_singleton()->delay_usec(1);
+			}
+		}
+
+		if (scenario && instance->spatial_partition_id) {
+			scenario->sps->erase(instance->spatial_partition_id);
+			instance->spatial_partition_id = 0;
+		}
+
+		switch (instance->base_type) {
+			case VS::INSTANCE_LIGHT: {
+				InstanceLightData *light = static_cast<InstanceLightData *>(instance->base_data);
+
+				if (instance->scenario && light->D) {
+					instance->scenario->directional_lights.erase(light->D);
+					light->D = nullptr;
+				}
+				VSG::scene_render->free(light->instance);
+			} break;
+			case VS::INSTANCE_REFLECTION_PROBE: {
+				InstanceReflectionProbeData *reflection_probe = static_cast<InstanceReflectionProbeData *>(instance->base_data);
+				VSG::scene_render->free(reflection_probe->instance);
+				if (reflection_probe->update_list.in_list()) {
+					reflection_probe_render_list.remove(&reflection_probe->update_list);
+				}
+			} break;
+			case VS::INSTANCE_LIGHTMAP_CAPTURE: {
+				InstanceLightmapCaptureData *lightmap_capture = static_cast<InstanceLightmapCaptureData *>(instance->base_data);
+				//erase dependencies, since no longer a lightmap
+				while (lightmap_capture->users.front()) {
+					instance_set_use_lightmap(lightmap_capture->users.front()->get()->self, RID(), RID(), -1, Rect2(0, 0, 1, 1));
+				}
+			} break;
+			case VS::INSTANCE_GI_PROBE: {
+				InstanceGIProbeData *gi_probe = static_cast<InstanceGIProbeData *>(instance->base_data);
+
+				if (gi_probe->update_element.in_list()) {
+					gi_probe_update_list.remove(&gi_probe->update_element);
+				}
+				if (gi_probe->dynamic.probe_data.is_valid()) {
+					VSG::storage->free(gi_probe->dynamic.probe_data);
+				}
+
+				if (instance->lightmap_capture) {
+					Instance *capture = (Instance *)instance->lightmap_capture;
+					InstanceLightmapCaptureData *lightmap_capture = static_cast<InstanceLightmapCaptureData *>(capture->base_data);
+					lightmap_capture->users.erase(instance);
+					instance->lightmap_capture = nullptr;
+					instance->lightmap = RID();
+				}
+
+				VSG::scene_render->free(gi_probe->probe_instance);
+
+			} break;
+			default: {
+			}
+		}
+
+		if (instance->base_data) {
+			memdelete(instance->base_data);
+			instance->base_data = nullptr;
+		}
+
+		instance->blend_values = PoolRealArray();
+
+		for (int i = 0; i < instance->materials.size(); i++) {
+			if (instance->materials[i].is_valid()) {
+				VSG::storage->material_remove_instance_owner(instance->materials[i], instance);
+			}
+		}
+		instance->materials.clear();
+	}
+
+	instance->base_type = VS::INSTANCE_NONE;
+	instance->base = RID();
+
+	if (p_base.is_valid()) {
+		instance->base_type = VSG::storage->get_base_type(p_base);
+		ERR_FAIL_COND(instance->base_type == VS::INSTANCE_NONE);
+
+		switch (instance->base_type) {
+			case VS::INSTANCE_LIGHT: {
+				InstanceLightData *light = memnew(InstanceLightData);
+
+				if (scenario && VSG::storage->light_get_type(p_base) == VS::LIGHT_DIRECTIONAL) {
+					light->D = scenario->directional_lights.push_back(instance);
+				}
+
+				light->instance = VSG::scene_render->light_instance_create(p_base);
+
+				instance->base_data = light;
+			} break;
+			case VS::INSTANCE_MESH:
+			case VS::INSTANCE_MULTIMESH:
+			case VS::INSTANCE_IMMEDIATE:
+			case VS::INSTANCE_PARTICLES: {
+				InstanceGeometryData *geom = memnew(InstanceGeometryData);
+				instance->base_data = geom;
+				if (instance->base_type == VS::INSTANCE_MESH) {
+					instance->blend_values.resize(VSG::storage->mesh_get_blend_shape_count(p_base));
+				}
+			} break;
+			case VS::INSTANCE_REFLECTION_PROBE: {
+				InstanceReflectionProbeData *reflection_probe = memnew(InstanceReflectionProbeData);
+				reflection_probe->owner = instance;
+				instance->base_data = reflection_probe;
+
+				reflection_probe->instance = VSG::scene_render->reflection_probe_instance_create(p_base);
+			} break;
+			case VS::INSTANCE_LIGHTMAP_CAPTURE: {
+				InstanceLightmapCaptureData *lightmap_capture = memnew(InstanceLightmapCaptureData);
+				instance->base_data = lightmap_capture;
+				//lightmap_capture->instance = VSG::scene_render->lightmap_capture_instance_create(p_base);
+			} break;
+			case VS::INSTANCE_GI_PROBE: {
+				InstanceGIProbeData *gi_probe = memnew(InstanceGIProbeData);
+				instance->base_data = gi_probe;
+				gi_probe->owner = instance;
+
+				if (scenario && !gi_probe->update_element.in_list()) {
+					gi_probe_update_list.add(&gi_probe->update_element);
+				}
+
+				gi_probe->probe_instance = VSG::scene_render->gi_probe_instance_create();
+
+			} break;
+			default: {
+			}
+		}
+
+		VSG::storage->instance_add_dependency(p_base, instance);
+
+		instance->base = p_base;
+
+		if (scenario) {
+			_instance_queue_update(instance, true, true);
+		}
+	}
+}
+
+/* Upstream lines 789-895 */
+
+void VisualServerScene::instance_set_transform(RID p_instance, const Transform &p_transform) {
+	Instance *instance = instance_owner.get(p_instance);
+	ERR_FAIL_COND(!instance);
+
+#ifdef VISUAL_SERVER_DEBUG_PHYSICS_INTERPOLATION
+	print_line("instance_set_transform " + rtos(p_transform.origin.x) + " .. tick " + itos(Engine::get_singleton()->get_physics_frames()));
+#endif
+
+	if (!(_interpolation_data.interpolation_enabled && instance->interpolated) || !instance->scenario) {
+		if (instance->transform == p_transform) {
+			return; //must be checked to avoid worst evil
+		}
+
+#ifdef DEBUG_ENABLED
+
+		for (int i = 0; i < 4; i++) {
+			const Vector3 &v = i < 3 ? p_transform.basis.elements[i] : p_transform.origin;
+			ERR_FAIL_COND(Math::is_inf(v.x));
+			ERR_FAIL_COND(Math::is_nan(v.x));
+			ERR_FAIL_COND(Math::is_inf(v.y));
+			ERR_FAIL_COND(Math::is_nan(v.y));
+			ERR_FAIL_COND(Math::is_inf(v.z));
+			ERR_FAIL_COND(Math::is_nan(v.z));
+		}
+
+#endif
+		instance->transform = p_transform;
+		_instance_queue_update(instance, true);
+
+#if defined(DEBUG_ENABLED) && defined(TOOLS_ENABLED)
+		if ((_interpolation_data.interpolation_enabled && !instance->interpolated) && (Engine::get_singleton()->is_in_physics_frame())) {
+			PHYSICS_INTERPOLATION_NODE_WARNING(instance->object_id, "Non-interpolated triggered from physics process");
+		}
+#endif
+
+		return;
+	}
+
+	float new_checksum = TransformInterpolator::checksum_transform(p_transform);
+	bool checksums_match = (instance->transform_checksum_curr == new_checksum) && (instance->transform_checksum_prev == new_checksum);
+
+	// we can't entirely reject no changes because we need the interpolation
+	// system to keep on stewing
+
+	// Optimized check. First checks the checksums. If they pass it does the slow check at the end.
+	// Alternatively we can do this non-optimized and ignore the checksum...
+	// if no change
+	if (checksums_match && (instance->transform_curr == p_transform) && (instance->transform_prev == p_transform)) {
+		return;
+	}
+
+#ifdef DEBUG_ENABLED
+
+	for (int i = 0; i < 4; i++) {
+		const Vector3 &v = i < 3 ? p_transform.basis.elements[i] : p_transform.origin;
+		ERR_FAIL_COND(Math::is_inf(v.x));
+		ERR_FAIL_COND(Math::is_nan(v.x));
+		ERR_FAIL_COND(Math::is_inf(v.y));
+		ERR_FAIL_COND(Math::is_nan(v.y));
+		ERR_FAIL_COND(Math::is_inf(v.z));
+		ERR_FAIL_COND(Math::is_nan(v.z));
+	}
+
+#endif
+
+	instance->transform_curr = p_transform;
+
+#ifdef VISUAL_SERVER_DEBUG_PHYSICS_INTERPOLATION
+	print_line("\tprev " + rtos(instance->transform_prev.origin.x) + ", curr " + rtos(instance->transform_curr.origin.x));
+#endif
+
+	// keep checksums up to date
+	instance->transform_checksum_curr = new_checksum;
+
+	if (!instance->on_interpolate_transform_list) {
+		_interpolation_data.instance_transform_update_list_curr->push_back(p_instance);
+		instance->on_interpolate_transform_list = true;
+	} else {
+		DEV_ASSERT(_interpolation_data.instance_transform_update_list_curr->size());
+	}
+
+	// If the instance is invisible, then we are simply updating the data flow, there is no need to calculate the interpolated
+	// transform or anything else.
+	// Ideally we would not even call the VisualServer::set_transform() when invisible but that would entail having logic
+	// to keep track of the previous transform on the SceneTree side. The "early out" below is less efficient but a lot cleaner codewise.
+	if (!instance->visible) {
+		return;
+	}
+
+	// decide on the interpolation method .. slerp if possible
+	instance->interpolation_method = TransformInterpolator::find_method(instance->transform_prev.basis, instance->transform_curr.basis);
+
+	if (!instance->on_interpolate_list) {
+		_interpolation_data.instance_interpolate_update_list.push_back(p_instance);
+		instance->on_interpolate_list = true;
+	} else {
+		DEV_ASSERT(_interpolation_data.instance_interpolate_update_list.size());
+	}
+
+	_instance_queue_update(instance, true);
+
+#if defined(DEBUG_ENABLED) && defined(TOOLS_ENABLED)
+	if (!Engine::get_singleton()->is_in_physics_frame()) {
+		PHYSICS_INTERPOLATION_NODE_WARNING(instance->object_id, "Interpolated triggered from outside physics process");
+	}
+#endif
+}

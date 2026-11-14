@@ -1,0 +1,6 @@
+config_version=7
+
+[application]
+
+config/name="Godot 4 S34 RenderingServer、RID 与场景层接口"
+run/main_scene="res://main.tscn"

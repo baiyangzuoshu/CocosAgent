@@ -2,13 +2,13 @@
 
 源码依据：`engine/godot-4.7/`，版本标记为 `4.7.3-rc`。使用 project.godot、ClassDB、RefCounted、RenderingServer、Callable 与 Signal。
 
-本课程的已编写范围为 S00–S30。每课都是独立项目，按“问题 → C++ 调用链 → 上游源码摘录 → 最小 GDScript 实验 → 观察与边界”阅读。
+本课程的已编写范围为 S00–S40。每课都是独立项目，按“问题 → C++ 调用链 → 上游源码摘录 → 最小 GDScript 实验 → 观察与边界”阅读。
 
-S00–S10 与 S21–S30 在 `src/upstream/` 保留完整上游 C++ 文件和原始行号摘录；S00–S10 的完整副本另由各课 `src/SOURCE_SHA256.txt` 校验。S11–S20 仍以原文摘录为主。S00–S10 与 S21–S30 的 `src/source_replay.gd` 按本代 C++ 路径复刻状态变化并保留版本边界。完整源码依据仍是只读 `engine/` 快照，许可文本见 [SOURCE_LICENSE.txt](SOURCE_LICENSE.txt)。
+S00–S10 与 S21–S40 在 `src/upstream/` 保留完整上游 C++ 文件和原始行号摘录；S00–S10 的完整副本另由各课 `src/SOURCE_SHA256.txt` 校验。S11–S20 仍以原文摘录为主。S00–S10 与 S21–S40 的 `src/source_replay.gd` 按本代 C++ 路径复刻状态变化并保留版本边界。完整源码依据仍是只读 `engine/` 快照，许可文本见 [SOURCE_LICENSE.txt](SOURCE_LICENSE.txt)。
 
 ## 课程入口
 
-- [S00–S30 课程大纲](课程大纲.md)
+- [S00–S40 课程大纲](课程大纲.md)
 - [第 0 课：源码快照与目录地图](./s00_source_map/README.md)
 - [第 1 课：平台入口如何进入 `Main`](./s01_platform_entry/README.md)
 - [第 2 课：`Main::setup()` 初始化与参数流](./s02_main_setup/README.md)
@@ -41,6 +41,17 @@ S00–S10 与 S21–S30 在 `src/upstream/` 保留完整上游 C++ 文件和原�
 - [第 28 课：平台事件到 InputEvent 的构造路径](./s28_input_event_flow/README.md)
 - [第 29 课：InputMap 动作映射与输入状态](./s29_input_map/README.md)
 - [第 30 课：Viewport 输入阶段与事件传播](./s30_viewport_input/README.md)
+
+- [第 31 课：Control 命中、焦点与 GUI 输入处理](./s31_control_gui_input/README.md)
+- [第 32 课：锚点、Container 布局与主题](./s32_control_layout_theme/README.md)
+- [第 33 课：Window、Viewport 与屏幕坐标转换](./s33_window_viewport_coordinates/README.md)
+- [第 34 课：RenderingServer、RID 与场景层接口](./s34_rendering_server_rid/README.md)
+- [第 35 课：CanvasItem 绘制命令如何提交](./s35_canvas_item_draw/README.md)
+- [第 36 课：2D 画布可见性、排序与绘制](./s36_2d_render_flow/README.md)
+- [第 37 课：3D 场景对象如何进入渲染服务器](./s37_3d_render_instances/README.md)
+- [第 38 课：Camera、视锥裁剪与可见对象列表](./s38_camera_culling/README.md)
+- [第 39 课：Mesh、Material 与 Shader 的绘制准备](./s39_material_shader/README.md)
+- [第 40 课：RenderingDevice 与图形后端提交](./s40_rendering_device/README.md)
 
 ## 阅读与运行
 

@@ -39,17 +39,15 @@
 
 ## GDScript 源码复刻
 
-S01 Godot 4.7: AppKit delegate → macOS entry → Main → OS_MacOS run loop.
+`src/source_replay.gd` 按本课列出的 C++ 入口重建关键数据结构、条件分支和状态更新。它是可逐步阅读的教学移植，不是完整引擎替身；模型函数表会标明直接对应的源码行为和仅用于组织输入/输出的脚手架。平台、线程、对象分配和服务器副作用仍由真实引擎处理。
 
-source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
-
-| GDScript 函数 | 复刻步骤 |
-| --- | --- |
-| _new_run() | 初始化平台入口的阶段状态 |
-| _appkit_launch() | 按平台入口顺序执行 setup/start/run 并走错误门 |
-| _main_setup() | 执行核心/项目初始化并让错误状态提前返回 |
-| _main_start() | 只在 setup 成功后安装主场景和 MainLoop |
-| _print_trace() | 输出成功或错误路径中的阶段记录 |
+| 模型函数 | C++ 源码对照或脚手架性质 | 复现的状态与分支 |
+| --- | --- | --- |
+| `_new_run()` | `教学脚手架：新建一份独立运行状态，不对应 C++ 函数` | 创建一次独立运行的输入、标志位和观察记录。 |
+| `_appkit_launch()` | `OS_MacOS_NSApp::run / start_main` | 模拟 AppKit 启动回调交接到 Godot 主流程。 |
+| `_main_setup()` | `Main::setup` | 在参数有效后保存 OS 命令行并推进初始化阶段。 |
+| `_main_start()` | `Main::start` | 仅在 setup 成功后建立主循环/主场景状态。 |
+| `_print_trace()` | `教学脚手架：输出模型状态，不对应 C++ 函数` | 逐项输出模型状态，方便与源码阶段对照。 |
 
 ## 最小 Godot/GDScript 实验
 

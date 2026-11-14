@@ -10,17 +10,20 @@
 
 ## C++ 源码追踪
 
-源码依据：`engine/godot-2.1/`（Godot 2.1 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
+源码依据：`engine/godot-2.1/`。以下路径相对于该快照目录；准确原文见后续摘录表。
 
-~~~text
-GDScript opcode → Variant::evaluate；convert → Variant::construct/can_convert；var2str/str2var → Variant writer/parser
-~~~
-- `engine/godot-2.1/modules/gdscript/gd_function.cpp:312-340`：本课追踪摘录。
-- `engine/godot-2.1/core/variant_op.cpp:238-300`：本课追踪摘录。
-- `engine/godot-2.1/core/variant.cpp:198-270`：本课追踪摘录。
-- `engine/godot-2.1/core/variant_call.cpp:1017-1110`：本课追踪摘录。
-- `engine/godot-2.1/modules/gdscript/gd_functions.cpp:507-530`：本课追踪摘录。
-- `engine/godot-2.1/modules/gdscript/gd_functions.cpp:621-635`：本课追踪摘录。
+```text
+GDScript operator bytecode → Variant::evaluate
+convert(type) → Variant::construct / Variant::can_convert
+var2str/str2var → VariantWriter / VariantParser
+```
+
+- `modules/gdscript/gd_function.cpp:312-340`：运行时运算 opcode 把 operator 与两个 Variant 操作数交给 `Variant::evaluate()`。
+- `core/variant_op.cpp:238-300` **`Variant::evaluate()`**：根据 operator 和 Variant 类型组合分派计算；非法类型组合通过 `valid` 与 CallError 路径上报。
+- `core/variant.cpp:198-270` **`Variant::can_convert()`**、`core/variant_call.cpp:1017-1110` **`Variant::construct()`**：分别决定转换许可和构造结果。
+- `modules/gdscript/gd_functions.cpp:507-530`、`621-635`：`typeof/convert` 和 `var2str/str2var` builtin；文本 builtin 在该函数内直接调用 VariantWriter/VariantParser。
+
+本课复刻只覆盖数字/字符串加法、除法边界和 STRING 构造；其余运算矩阵仍以快照为准。
 
 ## 本课源码复刻
 
@@ -36,14 +39,12 @@ GDScript opcode → Variant::evaluate；convert → Variant::construct/can_conve
 
 ## GDScript 源码复刻
 
-S10 Godot 2.1: GDScript operator bytecode selects a Variant operation implementation.
+`src/source_replay.gd` 按本课列出的 C++ 入口重建关键数据结构、条件分支和状态更新。它是可逐步阅读的教学移植，不是完整引擎替身；模型函数表会标明直接对应的源码行为和仅用于组织输入/输出的脚手架。平台、线程、对象分配和服务器副作用仍由真实引擎处理。
 
-source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
-
-| GDScript 函数 | 复刻步骤 |
-| --- | --- |
-| _evaluate() | 维护 Variant 类型标签并执行构造/转换/序列化分支 |
-| _construct() | 维护 Variant 类型标签并执行构造/转换/序列化分支 |
+| 模型函数 | C++ 源码对照或脚手架性质 | 复现的状态与分支 |
+| --- | --- | --- |
+| `_evaluate()` | `GDScript operator opcode → Variant::evaluate` | 按运算符和左右 Variant 标签选择计算分支。 |
+| `_construct()` | `Variant::construct / Variant::can_convert` | 按目标 Variant 类型匹配构造或转换路径。 |
 
 ## 最小 Godot/GDScript 实验
 

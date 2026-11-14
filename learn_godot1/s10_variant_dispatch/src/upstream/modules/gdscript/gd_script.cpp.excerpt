@@ -6,7 +6,8 @@
  * Copyright and license notice: Godot Engine; see course-root SOURCE_LICENSE.txt.
  */
 
-/* Upstream lines 327-350 */
+
+/* Upstream lines 328-351 */
 
 				CHECK_SPACE(5);
 
@@ -31,3 +32,4 @@
 					if (ret.get_type()==Variant::STRING) {
 						//return a string when invalid with the error
 						err_text=ret;
+						err_text += " in operator '"+Variant::get_operator_name(op)+"'.";

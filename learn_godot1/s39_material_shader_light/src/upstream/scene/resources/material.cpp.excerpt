@@ -1,0 +1,53 @@
+/*
+ * Godot 1 source excerpt.
+ * Upstream: engine/godot-1.1/scene/resources/material.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 55-58 */
+
+RID Material::get_rid() const {
+
+	return material;
+}
+
+/* Upstream lines 69-75 */
+
+void Material::set_blend_mode(BlendMode p_blend_mode) {
+
+	ERR_FAIL_INDEX(p_blend_mode,3);
+	blend_mode=p_blend_mode;
+	VisualServer::get_singleton()->material_set_blend_mode(material,(VS::MaterialBlendMode)p_blend_mode);
+	_change_notify();
+}
+
+/* Upstream lines 226-251 */
+
+void FixedMaterial::set_parameter(Parameter p_parameter, const Variant& p_value) {
+
+	ERR_FAIL_INDEX(p_parameter,PARAM_MAX);
+	if ((p_parameter==PARAM_DIFFUSE || p_parameter==PARAM_SPECULAR || p_parameter==PARAM_EMISSION)) {
+
+		if (p_value.get_type()!=Variant::COLOR) {
+			ERR_EXPLAIN(String(_param_names[p_parameter])+" expects Color");
+			ERR_FAIL();
+		}
+	} else {
+
+		if (!p_value.is_num()) {
+			ERR_EXPLAIN(String(_param_names[p_parameter])+" expects scalar");
+			ERR_FAIL();
+		}
+	}
+
+	ERR_FAIL_COND( (p_parameter==PARAM_DIFFUSE || p_parameter==PARAM_SPECULAR || p_parameter==PARAM_EMISSION) && p_value.get_type()!=Variant::COLOR );
+	ERR_FAIL_COND( p_parameter!=PARAM_SHADE_PARAM && p_parameter!=PARAM_DIFFUSE && p_parameter!=PARAM_DETAIL && p_parameter!=PARAM_SPECULAR && p_parameter!=PARAM_EMISSION && p_value.get_type()!=Variant::REAL && p_value.get_type()!=Variant::INT );
+
+	param[p_parameter]=p_value;
+
+	VisualServer::get_singleton()->fixed_material_set_param(material,(VS::FixedMaterialParam)p_parameter,p_value);
+
+	_change_notify(_full_param_names[p_parameter]);
+}

@@ -1,0 +1,23 @@
+/*
+ * Godot 2 source excerpt.
+ * Upstream: engine/godot-2.1/servers/visual/visual_server_raster.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 3338-3350 */
+
+void VisualServerRaster::canvas_item_add_rect(RID p_item, const Rect2 &p_rect, const Color &p_color) {
+	VS_CHANGED;
+	CanvasItem *canvas_item = canvas_item_owner.get(p_item);
+	ERR_FAIL_COND(!canvas_item);
+
+	CanvasItem::CommandRect *rect = memnew(CanvasItem::CommandRect);
+	ERR_FAIL_COND(!rect);
+	rect->modulate = p_color;
+	rect->rect = p_rect;
+	canvas_item->rect_dirty = true;
+
+	canvas_item->commands.push_back(rect);
+}

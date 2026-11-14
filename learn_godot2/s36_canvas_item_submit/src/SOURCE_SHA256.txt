@@ -1,0 +1,2 @@
+0dc6c0f5dbc9e144370b24e5a6aa5f116a5612e975ea68c5a6ec3e7da44a4d54  upstream/scene/2d/canvas_item.cpp
+e1a4dd16c93e0233dfb95e6ffd8d12902da77df907d5d96de6242c5a542c57b6  upstream/servers/visual/visual_server_raster.cpp

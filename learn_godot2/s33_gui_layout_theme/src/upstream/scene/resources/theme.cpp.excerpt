@@ -1,0 +1,22 @@
+/*
+ * Godot 2 source excerpt.
+ * Upstream: engine/godot-2.1/scene/resources/theme.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 355-366 */
+
+void Theme::set_stylebox(const StringName &p_name, const StringName &p_type, const Ref<StyleBox> &p_style) {
+
+	//	ERR_FAIL_COND(p_style.is_null());
+
+	bool new_value = !style_map.has(p_type) || !style_map[p_type].has(p_name);
+
+	style_map[p_type][p_name] = p_style;
+
+	if (new_value)
+		_change_notify();
+	emit_changed();
+}

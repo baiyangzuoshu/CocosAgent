@@ -1,0 +1,47 @@
+/*
+ * Godot 4 source excerpt.
+ * Upstream: engine/godot-4.7/scene/3d/camera_3d.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 159-176 */
+
+void Camera3D::_update_camera() {
+	if (!is_inside_tree()) {
+		return;
+	}
+
+	if (!is_physics_interpolated_and_enabled()) {
+		RenderingServer::get_singleton()->camera_set_transform(camera, get_camera_transform());
+	} else {
+		// Force a refresh next frame.
+		fti_notify_node_changed();
+	}
+
+	if (is_part_of_edited_scene() || !is_current()) {
+		return;
+	}
+
+	get_viewport()->_camera_3d_transform_changed_notify();
+}
+
+/* Upstream lines 300-303 */
+
+Projection Camera3D::get_camera_projection() const {
+	ERR_FAIL_COND_V_MSG(!is_inside_tree(), Projection(), "Camera is not inside the scene tree.");
+	return _get_camera_projection(_near);
+}
+
+/* Upstream lines 365-373 */
+
+void Camera3D::make_current() {
+	current = true;
+
+	if (!is_inside_tree()) {
+		return;
+	}
+
+	get_viewport()->_camera_3d_set(this);
+}

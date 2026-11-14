@@ -33,16 +33,14 @@
 
 ## GDScript 源码复刻
 
-S06 Godot 4.7: SceneTree process groups divide physics and idle callbacks.
+`src/source_replay.gd` 按本课列出的 C++ 入口重建关键数据结构、条件分支和状态更新。它是可逐步阅读的教学移植，不是完整引擎替身；模型函数表会标明直接对应的源码行为和仅用于组织输入/输出的脚手架。平台、线程、对象分配和服务器副作用仍由真实引擎处理。
 
-source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
-
-| GDScript 函数 | 复刻步骤 |
-| --- | --- |
-| _scene_tree_physics() | 分派本阶段信号/通知并执行阶段收尾 |
-| _scene_tree_process() | 分派本阶段信号/通知并执行阶段收尾 |
-| _process_groups() | 按 process group 顺序筛选节点并派发回调 |
-| _sort_groups() | 按 process group 顺序筛选节点并派发回调 |
+| 模型函数 | C++ 源码对照或脚手架性质 | 复现的状态与分支 |
+| --- | --- | --- |
+| `_scene_tree_physics()` | `SceneTree::physics_process` | 演示 SceneTree 的物理帧信号、节点调度和物理收尾。 |
+| `_scene_tree_process()` | `SceneTree::process` | 演示普通帧信号、节点调度、timer/tween 和退出检查。 |
+| `_process_groups()` | `SceneTree::_process` | 依照 process group 状态分组并调用可运行节点。 |
+| `_sort_groups()` | `process-group order/thread scheduling` | 按配置的 order 稳定插入 process group。 |
 
 ## 最小 Godot/GDScript 实验
 

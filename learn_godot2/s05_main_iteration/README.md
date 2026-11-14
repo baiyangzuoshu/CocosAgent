@@ -14,12 +14,14 @@
 
 以下路径相对于 `engine/godot-2.1/` 快照根目录：
 
-- `main/main.cpp:1494-1520`：`Main::iteration()` 读取 tick，按 `iterations_per_second` 计算 `frame_slice`，累计经过时间；单次 `step` 上限为 8 个固定片长。
+- `main/main.cpp:1494-1520`：`Main::iteration()` 读取 tick，按 `iterations_per_second` 计算 `frame_slice`，先把单帧 `step` 限制为 8 个片长，再累计经过时间。
 - `main/main.cpp:1523-1550`：固定步循环中先同步/刷新 2D/3D 物理，再调用 `MainLoop::iteration()`、物理服务器 `step()` 并冲刷消息队列。
 - `main/main.cpp:1557-1583`：固定循环后调用 `MainLoop::idle()`，同步 VisualServer，在允许绘制时调用 `draw()`，随后更新 AudioServer。
 - `scene/main/node.cpp:52-73`、`2179-2180`：SceneTree 更新 Node 的 `_process` / `_fixed_process`，并注册这两个脚本虚方法。
 
 调用摘要：OS 帧循环 → `Main::iteration()` 采样时间 → 固定 `MainLoop::iteration()` 与 PhysicsServer 步进 → `MainLoop::idle()` → VisualServer sync/draw。
+
+逐段核对时留意固定循环的严格条件 `time_accum > frame_slice`。模型以 `0.055s`、`0.020s` 展示两次固定更新并留下 `0.015s`；若输入 `0.300s`，引擎先截到 `0.160s`，循环会留下恰好 `0.020s`。idle 仍接收被截断后的帧 step，乘上 time scale 后每帧执行一次。
 
 ## 本课源码复刻
 
@@ -32,15 +34,13 @@
 
 ## GDScript 源码复刻
 
-S05 Godot 2.1: clamp incoming step, consume fixed slices, then idle and draw.
+`src/source_replay.gd` 按本课列出的 C++ 入口重建关键数据结构、条件分支和状态更新。它是可逐步阅读的教学移植，不是完整引擎替身；模型函数表会标明直接对应的源码行为和仅用于组织输入/输出的脚手架。平台、线程、对象分配和服务器副作用仍由真实引擎处理。
 
-source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
-
-| GDScript 函数 | 复刻步骤 |
-| --- | --- |
-| _advance_time() | 累计经过时间并计算固定步数、process delta 和余量 |
-| _fixed_step() | 逐个执行固定物理阶段并记录服务器同步顺序 |
-| _idle_and_draw() | 执行一次 process/idle 并记录 draw 或 sync 提交 |
+| 模型函数 | C++ 源码对照或脚手架性质 | 复现的状态与分支 |
+| --- | --- | --- |
+| `_advance_time()`、`_run_fixed_loop()` | `Main::iteration` 的 tick 截断、累加器与严格固定循环 | 保留 8 片长截断、每次循环减一片长，以及 quit 时提前跳出、不继续物理步进的分支。 |
+| `_fixed_step()` | `Main::iteration` 固定循环主体 | 逐项记录 3D/2D PhysicsServer sync 与 query flush、MainLoop 回调、服务器 step 和两次消息队列 flush。 |
+| `_idle_and_draw()` | `Main::iteration` idle、VisualServer sync/draw、AudioServer update | idle 使用帧 step 而非 accumulator 余数；展示低处理器模式下未变化时跳过 draw。 |
 
 ## 最小 Godot/GDScript 实验
 
@@ -56,7 +56,7 @@ godot -path .
 
 ## 简化与边界
 
-不修改 physics tick、time scale、目标 FPS 或低处理器占用设置，不覆盖各平台不同的事件循环。Godot 2.1 使用 `SceneTree::iteration()`、`idle()`、`VisualServer` 与 `_fixed_process`；本课尚未运行项目。
+模型移植摘录中的计时与条件分支；OS 时钟、真实服务器操作、目标 FPS 和平台事件循环仍由真实引擎完成。Godot 2.1 使用 `SceneTree::iteration()`、`idle()`、`VisualServer` 与 `_fixed_process`；本课尚未运行项目。
 
 ## 下一课
 

@@ -1,0 +1,54 @@
+/*
+ * Godot 4 source excerpt.
+ * Upstream: engine/godot-4.7/scene/main/canvas_item.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 553-565 */
+
+void CanvasItem::queue_redraw() {
+	ERR_THREAD_GUARD; // Calling from thread is safe.
+	if (!is_inside_tree()) {
+		return;
+	}
+	if (pending_update) {
+		return;
+	}
+
+	pending_update = true;
+
+	callable_mp(this, &CanvasItem::_redraw_callback).call_deferred();
+}
+
+/* Upstream lines 917-944 */
+
+void CanvasItem::draw_rect(const Rect2 &p_rect, const Color &p_color, bool p_filled, real_t p_width, bool p_antialiased) {
+	ERR_THREAD_GUARD;
+	ERR_DRAW_GUARD;
+
+	Rect2 rect = p_rect.abs();
+
+	if (p_filled) {
+		if (p_width != -1.0) {
+			WARN_PRINT("The draw_rect() \"width\" argument has no effect when \"filled\" is \"true\".");
+		}
+
+		RenderingServer::get_singleton()->canvas_item_add_rect(canvas_item, rect, p_color, p_antialiased);
+	} else if (p_width >= rect.size.width || p_width >= rect.size.height) {
+		RenderingServer::get_singleton()->canvas_item_add_rect(canvas_item, rect.grow(0.5f * p_width), p_color, p_antialiased);
+	} else {
+		Vector<Vector2> points;
+		points.resize(5);
+		points.write[0] = rect.position;
+		points.write[1] = rect.position + Vector2(rect.size.x, 0);
+		points.write[2] = rect.position + rect.size;
+		points.write[3] = rect.position + Vector2(0, rect.size.y);
+		points.write[4] = rect.position;
+
+		Vector<Color> colors = { p_color };
+
+		RenderingServer::get_singleton()->canvas_item_add_polyline(canvas_item, points, colors, p_width, p_antialiased);
+	}
+}

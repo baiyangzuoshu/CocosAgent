@@ -1,0 +1,2 @@
+198657c79c5f88b337fc459fb2b661ea37bc99bbf73946b97f78e1b5721d9c93  upstream/scene/3d/camera.cpp
+e1a4dd16c93e0233dfb95e6ffd8d12902da77df907d5d96de6242c5a542c57b6  upstream/servers/visual/visual_server_raster.cpp

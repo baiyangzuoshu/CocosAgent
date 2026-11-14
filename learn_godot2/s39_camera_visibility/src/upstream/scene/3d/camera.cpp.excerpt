@@ -1,0 +1,60 @@
+/*
+ * Godot 2 source excerpt.
+ * Upstream: engine/godot-2.1/scene/3d/camera.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 177-195 */
+
+void Camera::_update_camera() {
+
+	Transform tr = get_camera_transform();
+	tr.origin += tr.basis.get_axis(1) * v_offset;
+	tr.origin += tr.basis.get_axis(0) * h_offset;
+	VisualServer::get_singleton()->camera_set_transform(camera, tr);
+
+	// here goes listener stuff
+	//	if (viewport_ptr && is_inside_scene() && is_current())
+	//		get_viewport()->_camera_transform_changed_notify();
+
+	if (is_inside_tree() && is_current()) {
+		get_viewport()->_camera_transform_changed_notify();
+	}
+
+	if (is_current() && get_world().is_valid()) {
+		get_world()->_update_camera(this);
+	}
+}
+
+/* Upstream lines 245-258 */
+
+void Camera::set_perspective(float p_fovy_degrees, float p_z_near, float p_z_far) {
+
+	if (!force_change && fov == p_fovy_degrees && p_z_near == near && p_z_far == far && mode == PROJECTION_PERSPECTIVE)
+		return;
+
+	fov = p_fovy_degrees;
+	near = p_z_near;
+	far = p_z_far;
+	mode = PROJECTION_PERSPECTIVE;
+
+	VisualServer::get_singleton()->camera_set_perspective(camera, fov, near, far);
+	update_gizmo();
+	force_change = false;
+}
+
+/* Upstream lines 280-290 */
+
+void Camera::make_current() {
+
+	current = true;
+
+	if (!is_inside_tree())
+		return;
+
+	get_viewport()->_camera_set(this);
+
+	//get_scene()->call_group(SceneMainLoop::GROUP_CALL_REALTIME,camera_group,"_camera_make_current",this);
+}

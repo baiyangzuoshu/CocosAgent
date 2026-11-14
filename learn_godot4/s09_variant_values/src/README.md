@@ -11,7 +11,7 @@
 | 阅读顺序 | 完整上游副本 | 原始行号摘录 | 上游快照路径 |
 | --- | --- | --- | --- |
 | 1 | [object.cpp](upstream/core/object/object.cpp) | [750-765 ; 768-850](upstream/core/object/object.cpp.excerpt) | engine/godot-4.7/core/object/object.cpp |
-| 2 | [variant.cpp](upstream/core/variant/variant.cpp) | [189-228](upstream/core/variant/variant.cpp.excerpt) | engine/godot-4.7/core/variant/variant.cpp |
+| 2 | [variant.cpp](upstream/core/variant/variant.cpp) | [189-228 ; 532-862](upstream/core/variant/variant.cpp.excerpt) | engine/godot-4.7/core/variant/variant.cpp |
 | 3 | [variant.h](upstream/core/variant/variant.h) | [96-145](upstream/core/variant/variant.h.excerpt) | engine/godot-4.7/core/variant/variant.h |
 | 4 | [variant_construct.cpp](upstream/core/variant/variant_construct.cpp) | [264-289](upstream/core/variant/variant_construct.cpp.excerpt) | engine/godot-4.7/core/variant/variant_construct.cpp |
 | 5 | [variant_utility.cpp](upstream/core/variant/variant_utility.cpp) | [845-933 ; 1037-1053 ; 1747-1765](upstream/core/variant/variant_utility.cpp.excerpt) | engine/godot-4.7/core/variant/variant_utility.cpp |

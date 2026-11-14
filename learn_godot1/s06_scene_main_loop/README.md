@@ -33,14 +33,12 @@
 
 ## GDScript 源码复刻
 
-S06 Godot 1.1: SceneTree sends fixed/idle groups and routes handled input.
+`src/source_replay.gd` 按本课列出的 C++ 入口重建关键数据结构、条件分支和状态更新。它是可逐步阅读的教学移植，不是完整引擎替身；模型函数表会标明直接对应的源码行为和仅用于组织输入/输出的脚手架。平台、线程、对象分配和服务器副作用仍由真实引擎处理。
 
-source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
-
-| GDScript 函数 | 复刻步骤 |
-| --- | --- |
-| _route_input() | 沿本代输入路由更新 handled 状态 |
-| _process_group() | 按 process group 顺序筛选节点并派发回调 |
+| 模型函数 | C++ 源码对照或脚手架性质 | 复现的状态与分支 |
+| --- | --- | --- |
+| `_route_input()` | `SceneTree::input_event / Viewport 输入分发` | 把输入交给 GUI/Viewport，并在 handled 后停止传播。 |
+| `_process_group()` | `SceneTree::iteration / SceneTree::idle` | 只向启用对应处理开关的节点派发通知。 |
 
 ## 最小 Godot/GDScript 实验
 

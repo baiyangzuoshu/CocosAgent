@@ -34,14 +34,12 @@
 
 ## GDScript 源码复刻
 
-S02 Godot 1.1: legacy switches and unknown argv saved as OS main args.
+`src/source_replay.gd` 按本课列出的 C++ 入口重建关键数据结构、条件分支和状态更新。它是可逐步阅读的教学移植，不是完整引擎替身；模型函数表会标明直接对应的源码行为和仅用于组织输入/输出的脚手架。平台、线程、对象分配和服务器副作用仍由真实引擎处理。
 
-source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
-
-| GDScript 函数 | 复刻步骤 |
-| --- | --- |
-| _parse_args() | 逐项解析本代参数、分流或拒绝缺值选项 |
-| _main_setup() | 执行核心/项目初始化并让错误状态提前返回 |
+| 模型函数 | C++ 源码对照或脚手架性质 | 复现的状态与分支 |
+| --- | --- | --- |
+| `_parse_args()` | `Main::setup 参数扫描、-path 与 main_args 分流` | 逐个扫描 argv，维护选项、项目路径和透传参数。 |
+| `_main_setup()` | `Main::setup / OS::set_cmdline` | 在参数有效后保存 OS 命令行并推进初始化阶段。 |
 
 ## 最小 Godot/GDScript 实验
 

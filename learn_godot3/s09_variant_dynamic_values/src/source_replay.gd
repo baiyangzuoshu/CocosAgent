@@ -1,6 +1,10 @@
 # S09 Godot 3.6: Variant tags and convert/evaluate stay separate from Object::callv.
 extends Reference
 
+# 教学复刻模型：转译本课 C++ 摘录中的选定数据结构、分支和状态更新。
+# 不调用私有 C++；真实引擎行为由本课独立 GDScript probe 观察。
+
+# 教学脚手架：按本课顺序组装输入、执行模型并打印观察结果。
 func run():
 	var integer = _variant("INT", 7)
 	var real = _variant("REAL", 2.5)
@@ -13,24 +17,29 @@ func run():
 	print("[replay S09] Object::callv result=", call, " position=", object["position"])
 	print("[replay S09] var2str-style output=", _variant_to_text(sum))
 
+# C++ 对照：Variant typed value
 func _variant(type_name, value):
 	return {"type": type_name, "value": value}
 
+# C++ 对照：Variant::can_convert / Variant::construct
 func _convert(value, target_type):
 	if value["type"] == "INT" and target_type == "REAL":
 		return _variant("REAL", float(value["value"]))
 	return value
 
+# C++ 对照：GDScriptFunction operator opcode → Variant::evaluate
 func _evaluate_add(left, right):
 	if left["type"] == "REAL" or right["type"] == "REAL":
 		return _variant("REAL", float(left["value"]) + float(right["value"]))
 	return _variant("INT", int(left["value"]) + int(right["value"]))
 
+# C++ 对照：Object::callv → Object::call / MethodBind
 func _object_callv(object, method, args):
 	if method == "set_position" and args.size() == 1:
 		object["position"] = args[0]
 		return {"error": "OK", "value": null}
 	return {"error": "invalid method/argument count", "value": null}
 
+# C++ 对照：Variant::get_construct_string / var2str
 func _variant_to_text(value):
 	return str(value["value"])

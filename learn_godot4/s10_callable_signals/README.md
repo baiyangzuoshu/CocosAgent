@@ -10,16 +10,22 @@
 
 ## C++ 源码追踪
 
-源码依据：`engine/godot-4.7/`（Godot 4.7 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
+源码依据：`engine/godot-4.7/`。以下路径相对于该快照目录；准确原文见后续摘录表。
 
-~~~text
-GDScript 方法引用 → Callable → Object::connect → signal_map → emit_signalp → Callable::callp → Object::callp/GDScript
-~~~
-- `engine/godot-4.7/core/variant/callable.cpp:44-87`：本课追踪摘录。
-- `engine/godot-4.7/core/variant/variant.h:922-940`：本课追踪摘录。
-- `engine/godot-4.7/core/object/object.cpp:1179-1221`：本课追踪摘录。
-- `engine/godot-4.7/core/object/object.cpp:1233-1315`：本课追踪摘录。
-- `engine/godot-4.7/core/object/object.cpp:1518-1580`：本课追踪摘录。
+```text
+GDScript method reference → Callable
+Object::connect → SignalData slot
+Object::emit_signalp → Callable::callp → Object::callp
+```
+
+- `core/variant/callable.cpp:44-72` **`Callable::callp()`**：从 Callable 的对象身份解析 ObjectDB 实例，再调用对象方法；`callv()` 在 `74-87` 将 Array 转成参数指针。
+- `core/variant/variant.h:922-940` **`Callable::bind()`**：模板入口把已绑定参数交给 Callable bind 实现。
+- `core/object/object.cpp:1179-1315` **`Object::emit_signalp()`**：在锁内复制连接 Callable/flags，离开锁后再逐项调用；避免回调期间断开连接影响本次发射。
+- `core/object/object.cpp:1518-1583` **`Object::connect()`**：检查信号和重复连接；重复比较使用 base comparator，因此 bind 参数不区分连接身份。
+- `core/object/object.cpp:768-850` **`Object::callp()`**：先问 ScriptInstance；只有脚本未处理该方法时才查 ClassDB MethodBind。
+- `core/variant/variant.h:922-940`：确认本代 Variant 可承载 Callable 与 Signal 值。
+
+GDScript 模型记录对象/方法/绑定参数、按 base identity 检查重复连接、发射时复制连接列表再调用；实验用 Signal.connect/emit 与 Callable.bind 验证公开行为。
 
 ## 本课源码复刻
 
@@ -27,27 +33,25 @@ GDScript 方法引用 → Callable → Object::connect → signal_map → emit_s
 
 | 阅读顺序 | 完整上游副本 | 原始行号摘录 | 上游快照路径 |
 | --- | --- | --- | --- |
-| 1 | [object.cpp](src/upstream/core/object/object.cpp) | [1179-1221 ; 1233-1315 ; 1518-1580](src/upstream/core/object/object.cpp.excerpt) | engine/godot-4.7/core/object/object.cpp |
+| 1 | [object.cpp](src/upstream/core/object/object.cpp) | [768-850 ; 1179-1221 ; 1233-1315 ; 1518-1583](src/upstream/core/object/object.cpp.excerpt) | engine/godot-4.7/core/object/object.cpp |
 | 2 | [callable.cpp](src/upstream/core/variant/callable.cpp) | [44-87](src/upstream/core/variant/callable.cpp.excerpt) | engine/godot-4.7/core/variant/callable.cpp |
 | 3 | [variant.h](src/upstream/core/variant/variant.h) | [922-940](src/upstream/core/variant/variant.h.excerpt) | engine/godot-4.7/core/variant/variant.h |
 
 ## GDScript 源码复刻
 
-S10 Godot 4.7: SignalData stores Callable; emit snapshots slots before callp.
+`src/source_replay.gd` 按本课列出的 C++ 入口重建关键数据结构、条件分支和状态更新。它是可逐步阅读的教学移植，不是完整引擎替身；模型函数表会标明直接对应的源码行为和仅用于组织输入/输出的脚手架。平台、线程、对象分配和服务器副作用仍由真实引擎处理。
 
-source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
-
-| GDScript 函数 | 复刻步骤 |
-| --- | --- |
-| _make_callable() | 登记回调并按目标 ID、方法和参数调用目标 |
-| _connect() | 登记回调并按目标 ID、方法和参数调用目标 |
-| _same_callable() | 登记回调并按目标 ID、方法和参数调用目标 |
-| _emit() | 登记回调并按目标 ID、方法和参数调用目标 |
-| _callp() | 登记回调并按目标 ID、方法和参数调用目标 |
+| 模型函数 | C++ 源码对照或脚手架性质 | 复现的状态与分支 |
+| --- | --- | --- |
+| `_make_callable()` | `Callable::Callable / Callable::bind` | 组成对象、方法和绑定参数三元组。 |
+| `_connect()` | `Object::connect / SignalData connection list` | 检查重复目标后把 signal 与回调元数据登记到连接表。 |
+| `_same_callable()` | `Callable identity/equality fields` | 按 base comparator 比较对象和方法身份；本代信号重复检查忽略 bound 参数。 |
+| `_emit()` | `Object::emit_signalp / connection snapshot` | 为匹配 signal 取连接项并同步调用目标回调。 |
+| `_callp()` | `Callable::callp → Object::callp` | 合并发射参数与 bound 参数后分派目标方法。 |
 
 ## 最小 Godot/GDScript 实验
 
-把方法引用封装为 Callable 并连接 Signal，发射整型参数；再用 call 与 bind 构造部分参数函数。
+把方法引用封装为 Callable 并连接 Signal，发射整型参数；再对同一方法连接两个不同 bound 值，观察重复连接键忽略 bind 参数；最后直接调用 bind 后的 Callable。
 
 实验工程文件：
 
@@ -63,7 +67,7 @@ source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中
 godot --path .
 ~~~
 
-**预期观察：** 信号发射同步调用 GDScript 方法；Callable 直接调用和 bind 后调用输出计算结果，连接状态可查询。
+**预期观察：** 信号发射同步调用 GDScript 方法；同一方法即使绑定了不同参数，第二次连接仍返回 `ERR_INVALID_PARAMETER`；Callable 直接调用和 bind 后调用输出计算结果。
 
 **动手改一处：** 把 `bind(5)` 改成绑定另一个整数，并改变 signal 发射值，分别预测连接回调和部分应用 Callable 的结果。
 

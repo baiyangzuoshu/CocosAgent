@@ -1,0 +1,38 @@
+/*
+ * Godot 4 source excerpt.
+ * Upstream: engine/godot-4.7/scene/main/window.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 2004-2031 */
+
+void Window::_window_input(const Ref<InputEvent> &p_ev) {
+	ERR_MAIN_THREAD_GUARD;
+
+	if (exclusive_child != nullptr) {
+		if (nonclient_area.has_area() && is_inside_tree()) {
+			Ref<InputEventMouse> me = p_ev;
+			if (me.is_valid() && nonclient_area.has_point(me->get_position())) {
+				emit_signal(SceneStringName(nonclient_window_input), p_ev);
+			}
+		}
+		if (!is_embedding_subwindows()) { // Not embedding, no need for event.
+			return;
+		}
+	}
+
+	// If the event needs to be handled in a Window-derived class, then it should overwrite
+	// `_input_from_window` instead of subscribing to the `window_input` signal, because the signal
+	// filters out internal events.
+	_input_from_window(p_ev);
+
+	if (p_ev->get_device() != InputEvent::DEVICE_ID_INTERNAL && is_inside_tree()) {
+		emit_signal(SceneStringName(window_input), p_ev);
+	}
+
+	if (is_inside_tree()) {
+		push_input(p_ev);
+	}
+}

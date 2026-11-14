@@ -1,0 +1,35 @@
+/*
+ * Godot 3 source excerpt.
+ * Upstream: engine/godot-3.6/scene/main/viewport.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 844-850 */
+
+void Viewport::set_canvas_transform(const Transform2D &p_transform) {
+	canvas_transform = p_transform;
+
+	if (!override_canvas_transform) {
+		VisualServer::get_singleton()->viewport_set_canvas_transform(viewport, find_world_2d()->get_canvas(), canvas_transform);
+	}
+}
+
+/* Upstream lines 852-854 */
+
+Transform2D Viewport::get_canvas_transform() const {
+	return canvas_transform;
+}
+
+/* Upstream lines 1403-1411 */
+
+Ref<InputEvent> Viewport::_make_input_local(const Ref<InputEvent> &ev) {
+	if (ev.is_null()) {
+		return ev;
+	}
+	Vector2 vp_ofs = _get_window_offset();
+	Transform2D ai = get_final_transform().affine_inverse() * _get_input_pre_xform();
+
+	return ev->xformed_by(ai, -vp_ofs);
+}

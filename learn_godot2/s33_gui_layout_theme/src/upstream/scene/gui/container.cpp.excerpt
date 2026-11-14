@@ -1,0 +1,33 @@
+/*
+ * Godot 2 source excerpt.
+ * Upstream: engine/godot-2.1/scene/gui/container.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 75-83 */
+
+void Container::_sort_children() {
+
+	if (!is_inside_tree())
+		return;
+
+	notification(NOTIFICATION_SORT_CHILDREN);
+	emit_signal(SceneStringNames::get_singleton()->sort_children);
+	pending_sort = false;
+}
+
+/* Upstream lines 111-121 */
+
+void Container::queue_sort() {
+
+	if (!is_inside_tree())
+		return;
+
+	if (pending_sort)
+		return;
+
+	MessageQueue::get_singleton()->push_call(this, "_sort_children");
+	pending_sort = true;
+}

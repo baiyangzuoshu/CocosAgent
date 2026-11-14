@@ -17,7 +17,7 @@
 - `main/main.cpp:1016-1032`：源码将初始化划分为 `setup()`、`setup2()`、`start()`；其中 `setup2()` 注册高层服务器、单例和场景/编辑器类型。
 - `main/main.cpp:3033-3041`：`Main::setup2()` 启动第二阶段并建立阶段统计。
 - `main/main.cpp:3212-3229`、`servers/register_server_types.cpp:146-170`：创建导航服务管理器并调用 `register_server_types()`，后者把服务类注册到 ClassDB 并注册 TextServerManager 等单例。
-- `main/main.cpp:3776-3795`：初始化导航服务，注册场景类型和场景单例，再初始化场景级模块。
+- `main/main.cpp:3777-3796`：初始化导航服务，注册场景类型和场景单例，再初始化场景级模块。
 - `main/main.cpp:3858-3867`：创建相机服务、初始化物理服务，随后调用 `register_server_singletons()` 并初始化脚本语言。
 - `servers/register_server_types.cpp:393-418`：将 RenderingServer、AudioServer、DisplayServer、PhysicsServer 等实例发布为 Engine 单例；具体项受编译选项控制。
 - `servers/rendering/rendering_server.cpp:3511`、`3543-3545`：绑定 `get_rendering_info()` 与帧统计枚举；`core/core_bind.cpp:1599-1600`、`1842` 暴露 `ClassDB.class_exists()`。
@@ -31,21 +31,19 @@
 | 阅读顺序 | 完整上游副本 | 原始行号摘录 | 上游快照路径 |
 | --- | --- | --- | --- |
 | 1 | [core_bind.cpp](src/upstream/core/core_bind.cpp) | [1599-1600](src/upstream/core/core_bind.cpp.excerpt) | engine/godot-4.7/core/core_bind.cpp |
-| 2 | [main.cpp](src/upstream/main/main.cpp) | [1016-1032 ; 3033-3041 ; 3212-3229 ; 3776-3795 ; 3858-3867](src/upstream/main/main.cpp.excerpt) | engine/godot-4.7/main/main.cpp |
+| 2 | [main.cpp](src/upstream/main/main.cpp) | [1016-1032 ; 3033-3041 ; 3212-3229 ; 3777-3796 ; 3858-3867](src/upstream/main/main.cpp.excerpt) | engine/godot-4.7/main/main.cpp |
 | 3 | [register_server_types.cpp](src/upstream/servers/register_server_types.cpp) | [146-170 ; 393-418](src/upstream/servers/register_server_types.cpp.excerpt) | engine/godot-4.7/servers/register_server_types.cpp |
 | 4 | [rendering_server.cpp](src/upstream/servers/rendering/rendering_server.cpp) | [3511-3511](src/upstream/servers/rendering/rendering_server.cpp.excerpt) | engine/godot-4.7/servers/rendering/rendering_server.cpp |
 
 ## GDScript 源码复刻
 
-S03 Godot 4.7: ClassDB registration precedes service singleton publication.
+`src/source_replay.gd` 按本课列出的 C++ 入口重建关键数据结构、条件分支和状态更新。它是可逐步阅读的教学移植，不是完整引擎替身；模型函数表会标明直接对应的源码行为和仅用于组织输入/输出的脚手架。平台、线程、对象分配和服务器副作用仍由真实引擎处理。
 
-source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
-
-| GDScript 函数 | 复刻步骤 |
-| --- | --- |
-| _register_class() | 将类型名、父类和创建资格写入类型表 |
-| _publish() | 把服务器对象名称加入脚本可见单例表 |
-| _stage() | 按实际初始化先后追加阶段 |
+| 模型函数 | C++ 源码对照或脚手架性质 | 复现的状态与分支 |
+| --- | --- | --- |
+| `_register_class()` | `ClassDB::register_class / register_server_types` | 登记 ClassDB 类型、继承和创建元数据。 |
+| `_publish()` | `register_server_singletons / Engine::add_singleton` | 将已初始化的服务对象发布到 Globals/Engine 单例表。 |
+| `_stage()` | `教学脚手架：按 Main::setup2 摘录记录阶段，不对应单一 C++ 函数` | 只记下模型步骤；类型注册与单例发布分别由上一行、上上行的模型函数处理。 |
 
 ## 最小 Godot/GDScript 实验
 

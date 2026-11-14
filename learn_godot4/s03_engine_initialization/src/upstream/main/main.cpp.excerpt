@@ -6,7 +6,9 @@
  * Copyright and license notice: Godot Engine; see course-root SOURCE_LICENSE.txt.
  */
 
+
 /* Upstream lines 1016-1032 */
+
  * The initialization is typically done in 3 steps (with the setup2 step triggered either
  * automatically by setup, or manually in the platform's main).
  *
@@ -26,6 +28,7 @@
  *   in help, it's a bit messy and should be globalized with the setup() parsing somehow.
 
 /* Upstream lines 3033-3041 */
+
 Error Main::setup2(bool p_show_boot_logo) {
 	GodotProfileZone("setup2");
 	OS::get_singleton()->benchmark_begin_measure("Startup", "Main::Setup2");
@@ -37,6 +40,7 @@ Error Main::setup2(bool p_show_boot_logo) {
 	print_header(false);
 
 /* Upstream lines 3212-3229 */
+
 	physics_server_2d_manager = memnew(PhysicsServer2DManager);
 #endif // PHYSICS_2D_DISABLED
 
@@ -56,7 +60,7 @@ Error Main::setup2(bool p_show_boot_logo) {
 
 		OS::get_singleton()->benchmark_end_measure("Servers", "Modules and Extensions");
 
-/* Upstream lines 3776-3795 */
+/* Upstream lines 3777-3796 */
 
 #ifndef NAVIGATION_3D_DISABLED
 	NavigationServer3DManager::initialize_server();
@@ -78,7 +82,9 @@ Error Main::setup2(bool p_show_boot_logo) {
 
 		OS::get_singleton()->benchmark_end_measure("Scene", "Modules and Extensions");
 
+
 /* Upstream lines 3858-3867 */
+
 	camera_server = CameraServer::create();
 
 	MAIN_PRINT("Main: Load Physics");

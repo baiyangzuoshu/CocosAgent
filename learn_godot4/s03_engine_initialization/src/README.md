@@ -11,7 +11,7 @@
 | 阅读顺序 | 完整上游副本 | 原始行号摘录 | 上游快照路径 |
 | --- | --- | --- | --- |
 | 1 | [core_bind.cpp](upstream/core/core_bind.cpp) | [1599-1600](upstream/core/core_bind.cpp.excerpt) | engine/godot-4.7/core/core_bind.cpp |
-| 2 | [main.cpp](upstream/main/main.cpp) | [1016-1032 ; 3033-3041 ; 3212-3229 ; 3776-3795 ; 3858-3867](upstream/main/main.cpp.excerpt) | engine/godot-4.7/main/main.cpp |
+| 2 | [main.cpp](upstream/main/main.cpp) | [1016-1032 ; 3033-3041 ; 3212-3229 ; 3777-3796 ; 3858-3867](upstream/main/main.cpp.excerpt) | engine/godot-4.7/main/main.cpp |
 | 3 | [register_server_types.cpp](upstream/servers/register_server_types.cpp) | [146-170 ; 393-418](upstream/servers/register_server_types.cpp.excerpt) | engine/godot-4.7/servers/register_server_types.cpp |
 | 4 | [rendering_server.cpp](upstream/servers/rendering/rendering_server.cpp) | [3511-3511](upstream/servers/rendering/rendering_server.cpp.excerpt) | engine/godot-4.7/servers/rendering/rendering_server.cpp |
 

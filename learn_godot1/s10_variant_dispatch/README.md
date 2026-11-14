@@ -10,17 +10,21 @@
 
 ## C++ 源码追踪
 
-源码依据：`engine/godot-1.1/`（Godot 1.1 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
+源码依据：`engine/godot-1.1/`。以下路径相对于该快照目录；准确原文见后续摘录表。
 
-~~~text
-GDScript 运算 opcode → Variant::evaluate → 运算符/类型分支；convert → Variant::construct；var2str/str2var → 序列化与解析
-~~~
-- `engine/godot-1.1/modules/gdscript/gd_script.cpp:327-350`：本课追踪摘录。
-- `engine/godot-1.1/core/variant_op.cpp:219-280`：本课追踪摘录。
-- `engine/godot-1.1/core/variant.cpp:197-270`：本课追踪摘录。
-- `engine/godot-1.1/core/variant_call.cpp:921-1015`：本课追踪摘录。
-- `engine/godot-1.1/modules/gdscript/gd_functions.cpp:500-520`：本课追踪摘录。
-- `engine/godot-1.1/modules/gdscript/gd_functions.cpp:608-620`：本课追踪摘录。
+```text
+GDScript operator bytecode → Variant::evaluate
+convert(type) → Variant::construct / Variant::can_convert
+var2str/str2var → Variant construction text / parser
+```
+
+- `modules/gdscript/gd_script.cpp:328-351`：脚本虚拟机从 opcode 取运算符及左右 Variant，调用 `Variant::evaluate()`；无效组合保留错误信息。
+- `core/variant_op.cpp:219-280` **`Variant::evaluate()`**：先处理 operator，再按左右类型选择具体操作；本课模型只实现数字加法、除法和除零边界。
+- `core/variant.cpp:197-270` **`Variant::can_convert()`**：按目标类型列出有效/无效来源类型。
+- `core/variant_call.cpp:921-1015` **`Variant::construct()`**：区分默认构造、同类型复制、单参数转换和多参数构造器。
+- `modules/gdscript/gd_functions.cpp:500-520`、`608-620`：`typeof/convert` 与 `var2str/str2var` builtin 进入上述类型/文本路径。
+
+模型将 opcode、运算、构造转换分成独立函数；实验用真实 GDScript 值验证公开 builtin。
 
 ## 本课源码复刻
 
@@ -32,18 +36,16 @@ GDScript 运算 opcode → Variant::evaluate → 运算符/类型分支；conver
 | 2 | [variant_call.cpp](src/upstream/core/variant_call.cpp) | [921-1015](src/upstream/core/variant_call.cpp.excerpt) | engine/godot-1.1/core/variant_call.cpp |
 | 3 | [variant_op.cpp](src/upstream/core/variant_op.cpp) | [219-280](src/upstream/core/variant_op.cpp.excerpt) | engine/godot-1.1/core/variant_op.cpp |
 | 4 | [gd_functions.cpp](src/upstream/modules/gdscript/gd_functions.cpp) | [500-520 ; 608-620](src/upstream/modules/gdscript/gd_functions.cpp.excerpt) | engine/godot-1.1/modules/gdscript/gd_functions.cpp |
-| 5 | [gd_script.cpp](src/upstream/modules/gdscript/gd_script.cpp) | [327-350](src/upstream/modules/gdscript/gd_script.cpp.excerpt) | engine/godot-1.1/modules/gdscript/gd_script.cpp |
+| 5 | [gd_script.cpp](src/upstream/modules/gdscript/gd_script.cpp) | [328-351](src/upstream/modules/gdscript/gd_script.cpp.excerpt) | engine/godot-1.1/modules/gdscript/gd_script.cpp |
 
 ## GDScript 源码复刻
 
-S10 Godot 1.1: GDScript opcode selects Variant::evaluate, then construct/serialization.
+`src/source_replay.gd` 按本课列出的 C++ 入口重建关键数据结构、条件分支和状态更新。它是可逐步阅读的教学移植，不是完整引擎替身；模型函数表会标明直接对应的源码行为和仅用于组织输入/输出的脚手架。平台、线程、对象分配和服务器副作用仍由真实引擎处理。
 
-source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
-
-| GDScript 函数 | 复刻步骤 |
-| --- | --- |
-| _evaluate() | 维护 Variant 类型标签并执行构造/转换/序列化分支 |
-| _construct_string() | 维护 Variant 类型标签并执行构造/转换/序列化分支 |
+| 模型函数 | C++ 源码对照或脚手架性质 | 复现的状态与分支 |
+| --- | --- | --- |
+| `_evaluate()` | `GDScript operator opcode → Variant::evaluate` | 按运算符和左右 Variant 标签选择计算分支。 |
+| `_construct_string()` | `Variant::construct / Variant::can_convert` | 经可转换判断后构造 STRING Variant。 |
 
 ## 最小 Godot/GDScript 实验
 

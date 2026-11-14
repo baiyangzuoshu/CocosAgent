@@ -1,0 +1,6 @@
+config_version=6
+
+[application]
+
+config/name="Godot 3 S40 GLES 后端选择和渲染提交路径"
+run/main_scene="res://main.tscn"

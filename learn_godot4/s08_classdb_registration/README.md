@@ -41,16 +41,14 @@
 
 ## GDScript 源码复刻
 
-S08 Godot 4.7: ClassDB::instantiate uses registered creation info and abstract flags.
+`src/source_replay.gd` 按本课列出的 C++ 入口重建关键数据结构、条件分支和状态更新。它是可逐步阅读的教学移植，不是完整引擎替身；模型函数表会标明直接对应的源码行为和仅用于组织输入/输出的脚手架。平台、线程、对象分配和服务器副作用仍由真实引擎处理。
 
-source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
-
-| GDScript 函数 | 复刻步骤 |
-| --- | --- |
-| _register_class() | 将类型名、父类和创建资格写入类型表 |
-| _can_instantiate() | 检查类型父链、创建工厂或是否可实例化 |
-| _instantiate() | 从共享 PackedScene 描述创建独立节点实例 |
-| _is_class() | 检查类型父链、创建工厂或是否可实例化 |
+| 模型函数 | C++ 源码对照或脚手架性质 | 复现的状态与分支 |
+| --- | --- | --- |
+| `_register_class()` | `ClassDB::register_class / GDREGISTER_CLASS` | 登记 ClassDB 类型、继承和创建元数据。 |
+| `_can_instantiate()` | `ClassDB::can_instantiate` | 检查类型存在、未抽象且提供创建函数。 |
+| `_instantiate()` | `ClassDB::instantiate` | 只有存在 creation info 且非抽象类时，才调用注册的原生创建器并返回实例。 |
+| `_is_class()` | `ClassDB::is_parent_class / Object::is_class` | 沿类继承关系回答实例是否属于目标基类。 |
 
 ## 最小 Godot/GDScript 实验
 

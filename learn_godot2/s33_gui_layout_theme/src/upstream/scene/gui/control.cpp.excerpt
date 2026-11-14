@@ -1,0 +1,78 @@
+/*
+ * Godot 2 source excerpt.
+ * Upstream: engine/godot-2.1/scene/gui/control.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 205-218 */
+
+void Control::_update_minimum_size() {
+
+	if (!is_inside_tree())
+		return;
+
+	data.pending_min_size_update = false;
+	Size2 minsize = get_combined_minimum_size();
+	if (minsize.x > data.size_cache.x ||
+			minsize.y > data.size_cache.y) {
+		_size_changed();
+	}
+
+	emit_signal(SceneStringNames::get_singleton()->minimum_size_changed);
+}
+
+/* Upstream lines 1132-1182 */
+
+void Control::_size_changed() {
+
+	if (!is_inside_tree())
+		return;
+
+	Size2 parent_size = get_parent_area_size();
+
+	float margin_pos[4];
+
+	for (int i = 0; i < 4; i++) {
+
+		float area = parent_size[i & 1];
+		switch (data.anchor[i]) {
+
+			case ANCHOR_BEGIN: {
+
+				margin_pos[i] = data.margin[i];
+			} break;
+			case ANCHOR_END: {
+
+				margin_pos[i] = area - data.margin[i];
+			} break;
+			case ANCHOR_RATIO: {
+
+				margin_pos[i] = area * data.margin[i];
+			} break;
+			case ANCHOR_CENTER: {
+
+				margin_pos[i] = (area / 2) - data.margin[i];
+			} break;
+		}
+	}
+
+	Point2 new_pos_cache = Point2(margin_pos[0], margin_pos[1]);
+	Size2 new_size_cache = Point2(margin_pos[2], margin_pos[3]) - new_pos_cache;
+	Size2 minimum_size = get_combined_minimum_size();
+
+	new_size_cache.x = MAX(minimum_size.x, new_size_cache.x);
+	new_size_cache.y = MAX(minimum_size.y, new_size_cache.y);
+
+	if (new_pos_cache == data.pos_cache && new_size_cache == data.size_cache)
+		return; // did not change, don't emit signal
+
+	data.pos_cache = new_pos_cache;
+	data.size_cache = new_size_cache;
+
+	notification(NOTIFICATION_RESIZED);
+	item_rect_changed();
+	_change_notify_margins();
+	_notify_transform();
+}

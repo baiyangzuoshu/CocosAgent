@@ -1,0 +1,174 @@
+/*
+ * Godot 4 source excerpt.
+ * Upstream: engine/godot-4.7/servers/rendering/rendering_device.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 5551-5674 */
+
+RenderingDevice::DrawListID RenderingDevice::draw_list_begin(RID p_framebuffer, BitField<DrawFlags> p_draw_flags, VectorView<Color> p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region, uint32_t p_breadcrumb) {
+	ERR_RENDER_THREAD_GUARD_V(INVALID_ID);
+
+	ERR_FAIL_COND_V_MSG(draw_list.active, INVALID_ID, "Only one draw list can be active at the same time.");
+
+	Framebuffer *framebuffer = framebuffer_owner.get_or_null(p_framebuffer);
+	ERR_FAIL_NULL_V(framebuffer, INVALID_ID);
+
+	const FramebufferFormatKey *framebuffer_key;
+	{
+		_THREAD_SAFE_METHOD_
+		framebuffer_key = &framebuffer_formats[framebuffer->format_id].E->key();
+	}
+
+	Point2i viewport_offset;
+	Point2i viewport_size = framebuffer->size;
+
+	if (p_region != Rect2() && p_region != Rect2(Vector2(), viewport_size)) { // Check custom region.
+		Rect2i viewport(viewport_offset, viewport_size);
+		Rect2i regioni = p_region;
+		if (!((regioni.position.x >= viewport.position.x) && (regioni.position.y >= viewport.position.y) &&
+					((regioni.position.x + regioni.size.x) <= (viewport.position.x + viewport.size.x)) &&
+					((regioni.position.y + regioni.size.y) <= (viewport.position.y + viewport.size.y)))) {
+			ERR_FAIL_V_MSG(INVALID_ID, "When supplying a custom region, it must be contained within the framebuffer rectangle");
+		}
+
+		viewport_offset = regioni.position;
+		viewport_size = regioni.size;
+	}
+
+	thread_local LocalVector<RDG::AttachmentOperation> operations;
+	thread_local LocalVector<RDD::RenderPassClearValue> clear_values;
+	thread_local LocalVector<RDG::ResourceTracker *> resource_trackers;
+	thread_local LocalVector<RDG::ResourceUsage> resource_usages;
+	BitField<RDD::PipelineStageBits> stages = {};
+	operations.resize(framebuffer->texture_ids.size());
+	clear_values.resize(framebuffer->texture_ids.size());
+	resource_trackers.clear();
+	resource_usages.clear();
+	stages.clear();
+
+	uint32_t color_index = 0;
+	for (int i = 0; i < framebuffer->texture_ids.size(); i++) {
+		RID texture_rid = framebuffer->texture_ids[i];
+		Texture *texture = texture_owner.get_or_null(texture_rid);
+		if (texture == nullptr) {
+			operations[i] = RDG::ATTACHMENT_OPERATION_DEFAULT;
+			clear_values[i] = RDD::RenderPassClearValue();
+			continue;
+		}
+
+		// Clear the texture if the driver requires it during its first use.
+		_texture_check_pending_clear(texture_rid, texture);
+
+		// Indicate the texture will get modified for the shared texture fallback.
+		_texture_update_shared_fallback(texture_rid, texture, true);
+
+		RDG::AttachmentOperation operation = RDG::ATTACHMENT_OPERATION_DEFAULT;
+		RDD::RenderPassClearValue clear_value;
+		if (framebuffer_key->vrs_attachment == i && (texture->usage_flags & TEXTURE_USAGE_VRS_ATTACHMENT_BIT)) {
+			resource_trackers.push_back(texture->draw_tracker);
+			resource_usages.push_back(_vrs_usage_from_method(framebuffer_key->vrs_method));
+			stages.set_flag(_vrs_stages_from_method(framebuffer_key->vrs_method));
+		} else if (texture->usage_flags & TEXTURE_USAGE_COLOR_ATTACHMENT_BIT) {
+			if (p_draw_flags.has_flag(DrawFlags(DRAW_CLEAR_COLOR_0 << color_index))) {
+				ERR_FAIL_COND_V_MSG(color_index >= p_clear_color_values.size(), INVALID_ID, vformat("Color texture (%d) was specified to be cleared but no color value was provided.", color_index));
+				operation = RDG::ATTACHMENT_OPERATION_CLEAR;
+				clear_value.color = p_clear_color_values[color_index];
+			} else if (p_draw_flags.has_flag(DrawFlags(DRAW_IGNORE_COLOR_0 << color_index))) {
+				operation = RDG::ATTACHMENT_OPERATION_IGNORE;
+			}
+
+			resource_trackers.push_back(texture->draw_tracker);
+			resource_usages.push_back(RDG::RESOURCE_USAGE_ATTACHMENT_COLOR_READ_WRITE);
+			stages.set_flag(RDD::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+			color_index++;
+		} else if (texture->usage_flags & (TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT)) {
+			if (p_draw_flags.has_flag(DRAW_CLEAR_DEPTH) || p_draw_flags.has_flag(DRAW_CLEAR_STENCIL)) {
+				operation = RDG::ATTACHMENT_OPERATION_CLEAR;
+				clear_value.depth = p_clear_depth_value;
+				clear_value.stencil = p_clear_stencil_value;
+			} else if (p_draw_flags.has_flag(DRAW_IGNORE_DEPTH) || p_draw_flags.has_flag(DRAW_IGNORE_STENCIL)) {
+				operation = RDG::ATTACHMENT_OPERATION_IGNORE;
+			}
+
+			resource_trackers.push_back(texture->draw_tracker);
+			resource_usages.push_back(RDG::RESOURCE_USAGE_ATTACHMENT_DEPTH_STENCIL_READ_WRITE);
+			stages.set_flag(RDD::PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT);
+			stages.set_flag(RDD::PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT);
+		}
+
+		operations[i] = operation;
+		clear_values[i] = clear_value;
+	}
+
+	draw_graph.add_draw_list_begin(framebuffer->framebuffer_cache, Rect2i(viewport_offset, viewport_size), operations, clear_values, stages, p_breadcrumb);
+	draw_graph.add_draw_list_usages(resource_trackers, resource_usages);
+
+	// Mark textures as bound.
+	draw_list_bound_textures.clear();
+
+	for (int i = 0; i < framebuffer->texture_ids.size(); i++) {
+		Texture *texture = texture_owner.get_or_null(framebuffer->texture_ids[i]);
+		if (texture == nullptr) {
+			continue;
+		}
+
+		texture->bound = true;
+		draw_list_bound_textures.push_back(framebuffer->texture_ids[i]);
+	}
+
+	_draw_list_start(Rect2i(viewport_offset, viewport_size));
+#ifdef DEBUG_ENABLED
+	draw_list_framebuffer_format = framebuffer->format_id;
+#endif
+	draw_list_current_subpass = 0;
+	draw_list_subpass_count = framebuffer_key->passes.size();
+
+	Rect2i viewport_rect(viewport_offset, viewport_size);
+	draw_graph.add_draw_list_set_viewport(viewport_rect);
+	draw_graph.add_draw_list_set_scissor(viewport_rect);
+
+	return int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT;
+}
+
+/* Upstream lines 6348-6372 */
+
+void RenderingDevice::draw_list_end() {
+	ERR_RENDER_THREAD_GUARD();
+
+	ERR_FAIL_COND_MSG(!draw_list.active, "Immediate draw list is already inactive.");
+
+	draw_graph.add_draw_list_end();
+
+	_draw_list_end();
+
+	for (uint32_t i = 0; i < draw_list_bound_textures.size(); i++) {
+		Texture *texture = texture_owner.get_or_null(draw_list_bound_textures[i]);
+		ERR_CONTINUE(!texture); // Wtf.
+		if (texture->usage_flags & TEXTURE_USAGE_COLOR_ATTACHMENT_BIT) {
+			texture->bound = false;
+		}
+		if (texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+			texture->bound = false;
+		}
+		if (texture->usage_flags & TEXTURE_USAGE_DEPTH_RESOLVE_ATTACHMENT_BIT) {
+			texture->bound = false;
+		}
+	}
+
+	draw_list_bound_textures.clear();
+}
+
+/* Upstream lines 7885-7893 */
+
+void RenderingDevice::submit() {
+	ERR_RENDER_THREAD_GUARD();
+	ERR_FAIL_COND_MSG(is_main_instance, "Only local devices can submit and sync.");
+	ERR_FAIL_COND_MSG(local_device_processing, "device already submitted, call sync to wait until done.");
+
+	_end_frame();
+	_execute_frame(false);
+	local_device_processing = true;
+}

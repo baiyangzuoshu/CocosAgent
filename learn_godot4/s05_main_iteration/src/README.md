@@ -11,8 +11,8 @@
 | 阅读顺序 | 完整上游副本 | 原始行号摘录 | 上游快照路径 |
 | --- | --- | --- | --- |
 | 1 | [main.cpp](upstream/main/main.cpp) | [4921-4959 ; 4970-5053 ; 5062-5097 ; 5112](upstream/main/main.cpp.excerpt) | engine/godot-4.7/main/main.cpp |
-| 2 | [main_timer_sync.cpp](upstream/main/main_timer_sync.cpp) | [349-429 ; 432-505 ; 507-543](upstream/main/main_timer_sync.cpp.excerpt) | engine/godot-4.7/main/main_timer_sync.cpp |
-| 3 | [main_timer_sync.h](upstream/main/main_timer_sync.h) | [35-40 ; 93-144](upstream/main/main_timer_sync.h.excerpt) | engine/godot-4.7/main/main_timer_sync.h |
+| 2 | [main_timer_sync.cpp](upstream/main/main_timer_sync.cpp) | [319-346 ; 349-429 ; 432-505 ; 507-543](upstream/main/main_timer_sync.cpp.excerpt) | engine/godot-4.7/main/main_timer_sync.cpp |
+| 3 | [main_timer_sync.h](upstream/main/main_timer_sync.h) | [35-40 ; 94-145](upstream/main/main_timer_sync.h.excerpt) | engine/godot-4.7/main/main_timer_sync.h |
 | 4 | [node.cpp](upstream/scene/main/node.cpp) | [90-108 ; 4073-4074](upstream/scene/main/node.cpp.excerpt) | engine/godot-4.7/scene/main/node.cpp |
 
 ## GDScript 复刻

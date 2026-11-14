@@ -36,15 +36,13 @@
 
 ## GDScript 源码复刻
 
-S03 Godot 2.1: ObjectTypeDB types and Globals service instances are separate tables.
+`src/source_replay.gd` 按本课列出的 C++ 入口重建关键数据结构、条件分支和状态更新。它是可逐步阅读的教学移植，不是完整引擎替身；模型函数表会标明直接对应的源码行为和仅用于组织输入/输出的脚手架。平台、线程、对象分配和服务器副作用仍由真实引擎处理。
 
-source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
-
-| GDScript 函数 | 复刻步骤 |
-| --- | --- |
-| _register_type() | 将类型名、父类和创建资格写入类型表 |
-| _publish() | 把服务器对象名称加入脚本可见单例表 |
-| _stage() | 按实际初始化先后追加阶段 |
+| 模型函数 | C++ 源码对照或脚手架性质 | 复现的状态与分支 |
+| --- | --- | --- |
+| `_register_type()` | `ObjectTypeDB::register_type` | 保存原生类型名、父类与创建能力元数据。 |
+| `_publish()` | `register_server_types / Globals 单例表` | 将已初始化的服务对象发布到 Globals/Engine 单例表。 |
+| `_stage()` | `教学脚手架：按 Main::setup2 摘录记录阶段，不对应单一 C++ 函数` | 只记下模型步骤；类型注册与单例发布分别由上一行、上上行的模型函数处理。 |
 
 ## 最小 Godot/GDScript 实验
 

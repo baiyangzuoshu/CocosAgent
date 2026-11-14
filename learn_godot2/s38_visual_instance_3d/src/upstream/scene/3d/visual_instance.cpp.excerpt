@@ -1,0 +1,71 @@
+/*
+ * Godot 2 source excerpt.
+ * Upstream: engine/godot-2.1/scene/3d/visual_instance.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 44-97 */
+
+void VisualInstance::_notification(int p_what) {
+
+	switch (p_what) {
+
+		case NOTIFICATION_ENTER_WORLD: {
+
+			// CHECK ROOM
+			Spatial *parent = get_parent_spatial();
+			Room *room = NULL;
+			bool is_geom = cast_to<GeometryInstance>();
+
+			while (parent) {
+
+				room = parent->cast_to<Room>();
+				if (room)
+					break;
+
+				if (is_geom && parent->cast_to<BakedLightSampler>()) {
+					VS::get_singleton()->instance_geometry_set_baked_light_sampler(get_instance(), parent->cast_to<BakedLightSampler>()->get_instance());
+					break;
+				}
+
+				parent = parent->get_parent_spatial();
+			}
+
+			if (room) {
+
+				VisualServer::get_singleton()->instance_set_room(instance, room->get_instance());
+			}
+			// CHECK SKELETON => moving skeleton attaching logic to MeshInstance
+			/*
+			Skeleton *skeleton=get_parent()?get_parent()->cast_to<Skeleton>():NULL;
+			if (skeleton)
+				VisualServer::get_singleton()->instance_attach_skeleton( instance, skeleton->get_skeleton() );
+			*/
+
+			VisualServer::get_singleton()->instance_set_scenario(instance, get_world()->get_scenario());
+
+		} break;
+		case NOTIFICATION_TRANSFORM_CHANGED: {
+
+			Transform gt = get_global_transform();
+			VisualServer::get_singleton()->instance_set_transform(instance, gt);
+		} break;
+		case NOTIFICATION_EXIT_WORLD: {
+
+			VisualServer::get_singleton()->instance_set_scenario(instance, RID());
+			VisualServer::get_singleton()->instance_set_room(instance, RID());
+			VisualServer::get_singleton()->instance_attach_skeleton(instance, RID());
+			VS::get_singleton()->instance_geometry_set_baked_light_sampler(instance, RID());
+
+		} break;
+	}
+}
+
+/* Upstream lines 132-135 */
+
+void VisualInstance::set_base(const RID &p_base) {
+
+	VisualServer::get_singleton()->instance_set_base(instance, p_base);
+}

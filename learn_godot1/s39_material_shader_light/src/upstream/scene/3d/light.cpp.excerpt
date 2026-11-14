@@ -1,0 +1,31 @@
+/*
+ * Godot 1 source excerpt.
+ * Upstream: engine/godot-1.1/scene/3d/light.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 48-57 */
+
+void Light::set_parameter(Parameter p_param, float p_value) {
+
+	ERR_FAIL_INDEX(p_param, PARAM_MAX);
+	vars[p_param]=p_value;
+	VisualServer::get_singleton()->light_set_param(light,(VisualServer::LightParam)p_param,p_value);
+	if (p_param==PARAM_RADIUS || p_param==PARAM_SPOT_ANGLE)
+		update_gizmo();
+	_change_notify(_light_param_names[p_param]);
+//	_change_notify(_param_names[p_param]);
+}
+
+/* Upstream lines 66-73 */
+
+void Light::set_color(LightColor p_color, const Color& p_value) {
+
+	ERR_FAIL_INDEX(p_color, 3);
+	colors[p_color]=p_value;
+	VisualServer::get_singleton()->light_set_color(light,(VisualServer::LightColor)p_color,p_value);
+	//_change_notify(_color_names[p_color]);
+
+}

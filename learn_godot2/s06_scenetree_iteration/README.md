@@ -32,15 +32,13 @@
 
 ## GDScript 源码复刻
 
-S06 Godot 2.1: fixed and idle phases dispatch different process groups.
+`src/source_replay.gd` 按本课列出的 C++ 入口重建关键数据结构、条件分支和状态更新。它是可逐步阅读的教学移植，不是完整引擎替身；模型函数表会标明直接对应的源码行为和仅用于组织输入/输出的脚手架。平台、线程、对象分配和服务器副作用仍由真实引擎处理。
 
-source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
-
-| GDScript 函数 | 复刻步骤 |
-| --- | --- |
-| _emit_fixed_frame() | 分派本阶段信号/通知并执行阶段收尾 |
-| _emit_idle_frame() | 分派本阶段信号/通知并执行阶段收尾 |
-| _flush_delete_queue() | 更新本课状态并向后续步骤传递结果 |
+| 模型函数 | C++ 源码对照或脚手架性质 | 复现的状态与分支 |
+| --- | --- | --- |
+| `_emit_fixed_frame()` | `SceneTree::iteration / fixed_process group` | 发送 fixed frame 信号并遍历 fixed_process 候选。 |
+| `_emit_idle_frame()` | `SceneTree::idle / idle_process group` | 发送 idle frame 信号并遍历 idle_process 候选。 |
+| `_flush_delete_queue()` | `SceneTree::idle 删除队列收尾` | 在本代指定的帧阶段释放延迟删除队列。 |
 
 ## 最小 Godot/GDScript 实验
 

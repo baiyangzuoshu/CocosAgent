@@ -1,0 +1,236 @@
+/*
+ * Godot 2 source excerpt.
+ * Upstream: engine/godot-2.1/servers/visual/visual_server_raster.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1942-1953 */
+
+RID VisualServerRaster::instance_create() {
+
+	Instance *instance = memnew(Instance);
+	ERR_FAIL_COND_V(!instance, RID());
+
+	RID instance_rid = instance_owner.make_rid(instance);
+	instance->self = instance_rid;
+	instance->base_type = INSTANCE_NONE;
+	instance->scenario = NULL;
+
+	return instance_rid;
+}
+
+/* Upstream lines 1955-2149 */
+
+void VisualServerRaster::instance_set_base(RID p_instance, RID p_base) {
+
+	VS_CHANGED;
+	Instance *instance = instance_owner.get(p_instance);
+	ERR_FAIL_COND(!instance);
+
+	if (instance->base_type != INSTANCE_NONE) {
+		//free anything related to that base
+
+		Map<RID, Set<RID> >::Element *E = instance_dependency_map.find(instance->base_rid);
+
+		if (E) {
+			// wtf, no E?
+			E->get().erase(instance->self);
+
+		} else {
+
+			ERR_PRINT("no base E? Bug?");
+		}
+
+		if (instance->room) {
+
+			instance_set_room(p_instance, RID());
+			/*
+			if((1<<instance->base_type)&INSTANCE_GEOMETRY_MASK)
+				instance->room->room_info->owned_geometry_instances.erase(instance->RE);
+			else if (instance->base_type==INSTANCE_PORTAL) {
+				print_line("freeing portal, is it there? "+itos(instance->room->room_info->owned_portal_instances.(instance->RE)));
+				instance->room->room_info->owned_portal_instances.erase(instance->RE);
+			} else if (instance->base_type==INSTANCE_ROOM)
+				instance->room->room_info->owned_room_instances.erase(instance->RE);
+			else if (instance->base_type==INSTANCE_LIGHT)
+				instance->room->room_info->owned_light_instances.erase(instance->RE);
+
+			instance->RE=NULL;*/
+		}
+
+		if (instance->light_info) {
+
+			if (instance->scenario && instance->light_info->D)
+				instance->scenario->directional_lights.erase(instance->light_info->D);
+			rasterizer->free(instance->light_info->instance);
+			memdelete(instance->light_info);
+			instance->light_info = NULL;
+		}
+
+		if (instance->portal_info) {
+
+			_portal_disconnect(instance, true);
+			memdelete(instance->portal_info);
+			instance->portal_info = NULL;
+		}
+
+		if (instance->baked_light_info) {
+
+			while (instance->baked_light_info->owned_instances.size()) {
+
+				Instance *owned = instance->baked_light_info->owned_instances.front()->get();
+				owned->baked_light = NULL;
+				owned->data.baked_light = NULL;
+				owned->data.baked_light_octree_xform = NULL;
+				owned->BLE = NULL;
+				instance->baked_light_info->owned_instances.pop_front();
+			}
+
+			memdelete(instance->baked_light_info);
+			instance->baked_light_info = NULL;
+		}
+
+		if (instance->scenario && instance->octree_id) {
+			instance->scenario->octree.erase(instance->octree_id);
+			instance->octree_id = 0;
+		}
+
+		if (instance->room_info) {
+
+			for (List<Instance *>::Element *E = instance->room_info->owned_geometry_instances.front(); E; E = E->next()) {
+
+				Instance *owned = E->get();
+				owned->room = NULL;
+				owned->RE = NULL;
+			}
+			for (List<Instance *>::Element *E = instance->room_info->owned_portal_instances.front(); E; E = E->next()) {
+
+				_portal_disconnect(E->get(), true);
+				Instance *owned = E->get();
+				owned->room = NULL;
+				owned->RE = NULL;
+			}
+
+			for (List<Instance *>::Element *E = instance->room_info->owned_room_instances.front(); E; E = E->next()) {
+
+				Instance *owned = E->get();
+				owned->room = NULL;
+				owned->RE = NULL;
+			}
+
+			if (instance->room_info->disconnected_child_portals.size()) {
+				ERR_PRINT("BUG: Disconnected portals remain!");
+			}
+			memdelete(instance->room_info);
+			instance->room_info = NULL;
+		}
+
+		if (instance->particles_info) {
+
+			rasterizer->free(instance->particles_info->instance);
+			memdelete(instance->particles_info);
+			instance->particles_info = NULL;
+		}
+
+		if (instance->baked_light_sampler_info) {
+
+			while (instance->baked_light_sampler_info->owned_instances.size()) {
+
+				instance_geometry_set_baked_light_sampler(instance->baked_light_sampler_info->owned_instances.front()->get()->self, RID());
+			}
+
+			if (instance->baked_light_sampler_info->sampled_light.is_valid()) {
+				rasterizer->free(instance->baked_light_sampler_info->sampled_light);
+			}
+			memdelete(instance->baked_light_sampler_info);
+			instance->baked_light_sampler_info = NULL;
+		}
+
+		instance->data.morph_values.clear();
+		instance->data.materials.clear();
+	}
+
+	instance->base_type = INSTANCE_NONE;
+	instance->base_rid = RID();
+
+	if (p_base.is_valid()) {
+
+		if (rasterizer->is_mesh(p_base)) {
+			instance->base_type = INSTANCE_MESH;
+			instance->data.morph_values.resize(rasterizer->mesh_get_morph_target_count(p_base));
+			instance->data.materials.resize(rasterizer->mesh_get_surface_count(p_base));
+		} else if (rasterizer->is_multimesh(p_base)) {
+			instance->base_type = INSTANCE_MULTIMESH;
+		} else if (rasterizer->is_immediate(p_base)) {
+			instance->base_type = INSTANCE_IMMEDIATE;
+		} else if (rasterizer->is_particles(p_base)) {
+			instance->base_type = INSTANCE_PARTICLES;
+			instance->particles_info = memnew(Instance::ParticlesInfo);
+			instance->particles_info->instance = rasterizer->particles_instance_create(p_base);
+		} else if (rasterizer->is_light(p_base)) {
+
+			instance->base_type = INSTANCE_LIGHT;
+			instance->light_info = memnew(Instance::LightInfo);
+			instance->light_info->instance = rasterizer->light_instance_create(p_base);
+			if (instance->scenario && rasterizer->light_get_type(p_base) == LIGHT_DIRECTIONAL) {
+
+				instance->light_info->D = instance->scenario->directional_lights.push_back(instance->self);
+			}
+
+		} else if (room_owner.owns(p_base)) {
+			instance->base_type = INSTANCE_ROOM;
+			instance->room_info = memnew(Instance::RoomInfo);
+			instance->room_info->room = room_owner.get(p_base);
+		} else if (portal_owner.owns(p_base)) {
+
+			instance->base_type = INSTANCE_PORTAL;
+			instance->portal_info = memnew(Instance::PortalInfo);
+			instance->portal_info->portal = portal_owner.get(p_base);
+		} else if (baked_light_owner.owns(p_base)) {
+
+			instance->base_type = INSTANCE_BAKED_LIGHT;
+			instance->baked_light_info = memnew(Instance::BakedLightInfo);
+			instance->baked_light_info->baked_light = baked_light_owner.get(p_base);
+
+			//instance->portal_info = memnew(Instance::PortalInfo);
+			//instance->portal_info->portal=portal_owner.get(p_base);
+		} else if (baked_light_sampler_owner.owns(p_base)) {
+
+			instance->base_type = INSTANCE_BAKED_LIGHT_SAMPLER;
+			instance->baked_light_sampler_info = memnew(Instance::BakedLightSamplerInfo);
+			instance->baked_light_sampler_info->sampler = baked_light_sampler_owner.get(p_base);
+
+			//instance->portal_info = memnew(Instance::PortalInfo);
+			//instance->portal_info->portal=portal_owner.get(p_base);
+
+		} else {
+			ERR_EXPLAIN("Invalid base RID for instance!")
+			ERR_FAIL();
+		}
+
+		instance_dependency_map[p_base].insert(instance->self);
+
+		instance->base_rid = p_base;
+
+		if (instance->scenario)
+			_instance_queue_update(instance, true);
+	}
+}
+
+/* Upstream lines 2312-2324 */
+
+void VisualServerRaster::instance_set_transform(RID p_instance, const Transform &p_transform) {
+	VS_CHANGED;
+	Instance *instance = instance_owner.get(p_instance);
+	ERR_FAIL_COND(!instance);
+
+	if (p_transform == instance->data.transform) // must improve somehow
+		return;
+
+	instance->data.transform = p_transform;
+	if (instance->base_type == INSTANCE_LIGHT)
+		instance->data.transform.orthonormalize();
+	_instance_queue_update(instance);
+}

@@ -2,13 +2,13 @@
 
 源码依据：`engine/godot-3.6/`，版本标记为 `3.6.4-rc`。使用 project.godot、ClassDB、Reference、VisualServer 与 FuncRef 等本代接口。
 
-本课程的已编写范围为 S00–S30。每课都是独立项目，按“问题 → C++ 调用链 → 上游源码摘录 → 最小 GDScript 实验 → 观察与边界”阅读。
+本课程的已编写范围为 S00–S40。每课都是独立项目，按“问题 → C++ 调用链 → 上游源码摘录 → 最小 GDScript 实验 → 观察与边界”阅读。
 
-S00–S10 与 S21–S30 在 `src/upstream/` 保留完整上游 C++ 文件和原始行号摘录；S00–S10 的完整副本另由各课 `src/SOURCE_SHA256.txt` 校验。S11–S20 仍以原文摘录为主。S00–S10 与 S21–S30 的 `src/source_replay.gd` 按本代 C++ 路径复刻状态变化并保留版本边界。完整源码依据仍是只读 `engine/` 快照，许可文本见 [SOURCE_LICENSE.txt](SOURCE_LICENSE.txt)。
+S00–S10 与 S21–S40 在 `src/upstream/` 保留完整上游 C++ 文件和原始行号摘录；S00–S10 的完整副本另由各课 `src/SOURCE_SHA256.txt` 校验。S11–S20 仍以原文摘录为主。S00–S10 与 S21–S40 的 `src/source_replay.gd` 按本代 C++ 路径复刻状态变化并保留版本边界。完整源码依据仍是只读 `engine/` 快照，许可文本见 [SOURCE_LICENSE.txt](SOURCE_LICENSE.txt)。
 
 ## 课程入口
 
-- [S00–S30 课程大纲](课程大纲.md)
+- [S00–S40 课程大纲](课程大纲.md)
 - [第 0 课：源码快照与目录地图](./s00_source_map/README.md)
 - [第 1 课：平台启动代码到 `Main`](./s01_platform_entry/README.md)
 - [第 2 课：`Main::setup()` 参数解析、项目路径和启动模式](./s02_main_setup/README.md)
@@ -41,6 +41,17 @@ S00–S10 与 S21–S30 在 `src/upstream/` 保留完整上游 C++ 文件和原�
 - [第 28 课：平台输入到 InputEvent 的构造路径](./s28_input_event_flow/README.md)
 - [第 29 课：InputMap 动作映射与输入状态](./s29_input_map/README.md)
 - [第 30 课：Viewport 输入分发与未处理事件阶段](./s30_viewport_input_dispatch/README.md)
+
+- [第 31 课：Control 命中测试、焦点与 GUI 输入](./s31_control_gui_input/README.md)
+- [第 32 课：锚点、Container 布局和 Theme 属性](./s32_control_container_theme/README.md)
+- [第 33 课：Window、Viewport 与屏幕坐标关系](./s33_window_viewport_coordinates/README.md)
+- [第 34 课：VisualServer、RID 与场景层抽象](./s34_visual_server_rid/README.md)
+- [第 35 课：CanvasItem 命令缓存和绘制提交](./s35_canvas_item_commands/README.md)
+- [第 36 课：2D Canvas、排序、变换与可见性](./s36_canvas_2d_render/README.md)
+- [第 37 课：3D 场景对象到 VisualServer 实例](./s37_visual_instance_3d/README.md)
+- [第 38 课：相机、视锥裁剪和可见对象收集](./s38_camera_culling/README.md)
+- [第 39 课：Mesh、Material、Shader 与渲染状态](./s39_material_shader/README.md)
+- [第 40 课：GLES 后端选择和渲染提交路径](./s40_renderer_gles_backends/README.md)
 
 ## 阅读与运行
 

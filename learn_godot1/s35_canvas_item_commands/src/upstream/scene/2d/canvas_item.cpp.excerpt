@@ -1,0 +1,34 @@
+/*
+ * Godot 1 source excerpt.
+ * Upstream: engine/godot-1.1/scene/2d/canvas_item.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 571-581 */
+
+void CanvasItem::update() {
+
+	if (!is_inside_tree())
+		return;
+	if (pending_update)
+		return;
+
+	pending_update=true;
+
+	MessageQueue::get_singleton()->push_call(this,"_update_callback");
+}
+
+/* Upstream lines 681-690 */
+
+void CanvasItem::draw_rect(const Rect2& p_rect, const Color& p_color) {
+
+	if (!drawing) {
+		ERR_EXPLAIN("Drawing is only allowed inside NOTIFICATION_DRAW, _draw() function or 'draw' signal.");
+		ERR_FAIL();
+	}
+
+	VisualServer::get_singleton()->canvas_item_add_rect(canvas_item,p_rect,p_color);
+
+}

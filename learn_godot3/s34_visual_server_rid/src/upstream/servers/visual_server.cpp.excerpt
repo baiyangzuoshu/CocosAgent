@@ -1,0 +1,13 @@
+/*
+ * Godot 3 source excerpt.
+ * Upstream: engine/godot-3.6/servers/visual_server.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 45-47 */
+
+VisualServer *VisualServer::get_singleton() {
+	return singleton;
+}

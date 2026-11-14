@@ -41,16 +41,14 @@
 
 ## GDScript 源码复刻
 
-S08 Godot 2.1: ObjectTypeDB::register_type stores a base link and factory.
+`src/source_replay.gd` 按本课列出的 C++ 入口重建关键数据结构、条件分支和状态更新。它是可逐步阅读的教学移植，不是完整引擎替身；模型函数表会标明直接对应的源码行为和仅用于组织输入/输出的脚手架。平台、线程、对象分配和服务器副作用仍由真实引擎处理。
 
-source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
-
-| GDScript 函数 | 复刻步骤 |
-| --- | --- |
-| _register_type() | 将类型名、父类和创建资格写入类型表 |
-| _can_instance() | 检查类型父链、创建工厂或是否可实例化 |
-| _instance() | 检查类型父链、创建工厂或是否可实例化 |
-| _parent_chain() | 检查类型父链、创建工厂或是否可实例化 |
+| 模型函数 | C++ 源码对照或脚手架性质 | 复现的状态与分支 |
+| --- | --- | --- |
+| `_register_type()` | `ObjectTypeDB::_add_type2 / register_type` | 保存原生类型名、父类与创建能力元数据。 |
+| `_can_instance()` | `ObjectTypeDB::can_instance` | 检查类型表与原生 creator 是否允许实例化。 |
+| `_instance()` | `ObjectTypeDB::instance / GDNativeClass::instance` | 按类型表中的 creator 产生实例记录。 |
+| `_parent_chain()` | `TypeInfo::inherits_ptr` | 沿父类元数据逐级读取继承关系。 |
 
 ## 最小 Godot/GDScript 实验
 

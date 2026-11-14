@@ -1,0 +1,131 @@
+/*
+ * Godot 1 source excerpt.
+ * Upstream: engine/godot-1.1/drivers/gles2/rasterizer_gles2.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 4124-4233 */
+
+void RasterizerGLES2::begin_frame() {
+
+
+
+
+	_update_framebuffer();
+
+	glDepthFunc(GL_LEQUAL);
+	glFrontFace(GL_CW);
+
+	//fragment_lighting=Globals::get_singleton()->get("rasterizer/use_fragment_lighting");
+#ifdef TOOLS_ENABLED
+	canvas_shader.set_conditional(CanvasShaderGLES2::USE_PIXEL_SNAP,GLOBAL_DEF("rasterizer/use_pixel_snap",false));
+	shadow_filter=ShadowFilterTechnique(int(Globals::get_singleton()->get("rasterizer/shadow_filter")));
+#endif
+
+	canvas_shader.set_conditional(CanvasShaderGLES2::SHADOW_PCF5,shadow_filter==SHADOW_FILTER_PCF5);
+	canvas_shader.set_conditional(CanvasShaderGLES2::SHADOW_PCF13,shadow_filter==SHADOW_FILTER_PCF13);
+	canvas_shader.set_conditional(CanvasShaderGLES2::SHADOW_ESM,shadow_filter==SHADOW_FILTER_ESM);
+
+	window_size = Size2( OS::get_singleton()->get_video_mode().width, OS::get_singleton()->get_video_mode().height );
+
+	double time = (OS::get_singleton()->get_ticks_usec()/1000); // get msec
+	time/=1000.0; // make secs
+	time_delta=time-last_time;
+	last_time=time;
+	frame++;
+	clear_viewport(Color(1,0,0.5));
+
+	_rinfo.vertex_count=0;
+	_rinfo.object_count=0;
+	_rinfo.mat_change_count=0;
+	_rinfo.shader_change_count=0;
+	_rinfo.ci_draw_commands=0;
+	_rinfo.surface_count=0;
+	_rinfo.draw_calls=0;
+
+
+	_update_fixed_materials();
+	while(_shader_dirty_list.first()) {
+
+		_update_shader(_shader_dirty_list.first()->self());
+	}
+
+	while(_skeleton_dirty_list.first()) {
+
+
+		Skeleton *s=_skeleton_dirty_list.first()->self();
+
+		float *sk_float = (float*)skinned_buffer;
+		for(int i=0;i<s->bones.size();i++) {
+
+			float *m = &sk_float[i*12];
+			const Skeleton::Bone &b=s->bones[i];
+			m[0]=b.mtx[0][0];
+			m[1]=b.mtx[1][0];
+			m[2]=b.mtx[2][0];
+			m[3]=b.mtx[3][0];
+
+			m[4]=b.mtx[0][1];
+			m[5]=b.mtx[1][1];
+			m[6]=b.mtx[2][1];
+			m[7]=b.mtx[3][1];
+
+			m[8]=b.mtx[0][2];
+			m[9]=b.mtx[1][2];
+			m[10]=b.mtx[2][2];
+			m[11]=b.mtx[3][2];
+
+
+		}
+
+
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D,s->tex_id);
+		glTexSubImage2D(GL_TEXTURE_2D,0,0,0,nearest_power_of_2(s->bones.size()*3),1,GL_RGBA,GL_FLOAT,sk_float);
+		_skeleton_dirty_list.remove( _skeleton_dirty_list.first() );
+	}
+
+	while(_multimesh_dirty_list.first()) {
+
+
+		MultiMesh *s=_multimesh_dirty_list.first()->self();
+
+		float *sk_float = (float*)skinned_buffer;
+		for(int i=0;i<s->elements.size();i++) {
+
+			float *m = &sk_float[i*16];
+			const float *im=s->elements[i].matrix;
+			for(int j=0;j<16;j++) {
+				m[j]=im[j];
+			}
+
+		}
+
+
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D,s->tex_id);
+		glTexSubImage2D(GL_TEXTURE_2D,0,0,0,s->tw,s->th,GL_RGBA,GL_FLOAT,sk_float);
+		_multimesh_dirty_list.remove( _multimesh_dirty_list.first() );
+	}
+
+
+	draw_next_frame=false;
+//	material_shader.set_uniform_default(MaterialShaderGLES2::SCREENZ_SCALE, Math::fmod(time, 3600.0));
+	/* nehe ?*/
+
+//	glClearColor(0,0,1,1);
+//	glClear(GL_COLOR_BUFFER_BIT); //should not clear if anything else cleared..
+}
+
+/* Upstream lines 7844-7851 */
+
+void RasterizerGLES2::end_frame() {
+
+
+	//print_line("VTX: "+itos(_rinfo.vertex_count)+" OBJ: "+itos(_rinfo.object_count)+" MAT: "+itos(_rinfo.mat_change_count)+" SHD: "+itos(_rinfo.shader_change_count)+" CI: "+itos(_rinfo.ci_draw_commands));
+
+	//print_line("TOTAL VTX: "+itos(_rinfo.vertex_count));
+	OS::get_singleton()->swap_buffers();
+}

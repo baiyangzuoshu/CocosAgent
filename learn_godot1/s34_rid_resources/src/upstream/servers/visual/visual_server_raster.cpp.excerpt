@@ -1,0 +1,300 @@
+/*
+ * Godot 1 source excerpt.
+ * Upstream: engine/godot-1.1/servers/visual/visual_server_raster.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 3270-3276 */
+
+RID VisualServerRaster::canvas_item_create() {
+	
+	CanvasItem *canvas_item = memnew( CanvasItem );
+	ERR_FAIL_COND_V(!canvas_item,RID());
+		
+	return canvas_item_owner.make_rid( canvas_item );
+}
+
+/* Upstream lines 4392-4671 */
+
+void VisualServerRaster::free( RID p_rid ) {
+
+	VS_CHANGED;
+
+	if (rasterizer->is_texture(p_rid) || rasterizer->is_material(p_rid) ||  rasterizer->is_shader(p_rid) || rasterizer->is_environment(p_rid)) {
+	
+		rasterizer->free(p_rid);
+	} else if (rasterizer->is_skeleton(p_rid)) {
+
+		Map< RID, Set<Instance*> >::Element *E=skeleton_dependency_map.find(p_rid);
+
+		if (E) {
+			//detach skeletons
+			for (Set<Instance*>::Element *F=E->get().front();F;F=F->next()) {
+
+				F->get()->data.skeleton=RID();
+			}
+			skeleton_dependency_map.erase(E);
+		}
+
+		rasterizer->free(p_rid);
+	} else if (rasterizer->is_mesh(p_rid) || rasterizer->is_multimesh(p_rid) || rasterizer->is_light(p_rid) || rasterizer->is_particles(p_rid) || rasterizer->is_immediate(p_rid)) {
+		//delete the resource
+	
+		_free_attached_instances(p_rid);
+		rasterizer->free(p_rid);
+	} else if (room_owner.owns(p_rid)) {
+
+		_free_attached_instances(p_rid);
+		Room *room = room_owner.get(p_rid);		
+		ERR_FAIL_COND(!room);		
+		room_owner.free(p_rid);
+		memdelete(room);
+
+
+	} else if (portal_owner.owns(p_rid)) {
+
+		_free_attached_instances(p_rid);
+
+		Portal *portal = portal_owner.get(p_rid);
+		ERR_FAIL_COND(!portal);
+		portal_owner.free(p_rid);
+		memdelete(portal);
+
+	} else if (baked_light_owner.owns(p_rid)) {
+
+		_free_attached_instances(p_rid);
+
+		BakedLight *baked_light = baked_light_owner.get(p_rid);
+		ERR_FAIL_COND(!baked_light);
+		if (baked_light->data.octree_texture.is_valid())
+			rasterizer->free(baked_light->data.octree_texture);
+		baked_light_owner.free(p_rid);
+		memdelete(baked_light);
+
+	} else if (baked_light_sampler_owner.owns(p_rid)) {
+
+		_free_attached_instances(p_rid);
+
+		BakedLightSampler *baked_light_sampler = baked_light_sampler_owner.get(p_rid);
+		ERR_FAIL_COND(!baked_light_sampler);
+		//if (baked_light->data.octree_texture.is_valid())
+		//	rasterizer->free(baked_light->data.octree_texture);
+		baked_light_sampler_owner.free(p_rid);
+		memdelete(baked_light_sampler);
+
+	} else if (camera_owner.owns(p_rid)) {
+		// delete te camera
+		
+		Camera *camera = camera_owner.get(p_rid);
+		ERR_FAIL_COND(!camera);
+		
+		camera_owner.free( p_rid );
+		memdelete(camera);
+		
+	} else if (viewport_owner.owns(p_rid)) {
+		// delete the viewport
+		
+		Viewport *viewport = viewport_owner.get( p_rid );
+		ERR_FAIL_COND(!viewport);
+
+//		Viewport *parent=NULL;
+
+		rasterizer->free(viewport->viewport_data);
+		if (viewport->render_target.is_valid()) {
+
+			rasterizer->free(viewport->render_target);
+		}
+
+		if (viewport->update_list.in_list())
+			viewport_update_list.remove(&viewport->update_list);
+		if (screen_viewports.has(p_rid))
+			screen_viewports.erase(p_rid);
+
+		while(viewport->canvas_map.size()) {
+
+			Canvas *c = viewport->canvas_map.front()->get().canvas;
+			c->viewports.erase(p_rid);
+
+			viewport->canvas_map.erase(viewport->canvas_map.front());
+		}
+
+		
+		viewport_owner.free(p_rid);		
+		memdelete(viewport);
+		
+	} else if (instance_owner.owns(p_rid)) {
+		// delete the instance
+	
+		_update_instances(); // be sure
+		
+		Instance *instance = instance_owner.get(p_rid);
+		ERR_FAIL_COND(!instance);
+
+		instance_set_room(p_rid,RID());
+		instance_set_scenario(p_rid,RID());
+		instance_geometry_set_baked_light(p_rid,RID());
+		instance_geometry_set_baked_light_sampler(p_rid,RID());
+		instance_set_base(p_rid,RID());
+
+		if (instance->data.skeleton.is_valid())
+			instance_attach_skeleton(p_rid,RID());
+
+		instance_owner.free(p_rid);
+		memdelete(instance);
+		
+	} else if (canvas_owner.owns(p_rid)) {
+	
+		Canvas *canvas = canvas_owner.get(p_rid);
+		ERR_FAIL_COND(!canvas);
+
+		while(canvas->viewports.size()) {
+
+			Viewport *vp = viewport_owner.get(canvas->viewports.front()->get());
+			ERR_FAIL_COND(!vp);
+
+			Map<RID,Viewport::CanvasData>::Element *E=vp->canvas_map.find(p_rid);
+			ERR_FAIL_COND(!E);
+			vp->canvas_map.erase(p_rid);
+
+			canvas->viewports.erase( canvas->viewports.front() );
+		}
+
+		for (int i=0;i<canvas->child_items.size();i++) {
+
+			canvas->child_items[i].item->parent=RID();
+		}
+
+		for (Set<Rasterizer::CanvasLight*>::Element *E=canvas->lights.front();E;E=E->next()) {
+
+			E->get()->canvas=RID();
+		}
+
+		for (Set<Rasterizer::CanvasLightOccluderInstance*>::Element *E=canvas->occluders.front();E;E=E->next()) {
+
+			E->get()->canvas=RID();
+		}
+
+		canvas_owner.free( p_rid );
+		
+		memdelete( canvas );
+		
+	} else if (canvas_item_owner.owns(p_rid)) {
+		
+		CanvasItem *canvas_item = canvas_item_owner.get(p_rid);
+		ERR_FAIL_COND(!canvas_item);
+
+		if (canvas_item->parent.is_valid()) {
+
+			if (canvas_owner.owns(canvas_item->parent)) {
+
+				Canvas *canvas = canvas_owner.get(canvas_item->parent);
+				canvas->erase_item(canvas_item);
+			} else if (canvas_item_owner.owns(canvas_item->parent)) {
+
+				CanvasItem *item_owner = canvas_item_owner.get(canvas_item->parent);
+				item_owner->child_items.erase(canvas_item);
+
+			}
+		}
+
+		for (int i=0;i<canvas_item->child_items.size();i++) {
+
+			canvas_item->child_items[i]->parent=RID();
+		}
+
+		if (canvas_item->material) {
+			canvas_item->material->owners.erase(canvas_item);
+		}
+
+		canvas_item_owner.free( p_rid );
+		
+		memdelete( canvas_item );
+
+	} else if (canvas_item_material_owner.owns(p_rid)) {
+
+		Rasterizer::CanvasItemMaterial *material = canvas_item_material_owner.get(p_rid);
+		ERR_FAIL_COND(!material);
+		for(Set<Rasterizer::CanvasItem*>::Element *E=material->owners.front();E;E=E->next()) {
+
+			E->get()->material=NULL;
+		}
+
+		canvas_item_material_owner.free(p_rid);
+		memdelete(material);
+
+	} else if (canvas_light_owner.owns(p_rid)) {
+
+		Rasterizer::CanvasLight *canvas_light = canvas_light_owner.get(p_rid);
+		ERR_FAIL_COND(!canvas_light);
+
+		if (canvas_light->canvas.is_valid()) {
+			Canvas* canvas = canvas_owner.get(canvas_light->canvas);
+			if (canvas)
+				canvas->lights.erase(canvas_light);
+		}
+
+		if (canvas_light->shadow_buffer.is_valid())
+			rasterizer->free(canvas_light->shadow_buffer);
+
+		canvas_light_owner.free( p_rid );
+		memdelete( canvas_light );
+
+	} else if (canvas_light_occluder_owner.owns(p_rid)) {
+
+		Rasterizer::CanvasLightOccluderInstance *occluder = canvas_light_occluder_owner.get(p_rid);
+		ERR_FAIL_COND(!occluder);
+
+		if (occluder->polygon.is_valid()) {
+
+			CanvasLightOccluderPolygon *occluder_poly = canvas_light_occluder_polygon_owner.get(occluder->polygon);
+			if (occluder_poly) {
+				occluder_poly->owners.erase(occluder);
+			}
+
+		}
+
+		if (occluder->canvas.is_valid() && canvas_owner.owns(occluder->canvas)) {
+
+			Canvas *canvas = canvas_owner.get(occluder->canvas);
+			canvas->occluders.erase(occluder);
+
+		}
+
+		canvas_light_occluder_owner.free( p_rid );
+		memdelete(occluder);
+
+	} else if (canvas_light_occluder_polygon_owner.owns(p_rid)) {
+
+		CanvasLightOccluderPolygon *occluder_poly = canvas_light_occluder_polygon_owner.get(p_rid);
+		ERR_FAIL_COND(!occluder_poly);
+		rasterizer->free(occluder_poly->occluder);
+
+		while(occluder_poly->owners.size()) {
+
+			occluder_poly->owners.front()->get()->polygon=RID();
+			occluder_poly->owners.erase( occluder_poly->owners.front() );
+		}
+
+		canvas_light_occluder_polygon_owner.free( p_rid );
+		memdelete(occluder_poly);
+
+	} else if (scenario_owner.owns(p_rid)) {
+		
+		Scenario *scenario=scenario_owner.get(p_rid);
+		ERR_FAIL_COND(!scenario);
+		
+		_update_instances(); // be sure
+		_free_attached_instances(p_rid,true);
+		
+		//rasterizer->free( scenario->environment );
+		scenario_owner.free(p_rid);
+		memdelete(scenario);
+		
+	} else {
+		
+		ERR_FAIL();
+	}
+	
+}

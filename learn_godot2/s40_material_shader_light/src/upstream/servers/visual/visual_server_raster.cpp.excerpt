@@ -1,0 +1,22 @@
+/*
+ * Godot 2 source excerpt.
+ * Upstream: engine/godot-2.1/servers/visual/visual_server_raster.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 757-760 */
+
+void VisualServerRaster::light_set_color(RID p_light, LightColor p_type, const Color &p_color) {
+	VS_CHANGED;
+	rasterizer->light_set_color(p_light, p_type, p_color);
+}
+
+/* Upstream lines 796-800 */
+
+void VisualServerRaster::light_set_param(RID p_light, LightParam p_var, float p_value) {
+	VS_CHANGED;
+	rasterizer->light_set_var(p_light, p_var, p_value);
+	_dependency_queue_update(p_light, true);
+}

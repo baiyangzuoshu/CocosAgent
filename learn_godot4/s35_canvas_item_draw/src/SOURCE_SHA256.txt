@@ -1,0 +1,2 @@
+7abbd605dd2babf8771857852966b0ed0efb95c7f7da0a433a7495f6d7da137d  upstream/scene/main/canvas_item.cpp
+8d4f85652d69a3aec8378a391f5d5cff5f8aeb795243bedd56dff5c79f5d88a7  upstream/servers/rendering/renderer_canvas_cull.cpp

@@ -1,0 +1,132 @@
+/*
+ * Godot 1 source excerpt.
+ * Upstream: engine/godot-1.1/servers/visual/visual_server_raster.cpp
+ * Original line ranges copied from the local source snapshot.
+ * Full context is in the sibling source file.
+ * Copyright/license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 7197-7302 */
+
+void VisualServerRaster::_draw_viewports() {
+
+	//draw viewports for render targets
+
+	List<Viewport*> to_blit;
+	List<Viewport*> to_disable;
+	for(SelfList<Viewport> *E=viewport_update_list.first();E;E=E->next()) {
+
+		Viewport *vp = E->self();
+		ERR_CONTINUE(!vp);
+		if (
+			vp->render_target_update_mode==RENDER_TARGET_UPDATE_WHEN_VISIBLE &&
+			!vp->rendered_in_prev_frame &&
+			!vp->queue_capture
+		    ) {
+
+			continue;
+		}
+
+		if (vp->rt_to_screen_rect!=Rect2())
+			to_blit.push_back(vp);
+
+		rasterizer->set_render_target(vp->render_target,vp->transparent_bg,vp->render_target_vflip);
+		_draw_viewport(vp,0,0,vp->rect.width,vp->rect.height);
+
+		if ( (vp->queue_capture && vp->render_target_update_mode==RENDER_TARGET_UPDATE_DISABLED) || vp->render_target_update_mode==RENDER_TARGET_UPDATE_ONCE) {
+			//was only enabled for capture
+			to_disable.push_back(vp);
+			vp->render_target_update_mode=RENDER_TARGET_UPDATE_DISABLED;
+		}
+
+	}
+
+	rasterizer->set_render_target(RID());
+
+	while(to_disable.size()) {
+		//disable again because it was only for capture
+		viewport_update_list.remove(&to_disable.front()->get()->update_list);
+		to_disable.pop_front();
+	}
+
+
+	//draw RTs directly to screen when requested
+
+	for (List<Viewport*>::Element *E=to_blit.front();E;E=E->next()) {
+
+		int window_w = OS::get_singleton()->get_video_mode().width;
+		int window_h = OS::get_singleton()->get_video_mode().height;
+
+		ViewportRect desired_rect;
+		desired_rect.x = desired_rect.y = 0;
+		desired_rect.width = window_w;
+		desired_rect.height = window_h;
+
+		if ( viewport_rect.x != desired_rect.x ||
+			viewport_rect.y != desired_rect.y ||
+			viewport_rect.width != desired_rect.width ||
+			viewport_rect.height != desired_rect.height ) {
+
+			viewport_rect=desired_rect;
+
+			rasterizer->set_viewport(viewport_rect);
+		}
+
+		rasterizer->canvas_begin();		
+		rasterizer->canvas_disable_blending();
+		rasterizer->canvas_begin_rect(Matrix32());
+		rasterizer->canvas_draw_rect(E->get()->rt_to_screen_rect,0,Rect2(Point2(),E->get()->rt_to_screen_rect.size),E->get()->render_target_texture,Color(1,1,1));
+
+	}
+
+
+
+	//draw viewports attached to screen
+
+	for(Map<RID,int>::Element *E=screen_viewports.front();E;E=E->next()) {
+
+		Viewport *vp = viewport_owner.get(E->key());
+		ERR_CONTINUE(!vp);
+
+		int window_w = OS::get_singleton()->get_video_mode(E->get()).width;
+		int window_h = OS::get_singleton()->get_video_mode(E->get()).height;
+
+		Rect2 r(0,0,vp->rect.width,vp->rect.height);
+		if (r.size.width==0)
+			r.size.width=window_w;
+		if (r.size.height==0)
+			r.size.height=window_h;
+
+
+		_draw_viewport(vp,r.pos.x,r.pos.y,r.size.width,r.size.height);
+	}
+
+
+	//check when a viewport associated to a render target was drawn
+
+	for(SelfList<Viewport> *E=viewport_update_list.first();E;E=E->next()) {
+
+		Viewport *vp = E->self();
+		ERR_CONTINUE(!vp);
+		if (vp->render_target_update_mode!=RENDER_TARGET_UPDATE_WHEN_VISIBLE)
+			continue;
+		vp->rendered_in_prev_frame=rasterizer->render_target_renedered_in_frame(vp->render_target);
+	}
+
+}
+
+/* Upstream lines 7365-7377 */
+
+void VisualServerRaster::draw() {
+	//if (changes)
+	//	print_line("changes: "+itos(changes));
+	changes=0;
+	shadows_enabled=GLOBAL_DEF("render/shadows_enabled",true);
+	room_cull_enabled = GLOBAL_DEF("render/room_cull_enabled",true);
+	light_discard_enabled = GLOBAL_DEF("render/light_discard_enabled",true);
+	rasterizer->begin_frame();
+	_draw_viewports();
+	_draw_cursors_and_margins();
+	rasterizer->end_frame();	
+	draw_extra_frame=rasterizer->needs_to_draw_next_frame();
+}
