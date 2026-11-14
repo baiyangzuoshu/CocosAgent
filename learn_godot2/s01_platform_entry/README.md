@@ -2,6 +2,10 @@
 
 **目标：** 以 Godot 2.1 的 macOS 桌面入口为例，追踪原生 `main()` 如何把参数和控制权交给 `Main`，再用主场景脚本观察项目启动抵达 `_ready()`。
 
+## 本课增量
+
+把平台入口的控制权交接写成可执行状态流程，分别观察 setup 成功进入 Main::start 和失败提前返回。
+
 ## 本课问题
 
 平台 `main()` 传给 `Main::setup()` 的参数是什么？启动错误和正常启动分别沿什么路径返回？2.1 的主场景设置如何进入节点回调？
@@ -32,10 +36,19 @@
 | 4 | [node.cpp](src/upstream/scene/main/node.cpp) | [摘录](src/upstream/scene/main/node.cpp.excerpt) | `engine/godot-2.1/scene/main/node.cpp` | 1911-1930 |
 | 5 | [scene_main_loop.cpp](src/upstream/scene/main/scene_main_loop.cpp) | [摘录](src/upstream/scene/main/scene_main_loop.cpp.excerpt) | `engine/godot-2.1/scene/main/scene_main_loop.cpp` | 461-471 |
 
-## 可运行源码复刻
+## GDScript 源码复刻与 C++ 对照
 
-课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+模型实际执行成功和 setup 失败两条路径；失败会在 Main::start 之前返回，成功路径进入 MainLoop 并执行 cleanup。
 
+src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+
+| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
+| --- | --- | --- |
+| macOS platform entry | _platform_entry() | 执行入口交接、成功路径和 setup 错误返回 |
+| Main::setup() / Main::start() | _main_setup() → _main_start() | 检查 start 只在 setup 成功后执行 |
+| OS::run() / SceneTree::init() / READY | _os_run() → _main_loop_initialize() | 模拟 MainLoop 初始化和节点 READY |
+
+独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：entry_probe.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 - `engine.cfg`：Godot 2.1 项目配置和主场景路径。

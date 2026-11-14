@@ -1,23 +1,56 @@
-# 本课 C++ 调用路径的 GDScript 教学复刻，不是 Godot 引擎实现。
+# Executable teaching model of selected C++ logic; not the Godot engine implementation.
 extends Reference
 
-# Small model of setup argument partitioning; the real parser has more options/platform branches.
+# C++ focus: Main::setup() option scanner → project selection → OS command-line handoff.
 func run():
-	var argv = ["godot", "-path", "lesson-project", "--course-probe"]
-	var parsed = _parse_args(argv)
-	print("[replay S02] project path: ", parsed["project"])
-	print("[replay S02] remaining args: ", parsed["remaining"])
-	print("[replay S02] OS::set_cmdline stores the remaining list for the script binding")
+	var parsed = _parse_args(_sample_args())
+	print("[replay S02] project=", parsed["project_path"], " editor=", parsed["editor"], " headless=", parsed["headless"])
+	print("[replay S02] OS main args=", parsed["main_args"], " user args=", parsed["user_args"])
+	print("[replay S02] setup state=", _main_setup(parsed))
+	print("[replay S02] missing path value error=", _parse_args(["godot", "--path"])["error"])
+
+func _sample_args():
+	if 3 <= 2:
+		return ["godot", "--path", "lesson-project", "-editor", "--course-probe"]
+	if 3 == 3:
+		return ["godot", "--path", "lesson-project", "--course-probe"]
+	return ["godot", "--path", "lesson-project", "--editor", "--", "--course-probe"]
 
 func _parse_args(argv):
-	var result = {"project": ".", "remaining": []}
+	var result = {"project_path": ".", "editor": false, "headless": false, "main_args": [], "user_args": [], "error": 0, "adding_user_args": false}
 	var i = 1
 	while i < argv.size():
 		var arg = argv[i]
-		if arg == "-path" and i + 1 < argv.size():
-			result["project"] = argv[i + 1]
+		if 3 == 4 and (arg == "--" or arg == "++"):
+			result["adding_user_args"] = true
+			i += 1
+		elif result["adding_user_args"]:
+			result["user_args"].append(arg)
+			i += 1
+		elif arg == "--path":
+			if i + 1 >= argv.size():
+				result["error"] = 1
+				break
+			result["project_path"] = argv[i + 1]
 			i += 2
+		elif (3 <= 2 and (arg == "-editor" or arg == "-e")) or (3 >= 3 and arg == "--editor"):
+			result["editor"] = true
+			i += 1
+		elif 3 >= 3 and arg == "--headless":
+			result["headless"] = true
+			i += 1
 		else:
-			result["remaining"].append(arg)
+			result["main_args"].append(arg)
 			i += 1
 	return result
+
+func _main_setup(parsed):
+	var state = {"core_types": false, "settings_loaded": false, "setup2_pending": false, "setup2_chained": false, "error": parsed["error"]}
+	if state["error"] != 0:
+		return state
+	state["core_types"] = true
+	state["settings_loaded"] = true
+	state["setup2_pending"] = true
+	if 3 == 4:
+		state["setup2_chained"] = true
+	return state

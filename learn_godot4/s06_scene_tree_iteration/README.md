@@ -2,6 +2,10 @@
 
 **目标：** 追踪 Godot 4.7 的 SceneTree 如何在固定 tick 和普通帧分派节点回调，并在两阶段处理计时器、Tween、变换与退出。
 
+## 本课增量
+
+把输入 handled 状态、节点 fixed/idle 资格、暂停处理和延迟释放队列纳入 SceneTree 更新流程。
+
 ## 本课问题
 
 `_physics_process()` 和 `_process()` 分别在哪个 SceneTree 阶段执行？`SceneTree::_process(bool)` 如何调度 process groups？退出时如何卸载树？
@@ -29,10 +33,19 @@
 | 1 | [node.cpp](src/upstream/scene/main/node.cpp) | [摘录](src/upstream/scene/main/node.cpp.excerpt) | `engine/godot-4.7/scene/main/node.cpp` | 99-105 |
 | 2 | [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp) | [摘录](src/upstream/scene/main/scene_tree.cpp.excerpt) | `engine/godot-4.7/scene/main/scene_tree.cpp` | 639-671 |
 
-## 可运行源码复刻
+## GDScript 源码复刻与 C++ 对照
 
-课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+模型执行输入 handled 路由、fixed/idle 队列筛选和延迟释放，并按本代回调名区分 _fixed_process 与 _physics_process。
 
+src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+
+| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
+| --- | --- | --- |
+| SceneTree input route | _dispatch_input() | 路由输入并标记 handled |
+| SceneTree fixed/idle dispatch | _process_nodes() | 按启用状态选择本代回调名 |
+| MessageQueue/delete queue/quit | _flush_deferred() | 在回调后处理延迟释放并记录退出状态 |
+
+独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：tree_probe.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 - `project.godot` 指定本目录 `main.tscn`。

@@ -2,6 +2,10 @@
 
 **目标：** 追踪 Godot 2.1 的原生类注册信息和实例工厂，再从 GDScript 的 `Node2D.new()` 进入 `ObjectTypeDB::instance()`。
 
+## 本课增量
+
+把类名登记、父类链接、工厂资格、抽象类拒绝和动态实例化写成可运行流程。
+
 ## 本课问题
 
 类名和父类关系在何时登记？哪些元数据决定一个类型能否创建？GDScript 的 `type_exists()`、`is_type()` 与 `.new()` 分别观察了哪一层？
@@ -37,10 +41,19 @@
 | 6 | [node_2d.h](src/upstream/scene/2d/node_2d.h) | [摘录](src/upstream/scene/2d/node_2d.h.excerpt) | `engine/godot-2.1/scene/2d/node_2d.h` | 36-38 |
 | 7 | [register_scene_types.cpp](src/upstream/scene/register_scene_types.cpp) | [摘录](src/upstream/scene/register_scene_types.cpp.excerpt) | `engine/godot-2.1/scene/register_scene_types.cpp` | 240-294 |
 
-## 可运行源码复刻
+## GDScript 源码复刻与 C++ 对照
 
-课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+模型执行类型注册、父类存在检查、抽象类型拒绝实例化和父链查询；工厂元数据与对象实例分开记录。
 
+src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+
+| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
+| --- | --- | --- |
+| ObjectTypeDB/ClassDB registration | _register_class() | 登记类型名、父类和工厂信息 |
+| instance/instantiate | _can_instantiate() → _instantiate() | 拒绝抽象类并创建具体对象 |
+| inheritance lookup | _base_chain() | 沿父类链接重建 Node2D 类型链 |
+
+独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：type_probe.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 - `engine.cfg` 使用 Godot 2.1 项目配置，主场景 `main.tscn` 为 format 1 文本场景。

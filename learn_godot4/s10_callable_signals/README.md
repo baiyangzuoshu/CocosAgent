@@ -2,6 +2,10 @@
 
 **目标：** 追踪 Godot 4.7 的 Callable 表示、connect(Callable) 登记，以及 emit_signalp 如何调用连接目标。
 
+## 本课增量
+
+复刻 Callable 的对象/方法/绑定参数、连接重复检查、Signal 发射和 callp 参数合并。
+
 ## 本课问题
 
 GDScript 方法引用 → Callable → Object::connect → signal_map → emit_signalp → Callable::callp → Object::callp/GDScript
@@ -29,10 +33,19 @@ GDScript 方法引用 → Callable → Object::connect → signal_map → emit_s
 | 2 | [callable.cpp](src/upstream/core/variant/callable.cpp) | [摘录](src/upstream/core/variant/callable.cpp.excerpt) | `engine/godot-4.7/core/variant/callable.cpp` | 44-87 |
 | 3 | [variant.h](src/upstream/core/variant/variant.h) | [摘录](src/upstream/core/variant/variant.h.excerpt) | `engine/godot-4.7/core/variant/variant.h` | 922-940 |
 
-## 可运行源码复刻
+## GDScript 源码复刻与 C++ 对照
 
-课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+模型保存 Callable 的对象 ID、方法名和绑定参数，拒绝重复连接；发射参数与 bind 参数合并后进入 callp。
 
+src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+
+| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
+| --- | --- | --- |
+| Object::connect(Callable) | _callable() → _connect_signal() | 保存 Callable 目标并检查重复连接 |
+| Object::emit_signalp → Callable::callp | _emit_signal() → _callp() | 合并 signal 参数与 bind 参数后同步调用目标 |
+| Callable::call / bind | _callp() | 比较直接调用和部分参数绑定的返回值 |
+
+独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：signal_probe.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 把方法引用封装为 Callable 并连接 Signal，发射整型参数；再用 call 与 bind 构造部分参数函数。

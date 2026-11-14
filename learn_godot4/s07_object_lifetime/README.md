@@ -2,6 +2,10 @@
 
 **目标：** 追踪 Godot 4.7 的 `ObjectDB` ID、预删除和引用计数路径，比较普通 `Object` 与 `RefCounted` 的释放方式。
 
+## 本课增量
+
+用 ObjectDB 实例 ID 表对比普通 Object 显式 free 与引用计数对象最后一次 unref。
+
 ## 本课问题
 
 `ObjectID` 如何区分复用的对象槽？`RefCounted` 的最后一次 unreference 如何触发析构？`NOTIFICATION_PREDELETE` 与 ID 移除处于什么阶段？
@@ -29,10 +33,19 @@
 | 2 | [ref_counted.cpp](src/upstream/core/object/ref_counted.cpp) | [摘录](src/upstream/core/object/ref_counted.cpp.excerpt) | `engine/godot-4.7/core/object/ref_counted.cpp` | 74-126 |
 | 3 | [ref_counted.h](src/upstream/core/object/ref_counted.h) | [摘录](src/upstream/core/object/ref_counted.h.excerpt) | `engine/godot-4.7/core/object/ref_counted.h` | 199-228 |
 
-## 可运行源码复刻
+## GDScript 源码复刻与 C++ 对照
 
-课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+模型维护 ObjectDB 风格的实例 ID 表，分别执行普通 Object 显式 free 与 Reference/RefCounted 最后一个引用归零的销毁路径。
 
+src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+
+| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
+| --- | --- | --- |
+| ObjectDB registration | _objectdb_insert() / _objectdb_get() | 分配实例 ID 并按 ID 查找对象 |
+| Object::free() | _objectdb_erase() | 普通 Object 显式释放并注销 |
+| Reference/RefCounted ref/unref | _reference() / _unreference() | 最后一个所有者归零后销毁 |
+
+独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：lifetime_probe.gd, manual_object.gd, reference_probe.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 - `project.godot` 指定 `main.tscn`。

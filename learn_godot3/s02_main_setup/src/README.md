@@ -1,19 +1,20 @@
-# 本课源码副本
+# 本课源码副本与复刻模型
 
-本课使用 `godot-3.6`（Godot 3.6）快照。`upstream/` 中的 C++/头文件/构建脚本是从仓库 `engine/godot-3.6/` 按原路径复制的完整上游文件，逐字节保留；本目录不修改引擎快照，也不把这些文件当作独立可编译工程。
+源码依据：只读快照 engine/godot-3.6/。upstream/ 按上游原路径保存本课涉及的完整 C++、头文件和构建脚本副本；这些文件不作为可独立编译工程，也不修改 engine/ 快照。
 
-先读课程 README 中的调用链，再按下表中的行段打开摘录；随后在完整文件副本里查看函数上下文、条件分支和前后调用。完整源码以仓库只读 `engine/` 快照为最终依据。
+先读课程 README 的调用链，再按摘录行号定位函数和分支，随后回到完整文件查看上下文。上游实现的最终依据始终是仓库 engine/ 快照。
 
-| 阅读顺序 | 完整上游文件副本 | 关键行段摘录 | 上游文件 |
+| 阅读顺序 | 完整上游副本 | 函数/行号摘录 | 源码快照路径 |
 | --- | --- | --- | --- |
-| 1 | [core_bind.cpp](upstream/core/bind/core_bind.cpp) | [573-580](upstream/core/bind/core_bind.cpp.excerpt) | `engine/godot-3.6/core/bind/core_bind.cpp` |
-| 2 | [os.cpp](upstream/core/os/os.cpp) | [503-506](upstream/core/os/os.cpp.excerpt) | `engine/godot-3.6/core/os/os.cpp` |
-| 3 | [os.h](upstream/core/os/os.h) | [386-386](upstream/core/os/os.h.excerpt) | `engine/godot-3.6/core/os/os.h` |
-| 4 | [main.cpp](upstream/main/main.cpp) | [418-461](upstream/main/main.cpp.excerpt) | `engine/godot-3.6/main/main.cpp` |
+| 1 | [core_bind.cpp](upstream/core/bind/core_bind.cpp) | [573-580 ](upstream/core/bind/core_bind.cpp.excerpt) | engine/godot-3.6/core/bind/core_bind.cpp |
+| 2 | [os.cpp](upstream/core/os/os.cpp) | [503-506 ](upstream/core/os/os.cpp.excerpt) | engine/godot-3.6/core/os/os.cpp |
+| 3 | [os.h](upstream/core/os/os.h) | [386-386 ](upstream/core/os/os.h.excerpt) | engine/godot-3.6/core/os/os.h |
+| 4 | [main.cpp](upstream/main/main.cpp) | [418-461 ; 481-481 ; 982-984 ; 1018-1028 ; 1357-1361 ](upstream/main/main.cpp.excerpt) | engine/godot-3.6/main/main.cpp |
 
-## 副本核对
+## GDScript 源码教学复刻
 
-每个完整文件均与对应快照文件逐字节复制。摘录文件开头注明上游相对路径和行号；查阅时可用行号在完整副本中定位。
-## GDScript 源码复刻
+[source_replay.gd](source_replay.gd) 执行课程 README 列出的状态变化、参数传递和错误/分支路径。它是教学模型，不是 C++ 的逐行转译；公开 API 行为由课程根目录的独立实验观察。
 
-[`source_replay.gd`](source_replay.gd) 把本课 C++ 路径中的关键状态和调用顺序写成可运行的 GDScript 小模型。它保留概念对应关系，便于观察分支/状态变化；它不是 Godot C++ 实现，也不替代 `upstream/` 的逐字节原文。主项目脚本先执行该模型，再调用真实 Godot API 做对照。
+## 证据边界
+
+源码副本用于核对上游函数；摘录用于快速定位；教学模型用于理解选定算法；项目实验用于观察对应版本的公开行为。没有实际运行记录时，不把实验称为已验证。

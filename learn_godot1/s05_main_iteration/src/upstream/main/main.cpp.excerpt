@@ -31,7 +31,6 @@ bool Main::iteration() {
 
 	bool exit=false;
 
-
 /* Upstream lines 1341-1366 */
 	while(time_accum>frame_slice) {
 

@@ -1,0 +1,203 @@
+/* Godot source excerpt. Upstream: engine/godot-4.7/main/main_timer_sync.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license notice: Godot Engine; see course-root SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 349-429 */
+MainFrameTime MainTimerSync::advance_core(double p_physics_step, int p_physics_ticks_per_second, double p_process_step) {
+	MainFrameTime ret;
+
+	ret.process_step = p_process_step;
+
+	// simple determination of number of physics iteration
+	time_accum += ret.process_step;
+	ret.physics_steps = std::floor(time_accum * p_physics_ticks_per_second);
+
+	int min_typical_steps = typical_physics_steps[0];
+	int max_typical_steps = min_typical_steps + 1;
+
+	// given the past recorded steps and typical steps to match, calculate bounds for this
+	// step to be typical
+	bool update_typical = false;
+
+	for (int i = 0; i < CONTROL_STEPS - 1; ++i) {
+		int steps_left_to_match_typical = typical_physics_steps[i + 1] - accumulated_physics_steps[i];
+		if (steps_left_to_match_typical > max_typical_steps ||
+				steps_left_to_match_typical + 1 < min_typical_steps) {
+			update_typical = true;
+			break;
+		}
+
+		if (steps_left_to_match_typical > min_typical_steps) {
+			min_typical_steps = steps_left_to_match_typical;
+		}
+		if (steps_left_to_match_typical + 1 < max_typical_steps) {
+			max_typical_steps = steps_left_to_match_typical + 1;
+		}
+	}
+
+#ifdef DEBUG_ENABLED
+	if (max_typical_steps < 0) {
+		WARN_PRINT_ONCE("`max_typical_steps` is negative. This could hint at an engine bug or system timer misconfiguration.");
+	}
+#endif
+
+	// try to keep it consistent with previous iterations
+	if (ret.physics_steps < min_typical_steps) {
+		const int max_possible_steps = std::floor((time_accum)*p_physics_ticks_per_second + get_physics_jitter_fix());
+		if (max_possible_steps < min_typical_steps) {
+			ret.physics_steps = max_possible_steps;
+			update_typical = true;
+		} else {
+			ret.physics_steps = min_typical_steps;
+		}
+	} else if (ret.physics_steps > max_typical_steps) {
+		const int min_possible_steps = std::floor((time_accum)*p_physics_ticks_per_second - get_physics_jitter_fix());
+		if (min_possible_steps > max_typical_steps) {
+			ret.physics_steps = min_possible_steps;
+			update_typical = true;
+		} else {
+			ret.physics_steps = max_typical_steps;
+		}
+	}
+
+	if (ret.physics_steps < 0) {
+		ret.physics_steps = 0;
+	}
+
+	time_accum -= ret.physics_steps * p_physics_step;
+
+	// keep track of accumulated step counts
+	for (int i = CONTROL_STEPS - 2; i >= 0; --i) {
+		accumulated_physics_steps[i + 1] = accumulated_physics_steps[i] + ret.physics_steps;
+	}
+	accumulated_physics_steps[0] = ret.physics_steps;
+
+	if (update_typical) {
+		for (int i = CONTROL_STEPS - 1; i >= 0; --i) {
+			if (typical_physics_steps[i] > accumulated_physics_steps[i]) {
+				typical_physics_steps[i] = accumulated_physics_steps[i];
+			} else if (typical_physics_steps[i] < accumulated_physics_steps[i] - 1) {
+				typical_physics_steps[i] = accumulated_physics_steps[i] - 1;
+			}
+		}
+	}
+
+	return ret;
+}
+
+/* Upstream lines 432-505 */
+MainFrameTime MainTimerSync::advance_checked(double p_physics_step, int p_physics_ticks_per_second, double p_process_step) {
+	if (fixed_fps != -1) {
+		p_process_step = 1.0 / fixed_fps;
+	}
+
+	float min_output_step = p_process_step / 8;
+	min_output_step = MAX(min_output_step, 1E-6);
+
+	// compensate for last deficit
+	p_process_step += time_deficit;
+
+	MainFrameTime ret = advance_core(p_physics_step, p_physics_ticks_per_second, p_process_step);
+
+	// we will do some clamping on ret.process_step and need to sync those changes to time_accum,
+	// that's easiest if we just remember their fixed difference now
+	const double process_minus_accum = ret.process_step - time_accum;
+
+	// first, least important clamping: keep ret.process_step consistent with typical_physics_steps.
+	// this smoothes out the process steps and culls small but quick variations.
+	{
+		double min_average_physics_steps, max_average_physics_steps;
+		int consistent_steps = get_average_physics_steps(min_average_physics_steps, max_average_physics_steps);
+		if (consistent_steps > 3) {
+			ret.clamp_process_step(min_average_physics_steps * p_physics_step, max_average_physics_steps * p_physics_step);
+		}
+	}
+
+	// second clamping: keep abs(time_deficit) < jitter_fix * frame_slise
+	double max_clock_deviation = get_physics_jitter_fix() * p_physics_step;
+	ret.clamp_process_step(p_process_step - max_clock_deviation, p_process_step + max_clock_deviation);
+
+	// last clamping: make sure time_accum is between 0 and p_physics_step for consistency between physics and process
+	ret.clamp_process_step(process_minus_accum, process_minus_accum + p_physics_step);
+
+	// all the operations above may have turned ret.p_process_step negative or zero, keep a minimal value
+	if (ret.process_step < min_output_step) {
+		ret.process_step = min_output_step;
+	}
+
+	// restore time_accum
+	time_accum = ret.process_step - process_minus_accum;
+
+	// forcing ret.process_step to be positive may trigger a violation of the
+	// promise that time_accum is between 0 and p_physics_step
+#ifdef DEBUG_ENABLED
+	if (time_accum < -1E-7) {
+		WARN_PRINT_ONCE("Intermediate value of `time_accum` is negative. This could hint at an engine bug or system timer misconfiguration.");
+	}
+#endif
+
+	if (time_accum > p_physics_step) {
+		const int extra_physics_steps = std::floor(time_accum * p_physics_ticks_per_second);
+		time_accum -= extra_physics_steps * p_physics_step;
+		ret.physics_steps += extra_physics_steps;
+	}
+
+#ifdef DEBUG_ENABLED
+	if (time_accum < -1E-7) {
+		WARN_PRINT_ONCE("Final value of `time_accum` is negative. It should always be between 0 and `p_physics_step`. This hints at an engine bug.");
+	}
+	if (time_accum > p_physics_step + 1E-7) {
+		WARN_PRINT_ONCE("Final value of `time_accum` is larger than `p_physics_step`. It should always be between 0 and `p_physics_step`. This hints at an engine bug.");
+	}
+#endif
+
+	// track deficit
+	time_deficit = p_process_step - ret.process_step;
+
+	// p_physics_step is 1.0 / iterations_per_sec
+	// i.e. the time in seconds taken by a physics tick
+	ret.interpolation_fraction = time_accum / p_physics_step;
+
+	return ret;
+}
+
+/* Upstream lines 507-543 */
+// determine wall clock step since last iteration
+double MainTimerSync::get_cpu_process_step() {
+	uint64_t cpu_ticks_elapsed = current_cpu_ticks_usec - last_cpu_ticks_usec;
+	last_cpu_ticks_usec = current_cpu_ticks_usec;
+
+	cpu_ticks_elapsed = _delta_smoother.smooth_delta(cpu_ticks_elapsed);
+
+	return cpu_ticks_elapsed / 1000000.0;
+}
+
+MainTimerSync::MainTimerSync() {
+	for (int i = CONTROL_STEPS - 1; i >= 0; --i) {
+		typical_physics_steps[i] = i;
+		accumulated_physics_steps[i] = i;
+	}
+}
+
+// start the clock
+void MainTimerSync::init(uint64_t p_cpu_ticks_usec) {
+	current_cpu_ticks_usec = last_cpu_ticks_usec = p_cpu_ticks_usec;
+}
+
+// set measured wall clock time
+void MainTimerSync::set_cpu_ticks_usec(uint64_t p_cpu_ticks_usec) {
+	current_cpu_ticks_usec = p_cpu_ticks_usec;
+}
+
+void MainTimerSync::set_fixed_fps(int p_fixed_fps) {
+	fixed_fps = p_fixed_fps;
+}
+
+// advance one physics frame, return timesteps to take
+MainFrameTime MainTimerSync::advance(double p_physics_step, int p_physics_ticks_per_second) {
+	double cpu_process_step = get_cpu_process_step();
+
+	return advance_checked(p_physics_step, p_physics_ticks_per_second, cpu_process_step);
+}

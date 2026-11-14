@@ -4,7 +4,7 @@
 # Study excerpt; not a standalone module.
 # Copyright and license notice: Godot Engine; see course-root SOURCE_LICENSE.txt.
 
-# Upstream lines 1-7
+/* Upstream lines 1-7 */
 short_name="godot"
 name="Godot Engine"
 major=1

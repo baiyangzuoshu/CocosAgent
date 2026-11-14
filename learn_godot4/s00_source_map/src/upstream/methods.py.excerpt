@@ -4,7 +4,7 @@
 # Study excerpt; not a standalone module.
 # Copyright and license notice: Godot Engine; see course-root SOURCE_LICENSE.txt.
 
-# Upstream lines 136-165
+/* Upstream lines 136-165 */
 def get_version_info(module_version_string="", silent=False):
     build_name = "custom_build"
     if os.getenv("BUILD_NAME") is not None:

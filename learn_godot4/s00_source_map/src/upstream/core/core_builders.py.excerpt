@@ -4,7 +4,7 @@
 # Study excerpt; not a standalone module.
 # Copyright and license notice: Godot Engine; see course-root SOURCE_LICENSE.txt.
 
-# Upstream lines 17-34
+/* Upstream lines 17-34 */
 # Generate version info
 def version_info_builder(target, source, env):
     with methods.generated_wrapper(str(target[0])) as file:

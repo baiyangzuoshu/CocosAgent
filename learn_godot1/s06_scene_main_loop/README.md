@@ -2,6 +2,10 @@
 
 **目标：** 追踪 Godot 1.1 的 `SceneTree`（源码位于 `scene_main_loop.*`）如何实现 fixed/idle 更新、把输入交给 Viewport，并通过 quit 标记结束平台主循环。
 
+## 本课增量
+
+把输入 handled 状态、节点 fixed/idle 资格、暂停处理和延迟释放队列纳入 SceneTree 更新流程。
+
 ## 本课问题
 
 `Main::iteration()` 调用 `SceneTree::iteration()` 和 `idle()` 后，Node 的 fixed 与 idle 回调如何分派？输入事件如何到达 Viewport？`SceneTree.quit()` 如何离开主循环？
@@ -29,9 +33,19 @@
 | 1 | [node.cpp](src/upstream/scene/main/node.cpp) | [摘录](src/upstream/scene/main/node.cpp.excerpt) | `engine/godot-1.1/scene/main/node.cpp` | 451-455 |
 | 2 | [scene_main_loop.cpp](src/upstream/scene/main/scene_main_loop.cpp) | [摘录](src/upstream/scene/main/scene_main_loop.cpp.excerpt) | `engine/godot-1.1/scene/main/scene_main_loop.cpp` | 336-463 |
 
-## 可运行源码复刻
+## GDScript 源码复刻与 C++ 对照
 
-课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+模型执行输入 handled 路由、fixed/idle 队列筛选和延迟释放，并按本代回调名区分 _fixed_process 与 _physics_process。
+
+src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+
+| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
+| --- | --- | --- |
+| SceneTree input route | _dispatch_input() | 路由输入并标记 handled |
+| SceneTree fixed/idle dispatch | _process_nodes() | 按启用状态选择本代回调名 |
+| MessageQueue/delete queue/quit | _flush_deferred() | 在回调后处理延迟释放并记录退出状态 |
+
+独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：tree_probe.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 
 ## 最小 Godot/GDScript 实验
 

@@ -1,15 +1,47 @@
-# 本课 C++ 调用路径的 GDScript 教学复刻，不是 Godot 引擎实现。
+# Executable teaching model of selected C++ logic; not the Godot engine implementation.
 extends Reference
 
-# Main::start model: load scene resource → instance root → attach it to main loop → READY.
+# C++ focus: Main::start() → ResourceLoader → PackedScene::instance() → SceneTree root/current scene.
 func run():
-	var path = "res://main.tscn"
-	var packed_scene = {"path": path, "root": "Main"}
-	print("[replay S04] ResourceLoader.load(", path, ")")
-	var root = _instance_scene(packed_scene)
-	print("[replay S04] MainLoop installs root: ", root["name"])
-	root["inside_tree"] = true
-	print("[replay S04] SceneTree.initialize → enter tree → READY")
+	var path = "res://main.xml"
+	var missing = _resource_load(path, false)
+	print("[replay S04] missing resource stops before instance=", missing == null)
+	var packed = _resource_load(path, true)
+	var first = _packed_scene_instance(packed, 1)
+	var second = _packed_scene_instance(packed, 2)
+	var tree = {"root": null, "current_scene": null, "notifications": []}
+	_install_main_loop(tree, first)
+	print("[replay S04] format=", packed["format"], " instance API=instance()")
+	print("[replay S04] resource id=", packed["resource_id"])
+	print("[replay S04] instances are separate=", first["instance_id"] != second["instance_id"])
+	print("[replay S04] enter/ready order=", tree["notifications"])
+	print("[replay S04] current scene=", tree["current_scene"]["name"])
 
-func _instance_scene(packed_scene):
-	return {"name": packed_scene["root"], "source": packed_scene["path"], "inside_tree": false}
+func _resource_load(path, found):
+	if not found:
+		return null
+	return {"resource_id": "PackedScene:" + path, "path": path, "format": "PackedScene XML", "root_name": "CourseRoot", "children": ["Probe"]}
+
+func _packed_scene_instance(packed, serial):
+	var children = []
+	for child_name in packed["children"]:
+		children.append({"name": child_name, "inside_tree": false, "ready": false})
+	return {"instance_id": "NodeInstance:" + str(serial), "name": packed["root_name"], "inside_tree": false, "ready": false, "children": children}
+
+func _install_main_loop(tree, root):
+	tree["root"] = root
+	tree["notifications"].append("MainLoop::initialize")
+	_set_current_scene(tree, root)
+
+func _set_current_scene(tree, root):
+	tree["current_scene"] = root
+	root["inside_tree"] = true
+	tree["notifications"].append(root["name"] + " ENTER_TREE")
+	for child in root["children"]:
+		child["inside_tree"] = true
+		tree["notifications"].append(child["name"] + " ENTER_TREE")
+	for child in root["children"]:
+		child["ready"] = true
+		tree["notifications"].append(child["name"] + " READY")
+	root["ready"] = true
+	tree["notifications"].append(root["name"] + " READY")

@@ -1,18 +1,37 @@
-# 本课 C++ 调用路径的 GDScript 教学复刻，不是 Godot 引擎实现。
+# Executable teaching model of selected C++ logic; not the Godot engine implementation.
 extends Reference
 
-# Dynamic Variant model: runtime type tag, conversion, then operator dispatch.
+# Variant tags/conversion/evaluation; Object::callv receives a Variant argument array.
 func run():
-	var left = {"type": "INT", "value": 7}
-	var right = {"type": "REAL", "value": 2.5}
-	var converted = _convert_to_real(left)
-	var result = _evaluate_add(converted, right)
-	print("[replay S09] Variant tags: ", left["type"], " + ", right["type"])
-	print("[replay S09] converted result: ", result["value"], " type=", result["type"])
-	print("[replay S09] Object::callv carries Variant arguments into the bound method")
+	var integer_value = _variant("INT", 7)
+	var real_value = _variant("REAL", 2.5)
+	var converted = _convert(integer_value, "REAL")
+	var sum = _evaluate_add(converted, real_value)
+	var object = {"position": Vector2(0, 0)}
+	var call_result = _object_callv(object, "set_position", [Vector2(12, 24)])
+	print("[replay S09] runtime tags=", integer_value["type"], " + ", real_value["type"])
+	print("[replay S09] conversion then ADD=", sum)
+	print("[replay S09] Object::callv=", call_result, " position=", object["position"])
+	print("[replay S09] var2str-style output=", _variant_to_text(sum))
 
-func _convert_to_real(value):
-	return {"type": "REAL", "value": float(value["value"])}
+func _variant(type_name, value):
+	return {"type": type_name, "value": value}
+
+func _convert(value, target):
+	if value["type"] == "INT" and target == "REAL":
+		return _variant("REAL", float(value["value"]))
+	return value
 
 func _evaluate_add(left, right):
-	return {"type": "REAL", "value": left["value"] + right["value"]}
+	if left["type"] == "REAL" or right["type"] == "REAL":
+		return _variant("REAL", float(left["value"]) + float(right["value"]))
+	return _variant("INT", int(left["value"]) + int(right["value"]))
+
+func _object_callv(object, method, args):
+	if method == "set_position" and args.size() == 1:
+		object["position"] = args[0]
+		return {"error": "", "value": null}
+	return {"error": "invalid method or argument count", "value": null}
+
+func _variant_to_text(value):
+	return str(value["value"])

@@ -2,6 +2,10 @@
 
 **目标：** 把 GDScript typeof/convert、Variant 构造与 Object.callv 串起来，观察动态值和原生对象调用共用 Variant 参数。
 
+## 本课增量
+
+复刻 Variant 的运行时类型标签、转换和 ADD，再将 Variant 参数数组送进 Object::callv，区分值运算与对象分派。
+
 ## 本课问题
 
 typeof/convert → gdscript_functions → Variant::construct/can_convert；Object.callv(Array) → Object::call → ScriptInstance 或 ClassDB MethodBind
@@ -36,10 +40,19 @@ typeof/convert → gdscript_functions → Variant::construct/can_convert；Objec
 | 5 | [gdscript_function.cpp](src/upstream/modules/gdscript/gdscript_function.cpp) | [摘录](src/upstream/modules/gdscript/gdscript_function.cpp.excerpt) | `engine/godot-3.6/modules/gdscript/gdscript_function.cpp` | 432-455, 947-970 |
 | 6 | [gdscript_functions.cpp](src/upstream/modules/gdscript/gdscript_functions.cpp) | [摘录](src/upstream/modules/gdscript/gdscript_functions.cpp.excerpt) | `engine/godot-3.6/modules/gdscript/gdscript_functions.cpp` | 616-638, 1768-1779 |
 
-## 可运行源码复刻
+## GDScript 源码复刻与 C++ 对照
 
-课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+模型创建带运行时类型标签的 Variant，执行 INT→REAL 转换和 ADD，再将 Variant 参数数组交给对象 setter；两种分派路径分开显示。
 
+src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+
+| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
+| --- | --- | --- |
+| Variant type / convert / evaluate | _variant() → _convert() → _evaluate_add() | 观察 INT 转 REAL 后结果类型仍由运算分支决定 |
+| Object::callv | _object_callv() | 把 Vector2 参数放进 Variant 数组并调用 setter |
+| var2str utility | _variant_to_text() | 把模型 Variant 数值变为可读文本 |
+
+独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：variant_probe.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 观察 null、bool、int、float、String、Vector2、Dictionary；执行 convert，并用 callv 调 Node2D.set_position。

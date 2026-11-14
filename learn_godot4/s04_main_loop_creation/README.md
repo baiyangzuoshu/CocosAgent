@@ -2,6 +2,10 @@
 
 **目标：** 追踪 Godot 4.7 `Main::start()` 如何决定项目主场景和 `MainLoop` 类型、创建 `SceneTree`、实例化主场景并交给平台运行。
 
+## 本课增量
+
+把主场景资源、PackedScene 实例、SceneTree root/current_scene 和节点进入/READY 通知接成完整路径。
+
 ## 本课问题
 
 `application/run/main_scene` 什么时候选为启动路径？`MainLoop` 如何由 ClassDB 创建？SceneTree 的当前场景何时挂到 root？
@@ -31,10 +35,19 @@
 | 2 | [node.cpp](src/upstream/scene/main/node.cpp) | [摘录](src/upstream/scene/main/node.cpp.excerpt) | `engine/godot-4.7/scene/main/node.cpp` | 3868-3868 |
 | 3 | [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp) | [摘录](src/upstream/scene/main/scene_tree.cpp.excerpt) | `engine/godot-4.7/scene/main/scene_tree.cpp` | 586-591, 1954-1954 |
 
-## 可运行源码复刻
+## GDScript 源码复刻与 C++ 对照
 
-课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+模型把 PackedScene 资源和实例节点分开，展示本代文件格式与 instance()/instantiate() 差异，并记录 enter-tree 和 READY 顺序。
 
+src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+
+| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
+| --- | --- | --- |
+| project main scene / ResourceLoader | _resource_load() | 读出本代工程格式下的 PackedScene 描述 |
+| PackedScene::instance/instantiate | _packed_scene_instance() | 分离资源身份和新节点实例 |
+| MainLoop::initialize / SceneTree current scene | _install_main_loop() | 记录 enter-tree 父先、READY 子先顺序 |
+
+独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：start_probe.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 - `project.godot`：Godot 4.7 项目配置，版本 5，指定 `main.tscn`。

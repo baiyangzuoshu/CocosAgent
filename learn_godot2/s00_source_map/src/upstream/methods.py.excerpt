@@ -4,7 +4,7 @@
 # Study excerpt; not a standalone module.
 # Copyright and license notice: Godot Engine; see course-root SOURCE_LICENSE.txt.
 
-# Upstream lines 1089-1109
+/* Upstream lines 1089-1109 */
 def update_version():
 
     rev = "custom_build"

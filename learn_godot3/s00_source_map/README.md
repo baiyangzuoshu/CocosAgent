@@ -2,6 +2,10 @@
 
 **目标：** 确认课程使用的 Godot 3.6.4-rc 源码快照版本，追踪版本信息从构建宏进入 GDScript 的路径，并定位后续课程会追踪的源码区域。
 
+## 本课增量
+
+建立本代源码地图：把 version.py、构建宏和脚本可见版本查询串起来，并区分版本元数据与本机二进制证据。
+
 ## 本课问题
 
 `Engine.get_version_info()` 的字段从哪里来？C++ 包装层如何将它暴露给 GDScript？主循环和场景树入口分别在哪些源码目录？
@@ -51,10 +55,19 @@
 | 6 | [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp) | [摘录](src/upstream/scene/main/scene_tree.cpp.excerpt) | `engine/godot-3.6/scene/main/scene_tree.cpp` | 578-578 |
 | 7 | [version.py](src/upstream/version.py) | [摘录](src/upstream/version.py.excerpt) | `engine/godot-3.6/version.py` | 1-10 |
 
-## 可运行源码复刻
+## GDScript 源码复刻与 C++ 对照
 
-课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+模型从版本字段重建显示名，标出这一代的脚本查询入口，再打印源码目录职责。源码快照和本机运行二进制由独立实验分别确认。
 
+src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+
+| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
+| --- | --- | --- |
+| version.py → methods.py → generated version fields | _version_fields() → _compiled_full_name() | 重建编译期版本字符串和字段 |
+| typedefs.h / Engine 或 OS binding | _script_version_bridge() → _runtime_version_string() | 区分脚本查询入口及返回字符串格式 |
+| core/main/scene/servers/platform | _print_source_map() | 打印源码职责导航，不伪造调用栈 |
+
+独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：source_map.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 - `project.godot`：Godot 3.6 项目入口，配置版本为 4。

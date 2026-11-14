@@ -2,6 +2,10 @@
 
 **目标：** 从 Node2D 的绑定表追到 ObjectTypeDB，再观察 callv 和 transform/pos 如何到达 C++ setter/getter。
 
+## 本课增量
+
+复刻 ObjectTypeDB 中 Node2D 的 MethodBind 表；属性 pos 通过 setter/getter 映射，动态 callv 检查参数个数。
+
 ## 本课问题
 
 Node2D::_bind_methods → ObjectTypeDB 方法/属性注册 → Object::set/get → ObjectTypeDB 属性访问 → Object::callv → MethodBind
@@ -31,10 +35,19 @@ Node2D::_bind_methods → ObjectTypeDB 方法/属性注册 → Object::set/get �
 | 2 | [object_type_db.cpp](src/upstream/core/object_type_db.cpp) | [摘录](src/upstream/core/object_type_db.cpp.excerpt) | `engine/godot-2.1/core/object_type_db.cpp` | 614-701 |
 | 3 | [node_2d.cpp](src/upstream/scene/2d/node_2d.cpp) | [摘录](src/upstream/scene/2d/node_2d.cpp.excerpt) | `engine/godot-2.1/scene/2d/node_2d.cpp` | 398-455 |
 
-## 可运行源码复刻
+## GDScript 源码复刻与 C++ 对照
 
-课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+模型以 MethodBind 表记录方法参数和实现，再让属性读写经 getter/setter 进入 callv；Godot 1/2 的 Node2D 属性名保留为 pos。
 
+src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+
+| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
+| --- | --- | --- |
+| Node2D::_bind_methods / Object::callv | _bind_method() → _callv() | 验证 set_pos/get_pos 参数计数及属性访问走同一绑定表 |
+| Object::_set / Object::_get | _set_property() / _get_property() | 属性 pos 经 setter/getter 写入并回读 |
+| ObjectTypeDB::get_method_bind | binds 字典 | 区分方法名查找、参数检查和 native 实现 |
+
+独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：binding_probe.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 分别走动态方法调用和属性读写路径，观察 set_pos/get_pos、transform/pos 与 Vector2。

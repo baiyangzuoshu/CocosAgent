@@ -2,6 +2,10 @@
 
 **目标：** 追踪 Godot 4.7 `Main::setup2()` 中服务器类注册、场景类注册和服务单例发布的阶段顺序，并用 GDScript 检查公开类型和渲染服务。
 
+## 本课增量
+
+把类型注册和脚本单例发布拆成两张表，按本代 setup2 顺序填充代表类与服务器服务。
+
 ## 本课问题
 
 服务器类何时进入 ClassDB？`RenderingServer` 单例又何时对脚本发布？物理/导航初始化与场景注册之间的边界是什么？
@@ -33,10 +37,19 @@
 | 3 | [register_server_types.cpp](src/upstream/servers/register_server_types.cpp) | [摘录](src/upstream/servers/register_server_types.cpp.excerpt) | `engine/godot-4.7/servers/register_server_types.cpp` | 146-170 |
 | 4 | [rendering_server.cpp](src/upstream/servers/rendering/rendering_server.cpp) | [摘录](src/upstream/servers/rendering/rendering_server.cpp.excerpt) | `engine/godot-4.7/servers/rendering/rendering_server.cpp` | 3511-3511 |
 
-## 可运行源码复刻
+## GDScript 源码复刻与 C++ 对照
 
-课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+模型维护类型表与脚本单例表，复现 ObjectTypeDB/Globals 与 ClassDB/Engine singleton 的分代差异；只登记本课追踪的代表项。
 
+src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+
+| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
+| --- | --- | --- |
+| Main::setup2() | _stage() | 记录分代初始化阶段顺序 |
+| register_server_types / register_scene_types | _register_class() / _publish() | 分别维护原生类型表和脚本单例表 |
+| ScriptServer::init_languages() | _stage() | 脚本语言初始化晚于类型与服务准备 |
+
+独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：server_probe.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 - `project.godot`：Godot 4.7 项目配置，版本 5。

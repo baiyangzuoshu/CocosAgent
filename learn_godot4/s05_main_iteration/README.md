@@ -1,53 +1,65 @@
-# 第 5 课：`Main::iteration()` 的物理 tick、process 与绘制
+# 第 5 课：`Main::iteration()` 的固定物理步与帧提交
 
-**目标：** 追踪 Godot 4.7 如何从 `MainFrameTime` 计算固定物理步与普通帧 delta，调用 `MainLoop.physics_process/process`，再提交 `RenderingServer` 绘制。
+**目标：** 追踪 Godot 4.7 如何把 OS 时间差变成固定物理更新次数和每帧 delta，再调用脚本回调并提交服务器绘制。
+
+## 本课增量
+
+把定时器的累积状态、物理步数上限、固定循环、每帧回调和渲染服务器提交连成一条可检查的调用链。
 
 ## 本课问题
 
-物理 tick rate 如何产生固定步长？每帧物理步数受什么限制？`process()` 与物理步循环的相对顺序是什么？
+每帧经过的时间如何换算成零次或多次物理更新？引擎如何限制物理步数并留下插值余量？物理循环和 process/idle、绘制的先后关系是什么？
 
-## 源码调用链
+## C++ 源码调用链
 
-源码依据：`engine/godot-4.7/`（Godot 4.7 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
+源码依据：`engine/godot-4.7/` 本地快照。以下路径相对于该快照根目录，行号对应课程副本中的原始源码：
 
-以下路径相对于 `engine/godot-4.7/` 快照根目录：
+- `main/main.cpp:4921-4959, 4970-5053, 5062-5097, 5112`：读取 `physics_ticks_per_second`、physics step 和 time scale，再调用 `MainTimerSync::advance()`；超过用户配置的 `max_physics_steps_per_frame` 时削减 process_step 并限制本帧 physics_steps。
+- `main/main_timer_sync.cpp:349-429, 432-505, 507-543`：MainTimerSync::advance() 采样经过平滑的 OS 时间；advance_checked() 补偿 time_deficit 并校正 process_step；advance_core() 累积 time_accum，根据过去 12 帧步数历史选择 physics_steps，再返回余量与 interpolation_fraction。
+- `main/main_timer_sync.h:35-40, 93-144`：查看 `MainFrameTime` 字段、`time_accum/time_deficit`、12 帧 physics history 与 `advance()` 接口。
+- `scene/main/node.cpp:90-108, 4073-4074`：Node 把脚本 `_process` / `_physics_process` 虚方法接入本代调度。
 
-- `main/main.cpp:4921-4959`：读取 `physics_ticks_per_second`，用 `MainFrameTime::advance()` 取得 process step 与 physics steps；超过项目每帧上限时削减待处理步数。
-- `main/main.cpp:4970-5053`：每个物理步调用 `iteration_prepare()`、`MainLoop::physics_process()`、2D/3D 物理服务器 step 和 `iteration_end()`。
-- `main/main.cpp:5062-5097`：物理循环之后每帧调用一次 `MainLoop::process()`，再同步 RenderingServer，并在可绘制或有待处理资源时调用 `draw()`。
-- `main/main.cpp:5112`：主迭代末段更新 AudioServer。
-- `scene/main/node.cpp:90-108`、`4073-4074`：Node 将脚本 `_process` / `_physics_process` 虚方法接入本代调度。
-
-调用摘要：OS 帧循环 → `Main::iteration()` 计算 process step 与 physics steps → 零次或多次固定物理循环 → 一次 process → RenderingServer sync/条件绘制 → AudioServer 更新。
+调用摘要：OS 帧循环 → Main::iteration() / MainTimerSync 计算 process step 与 physics steps → 用户步数上限 → 固定循环 → process → RenderingServer sync/draw → AudioServer 更新。
 
 ## 本课源码复刻
 
-`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-4.7` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+`src/upstream/` 保存下列完整 C++ 源文件与带原始行号的重点摘录；文件内容复制自对应版本快照，核对清单和边界见 [`src/README.md`](src/README.md)。
 
-| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
+| 阅读顺序 | 完整源码副本 | 摘录 | 上游路径 | 行段 |
 | --- | --- | --- | --- | --- |
-| 1 | [main.cpp](src/upstream/main/main.cpp) | [摘录](src/upstream/main/main.cpp.excerpt) | `engine/godot-4.7/main/main.cpp` | 4921-4959 |
-| 2 | [node.cpp](src/upstream/scene/main/node.cpp) | [摘录](src/upstream/scene/main/node.cpp.excerpt) | `engine/godot-4.7/scene/main/node.cpp` | 90-108 |
+| 1 | [main.cpp](src/upstream/main/main.cpp) | [摘录](src/upstream/main/main.cpp.excerpt) | `engine/godot-4.7/main/main.cpp` | 4921-4959, 4970-5053, 5062-5097, 5112 |
+| 2 | [main_timer_sync.cpp](src/upstream/main/main_timer_sync.cpp) | [摘录](src/upstream/main/main_timer_sync.cpp.excerpt) | `engine/godot-4.7/main/main_timer_sync.cpp` | 349-429, 432-505, 507-543 |
+| 3 | [main_timer_sync.h](src/upstream/main/main_timer_sync.h) | [摘录](src/upstream/main/main_timer_sync.h.excerpt) | `engine/godot-4.7/main/main_timer_sync.h` | 35-40, 93-144 |
+| 4 | [node.cpp](src/upstream/scene/main/node.cpp) | [摘录](src/upstream/scene/main/node.cpp.excerpt) | `engine/godot-4.7/scene/main/node.cpp` | 90-108, 4073-4074 |
 
-## 可运行源码复刻
+## GDScript 源码复刻与 C++ 对照
 
-课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+模型以 55 ms 帧差和 20 ms 固定步演示 accumulator、物理步选择、项目步数上限与插值余量。它省略 MainTimerSync 的 delta smoother、12 帧典型步数历史、jitter fix 和 time_deficit 校正。它是选定算法的单帧教学模型，不是 C++ 的逐行转译，也不替代完整引擎调度。
+
+| C++ 追踪阶段 | 模型函数 | 观察状态或分支 |
+| --- | --- | --- |
+| `Main::iteration()` → `MainTimerSync::advance()` → `advance_checked/core()` | `_measure_frame_time()` | 跟踪采样时间、accumulator、步数、上限与插值余量（历史平滑省略） |
+| 固定物理循环 | `_physics_tick()` | 记录准备、`MainLoop::physics_process()`、PhysicsServer step 和循环收尾 |
+| 每帧回调与绘制 | `_process_idle()` → `_render_frame()` | 观察 `RenderingServer` 同步及条件绘制分支 |
+
+项目入口先运行 `src/source_replay.gd`，再执行下面的公开 API 实验。模型的 55 ms / 20 ms 数据是教学输入，不是目标平台的性能测量。
 
 ## 最小 Godot/GDScript 实验
 
 - `project.godot` 指定 `main.tscn` 为运行场景。
 - `frame_probe.gd` 计数 `_process` 和 `_physics_process`，累计约一秒后打印次数并退出。
-- 在本目录运行：
+
+在本目录运行：
 
 ```sh
 godot --path .
 ```
 
-观察普通 process 与 physics 回调的计数。物理次数接近项目 physics tick 配置，process 次数取决于实际帧率；两者都不保证固定的输出值。脚本不测量 RenderingServer 或 GPU 工作。
+观察普通 process 与 physics 回调的计数。物理次数接近项目 physics tick 配置，process 次数取决于实际帧率；两者都不保证固定值。脚本不测量 RenderingServer 或 GPU 工作。
 
 ## 简化与边界
 
-不改变 physics tick rate、最大 physics steps、time scale、固定 FPS 或渲染模式。Godot 4.7 使用 `physics_process/process`、`RenderingServer` 与本代 `MainFrameTime`；本课依据静态源码，尚未运行。
+不改变 physics tick rate、最大 physics steps、time scale、固定 FPS 或渲染模式，也不模拟 12 帧历史、delta smoother 和 jitter fix 的全部校正。教学模型只复现 accumulator、用户步数上限和阶段顺序；Godot 4.7 使用 RenderingServer 与本代 MainFrameTime，课程未运行。
 
 ## 下一课
 

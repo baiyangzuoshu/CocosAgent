@@ -2,6 +2,10 @@
 
 **目标：** 追踪 Godot 3.6 旧式 signal-to-object/method 连接、emit_signal 分派和 FuncRef 的 ID+函数名调用。
 
+## 本课增量
+
+复刻 signal connection 的 ObjectID/方法名登记与 Object::call；另用 FuncRef 的 ID+函数名路径回调。
+
 ## 本课问题
 
 Object::connect(signal,target,method) → 连接表 → emit_signal → 目标方法；funcref → FuncRef(ObjectID,function) → call_func → Object::call
@@ -29,10 +33,19 @@ Object::connect(signal,target,method) → 连接表 → emit_signal → 目标�
 | 2 | [object.cpp](src/upstream/core/object.cpp) | [摘录](src/upstream/core/object.cpp.excerpt) | `engine/godot-3.6/core/object.cpp` | 1172-1265 |
 | 3 | [gdscript_functions.cpp](src/upstream/modules/gdscript/gdscript_functions.cpp) | [摘录](src/upstream/modules/gdscript/gdscript_functions.cpp.excerpt) | `engine/godot-3.6/modules/gdscript/gdscript_functions.cpp` | 592-615, 1760-1766 |
 
-## 可运行源码复刻
+## GDScript 源码复刻与 C++ 对照
 
-课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+模型将 signal 连接保存为 ObjectID+方法名，拒绝重复连接，发射时通过对象表解析目标；FuncRef 也按 ID 和函数名调用。
 
+src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+
+| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
+| --- | --- | --- |
+| Object::connect / signal connection list | _connect_signal() | 写入 ObjectID+方法名并拒绝重复连接 |
+| Object::emit_signal → Object::call | _emit_signal() → _call_object() | 发射值到达 Receiver 后改变 score 状态 |
+| FuncRef::call_func | _call_func() | 从保存的 ObjectID 和函数名解析目标并拿到返回值 |
+
+独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：signal_probe.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 连接并发射自定义 signal，再创建 FuncRef 调用该脚本方法，比较信号参数与显式参数。
