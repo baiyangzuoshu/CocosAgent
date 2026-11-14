@@ -6,11 +6,9 @@
 
 复刻 ObjectTypeDB 中 Node2D 的 MethodBind 表；属性 pos 通过 setter/getter 映射，动态 callv 检查参数个数。
 
-## 本课问题
+**本课要回答：** Node2D::_bind_methods → ObjectTypeDB 方法/属性注册 → Object::set/get → ObjectTypeDB 属性访问 → Object::callv → MethodBind
 
-Node2D::_bind_methods → ObjectTypeDB 方法/属性注册 → Object::set/get → ObjectTypeDB 属性访问 → Object::callv → MethodBind
-
-## 源码调用链
+## C++ 源码追踪
 
 源码依据：`engine/godot-2.1/`（Godot 2.1 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
@@ -27,27 +25,28 @@ Node2D::_bind_methods → ObjectTypeDB 方法/属性注册 → Object::set/get �
 
 ## 本课源码复刻
 
-`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-2.1` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+完整上游文件按原路径复制到 src/upstream；摘录保留快照中的原始行段，每个完整文件都有 SHA-256 校验项。清单见 [src/README.md](src/README.md) 与 [src/SOURCE_SHA256.txt](src/SOURCE_SHA256.txt)。
 
-| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
-| --- | --- | --- | --- | --- |
-| 1 | [object.cpp](src/upstream/core/object.cpp) | [摘录](src/upstream/core/object.cpp.excerpt) | `engine/godot-2.1/core/object.cpp` | 305-398 |
-| 2 | [object_type_db.cpp](src/upstream/core/object_type_db.cpp) | [摘录](src/upstream/core/object_type_db.cpp.excerpt) | `engine/godot-2.1/core/object_type_db.cpp` | 614-701 |
-| 3 | [node_2d.cpp](src/upstream/scene/2d/node_2d.cpp) | [摘录](src/upstream/scene/2d/node_2d.cpp.excerpt) | `engine/godot-2.1/scene/2d/node_2d.cpp` | 398-455 |
+| 阅读顺序 | 完整上游副本 | 原始行号摘录 | 上游快照路径 |
+| --- | --- | --- | --- |
+| 1 | [object.cpp](src/upstream/core/object.cpp) | [305-398 ; 652-670 ; 797-859 ; 1527-1534 ; 1594-1597](src/upstream/core/object.cpp.excerpt) | engine/godot-2.1/core/object.cpp |
+| 2 | [object_type_db.cpp](src/upstream/core/object_type_db.cpp) | [614-701](src/upstream/core/object_type_db.cpp.excerpt) | engine/godot-2.1/core/object_type_db.cpp |
+| 3 | [node_2d.cpp](src/upstream/scene/2d/node_2d.cpp) | [398-455](src/upstream/scene/2d/node_2d.cpp.excerpt) | engine/godot-2.1/scene/2d/node_2d.cpp |
 
-## GDScript 源码复刻与 C++ 对照
+## GDScript 源码复刻
 
-模型以 MethodBind 表记录方法参数和实现，再让属性读写经 getter/setter 进入 callv；Godot 1/2 的 Node2D 属性名保留为 pos。
+S09 Godot 2.1: ObjectTypeDB property metadata delegates to MethodBind callv.
 
-src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
 
-| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
-| --- | --- | --- |
-| Node2D::_bind_methods / Object::callv | _bind_method() → _callv() | 验证 set_pos/get_pos 参数计数及属性访问走同一绑定表 |
-| Object::_set / Object::_get | _set_property() / _get_property() | 属性 pos 经 setter/getter 写入并回读 |
-| ObjectTypeDB::get_method_bind | binds 字典 | 区分方法名查找、参数检查和 native 实现 |
+| GDScript 函数 | 复刻步骤 |
+| --- | --- |
+| _register_method() | 登记 MethodBind 参数数、getter/setter 或属性路径 |
+| _register_property() | 登记 MethodBind 参数数、getter/setter 或属性路径 |
+| _callv() | 通过绑定表动态调用方法或访问属性 |
+| _get_property() | 通过绑定表动态调用方法或访问属性 |
+| _set_property() | 通过绑定表动态调用方法或访问属性 |
 
-独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：binding_probe.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 分别走动态方法调用和属性读写路径，观察 set_pos/get_pos、transform/pos 与 Vector2。
@@ -58,7 +57,7 @@ src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的
 - [`engine.cfg`](engine.cfg)
 - [`main.tscn`](main.tscn)
 
-## 运行与预期观察
+## 运行与观察
 
 在本课目录用 Godot 2.1 启动工程。命令中的 godot 需要指向支持本课项目格式的程序；未加入 PATH 时替换为对应 app bundle 内的可执行程序路径。
 

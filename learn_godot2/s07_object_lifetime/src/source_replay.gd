@@ -1,41 +1,34 @@
-# Executable teaching model of selected C++ logic; not the Godot engine implementation.
+# S07 Godot 2.1: ObjectDB lifetime is explicit for Object, refcount-driven for Reference.
 extends Reference
 
-# C++ focus: ObjectDB ID registration/free and Reference/RefCounted reference count.
 func run():
 	var db = {}
-	var manual_id = _objectdb_insert(db, 1001, "Object", 0)
-	var ref_id = _objectdb_insert(db, 1002, "Reference", 1)
-	print("[replay S07] registered id=", manual_id, " class=", _objectdb_get(db, manual_id)["class"])
-	_objectdb_erase(db, manual_id)
-	print("[replay S07] explicit Object.free; lookup=", _objectdb_get(db, manual_id))
-	_reference(db, ref_id)
-	print("[replay S07] copied Ref handle count=", db[ref_id]["refcount"])
-	_unreference(db, ref_id)
-	print("[replay S07] one owner released; alive=", _objectdb_get(db, ref_id) != null)
-	_unreference(db, ref_id)
-	print("[replay S07] last owner released; lookup=", _objectdb_get(db, ref_id))
+	var object_id = _register(db, 2101, "Object", 0)
+	var ref_id = _register(db, 2102, "Reference", 1)
+	print("[replay S07] ID lookup after construction=", _lookup(db, object_id)["class"])
+	_remove(db, object_id)
+	print("[replay S07] Object.free lookup=", _lookup(db, object_id))
+	_ref(db, ref_id)
+	print("[replay S07] Reference copied; refs=", db[ref_id]["refs"])
+	_unref(db, ref_id)
+	print("[replay S07] first unref still alive=", _lookup(db, ref_id) != null)
+	_unref(db, ref_id)
+	print("[replay S07] final unref deleted=", _lookup(db, ref_id) == null)
 
-func _objectdb_insert(db, object_id, class_type, refcount):
-	db[object_id] = {"class": class_type, "refcount": refcount}
-	return object_id
+func _register(db, instance_id, class_label, refs):
+	db[instance_id] = {"class": class_label, "refs": refs}
+	return instance_id
 
-func _objectdb_get(db, object_id):
-	if db.has(object_id):
-		return db[object_id]
-	return null
+func _lookup(db, instance_id):
+	return db.get(instance_id, null)
 
-func _objectdb_erase(db, object_id):
-	if db.has(object_id):
-		db.erase(object_id)
+func _remove(db, instance_id):
+	db.erase(instance_id)
 
-func _reference(db, object_id):
-	if db.has(object_id):
-		db[object_id]["refcount"] += 1
+func _ref(db, instance_id):
+	db[instance_id]["refs"] += 1
 
-func _unreference(db, object_id):
-	if not db.has(object_id):
-		return
-	db[object_id]["refcount"] -= 1
-	if db[object_id]["refcount"] <= 0:
-		_objectdb_erase(db, object_id)
+func _unref(db, instance_id):
+	db[instance_id]["refs"] -= 1
+	if db[instance_id]["refs"] <= 0:
+		_remove(db, instance_id)

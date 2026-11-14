@@ -6,11 +6,9 @@
 
 把类名登记、父类链接、工厂资格、抽象类拒绝和动态实例化写成可运行流程。
 
-## 本课问题
+**本课要回答：** `GDREGISTER_CLASS` 最终如何建立类型信息与创建函数？`class_exists()` 和 `can_instantiate()` 的判断有什么边界？`instantiate()` 怎样返回一个脚本可用对象？
 
-`GDREGISTER_CLASS` 最终如何建立类型信息与创建函数？`class_exists()` 和 `can_instantiate()` 的判断有什么边界？`instantiate()` 怎样返回一个脚本可用对象？
-
-## 源码调用链
+## C++ 源码追踪
 
 源码依据：`engine/godot-4.7/`（Godot 4.7 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
@@ -29,31 +27,31 @@
 
 ## 本课源码复刻
 
-`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-4.7` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+完整上游文件按原路径复制到 src/upstream；摘录保留快照中的原始行段，每个完整文件都有 SHA-256 校验项。清单见 [src/README.md](src/README.md) 与 [src/SOURCE_SHA256.txt](src/SOURCE_SHA256.txt)。
 
-| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
-| --- | --- | --- | --- | --- |
-| 1 | [core_bind.cpp](src/upstream/core/core_bind.cpp) | [摘录](src/upstream/core/core_bind.cpp.excerpt) | `engine/godot-4.7/core/core_bind.cpp` | 1599-1623 |
-| 2 | [class_db.cpp](src/upstream/core/object/class_db.cpp) | [摘录](src/upstream/core/object/class_db.cpp.excerpt) | `engine/godot-4.7/core/object/class_db.cpp` | 525-528, 842-865 |
-| 3 | [class_db.h](src/upstream/core/object/class_db.h) | [摘录](src/upstream/core/object/class_db.h.excerpt) | `engine/godot-4.7/core/object/class_db.h` | 244-257 |
-| 4 | [object.cpp](src/upstream/core/object/object.cpp) | [摘录](src/upstream/core/object/object.cpp.excerpt) | `engine/godot-4.7/core/object/object.cpp` | 1837-1839 |
-| 5 | [node_2d.cpp](src/upstream/scene/2d/node_2d.cpp) | [摘录](src/upstream/scene/2d/node_2d.cpp.excerpt) | `engine/godot-4.7/scene/2d/node_2d.cpp` | 461-504 |
-| 6 | [node_2d.h](src/upstream/scene/2d/node_2d.h) | [摘录](src/upstream/scene/2d/node_2d.h.excerpt) | `engine/godot-4.7/scene/2d/node_2d.h` | 35-36 |
-| 7 | [register_scene_types.cpp](src/upstream/scene/register_scene_types.cpp) | [摘录](src/upstream/scene/register_scene_types.cpp.excerpt) | `engine/godot-4.7/scene/register_scene_types.cpp` | 390-442 |
+| 阅读顺序 | 完整上游副本 | 原始行号摘录 | 上游快照路径 |
+| --- | --- | --- | --- |
+| 1 | [core_bind.cpp](src/upstream/core/core_bind.cpp) | [1599-1623](src/upstream/core/core_bind.cpp.excerpt) | engine/godot-4.7/core/core_bind.cpp |
+| 2 | [class_db.cpp](src/upstream/core/object/class_db.cpp) | [525-528 ; 842-865](src/upstream/core/object/class_db.cpp.excerpt) | engine/godot-4.7/core/object/class_db.cpp |
+| 3 | [class_db.h](src/upstream/core/object/class_db.h) | [244-257](src/upstream/core/object/class_db.h.excerpt) | engine/godot-4.7/core/object/class_db.h |
+| 4 | [object.cpp](src/upstream/core/object/object.cpp) | [1837-1839](src/upstream/core/object/object.cpp.excerpt) | engine/godot-4.7/core/object/object.cpp |
+| 5 | [node_2d.cpp](src/upstream/scene/2d/node_2d.cpp) | [461-504](src/upstream/scene/2d/node_2d.cpp.excerpt) | engine/godot-4.7/scene/2d/node_2d.cpp |
+| 6 | [node_2d.h](src/upstream/scene/2d/node_2d.h) | [35-36](src/upstream/scene/2d/node_2d.h.excerpt) | engine/godot-4.7/scene/2d/node_2d.h |
+| 7 | [register_scene_types.cpp](src/upstream/scene/register_scene_types.cpp) | [390-442](src/upstream/scene/register_scene_types.cpp.excerpt) | engine/godot-4.7/scene/register_scene_types.cpp |
 
-## GDScript 源码复刻与 C++ 对照
+## GDScript 源码复刻
 
-模型执行类型注册、父类存在检查、抽象类型拒绝实例化和父链查询；工厂元数据与对象实例分开记录。
+S08 Godot 4.7: ClassDB::instantiate uses registered creation info and abstract flags.
 
-src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
 
-| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
-| --- | --- | --- |
-| ObjectTypeDB/ClassDB registration | _register_class() | 登记类型名、父类和工厂信息 |
-| instance/instantiate | _can_instantiate() → _instantiate() | 拒绝抽象类并创建具体对象 |
-| inheritance lookup | _base_chain() | 沿父类链接重建 Node2D 类型链 |
+| GDScript 函数 | 复刻步骤 |
+| --- | --- |
+| _register_class() | 将类型名、父类和创建资格写入类型表 |
+| _can_instantiate() | 检查类型父链、创建工厂或是否可实例化 |
+| _instantiate() | 从共享 PackedScene 描述创建独立节点实例 |
+| _is_class() | 检查类型父链、创建工厂或是否可实例化 |
 
-独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：type_probe.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 - `project.godot` 使用 Godot 4.7 配置，主场景 `main.tscn` 为 format 3。

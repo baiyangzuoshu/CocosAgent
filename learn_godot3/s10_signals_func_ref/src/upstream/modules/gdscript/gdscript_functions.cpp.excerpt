@@ -1,5 +1,5 @@
 /*
- * Godot 3.6 source excerpt.
+ * Godot 3 source excerpt.
  * Upstream: engine/godot-3.6/modules/gdscript/gdscript_functions.cpp
  * Original line ranges are copied from the local source snapshot.
  * Study excerpt; not a standalone compilation unit.
@@ -39,3 +39,4 @@
 			mi.return_val.type = Variant::OBJECT;
 			mi.return_val.class_name = "FuncRef";
 			return mi;
+

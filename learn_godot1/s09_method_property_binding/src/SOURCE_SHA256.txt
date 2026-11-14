@@ -1,0 +1,3 @@
+79645ae4819ef0bed8eab4a8895dd4fadf45908bcfe5325d92408fbb83646f85  upstream/core/object.cpp
+49e317e0cec7fbf4718569c3bb8cf6c9836a768dfe1ea2d9df2b3dc801763503  upstream/core/object_type_db.cpp
+2f5d8d83d92a6cb592dc2c6ed9259ed388bcbd06a733ef646ef8ca93e35d0bc8  upstream/scene/2d/node_2d.cpp

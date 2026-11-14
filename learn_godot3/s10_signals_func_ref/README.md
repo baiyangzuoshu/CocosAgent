@@ -6,11 +6,9 @@
 
 复刻 signal connection 的 ObjectID/方法名登记与 Object::call；另用 FuncRef 的 ID+函数名路径回调。
 
-## 本课问题
+**本课要回答：** Object::connect(signal,target,method) → 连接表 → emit_signal → 目标方法；funcref → FuncRef(ObjectID,function) → call_func → Object::call
 
-Object::connect(signal,target,method) → 连接表 → emit_signal → 目标方法；funcref → FuncRef(ObjectID,function) → call_func → Object::call
-
-## 源码调用链
+## C++ 源码追踪
 
 源码依据：`engine/godot-3.6/`（Godot 3.6 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
@@ -25,27 +23,27 @@ Object::connect(signal,target,method) → 连接表 → emit_signal → 目标�
 
 ## 本课源码复刻
 
-`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-3.6` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+完整上游文件按原路径复制到 src/upstream；摘录保留快照中的原始行段，每个完整文件都有 SHA-256 校验项。清单见 [src/README.md](src/README.md) 与 [src/SOURCE_SHA256.txt](src/SOURCE_SHA256.txt)。
 
-| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
-| --- | --- | --- | --- | --- |
-| 1 | [func_ref.cpp](src/upstream/core/func_ref.cpp) | [摘录](src/upstream/core/func_ref.cpp.excerpt) | `engine/godot-3.6/core/func_ref.cpp` | 33-101 |
-| 2 | [object.cpp](src/upstream/core/object.cpp) | [摘录](src/upstream/core/object.cpp.excerpt) | `engine/godot-3.6/core/object.cpp` | 1172-1265 |
-| 3 | [gdscript_functions.cpp](src/upstream/modules/gdscript/gdscript_functions.cpp) | [摘录](src/upstream/modules/gdscript/gdscript_functions.cpp.excerpt) | `engine/godot-3.6/modules/gdscript/gdscript_functions.cpp` | 592-615, 1760-1766 |
+| 阅读顺序 | 完整上游副本 | 原始行号摘录 | 上游快照路径 |
+| --- | --- | --- | --- |
+| 1 | [func_ref.cpp](src/upstream/core/func_ref.cpp) | [33-101](src/upstream/core/func_ref.cpp.excerpt) | engine/godot-3.6/core/func_ref.cpp |
+| 2 | [object.cpp](src/upstream/core/object.cpp) | [1172-1265 ; 1452-1510](src/upstream/core/object.cpp.excerpt) | engine/godot-3.6/core/object.cpp |
+| 3 | [gdscript_functions.cpp](src/upstream/modules/gdscript/gdscript_functions.cpp) | [592-615 ; 1760-1766](src/upstream/modules/gdscript/gdscript_functions.cpp.excerpt) | engine/godot-3.6/modules/gdscript/gdscript_functions.cpp |
 
-## GDScript 源码复刻与 C++ 对照
+## GDScript 源码复刻
 
-模型将 signal 连接保存为 ObjectID+方法名，拒绝重复连接，发射时通过对象表解析目标；FuncRef 也按 ID 和函数名调用。
+S10 Godot 3.6: legacy object/method connection and FuncRef(ObjectID, function).
 
-src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
 
-| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
-| --- | --- | --- |
-| Object::connect / signal connection list | _connect_signal() | 写入 ObjectID+方法名并拒绝重复连接 |
-| Object::emit_signal → Object::call | _emit_signal() → _call_object() | 发射值到达 Receiver 后改变 score 状态 |
-| FuncRef::call_func | _call_func() | 从保存的 ObjectID 和函数名解析目标并拿到返回值 |
+| GDScript 函数 | 复刻步骤 |
+| --- | --- |
+| _connect() | 登记回调并按目标 ID、方法和参数调用目标 |
+| _emit() | 登记回调并按目标 ID、方法和参数调用目标 |
+| _call_func() | 登记回调并按目标 ID、方法和参数调用目标 |
+| _call_object() | 登记回调并按目标 ID、方法和参数调用目标 |
 
-独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：signal_probe.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 连接并发射自定义 signal，再创建 FuncRef 调用该脚本方法，比较信号参数与显式参数。
@@ -56,7 +54,7 @@ src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的
 - [`project.godot`](project.godot)
 - [`signal_probe.gd`](signal_probe.gd)
 
-## 运行与预期观察
+## 运行与观察
 
 在本课目录用 Godot 3.6 启动工程。命令中的 godot 需要指向支持本课项目格式的程序；未加入 PATH 时替换为对应 app bundle 内的可执行程序路径。
 

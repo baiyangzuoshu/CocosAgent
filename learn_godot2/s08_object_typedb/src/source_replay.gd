@@ -1,36 +1,32 @@
-# Executable teaching model of selected C++ logic; not the Godot engine implementation.
+# S08 Godot 2.1: ObjectTypeDB::register_type stores a base link and factory.
 extends Reference
 
-# C++ focus: ObjectTypeDB / Globals register_type metadata and class instance factories.
 func run():
-	var registry = {}
-	_register_class(registry, "Object", "", false, false)
-	_register_class(registry, "Node", "Object", true, false)
-	_register_class(registry, "CanvasItem", "Node", false, true)
-	_register_class(registry, "Node2D", "CanvasItem", true, false)
-	print("[replay S08] Node2D registered=", registry.has("Node2D"))
-	print("[replay S08] abstract CanvasItem instantiable=", _can_instantiate(registry, "CanvasItem"))
-	print("[replay S08] factory result=", _instantiate(registry, "Node2D"))
-	print("[replay S08] base chain=", _base_chain(registry, "Node2D"))
+	var db = {}
+	_register_type(db, "Object", "", true)
+	_register_type(db, "Node", "Object", true)
+	_register_type(db, "CanvasItem", "Node", false)
+	_register_type(db, "Node2D", "CanvasItem", true)
+	print("[replay S08] registered Node2D=", db.has("Node2D"))
+	print("[replay S08] ObjectTypeDB.can_instance(CanvasItem)=", _can_instance(db, "CanvasItem"))
+	print("[replay S08] ObjectTypeDB.instance(Node2D)=", _instance(db, "Node2D", 5201))
+	print("[replay S08] parent chain=", _parent_chain(db, "Node2D"))
 
-func _register_class(registry, name, base, has_factory, abstract):
-	if base != "" and not registry.has(base):
-		return false
-	registry[name] = {"base": base, "has_factory": has_factory, "abstract": abstract}
-	return true
+func _register_type(db, name, base, factory):
+	db[name] = {"base": base, "factory": factory}
 
-func _can_instantiate(registry, name):
-	return registry.has(name) and registry[name]["has_factory"] and not registry[name]["abstract"]
+func _can_instance(db, name):
+	return db.has(name) and db[name]["factory"]
 
-func _instantiate(registry, name):
-	if not _can_instantiate(registry, name):
+func _instance(db, name, new_id):
+	if not _can_instance(db, name):
 		return null
-	return {"class": name, "instance_id": 2001, "base": registry[name]["base"]}
+	return {"class": name, "instance_ID": new_id}
 
-func _base_chain(registry, name):
-	var result = []
+func _parent_chain(db, name):
+	var chain = []
 	var current = name
-	while current != "" and registry.has(current):
-		result.append(current)
-		current = registry[current]["base"]
-	return result
+	while current != "" and db.has(current):
+		chain.append(current)
+		current = db[current]["base"]
+	return chain

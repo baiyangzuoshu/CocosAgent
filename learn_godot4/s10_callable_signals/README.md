@@ -6,11 +6,9 @@
 
 复刻 Callable 的对象/方法/绑定参数、连接重复检查、Signal 发射和 callp 参数合并。
 
-## 本课问题
+**本课要回答：** GDScript 方法引用 → Callable → Object::connect → signal_map → emit_signalp → Callable::callp → Object::callp/GDScript
 
-GDScript 方法引用 → Callable → Object::connect → signal_map → emit_signalp → Callable::callp → Object::callp/GDScript
-
-## 源码调用链
+## C++ 源码追踪
 
 源码依据：`engine/godot-4.7/`（Godot 4.7 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
@@ -25,27 +23,28 @@ GDScript 方法引用 → Callable → Object::connect → signal_map → emit_s
 
 ## 本课源码复刻
 
-`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-4.7` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+完整上游文件按原路径复制到 src/upstream；摘录保留快照中的原始行段，每个完整文件都有 SHA-256 校验项。清单见 [src/README.md](src/README.md) 与 [src/SOURCE_SHA256.txt](src/SOURCE_SHA256.txt)。
 
-| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
-| --- | --- | --- | --- | --- |
-| 1 | [object.cpp](src/upstream/core/object/object.cpp) | [摘录](src/upstream/core/object/object.cpp.excerpt) | `engine/godot-4.7/core/object/object.cpp` | 1179-1221 |
-| 2 | [callable.cpp](src/upstream/core/variant/callable.cpp) | [摘录](src/upstream/core/variant/callable.cpp.excerpt) | `engine/godot-4.7/core/variant/callable.cpp` | 44-87 |
-| 3 | [variant.h](src/upstream/core/variant/variant.h) | [摘录](src/upstream/core/variant/variant.h.excerpt) | `engine/godot-4.7/core/variant/variant.h` | 922-940 |
+| 阅读顺序 | 完整上游副本 | 原始行号摘录 | 上游快照路径 |
+| --- | --- | --- | --- |
+| 1 | [object.cpp](src/upstream/core/object/object.cpp) | [1179-1221 ; 1233-1315 ; 1518-1580](src/upstream/core/object/object.cpp.excerpt) | engine/godot-4.7/core/object/object.cpp |
+| 2 | [callable.cpp](src/upstream/core/variant/callable.cpp) | [44-87](src/upstream/core/variant/callable.cpp.excerpt) | engine/godot-4.7/core/variant/callable.cpp |
+| 3 | [variant.h](src/upstream/core/variant/variant.h) | [922-940](src/upstream/core/variant/variant.h.excerpt) | engine/godot-4.7/core/variant/variant.h |
 
-## GDScript 源码复刻与 C++ 对照
+## GDScript 源码复刻
 
-模型保存 Callable 的对象 ID、方法名和绑定参数，拒绝重复连接；发射参数与 bind 参数合并后进入 callp。
+S10 Godot 4.7: SignalData stores Callable; emit snapshots slots before callp.
 
-src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
 
-| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
-| --- | --- | --- |
-| Object::connect(Callable) | _callable() → _connect_signal() | 保存 Callable 目标并检查重复连接 |
-| Object::emit_signalp → Callable::callp | _emit_signal() → _callp() | 合并 signal 参数与 bind 参数后同步调用目标 |
-| Callable::call / bind | _callp() | 比较直接调用和部分参数绑定的返回值 |
+| GDScript 函数 | 复刻步骤 |
+| --- | --- |
+| _make_callable() | 登记回调并按目标 ID、方法和参数调用目标 |
+| _connect() | 登记回调并按目标 ID、方法和参数调用目标 |
+| _same_callable() | 登记回调并按目标 ID、方法和参数调用目标 |
+| _emit() | 登记回调并按目标 ID、方法和参数调用目标 |
+| _callp() | 登记回调并按目标 ID、方法和参数调用目标 |
 
-独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：signal_probe.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 把方法引用封装为 Callable 并连接 Signal，发射整型参数；再用 call 与 bind 构造部分参数函数。
@@ -56,7 +55,7 @@ src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的
 - [`project.godot`](project.godot)
 - [`signal_probe.gd`](signal_probe.gd)
 
-## 运行与预期观察
+## 运行与观察
 
 在本课目录用 Godot 4.7 启动工程。命令中的 godot 需要指向支持本课项目格式的程序；未加入 PATH 时替换为对应 app bundle 内的可执行程序路径。
 

@@ -6,11 +6,9 @@
 
 建立本代源码地图：把 version.py、构建宏和脚本可见版本查询串起来，并区分版本元数据与本机二进制证据。
 
-## 本课问题
+**本课要回答：** 本地源码标记的版本是什么？当前启动项目的 Godot 二进制是否对应这个版本？引擎源码的主要职责分布在哪些目录？
 
-本地源码标记的版本是什么？当前启动项目的 Godot 二进制是否对应这个版本？引擎源码的主要职责分布在哪些目录？
-
-## 源码调用链
+## C++ 源码追踪
 
 源码依据：`engine/godot-4.7/`（Godot 4.7 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
@@ -47,40 +45,38 @@
 
 ## 本课源码复刻
 
-`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-4.7` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+完整上游文件按原路径复制到 src/upstream；摘录保留快照中的原始行段，每个完整文件都有 SHA-256 校验项。清单见 [src/README.md](src/README.md) 与 [src/SOURCE_SHA256.txt](src/SOURCE_SHA256.txt)。
 
-| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
-| --- | --- | --- | --- | --- |
-| 1 | [engine.cpp](src/upstream/core/config/engine.cpp) | [摘录](src/upstream/core/config/engine.cpp.excerpt) | `engine/godot-4.7/core/config/engine.cpp` | 153-174 |
-| 2 | [core_bind.cpp](src/upstream/core/core_bind.cpp) | [摘录](src/upstream/core/core_bind.cpp.excerpt) | `engine/godot-4.7/core/core_bind.cpp` | 1959-1960 |
-| 3 | [core_builders.py](src/upstream/core/core_builders.py) | [摘录](src/upstream/core/core_builders.py.excerpt) | `engine/godot-4.7/core/core_builders.py` | 17-34 |
-| 4 | [register_core_types.cpp](src/upstream/core/register_core_types.cpp) | [摘录](src/upstream/core/register_core_types.cpp.excerpt) | `engine/godot-4.7/core/register_core_types.cpp` | 364-369 |
-| 5 | [version.h](src/upstream/core/version.h) | [摘录](src/upstream/core/version.h.excerpt) | `engine/godot-4.7/core/version.h` | 33-33 |
-| 6 | [main.cpp](src/upstream/main/main.cpp) | [摘录](src/upstream/main/main.cpp.excerpt) | `engine/godot-4.7/main/main.cpp` | 1035-1035 |
-| 7 | [methods.py](src/upstream/methods.py) | [摘录](src/upstream/methods.py.excerpt) | `engine/godot-4.7/methods.py` | 136-165 |
-| 8 | [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp) | [摘录](src/upstream/scene/main/scene_tree.cpp.excerpt) | `engine/godot-4.7/scene/main/scene_tree.cpp` | 688-688 |
-| 9 | [version.py](src/upstream/version.py) | [摘录](src/upstream/version.py.excerpt) | `engine/godot-4.7/version.py` | 1-9 |
+| 阅读顺序 | 完整上游副本 | 原始行号摘录 | 上游快照路径 |
+| --- | --- | --- | --- |
+| 1 | [engine.cpp](src/upstream/core/config/engine.cpp) | [153-174](src/upstream/core/config/engine.cpp.excerpt) | engine/godot-4.7/core/config/engine.cpp |
+| 2 | [core_bind.cpp](src/upstream/core/core_bind.cpp) | [1959-1960](src/upstream/core/core_bind.cpp.excerpt) | engine/godot-4.7/core/core_bind.cpp |
+| 3 | [core_builders.py](src/upstream/core/core_builders.py) | [17-34](src/upstream/core/core_builders.py.excerpt) | engine/godot-4.7/core/core_builders.py |
+| 4 | [register_core_types.cpp](src/upstream/core/register_core_types.cpp) | [364-369](src/upstream/core/register_core_types.cpp.excerpt) | engine/godot-4.7/core/register_core_types.cpp |
+| 5 | [version.h](src/upstream/core/version.h) | [33-33](src/upstream/core/version.h.excerpt) | engine/godot-4.7/core/version.h |
+| 6 | [main.cpp](src/upstream/main/main.cpp) | [1035-1035](src/upstream/main/main.cpp.excerpt) | engine/godot-4.7/main/main.cpp |
+| 7 | [methods.py](src/upstream/methods.py) | [136-165](src/upstream/methods.py.excerpt) | engine/godot-4.7/methods.py |
+| 8 | [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp) | [688-688](src/upstream/scene/main/scene_tree.cpp.excerpt) | engine/godot-4.7/scene/main/scene_tree.cpp |
+| 9 | [version.py](src/upstream/version.py) | [1-9](src/upstream/version.py.excerpt) | engine/godot-4.7/version.py |
 
-## GDScript 源码复刻与 C++ 对照
+## GDScript 源码复刻
 
-模型从版本字段重建显示名，标出这一代的脚本查询入口，再打印源码目录职责。源码快照和本机运行二进制由独立实验分别确认。
+S00 Godot 4.7: build version macros → Engine singleton → GDScript dictionary.
 
-src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
 
-| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
-| --- | --- | --- |
-| version.py → methods.py → generated version fields | _version_fields() → _compiled_full_name() | 重建编译期版本字符串和字段 |
-| typedefs.h / Engine 或 OS binding | _script_version_bridge() → _runtime_version_string() | 区分脚本查询入口及返回字符串格式 |
-| core/main/scene/servers/platform | _print_source_map() | 打印源码职责导航，不伪造调用栈 |
+| GDScript 函数 | 复刻步骤 |
+| --- | --- |
+| _build_version_macros() | 把 version.py 字段写入生成宏记录 |
+| _engine_get_version_info() | 模拟本代 OS/Engine 脚本接口返回值 |
 
-独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：source_map.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 - `project.godot`：独立 Godot 项目入口。
 - `main.tscn`：启动场景。
 - `source_map.gd`：打印本机运行时版本，并比较 4.7.3-rc 版本字段。
 
-## 运行与预期观察
+## 运行与观察
 
 在 Godot 编辑器中打开本目录的 `project.godot`，按 F5 运行项目；也可在本目录使用已安装的 Godot 命令行程序运行项目。运行前确认本机程序版本，并将实际版本和源码快照版本分开记录。
 

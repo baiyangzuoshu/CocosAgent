@@ -6,11 +6,9 @@
 
 复刻 Variant 的运行时类型标签、转换和 ADD，再将 Variant 参数数组送进 Object::callv，区分值运算与对象分派。
 
-## 本课问题
+**本课要回答：** typeof/convert → gdscript_functions → Variant::construct/can_convert；Object.callv(Array) → Object::call → ScriptInstance 或 ClassDB MethodBind
 
-typeof/convert → gdscript_functions → Variant::construct/can_convert；Object.callv(Array) → Object::call → ScriptInstance 或 ClassDB MethodBind
-
-## 源码调用链
+## C++ 源码追踪
 
 源码依据：`engine/godot-3.6/`（Godot 3.6 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
@@ -29,30 +27,31 @@ typeof/convert → gdscript_functions → Variant::construct/can_convert；Objec
 
 ## 本课源码复刻
 
-`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-3.6` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+完整上游文件按原路径复制到 src/upstream；摘录保留快照中的原始行段，每个完整文件都有 SHA-256 校验项。清单见 [src/README.md](src/README.md) 与 [src/SOURCE_SHA256.txt](src/SOURCE_SHA256.txt)。
 
-| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
-| --- | --- | --- | --- | --- |
-| 1 | [object.cpp](src/upstream/core/object.cpp) | [摘录](src/upstream/core/object.cpp.excerpt) | `engine/godot-3.6/core/object.cpp` | 819-900 |
-| 2 | [variant.cpp](src/upstream/core/variant.cpp) | [摘录](src/upstream/core/variant.cpp.excerpt) | `engine/godot-3.6/core/variant.cpp` | 162-210 |
-| 3 | [variant.h](src/upstream/core/variant.h) | [摘录](src/upstream/core/variant.h.excerpt) | `engine/godot-3.6/core/variant.h` | 58-110 |
-| 4 | [variant_call.cpp](src/upstream/core/variant_call.cpp) | [摘录](src/upstream/core/variant_call.cpp.excerpt) | `engine/godot-3.6/core/variant_call.cpp` | 1217-1285 |
-| 5 | [gdscript_function.cpp](src/upstream/modules/gdscript/gdscript_function.cpp) | [摘录](src/upstream/modules/gdscript/gdscript_function.cpp.excerpt) | `engine/godot-3.6/modules/gdscript/gdscript_function.cpp` | 432-455, 947-970 |
-| 6 | [gdscript_functions.cpp](src/upstream/modules/gdscript/gdscript_functions.cpp) | [摘录](src/upstream/modules/gdscript/gdscript_functions.cpp.excerpt) | `engine/godot-3.6/modules/gdscript/gdscript_functions.cpp` | 616-638, 1768-1779 |
+| 阅读顺序 | 完整上游副本 | 原始行号摘录 | 上游快照路径 |
+| --- | --- | --- | --- |
+| 1 | [object.cpp](src/upstream/core/object.cpp) | [819-900](src/upstream/core/object.cpp.excerpt) | engine/godot-3.6/core/object.cpp |
+| 2 | [variant.cpp](src/upstream/core/variant.cpp) | [162-210](src/upstream/core/variant.cpp.excerpt) | engine/godot-3.6/core/variant.cpp |
+| 3 | [variant.h](src/upstream/core/variant.h) | [58-110](src/upstream/core/variant.h.excerpt) | engine/godot-3.6/core/variant.h |
+| 4 | [variant_call.cpp](src/upstream/core/variant_call.cpp) | [1217-1285](src/upstream/core/variant_call.cpp.excerpt) | engine/godot-3.6/core/variant_call.cpp |
+| 5 | [gdscript_function.cpp](src/upstream/modules/gdscript/gdscript_function.cpp) | [432-455 ; 947-970](src/upstream/modules/gdscript/gdscript_function.cpp.excerpt) | engine/godot-3.6/modules/gdscript/gdscript_function.cpp |
+| 6 | [gdscript_functions.cpp](src/upstream/modules/gdscript/gdscript_functions.cpp) | [616-638 ; 1768-1779 ; 1859-1869](src/upstream/modules/gdscript/gdscript_functions.cpp.excerpt) | engine/godot-3.6/modules/gdscript/gdscript_functions.cpp |
 
-## GDScript 源码复刻与 C++ 对照
+## GDScript 源码复刻
 
-模型创建带运行时类型标签的 Variant，执行 INT→REAL 转换和 ADD，再将 Variant 参数数组交给对象 setter；两种分派路径分开显示。
+S09 Godot 3.6: Variant tags and convert/evaluate stay separate from Object::callv.
 
-src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
 
-| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
-| --- | --- | --- |
-| Variant type / convert / evaluate | _variant() → _convert() → _evaluate_add() | 观察 INT 转 REAL 后结果类型仍由运算分支决定 |
-| Object::callv | _object_callv() | 把 Vector2 参数放进 Variant 数组并调用 setter |
-| var2str utility | _variant_to_text() | 把模型 Variant 数值变为可读文本 |
+| GDScript 函数 | 复刻步骤 |
+| --- | --- |
+| _variant() | 维护 Variant 类型标签并执行构造/转换/序列化分支 |
+| _convert() | 维护 Variant 类型标签并执行构造/转换/序列化分支 |
+| _evaluate_add() | 维护 Variant 类型标签并执行构造/转换/序列化分支 |
+| _object_callv() | 更新本课状态并向后续步骤传递结果 |
+| _variant_to_text() | 维护 Variant 类型标签并执行构造/转换/序列化分支 |
 
-独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：variant_probe.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 观察 null、bool、int、float、String、Vector2、Dictionary；执行 convert，并用 callv 调 Node2D.set_position。
@@ -63,7 +62,7 @@ src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的
 - [`project.godot`](project.godot)
 - [`variant_probe.gd`](variant_probe.gd)
 
-## 运行与预期观察
+## 运行与观察
 
 在本课目录用 Godot 3.6 启动工程。命令中的 godot 需要指向支持本课项目格式的程序；未加入 PATH 时替换为对应 app bundle 内的可执行程序路径。
 

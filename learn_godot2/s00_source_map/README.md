@@ -6,11 +6,9 @@
 
 建立本代源码地图：把 version.py、构建宏和脚本可见版本查询串起来，并区分版本元数据与本机二进制证据。
 
-## 本课问题
+**本课要回答：** 构建系统如何把 `version.py` 转成 C++ 版本宏？GDScript 如何经 OS 单例查询这些版本字段？2.1 项目的配置文件和文本场景格式是什么？
 
-构建系统如何把 `version.py` 转成 C++ 版本宏？GDScript 如何经 OS 单例查询这些版本字段？2.1 项目的配置文件和文本场景格式是什么？
-
-## 源码调用链
+## C++ 源码追踪
 
 源码依据：`engine/godot-2.1/`（Godot 2.1 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
@@ -40,37 +38,35 @@
 
 ## 本课源码复刻
 
-`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-2.1` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+完整上游文件按原路径复制到 src/upstream；摘录保留快照中的原始行段，每个完整文件都有 SHA-256 校验项。清单见 [src/README.md](src/README.md) 与 [src/SOURCE_SHA256.txt](src/SOURCE_SHA256.txt)。
 
-| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
-| --- | --- | --- | --- | --- |
-| 1 | [core_bind.cpp](src/upstream/core/bind/core_bind.cpp) | [摘录](src/upstream/core/bind/core_bind.cpp.excerpt) | `engine/godot-2.1/core/bind/core_bind.cpp` | 1020-1023 |
-| 2 | [os.cpp](src/upstream/core/os/os.cpp) | [摘录](src/upstream/core/os/os.cpp.excerpt) | `engine/godot-2.1/core/os/os.cpp` | 528-547 |
-| 3 | [version.h](src/upstream/core/version.h) | [摘录](src/upstream/core/version.h.excerpt) | `engine/godot-2.1/core/version.h` | 31-38 |
-| 4 | [methods.py](src/upstream/methods.py) | [摘录](src/upstream/methods.py.excerpt) | `engine/godot-2.1/methods.py` | 1089-1109 |
-| 5 | [scene_format_text.cpp](src/upstream/scene/resources/scene_format_text.cpp) | [摘录](src/upstream/scene/resources/scene_format_text.cpp.excerpt) | `engine/godot-2.1/scene/resources/scene_format_text.cpp` | 37-37, 1321-1339 |
-| 6 | [version.py](src/upstream/version.py) | [摘录](src/upstream/version.py.excerpt) | `engine/godot-2.1/version.py` | 1-6 |
+| 阅读顺序 | 完整上游副本 | 原始行号摘录 | 上游快照路径 |
+| --- | --- | --- | --- |
+| 1 | [core_bind.cpp](src/upstream/core/bind/core_bind.cpp) | [1020-1023](src/upstream/core/bind/core_bind.cpp.excerpt) | engine/godot-2.1/core/bind/core_bind.cpp |
+| 2 | [os.cpp](src/upstream/core/os/os.cpp) | [528-547](src/upstream/core/os/os.cpp.excerpt) | engine/godot-2.1/core/os/os.cpp |
+| 3 | [version.h](src/upstream/core/version.h) | [31-38](src/upstream/core/version.h.excerpt) | engine/godot-2.1/core/version.h |
+| 4 | [methods.py](src/upstream/methods.py) | [1089-1109](src/upstream/methods.py.excerpt) | engine/godot-2.1/methods.py |
+| 5 | [scene_format_text.cpp](src/upstream/scene/resources/scene_format_text.cpp) | [37-37 ; 1321-1339](src/upstream/scene/resources/scene_format_text.cpp.excerpt) | engine/godot-2.1/scene/resources/scene_format_text.cpp |
+| 6 | [version.py](src/upstream/version.py) | [1-6](src/upstream/version.py.excerpt) | engine/godot-2.1/version.py |
 
-## GDScript 源码复刻与 C++ 对照
+## GDScript 源码复刻
 
-模型从版本字段重建显示名，标出这一代的脚本查询入口，再打印源码目录职责。源码快照和本机运行二进制由独立实验分别确认。
+S00 Godot 2.1: generated version fields flow through OS into GDScript.
 
-src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
 
-| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
-| --- | --- | --- |
-| version.py → methods.py → generated version fields | _version_fields() → _compiled_full_name() | 重建编译期版本字符串和字段 |
-| typedefs.h / Engine 或 OS binding | _script_version_bridge() → _runtime_version_string() | 区分脚本查询入口及返回字符串格式 |
-| core/main/scene/servers/platform | _print_source_map() | 打印源码职责导航，不伪造调用栈 |
+| GDScript 函数 | 复刻步骤 |
+| --- | --- |
+| _generated_version_macros() | 把 version.py 字段写入生成宏记录 |
+| _os_engine_version() | 模拟本代 OS/Engine 脚本接口返回值 |
 
-独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：source_map.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 - `engine.cfg`：Godot 2.1 项目入口和主场景配置。
 - `main.tscn`：format 1 的最小文本场景，挂接版本查询脚本。
 - `source_map.gd`：输出运行时版本并比较四个字段。
 
-## 运行与预期观察
+## 运行与观察
 
 使用 Godot 2.1 工具打开本目录的 `engine.cfg`，运行主场景；也可在本目录使用兼容的 Godot 2.1 命令行程序启动项目。
 

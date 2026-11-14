@@ -1,5 +1,5 @@
 /*
- * Godot 1.1 source excerpt.
+ * Godot 1 source excerpt.
  * Upstream: engine/godot-1.1/scene/main/scene_main_loop.cpp
  * Original line ranges are copied from the local source snapshot.
  * Study excerpt; not a standalone compilation unit.
@@ -104,7 +104,7 @@ void SceneTree::input_event( const InputEvent& p_event ) {
 		ScriptDebugger::get_singleton()->request_quit();
 	}
 
-	_flush_ugc();
+	_flush_ugc();	
 	root_lock--;
 	MessageQueue::get_singleton()->flush(); //small little hack
 

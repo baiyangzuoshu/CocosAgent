@@ -1,35 +1,28 @@
-# Executable teaching model of selected C++ logic; not the Godot engine implementation.
+# S10 Godot 1.1: GDScript opcode selects Variant::evaluate, then construct/serialization.
 extends Reference
 
-# GDScript operation → Variant::evaluate/construct → textual conversion.
 func run():
-	var left = _variant("INT", 7)
-	var right = _variant("REAL", 2.5)
-	var sum = _evaluate("ADD", left, right)
-	var text_value = _construct("STRING", sum)
-	print("[replay S10] Variant::evaluate ADD=", sum)
-	print("[replay S10] Variant::construct STRING=", text_value)
-	print("[replay S10] var2str-style text=", _variant_to_string(sum))
-	print("[replay S10] divide by zero=", _evaluate("DIV", left, _variant("INT", 0)))
+	var left = {"type": "INT", "value": 7}
+	var right = {"type": "REAL", "value": 2.5}
+	var add = _evaluate(0, left, right)
+	var as_string = _construct_string(add)
+	var division_by_zero = _evaluate(1, left, {"type": "INT", "value": 0})
+	print("[replay S10] OP_ADD dispatch result=", add)
+	print("[replay S10] Variant::construct STRING=", as_string)
+	print("[replay S10] OP_DIV zero error=", division_by_zero)
 
-func _variant(type_name, value):
-	return {"type": type_name, "value": value}
-
-func _evaluate(operator, left, right):
-	if operator == "ADD":
-		if left["type"] == "STRING" or right["type"] == "STRING":
-			return _variant("STRING", str(left["value"]) + str(right["value"]))
+func _evaluate(op, left, right):
+	if op == 0:
 		if left["type"] == "REAL" or right["type"] == "REAL":
-			return _variant("REAL", float(left["value"]) + float(right["value"]))
-		return _variant("INT", int(left["value"]) + int(right["value"]))
-	if operator == "DIV" and float(right["value"]) != 0.0:
-		return _variant("REAL", float(left["value"]) / float(right["value"]))
-	return {"error": "invalid operation", "type": "NIL", "value": null}
+			return {"error": "OK", "type": "REAL", "value": float(left["value"]) + float(right["value"])}
+		return {"error": "OK", "type": "INT", "value": int(left["value"]) + int(right["value"])}
+	if op == 1:
+		if float(right["value"]) == 0.0:
+			return {"error": "division by zero", "type": "NIL", "value": null}
+		return {"error": "OK", "type": "REAL", "value": float(left["value"]) / float(right["value"])}
+	return {"error": "unsupported operator", "type": "NIL", "value": null}
 
-func _construct(type_name, value):
-	if type_name == "STRING":
-		return _variant("STRING", str(value["value"]))
-	return {"error": "unsupported constructor", "type": type_name, "value": null}
-
-func _variant_to_string(value):
-	return str(value["value"])
+func _construct_string(value):
+	if value["error"] != "OK":
+		return {"error": value["error"], "value": null}
+	return {"error": "OK", "type": "STRING", "value": str(value["value"])}

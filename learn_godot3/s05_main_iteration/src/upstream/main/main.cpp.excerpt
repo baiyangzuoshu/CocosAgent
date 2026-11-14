@@ -1,5 +1,5 @@
 /*
- * Godot 3.6 source excerpt.
+ * Godot 3 source excerpt.
  * Upstream: engine/godot-3.6/main/main.cpp
  * Original line ranges are copied from the local source snapshot.
  * Study excerpt; not a standalone compilation unit.
@@ -149,3 +149,6 @@ bool Main::iteration() {
 			Engine::get_singleton()->frames_drawn++;
 			force_redraw_requested = false;
 		}
+
+/* Upstream lines 2472-2472 */
+	AudioServer::get_singleton()->update();

@@ -1,47 +1,28 @@
-# Executable teaching model of selected C++ logic; not the Godot engine implementation.
+# S04 Godot 4.7: Main::start loads a format-3 PackedScene and calls instantiate().
 extends RefCounted
 
-# C++ focus: Main::start() → ResourceLoader → PackedScene::instantiate() → SceneTree root/current scene.
 func run():
-	var path = "res://main.tscn"
-	var missing = _resource_load(path, false)
-	print("[replay S04] missing resource stops before instance=", missing == null)
-	var packed = _resource_load(path, true)
-	var first = _packed_scene_instance(packed, 1)
-	var second = _packed_scene_instance(packed, 2)
-	var tree = {"root": null, "current_scene": null, "notifications": []}
-	_install_main_loop(tree, first)
-	print("[replay S04] format=", packed["format"], " instance API=instantiate()")
-	print("[replay S04] resource id=", packed["resource_id"])
-	print("[replay S04] instances are separate=", first["instance_id"] != second["instance_id"])
-	print("[replay S04] enter/ready order=", tree["notifications"])
-	print("[replay S04] current scene=", tree["current_scene"]["name"])
+	var packed = _load_main_scene("res://main.tscn", true)
+	var a = _instantiate(packed, 1)
+	var b = _instantiate(packed, 2)
+	var tree = {"root": "SceneTree root", "current_scene": null, "events": []}
+	_set_current_scene(tree, a)
+	print("[replay S04] main_loop_type=SceneTree; scene format=", packed["format"])
+	print("[replay S04] PackedScene resource remains shared; node instances differ=", a["id"] != b["id"])
+	print("[replay S04] current_scene=", tree["current_scene"]["name"], " events=", tree["events"])
 
-func _resource_load(path, found):
+func _load_main_scene(path, found):
 	if not found:
 		return null
-	return {"resource_id": "PackedScene:" + path, "path": path, "format": "PackedScene format 3", "root_name": "CourseRoot", "children": ["Probe"]}
+	return {"path": path, "format": "text scene format 3", "root": "CourseRoot", "children": ["Probe"]}
 
-func _packed_scene_instance(packed, serial):
-	var children = []
-	for child_name in packed["children"]:
-		children.append({"name": child_name, "inside_tree": false, "ready": false})
-	return {"instance_id": "NodeInstance:" + str(serial), "name": packed["root_name"], "inside_tree": false, "ready": false, "children": children}
+func _instantiate(packed, serial):
+	if packed == null:
+		return null
+	return {"id": serial, "name": packed["root"], "children": packed["children"].duplicate()}
 
-func _install_main_loop(tree, root):
-	tree["root"] = root
-	tree["notifications"].append("MainLoop::initialize")
-	_set_current_scene(tree, root)
-
-func _set_current_scene(tree, root):
-	tree["current_scene"] = root
-	root["inside_tree"] = true
-	tree["notifications"].append(root["name"] + " ENTER_TREE")
-	for child in root["children"]:
-		child["inside_tree"] = true
-		tree["notifications"].append(child["name"] + " ENTER_TREE")
-	for child in root["children"]:
-		child["ready"] = true
-		tree["notifications"].append(child["name"] + " READY")
-	root["ready"] = true
-	tree["notifications"].append(root["name"] + " READY")
+func _set_current_scene(tree, scene):
+	tree["current_scene"] = scene
+	tree["events"].append("SceneTree root exists before project scene")
+	tree["events"].append("set_current_scene adds the instantiated Node")
+	tree["events"].append("enter_tree parent-first; ready child-first")

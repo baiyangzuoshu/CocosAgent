@@ -1,0 +1,3 @@
+20d26e8c71b4186edbb997b109244245f976222e5139f93612a7e9045a3505d0  upstream/main/main.cpp
+3183747464b64d374a845d9a227a3e3115251039c10b20f9cc641ee5c51c278e  upstream/scene/main/node.cpp
+d1cf9f5eb85de6e15fd639f0f484e405fb3452fed1c1ce2287f0733eb4b861a7  upstream/scene/main/scene_main_loop.cpp

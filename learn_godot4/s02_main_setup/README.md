@@ -6,11 +6,9 @@
 
 加入 Godot 4 的 --path、引擎参数与 --/++ 用户参数分流，并保留缺少参数值的错误返回。
 
-## 本课问题
+**本课要回答：** Godot 4 的 `Main::setup()` 负责哪些初始化？`--` 如何改变参数处理？为什么要区分 `OS.get_cmdline_args()` 和 `OS.get_cmdline_user_args()`？
 
-Godot 4 的 `Main::setup()` 负责哪些初始化？`--` 如何改变参数处理？为什么要区分 `OS.get_cmdline_args()` 和 `OS.get_cmdline_user_args()`？
-
-## 源码调用链
+## C++ 源码追踪
 
 源码依据：`engine/godot-4.7/`（Godot 4.7 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
@@ -27,26 +25,24 @@ Godot 4 的 `Main::setup()` 负责哪些初始化？`--` 如何改变参数处�
 
 ## 本课源码复刻
 
-`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-4.7` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+完整上游文件按原路径复制到 src/upstream；摘录保留快照中的原始行段，每个完整文件都有 SHA-256 校验项。清单见 [src/README.md](src/README.md) 与 [src/SOURCE_SHA256.txt](src/SOURCE_SHA256.txt)。
 
-| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
-| --- | --- | --- | --- | --- |
-| 1 | [core_bind.cpp](src/upstream/core/core_bind.cpp) | [摘录](src/upstream/core/core_bind.cpp.excerpt) | `engine/godot-4.7/core/core_bind.cpp` | 518-535 |
-| 2 | [main.cpp](src/upstream/main/main.cpp) | [摘录](src/upstream/main/main.cpp.excerpt) | `engine/godot-4.7/main/main.cpp` | 1016-1032 |
+| 阅读顺序 | 完整上游副本 | 原始行号摘录 | 上游快照路径 |
+| --- | --- | --- | --- |
+| 1 | [core_bind.cpp](src/upstream/core/core_bind.cpp) | [518-535](src/upstream/core/core_bind.cpp.excerpt) | engine/godot-4.7/core/core_bind.cpp |
+| 2 | [main.cpp](src/upstream/main/main.cpp) | [1016-1032 ; 1035-1068 ; 1768-1785 ; 2069-2073 ; 2106-2108](src/upstream/main/main.cpp.excerpt) | engine/godot-4.7/main/main.cpp |
 
-## GDScript 源码复刻与 C++ 对照
+## GDScript 源码复刻
 
-模型复现 Godot 4 的 --path、引擎开关和 --/++ 用户参数分界；分隔符后的参数进入 user_args，setup 成功后桌面入口串接 setup2。
+S02 Godot 4.7: setup separates engine main_args from args after -- or ++.
 
-src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
 
-| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
-| --- | --- | --- |
-| Main::setup() 参数循环 | _parse_args() | 识别项目路径、引擎开关、-- 后脚本参数和缺值错误 |
-| OS command line / 项目设置 | _main_setup() | 记录参数分流和 setup 状态 |
-| setup / setup2 阶段边界 | _main_setup() | 保留初始化阶段及错误提前返回 |
+| GDScript 函数 | 复刻步骤 |
+| --- | --- |
+| _parse_args() | 逐项解析本代参数、分流或拒绝缺值选项 |
+| _setup() | 按 setup、项目配置、OS 参数保存和 setup2 排列阶段 |
 
-独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：args_probe.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 - `project.godot`：Godot 4.7 项目入口，配置版本 5。

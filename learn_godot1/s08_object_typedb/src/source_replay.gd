@@ -1,36 +1,34 @@
-# Executable teaching model of selected C++ logic; not the Godot engine implementation.
+# S08 Godot 1.1: ObjectTypeDB keeps parent metadata and optional creator function.
 extends Reference
 
-# C++ focus: ObjectTypeDB / Globals register_type metadata and class instance factories.
 func run():
-	var registry = {}
-	_register_class(registry, "Object", "", false, false)
-	_register_class(registry, "Node", "Object", true, false)
-	_register_class(registry, "CanvasItem", "Node", false, true)
-	_register_class(registry, "Node2D", "CanvasItem", true, false)
-	print("[replay S08] Node2D registered=", registry.has("Node2D"))
-	print("[replay S08] abstract CanvasItem instantiable=", _can_instantiate(registry, "CanvasItem"))
-	print("[replay S08] factory result=", _instantiate(registry, "Node2D"))
-	print("[replay S08] base chain=", _base_chain(registry, "Node2D"))
+	var types = {}
+	_register_type(types, "Object", "", true)
+	_register_type(types, "Node", "Object", true)
+	_register_type(types, "CanvasItem", "Node", false)
+	_register_type(types, "Node2D", "CanvasItem", true)
+	print("[replay S08] Node2D type record=", types["Node2D"])
+	print("[replay S08] CanvasItem has creator=", _can_create(types, "CanvasItem"))
+	print("[replay S08] Node2D instance=", _instance(types, "Node2D", 5001))
+	print("[replay S08] is Node2D an Object=", _inherits(types, "Node2D", "Object"))
 
-func _register_class(registry, name, base, has_factory, abstract):
-	if base != "" and not registry.has(base):
-		return false
-	registry[name] = {"base": base, "has_factory": has_factory, "abstract": abstract}
-	return true
+func _register_type(types, name, base, has_creator):
+	types[name] = {"base": base, "creator": has_creator}
 
-func _can_instantiate(registry, name):
-	return registry.has(name) and registry[name]["has_factory"] and not registry[name]["abstract"]
+func _can_create(types, name):
+	return types.has(name) and types[name]["creator"]
 
-func _instantiate(registry, name):
-	if not _can_instantiate(registry, name):
+func _instance(types, name, instance_id):
+	if not _can_create(types, name):
 		return null
-	return {"class": name, "instance_id": 2001, "base": registry[name]["base"]}
+	return {"class": name, "id": instance_id}
 
-func _base_chain(registry, name):
-	var result = []
+func _inherits(types, name, base):
 	var current = name
-	while current != "" and registry.has(current):
-		result.append(current)
-		current = registry[current]["base"]
-	return result
+	while current != "":
+		if current == base:
+			return true
+		if not types.has(current):
+			return false
+		current = types[current]["base"]
+	return false

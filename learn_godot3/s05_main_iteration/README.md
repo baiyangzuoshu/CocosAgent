@@ -6,11 +6,9 @@
 
 把定时器的累积状态、物理步数上限、固定循环、每帧回调和渲染服务器提交连成一条可检查的调用链。
 
-## 本课问题
+**本课要回答：** 每帧经过的时间如何换算成零次或多次物理更新？引擎如何限制物理步数并留下插值余量？物理循环和 process/idle、绘制的先后关系是什么？
 
-每帧经过的时间如何换算成零次或多次物理更新？引擎如何限制物理步数并留下插值余量？物理循环和 process/idle、绘制的先后关系是什么？
-
-## C++ 源码调用链
+## C++ 源码追踪
 
 源码依据：`engine/godot-3.6/` 本地快照。以下路径相对于该快照根目录，行号对应课程副本中的原始源码：
 
@@ -23,26 +21,27 @@
 
 ## 本课源码复刻
 
-`src/upstream/` 保存下列完整 C++ 源文件与带原始行号的重点摘录；文件内容复制自对应版本快照，核对清单和边界见 [`src/README.md`](src/README.md)。
+完整上游文件按原路径复制到 src/upstream；摘录保留快照中的原始行段，每个完整文件都有 SHA-256 校验项。清单见 [src/README.md](src/README.md) 与 [src/SOURCE_SHA256.txt](src/SOURCE_SHA256.txt)。
 
-| 阅读顺序 | 完整源码副本 | 摘录 | 上游路径 | 行段 |
-| --- | --- | --- | --- | --- |
-| 1 | [main.cpp](src/upstream/main/main.cpp) | [摘录](src/upstream/main/main.cpp.excerpt) | `engine/godot-3.6/main/main.cpp` | 2304-2359, 2363-2410, 2420-2453, 2472 |
-| 2 | [main_timer_sync.cpp](src/upstream/main/main_timer_sync.cpp) | [摘录](src/upstream/main/main_timer_sync.cpp.excerpt) | `engine/godot-3.6/main/main_timer_sync.cpp` | 322-403, 405-479, 481-522 |
-| 3 | [main_timer_sync.h](src/upstream/main/main_timer_sync.h) | [摘录](src/upstream/main/main_timer_sync.h.excerpt) | `engine/godot-3.6/main/main_timer_sync.h` | 39-44, 111-162 |
-| 4 | [node.cpp](src/upstream/scene/main/node.cpp) | [摘录](src/upstream/scene/main/node.cpp.excerpt) | `engine/godot-3.6/scene/main/node.cpp` | 50-70, 3275-3276 |
+| 阅读顺序 | 完整上游副本 | 原始行号摘录 | 上游快照路径 |
+| --- | --- | --- | --- |
+| 1 | [main.cpp](src/upstream/main/main.cpp) | [2304-2359 ; 2363-2410 ; 2420-2453 ; 2472](src/upstream/main/main.cpp.excerpt) | engine/godot-3.6/main/main.cpp |
+| 2 | [main_timer_sync.cpp](src/upstream/main/main_timer_sync.cpp) | [322-403 ; 405-479 ; 481-522](src/upstream/main/main_timer_sync.cpp.excerpt) | engine/godot-3.6/main/main_timer_sync.cpp |
+| 3 | [main_timer_sync.h](src/upstream/main/main_timer_sync.h) | [39-44 ; 111-162](src/upstream/main/main_timer_sync.h.excerpt) | engine/godot-3.6/main/main_timer_sync.h |
+| 4 | [node.cpp](src/upstream/scene/main/node.cpp) | [50-70 ; 3275-3276](src/upstream/scene/main/node.cpp.excerpt) | engine/godot-3.6/scene/main/node.cpp |
 
-## GDScript 源码复刻与 C++ 对照
+## GDScript 源码复刻
 
-模型以 55 ms 帧差和 20 ms 固定步演示 accumulator、物理步选择、8 步上限与插值余量。它省略 MainTimerSync 的 delta smoother、12 帧典型步数历史、jitter fix 和 time_deficit 校正。它是选定算法的单帧教学模型，不是 C++ 的逐行转译，也不替代完整引擎调度。
+S05 Godot 3.6: MainTimerSync accumulator plus Main::iteration physics cap.
 
-| C++ 追踪阶段 | 模型函数 | 观察状态或分支 |
-| --- | --- | --- |
-| `Main::iteration()` → `MainTimerSync::advance()` → `advance_checked/core()` | `_measure_frame_time()` | 跟踪采样时间、accumulator、步数、上限与插值余量（历史平滑省略） |
-| 固定物理循环 | `_physics_tick()` | 记录准备、`MainLoop::iteration()`、PhysicsServer step 和循环收尾 |
-| 每帧回调与绘制 | `_process_idle()` → `_render_frame()` | 观察 `VisualServer` 同步及条件绘制分支 |
+source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
 
-项目入口先运行 `src/source_replay.gd`，再执行下面的公开 API 实验。模型的 55 ms / 20 ms 数据是教学输入，不是目标平台的性能测量。
+| GDScript 函数 | 复刻步骤 |
+| --- | --- |
+| _advance_core() | 累计经过时间并计算固定步数、process delta 和余量 |
+| _apply_frame_cap() | 应用最大 physics tick 数并修正普通帧 delta |
+| _physics_tick() | 逐个执行固定物理阶段并记录服务器同步顺序 |
+| _idle_draw() | 执行一次 process/idle 并记录 draw 或 sync 提交 |
 
 ## 最小 Godot/GDScript 实验
 

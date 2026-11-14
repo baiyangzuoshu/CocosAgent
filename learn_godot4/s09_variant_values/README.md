@@ -6,11 +6,9 @@
 
 复刻 Variant::construct 的成功/失败、文本往返和 Object::callp setter，区分 Variant utility 与对象方法调用。
 
-## 本课问题
+**本课要回答：** Variant::Type → can_convert_strict/construct → typeof/type_string/type_convert → var_to_str/str_to_var → VariantWriter/Parser
 
-Variant::Type → can_convert_strict/construct → typeof/type_string/type_convert → var_to_str/str_to_var → VariantWriter/Parser
-
-## 源码调用链
+## C++ 源码追踪
 
 源码依据：`engine/godot-4.7/`（Godot 4.7 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
@@ -28,29 +26,30 @@ Variant::Type → can_convert_strict/construct → typeof/type_string/type_conve
 
 ## 本课源码复刻
 
-`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-4.7` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+完整上游文件按原路径复制到 src/upstream；摘录保留快照中的原始行段，每个完整文件都有 SHA-256 校验项。清单见 [src/README.md](src/README.md) 与 [src/SOURCE_SHA256.txt](src/SOURCE_SHA256.txt)。
 
-| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
-| --- | --- | --- | --- | --- |
-| 1 | [object.cpp](src/upstream/core/object/object.cpp) | [摘录](src/upstream/core/object/object.cpp.excerpt) | `engine/godot-4.7/core/object/object.cpp` | 750-765, 768-850 |
-| 2 | [variant.cpp](src/upstream/core/variant/variant.cpp) | [摘录](src/upstream/core/variant/variant.cpp.excerpt) | `engine/godot-4.7/core/variant/variant.cpp` | 189-228 |
-| 3 | [variant.h](src/upstream/core/variant/variant.h) | [摘录](src/upstream/core/variant/variant.h.excerpt) | `engine/godot-4.7/core/variant/variant.h` | 96-145 |
-| 4 | [variant_construct.cpp](src/upstream/core/variant/variant_construct.cpp) | [摘录](src/upstream/core/variant/variant_construct.cpp.excerpt) | `engine/godot-4.7/core/variant/variant_construct.cpp` | 264-289 |
-| 5 | [variant_utility.cpp](src/upstream/core/variant/variant_utility.cpp) | [摘录](src/upstream/core/variant/variant_utility.cpp.excerpt) | `engine/godot-4.7/core/variant/variant_utility.cpp` | 845-933 |
+| 阅读顺序 | 完整上游副本 | 原始行号摘录 | 上游快照路径 |
+| --- | --- | --- | --- |
+| 1 | [object.cpp](src/upstream/core/object/object.cpp) | [750-765 ; 768-850](src/upstream/core/object/object.cpp.excerpt) | engine/godot-4.7/core/object/object.cpp |
+| 2 | [variant.cpp](src/upstream/core/variant/variant.cpp) | [189-228](src/upstream/core/variant/variant.cpp.excerpt) | engine/godot-4.7/core/variant/variant.cpp |
+| 3 | [variant.h](src/upstream/core/variant/variant.h) | [96-145](src/upstream/core/variant/variant.h.excerpt) | engine/godot-4.7/core/variant/variant.h |
+| 4 | [variant_construct.cpp](src/upstream/core/variant/variant_construct.cpp) | [264-289](src/upstream/core/variant/variant_construct.cpp.excerpt) | engine/godot-4.7/core/variant/variant_construct.cpp |
+| 5 | [variant_utility.cpp](src/upstream/core/variant/variant_utility.cpp) | [845-933 ; 1037-1053 ; 1747-1765](src/upstream/core/variant/variant_utility.cpp.excerpt) | engine/godot-4.7/core/variant/variant_utility.cpp |
 
-## GDScript 源码复刻与 C++ 对照
+## GDScript 源码复刻
 
-模型执行 Variant::construct 成功/失败分支、var_to_str/str_to_var 往返，以及独立的 Object::callp setter 路径。
+S09 Godot 4.7: strict Variant construction, utility text round-trip, Object::callp.
 
-src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
 
-| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
-| --- | --- | --- |
-| Variant::construct | _construct() / _is_integer() | 比较合法和非法文本转换的成功状态 |
-| var_to_str / str_to_var utility | _variant_to_text() / _text_to_variant() | 做简单整数/浮点文本往返 |
-| Object::callp | _object_callp() | 单独观察对象 setter 的 Variant 参数入口 |
+| GDScript 函数 | 复刻步骤 |
+| --- | --- |
+| _construct() | 维护 Variant 类型标签并执行构造/转换/序列化分支 |
+| _is_integer() | 维护 Variant 类型标签并执行构造/转换/序列化分支 |
+| _var_to_str() | 维护 Variant 类型标签并执行构造/转换/序列化分支 |
+| _str_to_var() | 维护 Variant 类型标签并执行构造/转换/序列化分支 |
+| _object_callp() | 更新本课状态并向后续步骤传递结果 |
 
-独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：variant_probe.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 遍历不同 Variant 类型，用 type_string(typeof(...)) 标注；转换 String 为 int，并把含 Vector2i 的 Dictionary 做文本往返。
@@ -61,7 +60,7 @@ src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的
 - [`project.godot`](project.godot)
 - [`variant_probe.gd`](variant_probe.gd)
 
-## 运行与预期观察
+## 运行与观察
 
 在本课目录用 Godot 4.7 启动工程。命令中的 godot 需要指向支持本课项目格式的程序；未加入 PATH 时替换为对应 app bundle 内的可执行程序路径。
 

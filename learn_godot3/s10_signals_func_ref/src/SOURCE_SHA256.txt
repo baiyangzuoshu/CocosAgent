@@ -1,0 +1,3 @@
+5f35a4ef41c14d2c24bbae95281e416e7c70c558e9125dcce04977991e872d31  upstream/core/func_ref.cpp
+7d9bb073fde7ba0c1d7b057fbefcdba292148eeb4cdd58c1c975c9e8f8f3b8c6  upstream/core/object.cpp
+ded4a283e0d876f43e5315bea2f5c543c3893b027eea56c9e344b33095fca2d2  upstream/modules/gdscript/gdscript_functions.cpp

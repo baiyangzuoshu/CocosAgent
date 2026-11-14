@@ -1,5 +1,5 @@
 /*
- * Godot 1.1 source excerpt.
+ * Godot 1 source excerpt.
  * Upstream: engine/godot-1.1/core/variant_op.cpp
  * Original line ranges are copied from the local source snapshot.
  * Study excerpt; not a standalone compilation unit.
@@ -68,3 +68,4 @@ void Variant::evaluate(const Operator& p_op, const Variant& p_a, const Variant& 
 
 					if (p_b.type!=DICTIONARY)
 						_RETURN( false );
+

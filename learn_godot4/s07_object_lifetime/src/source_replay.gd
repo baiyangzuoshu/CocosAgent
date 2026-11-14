@@ -1,41 +1,41 @@
-# Executable teaching model of selected C++ logic; not the Godot engine implementation.
+# S07 Godot 4.7: ObjectID slots/validators track objects; RefCounted controls ownership.
 extends RefCounted
 
-# C++ focus: ObjectDB ID registration/free and Reference/RefCounted reference count.
 func run():
-	var db = {}
-	var manual_id = _objectdb_insert(db, 1001, "Object", 0)
-	var ref_id = _objectdb_insert(db, 1002, "RefCounted", 1)
-	print("[replay S07] registered id=", manual_id, " class=", _objectdb_get(db, manual_id)["class"])
-	_objectdb_erase(db, manual_id)
-	print("[replay S07] explicit Object.free; lookup=", _objectdb_get(db, manual_id))
-	_reference(db, ref_id)
-	print("[replay S07] copied Ref handle count=", db[ref_id]["refcount"])
-	_unreference(db, ref_id)
-	print("[replay S07] one owner released; alive=", _objectdb_get(db, ref_id) != null)
-	_unreference(db, ref_id)
-	print("[replay S07] last owner released; lookup=", _objectdb_get(db, ref_id))
+	var slots = {}
+	var next_slot = 17
+	var object_id = _allocate(slots, next_slot, "Object", false)
+	var resource_id = _allocate(slots, next_slot + 1, "RefCounted", true)
+	print("[replay S07] ObjectID=", object_id, " valid=", _resolve(slots, object_id) != null)
+	_free_object(slots, object_id)
+	print("[replay S07] Object.free invalidates slot=", _resolve(slots, object_id) == null)
+	_ref(slots, resource_id)
+	_unref(slots, resource_id)
+	print("[replay S07] RefCounted with one owner still resolves=", _resolve(slots, resource_id) != null)
+	_unref(slots, resource_id)
+	print("[replay S07] zero owners releases slot=", _resolve(slots, resource_id) == null)
 
-func _objectdb_insert(db, object_id, class_type, refcount):
-	db[object_id] = {"class": class_type, "refcount": refcount}
-	return object_id
+func _allocate(slots, slot, class_label, ref_counted):
+	var validator = slot * 37
+	slots[slot] = {"validator": validator, "class": class_label, "ref_counted": ref_counted, "refs": 1 if ref_counted else 0}
+	return {"slot": slot, "validator": validator}
 
-func _objectdb_get(db, object_id):
-	if db.has(object_id):
-		return db[object_id]
-	return null
+func _resolve(slots, object_id):
+	var slot = object_id["slot"]
+	if not slots.has(slot) or slots[slot]["validator"] != object_id["validator"]:
+		return null
+	return slots[slot]
 
-func _objectdb_erase(db, object_id):
-	if db.has(object_id):
-		db.erase(object_id)
+func _free_object(slots, object_id):
+	var slot = object_id["slot"]
+	if _resolve(slots, object_id) != null:
+		slots.erase(slot)
 
-func _reference(db, object_id):
-	if db.has(object_id):
-		db[object_id]["refcount"] += 1
+func _ref(slots, object_id):
+	slots[object_id["slot"]]["refs"] += 1
 
-func _unreference(db, object_id):
-	if not db.has(object_id):
-		return
-	db[object_id]["refcount"] -= 1
-	if db[object_id]["refcount"] <= 0:
-		_objectdb_erase(db, object_id)
+func _unref(slots, object_id):
+	var slot = object_id["slot"]
+	slots[slot]["refs"] -= 1
+	if slots[slot]["refs"] == 0:
+		slots.erase(slot)

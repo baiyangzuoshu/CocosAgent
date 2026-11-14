@@ -1,5 +1,5 @@
 /*
- * Godot 1.1 source excerpt.
+ * Godot 1 source excerpt.
  * Upstream: engine/godot-1.1/main/main.cpp
  * Original line ranges are copied from the local source snapshot.
  * Study excerpt; not a standalone compilation unit.
@@ -13,6 +13,7 @@ Error Main::setup2() {
 	OS::get_singleton()->initialize(video_mode,video_driver_idx,audio_driver_idx);
 
 	register_core_singletons();
+
 
 /* Upstream lines 792-835 */
 	if (show_logo) { //boot logo!

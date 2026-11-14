@@ -1,5 +1,5 @@
 /*
- * Godot 2.1 source excerpt.
+ * Godot 2 source excerpt.
  * Upstream: engine/godot-2.1/main/main.cpp
  * Original line ranges are copied from the local source snapshot.
  * Study excerpt; not a standalone compilation unit.
@@ -33,6 +33,7 @@ bool Main::iteration() {
 	float time_scale = OS::get_singleton()->get_time_scale();
 
 	bool exit = false;
+
 
 /* Upstream lines 1523-1550 */
 	while (time_accum > frame_slice) {
@@ -91,3 +92,4 @@ bool Main::iteration() {
 
 	if (AudioServer::get_singleton())
 		AudioServer::get_singleton()->update();
+

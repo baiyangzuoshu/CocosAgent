@@ -6,11 +6,9 @@
 
 建立本代源码地图：把 version.py、构建宏和脚本可见版本查询串起来，并区分版本元数据与本机二进制证据。
 
-## 本课问题
+**本课要回答：** `Engine.get_version_info()` 的字段从哪里来？C++ 包装层如何将它暴露给 GDScript？主循环和场景树入口分别在哪些源码目录？
 
-`Engine.get_version_info()` 的字段从哪里来？C++ 包装层如何将它暴露给 GDScript？主循环和场景树入口分别在哪些源码目录？
-
-## 源码调用链
+## C++ 源码追踪
 
 源码依据：`engine/godot-3.6/`（Godot 3.6 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
@@ -43,38 +41,36 @@
 
 ## 本课源码复刻
 
-`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-3.6` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+完整上游文件按原路径复制到 src/upstream；摘录保留快照中的原始行段，每个完整文件都有 SHA-256 校验项。清单见 [src/README.md](src/README.md) 与 [src/SOURCE_SHA256.txt](src/SOURCE_SHA256.txt)。
 
-| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
-| --- | --- | --- | --- | --- |
-| 1 | [core_bind.cpp](src/upstream/core/bind/core_bind.cpp) | [摘录](src/upstream/core/bind/core_bind.cpp.excerpt) | `engine/godot-3.6/core/bind/core_bind.cpp` | 3212-3214 |
-| 2 | [engine.cpp](src/upstream/core/engine.cpp) | [摘录](src/upstream/core/engine.cpp.excerpt) | `engine/godot-3.6/core/engine.cpp` | 89-109 |
-| 3 | [register_core_types.cpp](src/upstream/core/register_core_types.cpp) | [摘录](src/upstream/core/register_core_types.cpp.excerpt) | `engine/godot-3.6/core/register_core_types.cpp` | 261-274 |
-| 4 | [main.cpp](src/upstream/main/main.cpp) | [摘录](src/upstream/main/main.cpp.excerpt) | `engine/godot-3.6/main/main.cpp` | 418-418 |
-| 5 | [methods.py](src/upstream/methods.py) | [摘录](src/upstream/methods.py.excerpt) | `engine/godot-3.6/methods.py` | 235-252 |
-| 6 | [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp) | [摘录](src/upstream/scene/main/scene_tree.cpp.excerpt) | `engine/godot-3.6/scene/main/scene_tree.cpp` | 578-578 |
-| 7 | [version.py](src/upstream/version.py) | [摘录](src/upstream/version.py.excerpt) | `engine/godot-3.6/version.py` | 1-10 |
+| 阅读顺序 | 完整上游副本 | 原始行号摘录 | 上游快照路径 |
+| --- | --- | --- | --- |
+| 1 | [core_bind.cpp](src/upstream/core/bind/core_bind.cpp) | [3212-3214](src/upstream/core/bind/core_bind.cpp.excerpt) | engine/godot-3.6/core/bind/core_bind.cpp |
+| 2 | [engine.cpp](src/upstream/core/engine.cpp) | [89-109](src/upstream/core/engine.cpp.excerpt) | engine/godot-3.6/core/engine.cpp |
+| 3 | [register_core_types.cpp](src/upstream/core/register_core_types.cpp) | [261-274](src/upstream/core/register_core_types.cpp.excerpt) | engine/godot-3.6/core/register_core_types.cpp |
+| 4 | [main.cpp](src/upstream/main/main.cpp) | [418-418](src/upstream/main/main.cpp.excerpt) | engine/godot-3.6/main/main.cpp |
+| 5 | [methods.py](src/upstream/methods.py) | [235-252](src/upstream/methods.py.excerpt) | engine/godot-3.6/methods.py |
+| 6 | [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp) | [578-578](src/upstream/scene/main/scene_tree.cpp.excerpt) | engine/godot-3.6/scene/main/scene_tree.cpp |
+| 7 | [version.py](src/upstream/version.py) | [1-10](src/upstream/version.py.excerpt) | engine/godot-3.6/version.py |
 
-## GDScript 源码复刻与 C++ 对照
+## GDScript 源码复刻
 
-模型从版本字段重建显示名，标出这一代的脚本查询入口，再打印源码目录职责。源码快照和本机运行二进制由独立实验分别确认。
+S00 Godot 3.6: build version macros are exposed through Engine.get_version_info().
 
-src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
 
-| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
-| --- | --- | --- |
-| version.py → methods.py → generated version fields | _version_fields() → _compiled_full_name() | 重建编译期版本字符串和字段 |
-| typedefs.h / Engine 或 OS binding | _script_version_bridge() → _runtime_version_string() | 区分脚本查询入口及返回字符串格式 |
-| core/main/scene/servers/platform | _print_source_map() | 打印源码职责导航，不伪造调用栈 |
+| GDScript 函数 | 复刻步骤 |
+| --- | --- |
+| _build_macros() | 把 version.py 字段写入生成宏记录 |
+| _engine_version_info() | 模拟本代 OS/Engine 脚本接口返回值 |
 
-独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：source_map.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 - `project.godot`：Godot 3.6 项目入口，配置版本为 4。
 - `main.tscn`：format 2 的最小文本场景。
 - `source_map.gd`：读取版本信息并与 3.6.4-rc 对照。
 
-## 运行与预期观察
+## 运行与观察
 
 使用 Godot 3.6 编辑器打开本目录的 `project.godot` 并按 F5；也可在本目录使用 Godot 3.6 命令行程序运行项目。
 

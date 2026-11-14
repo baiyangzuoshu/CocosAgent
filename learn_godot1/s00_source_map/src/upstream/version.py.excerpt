@@ -1,8 +1,10 @@
-# Godot 1.1 source excerpt.
-# Upstream: engine/godot-1.1/version.py
-# Original line ranges are copied from the local source snapshot.
-# Study excerpt; not a standalone module.
-# Copyright and license notice: Godot Engine; see course-root SOURCE_LICENSE.txt.
+/*
+ * Godot 1 source excerpt.
+ * Upstream: engine/godot-1.1/version.py
+ * Original line ranges are copied from the local source snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license notice: Godot Engine; see course-root SOURCE_LICENSE.txt.
+ */
 
 /* Upstream lines 1-7 */
 short_name="godot"
@@ -10,3 +12,5 @@ name="Godot Engine"
 major=1
 minor=1
 status="stable"
+
+

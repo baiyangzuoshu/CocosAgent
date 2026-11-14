@@ -1,5 +1,5 @@
 /*
- * Godot 4.7 source excerpt.
+ * Godot 4 source excerpt.
  * Upstream: engine/godot-4.7/core/variant/variant_utility.cpp
  * Original line ranges are copied from the local source snapshot.
  * Study excerpt; not a standalone compilation unit.
@@ -135,3 +135,4 @@ Variant VariantUtilityFunctions::str_to_var(const String &p_var) {
 
 	FUNCBINDR(var_to_str, sarray("variable"), Variant::UTILITY_FUNC_TYPE_GENERAL);
 	FUNCBINDR(str_to_var, sarray("string"), Variant::UTILITY_FUNC_TYPE_GENERAL);
+

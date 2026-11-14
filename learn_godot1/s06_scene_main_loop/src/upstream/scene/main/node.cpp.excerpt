@@ -1,5 +1,5 @@
 /*
- * Godot 1.1 source excerpt.
+ * Godot 1 source excerpt.
  * Upstream: engine/godot-1.1/scene/main/node.cpp
  * Original line ranges are copied from the local source snapshot.
  * Study excerpt; not a standalone compilation unit.
@@ -11,3 +11,4 @@ void Node::set_process_input(bool p_enable) {
 
 	if (p_enable==data.input)
 		return;
+

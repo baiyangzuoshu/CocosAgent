@@ -1,5 +1,5 @@
 /*
- * Godot 1.1 source excerpt.
+ * Godot 1 source excerpt.
  * Upstream: engine/godot-1.1/main/main.cpp
  * Original line ranges are copied from the local source snapshot.
  * Study excerpt; not a standalone compilation unit.
@@ -11,5 +11,5 @@
 
 /* Upstream lines 911-913 */
 		} else if ((args[i]=="-script" || args[i]=="-s") && i <(args.size()-1)) {
-
+		
 			script=args[i+1];

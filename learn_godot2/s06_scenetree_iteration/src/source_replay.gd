@@ -1,56 +1,34 @@
-# Executable teaching model of selected C++ logic; not the Godot engine implementation.
+# S06 Godot 2.1: fixed and idle phases dispatch different process groups.
 extends Reference
 
-# C++ focus: SceneTree input routing → fixed/idle queues → deferred deletion and quit.
 func run():
-	var state = {"paused": false, "events": [], "delete_queue": [], "quit": false}
-	var nodes = [
-		{"name": "Root", "input": true, "fixed": true, "idle": true, "process_when_paused": false, "delete_after_idle": false},
-		{"name": "Worker", "input": false, "fixed": true, "idle": true, "process_when_paused": false, "delete_after_idle": true},
-		{"name": "Overlay", "input": true, "fixed": false, "idle": true, "process_when_paused": true, "delete_after_idle": false}
-	]
-	_dispatch_input(state, nodes, {"handled": false})
-	_process_nodes(state, nodes, "fixed", 0.02)
-	_process_nodes(state, nodes, "idle", 0.016)
-	state["paused"] = true
-	state["events"].append("SceneTree paused: only nodes configured to process while paused remain eligible")
-	_process_nodes(state, nodes, "fixed", 0.02)
-	_process_nodes(state, nodes, "idle", 0.016)
-	state["paused"] = false
-	_flush_deferred(state)
+	var groups = {
+		"fixed_process": [{"name": "Player", "enabled": true}, {"name": "Hud", "enabled": false}],
+		"idle_process": [{"name": "Player", "enabled": true}, {"name": "Hud", "enabled": true}]
+	}
+	var state = {"events": [], "quit": false, "delete_queue": ["TemporaryNode"]}
+	_emit_fixed_frame(state, groups, 0.02)
+	_emit_idle_frame(state, groups, 0.016)
+	_flush_delete_queue(state)
 	state["quit"] = true
-	state["events"].append("SceneTree quit flag returned to MainLoop")
-	for item in state["events"]:
-		print("[replay S06] ", item)
+	state["events"].append("SceneTree::quit sets _quit; iteration/idle return quit state")
+	for event in state["events"]:
+		print("[replay S06] ", event)
 
-func _dispatch_input(state, nodes, event):
-	state["events"].append("SceneTree routes event through Viewport input")
-	for node in nodes:
-		if node["input"] and not event["handled"]:
-			state["events"].append(node["name"] + " receives input notification")
-			if node["name"] == "Overlay":
-				event["handled"] = true
-				state["events"].append("Overlay handles event; unhandled stage is skipped")
+func _emit_fixed_frame(state, groups, delta):
+	state["events"].append("SceneTree::iteration saves fixed_process_time and emits fixed_frame")
+	for item in groups["fixed_process"]:
+		if item["enabled"]:
+			state["events"].append(item["name"] + " receives NOTIFICATION_FIXED_PROCESS(" + str(delta) + ")")
 
-func _process_nodes(state, nodes, phase, delta):
-	var key = "idle"
-	var callback = "_process"
-	if phase == "fixed":
-		key = "fixed"
-		if 2 <= 2:
-			callback = "_fixed_process"
-		else:
-			callback = "_physics_process"
-	for node in nodes:
-		var eligible = node[key]
-		if state["paused"] and not node["process_when_paused"]:
-			eligible = false
-		if eligible:
-			state["events"].append(node["name"] + "." + callback + "(" + str(delta) + ")")
-			if phase == "idle" and node["delete_after_idle"]:
-				state["delete_queue"].append(node["name"])
+func _emit_idle_frame(state, groups, delta):
+	state["events"].append("SceneTree::idle saves idle_process_time and emits idle_frame")
+	for item in groups["idle_process"]:
+		if item["enabled"]:
+			state["events"].append(item["name"] + " receives NOTIFICATION_PROCESS(" + str(delta) + ")")
+	state["events"].append("Viewport update precedes idle delete-queue cleanup")
 
-func _flush_deferred(state):
+func _flush_delete_queue(state):
 	for name in state["delete_queue"]:
-		state["events"].append("MessageQueue/delete queue frees " + name + " after callbacks")
+		state["events"].append("delete queue frees " + name + " after process notifications")
 	state["delete_queue"] = []

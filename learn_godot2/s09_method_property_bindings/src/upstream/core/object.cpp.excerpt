@@ -1,5 +1,5 @@
 /*
- * Godot 2.1 source excerpt.
+ * Godot 2 source excerpt.
  * Upstream: engine/godot-2.1/core/object.cpp
  * Original line ranges are copied from the local source snapshot.
  * Study excerpt; not a standalone compilation unit.
@@ -202,3 +202,4 @@ void Object::_bind_methods() {
 	ObjectTypeDB::bind_method(_MD("callv:Variant", "method", "arg_array"), &Object::callv);
 
 	ObjectTypeDB::bind_method(_MD("has_method", "method"), &Object::has_method);
+

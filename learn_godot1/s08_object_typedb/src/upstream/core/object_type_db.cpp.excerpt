@@ -1,5 +1,5 @@
 /*
- * Godot 1.1 source excerpt.
+ * Godot 1 source excerpt.
  * Upstream: engine/godot-1.1/core/object_type_db.cpp
  * Original line ranges are copied from the local source snapshot.
  * Study excerpt; not a standalone compilation unit.
@@ -8,7 +8,7 @@
 
 /* Upstream lines 272-296 */
 Object *ObjectTypeDB::instance(const String &p_type) {
-
+	
 	TypeInfo *ti;
 	{
 		OBJTYPE_LOCK;
@@ -26,9 +26,9 @@ Object *ObjectTypeDB::instance(const String &p_type) {
 	return ti->creation_func();
 }
 bool ObjectTypeDB::can_instance(const String &p_type) {
-
+	
 	OBJTYPE_LOCK;
-
+	
 	TypeInfo *ti = types.getptr(p_type);
 	ERR_FAIL_COND_V(!ti,false);
 	return (!ti->disabled && ti->creation_func!=NULL);
@@ -51,3 +51,4 @@ void ObjectTypeDB::_add_type2(const StringName& p_type, const StringName& p_inhe
 
 		ERR_FAIL_COND( !types.has(ti.inherits) ); //it MUST be registered.
 		ti.inherits_ptr = &types[ti.inherits];
+

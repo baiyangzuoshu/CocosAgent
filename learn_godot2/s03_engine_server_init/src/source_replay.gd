@@ -1,54 +1,30 @@
-# Executable teaching model of selected C++ logic; not the Godot engine implementation.
+# S03 Godot 2.1: ObjectTypeDB types and Globals service instances are separate tables.
 extends Reference
 
-# C++ focus: Main::setup2() and the version-specific register_* functions.
 func run():
-	var state = {"classes": {}, "singletons": [], "stages": []}
-	_stage(state, "OS initialization")
-	_register_class(state, "Object", "", false)
-	if 2 <= 2:
-		_stage(state, "register_core_singletons")
-		_publish(state, "Input")
-		_stage(state, "register_scene_types")
-		_register_class(state, "Node", "Object", true)
-		_stage(state, "register_server_types")
-		_register_class(state, "VisualServer", "Object", false)
-		_publish(state, "VisualServer")
-		_stage(state, "register modules/drivers and initialize ScriptServer languages")
-	elif 2 == 3:
-		_stage(state, "register_server_types")
-		_register_class(state, "VisualServer", "Object", false)
-		_stage(state, "register_scene_types")
-		_register_class(state, "CanvasItem", "Node", false)
-		_register_class(state, "Node2D", "CanvasItem", true)
-		_stage(state, "initialize physics/navigation")
-		_stage(state, "register_server_singletons")
-		_publish(state, "VisualServer")
-		_publish(state, "Input")
-		_stage(state, "register drivers and initialize ScriptServer languages")
-	else:
-		_stage(state, "register_server_types at servers initialization level")
-		_register_class(state, "RenderingServer", "Object", false)
-		_stage(state, "register_scene_types and scene singletons")
-		_register_class(state, "Node", "Object", true)
-		_register_class(state, "CanvasItem", "Node", false)
-		_register_class(state, "Node2D", "CanvasItem", true)
-		_stage(state, "initialize physics, then register_server_singletons")
-		_publish(state, "RenderingServer")
-		_publish(state, "Input")
-		_stage(state, "initialize ScriptServer languages")
-	for item in state["stages"]:
-		print("[replay S03] stage=", item)
-	print("[replay S03] class table=", state["classes"])
-	print("[replay S03] script singleton table=", state["singletons"])
-	print("[replay S03] type registration does not create or publish every service instance")
+	var state = {"types": {}, "globals": [], "stages": []}
+	_stage(state, "Main::setup2: initialize OS/window")
+	_stage(state, "register_core_singletons")
+	_publish(state, "Input")
+	_stage(state, "register_scene_types")
+	_register_type(state, "Node", "Object", true)
+	_stage(state, "register_server_types")
+	_register_type(state, "VisualServer", "Object", false)
+	_publish(state, "VisualServer")
+	_publish(state, "AudioServer")
+	_publish(state, "PhysicsServer")
+	_stage(state, "register modules/drivers; ScriptServer::init_languages")
+	print("[replay S03] stage order=", state["stages"])
+	print("[replay S03] ObjectTypeDB=", state["types"])
+	print("[replay S03] Globals=", state["globals"])
+	print("[replay S03] type registration does not mean a singleton instance was published")
 
-func _register_class(state, name, base, instantiable):
-	state["classes"][name] = {"base": base, "instantiable": instantiable}
+func _register_type(state, name, base, has_creator):
+	state["types"][name] = {"base": base, "has_creator": has_creator}
 
 func _publish(state, name):
-	if not state["singletons"].has(name):
-		state["singletons"].append(name)
+	if not state["globals"].has(name):
+		state["globals"].append(name)
 
-func _stage(state, value):
-	state["stages"].append(value)
+func _stage(state, name):
+	state["stages"].append(name)

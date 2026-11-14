@@ -6,11 +6,9 @@
 
 把平台入口的控制权交接写成可执行状态流程，分别观察 setup 成功进入 Main::start 和失败提前返回。
 
-## 本课问题
+**本课要回答：** 平台层如何处理 macOS 打开的场景文件？`Main::setup()` 的错误码如何影响后续启动？`application/run/main_scene` 最终怎样触发脚本 READY？
 
-平台层如何处理 macOS 打开的场景文件？`Main::setup()` 的错误码如何影响后续启动？`application/run/main_scene` 最终怎样触发脚本 READY？
-
-## 源码调用链
+## C++ 源码追踪
 
 源码依据：`engine/godot-3.6/`（Godot 3.6 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
@@ -26,29 +24,30 @@
 
 ## 本课源码复刻
 
-`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-3.6` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+完整上游文件按原路径复制到 src/upstream；摘录保留快照中的原始行段，每个完整文件都有 SHA-256 校验项。清单见 [src/README.md](src/README.md) 与 [src/SOURCE_SHA256.txt](src/SOURCE_SHA256.txt)。
 
-| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
-| --- | --- | --- | --- | --- |
-| 1 | [main.cpp](src/upstream/main/main.cpp) | [摘录](src/upstream/main/main.cpp.excerpt) | `engine/godot-3.6/main/main.cpp` | 418-437, 1682-1682 |
-| 2 | [godot_main_osx.mm](src/upstream/platform/osx/godot_main_osx.mm) | [摘录](src/upstream/platform/osx/godot_main_osx.mm.excerpt) | `engine/godot-3.6/platform/osx/godot_main_osx.mm` | 38-78 |
-| 3 | [os_osx.mm](src/upstream/platform/osx/os_osx.mm) | [摘录](src/upstream/platform/osx/os_osx.mm.excerpt) | `engine/godot-3.6/platform/osx/os_osx.mm` | 3442-3474 |
-| 4 | [node.cpp](src/upstream/scene/main/node.cpp) | [摘录](src/upstream/scene/main/node.cpp.excerpt) | `engine/godot-3.6/scene/main/node.cpp` | 2868-2885 |
-| 5 | [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp) | [摘录](src/upstream/scene/main/scene_tree.cpp.excerpt) | `engine/godot-3.6/scene/main/scene_tree.cpp` | 521-526 |
+| 阅读顺序 | 完整上游副本 | 原始行号摘录 | 上游快照路径 |
+| --- | --- | --- | --- |
+| 1 | [main.cpp](src/upstream/main/main.cpp) | [418-437 ; 1682-1682](src/upstream/main/main.cpp.excerpt) | engine/godot-3.6/main/main.cpp |
+| 2 | [godot_main_osx.mm](src/upstream/platform/osx/godot_main_osx.mm) | [38-78](src/upstream/platform/osx/godot_main_osx.mm.excerpt) | engine/godot-3.6/platform/osx/godot_main_osx.mm |
+| 3 | [os_osx.mm](src/upstream/platform/osx/os_osx.mm) | [3442-3474](src/upstream/platform/osx/os_osx.mm.excerpt) | engine/godot-3.6/platform/osx/os_osx.mm |
+| 4 | [node.cpp](src/upstream/scene/main/node.cpp) | [2868-2885](src/upstream/scene/main/node.cpp.excerpt) | engine/godot-3.6/scene/main/node.cpp |
+| 5 | [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp) | [521-526](src/upstream/scene/main/scene_tree.cpp.excerpt) | engine/godot-3.6/scene/main/scene_tree.cpp |
 
-## GDScript 源码复刻与 C++ 对照
+## GDScript 源码复刻
 
-模型实际执行成功和 setup 失败两条路径；失败会在 Main::start 之前返回，成功路径进入 MainLoop 并执行 cleanup。
+S01 Godot 3.6: macOS native entry → Main setup/start → OS run.
 
-src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
 
-| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
-| --- | --- | --- |
-| macOS platform entry | _platform_entry() | 执行入口交接、成功路径和 setup 错误返回 |
-| Main::setup() / Main::start() | _main_setup() → _main_start() | 检查 start 只在 setup 成功后执行 |
-| OS::run() / SceneTree::init() / READY | _os_run() → _main_loop_initialize() | 模拟 MainLoop 初始化和节点 READY |
+| GDScript 函数 | 复刻步骤 |
+| --- | --- |
+| _new_run() | 初始化平台入口的阶段状态 |
+| _platform_main() | 按平台入口顺序执行 setup/start/run 并走错误门 |
+| _main_setup() | 执行核心/项目初始化并让错误状态提前返回 |
+| _main_start() | 只在 setup 成功后安装主场景和 MainLoop |
+| _print_trace() | 输出成功或错误路径中的阶段记录 |
 
-独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：entry_probe.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 - `project.godot`：Godot 3.6 项目配置，设置 `run/main_scene`。

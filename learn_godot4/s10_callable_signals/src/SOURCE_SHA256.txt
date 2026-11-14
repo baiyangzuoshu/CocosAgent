@@ -1,0 +1,3 @@
+d16943098177c719820de78f664d4cde3a9c4f997f25ccfa6a1f9b7e18098bd4  upstream/core/object/object.cpp
+78bcfcc2440be43330a1f848a619110f5eb1174fa6e0c3a32a57157e66b40db1  upstream/core/variant/callable.cpp
+3d7d7c8bdc02d4ac73d06b16f487a9ba0f9a188c854ab0befc57b98f807523b2  upstream/core/variant/variant.h

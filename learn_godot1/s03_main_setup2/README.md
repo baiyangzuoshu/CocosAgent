@@ -6,11 +6,9 @@
 
 把类型注册和脚本单例发布拆成两张表，按本代 setup2 顺序填充代表类与服务器服务。
 
-## 本课问题
+**本课要回答：** `setup2()` 如何接续 `setup()`？`register_server_types()` 注册了什么？为什么主场景脚本能够访问 `VisualServer`？
 
-`setup2()` 如何接续 `setup()`？`register_server_types()` 注册了什么？为什么主场景脚本能够访问 `VisualServer`？
-
-## 源码调用链
+## C++ 源码追踪
 
 源码依据：`engine/godot-1.1/`（Godot 1.1 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
@@ -27,27 +25,25 @@
 
 ## 本课源码复刻
 
-`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-1.1` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+完整上游文件按原路径复制到 src/upstream；摘录保留快照中的原始行段，每个完整文件都有 SHA-256 校验项。清单见 [src/README.md](src/README.md) 与 [src/SOURCE_SHA256.txt](src/SOURCE_SHA256.txt)。
 
-| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
-| --- | --- | --- | --- | --- |
-| 1 | [main.cpp](src/upstream/main/main.cpp) | [摘录](src/upstream/main/main.cpp.excerpt) | `engine/godot-1.1/main/main.cpp` | 778-784, 792-835 |
-| 2 | [register_server_types.cpp](src/upstream/servers/register_server_types.cpp) | [摘录](src/upstream/servers/register_server_types.cpp.excerpt) | `engine/godot-1.1/servers/register_server_types.cpp` | 39-66 |
-| 3 | [visual_server.cpp](src/upstream/servers/visual_server.cpp) | [摘录](src/upstream/servers/visual_server.cpp.excerpt) | `engine/godot-1.1/servers/visual_server.cpp` | 562-562 |
+| 阅读顺序 | 完整上游副本 | 原始行号摘录 | 上游快照路径 |
+| --- | --- | --- | --- |
+| 1 | [main.cpp](src/upstream/main/main.cpp) | [778-784 ; 792-835 ; 837-856 ; 869-874](src/upstream/main/main.cpp.excerpt) | engine/godot-1.1/main/main.cpp |
+| 2 | [register_server_types.cpp](src/upstream/servers/register_server_types.cpp) | [39-66](src/upstream/servers/register_server_types.cpp.excerpt) | engine/godot-1.1/servers/register_server_types.cpp |
+| 3 | [visual_server.cpp](src/upstream/servers/visual_server.cpp) | [562-562](src/upstream/servers/visual_server.cpp.excerpt) | engine/godot-1.1/servers/visual_server.cpp |
 
-## GDScript 源码复刻与 C++ 对照
+## GDScript 源码复刻
 
-模型维护类型表与脚本单例表，复现 ObjectTypeDB/Globals 与 ClassDB/Engine singleton 的分代区别；表内只放本课追踪的代表项。
+S03 Godot 1.1: setup2 prepares legacy Globals services before script startup.
 
-src/upstream/ 保存本课引用的完整上游源文件副本和带原始行号的摘录；src/source_replay.gd 则执行表中的教学模型。阅读时先看模型如何改变状态或走分支，再回到相应 C++ 函数核对。模型不替代 C++，也不代表 Godot 引擎运行时本身。
+source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
 
-| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
-| --- | --- | --- |
-| Main::setup2() | _stage() | 记录分代初始化阶段顺序 |
-| register_server_types / register_scene_types | _register_class() / _publish() | 分别维护原生类型表和脚本单例表 |
-| ScriptServer::init_languages() | _stage() | 脚本语言初始化晚于类型与服务准备 |
-
-独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：server_probe.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
+| GDScript 函数 | 复刻步骤 |
+| --- | --- |
+| _register_type() | 将类型名、父类和创建资格写入类型表 |
+| _publish_global() | 把服务器对象名称加入脚本可见单例表 |
+| _stage() | 按实际初始化先后追加阶段 |
 
 ## 最小 Godot/GDScript 实验
 

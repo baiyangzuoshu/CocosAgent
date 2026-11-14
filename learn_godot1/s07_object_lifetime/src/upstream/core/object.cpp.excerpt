@@ -1,5 +1,5 @@
 /*
- * Godot 1.1 source excerpt.
+ * Godot 1 source excerpt.
  * Upstream: engine/godot-1.1/core/object.cpp
  * Original line ranges are copied from the local source snapshot.
  * Study excerpt; not a standalone compilation unit.
@@ -8,14 +8,14 @@
 
 /* Upstream lines 256-260 */
 bool Object::_predelete() {
-
+	
 	_predelete_ok=1;
 	notification(NOTIFICATION_PREDELETE,true);
 	return _predelete_ok;
 
 /* Upstream lines 1608-1614 */
 Object::Object() {
-
+	
 
 	_block_signals=false;
 	_predelete_ok=0;

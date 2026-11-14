@@ -1,36 +1,22 @@
-# Executable teaching model of selected C++ logic; not the Godot engine implementation.
+# S00 Godot 1.1: version.py → generated build macros → old script surface.
 extends Reference
 
-# C++ focus: version.py → build script → version macros → OS/Engine script binding.
 func run():
-	var fields = _version_fields()
-	print("[replay S00] version.py inputs=", fields)
-	print("[replay S00] generated VERSION_FULL_NAME=", _compiled_full_name(fields))
-	print("[replay S00] script bridge=", _script_version_bridge())
-	print("[replay S00] runtime version string=", _runtime_version_string(fields))
-	_print_source_map()
+	var fields = _snapshot_fields()
+	var macros = _generated_version_macros(fields)
+	print("[replay S00] source fields=", fields)
+	print("[replay S00] generated version macros=", macros)
+	print("[replay S00] script query=", _script_version_query())
+	print("[replay S00] source areas=", _source_areas())
 
-func _version_fields():
-	return {"major": 1, "minor": 1, "patch": 0, "patch_defined": false, "status": "stable", "build": "custom_build"}
+func _snapshot_fields():
+	return {"major": 1, "minor": 1, "status": "stable"}
 
-func _compiled_full_name(fields):
-	var number = str(fields["major"]) + "." + str(fields["minor"])
-	if fields["patch_defined"]:
-		number += "." + str(fields["patch"])
-	return "Godot Engine v" + number + "." + fields["status"] + "." + fields["build"]
+func _generated_version_macros(fields):
+	return {"VERSION_MAJOR": fields["major"], "VERSION_MINOR": fields["minor"], "VERSION_STATUS": fields["status"]}
 
-func _script_version_bridge():
-	return "OS.get_name(); no Engine.get_version_info() binding"
+func _script_version_query():
+	return "Godot 1.1 does not bind Engine.get_version_info or OS.get_engine_version; use the executable/editor label."
 
-func _runtime_version_string(fields):
-	if fields["major"] == 1:
-		return "not exposed in this GDScript API; inspect the executable/project manager"
-	var number = str(fields["major"]) + "." + str(fields["minor"])
-	if fields["patch_defined"]:
-		number += "." + str(fields["patch"])
-	return number + "-" + fields["status"] + " (" + fields["build"] + ")"
-
-func _print_source_map():
-	var areas = ["main/: entry and frame loop", "core/: Object, Variant, OS and resources", "modules/gdscript/: parse and execution", "scene/: Node, SceneTree and resources", "servers/ + drivers/: interfaces and backends", "platform/: native window and input"]
-	for area in areas:
-		print("[replay S00] ", area)
+func _source_areas():
+	return ["main/: entry and Main::iteration", "core/: Object, Variant and OS", "scene/: SceneTree and Node", "servers/ + drivers/: server interface and backend", "platform/: native startup"]

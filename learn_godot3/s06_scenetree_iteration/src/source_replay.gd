@@ -1,56 +1,33 @@
-# Executable teaching model of selected C++ logic; not the Godot engine implementation.
+# S06 Godot 3.6: physics and idle notifications have separate post-update work.
 extends Reference
 
-# C++ focus: SceneTree input routing → fixed/idle queues → deferred deletion and quit.
 func run():
-	var state = {"paused": false, "events": [], "delete_queue": [], "quit": false}
-	var nodes = [
-		{"name": "Root", "input": true, "fixed": true, "idle": true, "process_when_paused": false, "delete_after_idle": false},
-		{"name": "Worker", "input": false, "fixed": true, "idle": true, "process_when_paused": false, "delete_after_idle": true},
-		{"name": "Overlay", "input": true, "fixed": false, "idle": true, "process_when_paused": true, "delete_after_idle": false}
+	var state = {"events": [], "delete_queue": ["TemporaryNode"], "quit": false}
+	var tree = [
+		{"name": "Player", "physics": true, "process": true},
+		{"name": "Hud", "physics": false, "process": true}
 	]
-	_dispatch_input(state, nodes, {"handled": false})
-	_process_nodes(state, nodes, "fixed", 0.02)
-	_process_nodes(state, nodes, "idle", 0.016)
-	state["paused"] = true
-	state["events"].append("SceneTree paused: only nodes configured to process while paused remain eligible")
-	_process_nodes(state, nodes, "fixed", 0.02)
-	_process_nodes(state, nodes, "idle", 0.016)
-	state["paused"] = false
-	_flush_deferred(state)
+	_physics_frame(state, tree, 0.02)
+	_idle_frame(state, tree, 0.016)
 	state["quit"] = true
-	state["events"].append("SceneTree quit flag returned to MainLoop")
-	for item in state["events"]:
-		print("[replay S06] ", item)
+	state["events"].append("SceneTree::quit records exit code; main loop reads _quit")
+	for event in state["events"]:
+		print("[replay S06] ", event)
 
-func _dispatch_input(state, nodes, event):
-	state["events"].append("SceneTree routes event through Viewport input")
+func _physics_frame(state, nodes, delta):
+	state["events"].append("emit physics_frame")
+	_dispatch(state, nodes, "physics", "NOTIFICATION_INTERNAL_PHYSICS_PROCESS", delta)
+	_dispatch(state, nodes, "physics", "NOTIFICATION_PHYSICS_PROCESS", delta)
+	state["events"].append("physics Tween and transform update; flush delete queue")
+
+func _idle_frame(state, nodes, delta):
+	state["events"].append("emit idle_frame")
+	_dispatch(state, nodes, "process", "NOTIFICATION_INTERNAL_PROCESS", delta)
+	_dispatch(state, nodes, "process", "NOTIFICATION_PROCESS", delta)
+	state["events"].append("update Viewports, timers and Tween")
+	state["events"].append("VisualServer::pre_draw after SceneTree idle work")
+
+func _dispatch(state, nodes, key, notification, delta):
 	for node in nodes:
-		if node["input"] and not event["handled"]:
-			state["events"].append(node["name"] + " receives input notification")
-			if node["name"] == "Overlay":
-				event["handled"] = true
-				state["events"].append("Overlay handles event; unhandled stage is skipped")
-
-func _process_nodes(state, nodes, phase, delta):
-	var key = "idle"
-	var callback = "_process"
-	if phase == "fixed":
-		key = "fixed"
-		if 3 <= 2:
-			callback = "_fixed_process"
-		else:
-			callback = "_physics_process"
-	for node in nodes:
-		var eligible = node[key]
-		if state["paused"] and not node["process_when_paused"]:
-			eligible = false
-		if eligible:
-			state["events"].append(node["name"] + "." + callback + "(" + str(delta) + ")")
-			if phase == "idle" and node["delete_after_idle"]:
-				state["delete_queue"].append(node["name"])
-
-func _flush_deferred(state):
-	for name in state["delete_queue"]:
-		state["events"].append("MessageQueue/delete queue frees " + name + " after callbacks")
-	state["delete_queue"] = []
+		if node[key]:
+			state["events"].append(node["name"] + " receives " + notification + "(" + str(delta) + ")")

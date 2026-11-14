@@ -1,5 +1,5 @@
 /*
- * Godot 2.1 source excerpt.
+ * Godot 2 source excerpt.
  * Upstream: engine/godot-2.1/scene/main/node.cpp
  * Original line ranges are copied from the local source snapshot.
  * Study excerpt; not a standalone compilation unit.
@@ -29,3 +29,7 @@
 				if (data.parent)
 					data.pause_owner = data.parent->data.pause_owner;
 				else
+
+/* Upstream lines 2179-2180 */
+	BIND_VMETHOD(MethodInfo("_process", PropertyInfo(Variant::REAL, "delta")));
+	BIND_VMETHOD(MethodInfo("_fixed_process", PropertyInfo(Variant::REAL, "delta")));

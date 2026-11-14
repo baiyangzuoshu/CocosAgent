@@ -1,62 +1,50 @@
-# Executable teaching model of selected C++ logic; not the Godot engine implementation.
+# S01 Godot 3.6: macOS native entry → Main setup/start → OS run.
 extends Reference
 
-# C++ focus: platform/osx/godot_main_osx.mm::main() → Main::setup() → Main::start() → OS::run().
 func run():
-	var success = _new_state()
-	var result = _platform_entry(success, false)
-	print("[replay S01] success return=", result)
-	for event in success["trace"]:
+	var state = _new_run()
+	_platform_main(state, 0, 0)
+	_print_trace("success", state)
+	var setup_failed = _new_run()
+	_platform_main(setup_failed, 1, 0)
+	_print_trace("setup-error", setup_failed)
+	var start_failed = _new_run()
+	_platform_main(start_failed, 0, 1)
+	_print_trace("start-error", start_failed)
+
+func _new_run():
+	return {"trace": [], "setup": false, "start": false, "run": false, "finish": false, "exit": 0}
+
+func _platform_main(state, setup_error, start_error):
+	state["trace"].append("godot_main_osx.mm::main forwards argc/argv")
+	state["exit"] = _main_setup(state, setup_error)
+	if state["exit"] != 0:
+		state["trace"].append("setup error returns to platform entry")
+		return
+	state["exit"] = _main_start(state, start_error)
+	if state["exit"] != 0:
+		state["trace"].append("start error returns before OS::run")
+		return
+	state["run"] = true
+	state["trace"].append("OS::run invokes MainLoop initialize/iteration")
+	state["finish"] = true
+	state["trace"].append("platform loop exits and Main cleanup runs")
+
+func _main_setup(state, error_code):
+	state["trace"].append("Main::setup initializes core and ProjectSettings")
+	if error_code != 0:
+		return error_code
+	state["setup"] = true
+	return 0
+
+func _main_start(state, error_code):
+	if not state["setup"] or error_code != 0:
+		return 1 if error_code == 0 else error_code
+	state["start"] = true
+	state["trace"].append("Main::start selects MainLoop and project scene")
+	return 0
+
+func _print_trace(label, state):
+	print("[replay S01] ", label, " setup=", state["setup"], " start=", state["start"], " run=", state["run"], " exit=", state["exit"])
+	for event in state["trace"]:
 		print("[replay S01] ", event)
-	var failure = _new_state()
-	result = _platform_entry(failure, true)
-	print("[replay S01] setup failure return=", result, " start_called=", failure["start_called"])
-
-func _new_state():
-	return {"trace": [], "setup_ok": false, "start_called": false, "loop_initialized": false, "ready_called": false, "cleaned": false}
-
-func _platform_entry(state, force_setup_error):
-	_trace(state, "platform/osx/godot_main_osx.mm::main() creates OS and forwards command-line arguments")
-	var error_code = _main_setup(state, force_setup_error)
-	if error_code != 0:
-		_trace(state, "setup Error returned; Main::start is skipped")
-		return error_code
-	error_code = _main_start(state)
-	if error_code != 0:
-		_trace(state, "start Error returned; OS::run is skipped")
-		return error_code
-	_os_run(state)
-	_main_cleanup(state)
-	return 0
-
-func _main_setup(state, fail):
-	_trace(state, "Main::setup initializes core and project state")
-	if fail:
-		return 1
-	state["setup_ok"] = true
-	return 0
-
-func _main_start(state):
-	if not state["setup_ok"]:
-		return 1
-	state["start_called"] = true
-	_trace(state, "Main::start installs configured scene and MainLoop")
-	return 0
-
-func _os_run(state):
-	_trace(state, "OS::run calls MainLoop initialization")
-	_main_loop_initialize(state)
-	_trace(state, "OS::run advances MainLoop once")
-	state["trace"].append("iteration returns quit=true")
-
-func _main_loop_initialize(state):
-	state["loop_initialized"] = true
-	state["ready_called"] = true
-	_trace(state, "SceneTree root enters tree; READY is delivered to nodes")
-
-func _main_cleanup(state):
-	state["cleaned"] = true
-	_trace(state, "platform loop returns; Main::cleanup runs")
-
-func _trace(state, value):
-	state["trace"].append(value)

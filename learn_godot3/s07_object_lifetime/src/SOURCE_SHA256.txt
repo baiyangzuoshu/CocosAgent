@@ -1,0 +1,4 @@
+7d9bb073fde7ba0c1d7b057fbefcdba292148eeb4cdd58c1c975c9e8f8f3b8c6  upstream/core/object.cpp
+47e2e30d76c93182ac6a5900df8a652d01b4b1f8e513c375d6060b869dcb4562  upstream/core/object.h
+2964d690fffda7df119744278f66df3807bd06d749effe4eb18dbe9bd01048de  upstream/core/reference.cpp
+05906b7002691b52cebf1becc17f67822848eb91dec74f6dd1ea2bfa82fe1f1d  upstream/core/reference.h

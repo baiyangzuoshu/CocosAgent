@@ -1,32 +1,32 @@
-# Executable teaching model of selected C++ logic; not the Godot engine implementation.
+# S10 Godot 3.6: legacy object/method connection and FuncRef(ObjectID, function).
 extends Reference
 
-# Signal map → Object::call; FuncRef retains ObjectID + method name.
 func run():
-	var objects = {41: {"name": "Receiver", "score": 0}}
+	var objects = {41: {"score": 0}}
 	var connections = []
-	var connected = _connect_signal(connections, "score_changed", 41, "on_score", [])
-	var duplicate = _connect_signal(connections, "score_changed", 41, "on_score", [])
-	_emit_signal(objects, connections, "score_changed", [7])
-	var function_ref = {"object_id": 41, "function": "double_score"}
-	var result = _call_func(objects, function_ref, [7])
-	print("[replay S10] connected=", connected, " duplicate rejected=", not duplicate)
-	print("[replay S10] receiver score=", objects[41]["score"], " FuncRef result=", result)
+	var status = _connect(connections, "score_changed", 41, "on_score", [])
+	var duplicate = _connect(connections, "score_changed", 41, "on_score", [])
+	_emit(objects, connections, "score_changed", [7])
+	var func_ref = {"object_id": 41, "function": "double_score"}
+	var call_result = _call_func(objects, func_ref, [7])
+	print("[replay S10] connect error=", status, " duplicate result=", duplicate)
+	print("[replay S10] emit_signal updated score=", objects[41]["score"])
+	print("[replay S10] FuncRef.call_func=", call_result)
 
-func _connect_signal(connections, signal_name, object_id, method, binds):
-	for item in connections:
-		if item["signal"] == signal_name and item["object_id"] == object_id and item["method"] == method:
-			return false
-	connections.append({"signal": signal_name, "object_id": object_id, "method": method, "binds": binds})
-	return true
+func _connect(connections, signal_name, target_id, method, binds):
+	for connection in connections:
+		if connection["signal"] == signal_name and connection["target"] == target_id and connection["method"] == method:
+			return "duplicate connection rejected"
+	connections.append({"signal": signal_name, "target": target_id, "method": method, "binds": binds})
+	return "OK"
 
-func _emit_signal(objects, connections, signal_name, args):
-	for item in connections.duplicate():
-		if item["signal"] == signal_name:
-			_call_object(objects, item["object_id"], item["method"], args + item["binds"])
+func _emit(objects, connections, signal_name, emitted_args):
+	for connection in connections.duplicate():
+		if connection["signal"] == signal_name:
+			_call_object(objects, connection["target"], connection["method"], emitted_args + connection["binds"])
 
-func _call_func(objects, function_ref, args):
-	return _call_object(objects, function_ref["object_id"], function_ref["function"], args)
+func _call_func(objects, func_ref, args):
+	return _call_object(objects, func_ref["object_id"], func_ref["function"], args)
 
 func _call_object(objects, object_id, method, args):
 	if not objects.has(object_id):

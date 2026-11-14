@@ -1,0 +1,3 @@
+d16943098177c719820de78f664d4cde3a9c4f997f25ccfa6a1f9b7e18098bd4  upstream/core/object/object.cpp
+ae63d1a000fef6a0854587820d1c920fb5417c1fa7326d4fea1b8a21771c84c3  upstream/core/object/ref_counted.cpp
+05ef9e22f969dd4e93d5682e898b86e0ed646bf6d21a0225de9c7d68193bf074  upstream/core/object/ref_counted.h

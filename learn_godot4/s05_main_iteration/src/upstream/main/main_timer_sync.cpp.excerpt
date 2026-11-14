@@ -1,4 +1,6 @@
-/* Godot source excerpt. Upstream: engine/godot-4.7/main/main_timer_sync.cpp
+/*
+ * Godot 4 source excerpt.
+ * Upstream: engine/godot-4.7/main/main_timer_sync.cpp
  * Original line ranges are copied from the local source snapshot.
  * Study excerpt; not a standalone compilation unit.
  * Copyright and license notice: Godot Engine; see course-root SOURCE_LICENSE.txt.

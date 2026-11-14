@@ -1,5 +1,5 @@
 /*
- * Godot 1.1 source excerpt.
+ * Godot 1 source excerpt.
  * Upstream: engine/godot-1.1/core/object.cpp
  * Original line ranges are copied from the local source snapshot.
  * Study excerpt; not a standalone compilation unit.
@@ -42,7 +42,7 @@
 			*r_valid=true;
 		return;
 	} else {
-		//something inside the object... :|
+		//something inside the object... :|		
 		bool success = _setv(p_name,p_value);
 		if (success) {
 			if (r_valid)

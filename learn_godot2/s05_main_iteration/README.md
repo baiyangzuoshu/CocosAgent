@@ -6,11 +6,9 @@
 
 把固定步累积、每帧 process/idle 与服务器同步绘制接在同一帧模型里，并显式记录步数上限和余量。
 
-## 本课问题
+**本课要回答：** 固定步长如何从 OS 时间差得到？SceneTree 固定回调和 idle 回调处在主循环的什么位置？绘制何时发生？
 
-固定步长如何从 OS 时间差得到？SceneTree 固定回调和 idle 回调处在主循环的什么位置？绘制何时发生？
-
-## 源码调用链
+## C++ 源码追踪
 
 源码依据：`engine/godot-2.1/`（Godot 2.1 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
@@ -25,26 +23,25 @@
 
 ## 本课源码复刻
 
-`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-2.1` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+完整上游文件按原路径复制到 src/upstream；摘录保留快照中的原始行段，每个完整文件都有 SHA-256 校验项。清单见 [src/README.md](src/README.md) 与 [src/SOURCE_SHA256.txt](src/SOURCE_SHA256.txt)。
 
-| 阅读顺序 | 完整源码副本 | 摘录 | 上游路径 | 行段 |
-| --- | --- | --- | --- | --- |
-| 1 | [main.cpp](src/upstream/main/main.cpp) | [摘录](src/upstream/main/main.cpp.excerpt) | `engine/godot-2.1/main/main.cpp` | 1494-1520, 1523-1550, 1557-1583 |
-| 2 | [node.cpp](src/upstream/scene/main/node.cpp) | [摘录](src/upstream/scene/main/node.cpp.excerpt) | `engine/godot-2.1/scene/main/node.cpp` | 52-73, 2179-2180 |
+| 阅读顺序 | 完整上游副本 | 原始行号摘录 | 上游快照路径 |
+| --- | --- | --- | --- |
+| 1 | [main.cpp](src/upstream/main/main.cpp) | [1494-1520 ; 1523-1550 ; 1557-1583](src/upstream/main/main.cpp.excerpt) | engine/godot-2.1/main/main.cpp |
+| 2 | [node.cpp](src/upstream/scene/main/node.cpp) | [52-73 ; 2179-2180](src/upstream/scene/main/node.cpp.excerpt) | engine/godot-2.1/scene/main/node.cpp |
 
-## GDScript 源码复刻与 C++ 对照
+## GDScript 源码复刻
 
-模型从零初始余量开始，用固定 55 ms step 和 20 ms frame_slice 复现单次输入限幅、time_accum 消耗、fixed 次数与余量；真实时间由 OS 提供，跨帧余量和后端绘制以对应版本源码为准。
+S05 Godot 2.1: clamp incoming step, consume fixed slices, then idle and draw.
 
-src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
 
-| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
-| --- | --- | --- |
-| Main::iteration elapsed-time accumulator | _measure_frame_time() | 计算固定步数、帧 delta 和余量 |
-| fixed/physics iteration | _physics_tick() | 记录准备、回调、服务器 step 和队列冲刷 |
-| idle/process and rendering | _process_idle() → _render_frame() | 展示分代帧回调及可绘制条件 |
+| GDScript 函数 | 复刻步骤 |
+| --- | --- |
+| _advance_time() | 累计经过时间并计算固定步数、process delta 和余量 |
+| _fixed_step() | 逐个执行固定物理阶段并记录服务器同步顺序 |
+| _idle_and_draw() | 执行一次 process/idle 并记录 draw 或 sync 提交 |
 
-独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：frame_probe.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 - `engine.cfg` 使用 Godot 2.1 项目配置，指定文本场景 `main.tscn`。

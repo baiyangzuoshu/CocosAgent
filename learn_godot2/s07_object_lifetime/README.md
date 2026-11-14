@@ -6,11 +6,9 @@
 
 用 ObjectDB 实例 ID 表对比普通 Object 显式 free 与引用计数对象最后一次 unref。
 
-## 本课问题
+**本课要回答：** `ObjectDB` 如何登记实例 ID？`NOTIFICATION_PREDELETE` 在什么阶段发生？`Reference::unreference()` 如何影响对象实际析构？
 
-`ObjectDB` 如何登记实例 ID？`NOTIFICATION_PREDELETE` 在什么阶段发生？`Reference::unreference()` 如何影响对象实际析构？
-
-## 源码调用链
+## C++ 源码追踪
 
 源码依据：`engine/godot-2.1/`（Godot 2.1 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
@@ -24,27 +22,28 @@
 
 ## 本课源码复刻
 
-`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-2.1` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+完整上游文件按原路径复制到 src/upstream；摘录保留快照中的原始行段，每个完整文件都有 SHA-256 校验项。清单见 [src/README.md](src/README.md) 与 [src/SOURCE_SHA256.txt](src/SOURCE_SHA256.txt)。
 
-| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
-| --- | --- | --- | --- | --- |
-| 1 | [object.cpp](src/upstream/core/object.cpp) | [摘录](src/upstream/core/object.cpp.excerpt) | `engine/godot-2.1/core/object.cpp` | 257-265, 1718-1724, 1739-1777 |
-| 2 | [reference.cpp](src/upstream/core/reference.cpp) | [摘录](src/upstream/core/reference.cpp.excerpt) | `engine/godot-2.1/core/reference.cpp` | 65-80 |
-| 3 | [reference.h](src/upstream/core/reference.h) | [摘录](src/upstream/core/reference.h.excerpt) | `engine/godot-2.1/core/reference.h` | 281-304 |
+| 阅读顺序 | 完整上游副本 | 原始行号摘录 | 上游快照路径 |
+| --- | --- | --- | --- |
+| 1 | [object.cpp](src/upstream/core/object.cpp) | [257-265 ; 1718-1724 ; 1739-1777](src/upstream/core/object.cpp.excerpt) | engine/godot-2.1/core/object.cpp |
+| 2 | [reference.cpp](src/upstream/core/reference.cpp) | [65-80](src/upstream/core/reference.cpp.excerpt) | engine/godot-2.1/core/reference.cpp |
+| 3 | [reference.h](src/upstream/core/reference.h) | [281-304](src/upstream/core/reference.h.excerpt) | engine/godot-2.1/core/reference.h |
 
-## GDScript 源码复刻与 C++ 对照
+## GDScript 源码复刻
 
-模型维护 ObjectDB 风格的实例 ID 表，分别执行普通 Object 显式 free 与 Reference/RefCounted 最后一个引用归零的销毁路径。
+S07 Godot 2.1: ObjectDB lifetime is explicit for Object, refcount-driven for Reference.
 
-src/upstream/ 保存本课引用的完整上游文件副本和带原始行号的摘录；src/source_replay.gd 执行表中的教学模型。先观察模型如何改变状态或走分支，再回到对应 C++ 函数核对。模型不替代 C++，也不代表引擎运行时本身。
+source_replay.gd 按本课指定快照复刻控制流与状态传递，模型中的状态字段、函数入口和 API 名称对应本代 C++ 路径。根目录实验脚本先运行模型，再调用对应版本的 Godot API。
 
-| C++ 追踪阶段 | 模型函数 | 运行时要观察什么 |
-| --- | --- | --- |
-| ObjectDB registration | _objectdb_insert() / _objectdb_get() | 分配实例 ID 并按 ID 查找对象 |
-| Object::free() | _objectdb_erase() | 普通 Object 显式释放并注销 |
-| Reference/RefCounted ref/unref | _reference() / _unreference() | 最后一个所有者归零后销毁 |
+| GDScript 函数 | 复刻步骤 |
+| --- | --- |
+| _register() | 按实例 ID/ObjectID 查询对象数据库 |
+| _lookup() | 按实例 ID/ObjectID 查询对象数据库 |
+| _remove() | 移除 ObjectDB 项或更新引用计数直到销毁 |
+| _ref() | 移除 ObjectDB 项或更新引用计数直到销毁 |
+| _unref() | 移除 ObjectDB 项或更新引用计数直到销毁 |
 
-独立项目入口先调用 source_replay.gd，再执行真实 Godot API 实验。实验脚本：lifetime_probe.gd, manual_object.gd, reference_probe.gd。模型输出是确定性的教学数据；只有实际用对应版本 Godot 运行后，才能记录为引擎实验验证。
 ## 最小 Godot/GDScript 实验
 
 - `engine.cfg` 使用本代项目配置并指定 format 1 场景 `main.tscn`。
