@@ -38,5 +38,5 @@ func _run_experiment():
 	var light = DirectionalLight.new()
 	light.set_color(Light.COLOR_DIFFUSE, Color(1, 0.95, 0.8))
 	world.add_child(light)
-	print("Experiment: compare the resource parameter with the server-side material/light update path.")
+	print("Experiment: compare FixedMaterial and Light parameters with their server update paths.")
 

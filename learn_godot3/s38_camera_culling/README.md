@@ -47,7 +47,7 @@ Camera::make_current / projection → VisualServerScene::render_camera → _cull
 
 ## 最小 Godot/GDScript 实验
 
-**实验：Camera 投影与可见性。** 创建当前 Camera 和网格，修改相机位置/投影参数，观察对象是否进入视野并对照裁剪入口。
+**实验：Camera 投影与可见性。** 脚本显式设置当前相机的位置、视场角和 near/far；先观察默认网格，再修改这些参数并重新运行，对照视野变化和 C++ 裁剪入口。
 
 
 
@@ -64,7 +64,7 @@ Camera::make_current / projection → VisualServerScene::render_camera → _cull
 godot --path .
 ```
 
-**预期观察：** 启动后先打印 GDScript 模型中的状态转移，再执行本课公开 API 实验。模型打印用于检查调用顺序；只有引擎实际运行并留下日志后，才能把预期观察记为运行验证。
+**预期观察：** 模型先输出相机/可见性状态；运行时先观察当前视野中的网格。将脚本中的相机位置或投影参数改动后重新运行，比较网格是否进入视野，再回到源码中的裁剪路径。
 
 **动手改一处：** 按实验主题修改一个输入、尺寸、变换、材质或可见性参数；先预测状态/输出，再沿上方 C++ 链找出负责更新的函数。
 

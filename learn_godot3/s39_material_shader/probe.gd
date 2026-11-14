@@ -22,5 +22,8 @@ func _run_experiment():
 	var material = SpatialMaterial.new()
 	material.albedo_color = Color(1, 0.2, 0.2)
 	mesh_node.set_material_override(material)
-	print("Experiment: compare the resource parameter with the server-side material/light update path.")
+	var light = DirectionalLight.new()
+	light.light_color = Color(1, 0.95, 0.8)
+	world.add_child(light)
+	print("Experiment: compare material albedo and directional-light color with their server update paths.")
 

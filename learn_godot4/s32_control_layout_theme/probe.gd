@@ -10,6 +10,8 @@ func _ready():
 
 func _run_experiment():
 	var row = HBoxContainer.new()
+	row.position = Vector2(24, 32)
+	row.size = Vector2(520, 64)
 	add_child(row)
 	var first = Button.new()
 	var second = Button.new()
@@ -18,5 +20,5 @@ func _run_experiment():
 	first.custom_minimum_size = Vector2(120, 32)
 	row.add_child(first)
 	row.add_child(second)
-	print("Experiment: resize the window and compare container-managed child positions.")
+	print("Experiment: edit the HBoxContainer size and compare its allocated child rectangles.")
 

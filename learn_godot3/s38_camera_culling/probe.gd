@@ -18,6 +18,7 @@ func _run_experiment():
 	var camera = Camera.new()
 	world.add_child(camera)
 	camera.set_translation(Vector3(0, 0, 5))
+	camera.set_perspective(70, 0.1, 100)
 	camera.make_current()
-	print("Experiment: move the current camera and compare the mesh against the view volume.")
+	print("Experiment: edit camera position/FOV or near/far, rerun, and compare mesh visibility.")
 

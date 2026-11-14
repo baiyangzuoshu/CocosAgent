@@ -49,7 +49,7 @@ Control minimum-size cache → Container::queue_sort → _sort_children → Them
 
 ## 最小 Godot/GDScript 实验
 
-**实验：Container 最小尺寸和主题布局。** 把两个 Button 放进 HBoxContainer，给第一个设置最小尺寸；调整窗口并观察 Container 重排子项。
+**实验：Container 最小尺寸和主题布局。** 把两个 Button 放进有明确位置和尺寸的 HBoxContainer，给第一个设置自定义最小尺寸；观察子项分配结果，修改容器尺寸后重新运行比较布局。
 
 
 
@@ -66,7 +66,7 @@ Control minimum-size cache → Container::queue_sort → _sort_children → Them
 godot --path .
 ```
 
-**预期观察：** 启动后先打印 GDScript 模型中的状态转移，再执行本课公开 API 实验。模型打印用于检查调用顺序；只有引擎实际运行并留下日志后，才能把预期观察记为运行验证。
+**预期观察：** 模型输出尺寸传播和排序请求；运行时 HBoxContainer 会按子项最小尺寸分配水平空间。修改探针中的容器尺寸再运行，可比较子项布局变化。
 
 **动手改一处：** 按实验主题修改一个输入、尺寸、变换、材质或可见性参数；先预测状态/输出，再沿上方 C++ 链找出负责更新的函数。
 

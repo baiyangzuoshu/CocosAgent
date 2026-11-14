@@ -44,7 +44,7 @@ Material3D::_update_shader / set_albedo → ShaderMaterial parameter → VisualS
 
 ## 最小 Godot/GDScript 实验
 
-**实验：Material、Shader 与 Light 参数。** 给网格设置本代材质颜色；旧版 1/2 另设置 DirectionalLight 颜色，对照参数如何写入服务器状态。
+**实验：Material、Shader 与 Light 参数。** 给网格设置本代材质颜色并加入 DirectionalLight；Godot 1/2 使用 FixedMaterial/Light 参数 API，Godot 3/4 使用 SpatialMaterial/StandardMaterial3D 和 light_color，对照服务器更新路径。
 
 
 
@@ -61,7 +61,7 @@ Material3D::_update_shader / set_albedo → ShaderMaterial parameter → VisualS
 godot --path .
 ```
 
-**预期观察：** 启动后先打印 GDScript 模型中的状态转移，再执行本课公开 API 实验。模型打印用于检查调用顺序；只有引擎实际运行并留下日志后，才能把预期观察记为运行验证。
+**预期观察：** 模型输出材质/灯光参数更新；运行时场景显示设置了材质并由方向光照亮的网格。逐个修改 albedo 或 light_color 后重运行，对照参数写入路径。
 
 **动手改一处：** 按实验主题修改一个输入、尺寸、变换、材质或可见性参数；先预测状态/输出，再沿上方 C++ 链找出负责更新的函数。
 

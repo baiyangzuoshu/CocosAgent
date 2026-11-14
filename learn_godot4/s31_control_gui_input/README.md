@@ -50,7 +50,7 @@ Window::_window_input → Viewport::_gui_input_event → _gui_find_control_at_po
 
 ## 最小 Godot/GDScript 实验
 
-**实验：Control 命中、焦点与 GUI 输入。** 点击运行时创建的 Button，按 Tab 切换焦点并检查 pressed 回调；模型输出显示目标 Control 与 handled 状态。
+**实验：Control 命中、焦点与 GUI 输入。** 创建两个可聚焦 Button，点击分别观察 pressed 回调，按 Tab 在两个控件间切换焦点；源码模型单独打印模拟命中目标与 handled 状态。
 
 
 
@@ -67,7 +67,7 @@ Window::_window_input → Viewport::_gui_input_event → _gui_find_control_at_po
 godot --path .
 ```
 
-**预期观察：** 启动后先打印 GDScript 模型中的状态转移，再执行本课公开 API 实验。模型打印用于检查调用顺序；只有引擎实际运行并留下日志后，才能把预期观察记为运行验证。
+**预期观察：** 模型先打印 hit-test → focus → GUI dispatch → accept_event，并输出模拟目标与 handled 状态。运行时窗口提供两个按钮；点击可看到对应回调，按 Tab 可在两个焦点目标间切换。
 
 **动手改一处：** 按实验主题修改一个输入、尺寸、变换、材质或可见性参数；先预测状态/输出，再沿上方 C++ 链找出负责更新的函数。
 

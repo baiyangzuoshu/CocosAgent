@@ -18,6 +18,9 @@ func _run_experiment():
 	var camera = Camera3D.new()
 	world.add_child(camera)
 	camera.position = Vector3(0, 0, 5)
+	camera.fov = 70.0
+	camera.near = 0.1
+	camera.far = 100.0
 	camera.make_current()
-	print("Experiment: move the current camera and compare the mesh against the view volume.")
+	print("Experiment: edit camera position/FOV or near/far, rerun, and compare mesh visibility.")
 
