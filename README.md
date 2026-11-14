@@ -29,6 +29,7 @@
 | --- | --- |
 | [OpenAI 官方资料](learn_openai/README.md) | 按主题学习 OpenAI API、模型能力和开发工具。 |
 | [Anthropic 官方资料](learn_anthropic/README.md) | 学习 Anthropic、Claude 产品与开发者平台资料。 |
+| [LangGraph 1.2.22 Python](learn_langgraph/README.md) | 对照 AI/langgraph-main 快照学习图编译、Pregel 运行时、流式执行与持久化恢复。 |
 | [Claude Code](learn_claude_code/README.md) | 根据仓库中的源码快照追踪 CLI 启动、请求、工具和扩展。 |
 | [Claude Code Game Studios](learn_claude_code_game_studios/README.md) | 学习该仓库快照中的游戏开发工作流与配置。 |
 | [DeepSeek Harness](learn-dsh/README.md) | 用 TypeScript 与 Deno 逐课搭建简化的 Harness 示例。 |
