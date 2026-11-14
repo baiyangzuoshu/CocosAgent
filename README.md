@@ -27,6 +27,7 @@
 
 | 课程 | 内容 |
 | --- | --- |
+| [LangChain 1.x Python](learn_langchain/README.md) | 对照 `AI/langchain-master` 快照逐课学习 LangChain 与 langchain-core 的架构、组合、检索和 Agent。 |
 | [OpenAI 官方资料](learn_openai/README.md) | 按主题学习 OpenAI API、模型能力和开发工具。 |
 | [Anthropic 官方资料](learn_anthropic/README.md) | 学习 Anthropic、Claude 产品与开发者平台资料。 |
 | [LangGraph 1.2.22 Python](learn_langgraph/README.md) | 对照 AI/langgraph-main 快照学习图编译、Pregel 运行时、流式执行与持久化恢复。 |
