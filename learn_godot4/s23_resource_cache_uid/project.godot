@@ -1,0 +1,6 @@
+config_version=7
+
+[application]
+
+config/name="Godot 4.7 S23 ResourceCache、ResourceUID 与路径映射"
+run/main_scene="res://main.tscn"

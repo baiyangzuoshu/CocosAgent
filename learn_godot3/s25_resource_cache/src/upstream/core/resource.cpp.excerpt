@@ -1,0 +1,22 @@
+/*
+ * Godot 3 source excerpt.
+ * Upstream: engine/godot-3.6/core/resource.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 440-452 */
+Resource *ResourceCache::get(const String &p_path) {
+	lock.read_lock();
+
+	Resource **res = resources.getptr(p_path);
+
+	lock.read_unlock();
+
+	if (!res) {
+		return nullptr;
+	}
+
+	return *res;
+}

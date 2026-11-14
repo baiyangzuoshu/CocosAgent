@@ -1,0 +1,24 @@
+/*
+ * Godot 4 source excerpt.
+ * Upstream: engine/godot-4.7/core/io/resource_loader.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1412-1426 */
+ResourceUID::ID ResourceLoader::get_resource_uid(const String &p_path) {
+	const String local_path = _validate_local_path(p_path);
+	if (!Engine::get_singleton()->is_editor_hint()) {
+		return ResourceUID::get_singleton()->get_path_id(local_path);
+	}
+
+	for (int i = 0; i < loader_count; i++) {
+		ResourceUID::ID id = loader[i]->get_resource_uid(local_path);
+		if (id != ResourceUID::INVALID_ID) {
+			return id;
+		}
+	}
+
+	return ResourceUID::INVALID_ID;
+}

@@ -1,0 +1,39 @@
+/*
+ * Godot 2 source excerpt.
+ * Upstream: engine/godot-2.1/scene/resources/packed_scene.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1660-1663 */
+Error PackedScene::pack(Node *p_scene) {
+
+	return state->pack(p_scene);
+}
+
+/* Upstream lines 1675-1698 */
+Node *PackedScene::instance(bool p_gen_edit_state) const {
+
+#ifndef TOOLS_ENABLED
+	if (p_gen_edit_state) {
+		ERR_EXPLAIN("Edit state is only for editors, does not work without tools compiled");
+		ERR_FAIL_COND_V(p_gen_edit_state, NULL);
+	}
+#endif
+
+	Node *s = state->instance(p_gen_edit_state);
+	if (!s)
+		return NULL;
+
+	if (p_gen_edit_state) {
+		s->set_scene_instance_state(state);
+	}
+
+	if (get_path() != "" && get_path().find("::") == -1)
+		s->set_filename(get_path());
+
+	s->notification(Node::NOTIFICATION_INSTANCED);
+
+	return s;
+}

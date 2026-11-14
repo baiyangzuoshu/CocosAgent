@@ -6,7 +6,9 @@
 
 服务器类何时进入 ClassDB？`RenderingServer` 单例又何时对脚本发布？物理/导航初始化与场景注册之间的边界是什么？
 
-## C++ 源码追踪
+## 源码调用链
+
+源码依据：`engine/godot-4.7/`（Godot 4.7 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
 以下路径相对于 `engine/godot-4.7/` 快照根目录：
 
@@ -20,7 +22,22 @@
 
 调用摘要：服务类注册 → 场景类与场景单例注册 → 物理/导航服务初始化 → 发布服务器单例 → 初始化脚本语言。ClassDB 注册类型与 Engine 发布服务实例是两个不同阶段。
 
-## 最小实验
+## 本课源码复刻
+
+`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-4.7` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+
+| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
+| --- | --- | --- | --- | --- |
+| 1 | [core_bind.cpp](src/upstream/core/core_bind.cpp) | [摘录](src/upstream/core/core_bind.cpp.excerpt) | `engine/godot-4.7/core/core_bind.cpp` | 1599-1600 |
+| 2 | [main.cpp](src/upstream/main/main.cpp) | [摘录](src/upstream/main/main.cpp.excerpt) | `engine/godot-4.7/main/main.cpp` | 1016-1032 |
+| 3 | [register_server_types.cpp](src/upstream/servers/register_server_types.cpp) | [摘录](src/upstream/servers/register_server_types.cpp.excerpt) | `engine/godot-4.7/servers/register_server_types.cpp` | 146-170 |
+| 4 | [rendering_server.cpp](src/upstream/servers/rendering/rendering_server.cpp) | [摘录](src/upstream/servers/rendering/rendering_server.cpp.excerpt) | `engine/godot-4.7/servers/rendering/rendering_server.cpp` | 3511-3511 |
+
+## 可运行源码复刻
+
+课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+
+## 最小 Godot/GDScript 实验
 
 - `project.godot`：Godot 4.7 项目配置，版本 5。
 - `main.tscn`：format 3 文本场景。
@@ -38,13 +55,8 @@ godot
 
 本课只跟踪桌面项目的主要初始化顺序，省略各服务器后端创建细节、扩展初始化级别和禁用模块的编译分支。Godot 4 的 `RenderingServer`、`ClassDB` 和 `Engine` 注册方式不套用到旧版本。本课依据静态源码，未运行实验。
 
-## 本课 C++ 源码摘录
+## 下一课
 
-课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+继续阅读 [s04_main_loop_creation](../s04_main_loop_creation/README.md)。
 
-| 课内摘录 | Godot 源文件 | 上游行段 |
-| --- | --- | --- |
-| [core_bind.cpp](src/upstream/core/core_bind.cpp.excerpt) | godot-4.7/core/core_bind.cpp | 1599-1600 |
-| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-4.7/main/main.cpp | 1016-1032, 3033-3041, 3212-3229, 3776-3795, 3858-3867 |
-| [register_server_types.cpp](src/upstream/servers/register_server_types.cpp.excerpt) | godot-4.7/servers/register_server_types.cpp | 146-170, 393-418 |
-| [rendering_server.cpp](src/upstream/servers/rendering/rendering_server.cpp.excerpt) | godot-4.7/servers/rendering/rendering_server.cpp | 3511-3511 |
+源码版权与许可说明见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。

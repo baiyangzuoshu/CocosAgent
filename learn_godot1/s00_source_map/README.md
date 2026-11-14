@@ -6,7 +6,9 @@
 
 Godot 1.1 如何把版本元数据编译进引擎？这个版本为什么不能像 Godot 3/4 一样从 GDScript 调用版本字典？用什么最小脚本确认旧版脚本运行路径？
 
-## 源码对照
+## 源码调用链
+
+源码依据：`engine/godot-1.1/`（Godot 1.1 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
 以下路径相对于仓库根目录：
 
@@ -34,12 +36,29 @@ Godot 1.1 如何把版本元数据编译进引擎？这个版本为什么不能�
 
 目录只表示源码职责导航，不表示它们会在同一个调用栈里直接相连。
 
-## 实验文件
+## 本课源码复刻
+
+`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-1.1` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+
+| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
+| --- | --- | --- | --- | --- |
+| 1 | [main_loop.cpp](src/upstream/core/os/main_loop.cpp) | [摘录](src/upstream/core/os/main_loop.cpp.excerpt) | `engine/godot-1.1/core/os/main_loop.cpp` | 71-87 |
+| 2 | [typedefs.h](src/upstream/core/typedefs.h) | [摘录](src/upstream/core/typedefs.h.excerpt) | `engine/godot-1.1/core/typedefs.h` | 44-45 |
+| 3 | [main.cpp](src/upstream/main/main.cpp) | [摘录](src/upstream/main/main.cpp.excerpt) | `engine/godot-1.1/main/main.cpp` | 117-117, 911-913 |
+| 4 | [methods.py](src/upstream/methods.py) | [摘录](src/upstream/methods.py.excerpt) | `engine/godot-1.1/methods.py` | 1085-1102 |
+| 5 | [project_manager.cpp](src/upstream/tools/editor/project_manager.cpp) | [摘录](src/upstream/tools/editor/project_manager.cpp.excerpt) | `engine/godot-1.1/tools/editor/project_manager.cpp` | 840-840 |
+| 6 | [version.py](src/upstream/version.py) | [摘录](src/upstream/version.py.excerpt) | `engine/godot-1.1/version.py` | 1-7 |
+
+## 可运行源码复刻
+
+课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+
+## 最小 Godot/GDScript 实验
 
 - `engine.cfg`：Godot 1.1 项目标识；本实验使用脚本 MainLoop，不配置场景文件。
 - `source_map.gd`：在 `init()` 打印源码快照和运行平台，随后由 `iteration()` 结束本次运行。
 
-## 运行
+## 运行与预期观察
 
 在本目录使用 Godot 1.1 命令行程序运行：
 
@@ -49,23 +68,14 @@ godot -path . -s res://source_map.gd
 
 命令中的 `-s` 对应源码中加载 MainLoop 脚本的分支。若要确认二进制的实际版本，另看 Godot 1.1 工具启动标识或 Project Manager 版本标签；本实验脚本不会伪造一个不存在的版本查询 API。
 
-## 观察结果
-
 输出包含 `Godot 1.1 stable`、当前平台名，以及提示通过旧版工具标识确认运行时版本。确认 `iteration()` 返回 `true` 后程序结束；这同时验证了脚本被作为 MainLoop 执行。
 
 ## 简化与边界
 
 本课不编译引擎、不生成二进制场景，也不验证各平台构建。版本显示只用于确认运行二进制报告的版本字符串；若要对齐某个源码提交，还需要构建信息或提交标识。
 
-## 本课 C++ 源码摘录
+## 下一课
 
-课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+继续阅读 [s01_platform_entry](../s01_platform_entry/README.md)。
 
-| 课内摘录 | Godot 源文件 | 上游行段 |
-| --- | --- | --- |
-| [main_loop.cpp](src/upstream/core/os/main_loop.cpp.excerpt) | godot-1.1/core/os/main_loop.cpp | 71-87 |
-| [typedefs.h](src/upstream/core/typedefs.h.excerpt) | godot-1.1/core/typedefs.h | 44-45 |
-| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-1.1/main/main.cpp | 117-117, 911-913 |
-| [methods.py](src/upstream/methods.py.excerpt) | godot-1.1/methods.py | 1085-1102 |
-| [project_manager.cpp](src/upstream/tools/editor/project_manager.cpp.excerpt) | godot-1.1/tools/editor/project_manager.cpp | 840-840 |
-| [version.py](src/upstream/version.py.excerpt) | godot-1.1/version.py | 1-7 |
+源码版权与许可说明见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。

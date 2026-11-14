@@ -6,7 +6,9 @@
 
 `application/run/main_scene` 什么时候选为启动路径？`MainLoop` 如何由 ClassDB 创建？SceneTree 的当前场景何时挂到 root？
 
-## C++ 源码追踪
+## 源码调用链
+
+源码依据：`engine/godot-4.7/`（Godot 4.7 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
 以下路径相对于 `engine/godot-4.7/` 快照根目录：
 
@@ -19,7 +21,21 @@
 
 调用摘要：确定主场景路径 → 创建 `MainLoop`（默认 `SceneTree`）并交给 OS → 加载/实例化 PackedScene → 设置当前场景并挂到 root → 平台调用 SceneTree 初始化。S01 追踪的平台回调负责在 `Main::start()` 返回后初始化主循环；本课聚焦主循环和场景对象的构造。
 
-## 最小实验
+## 本课源码复刻
+
+`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-4.7` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+
+| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
+| --- | --- | --- | --- | --- |
+| 1 | [main.cpp](src/upstream/main/main.cpp) | [摘录](src/upstream/main/main.cpp.excerpt) | `engine/godot-4.7/main/main.cpp` | 4013-4013, 4335-4346, 4360-4438 |
+| 2 | [node.cpp](src/upstream/scene/main/node.cpp) | [摘录](src/upstream/scene/main/node.cpp.excerpt) | `engine/godot-4.7/scene/main/node.cpp` | 3868-3868 |
+| 3 | [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp) | [摘录](src/upstream/scene/main/scene_tree.cpp.excerpt) | `engine/godot-4.7/scene/main/scene_tree.cpp` | 586-591, 1954-1954 |
+
+## 可运行源码复刻
+
+课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+
+## 最小 Godot/GDScript 实验
 
 - `project.godot`：Godot 4.7 项目配置，版本 5，指定 `main.tscn`。
 - `main.tscn`：format 3 文本场景，root Node 挂接脚本。
@@ -37,12 +53,8 @@ godot
 
 实验使用当前目录中的项目配置和默认 `SceneTree`，不传命令行覆盖路径，不处理脚本型 MainLoop、编辑器或自定义运行工具。Godot 4.7 的 `instantiate()`、ClassDB 和 SceneTree 初始化顺序不外推到旧代。本课依据静态源码，尚未运行。
 
-## 本课 C++ 源码摘录
+## 下一课
 
-课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+继续阅读 [s05_main_iteration](../s05_main_iteration/README.md)。
 
-| 课内摘录 | Godot 源文件 | 上游行段 |
-| --- | --- | --- |
-| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-4.7/main/main.cpp | 4013-4013, 4335-4346, 4360-4438, 4753-4768 |
-| [node.cpp](src/upstream/scene/main/node.cpp.excerpt) | godot-4.7/scene/main/node.cpp | 3868-3868 |
-| [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp.excerpt) | godot-4.7/scene/main/scene_tree.cpp | 586-591, 1954-1954 |
+源码版权与许可说明见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。

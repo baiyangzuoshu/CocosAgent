@@ -1,0 +1,16 @@
+/*
+ * Godot 1 source excerpt.
+ * Upstream: engine/godot-1.1/platform/osx/os_osx.mm
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1505-1511 */
+void OS_OSX::push_input(const InputEvent& p_event) {
+
+	InputEvent ev=p_event;
+	ev.ID=last_id++;
+	//print_line("EV: "+String(ev));
+	input->parse_input_event(ev);
+}

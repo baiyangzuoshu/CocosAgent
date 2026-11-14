@@ -1,0 +1,84 @@
+/*
+ * Godot 4 source excerpt.
+ * Upstream: engine/godot-4.7/core/io/resource_loader.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 275-333 */
+Ref<Resource> ResourceLoader::_load(const String &p_path, const String &p_original_path, const String &p_type_hint, CacheMode p_cache_mode, Error *r_error, bool p_use_sub_threads, float *r_progress) {
+	const String &original_path = p_original_path.is_empty() ? p_path : p_original_path;
+	load_nesting++;
+
+	print_verbose(vformat("Loading resource: %s remapped: %s", p_path, _path_remap(p_path)));
+
+	// Try all loaders and pick the first match for the type hint
+	bool found = false;
+	Ref<Resource> res;
+	for (int i = 0; i < loader_count; i++) {
+		if (!loader[i]->recognize_path(p_path, p_type_hint)) {
+			continue;
+		}
+		found = true;
+		res = loader[i]->load(p_path, original_path, r_error, p_use_sub_threads, r_progress, p_cache_mode);
+		if (res.is_valid()) {
+			break;
+		}
+	}
+
+	res_ref_overrides.erase(load_nesting);
+	load_nesting--;
+
+	if (res.is_valid()) {
+		return res;
+	} else {
+		print_verbose(vformat("Failed loading resource: %s", p_path));
+	}
+
+#ifdef TOOLS_ENABLED
+	if (Engine::get_singleton()->is_editor_hint()) {
+		if (ResourceFormatImporter::get_singleton()->get_importer_by_file(p_path).is_valid()) {
+			// The format is known to the editor, but the file hasn't been imported
+			// (otherwise, ResourceFormatImporter would have been found as a suitable loader).
+			found = true;
+			if (r_error) {
+				*r_error = ERR_FILE_NOT_FOUND;
+			}
+		}
+	}
+#endif
+
+	ERR_FAIL_COND_V_MSG(found, Ref<Resource>(), vformat("Failed loading resource: %s.", p_path));
+
+#ifdef TOOLS_ENABLED
+	Ref<FileAccess> file_check = FileAccess::create(FileAccess::ACCESS_RESOURCES);
+	if (!file_check->file_exists(p_path)) {
+		if (r_error) {
+			*r_error = ERR_FILE_NOT_FOUND;
+		}
+		ERR_FAIL_V_MSG(Ref<Resource>(), vformat("Resource file not found: %s (expected type: %s)", p_path, !p_type_hint.is_empty() ? p_type_hint : "unknown"));
+	}
+#endif
+
+	if (r_error) {
+		*r_error = ERR_FILE_UNRECOGNIZED;
+	}
+	ERR_FAIL_V_MSG(Ref<Resource>(), vformat("No loader found for resource: %s (expected type: %s)", p_path, !p_type_hint.is_empty() ? p_type_hint : "unknown"));
+}
+
+/* Upstream lines 1270-1283 */
+void ResourceLoader::add_resource_format_loader(Ref<ResourceFormatLoader> p_format_loader, bool p_at_front) {
+	ERR_FAIL_COND(p_format_loader.is_null());
+	ERR_FAIL_COND(loader_count >= MAX_LOADERS);
+
+	if (p_at_front) {
+		for (int i = loader_count; i > 0; i--) {
+			loader[i] = loader[i - 1];
+		}
+		loader[0] = p_format_loader;
+		loader_count++;
+	} else {
+		loader[loader_count++] = p_format_loader;
+	}
+}

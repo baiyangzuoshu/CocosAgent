@@ -1,0 +1,13 @@
+/*
+ * Godot 3 source excerpt.
+ * Upstream: engine/godot-3.6/platform/osx/os_osx.mm
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 3418-3421 */
+void OS_OSX::push_input(const Ref<InputEvent> &p_event) {
+	Ref<InputEvent> ev = p_event;
+	input->parse_input_event(ev);
+}

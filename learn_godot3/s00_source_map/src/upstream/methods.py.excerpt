@@ -1,8 +1,8 @@
-# Godot 3 source excerpts.
+# Godot 3.6 source excerpt.
 # Upstream: engine/godot-3.6/methods.py
 # Original line ranges are copied from the local source snapshot.
-# Study excerpt; not a standalone compilation unit.
-# Copyright and license notice: Godot Engine; see ../../../SOURCE_LICENSE.txt.
+# Study excerpt; not a standalone module.
+# Copyright and license notice: Godot Engine; see course-root SOURCE_LICENSE.txt.
 
 # Upstream lines 235-252
     f = open("core/version_generated.gen.h", "w")

@@ -1,0 +1,39 @@
+/*
+ * Godot 2 source excerpt.
+ * Upstream: engine/godot-2.1/core/resource.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 152-181 */
+void Resource::set_path(const String &p_path, bool p_take_over) {
+
+	if (path_cache == p_path)
+		return;
+
+	if (path_cache != "") {
+
+		ResourceCache::resources.erase(path_cache);
+	}
+
+	path_cache = "";
+	if (ResourceCache::resources.has(p_path)) {
+		if (p_take_over) {
+
+			ResourceCache::resources.get(p_path)->set_name("");
+		} else {
+			ERR_EXPLAIN("Another resource is loaded from path: " + p_path);
+			ERR_FAIL_COND(ResourceCache::resources.has(p_path));
+		}
+	}
+	path_cache = p_path;
+
+	if (path_cache != "") {
+
+		ResourceCache::resources[path_cache] = this;
+	}
+
+	_change_notify("resource/path");
+	_resource_path_changed();
+}

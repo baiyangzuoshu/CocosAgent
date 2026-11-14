@@ -1,0 +1,106 @@
+/*
+ * Godot 4 source excerpt.
+ * Upstream: engine/godot-4.7/scene/main/viewport.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 3489-3553 */
+void Viewport::push_input(RequiredParam<InputEvent> rp_event, bool p_local_coords) {
+	ERR_MAIN_THREAD_GUARD;
+	ERR_FAIL_COND(!is_inside_tree());
+	EXTRACT_PARAM_OR_FAIL(p_event, rp_event);
+
+	if (disable_input || disable_input_override) {
+		return;
+	}
+
+	if (Engine::get_singleton()->is_editor_hint() && get_tree()->get_edited_scene_root() && get_tree()->get_edited_scene_root()->is_ancestor_of(this)) {
+		return;
+	}
+
+	local_input_handled = false;
+	if (!handle_input_locally) {
+		Viewport *vp = this;
+		while (true) {
+			if (Object::cast_to<Window>(vp) || !vp->get_parent()) {
+				break;
+			}
+			vp = vp->get_parent()->get_viewport();
+		}
+		vp->local_input_handled = false;
+	}
+
+	Ref<InputEvent> ev;
+	if (!p_local_coords) {
+		ev = _make_input_local(p_event);
+	} else {
+		ev = p_event;
+	}
+
+	Ref<InputEventMouse> me = ev;
+	if (me.is_valid()) {
+		_update_mouse_over(me);
+	}
+
+	if (is_embedding_subwindows() && _sub_windows_forward_input(ev)) {
+		set_input_as_handled();
+		return;
+	}
+
+	if (!_can_consume_input_events()) {
+		return;
+	}
+
+	if (!is_input_handled()) {
+		ERR_FAIL_COND(!is_inside_tree());
+		get_tree()->_call_input_pause(input_group, SceneTree::CALL_INPUT_TYPE_INPUT, ev, this); //not a bug, must happen before GUI, order is _input -> gui input -> _unhandled input
+	}
+
+	if (!is_input_handled()) {
+		ERR_FAIL_COND(!is_inside_tree());
+		_gui_input_event(ev);
+	} else {
+		// Cleanup internal GUI state after accepting event during _input().
+		_gui_cleanup_internal_state(ev);
+	}
+
+	if (!is_input_handled()) {
+		_push_unhandled_input_internal(ev);
+	}
+
+	event_count++;
+}
+
+/* Upstream lines 3620-3649 */
+void Viewport::_push_unhandled_input_internal(const Ref<InputEvent> &p_event) {
+	// Shortcut Input.
+	_push_shortcut_input_internal(p_event);
+
+	// Unhandled key Input - Used for performance reasons - This is called a lot less than _unhandled_input since it ignores MouseMotion, and to handle Unicode input with Alt / Ctrl modifiers after handling shortcuts.
+	if (!is_input_handled() && (Object::cast_to<InputEventKey>(*p_event) != nullptr)) {
+		ERR_FAIL_COND(!is_inside_tree());
+		get_tree()->_call_input_pause(unhandled_key_input_group, SceneTree::CALL_INPUT_TYPE_UNHANDLED_KEY_INPUT, p_event, this);
+	}
+
+	// Unhandled Input.
+	if (!is_input_handled()) {
+		ERR_FAIL_COND(!is_inside_tree());
+		get_tree()->_call_input_pause(unhandled_input_group, SceneTree::CALL_INPUT_TYPE_UNHANDLED_INPUT, p_event, this);
+	}
+
+#if !defined(PHYSICS_2D_DISABLED) || !defined(PHYSICS_3D_DISABLED)
+	if (physics_object_picking && !is_input_handled()) {
+		if (Input::get_singleton()->get_mouse_mode() != Input::MouseMode::MOUSE_MODE_CAPTURED &&
+				(Object::cast_to<InputEventMouse>(*p_event) ||
+						Object::cast_to<InputEventScreenDrag>(*p_event) ||
+						Object::cast_to<InputEventScreenTouch>(*p_event)
+
+								)) {
+			physics_picking_events.push_back(p_event);
+			set_input_as_handled();
+		}
+	}
+#endif // !defined(PHYSICS_2D_DISABLED) || !defined(PHYSICS_3D_DISABLED)
+}

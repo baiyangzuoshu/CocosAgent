@@ -1,0 +1,47 @@
+/*
+ * Godot 4 source excerpt.
+ * Upstream: engine/godot-4.7/core/io/resource.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 79-116 */
+void Resource::set_path(const String &p_path, bool p_take_over) {
+	if (path_cache == p_path) {
+		return;
+	}
+
+	if (p_path.is_empty()) {
+		p_take_over = false; // Can't take over an empty path
+	}
+
+	{
+		MutexLock lock(ResourceCache::lock);
+
+		if (!path_cache.is_empty()) {
+			ResourceCache::resources.erase(path_cache);
+		}
+
+		path_cache = "";
+
+		Ref<Resource> existing = ResourceCache::get_ref(p_path);
+
+		if (existing.is_valid()) {
+			if (p_take_over) {
+				existing->path_cache = String();
+				ResourceCache::resources.erase(p_path);
+			} else {
+				ERR_FAIL_MSG(vformat("Another resource is loaded from path '%s' (possible cyclic resource inclusion).", p_path));
+			}
+		}
+
+		path_cache = p_path;
+
+		if (!path_cache.is_empty()) {
+			ResourceCache::resources[path_cache] = this;
+		}
+	}
+
+	_resource_path_changed();
+}

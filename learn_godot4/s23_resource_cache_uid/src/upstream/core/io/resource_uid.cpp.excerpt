@@ -1,0 +1,90 @@
+/*
+ * Godot 4 source excerpt.
+ * Upstream: engine/godot-4.7/core/io/resource_uid.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 113-132 */
+ResourceUID::ID ResourceUID::create_id() {
+	// mbedTLS may not be fully initialized when the ResourceUID is created, so we
+	// need to lazily instantiate the random number generator.
+	if (crypto == nullptr) {
+		crypto = memnew(CryptoCore::RandomGenerator);
+		((CryptoCore::RandomGenerator *)crypto)->init();
+	}
+
+	while (true) {
+		ID id = INVALID_ID;
+		MutexLock lock(mutex);
+		Error err = ((CryptoCore::RandomGenerator *)crypto)->get_random_bytes((uint8_t *)&id, sizeof(id));
+		ERR_FAIL_COND_V(err != OK, INVALID_ID);
+		id &= 0x7FFFFFFFFFFFFFFF;
+		bool exists = unique_ids.has(id);
+		if (!exists) {
+			return id;
+		}
+	}
+}
+
+/* Upstream lines 162-174 */
+void ResourceUID::add_id(ID p_id, const String &p_path) {
+	MutexLock l(mutex);
+	ERR_FAIL_COND(unique_ids.has(p_id));
+	Cache c;
+	c.cs = p_path.utf8();
+	unique_ids[p_id] = c;
+	if (use_reverse_cache) {
+		reverse_cache[c.cs] = p_id;
+	}
+	changed = true;
+	// The cache was never loaded (probably does not exist), so assume that first ID initializes it.
+	cache_initialized = true;
+}
+
+/* Upstream lines 195-220 */
+String ResourceUID::get_id_path(ID p_id) const {
+	ERR_FAIL_COND_V_MSG(p_id == INVALID_ID, String(), "Invalid UID.");
+	MutexLock l(mutex);
+	const ResourceUID::Cache *cache = unique_ids.getptr(p_id);
+
+#if TOOLS_ENABLED
+	// On startup, the scan_for_uid_on_startup callback should be set and will
+	// execute EditorFileSystem::scan_for_uid, which scans all project files
+	// to reload the UID cache before the first scan.
+	// Note: EditorFileSystem::scan_for_uid sets scan_for_uid_on_startup to nullptr
+	//       once the first scan_for_uid is complete.
+	if (!cache && scan_for_uid_on_startup) {
+		scan_for_uid_on_startup();
+		cache = unique_ids.getptr(p_id);
+	}
+#endif
+
+	if (unlikely(!cache)) {
+		if (cache_initialized) {
+			ERR_PRINT(vformat("Unrecognized UID: \"%s\".", id_to_text(p_id)));
+		}
+		return String();
+	}
+	const CharString &cs = cache->cs;
+	return String::utf8(cs.ptr());
+}
+
+/* Upstream lines 243-250 */
+String ResourceUID::path_to_uid(const String &p_path) {
+	const ID id = ResourceLoader::get_resource_uid(p_path);
+	if (id == INVALID_ID) {
+		return p_path;
+	} else {
+		return singleton->id_to_text(id);
+	}
+}
+
+/* Upstream lines 252-257 */
+String ResourceUID::ensure_path(const String &p_uid_or_path) {
+	if (p_uid_or_path.begins_with("uid://")) {
+		return uid_to_path(p_uid_or_path);
+	}
+	return p_uid_or_path;
+}

@@ -1,0 +1,57 @@
+/*
+ * Godot 1 source excerpt.
+ * Upstream: engine/godot-1.1/core/os/input.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 246-293 */
+void InputDefault::parse_input_event(const InputEvent& p_event) {
+
+	_THREAD_SAFE_METHOD_
+	switch(p_event.type) {
+
+		case InputEvent::KEY: {
+
+			if (p_event.key.echo)
+				break;
+			if (p_event.key.scancode==0)
+				break;
+
+		//	print_line(p_event);
+
+			if (p_event.key.pressed)
+				keys_pressed.insert(p_event.key.scancode);
+			else
+				keys_pressed.erase(p_event.key.scancode);
+		} break;
+		case InputEvent::MOUSE_BUTTON: {
+
+			if (p_event.mouse_button.doubleclick)
+				break;
+
+			if (p_event.mouse_button.pressed)
+				mouse_button_mask|=(1<<p_event.mouse_button.button_index);
+			else
+				mouse_button_mask&=~(1<<p_event.mouse_button.button_index);
+		} break;
+		case InputEvent::JOYSTICK_BUTTON: {
+
+			int c = _combine_device(p_event.joy_button.button_index,p_event.device);
+
+			if (p_event.joy_button.pressed)
+				joy_buttons_pressed.insert(c);
+			else
+				joy_buttons_pressed.erase(c);
+		} break;
+		case InputEvent::JOYSTICK_MOTION: {
+			set_joy_axis(p_event.device, p_event.joy_motion.axis, p_event.joy_motion.axis_value);
+		} break;
+
+	}
+
+	if (main_loop)
+		main_loop->input_event(p_event);
+
+}

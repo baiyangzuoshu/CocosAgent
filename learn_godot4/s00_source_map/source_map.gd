@@ -6,6 +6,9 @@ const SNAPSHOT_PATCH := 3
 const SNAPSHOT_STATUS := "rc"
 
 func _ready() -> void:
+	# Run the lesson's miniature source replica before probing the real engine API.
+	var replay = load("res://src/source_replay.gd").new()
+	replay.run()
 	var version_info: Dictionary = Engine.get_version_info()
 	var runtime_version := "%s.%s.%s %s" % [
 		str(version_info.get("major", "?")),

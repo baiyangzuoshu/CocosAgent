@@ -1,0 +1,29 @@
+/*
+ * Godot 4 source excerpt.
+ * Upstream: engine/godot-4.7/core/io/resource.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 852-871 */
+Ref<Resource> ResourceCache::get_ref(const String &p_path) {
+	Ref<Resource> ref;
+	{
+		MutexLock mutex_lock(lock);
+		Resource **res = resources.getptr(p_path);
+
+		if (res) {
+			ref = Ref<Resource>(*res);
+		}
+
+		if (res && ref.is_null()) {
+			// This resource is in the process of being deleted, ignore its existence
+			(*res)->path_cache = String();
+			resources.erase(p_path);
+			res = nullptr;
+		}
+	}
+
+	return ref;
+}

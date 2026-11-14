@@ -1,0 +1,7 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://base_scene.tscn" id="1"]
+[ext_resource type="Script" path="res://probe.gd" id="2"]
+
+[node name="S26Inherited" instance=ExtResource("1")]
+script = ExtResource("2")

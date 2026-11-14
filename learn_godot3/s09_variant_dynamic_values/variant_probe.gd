@@ -1,6 +1,9 @@
 extends Node
 
 func _ready():
+	# Run the lesson's miniature source replica before probing the real engine API.
+	var replay = load("res://src/source_replay.gd").new()
+	replay.run()
 	var values = [null, true, 42, 3.5, "godot", Vector2(2, 4), {"score": 42}]
 	for value in values:
 		print("S09 Variant type code: ", typeof(value))

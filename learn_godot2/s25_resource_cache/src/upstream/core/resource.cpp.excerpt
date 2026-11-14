@@ -1,0 +1,20 @@
+/*
+ * Godot 2 source excerpt.
+ * Upstream: engine/godot-2.1/core/resource.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 400-410 */
+Resource *ResourceCache::get(const String &p_path) {
+
+	GLOBAL_LOCK_FUNCTION
+
+	Resource **res = resources.getptr(p_path);
+	if (!res) {
+		return NULL;
+	}
+
+	return *res;
+}

@@ -1,0 +1,6 @@
+config_version=6
+
+[application]
+
+config/name="Godot 3.6 S30 Viewport 输入分发与未处理事件阶段"
+run/main_scene="res://main.tscn"

@@ -6,7 +6,9 @@
 
 `Main::iteration()` 调用 `SceneTree::iteration()` 和 `idle()` 后，Node 的 fixed 与 idle 回调如何分派？输入事件如何到达 Viewport？`SceneTree.quit()` 如何离开主循环？
 
-## C++ 源码追踪
+## 源码调用链
+
+源码依据：`engine/godot-1.1/`（Godot 1.1 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
 以下路径相对于 `engine/godot-1.1/` 快照根目录：
 
@@ -18,7 +20,20 @@
 
 调用摘要：平台事件送入 SceneTree → Viewport 执行输入/未处理输入路由；平台帧循环调用 fixed `iteration()` 和 idle `idle()` → SceneTree 按组发送 Node 通知 → `_quit` 逐层返回并触发 `finish()`。
 
-## 最小实验
+## 本课源码复刻
+
+`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-1.1` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+
+| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
+| --- | --- | --- | --- | --- |
+| 1 | [node.cpp](src/upstream/scene/main/node.cpp) | [摘录](src/upstream/scene/main/node.cpp.excerpt) | `engine/godot-1.1/scene/main/node.cpp` | 451-455 |
+| 2 | [scene_main_loop.cpp](src/upstream/scene/main/scene_main_loop.cpp) | [摘录](src/upstream/scene/main/scene_main_loop.cpp.excerpt) | `engine/godot-1.1/scene/main/scene_main_loop.cpp` | 336-463 |
+
+## 可运行源码复刻
+
+课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+
+## 最小 Godot/GDScript 实验
 
 - `engine.cfg` 指向 Godot 1.1 XML 场景 `main.xml`。
 - `tree_probe.gd` 启用 idle、fixed 和 input 回调，记录首次 delta；运行期间按键可观察 `_input`，约 5 秒后脚本调用 `get_tree().quit()`。
@@ -34,11 +49,8 @@ godot -path .
 
 不细分 Viewport 的 GUI 命中和未处理事件行为，也不测试 OS 窗口关闭、暂停或平台事件队列。`SceneTree` 类名与 `scene_main_loop.cpp` 文件名均为 Godot 1.1 快照事实；本课尚未运行项目。
 
-## 本课 C++ 源码摘录
+## 下一课
 
-课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+继续阅读 [s07_object_lifetime](../s07_object_lifetime/README.md)。
 
-| 课内摘录 | Godot 源文件 | 上游行段 |
-| --- | --- | --- |
-| [node.cpp](src/upstream/scene/main/node.cpp.excerpt) | godot-1.1/scene/main/node.cpp | 451-455 |
-| [scene_main_loop.cpp](src/upstream/scene/main/scene_main_loop.cpp.excerpt) | godot-1.1/scene/main/scene_main_loop.cpp | 336-463, 481-504, 506-546, 548-576 |
+源码版权与许可说明见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。

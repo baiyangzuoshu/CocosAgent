@@ -1,0 +1,311 @@
+/*
+ * Godot 4 source excerpt.
+ * Upstream: engine/godot-4.7/scene/resources/resource_format_text.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 126-182 */
+Error ResourceLoaderText::_parse_ext_resource(VariantParser::Stream *p_stream, Ref<Resource> &r_res, int &line, String &r_err_str) {
+	VariantParser::Token token;
+	VariantParser::get_token(p_stream, token, line, r_err_str);
+	if (token.type != VariantParser::TK_NUMBER && token.type != VariantParser::TK_STRING) {
+		r_err_str = "Expected number (old style sub-resource index) or String (ext-resource ID)";
+		return ERR_PARSE_ERROR;
+	}
+
+	String id = token.value;
+	Error err = OK;
+
+	if (!ignore_resource_parsing) {
+		if (!ext_resources.has(id)) {
+			r_err_str = "Can't load cached ext-resource id: " + id;
+			return ERR_PARSE_ERROR;
+		}
+
+		String path = ext_resources[id].path;
+		String type = ext_resources[id].type;
+		Ref<ResourceLoader::LoadToken> &load_token = ext_resources[id].load_token;
+
+		if (load_token.is_valid()) { // If not valid, it's OK since then we know this load accepts broken dependencies.
+			Ref<Resource> res = ResourceLoader::_load_complete(*load_token.ptr(), &err);
+			if (res.is_null()) {
+				if (!ResourceLoader::is_cleaning_tasks()) {
+					if (ResourceLoader::get_abort_on_missing_resources()) {
+						error = ERR_FILE_MISSING_DEPENDENCIES;
+						error_text = "[ext_resource] referenced non-existent resource at: " + path;
+						_printerr();
+						err = error;
+					} else {
+						ResourceLoader::notify_dependency_error(local_path, path, type);
+					}
+				}
+			} else {
+				r_res = res;
+			}
+		} else {
+			r_res = Ref<Resource>();
+		}
+#ifdef TOOLS_ENABLED
+		if (r_res.is_null()) {
+			// Hack to allow checking original path.
+			r_res.instantiate();
+			r_res->set_meta("__load_path__", ext_resources[id].path);
+		}
+#endif
+	}
+
+	VariantParser::get_token(p_stream, token, line, r_err_str);
+	if (token.type != VariantParser::TK_PARENTHESIS_CLOSE) {
+		r_err_str = "Expected ')'";
+		return ERR_PARSE_ERROR;
+	}
+
+	return err;
+}
+
+/* Upstream lines 184-426 */
+Ref<PackedScene> ResourceLoaderText::_parse_node_tag(VariantParser::ResourceParser &parser) {
+	Ref<PackedScene> packed_scene = ResourceLoader::get_resource_ref_override(local_path);
+	if (packed_scene.is_null()) {
+		packed_scene.instantiate();
+	}
+
+	while (true) {
+		if (next_tag.name == "node") {
+			int parent = -1;
+			int owner = -1;
+			int type = -1;
+			int name = -1;
+			int instance = -1;
+			int index = -1;
+			int unique_id = Node::UNIQUE_SCENE_ID_UNASSIGNED;
+
+			//int base_scene=-1;
+
+			if (next_tag.fields.has("name")) {
+				name = packed_scene->get_state()->add_name(next_tag.fields["name"]);
+			} else {
+				error = ERR_FILE_CORRUPT;
+				error_text = "Missing 'name' field from node tag";
+				_printerr();
+				return Ref<PackedScene>();
+			}
+
+			if (next_tag.fields.has("parent")) {
+				NodePath np = next_tag.fields["parent"];
+				np.prepend_period();
+				PackedInt32Array np_id;
+				if (next_tag.fields.has("parent_id_path")) {
+					np_id = next_tag.fields["parent_id_path"];
+				}
+				parent = packed_scene->get_state()->add_node_path(np, np_id);
+			}
+			if (next_tag.fields.has("unique_id")) {
+				unique_id = next_tag.fields["unique_id"];
+			}
+
+			if (next_tag.fields.has("type")) {
+				type = packed_scene->get_state()->add_name(next_tag.fields["type"]);
+			} else {
+				type = SceneState::TYPE_INSTANTIATED; //no type? assume this was instantiated
+			}
+
+			HashSet<StringName> path_properties;
+
+			if (next_tag.fields.has("node_paths")) {
+				Vector<String> paths = next_tag.fields["node_paths"];
+				for (int i = 0; i < paths.size(); i++) {
+					path_properties.insert(paths[i]);
+				}
+			}
+
+			if (next_tag.fields.has("instance")) {
+				instance = packed_scene->get_state()->add_value(next_tag.fields["instance"]);
+
+				if (packed_scene->get_state()->get_node_count() == 0 && parent == -1) {
+					packed_scene->get_state()->set_base_scene(instance);
+					instance = -1;
+				}
+			}
+
+			if (next_tag.fields.has("instance_placeholder")) {
+				String path = next_tag.fields["instance_placeholder"];
+
+				int path_v = packed_scene->get_state()->add_value(path);
+
+				if (packed_scene->get_state()->get_node_count() == 0) {
+					error = ERR_FILE_CORRUPT;
+					error_text = "Instance Placeholder can't be used for inheritance";
+					_printerr();
+					return Ref<PackedScene>();
+				}
+
+				instance = path_v | SceneState::FLAG_INSTANCE_IS_PLACEHOLDER;
+			}
+
+			if (next_tag.fields.has("owner")) {
+				PackedInt32Array np_id;
+				if (next_tag.fields.has("owner_uid_path")) {
+					np_id = next_tag.fields["owner_uid_path"];
+				}
+				owner = packed_scene->get_state()->add_node_path(next_tag.fields["owner"], np_id);
+			} else {
+				if (parent != -1 && !(type == SceneState::TYPE_INSTANTIATED && instance == -1)) {
+					owner = 0; //if no owner, owner is root
+				}
+			}
+
+			if (next_tag.fields.has("index")) {
+				index = next_tag.fields["index"];
+			}
+
+			int node_id = packed_scene->get_state()->add_node(parent, owner, type, name, instance, index, unique_id);
+
+			if (next_tag.fields.has("groups")) {
+				Array groups = next_tag.fields["groups"];
+				for (const Variant &group : groups) {
+					packed_scene->get_state()->add_node_group(node_id, packed_scene->get_state()->add_name(group));
+				}
+			}
+
+			while (true) {
+				String assign;
+				Variant value;
+
+				error = VariantParser::parse_tag_assign_eof(&stream, lines, error_text, next_tag, assign, value, &parser);
+
+				if (error) {
+					if (error == ERR_FILE_MISSING_DEPENDENCIES) {
+						// Resource loading error, just skip it.
+					} else if (error != ERR_FILE_EOF) {
+						ERR_PRINT(vformat("Parse Error: %s. [Resource file %s:%d]", error_names[error], res_path, lines));
+						return Ref<PackedScene>();
+					} else {
+						error = OK;
+						return packed_scene;
+					}
+				}
+
+				if (!assign.is_empty()) {
+					StringName assign_name = assign;
+					int nameidx = packed_scene->get_state()->add_name(assign_name);
+					int valueidx = packed_scene->get_state()->add_value(value);
+					packed_scene->get_state()->add_node_property(node_id, nameidx, valueidx, path_properties.has(assign_name));
+					//it's assignment
+				} else if (!next_tag.name.is_empty()) {
+					break;
+				}
+			}
+		} else if (next_tag.name == "connection") {
+			if (!next_tag.fields.has("from")) {
+				error = ERR_FILE_CORRUPT;
+				error_text = "missing 'from' field from connection tag";
+				return Ref<PackedScene>();
+			}
+
+			if (!next_tag.fields.has("to")) {
+				error = ERR_FILE_CORRUPT;
+				error_text = "missing 'to' field from connection tag";
+				return Ref<PackedScene>();
+			}
+
+			if (!next_tag.fields.has("signal")) {
+				error = ERR_FILE_CORRUPT;
+				error_text = "missing 'signal' field from connection tag";
+				return Ref<PackedScene>();
+			}
+
+			if (!next_tag.fields.has("method")) {
+				error = ERR_FILE_CORRUPT;
+				error_text = "missing 'method' field from connection tag";
+				return Ref<PackedScene>();
+			}
+
+			NodePath from = next_tag.fields["from"];
+			NodePath to = next_tag.fields["to"];
+			StringName method = next_tag.fields["method"];
+			StringName signal = next_tag.fields["signal"];
+			int flags = Object::CONNECT_PERSIST;
+			int unbinds = 0;
+			Array binds;
+
+			PackedInt32Array from_id;
+			if (next_tag.fields.has("from_uid_path")) {
+				from_id = next_tag.fields["from_uid_path"];
+			}
+
+			PackedInt32Array to_id;
+			if (next_tag.fields.has("to_uid_path")) {
+				to_id = next_tag.fields["to_uid_path"];
+			}
+
+			if (next_tag.fields.has("flags")) {
+				flags = next_tag.fields["flags"];
+			}
+
+			if (next_tag.fields.has("binds")) {
+				binds = next_tag.fields["binds"];
+			}
+
+			if (next_tag.fields.has("unbinds")) {
+				unbinds = next_tag.fields["unbinds"];
+			}
+
+			Vector<int> bind_ints;
+			for (const Variant &bind : binds) {
+				bind_ints.push_back(packed_scene->get_state()->add_value(bind));
+			}
+
+			packed_scene->get_state()->add_connection(
+					packed_scene->get_state()->add_node_path(from.simplified(), from_id),
+					packed_scene->get_state()->add_node_path(to.simplified(), to_id),
+					packed_scene->get_state()->add_name(signal),
+					packed_scene->get_state()->add_name(method),
+					flags,
+					unbinds,
+					bind_ints);
+
+			error = VariantParser::parse_tag(&stream, lines, error_text, next_tag, &parser);
+
+			if (error) {
+				if (error != ERR_FILE_EOF) {
+					_printerr();
+					return Ref<PackedScene>();
+				} else {
+					error = OK;
+					return packed_scene;
+				}
+			}
+		} else if (next_tag.name == "editable") {
+			if (!next_tag.fields.has("path")) {
+				error = ERR_FILE_CORRUPT;
+				error_text = "Missing 'path' field from editable tag";
+				_printerr();
+				return Ref<PackedScene>();
+			}
+
+			NodePath path = next_tag.fields["path"];
+
+			packed_scene->get_state()->add_editable_instance(path.simplified());
+
+			error = VariantParser::parse_tag(&stream, lines, error_text, next_tag, &parser);
+
+			if (error) {
+				if (error != ERR_FILE_EOF) {
+					_printerr();
+					return Ref<PackedScene>();
+				} else {
+					error = OK;
+					return packed_scene;
+				}
+			}
+		} else {
+			error = ERR_FILE_CORRUPT;
+			error_text = vformat("Unknown tag '%s' in file", next_tag.name);
+			_printerr();
+			return Ref<PackedScene>();
+		}
+	}
+}

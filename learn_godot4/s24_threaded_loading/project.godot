@@ -1,0 +1,6 @@
+config_version=7
+
+[application]
+
+config/name="Godot 4.7 S24 线程化请求、状态轮询与结果交付"
+run/main_scene="res://main.tscn"

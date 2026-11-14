@@ -1,0 +1,201 @@
+/*
+ * Godot 1 source excerpt.
+ * Upstream: engine/godot-1.1/scene/resources/packed_scene.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 41-189 */
+Node *PackedScene::instance(bool p_gen_edit_state) const {
+
+	int nc = nodes.size();
+	ERR_FAIL_COND_V(nc==0,NULL);
+
+	const StringName*snames=NULL;
+	int sname_count=names.size();
+	if (sname_count)
+		snames=&names[0];
+
+	const Variant*props=NULL;
+	int prop_count=variants.size();
+	if (prop_count)
+		props=&variants[0];
+
+	Vector<Variant> properties;
+
+	const NodeData *nd = &nodes[0];
+
+	Node **ret_nodes=(Node**)alloca( sizeof(Node*)*nc );
+
+
+	for(int i=0;i<nc;i++) {
+
+		const NodeData &n=nd[i];
+
+		if (!ObjectTypeDB::is_type_enabled(snames[n.type])) {
+			ret_nodes[i]=NULL;
+			continue;
+		}
+
+		Node *node=NULL;
+
+		if (n.instance>=0) {
+			//instance existing
+			Ref<PackedScene> sdata = props[ n.instance ];
+			ERR_FAIL_COND_V( !sdata.is_valid(), NULL);
+			node = sdata->instance();
+			ERR_FAIL_COND_V(!node,NULL);
+			if (p_gen_edit_state)
+				node->generate_instance_state();
+
+		} else {
+			//create anew
+			Object * obj = ObjectTypeDB::instance(snames[ n.type ]);
+			if (!obj || !obj->cast_to<Node>()) {
+				if (obj) {
+					memdelete(obj);
+					obj=NULL;
+				}
+				WARN_PRINT(String("Warning node of type "+snames[n.type].operator String()+" does not exist.").ascii().get_data());
+				if (n.parent>=0 && n.parent<nc && ret_nodes[n.parent]) {
+					if (ret_nodes[n.parent]->cast_to<Spatial>()) {
+						obj = memnew( Spatial );
+					} else if (ret_nodes[n.parent]->cast_to<Control>()) {
+						obj = memnew( Control );
+					} else if (ret_nodes[n.parent]->cast_to<Node2D>()) {
+						obj = memnew( Node2D );
+					}
+
+				}
+				if (!obj) {
+					obj = memnew( Node );
+				}
+			}
+
+			node = obj->cast_to<Node>();
+
+		}
+
+
+		//properties
+		int nprop_count=n.properties.size();
+		if (nprop_count) {
+
+			const NodeData::Property* nprops=&n.properties[0];
+
+			for(int j=0;j<nprop_count;j++) {
+
+				bool valid;
+				ERR_FAIL_INDEX_V( nprops[j].name, sname_count, NULL );
+				ERR_FAIL_INDEX_V( nprops[j].value, prop_count, NULL );
+
+				node->set(snames[ nprops[j].name ],props[ nprops[j].value ],&valid);
+			}
+		}
+
+		//name
+
+		//groups
+		for(int j=0;j<n.groups.size();j++) {
+
+			ERR_FAIL_INDEX_V( n.groups[j], sname_count, NULL );
+			node->add_to_group( snames[ n.groups[j] ], true );
+		}
+
+
+		ret_nodes[i]=node;
+
+		if (i>0) {			
+			ERR_FAIL_INDEX_V(n.parent,i,NULL);
+			ERR_FAIL_COND_V(!ret_nodes[n.parent],NULL);
+			ret_nodes[n.parent]->_add_child_nocheck(node,snames[n.name]);
+		} else {
+			node->_set_name_nocheck( snames[ n.name ] );
+		}
+
+
+		if (n.owner>=0) {
+
+			ERR_FAIL_INDEX_V(n.owner,i,NULL);
+			node->_set_owner_nocheck(ret_nodes[n.owner]);
+		}
+
+	}
+
+
+	//do connections
+
+	int cc = connections.size();
+	const ConnectionData *cdata = connections.ptr();
+
+	for(int i=0;i<cc;i++) {
+
+		const ConnectionData &c=cdata[i];
+		ERR_FAIL_INDEX_V( c.from, nc, NULL );
+		ERR_FAIL_INDEX_V( c.to, nc, NULL );
+
+		Vector<Variant> binds;
+		if (c.binds.size()) {
+			binds.resize(c.binds.size());
+			for(int j=0;j<c.binds.size();j++)
+				binds[j]=props[ c.binds[j] ];
+		}
+
+		if (!ret_nodes[c.from] || !ret_nodes[c.to])
+			continue;
+		ret_nodes[c.from]->connect( snames[ c.signal], ret_nodes[ c.to ], snames[ c.method], binds,CONNECT_PERSIST|c.flags );
+	}
+
+	Node *s = ret_nodes[0];
+
+	if (get_path()!="" && get_path().find("::")==-1)
+		s->set_filename(get_path());
+
+	s->notification(Node::NOTIFICATION_INSTANCED);
+	return ret_nodes[0];
+
+}
+
+/* Upstream lines 401-441 */
+Error PackedScene::pack(Node *p_scene) {
+	ERR_FAIL_NULL_V( p_scene, ERR_INVALID_PARAMETER );
+
+
+	clear();
+
+	Node *scene = p_scene;
+
+	Map<StringName,int> name_map;
+	HashMap<Variant,int,VariantHasher> variant_map;
+	Map<Node*,int> node_map;
+
+	Error err = _parse_node(scene,scene,-1,name_map,variant_map,node_map);
+	if (err) {
+		clear();
+		ERR_FAIL_V(err);
+	}
+
+	err = _parse_connections(scene,scene,name_map,variant_map,node_map);
+	if (err) {
+		clear();
+		ERR_FAIL_V(err);
+	}
+
+	names.resize(name_map.size());
+
+	for(Map<StringName,int>::Element *E=name_map.front();E;E=E->next()) {
+
+		names[E->get()]=E->key();
+	}
+
+	variants.resize(variant_map.size());
+	const Variant *K=NULL;
+	while((K=variant_map.next(K))) {
+
+		int idx = variant_map[*K];
+		variants[idx]=*K;
+	}
+
+	return OK;
+}

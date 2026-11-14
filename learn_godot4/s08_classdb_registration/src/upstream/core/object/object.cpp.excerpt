@@ -1,8 +1,9 @@
-/* Godot 4 source excerpts.
-/* Upstream: engine/godot-4.7/core/object/object.cpp
-/* Original line ranges are copied from the local source snapshot.
-/* Study excerpt; not a standalone compilation unit.
-/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+/*
+ * Godot 4.7 source excerpt.
+ * Upstream: engine/godot-4.7/core/object/object.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license notice: Godot Engine; see course-root SOURCE_LICENSE.txt.
  */
 
 /* Upstream lines 1837-1839 */

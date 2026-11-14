@@ -1,0 +1,127 @@
+/*
+ * Godot 1 source excerpt.
+ * Upstream: engine/godot-1.1/scene/main/viewport.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1092-1148 */
+void Viewport::_make_input_local(InputEvent& ev) {
+
+	switch(ev.type) {
+
+		case InputEvent::MOUSE_BUTTON: {
+
+			Matrix32 ai = get_final_transform().affine_inverse() * _get_input_pre_xform();
+			Vector2 g = ai.xform(Vector2(ev.mouse_button.global_x,ev.mouse_button.global_y));
+			Vector2 l = ai.xform(Vector2(ev.mouse_button.x,ev.mouse_button.y));
+			ev.mouse_button.x=l.x;
+			ev.mouse_button.y=l.y;
+			ev.mouse_button.global_x=g.x;
+			ev.mouse_button.global_y=g.y;
+
+		} break;
+		case InputEvent::MOUSE_MOTION: {
+
+			Matrix32 ai = get_final_transform().affine_inverse() * _get_input_pre_xform();
+			Vector2 g = ai.xform(Vector2(ev.mouse_motion.global_x,ev.mouse_motion.global_y));
+			Vector2 l = ai.xform(Vector2(ev.mouse_motion.x,ev.mouse_motion.y));
+			Vector2 r = ai.basis_xform(Vector2(ev.mouse_motion.relative_x,ev.mouse_motion.relative_y));
+			Vector2 s = ai.basis_xform(Vector2(ev.mouse_motion.speed_x,ev.mouse_motion.speed_y));
+			ev.mouse_motion.x=l.x;
+			ev.mouse_motion.y=l.y;
+			ev.mouse_motion.global_x=g.x;
+			ev.mouse_motion.global_y=g.y;
+			ev.mouse_motion.relative_x=r.x;
+			ev.mouse_motion.relative_y=r.y;
+			ev.mouse_motion.speed_x=s.x;
+			ev.mouse_motion.speed_y=s.y;
+
+		} break;
+		case InputEvent::SCREEN_TOUCH: {
+
+			Matrix32 ai = get_final_transform().affine_inverse() * _get_input_pre_xform();
+			Vector2 t = ai.xform(Vector2(ev.screen_touch.x,ev.screen_touch.y));
+			ev.screen_touch.x=t.x;
+			ev.screen_touch.y=t.y;
+
+		} break;
+		case InputEvent::SCREEN_DRAG: {
+
+			Matrix32 ai = get_final_transform().affine_inverse() * _get_input_pre_xform();
+			Vector2 t = ai.xform(Vector2(ev.screen_drag.x,ev.screen_drag.y));
+			Vector2 r = ai.basis_xform(Vector2(ev.screen_drag.relative_x,ev.screen_drag.relative_y));
+			Vector2 s = ai.basis_xform(Vector2(ev.screen_drag.speed_x,ev.screen_drag.speed_y));
+			ev.screen_drag.x=t.x;
+			ev.screen_drag.y=t.y;
+			ev.screen_drag.relative_x=r.x;
+			ev.screen_drag.relative_y=r.y;
+			ev.screen_drag.speed_x=s.x;
+			ev.screen_drag.speed_y=s.y;
+		} break;
+	}
+
+
+}
+
+/* Upstream lines 1151-1163 */
+void Viewport::_vp_input(const InputEvent& p_ev) {
+
+	if (render_target && to_screen_rect==Rect2())
+		return; //if render target, can't get input events
+
+	//this one handles system input, p_ev are in system coordinates
+	//they are converted to viewport coordinates
+
+	InputEvent ev = p_ev;	
+	_make_input_local(ev);
+	input(ev);
+
+}
+
+/* Upstream lines 1165-1178 */
+void Viewport::_vp_unhandled_input(const InputEvent& p_ev) {
+
+
+	if (render_target && to_screen_rect==Rect2())
+		return; //if render target, can't get input events
+
+	//this one handles system input, p_ev are in system coordinates
+	//they are converted to viewport coordinates
+
+	InputEvent ev = p_ev;
+	_make_input_local(ev);
+	unhandled_input(ev);
+
+}
+
+/* Upstream lines 1191-1196 */
+void Viewport::input(const InputEvent& p_event) {
+
+	ERR_FAIL_COND(!is_inside_tree());
+	get_tree()->_call_input_pause(input_group,"_input",p_event);
+	get_tree()->call_group(SceneTree::GROUP_CALL_REVERSE|SceneTree::GROUP_CALL_REALTIME|SceneTree::GROUP_CALL_MULIILEVEL,gui_input_group,"_gui_input",p_event); //special one for GUI, as controls use their own process check
+}
+
+/* Upstream lines 1198-1217 */
+void Viewport::unhandled_input(const InputEvent& p_event) {
+
+	ERR_FAIL_COND(!is_inside_tree());
+
+	get_tree()->_call_input_pause(unhandled_input_group,"_unhandled_input",p_event);
+	//call_group(GROUP_CALL_REVERSE|GROUP_CALL_REALTIME|GROUP_CALL_MULIILEVEL,"unhandled_input","_unhandled_input",ev);
+	if (!get_tree()->input_handled && p_event.type==InputEvent::KEY) {
+		get_tree()->_call_input_pause(unhandled_key_input_group,"_unhandled_key_input",p_event);
+		//call_group(GROUP_CALL_REVERSE|GROUP_CALL_REALTIME|GROUP_CALL_MULIILEVEL,"unhandled_key_input","_unhandled_key_input",ev);
+	}
+
+
+	if (physics_object_picking && !get_tree()->input_handled) {
+
+		if (p_event.type==InputEvent::MOUSE_BUTTON || p_event.type==InputEvent::MOUSE_MOTION || p_event.type==InputEvent::SCREEN_DRAG || p_event.type==InputEvent::SCREEN_TOUCH) {
+			physics_picking_events.push_back(p_event);
+		}
+	}
+
+}

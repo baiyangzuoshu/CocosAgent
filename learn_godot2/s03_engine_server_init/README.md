@@ -6,7 +6,9 @@
 
 `setup2()` 在 `setup()` 之后补上哪些初始化？`ObjectTypeDB` 类型注册与 `Globals` 单例注册有何区别？GDScript 何时能调用服务器方法？
 
-## C++ 源码追踪
+## 源码调用链
+
+源码依据：`engine/godot-2.1/`（Godot 2.1 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
 以下路径相对于 `engine/godot-2.1/` 快照根目录：
 
@@ -19,7 +21,22 @@
 
 调用摘要：平台完成 `setup()` → `setup2()` 初始化 OS → 注册 core/scene/server → 注册 modules/drivers → 初始化 GDScript。`register_server_types()` 同时将服务器对象挂到 `Globals` 并注册相应类型；两种注册影响不同。
 
-## 最小实验
+## 本课源码复刻
+
+`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-2.1` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+
+| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
+| --- | --- | --- | --- | --- |
+| 1 | [main.cpp](src/upstream/main/main.cpp) | [摘录](src/upstream/main/main.cpp.excerpt) | `engine/godot-2.1/main/main.cpp` | 869-884, 904-973 |
+| 2 | [register_server_types.cpp](src/upstream/servers/register_server_types.cpp) | [摘录](src/upstream/servers/register_server_types.cpp.excerpt) | `engine/godot-2.1/servers/register_server_types.cpp` | 59-86 |
+| 3 | [visual_server.cpp](src/upstream/servers/visual_server.cpp) | [摘录](src/upstream/servers/visual_server.cpp.excerpt) | `engine/godot-2.1/servers/visual_server.cpp` | 541-541 |
+| 4 | [visual_server.h](src/upstream/servers/visual_server.h) | [摘录](src/upstream/servers/visual_server.h.excerpt) | `engine/godot-2.1/servers/visual_server.h` | 1100-1114 |
+
+## 可运行源码复刻
+
+课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+
+## 最小 Godot/GDScript 实验
 
 - `engine.cfg`：Godot 2.1 项目和主场景配置。
 - `main.tscn`：format 1 文本场景。
@@ -37,13 +54,8 @@ godot -path .
 
 本课不展开每个服务的后端选择、线程模型和渲染提交，也不将 2.1 的 `Globals`/`ObjectTypeDB` 用新版本 `Engine`/`ClassDB` 术语替代。项目尚未用 Godot 2.1 工具运行，文中行为依据静态源码。
 
-## 本课 C++ 源码摘录
+## 下一课
 
-课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+继续阅读 [s04_main_start_scene](../s04_main_start_scene/README.md)。
 
-| 课内摘录 | Godot 源文件 | 上游行段 |
-| --- | --- | --- |
-| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-2.1/main/main.cpp | 869-884, 904-973, 983-1007 |
-| [register_server_types.cpp](src/upstream/servers/register_server_types.cpp.excerpt) | godot-2.1/servers/register_server_types.cpp | 59-86 |
-| [visual_server.cpp](src/upstream/servers/visual_server.cpp.excerpt) | godot-2.1/servers/visual_server.cpp | 541-541 |
-| [visual_server.h](src/upstream/servers/visual_server.h.excerpt) | godot-2.1/servers/visual_server.h | 1100-1114 |
+源码版权与许可说明见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。

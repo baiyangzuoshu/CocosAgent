@@ -1,8 +1,9 @@
-/* Godot 3 source excerpts.
-/* Upstream: engine/godot-3.6/modules/gdscript/gdscript.cpp
-/* Original line ranges are copied from the local source snapshot.
-/* Study excerpt; not a standalone compilation unit.
-/* Copyright and license notice: Godot Engine; see ../../../../../SOURCE_LICENSE.txt.
+/*
+ * Godot 3.6 source excerpt.
+ * Upstream: engine/godot-3.6/modules/gdscript/gdscript.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license notice: Godot Engine; see course-root SOURCE_LICENSE.txt.
  */
 
 /* Upstream lines 60-78 */

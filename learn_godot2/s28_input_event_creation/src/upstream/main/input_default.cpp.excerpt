@@ -1,0 +1,92 @@
+/*
+ * Godot 2 source excerpt.
+ * Upstream: engine/godot-2.1/main/input_default.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 269-351 */
+void InputDefault::parse_input_event(const InputEvent &p_event) {
+
+	_THREAD_SAFE_METHOD_
+	switch (p_event.type) {
+
+		case InputEvent::KEY: {
+
+			if (p_event.key.echo)
+				break;
+			if (p_event.key.scancode == 0)
+				break;
+
+			//	print_line(p_event);
+
+			if (p_event.key.pressed)
+				keys_pressed.insert(p_event.key.scancode);
+			else
+				keys_pressed.erase(p_event.key.scancode);
+		} break;
+		case InputEvent::MOUSE_BUTTON: {
+
+			if (p_event.mouse_button.doubleclick)
+				break;
+
+			if (p_event.mouse_button.pressed)
+				mouse_button_mask |= (1 << p_event.mouse_button.button_index);
+			else
+				mouse_button_mask &= ~(1 << p_event.mouse_button.button_index);
+
+			if (main_loop && emulate_touch && p_event.mouse_button.button_index == 1) {
+				InputEventScreenTouch touch_event;
+				touch_event.index = 0;
+				touch_event.pressed = p_event.mouse_button.pressed;
+				touch_event.x = p_event.mouse_button.x;
+				touch_event.y = p_event.mouse_button.y;
+				InputEvent ev;
+				ev.type = InputEvent::SCREEN_TOUCH;
+				ev.screen_touch = touch_event;
+				main_loop->input_event(ev);
+			}
+
+			Point2 pos = Point2(p_event.mouse_button.global_x, p_event.mouse_button.global_y);
+			if (mouse_pos != pos) {
+				set_mouse_pos(pos);
+			}
+		} break;
+		case InputEvent::MOUSE_MOTION: {
+
+			if (main_loop && emulate_touch && p_event.mouse_motion.button_mask & 1) {
+				InputEventScreenDrag drag_event;
+				drag_event.index = 0;
+				drag_event.x = p_event.mouse_motion.x;
+				drag_event.y = p_event.mouse_motion.y;
+				drag_event.relative_x = p_event.mouse_motion.relative_x;
+				drag_event.relative_y = p_event.mouse_motion.relative_y;
+				drag_event.speed_x = p_event.mouse_motion.speed_x;
+				drag_event.speed_y = p_event.mouse_motion.speed_y;
+
+				InputEvent ev;
+				ev.type = InputEvent::SCREEN_DRAG;
+				ev.screen_drag = drag_event;
+
+				main_loop->input_event(ev);
+			}
+
+		} break;
+		case InputEvent::JOYSTICK_BUTTON: {
+
+			int c = _combine_device(p_event.joy_button.button_index, p_event.device);
+
+			if (p_event.joy_button.pressed)
+				joy_buttons_pressed.insert(c);
+			else
+				joy_buttons_pressed.erase(c);
+		} break;
+		case InputEvent::JOYSTICK_MOTION: {
+			set_joy_axis(p_event.device, p_event.joy_motion.axis, p_event.joy_motion.axis_value);
+		} break;
+	}
+
+	if (main_loop)
+		main_loop->input_event(p_event);
+}

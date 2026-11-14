@@ -1,0 +1,245 @@
+/*
+ * Godot 3 source excerpt.
+ * Upstream: engine/godot-3.6/scene/resources/resource_format_text.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 130-170 */
+Error ResourceInteractiveLoaderText::_parse_ext_resource(VariantParser::Stream *p_stream, Ref<Resource> &r_res, int &line, String &r_err_str) {
+	VariantParser::Token token;
+	VariantParser::get_token(p_stream, token, line, r_err_str);
+	if (token.type != VariantParser::TK_NUMBER) {
+		r_err_str = "Expected number (sub-resource index)";
+		return ERR_PARSE_ERROR;
+	}
+
+	int id = token.value;
+
+	if (!ignore_resource_parsing) {
+		if (!ext_resources.has(id)) {
+			r_err_str = "Can't load cached ext-resource #" + itos(id);
+			return ERR_PARSE_ERROR;
+		}
+
+		String path = ext_resources[id].path;
+		String type = ext_resources[id].type;
+
+		if (path.find("://") == -1 && path.is_rel_path()) {
+			// path is relative to file being loaded, so convert to a resource path
+			path = ProjectSettings::get_singleton()->localize_path(res_path.get_base_dir().plus_file(path));
+		}
+
+		r_res = ResourceLoader::load(path, type, false);
+
+		if (r_res.is_null()) {
+			WARN_PRINT(String("Couldn't load external resource: " + path).utf8().get_data());
+		}
+	} else {
+		r_res = RES();
+	}
+
+	VariantParser::get_token(p_stream, token, line, r_err_str);
+	if (token.type != VariantParser::TK_PARENTHESIS_CLOSE) {
+		r_err_str = "Expected ')'";
+		return ERR_PARSE_ERROR;
+	}
+
+	return OK;
+}
+
+/* Upstream lines 172-364 */
+Ref<PackedScene> ResourceInteractiveLoaderText::_parse_node_tag(VariantParser::ResourceParser &parser) {
+	Ref<PackedScene> packed_scene;
+	packed_scene.instance();
+
+	while (true) {
+		if (next_tag.name == "node") {
+			int parent = -1;
+			int owner = -1;
+			int type = -1;
+			int name = -1;
+			int instance = -1;
+			int index = -1;
+			//int base_scene=-1;
+
+			if (next_tag.fields.has("name")) {
+				name = packed_scene->get_state()->add_name(next_tag.fields["name"]);
+			}
+
+			if (next_tag.fields.has("parent")) {
+				NodePath np = next_tag.fields["parent"];
+				np.prepend_period(); //compatible to how it manages paths internally
+				parent = packed_scene->get_state()->add_node_path(np);
+			}
+
+			if (next_tag.fields.has("type")) {
+				type = packed_scene->get_state()->add_name(next_tag.fields["type"]);
+			} else {
+				type = SceneState::TYPE_INSTANCED; //no type? assume this was instanced
+			}
+
+			if (next_tag.fields.has("instance")) {
+				instance = packed_scene->get_state()->add_value(next_tag.fields["instance"]);
+
+				if (packed_scene->get_state()->get_node_count() == 0 && parent == -1) {
+					packed_scene->get_state()->set_base_scene(instance);
+					instance = -1;
+				}
+			}
+
+			if (next_tag.fields.has("instance_placeholder")) {
+				String path = next_tag.fields["instance_placeholder"];
+
+				int path_v = packed_scene->get_state()->add_value(path);
+
+				if (packed_scene->get_state()->get_node_count() == 0) {
+					error = ERR_FILE_CORRUPT;
+					error_text = "Instance Placeholder can't be used for inheritance.";
+					_printerr();
+					return Ref<PackedScene>();
+				}
+
+				instance = path_v | SceneState::FLAG_INSTANCE_IS_PLACEHOLDER;
+			}
+
+			if (next_tag.fields.has("owner")) {
+				owner = packed_scene->get_state()->add_node_path(next_tag.fields["owner"]);
+			} else {
+				if (parent != -1 && !(type == SceneState::TYPE_INSTANCED && instance == -1)) {
+					owner = 0; //if no owner, owner is root
+				}
+			}
+
+			if (next_tag.fields.has("index")) {
+				index = next_tag.fields["index"];
+			}
+
+			int node_id = packed_scene->get_state()->add_node(parent, owner, type, name, instance, index);
+
+			if (next_tag.fields.has("groups")) {
+				Array groups = next_tag.fields["groups"];
+				for (int i = 0; i < groups.size(); i++) {
+					packed_scene->get_state()->add_node_group(node_id, packed_scene->get_state()->add_name(groups[i]));
+				}
+			}
+
+			while (true) {
+				String assign;
+				Variant value;
+
+				error = VariantParser::parse_tag_assign_eof(&stream, lines, error_text, next_tag, assign, value, &parser);
+
+				if (error) {
+					if (error != ERR_FILE_EOF) {
+						_printerr();
+						return Ref<PackedScene>();
+					} else {
+						return packed_scene;
+					}
+				}
+
+				if (assign != String()) {
+					int nameidx = packed_scene->get_state()->add_name(assign);
+					int valueidx = packed_scene->get_state()->add_value(value);
+					packed_scene->get_state()->add_node_property(node_id, nameidx, valueidx);
+					//it's assignment
+				} else if (next_tag.name != String()) {
+					break;
+				}
+			}
+		} else if (next_tag.name == "connection") {
+			if (!next_tag.fields.has("from")) {
+				error = ERR_FILE_CORRUPT;
+				error_text = "missing 'from' field from connection tag";
+				return Ref<PackedScene>();
+			}
+
+			if (!next_tag.fields.has("to")) {
+				error = ERR_FILE_CORRUPT;
+				error_text = "missing 'to' field from connection tag";
+				return Ref<PackedScene>();
+			}
+
+			if (!next_tag.fields.has("signal")) {
+				error = ERR_FILE_CORRUPT;
+				error_text = "missing 'signal' field from connection tag";
+				return Ref<PackedScene>();
+			}
+
+			if (!next_tag.fields.has("method")) {
+				error = ERR_FILE_CORRUPT;
+				error_text = "missing 'method' field from connection tag";
+				return Ref<PackedScene>();
+			}
+
+			NodePath from = next_tag.fields["from"];
+			NodePath to = next_tag.fields["to"];
+			StringName method = next_tag.fields["method"];
+			StringName signal = next_tag.fields["signal"];
+			int flags = CONNECT_PERSIST;
+			Array binds;
+
+			if (next_tag.fields.has("flags")) {
+				flags = next_tag.fields["flags"];
+			}
+
+			if (next_tag.fields.has("binds")) {
+				binds = next_tag.fields["binds"];
+			}
+
+			Vector<int> bind_ints;
+			for (int i = 0; i < binds.size(); i++) {
+				bind_ints.push_back(packed_scene->get_state()->add_value(binds[i]));
+			}
+
+			packed_scene->get_state()->add_connection(
+					packed_scene->get_state()->add_node_path(from.simplified()),
+					packed_scene->get_state()->add_node_path(to.simplified()),
+					packed_scene->get_state()->add_name(signal),
+					packed_scene->get_state()->add_name(method),
+					flags,
+					bind_ints);
+
+			error = VariantParser::parse_tag(&stream, lines, error_text, next_tag, &parser);
+
+			if (error) {
+				if (error != ERR_FILE_EOF) {
+					_printerr();
+					return Ref<PackedScene>();
+				} else {
+					return packed_scene;
+				}
+			}
+		} else if (next_tag.name == "editable") {
+			if (!next_tag.fields.has("path")) {
+				error = ERR_FILE_CORRUPT;
+				error_text = "missing 'path' field from connection tag";
+				_printerr();
+				return Ref<PackedScene>();
+			}
+
+			NodePath path = next_tag.fields["path"];
+
+			packed_scene->get_state()->add_editable_instance(path.simplified());
+
+			error = VariantParser::parse_tag(&stream, lines, error_text, next_tag, &parser);
+
+			if (error) {
+				if (error != ERR_FILE_EOF) {
+					_printerr();
+					return Ref<PackedScene>();
+				} else {
+					return packed_scene;
+				}
+			}
+		} else {
+			error = ERR_FILE_CORRUPT;
+			_printerr();
+			return Ref<PackedScene>();
+		}
+	}
+
+	return packed_scene;
+}

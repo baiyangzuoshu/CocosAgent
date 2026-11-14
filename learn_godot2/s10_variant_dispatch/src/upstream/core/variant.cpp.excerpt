@@ -1,8 +1,9 @@
-/* Godot Godot 2.1 source excerpts.
-/* Upstream: engine/godot-2.1/core/variant.cpp
-/* Original line ranges are copied from the local source snapshot.
-/* Study excerpt; not a standalone compilation unit.
-/* Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+/*
+ * Godot 2.1 source excerpt.
+ * Upstream: engine/godot-2.1/core/variant.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license notice: Godot Engine; see course-root SOURCE_LICENSE.txt.
  */
 
 /* Upstream lines 198-270 */

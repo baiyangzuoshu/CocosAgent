@@ -6,7 +6,9 @@
 
 对象 ID 由谁生成和移除？`NOTIFICATION_PREDELETE` 与 C++ 析构是什么顺序？当脚本变量共享一个 `Reference` 时，谁决定删除时机？
 
-## C++ 源码追踪
+## 源码调用链
+
+源码依据：`engine/godot-3.6/`（Godot 3.6 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
 以下路径相对于 `engine/godot-3.6/` 快照根目录：
 
@@ -16,7 +18,22 @@
 - `core/reference.h:252-273`：`Ref<T>` 在最后引用释放时调用 `memdelete`。
 - `core/object.cpp:1747`：Object 类型注册了脚本可调用的虚拟 `free()` 方法。
 
-## 最小实验
+## 本课源码复刻
+
+`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-3.6` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+
+| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
+| --- | --- | --- | --- | --- |
+| 1 | [object.cpp](src/upstream/core/object.cpp) | [摘录](src/upstream/core/object.cpp.excerpt) | `engine/godot-3.6/core/object.cpp` | 388-395, 1747-1747, 1931-1952 |
+| 2 | [object.h](src/upstream/core/object.h) | [摘录](src/upstream/core/object.h.excerpt) | `engine/godot-3.6/core/object.h` | 604-604 |
+| 3 | [reference.cpp](src/upstream/core/reference.cpp) | [摘录](src/upstream/core/reference.cpp.excerpt) | `engine/godot-3.6/core/reference.cpp` | 57-96 |
+| 4 | [reference.h](src/upstream/core/reference.h) | [摘录](src/upstream/core/reference.h.excerpt) | `engine/godot-3.6/core/reference.h` | 252-273 |
+
+## 可运行源码复刻
+
+课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+
+## 最小 Godot/GDScript 实验
 
 - `project.godot` 使用 Godot 3.6 配置，主场景为 `main.tscn`。
 - `manual_object.gd` 继承 `Object` 并显式调用 `free()`；`reference_probe.gd` 继承 `Reference`，主脚本用两个变量持有它并逐个清空。
@@ -32,13 +49,8 @@ godot --path .
 
 不演示 `WeakRef`、引用循环、脚本实例绑定计数或多线程析构。Godot 3.6 使用 `Reference`、`ObjectID`、`ClassDB` 与 GDScript `free()` 虚方法；本课尚未运行。
 
-## 本课 C++ 源码摘录
+## 下一课
 
-课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+继续阅读 [s08_classdb_registration](../s08_classdb_registration/README.md)。
 
-| 课内摘录 | Godot 源文件 | 上游行段 |
-| --- | --- | --- |
-| [object.cpp](src/upstream/core/object.cpp.excerpt) | godot-3.6/core/object.cpp | 388-395, 1747-1747, 1931-1952 |
-| [object.h](src/upstream/core/object.h.excerpt) | godot-3.6/core/object.h | 604-604 |
-| [reference.cpp](src/upstream/core/reference.cpp.excerpt) | godot-3.6/core/reference.cpp | 57-96 |
-| [reference.h](src/upstream/core/reference.h.excerpt) | godot-3.6/core/reference.h | 252-273 |
+源码版权与许可说明见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。

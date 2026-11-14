@@ -6,7 +6,9 @@
 
 平台层如何处理 macOS 打开的场景文件？`Main::setup()` 的错误码如何影响后续启动？`application/run/main_scene` 最终怎样触发脚本 READY？
 
-## C++ 源码追踪
+## 源码调用链
+
+源码依据：`engine/godot-3.6/`（Godot 3.6 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
 以下路径相对于 `engine/godot-3.6/` 快照根目录：
 
@@ -18,7 +20,23 @@
 
 路径摘要：macOS `main()` → `Main::setup(argv)` → `Main::start()` 选择主场景/主循环 → `OS_OSX::run()` → `SceneTree::init()` → Node READY → GDScript `_ready()`。平台打开单个场景文件的特例和普通项目启动共享 `Main`，但参数来源不同。
 
-## 最小实验
+## 本课源码复刻
+
+`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-3.6` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+
+| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
+| --- | --- | --- | --- | --- |
+| 1 | [main.cpp](src/upstream/main/main.cpp) | [摘录](src/upstream/main/main.cpp.excerpt) | `engine/godot-3.6/main/main.cpp` | 418-437, 1682-1682 |
+| 2 | [godot_main_osx.mm](src/upstream/platform/osx/godot_main_osx.mm) | [摘录](src/upstream/platform/osx/godot_main_osx.mm.excerpt) | `engine/godot-3.6/platform/osx/godot_main_osx.mm` | 38-78 |
+| 3 | [os_osx.mm](src/upstream/platform/osx/os_osx.mm) | [摘录](src/upstream/platform/osx/os_osx.mm.excerpt) | `engine/godot-3.6/platform/osx/os_osx.mm` | 3442-3474 |
+| 4 | [node.cpp](src/upstream/scene/main/node.cpp) | [摘录](src/upstream/scene/main/node.cpp.excerpt) | `engine/godot-3.6/scene/main/node.cpp` | 2868-2885 |
+| 5 | [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp) | [摘录](src/upstream/scene/main/scene_tree.cpp.excerpt) | `engine/godot-3.6/scene/main/scene_tree.cpp` | 521-526 |
+
+## 可运行源码复刻
+
+课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+
+## 最小 Godot/GDScript 实验
 
 - `project.godot`：Godot 3.6 项目配置，设置 `run/main_scene`。
 - `main.tscn`：format 2 文本场景，只有一个挂载脚本的 Node。
@@ -36,14 +54,8 @@ godot --path .
 
 本课只追踪 macOS 桌面入口，不推断 Android、iOS、Web 等平台都经过相同的原生 `main()` 文件。只观察一条启动路径，不展开 `Main::setup()`、服务器初始化或帧循环；这些内容由 S02 及后续课程分别追踪。此实验尚未运行。
 
-## 本课 C++ 源码摘录
+## 下一课
 
-课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+继续阅读 [s02_main_setup](../s02_main_setup/README.md)。
 
-| 课内摘录 | Godot 源文件 | 上游行段 |
-| --- | --- | --- |
-| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-3.6/main/main.cpp | 418-437, 1682-1682 |
-| [godot_main_osx.mm](src/upstream/platform/osx/godot_main_osx.mm.excerpt) | godot-3.6/platform/osx/godot_main_osx.mm | 38-78 |
-| [os_osx.mm](src/upstream/platform/osx/os_osx.mm.excerpt) | godot-3.6/platform/osx/os_osx.mm | 3442-3474 |
-| [node.cpp](src/upstream/scene/main/node.cpp.excerpt) | godot-3.6/scene/main/node.cpp | 2868-2885 |
-| [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp.excerpt) | godot-3.6/scene/main/scene_tree.cpp | 521-526 |
+源码版权与许可说明见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。

@@ -6,7 +6,9 @@
 
 `ClassDB` 注册类型与 `Engine` 注册脚本单例分别发生在哪里？物理/导航初始化和服务器单例发布的次序如何？
 
-## C++ 源码追踪
+## 源码调用链
+
+源码依据：`engine/godot-3.6/`（Godot 3.6 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
 以下路径相对于 `engine/godot-3.6/` 快照根目录：
 
@@ -19,7 +21,22 @@
 
 调用摘要：`setup2()` 初始化平台服务 → 注册服务类 → 注册场景类 → 初始化物理/导航 → 发布服务器单例 → 初始化脚本语言。ClassDB 类型存在，不等于一个服务单例已发布；源码分别处理这两件事。
 
-## 最小实验
+## 本课源码复刻
+
+`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-3.6` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+
+| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
+| --- | --- | --- | --- | --- |
+| 1 | [core_bind.cpp](src/upstream/core/bind/core_bind.cpp) | [摘录](src/upstream/core/bind/core_bind.cpp.excerpt) | `engine/godot-3.6/core/bind/core_bind.cpp` | 2949-2950 |
+| 2 | [main.cpp](src/upstream/main/main.cpp) | [摘录](src/upstream/main/main.cpp.excerpt) | `engine/godot-3.6/main/main.cpp` | 1422-1477 |
+| 3 | [register_server_types.cpp](src/upstream/servers/register_server_types.cpp) | [摘录](src/upstream/servers/register_server_types.cpp.excerpt) | `engine/godot-3.6/servers/register_server_types.cpp` | 110-124, 211-220 |
+| 4 | [visual_server.cpp](src/upstream/servers/visual_server.cpp) | [摘录](src/upstream/servers/visual_server.cpp.excerpt) | `engine/godot-3.6/servers/visual_server.cpp` | 2286-2286 |
+
+## 可运行源码复刻
+
+课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+
+## 最小 Godot/GDScript 实验
 
 - `project.godot`：Godot 3.6 项目配置，版本 4。
 - `main.tscn`：format 2 文本场景。
@@ -37,13 +54,8 @@ godot --path .
 
 只比较一个基础场景类和一个服务器类，并读取一项统计；没有检查每个条件编译分支或平台后端。Godot 3.6 保留 `VisualServer` / `ClassDB` 命名，不外推为 Godot 4 的注册时序。本课尚未运行。
 
-## 本课 C++ 源码摘录
+## 下一课
 
-课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+继续阅读 [s04_main_start](../s04_main_start/README.md)。
 
-| 课内摘录 | Godot 源文件 | 上游行段 |
-| --- | --- | --- |
-| [core_bind.cpp](src/upstream/core/bind/core_bind.cpp.excerpt) | godot-3.6/core/bind/core_bind.cpp | 2949-2950 |
-| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-3.6/main/main.cpp | 1422-1477, 1501-1506, 1615-1633, 1648-1657 |
-| [register_server_types.cpp](src/upstream/servers/register_server_types.cpp.excerpt) | godot-3.6/servers/register_server_types.cpp | 110-124, 211-220 |
-| [visual_server.cpp](src/upstream/servers/visual_server.cpp.excerpt) | godot-3.6/servers/visual_server.cpp | 2286-2286 |
+源码版权与许可说明见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。

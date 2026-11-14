@@ -1,0 +1,36 @@
+/*
+ * Godot 4 source excerpt.
+ * Upstream: engine/godot-4.7/scene/resources/packed_scene.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 2546-2548 */
+Error PackedScene::pack(Node *p_scene) {
+	return state->pack(p_scene);
+}
+
+/* Upstream lines 2580-2601 */
+Node *PackedScene::instantiate(GenEditState p_edit_state) const {
+#ifndef TOOLS_ENABLED
+	ERR_FAIL_COND_V_MSG(p_edit_state != GEN_EDIT_STATE_DISABLED, nullptr, "Edit state is only for editors, does not work without tools compiled.");
+#endif
+
+	Node *s = state->instantiate((SceneState::GenEditState)p_edit_state);
+	if (!s) {
+		return nullptr;
+	}
+
+	if (p_edit_state != GEN_EDIT_STATE_DISABLED) {
+		s->set_scene_instance_state(state);
+	}
+
+	if (!is_built_in()) {
+		s->set_scene_file_path(get_path());
+	}
+
+	s->notification(Node::NOTIFICATION_SCENE_INSTANTIATED);
+
+	return s;
+}

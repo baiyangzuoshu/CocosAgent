@@ -1,0 +1,6 @@
+config_version=6
+
+[application]
+
+config/name="Godot 3.6 S25 ResourceCache 路径映射与共享资源"
+run/main_scene="res://main.tscn"

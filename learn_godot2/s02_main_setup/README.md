@@ -6,7 +6,9 @@
 
 `-path` 在什么阶段处理？未知参数如何保留？项目设置读取和 `setup2()` 的调用次序是什么？脚本能观察到原始 `argv` 还是筛选后的参数？
 
-## C++ 源码追踪
+## 源码调用链
+
+源码依据：`engine/godot-2.1/`（Godot 2.1 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
 以下路径相对于 `engine/godot-2.1/` 快照根目录：
 
@@ -19,7 +21,20 @@
 
 调用摘要：`argv` → `Main::setup()` 解析项目路径和选项 → `Globals::setup()` → 保存 `main_args` → 可选 `setup2()`。Godot 2.1 使用 `OS.get_cmdline_args()` 观察保存的参数。
 
-## 最小实验
+## 本课源码复刻
+
+`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-2.1` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+
+| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
+| --- | --- | --- | --- | --- |
+| 1 | [core_bind.cpp](src/upstream/core/bind/core_bind.cpp) | [摘录](src/upstream/core/bind/core_bind.cpp.excerpt) | `engine/godot-2.1/core/bind/core_bind.cpp` | 426-432 |
+| 2 | [main.cpp](src/upstream/main/main.cpp) | [摘录](src/upstream/main/main.cpp.excerpt) | `engine/godot-2.1/main/main.cpp` | 199-245 |
+
+## 可运行源码复刻
+
+课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+
+## 最小 Godot/GDScript 实验
 
 - `engine.cfg`：指定主场景。
 - `main.tscn`：Godot 2.1 format 1 文本场景，只包含一个 Node。
@@ -37,11 +52,8 @@ godot -path . --course-probe
 
 实验用单个未知选项隔离参数转交行为，不展开音视频驱动、远程调试、导出或编辑器参数。项目使用 Godot 2.1 的 `engine.cfg` 和 format 1 场景；本文仅完成静态源码与文件结构核对，未运行旧版工具。
 
-## 本课 C++ 源码摘录
+## 下一课
 
-课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+继续阅读 [s03_engine_server_init](../s03_engine_server_init/README.md)。
 
-| 课内摘录 | Godot 源文件 | 上游行段 |
-| --- | --- | --- |
-| [core_bind.cpp](src/upstream/core/bind/core_bind.cpp.excerpt) | godot-2.1/core/bind/core_bind.cpp | 426-432 |
-| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-2.1/main/main.cpp | 199-245, 253-253, 560-580, 649-676, 1010-1010 |
+源码版权与许可说明见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。

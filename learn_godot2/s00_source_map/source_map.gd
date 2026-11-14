@@ -6,6 +6,9 @@ const SNAPSHOT_PATCH = "7"
 const SNAPSHOT_STATUS = "rc"
 
 func _ready():
+	# Run the lesson's miniature source replica before probing the real engine API.
+	var replay = load("res://src/source_replay.gd").new()
+	replay.run()
 	var version_info = OS.get_engine_version()
 	var matches_snapshot = version_info["major"] == SNAPSHOT_MAJOR
 	matches_snapshot = matches_snapshot and version_info["minor"] == SNAPSHOT_MINOR

@@ -6,7 +6,9 @@
 
 `register_class<T>()` 写入哪些类型信息？`class_exists()` 和 `can_instance()` 分别检查什么？`ClassDB.instance()` 怎样把登记的工厂结果交给 GDScript？
 
-## C++ 源码追踪
+## 源码调用链
+
+源码依据：`engine/godot-3.6/`（Godot 3.6 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
 以下路径相对于 `engine/godot-3.6/` 快照根目录：
 
@@ -21,7 +23,26 @@
 
 调用摘要：C++ `register_scene_types()` 登记类 → ClassDB 保存构造工厂 → GDScript 查询类型是否存在/可创建 → `ClassDB.instance("Node2D")` 调用工厂并返回实例。
 
-## 最小实验
+## 本课源码复刻
+
+`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-3.6` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+
+| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
+| --- | --- | --- | --- | --- |
+| 1 | [core_bind.cpp](src/upstream/core/bind/core_bind.cpp) | [摘录](src/upstream/core/bind/core_bind.cpp.excerpt) | `engine/godot-3.6/core/bind/core_bind.cpp` | 2949-2968 |
+| 2 | [class_db.cpp](src/upstream/core/class_db.cpp) | [摘录](src/upstream/core/class_db.cpp.excerpt) | `engine/godot-3.6/core/class_db.cpp` | 491-494 |
+| 3 | [class_db.h](src/upstream/core/class_db.h) | [摘录](src/upstream/core/class_db.h.excerpt) | `engine/godot-3.6/core/class_db.h` | 165-181 |
+| 4 | [object.cpp](src/upstream/core/object.cpp) | [摘录](src/upstream/core/object.cpp.excerpt) | `engine/godot-3.6/core/object.cpp` | 1673-1675 |
+| 5 | [gdscript.cpp](src/upstream/modules/gdscript/gdscript.cpp) | [摘录](src/upstream/modules/gdscript/gdscript.cpp.excerpt) | `engine/godot-3.6/modules/gdscript/gdscript.cpp` | 60-78 |
+| 6 | [node_2d.cpp](src/upstream/scene/2d/node_2d.cpp) | [摘录](src/upstream/scene/2d/node_2d.cpp.excerpt) | `engine/godot-3.6/scene/2d/node_2d.cpp` | 382-430 |
+| 7 | [node_2d.h](src/upstream/scene/2d/node_2d.h) | [摘录](src/upstream/scene/2d/node_2d.h.excerpt) | `engine/godot-3.6/scene/2d/node_2d.h` | 37-37 |
+| 8 | [register_scene_types.cpp](src/upstream/scene/register_scene_types.cpp) | [摘录](src/upstream/scene/register_scene_types.cpp.excerpt) | `engine/godot-3.6/scene/register_scene_types.cpp` | 250-287 |
+
+## 可运行源码复刻
+
+课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+
+## 最小 Godot/GDScript 实验
 
 - `project.godot` 使用 Godot 3.6 配置，主场景 `main.tscn` 为 format 2。
 - `type_probe.gd` 依次查询 `Node2D` 存在性和可实例化状态，再用 `ClassDB.instance()` 创建实例；通过 `set_position()` 和 `position` 属性观察方法与属性绑定，并检查 `CanvasItem`、`Node` 父类关系。
@@ -37,17 +58,8 @@ godot --path .
 
 只检查一个内置 C++ 类，不枚举完整 ClassDB，也不讨论 GDNative 注册、编辑器类、脚本全局类和属性/方法绑定细节。Godot 3.6 使用 `ClassDB.instance()`；本课依据静态源码，尚未运行实验。
 
-## 本课 C++ 源码摘录
+## 下一课
 
-课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+继续阅读 [s09_variant_dynamic_values](../s09_variant_dynamic_values/README.md)。
 
-| 课内摘录 | Godot 源文件 | 上游行段 |
-| --- | --- | --- |
-| [core_bind.cpp](src/upstream/core/bind/core_bind.cpp.excerpt) | godot-3.6/core/bind/core_bind.cpp | 2949-2968 |
-| [class_db.cpp](src/upstream/core/class_db.cpp.excerpt) | godot-3.6/core/class_db.cpp | 491-494 |
-| [class_db.h](src/upstream/core/class_db.h.excerpt) | godot-3.6/core/class_db.h | 165-181 |
-| [object.cpp](src/upstream/core/object.cpp.excerpt) | godot-3.6/core/object.cpp | 1673-1675 |
-| [gdscript.cpp](src/upstream/modules/gdscript/gdscript.cpp.excerpt) | godot-3.6/modules/gdscript/gdscript.cpp | 60-78 |
-| [node_2d.cpp](src/upstream/scene/2d/node_2d.cpp.excerpt) | godot-3.6/scene/2d/node_2d.cpp | 382-430 |
-| [node_2d.h](src/upstream/scene/2d/node_2d.h.excerpt) | godot-3.6/scene/2d/node_2d.h | 37-37 |
-| [register_scene_types.cpp](src/upstream/scene/register_scene_types.cpp.excerpt) | godot-3.6/scene/register_scene_types.cpp | 250-287 |
+源码版权与许可说明见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。

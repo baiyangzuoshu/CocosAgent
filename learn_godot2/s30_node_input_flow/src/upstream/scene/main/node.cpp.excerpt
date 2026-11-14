@@ -1,0 +1,38 @@
+/*
+ * Godot 2 source excerpt.
+ * Upstream: engine/godot-2.1/scene/main/node.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 468-481 */
+void Node::set_process_input(bool p_enable) {
+
+	if (p_enable == data.input)
+		return;
+
+	data.input = p_enable;
+	if (!is_inside_tree())
+		return;
+
+	if (p_enable)
+		add_to_group("_vp_input" + itos(get_viewport()->get_instance_ID()));
+	else
+		remove_from_group("_vp_input" + itos(get_viewport()->get_instance_ID()));
+}
+
+/* Upstream lines 487-499 */
+void Node::set_process_unhandled_input(bool p_enable) {
+
+	if (p_enable == data.unhandled_input)
+		return;
+	data.unhandled_input = p_enable;
+	if (!is_inside_tree())
+		return;
+
+	if (p_enable)
+		add_to_group("_vp_unhandled_input" + itos(get_viewport()->get_instance_ID()));
+	else
+		remove_from_group("_vp_unhandled_input" + itos(get_viewport()->get_instance_ID()));
+}

@@ -1,6 +1,9 @@
 extends Node
 
 func _ready():
+	# Run the lesson's miniature source replica before probing the real engine API.
+	var replay = load("res://src/source_replay.gd").new()
+	replay.run()
 	print("S08 Node2D registered: ", type_exists("Node2D"))
 	var probe = Node2D.new()
 	print("S08 native type: ", probe.get_type())

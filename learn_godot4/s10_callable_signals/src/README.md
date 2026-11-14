@@ -1,7 +1,18 @@
-# 本课 C++ 源码摘录
+# 本课源码副本
 
-先看课程 README 的调用链，再按上游文件路径与原始行号逐段阅读。
+本课使用 `godot-4.7`（Godot 4.7）快照。`upstream/` 中的 C++/头文件/构建脚本是从仓库 `engine/godot-4.7/` 按原路径复制的完整上游文件，逐字节保留；本目录不修改引擎快照，也不把这些文件当作独立可编译工程。
 
-- [core/object/object.cpp](src/upstream/core/object/object.cpp.excerpt)：上游 godot-4.7/core/object/object.cpp，行 1179-1221, 1233-1315, 1518-1580。
-- [core/variant/callable.cpp](src/upstream/core/variant/callable.cpp.excerpt)：上游 godot-4.7/core/variant/callable.cpp，行 44-87。
-- [core/variant/variant.h](src/upstream/core/variant/variant.h.excerpt)：上游 godot-4.7/core/variant/variant.h，行 922-940。
+先读课程 README 中的调用链，再按下表中的行段打开摘录；随后在完整文件副本里查看函数上下文、条件分支和前后调用。完整源码以仓库只读 `engine/` 快照为最终依据。
+
+| 阅读顺序 | 完整上游文件副本 | 关键行段摘录 | 上游文件 |
+| --- | --- | --- | --- |
+| 1 | [object.cpp](upstream/core/object/object.cpp) | [1179-1221](upstream/core/object/object.cpp.excerpt) | `engine/godot-4.7/core/object/object.cpp` |
+| 2 | [callable.cpp](upstream/core/variant/callable.cpp) | [44-87](upstream/core/variant/callable.cpp.excerpt) | `engine/godot-4.7/core/variant/callable.cpp` |
+| 3 | [variant.h](upstream/core/variant/variant.h) | [922-940](upstream/core/variant/variant.h.excerpt) | `engine/godot-4.7/core/variant/variant.h` |
+
+## 副本核对
+
+每个完整文件均与对应快照文件逐字节复制。摘录文件开头注明上游相对路径和行号；查阅时可用行号在完整副本中定位。
+## GDScript 源码复刻
+
+[`source_replay.gd`](source_replay.gd) 把本课 C++ 路径中的关键状态和调用顺序写成可运行的 GDScript 小模型。它保留概念对应关系，便于观察分支/状态变化；它不是 Godot C++ 实现，也不替代 `upstream/` 的逐字节原文。主项目脚本先执行该模型，再调用真实 Godot API 做对照。

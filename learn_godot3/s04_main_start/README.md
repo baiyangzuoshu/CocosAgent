@@ -6,7 +6,9 @@
 
 项目主场景配置何时参与启动？默认 `MainLoop` 类型是什么？场景实例与 OS 主循环分别在哪一步交接？
 
-## C++ 源码追踪
+## 源码调用链
+
+源码依据：`engine/godot-3.6/`（Godot 3.6 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
 以下路径相对于 `engine/godot-3.6/` 快照根目录：
 
@@ -19,7 +21,21 @@
 
 调用摘要：项目配置和启动参数确定 scene path / loop type → ClassDB 创建默认 `SceneTree` → 加载并实例化 `PackedScene` → 设为当前场景并加入 root → OS 持有主循环 → SceneTree 初始化。
 
-## 最小实验
+## 本课源码复刻
+
+`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-3.6` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+
+| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
+| --- | --- | --- | --- | --- |
+| 1 | [main.cpp](src/upstream/main/main.cpp) | [摘录](src/upstream/main/main.cpp.excerpt) | `engine/godot-3.6/main/main.cpp` | 1682-1682, 1859-1867, 1927-1948 |
+| 2 | [node.cpp](src/upstream/scene/main/node.cpp) | [摘录](src/upstream/scene/main/node.cpp.excerpt) | `engine/godot-3.6/scene/main/node.cpp` | 3132-3132 |
+| 3 | [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp) | [摘录](src/upstream/scene/main/scene_tree.cpp.excerpt) | `engine/godot-3.6/scene/main/scene_tree.cpp` | 521-525, 2119-2119 |
+
+## 可运行源码复刻
+
+课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+
+## 最小 Godot/GDScript 实验
 
 - `project.godot`：Godot 3.6 项目配置，版本 4，指定 `main.tscn`。
 - `main.tscn`：format 2 文本场景，root Node 挂接脚本。
@@ -37,12 +53,8 @@ godot --path .
 
 实验仅走项目设置中的默认 `SceneTree` 和主场景，不覆盖脚本型 MainLoop、编辑器、自定义命令行场景及其他平台的 `OS::run()` 实现。Godot 3.6 使用 `VisualServer`、`PackedScene::instance()` 和 format 2 场景；本课未运行。
 
-## 本课 C++ 源码摘录
+## 下一课
 
-课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+继续阅读 [s05_main_iteration](../s05_main_iteration/README.md)。
 
-| 课内摘录 | Godot 源文件 | 上游行段 |
-| --- | --- | --- |
-| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-3.6/main/main.cpp | 1682-1682, 1859-1867, 1927-1948, 2193-2206, 2259-2259 |
-| [node.cpp](src/upstream/scene/main/node.cpp.excerpt) | godot-3.6/scene/main/node.cpp | 3132-3132 |
-| [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp.excerpt) | godot-3.6/scene/main/scene_tree.cpp | 521-525, 2119-2119 |
+源码版权与许可说明见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。

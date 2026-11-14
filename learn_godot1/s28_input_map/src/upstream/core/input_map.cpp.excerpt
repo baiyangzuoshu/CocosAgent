@@ -1,0 +1,37 @@
+/*
+ * Godot 1 source excerpt.
+ * Upstream: engine/godot-1.1/core/input_map.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 128-137 */
+void InputMap::action_add_event(const StringName& p_action,const InputEvent& p_event) {
+
+	ERR_FAIL_COND(p_event.type==InputEvent::ACTION);
+	ERR_FAIL_COND( !input_map.has(p_action) );
+	if (_find_event(input_map[p_action].inputs,p_event))
+		return; //already gots
+
+	input_map[p_action].inputs.push_back(p_event);
+
+}
+
+/* Upstream lines 190-205 */
+bool InputMap::event_is_action(const InputEvent& p_event, const StringName& p_action) const {
+
+
+	Map<StringName,Action >::Element *E=input_map.find(p_action);
+	if(!E) {
+		ERR_EXPLAIN("Request for nonexistent InputMap action: "+String(p_action));
+		ERR_FAIL_COND_V(!E,false);
+	}
+
+	if (p_event.type==InputEvent::ACTION) {
+
+		return p_event.action.action==E->get().id;
+	}
+
+	return _find_event(E->get().inputs,p_event)!=NULL;
+}

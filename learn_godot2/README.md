@@ -2,13 +2,13 @@
 
 源码依据：`engine/godot-2.1/`，版本标记为 `2.1.7-rc`。使用 engine.cfg、文本 .tscn、ObjectTypeDB 与旧版 GDScript API。
 
-本课程的已编写范围为 S00–S20。每课都是独立项目，按“问题 → C++ 调用链 → 上游源码摘录 → 最小 GDScript 实验 → 观察与边界”阅读。
+本课程的已编写范围为 S00–S30。每课都是独立项目，按“问题 → C++ 调用链 → 上游源码摘录 → 最小 GDScript 实验 → 观察与边界”阅读。
 
-课内 `src/upstream/` 保留本地快照中与本课直接相关的 C++ 源码行段，并在摘录中标出原始路径和行号；它用于逐行对照，不是单独编译的引擎副本。完整上下文以只读 `engine/` 快照为准，许可文本见 [SOURCE_LICENSE.txt](SOURCE_LICENSE.txt)。
+S00–S10 与 S21–S30 在 `src/upstream/` 保留逐字节的完整上游 C++ 文件，并配带原始行号的函数摘录；S11–S20 仍以原文摘录为主。课程中的 `src/source_replay.gd` 是按所选调用路径写成的可运行 GDScript 教学模型，不替代引擎实现。完整源码依据仍是只读 `engine/` 快照，许可文本见 [SOURCE_LICENSE.txt](SOURCE_LICENSE.txt)。
 
 ## 课程入口
 
-- [S00–S20 课程大纲](课程大纲.md)
+- [S00–S30 课程大纲](课程大纲.md)
 - [第 0 课：源码快照与目录地图](./s00_source_map/README.md)
 - [第 1 课：平台 `main()` 到 `Main`](./s01_platform_entry/README.md)
 - [第 2 课：命令行、项目路径与 `Main::setup()`](./s02_main_setup/README.md)
@@ -30,6 +30,17 @@
 - [第 18 课：延迟调用队列与延迟删除](./s18_deferred_delete/README.md)
 - [第 19 课：Node2D 变换、CanvasItem 与 2D 绘制](./s19_node2d_canvas/README.md)
 - [第 20 课：Spatial 局部变换与父子全局变换](./s20_spatial_transform/README.md)
+
+- [第 21 课：Resource、Reference 与路径归属](./s21_resource_reference/README.md)
+- [第 22 课：ResourceLoader 格式注册与分派](./s22_resource_format_loader/README.md)
+- [第 23 课：ResourceInteractiveLoader 的分阶段加载](./s23_interactive_loader/README.md)
+- [第 24 课：分帧读取与阻塞 wait 的边界](./s24_incremental_loading_boundary/README.md)
+- [第 25 课：ResourceCache 路径缓存与共享实例](./s25_resource_cache/README.md)
+- [第 26 课：PackedScene 的 pack、instance 与子场景](./s26_packed_scene_instance/README.md)
+- [第 27 课：文本场景中的外部资源依赖](./s27_scene_serialization/README.md)
+- [第 28 课：平台事件到 InputEvent 的构造路径](./s28_input_event_creation/README.md)
+- [第 29 课：InputMap 动作绑定与状态查询](./s29_input_map_actions/README.md)
+- [第 30 课：Node 输入、未处理输入与传播顺序](./s30_node_input_flow/README.md)
 
 ## 阅读与运行
 

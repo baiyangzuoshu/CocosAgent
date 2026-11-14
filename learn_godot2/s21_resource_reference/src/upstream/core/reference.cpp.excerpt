@@ -1,0 +1,26 @@
+/*
+ * Godot 2 source excerpt.
+ * Upstream: engine/godot-2.1/core/reference.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 65-81 */
+void Reference::reference() {
+
+	refcount.ref();
+	if (get_script_instance()) {
+		get_script_instance()->refcount_incremented();
+	}
+}
+bool Reference::unreference() {
+
+	bool die = refcount.unref();
+
+	if (get_script_instance()) {
+		die = die && get_script_instance()->refcount_decremented();
+	}
+
+	return die;
+}

@@ -6,7 +6,9 @@
 
 物理 tick rate 如何产生固定步长？每帧物理步数受什么限制？`process()` 与物理步循环的相对顺序是什么？
 
-## C++ 源码追踪
+## 源码调用链
+
+源码依据：`engine/godot-4.7/`（Godot 4.7 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
 以下路径相对于 `engine/godot-4.7/` 快照根目录：
 
@@ -18,7 +20,20 @@
 
 调用摘要：OS 帧循环 → `Main::iteration()` 计算 process step 与 physics steps → 零次或多次固定物理循环 → 一次 process → RenderingServer sync/条件绘制 → AudioServer 更新。
 
-## 最小实验
+## 本课源码复刻
+
+`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-4.7` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+
+| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
+| --- | --- | --- | --- | --- |
+| 1 | [main.cpp](src/upstream/main/main.cpp) | [摘录](src/upstream/main/main.cpp.excerpt) | `engine/godot-4.7/main/main.cpp` | 4921-4959 |
+| 2 | [node.cpp](src/upstream/scene/main/node.cpp) | [摘录](src/upstream/scene/main/node.cpp.excerpt) | `engine/godot-4.7/scene/main/node.cpp` | 90-108 |
+
+## 可运行源码复刻
+
+课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+
+## 最小 Godot/GDScript 实验
 
 - `project.godot` 指定 `main.tscn` 为运行场景。
 - `frame_probe.gd` 计数 `_process` 和 `_physics_process`，累计约一秒后打印次数并退出。
@@ -34,11 +49,8 @@ godot --path .
 
 不改变 physics tick rate、最大 physics steps、time scale、固定 FPS 或渲染模式。Godot 4.7 使用 `physics_process/process`、`RenderingServer` 与本代 `MainFrameTime`；本课依据静态源码，尚未运行。
 
-## 本课 C++ 源码摘录
+## 下一课
 
-课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+继续阅读 [s06_scene_tree_iteration](../s06_scene_tree_iteration/README.md)。
 
-| 课内摘录 | Godot 源文件 | 上游行段 |
-| --- | --- | --- |
-| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-4.7/main/main.cpp | 4921-4959, 4970-5053, 5062-5097, 5112-5112 |
-| [node.cpp](src/upstream/scene/main/node.cpp.excerpt) | godot-4.7/scene/main/node.cpp | 90-108 |
+源码版权与许可说明见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。

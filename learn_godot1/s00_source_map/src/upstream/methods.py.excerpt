@@ -1,8 +1,8 @@
-# Godot 1 source excerpts.
+# Godot 1.1 source excerpt.
 # Upstream: engine/godot-1.1/methods.py
 # Original line ranges are copied from the local source snapshot.
-# Study excerpt; not a standalone compilation unit.
-# Copyright and license notice: Godot Engine; see ../../../SOURCE_LICENSE.txt.
+# Study excerpt; not a standalone module.
+# Copyright and license notice: Godot Engine; see course-root SOURCE_LICENSE.txt.
 
 # Upstream lines 1085-1102
 def update_version():

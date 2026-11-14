@@ -6,6 +6,9 @@ var physics_reported = false
 var quit_requested = false
 
 func _ready():
+	# Run the lesson's miniature source replica before probing the real engine API.
+	var replay = load("res://src/source_replay.gd").new()
+	replay.run()
 	set_process(true)
 	set_physics_process(true)
 	print("S06 SceneTree probe ready")

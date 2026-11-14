@@ -4,6 +4,9 @@ func _add_dynamic_values(left, right):
 	return left + right
 
 func _ready():
+	# Run the lesson's miniature source replica before probing the real engine API.
+	var replay = load("res://src/source_replay.gd").new()
+	replay.run()
 	var left = 7
 	var right = 2.5
 	print("S10 dynamic sum: ", _add_dynamic_values(left, right))

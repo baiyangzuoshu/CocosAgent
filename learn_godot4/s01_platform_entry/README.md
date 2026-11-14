@@ -6,7 +6,9 @@
 
 `main()` 怎样决定 macOS OS 实例类型？普通桌面运行为什么先进入 AppKit 事件循环？哪个回调再启动 `Main` 和项目主场景？
 
-## C++ 源码追踪
+## 源码调用链
+
+源码依据：`engine/godot-4.7/`（Godot 4.7 对应本地快照）。阅读顺序按真实调用关系排列；函数名、参数和分支以本课完整源码副本为准。
 
 以下路径相对于 `engine/godot-4.7/` 快照根目录：
 
@@ -20,7 +22,24 @@
 
 路径摘要：macOS `main()` → 选择 `OS_MacOS_NSApp` → AppKit `run` → `applicationDidFinishLaunching` → `start_main()` → `Main::setup()` / `Main::start()` → 主场景加入 `SceneTree` → `main_loop->initialize()` → Node READY → GDScript `_ready()`。之后 AppKit observer 才开始逐帧调用 `Main::iteration()`。Headless 和 embedded 会选不同 OS 子类，不走普通 NSApp 回调，但各自的 `run()` 也负责进入 `Main`。
 
-## 最小实验
+## 本课源码复刻
+
+`src/upstream/` 按 Godot 原目录保存本课涉及的完整上游源文件，文件内容直接来自 `godot-4.7` 快照；`.excerpt` 是带原始行号的重点行段，便于先定位再回看完整上下文。每课的副本清单和逐字节核对说明见 [`src/README.md`](src/README.md)。
+
+| 阅读顺序 | 完整源码副本 | 摘录 | 上游版本路径 | 行段 |
+| --- | --- | --- | --- | --- |
+| 1 | [main.cpp](src/upstream/main/main.cpp) | [摘录](src/upstream/main/main.cpp.excerpt) | `engine/godot-4.7/main/main.cpp` | 1035-1068 |
+| 2 | [godot_application_delegate.mm](src/upstream/platform/macos/godot_application_delegate.mm) | [摘录](src/upstream/platform/macos/godot_application_delegate.mm.excerpt) | `engine/godot-4.7/platform/macos/godot_application_delegate.mm` | 142-143 |
+| 3 | [godot_main_macos.mm](src/upstream/platform/macos/godot_main_macos.mm) | [摘录](src/upstream/platform/macos/godot_main_macos.mm.excerpt) | `engine/godot-4.7/platform/macos/godot_main_macos.mm` | 41-141 |
+| 4 | [os_macos.mm](src/upstream/platform/macos/os_macos.mm) | [摘录](src/upstream/platform/macos/os_macos.mm.excerpt) | `engine/godot-4.7/platform/macos/os_macos.mm` | 1107-1109, 1119-1138 |
+| 5 | [node.cpp](src/upstream/scene/main/node.cpp) | [摘录](src/upstream/scene/main/node.cpp.excerpt) | `engine/godot-4.7/scene/main/node.cpp` | 255-280, 3363-3381 |
+| 6 | [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp) | [摘录](src/upstream/scene/main/scene_tree.cpp.excerpt) | `engine/godot-4.7/scene/main/scene_tree.cpp` | 586-591 |
+
+## 可运行源码复刻
+
+课程代码 [`src/source_replay.gd`](src/source_replay.gd) 按本课 C++ 函数关系实现一个小型 GDScript 模型；入口脚本会先运行它，再执行下面的真实引擎 API 实验。阅读时把模型中的状态变化逐步映射到上方的 C++ 摘录。模型只复刻本课选出的路径，不声称等同于完整 Godot 引擎。
+
+## 最小 Godot/GDScript 实验
 
 - `project.godot`：Godot 4.7 项目配置，设置 `run/main_scene`。
 - `main.tscn`：format 3 文本场景，只有一个挂载脚本的 Node。
@@ -38,15 +57,8 @@ godot --path .
 
 本课聚焦 macOS 普通桌面 AppKit 路径。`godot_main_macos.mm` 的 mode 分流、`OS_MacOS_Headless::run()` 和 `OS_MacOS_Embedded::run()` 是不同入口分支，实验不覆盖它们；其他操作系统也有各自的平台启动文件。此实验尚未运行。
 
-## 本课 C++ 源码摘录
+## 下一课
 
-课内摘录保留对应 Godot 源码行段正文，并在段首标出原始行号；完整上下文以只读的 engine 快照为准。摘录用于追踪，不是独立编译单元。许可文本见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。
+继续阅读 [s02_main_setup](../s02_main_setup/README.md)。
 
-| 课内摘录 | Godot 源文件 | 上游行段 |
-| --- | --- | --- |
-| [main.cpp](src/upstream/main/main.cpp.excerpt) | godot-4.7/main/main.cpp | 1035-1068, 4013-4017, 4760-4768 |
-| [godot_application_delegate.mm](src/upstream/platform/macos/godot_application_delegate.mm.excerpt) | godot-4.7/platform/macos/godot_application_delegate.mm | 142-143 |
-| [godot_main_macos.mm](src/upstream/platform/macos/godot_main_macos.mm.excerpt) | godot-4.7/platform/macos/godot_main_macos.mm | 41-141 |
-| [os_macos.mm](src/upstream/platform/macos/os_macos.mm.excerpt) | godot-4.7/platform/macos/os_macos.mm | 1107-1109, 1119-1138 |
-| [node.cpp](src/upstream/scene/main/node.cpp.excerpt) | godot-4.7/scene/main/node.cpp | 255-280, 3363-3381 |
-| [scene_tree.cpp](src/upstream/scene/main/scene_tree.cpp.excerpt) | godot-4.7/scene/main/scene_tree.cpp | 586-591 |
+源码版权与许可说明见课程根目录 [SOURCE_LICENSE.txt](../SOURCE_LICENSE.txt)。

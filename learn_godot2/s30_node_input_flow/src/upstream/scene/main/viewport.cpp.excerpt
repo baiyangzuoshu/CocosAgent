@@ -1,0 +1,37 @@
+/*
+ * Godot 2 source excerpt.
+ * Upstream: engine/godot-2.1/scene/main/viewport.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 2271-2278 */
+void Viewport::input(const InputEvent &p_event) {
+
+	ERR_FAIL_COND(!is_inside_tree());
+
+	get_tree()->_call_input_pause(input_group, "_input", p_event); //not a bug, must happen before GUI, order is _input -> gui input -> _unhandled input
+	_gui_input_event(p_event);
+	//get_tree()->call_group(SceneTree::GROUP_CALL_REVERSE|SceneTree::GROUP_CALL_REALTIME|SceneTree::GROUP_CALL_MULIILEVEL,gui_input_group,"_gui_input",p_event); //special one for GUI, as controls use their own process check
+}
+
+/* Upstream lines 2280-2297 */
+void Viewport::unhandled_input(const InputEvent &p_event) {
+
+	ERR_FAIL_COND(!is_inside_tree());
+
+	get_tree()->_call_input_pause(unhandled_input_group, "_unhandled_input", p_event);
+	//call_group(GROUP_CALL_REVERSE|GROUP_CALL_REALTIME|GROUP_CALL_MULIILEVEL,"unhandled_input","_unhandled_input",ev);
+	if (!get_tree()->input_handled && p_event.type == InputEvent::KEY) {
+		get_tree()->_call_input_pause(unhandled_key_input_group, "_unhandled_key_input", p_event);
+		//call_group(GROUP_CALL_REVERSE|GROUP_CALL_REALTIME|GROUP_CALL_MULIILEVEL,"unhandled_key_input","_unhandled_key_input",ev);
+	}
+
+	if (physics_object_picking && !get_tree()->input_handled) {
+
+		if (p_event.type == InputEvent::MOUSE_BUTTON || p_event.type == InputEvent::MOUSE_MOTION || p_event.type == InputEvent::SCREEN_DRAG || p_event.type == InputEvent::SCREEN_TOUCH) {
+			physics_picking_events.push_back(p_event);
+		}
+	}
+}

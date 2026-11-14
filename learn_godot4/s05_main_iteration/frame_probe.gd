@@ -5,6 +5,9 @@ var process_count = 0
 var physics_count = 0
 
 func _ready() -> void:
+	# Run the lesson's miniature source replica before probing the real engine API.
+	var replay = load("res://src/source_replay.gd").new()
+	replay.run()
 	set_process(true)
 	set_physics_process(true)
 

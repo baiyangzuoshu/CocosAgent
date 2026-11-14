@@ -1,8 +1,8 @@
-# Godot 4 source excerpts.
+# Godot 4.7 source excerpt.
 # Upstream: engine/godot-4.7/version.py
 # Original line ranges are copied from the local source snapshot.
-# Study excerpt; not a standalone compilation unit.
-# Copyright and license notice: Godot Engine; see ../../../SOURCE_LICENSE.txt.
+# Study excerpt; not a standalone module.
+# Copyright and license notice: Godot Engine; see course-root SOURCE_LICENSE.txt.
 
 # Upstream lines 1-9
 short_name = "godot"

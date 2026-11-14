@@ -1,0 +1,79 @@
+/*
+ * Godot 3 source excerpt.
+ * Upstream: engine/godot-3.6/scene/main/scene_tree.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 450-519 */
+void SceneTree::input_event(const Ref<InputEvent> &p_event) {
+	if (Engine::get_singleton()->is_editor_hint() && (Object::cast_to<InputEventJoypadButton>(p_event.ptr()) || Object::cast_to<InputEventJoypadMotion>(*p_event))) {
+		return; //avoid joy input on editor
+	}
+
+	current_event++;
+	root_lock++;
+
+	input_handled = false;
+
+	// Don't make const ref unless you can find and fix what caused GH-34691.
+	Ref<InputEvent> ev = p_event;
+
+	MainLoop::input_event(ev);
+
+	call_group_flags(GROUP_CALL_REALTIME, "_viewports", "_vp_input", ev); //special one for GUI, as controls use their own process check
+
+	if (ScriptDebugger::get_singleton() && ScriptDebugger::get_singleton()->is_remote()) {
+		// Quit from game window using the stop shortcut (F8 by default).
+		// The custom shortcut is provided via environment variable when running from the editor.
+		if (debugger_stop_shortcut.is_null()) {
+			String shortcut_str = OS::get_singleton()->get_environment("__GODOT_EDITOR_STOP_SHORTCUT__");
+			if (!shortcut_str.empty()) {
+				Variant shortcut_var;
+
+				VariantParser::StreamString ss;
+				ss.s = shortcut_str;
+
+				String errs;
+				int line;
+				VariantParser::parse(&ss, shortcut_var, errs, line);
+				debugger_stop_shortcut = shortcut_var;
+			}
+
+			if (debugger_stop_shortcut.is_null()) {
+				// Define a default shortcut if it wasn't provided or is invalid.
+				Ref<InputEventKey> ie;
+				ie.instance();
+				ie->set_scancode(KEY_F8);
+				ie->set_unicode(KEY_F8);
+				debugger_stop_shortcut.instance();
+				debugger_stop_shortcut->set_shortcut(ie);
+			}
+		}
+
+		Ref<InputEventKey> k = ev;
+		if (k.is_valid() && k->is_pressed() && !k->is_echo() && debugger_stop_shortcut->is_shortcut(k)) {
+			ScriptDebugger::get_singleton()->request_quit();
+		}
+	}
+
+	_flush_ugc();
+	root_lock--;
+	//MessageQueue::get_singleton()->flush(); //flushing here causes UI and other places slowness
+
+	root_lock++;
+
+	if (!input_handled) {
+		call_group_flags(GROUP_CALL_REALTIME, "_viewports", "_vp_unhandled_input", ev); //special one for GUI, as controls use their own process check
+		_flush_ugc();
+		//		input_handled = true; - no reason to set this as handled
+		root_lock--;
+		//MessageQueue::get_singleton()->flush(); //flushing here causes UI and other places slowness
+	} else {
+		//		input_handled = true; - no reason to set this as handled
+		root_lock--;
+	}
+
+	_call_idle_callbacks();
+}

@@ -1,0 +1,5 @@
+[gd_scene load_steps=1 format=1]
+
+[node name="BaseScene" type="Node"]
+
+[node name="BaseChild" type="Node" parent="."]

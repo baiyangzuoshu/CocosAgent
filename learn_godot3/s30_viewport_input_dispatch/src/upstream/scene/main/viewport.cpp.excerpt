@@ -1,0 +1,104 @@
+/*
+ * Godot 3 source excerpt.
+ * Upstream: engine/godot-3.6/scene/main/viewport.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1419-1441 */
+void Viewport::_vp_input(const Ref<InputEvent> &p_ev) {
+	ERR_FAIL_COND(p_ev.is_null());
+
+	if (disable_input) {
+		return;
+	}
+
+#ifdef TOOLS_ENABLED
+	if (Engine::get_singleton()->is_editor_hint() && get_tree()->get_edited_scene_root() && get_tree()->get_edited_scene_root()->is_a_parent_of(this)) {
+		return;
+	}
+#endif
+
+	if (to_screen_rect == Rect2()) {
+		return; //if render target, can't get input events
+	}
+
+	//this one handles system input, p_ev are in system coordinates
+	//they are converted to viewport coordinates
+
+	Ref<InputEvent> ev = _make_input_local(p_ev);
+	input(ev);
+}
+
+/* Upstream lines 1443-1469 */
+void Viewport::_vp_unhandled_input(const Ref<InputEvent> &p_ev) {
+	ERR_FAIL_COND(p_ev.is_null());
+
+	if (disable_input) {
+		return;
+	}
+#ifdef TOOLS_ENABLED
+	if (Engine::get_singleton()->is_editor_hint() && get_tree()->get_edited_scene_root() && get_tree()->get_edited_scene_root()->is_a_parent_of(this)) {
+		return;
+	}
+#endif
+
+	/*
+	if (parent_control && !parent_control->is_visible_in_tree())
+		return;
+	*/
+
+	if (to_screen_rect == Rect2()) {
+		return; //if render target, can't get input events
+	}
+
+	//this one handles system input, p_ev are in system coordinates
+	//they are converted to viewport coordinates
+
+	Ref<InputEvent> ev = _make_input_local(p_ev);
+	unhandled_input(ev);
+}
+
+/* Upstream lines 2880-2895 */
+void Viewport::input(const Ref<InputEvent> &p_event) {
+	ERR_FAIL_COND(!is_inside_tree());
+
+	local_input_handled = false;
+
+	if (!is_input_handled()) {
+		get_tree()->_call_input_pause(input_group, "_input", p_event); //not a bug, must happen before GUI, order is _input -> gui input -> _unhandled input
+	}
+
+	if (!is_input_handled()) {
+		_gui_input_event(p_event);
+	} else {
+		_gui_cleanup_internal_state(p_event);
+	}
+	//get_tree()->call_group(SceneTree::GROUP_CALL_REVERSE|SceneTree::GROUP_CALL_REALTIME|SceneTree::GROUP_CALL_MULIILEVEL,gui_input_group,"_gui_input",p_event); //special one for GUI, as controls use their own process check
+}
+
+/* Upstream lines 2897-2919 */
+void Viewport::unhandled_input(const Ref<InputEvent> &p_event) {
+	ERR_FAIL_COND(!is_inside_tree());
+
+	get_tree()->_call_input_pause(unhandled_input_group, "_unhandled_input", p_event);
+	//call_group(GROUP_CALL_REVERSE|GROUP_CALL_REALTIME|GROUP_CALL_MULIILEVEL,"unhandled_input","_unhandled_input",ev);
+	if (!get_tree()->input_handled && Object::cast_to<InputEventKey>(*p_event) != nullptr) {
+		get_tree()->_call_input_pause(unhandled_key_input_group, "_unhandled_key_input", p_event);
+		//call_group(GROUP_CALL_REVERSE|GROUP_CALL_REALTIME|GROUP_CALL_MULIILEVEL,"unhandled_key_input","_unhandled_key_input",ev);
+	}
+
+	if (physics_object_picking && !get_tree()->input_handled) {
+		if (Input::get_singleton()->get_mouse_mode() != Input::MOUSE_MODE_CAPTURED &&
+				(Object::cast_to<InputEventMouseButton>(*p_event) ||
+						Object::cast_to<InputEventMouseMotion>(*p_event) ||
+						Object::cast_to<InputEventScreenDrag>(*p_event) ||
+						Object::cast_to<InputEventScreenTouch>(*p_event) ||
+						Object::cast_to<InputEventKey>(*p_event) //to remember state
+
+						)) {
+			physics_picking_events.push_back(p_event);
+		}
+	}
+}

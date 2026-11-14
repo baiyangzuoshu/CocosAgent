@@ -3,6 +3,9 @@ extends Node
 signal score_changed(value)
 
 func _ready():
+	# Run the lesson's miniature source replica before probing the real engine API.
+	var replay = load("res://src/source_replay.gd").new()
+	replay.run()
 	connect("score_changed", self, "_on_score_changed")
 	emit_signal("score_changed", 7)
 	var callback = funcref(self, "_double_score")

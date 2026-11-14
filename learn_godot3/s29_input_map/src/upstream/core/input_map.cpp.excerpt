@@ -1,0 +1,24 @@
+/*
+ * Godot 3 source excerpt.
+ * Upstream: engine/godot-3.6/core/input_map.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 164-173 */
+void InputMap::action_add_event(const StringName &p_action, const Ref<InputEvent> &p_event) {
+	ERR_FAIL_COND_MSG(p_event.is_null(), "It's not a reference to a valid InputEvent object.");
+	ERR_FAIL_COND_MSG(!input_map.has(p_action), suggest_actions(p_action));
+
+	if (_find_event(input_map[p_action], p_event, true)) {
+		return; // Already added.
+	}
+
+	input_map[p_action].inputs.push_back(p_event);
+}
+
+/* Upstream lines 220-222 */
+bool InputMap::event_is_action(const Ref<InputEvent> &p_event, const StringName &p_action, bool p_exact_match) const {
+	return event_get_action_status(p_event, p_action, p_exact_match);
+}

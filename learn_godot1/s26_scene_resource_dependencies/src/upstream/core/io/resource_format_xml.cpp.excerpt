@@ -1,0 +1,258 @@
+/*
+ * Godot 1 source excerpt.
+ * Upstream: engine/godot-1.1/core/io/resource_format_xml.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1362-1555 */
+Error ResourceInteractiveLoaderXML::poll() {
+
+	if (error!=OK)
+		return error;
+
+	if (ext_resources.size()) {
+
+		error=ERR_FILE_CORRUPT;
+		String path=ext_resources.front()->get();
+
+		RES res = ResourceLoader::load(path);
+
+		if (res.is_null()) {
+
+			if (ResourceLoader::get_abort_on_missing_resources()) {
+				ERR_EXPLAIN(local_path+":"+itos(get_current_line())+": editor exported nonexistent resource at: "+path);
+				ERR_FAIL_V(error);
+			} else {
+				ResourceLoader::notify_load_error("Resource Not Found: "+path);
+			}
+		} else {
+
+			resource_cache.push_back(res);
+		}
+
+		error=OK;
+		ext_resources.pop_front();
+		resource_current++;
+		return error;
+	}
+
+	bool exit;
+	Tag *tag = parse_tag(&exit);
+
+
+	if (!tag) {
+		error=ERR_FILE_CORRUPT;
+		if (!exit) // shouldn't have exited
+			ERR_FAIL_V(error);
+		error=ERR_FILE_EOF;
+		return error;
+	}
+
+	RES res;
+	//Object *obj=NULL;
+
+	bool main;
+
+	if (tag->name=="ext_resource") {
+
+		error=ERR_FILE_CORRUPT;
+		ERR_EXPLAIN(local_path+":"+itos(get_current_line())+": <ext_resource> missing 'path' field.");
+		ERR_FAIL_COND_V(!tag->args.has("path"),ERR_FILE_CORRUPT);
+
+		String type;
+		if (tag->args.has("type"))
+			type=tag->args["type"];
+
+		String path = tag->args["path"];
+
+		ERR_EXPLAIN(local_path+":"+itos(get_current_line())+": <ext_resource> can't use a local path, this is a bug?.");
+		ERR_FAIL_COND_V(path.begins_with("local://"),ERR_FILE_CORRUPT);
+
+		if (path.find("://")==-1 && path.is_rel_path()) {
+			// path is relative to file being loaded, so convert to a resource path
+			path=Globals::get_singleton()->localize_path(local_path.get_base_dir().plus_file(path));
+		}
+
+
+		RES res = ResourceLoader::load(path,type);
+
+		if (res.is_null()) {
+
+			if (ResourceLoader::get_abort_on_missing_resources()) {
+				ERR_EXPLAIN(local_path+":"+itos(get_current_line())+": <ext_resource> referenced nonexistent resource at: "+path);
+				ERR_FAIL_V(error);
+			} else {
+				ResourceLoader::notify_load_error("Resource Not Found: "+path);
+			}
+		} else {
+
+			resource_cache.push_back(res);
+		}
+
+		Error err = close_tag("ext_resource");
+		if (err)
+			return error;
+
+
+		error=OK;
+		resource_current++;
+		return error;
+
+	} else if (tag->name=="resource") {
+
+		main=false;
+	} else if (tag->name=="main_resource") {
+		main=true;
+	} else {
+		ERR_EXPLAIN(local_path+":"+itos(get_current_line())+": unexpected main tag: "+tag->name);
+		error=ERR_FILE_CORRUPT;
+		ERR_FAIL_V(error);
+	}
+
+
+	String type;
+	String path;
+
+	if (!main) {
+		//loading resource
+
+		error=ERR_FILE_CORRUPT;
+		ERR_EXPLAIN(local_path+":"+itos(get_current_line())+": <resource> missing 'len' field.");
+		ERR_FAIL_COND_V(!tag->args.has("path"),ERR_FILE_CORRUPT);
+		ERR_EXPLAIN(local_path+":"+itos(get_current_line())+": <resource> missing 'type' field.");
+		ERR_FAIL_COND_V(!tag->args.has("type"),ERR_FILE_CORRUPT);
+		path=tag->args["path"];
+		error=OK;
+
+		if (path.begins_with("local://")) {
+			//built-in resource (but really external)
+			path=path.replace("local://",local_path+"::");
+		}
+
+
+		if (ResourceCache::has(path)) {
+			Error err = close_tag(tag->name);
+			if (err) {
+				error=ERR_FILE_CORRUPT;
+			}
+			ERR_EXPLAIN(local_path+":"+itos(get_current_line())+": Unable to close <resource> tag.");
+			ERR_FAIL_COND_V( err, err );
+			resource_current++;
+			error=OK;
+			return OK;
+		}
+
+		type = tag->args["type"];
+	} else {
+		type=resource_type;
+	}
+
+	Object *obj = ObjectTypeDB::instance(type);
+	if (!obj) {
+		error=ERR_FILE_CORRUPT;
+		ERR_EXPLAIN(local_path+":"+itos(get_current_line())+": Object of unrecognized type in file: "+type);
+	}
+	ERR_FAIL_COND_V(!obj,ERR_FILE_CORRUPT);
+
+	Resource *r = obj->cast_to<Resource>();
+	if (!r) {
+		error=ERR_FILE_CORRUPT;
+		memdelete(obj); //bye
+		ERR_EXPLAIN(local_path+":"+itos(get_current_line())+": Object type in resource field not a resource, type is: "+obj->get_type());
+		ERR_FAIL_COND_V(!r,ERR_FILE_CORRUPT);
+	}
+
+	res = RES( r );
+	if (path!="")
+		r->set_path(path);
+
+	//load properties
+
+	while(true) {
+
+		String name;
+		Variant v;
+		Error err;
+		err = parse_property(v,name);
+		if (err==ERR_FILE_EOF) //tag closed
+			break;
+		if (err!=OK) {
+			ERR_EXPLAIN(local_path+":"+itos(get_current_line())+": XML Parsing aborted.");
+			ERR_FAIL_COND_V(err!=OK,ERR_FILE_CORRUPT);
+		}
+
+		obj->set(name,v);
+	}
+#ifdef TOOLS_ENABLED
+	res->set_edited(false);
+#endif
+	resource_cache.push_back(res); //keep it in mem until finished loading
+	resource_current++;
+	if (main) {
+		f->close();
+		resource=res;
+		resource->set_path(res_path);
+		error=ERR_FILE_EOF;
+		return error;
+
+	}
+	error=OK;
+	return OK;
+}
+
+/* Upstream lines 1571-1623 */
+void ResourceInteractiveLoaderXML::get_dependencies(FileAccess *f,List<String> *p_dependencies) {
+
+
+	open(f);
+	ERR_FAIL_COND(error!=OK);
+
+	while(true) {
+		bool exit;
+		Tag *tag = parse_tag(&exit);
+
+
+		if (!tag) {
+			error=ERR_FILE_CORRUPT;
+			ERR_FAIL_COND(!exit);
+			error=ERR_FILE_EOF;
+			return;
+		}
+
+		if (tag->name!="ext_resource") {
+
+			return;
+		}
+
+		error=ERR_FILE_CORRUPT;
+		ERR_EXPLAIN(local_path+":"+itos(get_current_line())+": <ext_resource> missing 'path' field.");
+		ERR_FAIL_COND(!tag->args.has("path"));
+
+		String path = tag->args["path"];
+
+		ERR_EXPLAIN(local_path+":"+itos(get_current_line())+": <ext_resource> can't use a local path, this is a bug?.");
+		ERR_FAIL_COND(path.begins_with("local://"));
+
+		if (path.find("://")==-1 && path.is_rel_path()) {
+			// path is relative to file being loaded, so convert to a resource path
+			path=Globals::get_singleton()->localize_path(local_path.get_base_dir().plus_file(path));
+		}
+
+		if (path.ends_with("*")) {
+			ERR_FAIL_COND(!tag->args.has("type"));
+			String type = tag->args["type"];
+			path = ResourceLoader::guess_full_filename(path,type);
+		}
+
+		p_dependencies->push_back(path);
+
+		Error err = close_tag("ext_resource");
+		if (err)
+			return;
+
+		error=OK;
+	}
+
+}

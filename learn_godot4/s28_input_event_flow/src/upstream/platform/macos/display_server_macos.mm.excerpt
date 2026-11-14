@@ -1,0 +1,55 @@
+/*
+ * Godot 4 source excerpt.
+ * Upstream: engine/godot-4.7/platform/macos/display_server_macos.mm
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 504-507 */
+void DisplayServerMacOS::_push_input(const Ref<InputEvent> &p_event) {
+	Ref<InputEvent> ev = p_event;
+	Input::get_singleton()->parse_input_event(ev);
+}
+
+/* Upstream lines 641-680 */
+void DisplayServerMacOS::send_event(NSEvent *p_event) {
+	// Special case handling of shortcuts that don't arrive at the regular keyDown handler
+	if ([p_event type] == NSEventTypeKeyDown) {
+		NSEventModifierFlags flags = [p_event modifierFlags] & NSEventModifierFlagDeviceIndependentFlagsMask;
+
+		// Command-period
+		if ((flags == NSEventModifierFlagCommand) && [p_event keyCode] == 0x2f) {
+			Ref<InputEventKey> k;
+			k.instantiate();
+
+			get_key_modifier_state([p_event modifierFlags], k);
+			k->set_window_id(DisplayServerEnums::INVALID_WINDOW_ID);
+			k->set_pressed(true);
+			k->set_keycode(Key::PERIOD);
+			k->set_physical_keycode(Key::PERIOD);
+			k->set_key_label(Key::PERIOD);
+			k->set_echo([p_event isARepeat]);
+
+			Input::get_singleton()->parse_input_event(k);
+			return;
+		}
+
+		// Ctrl+Tab and Ctrl+Shift+Tab
+		if (((flags == NSEventModifierFlagControl) || (flags == (NSEventModifierFlagControl | NSEventModifierFlagShift))) && [p_event keyCode] == 0x30) {
+			Ref<InputEventKey> k;
+			k.instantiate();
+
+			get_key_modifier_state([p_event modifierFlags], k);
+			k->set_window_id(DisplayServerEnums::INVALID_WINDOW_ID);
+			k->set_pressed(true);
+			k->set_keycode(Key::TAB);
+			k->set_physical_keycode(Key::TAB);
+			k->set_key_label(Key::TAB);
+			k->set_echo([p_event isARepeat]);
+
+			Input::get_singleton()->parse_input_event(k);
+			return;
+		}
+	}
+}

@@ -1,0 +1,40 @@
+/*
+ * Godot 4 source excerpt.
+ * Upstream: engine/godot-4.7/core/input/input_map.cpp
+ * Original line ranges are copied from the local source snapshot.
+ * Exact function bodies; surrounding file context is in the sibling full source copy.
+ * Copyright and license notice: Godot Engine; see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 202-226 */
+void InputMap::action_add_event(const StringName &p_action, RequiredParam<InputEvent> rp_event) {
+	EXTRACT_PARAM_OR_FAIL_MSG(p_event, rp_event, "It's not a reference to a valid InputEvent object.");
+	ERR_FAIL_COND_MSG(!input_map.has(p_action), suggest_actions(p_action));
+	if (_find_event(input_map[p_action], p_event, true)) {
+		return; // Already added.
+	}
+
+	// Normalize legacy device IDs: before the device ID change,
+	// keyboard and mouse events defaulted to device=0.
+	if (p_event->get_device() == 0) {
+		switch (p_event->get_type()) {
+			case InputEventType::KEY:
+				p_event->set_device(InputEvent::DEVICE_ID_KEYBOARD);
+				break;
+			case InputEventType::MOUSE_BUTTON:
+			case InputEventType::MOUSE_MOTION:
+				p_event->set_device(InputEvent::DEVICE_ID_MOUSE);
+				break;
+			default:
+				break;
+		}
+	}
+
+	input_map[p_action].inputs.push_back(p_event);
+}
+
+/* Upstream lines 279-282 */
+bool InputMap::event_is_action(RequiredParam<InputEvent> rp_event, const StringName &p_action, bool p_exact_match) const {
+	EXTRACT_PARAM_OR_FAIL_V(p_event, rp_event, false);
+	return event_get_action_status(p_event, p_action, p_exact_match);
+}
