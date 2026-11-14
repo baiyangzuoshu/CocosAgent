@@ -1,0 +1,157 @@
+/* Godot 3.6 source excerpt.
+ * Upstream: engine/godot-3.6/scene/main/scene_tree.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 578-610 */
+bool SceneTree::iteration(float p_time) {
+	root_lock++;
+
+	current_frame++;
+
+	flush_transform_notifications();
+
+	if (MainLoop::iteration(p_time)) {
+		_quit = true;
+	}
+	physics_process_time = p_time;
+
+	emit_signal("physics_frame");
+
+	_notify_group_pause("physics_process_internal", Node::NOTIFICATION_INTERNAL_PHYSICS_PROCESS);
+	if (GLOBAL_GET("physics/common/enable_pause_aware_picking")) {
+		call_group_flags(GROUP_CALL_REALTIME, "_viewports", "_process_picking", true);
+	}
+	_notify_group_pause("physics_process", Node::NOTIFICATION_PHYSICS_PROCESS);
+	_flush_ugc();
+	MessageQueue::get_singleton()->flush(); //small little hack
+
+	process_tweens(p_time, true);
+
+	flush_transform_notifications();
+	call_group_flags(GROUP_CALL_REALTIME, "_viewports", "update_worlds");
+	root_lock--;
+
+	_flush_delete_queue();
+	_call_idle_callbacks();
+
+	return _quit;
+}
+
+/* Upstream lines 621-734 */
+bool SceneTree::idle(float p_time) {
+	//print_line("ram: "+itos(OS::get_singleton()->get_static_memory_usage())+" sram: "+itos(OS::get_singleton()->get_dynamic_memory_usage()));
+	//print_line("node count: "+itos(get_node_count()));
+	//print_line("TEXTURE RAM: "+itos(VS::get_singleton()->get_render_info(VS::INFO_TEXTURE_MEM_USED)));
+
+	root_lock++;
+
+	if (MainLoop::idle(p_time)) {
+		_quit = true;
+	}
+
+	idle_process_time = p_time;
+
+	if (multiplayer_poll) {
+		multiplayer->poll();
+	}
+
+	emit_signal("idle_frame");
+
+	MessageQueue::get_singleton()->flush(); //small little hack
+
+	flush_transform_notifications();
+
+	_notify_group_pause("idle_process_internal", Node::NOTIFICATION_INTERNAL_PROCESS);
+	_notify_group_pause("idle_process", Node::NOTIFICATION_PROCESS);
+
+	Size2 win_size = OS::get_singleton()->get_window_size();
+
+	if (win_size != last_screen_size) {
+		last_screen_size = win_size;
+		_update_root_rect();
+		emit_signal("screen_resized");
+	}
+
+	_flush_ugc();
+	MessageQueue::get_singleton()->flush(); //small little hack
+	flush_transform_notifications(); //transforms after world update, to avoid unnecessary enter/exit notifications
+	call_group_flags(GROUP_CALL_REALTIME, "_viewports", "update_worlds");
+
+	root_lock--;
+
+	_flush_delete_queue();
+
+	//go through timers
+
+	List<Ref<SceneTreeTimer>>::Element *L = timers.back(); //last element
+
+	for (List<Ref<SceneTreeTimer>>::Element *E = timers.front(); E;) {
+		List<Ref<SceneTreeTimer>>::Element *N = E->next();
+		if (pause && !E->get()->is_pause_mode_process()) {
+			if (E == L) {
+				break; //break on last, so if new timers were added during list traversal, ignore them.
+			}
+			E = N;
+			continue;
+		}
+
+		float time_left = E->get()->get_time_left();
+		if (E->get()->is_ignore_time_scale()) {
+			time_left -= Engine::get_singleton()->get_idle_frame_step();
+		} else {
+			time_left -= p_time;
+		}
+		E->get()->set_time_left(time_left);
+
+		if (time_left < 0) {
+			E->get()->emit_signal("timeout");
+			timers.erase(E);
+		}
+		if (E == L) {
+			break; //break on last, so if new timers were added during list traversal, ignore them.
+		}
+		E = N;
+	}
+
+	process_tweens(p_time, false);
+
+	flush_transform_notifications(); //additional transforms after timers update
+
+	_call_idle_callbacks();
+
+	ProjectSettings::get_singleton()->update();
+
+#ifdef TOOLS_ENABLED
+
+	if (Engine::get_singleton()->is_editor_hint()) {
+		//simple hack to reload fallback environment if it changed from editor
+		String env_path = ProjectSettings::get_singleton()->get("rendering/environment/default_environment");
+		env_path = env_path.strip_edges(); //user may have added a space or two
+		String cpath;
+		Ref<Environment> fallback = get_root()->get_world()->get_fallback_environment();
+		if (fallback.is_valid()) {
+			cpath = fallback->get_path();
+		}
+		if (cpath != env_path) {
+			if (env_path != String()) {
+				fallback = ResourceLoader::load(env_path);
+				if (fallback.is_null()) {
+					//could not load fallback, set as empty
+					ProjectSettings::get_singleton()->set("rendering/environment/default_environment", "");
+				}
+			} else {
+				fallback.unref();
+			}
+			get_root()->get_world()->set_fallback_environment(fallback);
+		}
+	}
+
+#endif
+
+	VisualServer::get_singleton()->pre_draw(true);
+
+	return _quit;
+}

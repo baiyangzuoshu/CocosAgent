@@ -1,0 +1,14 @@
+/* Godot 4.7 source excerpt.
+ * Upstream: engine/godot-4.7/scene/main/scene_tree.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1638-1643 */
+void SceneTree::queue_delete(RequiredParam<Object> rp_object) {
+	_THREAD_SAFE_METHOD_
+	EXTRACT_PARAM_OR_FAIL(p_object, rp_object);
+	p_object->_is_queued_for_deletion = true;
+	delete_queue.push_back(p_object->get_instance_id());
+}

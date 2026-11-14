@@ -1,0 +1,6 @@
+config_version=4
+
+[application]
+
+config/name="Godot 3.6 S14 Node 父子关系、NodePath 与 owner"
+run/main_scene="res://main.tscn"

@@ -1,0 +1,163 @@
+/* Godot 1.1 source excerpt.
+ * Upstream: engine/godot-1.1/core/object.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1099-1215 */
+void Object::emit_signal(const StringName& p_name,VARIANT_ARG_DECLARE) {
+
+	if (_block_signals)
+		return; //no emit, signals blocked
+
+	Signal *s = signal_map.getptr(p_name);
+	if (!s) {
+		return;
+	}
+
+
+	List<_ObjectSignalDisconnectData> disconnect_data;
+
+
+	//copy on write will ensure that disconnecting the signal or even deleting the object will not affect the signal calling.
+	//this happens automatically and will not change the performance of calling.
+	//awesome, isn't it?
+	VMap<Signal::Target,Signal::Slot> slot_map = s->slot_map;
+
+	int ssize = slot_map.size();
+
+	OBJ_DEBUG_LOCK
+
+	for(int i=0;i<ssize;i++) {
+
+		const Connection &c = slot_map.getv(i).conn;
+		VARIANT_ARGPTRS
+
+		Object *target;
+#ifdef DEBUG_ENABLED
+		target = ObjectDB::get_instance(slot_map.getk(i)._id);
+		ERR_CONTINUE(!target);
+#else
+		target=c.target;
+#endif
+
+
+		int bind_count=c.binds.size();
+		int bind=0;
+
+		for(int i=0;bind < bind_count && i<VARIANT_ARG_MAX;i++) {
+
+			if (argptr[i]->get_type()==Variant::NIL) {
+				argptr[i]=&c.binds[bind];
+				bind++;
+			}
+		}
+
+		if (c.flags&CONNECT_DEFERRED) {
+			MessageQueue::get_singleton()->push_call(target->get_instance_ID(),c.method,VARIANT_ARGPTRS_PASS);
+		} else {
+			target->call( c.method, VARIANT_ARGPTRS_PASS );
+		}
+
+		if (c.flags&CONNECT_ONESHOT) {
+			_ObjectSignalDisconnectData dd;
+			dd.signal=p_name;
+			dd.target=target;
+			dd.method=c.method;
+			disconnect_data.push_back(dd);
+		}
+
+	}
+
+#if 0
+
+	//old (deprecated and dangerous code)
+	s->lock++;
+	for( Map<Signal::Target,Signal::Slot>::Element *E = s->slot_map.front();E;E=E->next() ) {
+
+		const Signal::Target& t = E->key();
+		const Signal::Slot& s = E->get();
+		const Connection &c = s.cE->get();
+
+		VARIANT_ARGPTRS
+
+		int bind_count=c.binds.size();
+		int bind=0;
+
+		for(int i=0;bind < bind_count && i<VARIANT_ARG_MAX;i++) {
+
+			if (argptr[i]->get_type()==Variant::NIL) {
+				argptr[i]=&c.binds[bind];
+				bind++;
+			}
+		}
+
+		if (c.flags&CONNECT_DEFERRED) {
+			MessageQueue::get_singleton()->push_call(t._id,t.method,VARIANT_ARGPTRS_PASS);
+		} else {
+			Object *obj = ObjectDB::get_instance(t._id);
+			ERR_CONTINUE(!obj); //yeah this should always be here
+			obj->call( t.method, VARIANT_ARGPTRS_PASS );
+		}
+
+		if (c.flags&CONNECT_ONESHOT) {
+			_ObjectSignalDisconnectData dd;
+			dd.signal=p_name;
+			dd.target=ObjectDB::get_instance(t._id);
+			dd.method=t.method;
+			disconnect_data.push_back(dd);
+		}
+
+	}
+
+
+
+	s->lock--;
+#endif
+	while (!disconnect_data.empty()) {
+
+		const _ObjectSignalDisconnectData &dd = disconnect_data.front()->get();
+		disconnect(dd.signal,dd.target,dd.method);
+		disconnect_data.pop_front();
+	}
+
+}
+
+/* Upstream lines 1314-1349 */
+Error Object::connect(const StringName& p_signal, Object *p_to_object, const StringName& p_to_method,const Vector<Variant>& p_binds,uint32_t p_flags) {
+
+	ERR_FAIL_NULL_V(p_to_object,ERR_INVALID_PARAMETER);
+
+	Signal *s = signal_map.getptr(p_signal);
+	if (!s) {
+		bool signal_is_valid = ObjectTypeDB::has_signal(get_type_name(),p_signal);
+		if (!signal_is_valid) {
+			ERR_EXPLAIN("Attempt to connect to nonexistent signal: "+p_signal);
+			ERR_FAIL_COND_V(!signal_is_valid,ERR_INVALID_PARAMETER);
+		}
+		signal_map[p_signal]=Signal();
+		s=&signal_map[p_signal];
+	}
+
+	Signal::Target target(p_to_object->get_instance_ID(),p_to_method);
+	if (s->slot_map.has(target)) {
+		ERR_EXPLAIN("Signal '"+p_signal+"'' already connected to given method '"+p_to_method+"' in that object.");
+		ERR_FAIL_COND_V(s->slot_map.has(target),ERR_INVALID_PARAMETER);
+	}
+
+	Signal::Slot slot;
+
+	Connection conn;
+	conn.source=this;
+	conn.target=p_to_object;
+	conn.method=p_to_method;
+	conn.signal=p_signal;
+	conn.flags=p_flags;
+	conn.binds=p_binds;
+	slot.conn=conn;
+	slot.cE=p_to_object->connections.push_back(conn);
+	s->slot_map[target]=slot;
+
+	return OK;
+}

@@ -1,0 +1,167 @@
+/* Godot 3.6 source excerpt.
+ * Upstream: engine/godot-3.6/scene/main/node.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 188-203 */
+void Node::_propagate_ready() {
+	data.ready_notified = true;
+	data.blocked++;
+	for (int i = 0; i < data.children.size(); i++) {
+		data.children[i]->_propagate_ready();
+	}
+	data.blocked--;
+
+	notification(NOTIFICATION_POST_ENTER_TREE);
+
+	if (data.ready_first) {
+		data.ready_first = false;
+		notification(NOTIFICATION_READY);
+		emit_signal(SceneStringNames::get_singleton()->ready);
+	}
+}
+
+/* Upstream lines 249-305 */
+void Node::_propagate_enter_tree() {
+	// this needs to happen to all children before any enter_tree
+
+	if (data.parent) {
+		data.tree = data.parent->data.tree;
+		data.depth = data.parent->data.depth + 1;
+	} else {
+		data.depth = 1;
+	}
+
+	data.viewport = Object::cast_to<Viewport>(this);
+	if (!data.viewport && data.parent) {
+		data.viewport = data.parent->data.viewport;
+	}
+
+	data.inside_tree = true;
+
+	for (Map<StringName, GroupData>::Element *E = data.grouped.front(); E; E = E->next()) {
+		E->get().group = data.tree->add_to_group(E->key(), this);
+	}
+
+	notification(NOTIFICATION_ENTER_TREE);
+
+	if (get_script_instance()) {
+		get_script_instance()->call_multilevel_reversed(SceneStringNames::get_singleton()->_enter_tree, nullptr, 0);
+	}
+
+	emit_signal(SceneStringNames::get_singleton()->tree_entered);
+
+	data.tree->node_added(this);
+
+	if (data.parent) {
+		Variant c = this;
+		const Variant *cptr = &c;
+		data.parent->emit_signal(SceneStringNames::get_singleton()->child_entered_tree, &cptr, 1);
+	}
+
+	data.blocked++;
+	//block while adding children
+
+	for (int i = 0; i < data.children.size(); i++) {
+		if (!data.children[i]->is_inside_tree()) { // could have been added in enter_tree
+			data.children[i]->_propagate_enter_tree();
+		}
+	}
+
+	data.blocked--;
+
+#ifdef DEBUG_ENABLED
+
+	if (ScriptDebugger::get_singleton() && data.filename != String()) {
+		//used for live edit
+		data.tree->live_scene_edit_cache[data.filename].insert(this);
+	}
+#endif
+	// enter groups
+}
+
+/* Upstream lines 342-407 */
+void Node::_propagate_exit_tree() {
+	//block while removing children
+
+#ifdef DEBUG_ENABLED
+
+	if (ScriptDebugger::get_singleton() && data.filename != String()) {
+		//used for live edit
+		Map<String, Set<Node *>>::Element *E = data.tree->live_scene_edit_cache.find(data.filename);
+		if (E) {
+			E->get().erase(this);
+			if (E->get().size() == 0) {
+				data.tree->live_scene_edit_cache.erase(E);
+			}
+		}
+
+		Map<Node *, Map<ObjectID, Node *>>::Element *F = data.tree->live_edit_remove_list.find(this);
+		if (F) {
+			for (Map<ObjectID, Node *>::Element *G = F->get().front(); G; G = G->next()) {
+				memdelete(G->get());
+			}
+			data.tree->live_edit_remove_list.erase(F);
+		}
+	}
+#endif
+	data.blocked++;
+
+	for (int i = data.children.size() - 1; i >= 0; i--) {
+		data.children[i]->_propagate_exit_tree();
+	}
+
+	data.blocked--;
+
+	if (get_script_instance()) {
+		get_script_instance()->call_multilevel(SceneStringNames::get_singleton()->_exit_tree, nullptr, 0);
+	}
+	emit_signal(SceneStringNames::get_singleton()->tree_exiting);
+
+	notification(NOTIFICATION_EXIT_TREE, true);
+	if (data.tree) {
+		data.tree->node_removed(this);
+	}
+
+	if (data.parent) {
+		Variant c = this;
+		const Variant *cptr = &c;
+		data.parent->emit_signal(SceneStringNames::get_singleton()->child_exiting_tree, &cptr, 1);
+	}
+
+	// exit groups
+
+	for (Map<StringName, GroupData>::Element *E = data.grouped.front(); E; E = E->next()) {
+		data.tree->remove_from_group(E->key(), this);
+		E->get().group = nullptr;
+	}
+
+	data.viewport = nullptr;
+
+	if (data.tree) {
+		data.tree->tree_changed();
+	}
+
+	data.inside_tree = false;
+	data.ready_notified = false;
+	data.tree = nullptr;
+	data.depth = -1;
+}
+
+/* Upstream lines 1323-1336 */
+void Node::add_child(Node *p_child, bool p_force_readable_name) {
+	ERR_FAIL_NULL(p_child);
+	ERR_FAIL_COND_MSG(p_child == this, vformat("Can't add child '%s' to itself.", p_child->get_name())); // adding to itself!
+	ERR_FAIL_COND_MSG(p_child->data.parent, vformat("Can't add child '%s' to '%s', already has a parent '%s'.", p_child->get_name(), get_name(), p_child->data.parent->get_name())); //Fail if node has a parent
+#ifdef DEBUG_ENABLED
+	ERR_FAIL_COND_MSG(p_child->is_a_parent_of(this), vformat("Can't add child '%s' to '%s' as it would result in a cyclic dependency since '%s' is already a parent of '%s'.", p_child->get_name(), get_name(), p_child->get_name(), get_name()));
+#endif
+	ERR_FAIL_COND_MSG(data.blocked > 0, "Parent node is busy setting up children, add_node() failed. Consider using call_deferred(\"add_child\", child) instead.");
+
+	/* Validate name */
+	_validate_child_name(p_child, p_force_readable_name);
+
+	_add_child_nocheck(p_child, p_child->data.name);
+}

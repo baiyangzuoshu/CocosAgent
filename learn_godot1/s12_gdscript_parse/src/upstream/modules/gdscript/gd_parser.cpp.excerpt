@@ -1,0 +1,31 @@
+/* Godot 1.1 source excerpt.
+ * Upstream: engine/godot-1.1/modules/gdscript/gd_parser.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 2782-2804 */
+Error GDParser::parse(const String& p_code, const String& p_base_path, bool p_just_validate, const String &p_self_path) {
+
+	completion_type=COMPLETION_NONE;
+	completion_node=NULL;
+	completion_class=NULL;
+	completion_function=NULL;
+	completion_block=NULL;
+	current_block=NULL;
+	current_class=NULL;
+
+	current_function=NULL;
+
+	self_path=p_self_path;
+	GDTokenizerText *tt = memnew( GDTokenizerText );
+	tt->set_code(p_code);
+
+	validating=p_just_validate;
+	tokenizer=tt;
+	Error ret = _parse(p_base_path);
+	memdelete(tt);
+	tokenizer=NULL;
+	return ret;
+}

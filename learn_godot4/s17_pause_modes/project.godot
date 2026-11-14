@@ -1,0 +1,6 @@
+config_version=5
+
+[application]
+
+config/name="Godot 4.7 S17 ProcessMode、节点组与暂停传播"
+run/main_scene="res://main.tscn"

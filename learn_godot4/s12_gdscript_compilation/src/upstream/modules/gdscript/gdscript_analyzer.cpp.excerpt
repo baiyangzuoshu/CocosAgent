@@ -1,0 +1,24 @@
+/* Godot 4.7 source excerpt.
+ * Upstream: engine/godot-4.7/modules/gdscript/gdscript_analyzer.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 6654-6669 */
+Error GDScriptAnalyzer::analyze() {
+	parser->errors.clear();
+
+	Error err = resolve_inheritance();
+	if (err) {
+		return err;
+	}
+
+	resolve_interface();
+	err = resolve_body();
+	if (err) {
+		return err;
+	}
+
+	return resolve_dependencies();
+}

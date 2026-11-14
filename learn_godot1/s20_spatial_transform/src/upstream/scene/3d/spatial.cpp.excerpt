@@ -1,0 +1,144 @@
+/* Godot 1.1 source excerpt.
+ * Upstream: engine/godot-1.1/scene/3d/spatial.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 121-224 */
+void Spatial::_notification(int p_what) {
+
+	switch(p_what) {
+		case NOTIFICATION_ENTER_TREE: {
+
+			Node *p = get_parent();
+			if (p)
+				data.parent=p->cast_to<Spatial>();
+
+			if (data.parent)
+				data.C=data.parent->data.children.push_back(this);
+			else
+				data.C=NULL;
+
+			if (data.toplevel && !get_tree()->is_editor_hint()) {
+
+				if (data.parent) {
+					data.local_transform = data.parent->get_global_transform() * get_transform();
+					data.dirty=DIRTY_VECTORS; //global is always dirty upon entering a scene
+				}
+				data.toplevel_active=true;
+			}
+
+			data.dirty|=DIRTY_GLOBAL; //global is always dirty upon entering a scene
+			_notify_dirty();
+
+			notification(NOTIFICATION_ENTER_WORLD);
+
+		} break;
+		case NOTIFICATION_EXIT_TREE: {
+
+			notification(NOTIFICATION_EXIT_WORLD,true);
+			if (xform_change.in_list())
+				get_tree()->xform_change_list.remove(&xform_change);
+			if (data.C)
+				data.parent->data.children.erase(data.C);
+			data.parent=NULL;
+			data.C=NULL;
+			data.toplevel_active=false;
+		} break;
+		case NOTIFICATION_ENTER_WORLD: {
+
+			data.inside_world=true;
+			data.viewport=NULL;
+			Node *parent = get_parent();
+			while(parent && !data.viewport) {
+				data.viewport=parent->cast_to<Viewport>();
+				parent=parent->get_parent();
+			}
+
+			ERR_FAIL_COND(!data.viewport);
+
+
+			if (get_script_instance()) {
+
+				Variant::CallError err;
+				get_script_instance()->call_multilevel(SceneStringNames::get_singleton()->_enter_world,NULL,0);
+			}
+#ifdef TOOLS_ENABLED
+			if (get_tree()->is_editor_hint()) {
+
+//				get_scene()->call_group(SceneMainLoop::GROUP_CALL_REALTIME,SceneStringNames::get_singleton()->_spatial_editor_group,SceneStringNames::get_singleton()->_request_gizmo,this);
+				get_tree()->call_group(0,SceneStringNames::get_singleton()->_spatial_editor_group,SceneStringNames::get_singleton()->_request_gizmo,this);
+				if (!data.gizmo_disabled) {
+
+					if (data.gizmo.is_valid())
+						data.gizmo->create();
+				}
+			}
+#endif
+
+		} break;
+		case NOTIFICATION_EXIT_WORLD: {
+
+#ifdef TOOLS_ENABLED
+			if (data.gizmo.is_valid()) {
+				data.gizmo->free();
+			}
+#endif
+
+			if (get_script_instance()) {
+
+				Variant::CallError err;
+				get_script_instance()->call_multilevel(SceneStringNames::get_singleton()->_exit_world,NULL,0);
+			}
+
+			data.viewport=NULL;
+			data.inside_world=false;
+
+		} break;
+
+
+		case NOTIFICATION_TRANSFORM_CHANGED: {
+
+#ifdef TOOLS_ENABLED
+			if (data.gizmo.is_valid()) {
+				data.gizmo->transform();
+			}
+#endif
+		} break;
+
+		default: {}
+	}
+}
+
+/* Upstream lines 226-235 */
+void Spatial::set_transform(const Transform& p_transform) {
+
+	data.local_transform=p_transform;
+	data.dirty|=DIRTY_VECTORS;
+	_change_notify("transform/translation");
+	_change_notify("transform/rotation");
+	_change_notify("transform/scale");
+	_propagate_transform_changed(this);
+
+}
+
+/* Upstream lines 237-246 */
+void Spatial::set_global_transform(const Transform& p_transform) {
+
+	Transform xform =
+			(data.parent && !data.toplevel_active) ?
+			data.parent->get_global_transform().affine_inverse() * p_transform :
+			p_transform;
+
+	set_transform(xform);
+
+}
+
+/* Upstream lines 334-339 */
+void Spatial::set_translation(const Vector3& p_translation) {
+
+	data.local_transform.origin=p_translation;
+	_propagate_transform_changed(this);
+
+}

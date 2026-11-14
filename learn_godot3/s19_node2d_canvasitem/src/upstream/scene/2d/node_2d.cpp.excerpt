@@ -1,0 +1,42 @@
+/* Godot 3.6 source excerpt.
+ * Upstream: engine/godot-3.6/scene/2d/node_2d.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 135-146 */
+void Node2D::_update_transform() {
+	_mat.set_rotation_and_scale(angle, _scale);
+	_mat.elements[2] = pos;
+
+	VisualServer::get_singleton()->canvas_item_set_transform(get_canvas_item(), _mat);
+
+	if (!is_inside_tree()) {
+		return;
+	}
+
+	_notify_transform();
+}
+
+/* Upstream lines 148-155 */
+void Node2D::set_position(const Point2 &p_pos) {
+	if (_xform_dirty) {
+		((Node2D *)this)->_update_xform_values();
+	}
+	pos = p_pos;
+	_update_transform();
+	_change_notify("position");
+}
+
+/* Upstream lines 256-265 */
+void Node2D::set_global_position(const Point2 &p_pos) {
+	Transform2D inv;
+	CanvasItem *pi = get_parent_item();
+	if (pi) {
+		inv = pi->get_global_transform().affine_inverse();
+		set_position(inv.xform(p_pos));
+	} else {
+		set_position(p_pos);
+	}
+}

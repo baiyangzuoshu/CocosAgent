@@ -1,0 +1,80 @@
+/* Godot 2.1 source excerpt.
+ * Upstream: engine/godot-2.1/scene/main/node.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 703-730 */
+void Node::add_child(Node *p_child, bool p_legible_unique_name) {
+
+	ERR_FAIL_NULL(p_child);
+
+	if (p_child == this) {
+		ERR_EXPLAIN("Can't add child '" + p_child->get_name() + "' to itself.")
+		ERR_FAIL_COND(p_child == this); // adding to itself!
+	}
+
+	/* Fail if node has a parent */
+	if (p_child->data.parent) {
+		ERR_EXPLAIN("Can't add child '" + p_child->get_name() + "' to '" + get_name() + "', already has a parent '" + p_child->data.parent->get_name() + "'.");
+		ERR_FAIL_COND(p_child->data.parent);
+	}
+
+	if (data.blocked > 0) {
+		ERR_EXPLAIN("Parent node is busy setting up children, add_node() failed. Consider using call_deferred(\"add_child\", child) instead.");
+		ERR_FAIL_COND(data.blocked > 0);
+	}
+
+	ERR_EXPLAIN("Can't add child while a notification is happening.");
+	ERR_FAIL_COND(data.blocked > 0);
+
+	/* Validate name */
+	_validate_child_name(p_child, p_legible_unique_name);
+
+	_add_child_nocheck(p_child, p_child->data.name);
+}
+
+/* Upstream lines 903-911 */
+Node *Node::get_node(const NodePath &p_path) const {
+
+	Node *node = _get_node(p_path);
+	if (!node) {
+		ERR_EXPLAIN("Node not found: " + p_path);
+		ERR_FAIL_COND_V(!node, NULL);
+	}
+	return node;
+}
+
+/* Upstream lines 1042-1072 */
+void Node::set_owner(Node *p_owner) {
+
+	if (data.owner) {
+
+		data.owner->data.owned.erase(data.OW);
+		data.OW = NULL;
+		data.owner = NULL;
+	}
+
+	ERR_FAIL_COND(p_owner == this);
+
+	if (!p_owner)
+		return;
+
+	Node *check = this->get_parent();
+	bool owner_valid = false;
+
+	while (check) {
+
+		if (check == p_owner) {
+			owner_valid = true;
+			break;
+		}
+
+		check = check->data.parent;
+	}
+
+	ERR_FAIL_COND(!owner_valid);
+
+	_set_owner_nocheck(p_owner);
+}

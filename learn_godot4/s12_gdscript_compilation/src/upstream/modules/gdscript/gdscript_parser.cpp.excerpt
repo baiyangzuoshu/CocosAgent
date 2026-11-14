@@ -1,0 +1,99 @@
+/* Godot 4.7 source excerpt.
+ * Upstream: engine/godot-4.7/modules/gdscript/gdscript_parser.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 438-528 */
+Error GDScriptParser::parse(const String &p_source_code, const String &p_script_path, bool p_for_completion, bool p_parse_body) {
+	clear();
+
+	String source = p_source_code;
+	int cursor_line = -1;
+	int cursor_column = -1;
+	for_completion = p_for_completion;
+	parse_body = p_parse_body;
+
+	if (p_for_completion) {
+		// Remove cursor sentinel char.
+		const Vector<String> lines = p_source_code.split("\n");
+		cursor_line = 1;
+		cursor_column = 1;
+		for (int i = 0; i < lines.size(); i++) {
+			bool found = false;
+			const String &line = lines[i];
+			for (int j = 0; j < line.size(); j++) {
+				if (line[j] == char32_t(0xFFFF)) {
+					found = true;
+					break;
+				}
+				cursor_column++;
+			}
+			if (found) {
+				break;
+			}
+			cursor_line++;
+			cursor_column = 1;
+		}
+
+		source = source.replace_first(String::chr(0xFFFF), String());
+	}
+
+	GDScriptTokenizerText *text_tokenizer = memnew(GDScriptTokenizerText);
+	text_tokenizer->set_source_code(source);
+
+	tokenizer = text_tokenizer;
+	tokenizer->set_cursor_position(cursor_line, cursor_column);
+
+	script_path = p_script_path.simplify_path();
+
+#ifdef DEBUG_ENABLED
+	evaluate_warning_directory_rules_for_script_path();
+#endif // DEBUG_ENABLED
+
+	current = tokenizer->scan();
+	// Avoid error or newline as the first token.
+	// The latter can mess with the parser when opening files filled exclusively with comments and newlines.
+	while (current.type == GDScriptTokenizer::Token::ERROR || current.type == GDScriptTokenizer::Token::NEWLINE) {
+		if (current.type == GDScriptTokenizer::Token::ERROR) {
+			push_error(current.literal, current);
+		}
+		current = tokenizer->scan();
+	}
+
+#ifdef DEBUG_ENABLED
+	// Warn about parsing an empty script file:
+	if (current.type == GDScriptTokenizer::Token::TK_EOF) {
+		// Create a dummy Node for the warning, pointing to the very beginning of the file
+		Node *nd = alloc_node<PassNode>();
+		nd->start_line = 1;
+		nd->start_column = 1;
+		nd->end_line = 1;
+		push_warning(nd, GDScriptWarning::EMPTY_FILE);
+	}
+#endif // DEBUG_ENABLED
+
+	push_multiline(false); // Keep one for the whole parsing.
+	parse_program();
+	pop_multiline();
+
+#ifdef TOOLS_ENABLED
+	comment_data = tokenizer->get_comments();
+#endif // TOOLS_ENABLED
+
+	memdelete(text_tokenizer);
+	tokenizer = nullptr;
+
+#ifdef DEBUG_ENABLED
+	if (multiline_stack.size() > 0) {
+		ERR_PRINT("Parser bug: Imbalanced multiline stack.");
+	}
+#endif // DEBUG_ENABLED
+
+	if (errors.is_empty()) {
+		return OK;
+	} else {
+		return ERR_PARSE_ERROR;
+	}
+}

@@ -1,0 +1,6 @@
+config_version=4
+
+[application]
+
+config/name="Godot 3.6 S19 Node2D 变换与 CanvasItem 更新"
+run/main_scene="res://main.tscn"

@@ -1,0 +1,52 @@
+/* Godot 3.6 source excerpt.
+ * Upstream: engine/godot-3.6/core/resource.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 49-92 */
+void Resource::set_path(const String &p_path, bool p_take_over) {
+	if (path_cache == p_path) {
+		return;
+	}
+
+	if (path_cache != "") {
+		ResourceCache::lock.write_lock();
+		ResourceCache::resources.erase(path_cache);
+		ResourceCache::lock.write_unlock();
+	}
+
+	path_cache = "";
+
+	ResourceCache::lock.read_lock();
+	bool has_path = ResourceCache::resources.has(p_path);
+	ResourceCache::lock.read_unlock();
+
+	if (has_path) {
+		if (p_take_over) {
+			ResourceCache::lock.write_lock();
+			Resource **res = ResourceCache::resources.getptr(p_path);
+			if (res) {
+				(*res)->set_name("");
+			}
+			ResourceCache::lock.write_unlock();
+		} else {
+			ResourceCache::lock.read_lock();
+			bool exists = ResourceCache::resources.has(p_path);
+			ResourceCache::lock.read_unlock();
+
+			ERR_FAIL_COND_MSG(exists, "Another resource is loaded from path '" + p_path + "' (possible cyclic resource inclusion).");
+		}
+	}
+	path_cache = p_path;
+
+	if (path_cache != "") {
+		ResourceCache::lock.write_lock();
+		ResourceCache::resources[path_cache] = this;
+		ResourceCache::lock.write_unlock();
+	}
+
+	_change_notify("resource_path");
+	_resource_path_changed();
+}

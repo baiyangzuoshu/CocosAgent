@@ -1,0 +1,67 @@
+/* Godot 1.1 source excerpt.
+ * Upstream: engine/godot-1.1/scene/main/node.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 659-675 */
+void Node::add_child(Node *p_child) {
+
+	ERR_FAIL_NULL(p_child);
+	/* Fail if node has a parent */
+	ERR_EXPLAIN("Can't add child "+p_child->get_name()+" to itself.")
+	ERR_FAIL_COND( p_child==this ); // adding to itself!
+	ERR_EXPLAIN("Can't add child, already has a parent");
+	ERR_FAIL_COND( p_child->data.parent );
+	ERR_EXPLAIN("Can't add child while a notification is happening");
+	ERR_FAIL_COND( data.blocked > 0 );
+
+	/* Validate name */
+	_validate_child_name(p_child);
+
+	_add_child_nocheck(p_child,p_child->data.name);
+
+}
+
+/* Upstream lines 830-836 */
+Node *Node::get_node(const NodePath& p_path) const {
+
+	Node *node = _get_node(p_path);
+	ERR_EXPLAIN("Node not found: "+p_path);
+	ERR_FAIL_COND_V(!node,NULL);
+	return node;
+}
+
+/* Upstream lines 946-976 */
+void Node::set_owner(Node *p_owner) {
+
+	if (data.owner) {
+
+		data.owner->data.owned.erase( data.OW );
+		data.OW=NULL;
+		data.owner=NULL;
+	}
+
+	ERR_FAIL_COND(p_owner==this);
+
+	if (!p_owner)
+		return;
+
+	Node *check=this->get_parent();
+	bool owner_valid=false;
+
+	while(check) {
+
+		if (check==p_owner) {
+			owner_valid=true;
+			break;
+		}
+
+		check=check->data.parent;
+	}
+
+	ERR_FAIL_COND(!owner_valid);
+
+	_set_owner_nocheck(p_owner);
+}

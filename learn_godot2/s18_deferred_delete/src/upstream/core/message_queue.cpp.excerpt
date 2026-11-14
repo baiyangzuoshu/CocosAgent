@@ -1,0 +1,115 @@
+/* Godot 2.1 source excerpt.
+ * Upstream: engine/godot-2.1/core/message_queue.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 41-75 */
+Error MessageQueue::push_call(ObjectID p_id, const StringName &p_method, const Variant **p_args, int p_argcount, bool p_show_error) {
+
+	_THREAD_SAFE_METHOD_
+
+	int room_needed = sizeof(Message) + sizeof(Variant) * p_argcount;
+
+	if ((buffer_end + room_needed) >= buffer_size) {
+		String type;
+		if (ObjectDB::get_instance(p_id))
+			type = ObjectDB::get_instance(p_id)->get_type();
+		print_line("failed method: " + type + ":" + p_method + " target ID: " + itos(p_id));
+		statistics();
+		ERR_EXPLAIN("Message queue out of memory. Try increasing 'message_queue_size_kb' in project settings");
+		ERR_FAIL_V(ERR_OUT_OF_MEMORY);
+	}
+
+	Message *msg = memnew_placement(&buffer[buffer_end], Message);
+	msg->args = p_argcount;
+	msg->instance_ID = p_id;
+	msg->target = p_method;
+	msg->type = TYPE_CALL;
+	if (p_show_error)
+		msg->type |= FLAG_SHOW_ERROR;
+
+	buffer_end += sizeof(Message);
+
+	for (int i = 0; i < p_argcount; i++) {
+
+		Variant *v = memnew_placement(&buffer[buffer_end], Variant);
+		buffer_end += sizeof(Variant);
+		*v = *p_args[i];
+	}
+
+	return OK;
+}
+
+/* Upstream lines 306-375 */
+void MessageQueue::flush() {
+
+	if (buffer_end > buffer_max_used) {
+		buffer_max_used = buffer_end;
+		//statistics();
+	}
+
+	uint32_t read_pos = 0;
+
+	//using reverse locking strategy
+	_THREAD_SAFE_LOCK_
+
+	while (read_pos < buffer_end) {
+
+		//lock on each interation, so a call can re-add itself to the message queue
+
+		Message *message = (Message *)&buffer[read_pos];
+
+		uint32_t advance = sizeof(Message);
+		if ((message->type & FLAG_MASK) != TYPE_NOTIFICATION)
+			advance += sizeof(Variant) * message->args;
+
+		//pre-advance so this function is reentrant
+		read_pos += advance;
+
+		_THREAD_SAFE_UNLOCK_
+
+		Object *target = ObjectDB::get_instance(message->instance_ID);
+
+		if (target != NULL) {
+
+			switch (message->type & FLAG_MASK) {
+				case TYPE_CALL: {
+
+					Variant *args = (Variant *)(message + 1);
+
+					// messages don't expect a return value
+
+					_call_function(target, message->target, args, message->args, message->type & FLAG_SHOW_ERROR);
+
+					for (int i = 0; i < message->args; i++) {
+						args[i].~Variant();
+					}
+
+				} break;
+				case TYPE_NOTIFICATION: {
+
+					// messages don't expect a return value
+					target->notification(message->notification);
+
+				} break;
+				case TYPE_SET: {
+
+					Variant *arg = (Variant *)(message + 1);
+					// messages don't expect a return value
+					target->set(message->target, *arg);
+
+					arg->~Variant();
+				} break;
+			}
+		}
+
+		message->~Message();
+
+		_THREAD_SAFE_LOCK_
+	}
+
+	buffer_end = 0; // reset buffer
+	_THREAD_SAFE_UNLOCK_
+}

@@ -1,0 +1,43 @@
+/* Godot 4.7 source excerpt.
+ * Upstream: engine/godot-4.7/modules/gdscript/gdscript_tokenizer.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1351-1385 */
+GDScriptTokenizer::Token GDScriptTokenizerText::scan() {
+	if (has_error()) {
+		return pop_error();
+	}
+
+	_skip_whitespace();
+
+	if (pending_newline) {
+		pending_newline = false;
+		if (!multiline_mode) {
+			// Don't return newline tokens on multiline mode.
+			return last_newline;
+		}
+	}
+
+	// Check for potential errors after skipping whitespace().
+	if (has_error()) {
+		return pop_error();
+	}
+
+	_start = _current;
+	start_line = line;
+	start_column = column;
+
+	if (pending_indents != 0) {
+		// Adjust position for indent.
+		_start -= start_column - 1;
+		start_column = 1;
+		if (pending_indents > 0) {
+			// Indents.
+			pending_indents--;
+			return make_token(Token::INDENT);
+		} else {
+			// Dedents.
+			pending_indents++;

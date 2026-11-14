@@ -1,0 +1,6 @@
+config_version=4
+
+[application]
+
+config/name="Godot 3.6 S16 _process、_physics_process 与优先级"
+run/main_scene="res://main.tscn"

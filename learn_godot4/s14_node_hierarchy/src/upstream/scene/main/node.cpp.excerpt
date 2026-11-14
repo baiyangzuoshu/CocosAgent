@@ -1,0 +1,75 @@
+/* Godot 4.7 source excerpt.
+ * Upstream: engine/godot-4.7/scene/main/node.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1711-1733 */
+void Node::add_child(RequiredParam<Node> rp_child, bool p_force_readable_name, InternalMode p_internal) {
+	ERR_FAIL_COND_MSG(data.tree && !Thread::is_main_thread(), "Adding children to a node inside the SceneTree is only allowed from the main thread. Use call_deferred(\"add_child\",node).");
+
+	ERR_THREAD_GUARD
+	EXTRACT_PARAM_OR_FAIL(p_child, rp_child);
+	ERR_FAIL_COND_MSG(p_child == this, vformat("Can't add child '%s' to itself.", p_child->get_name())); // adding to itself!
+	ERR_FAIL_COND_MSG(p_child->data.parent, vformat("Can't add child '%s' to '%s', already has a parent '%s'.", p_child->get_name(), get_name(), p_child->data.parent->get_name())); //Fail if node has a parent
+#ifdef DEBUG_ENABLED
+	ERR_FAIL_COND_MSG(p_child->is_ancestor_of(this), vformat("Can't add child '%s' to '%s' as it would result in a cyclic dependency since '%s' is already a parent of '%s'.", p_child->get_name(), get_name(), p_child->get_name(), get_name()));
+#endif
+	ERR_FAIL_COND_MSG(data.blocked > 0, "Parent node is busy setting up children, `add_child()` failed. Consider using `add_child.call_deferred(child)` instead.");
+
+	_validate_child_name(p_child, p_force_readable_name);
+
+#ifdef DEBUG_ENABLED
+	if (p_child->data.owner && !p_child->data.owner->is_ancestor_of(p_child)) {
+		// Owner of p_child should be ancestor of p_child.
+		WARN_PRINT(vformat("Adding '%s' as child to '%s' will make owner '%s' inconsistent. Consider unsetting the owner beforehand.", p_child->get_name(), get_name(), p_child->data.owner->get_name()));
+	}
+#endif // DEBUG_ENABLED
+
+	_add_child_nocheck(p_child, p_child->data.name, p_internal);
+}
+
+/* Upstream lines 1966-1981 */
+Node *Node::get_node(const NodePath &p_path) const {
+	Node *node = get_node_or_null(p_path);
+
+	if (unlikely(!node)) {
+		const String desc = get_description();
+		if (p_path.is_absolute()) {
+			ERR_FAIL_V_MSG(nullptr,
+					vformat(R"(Node not found: "%s" (absolute path attempted from "%s").)", p_path, desc));
+		} else {
+			ERR_FAIL_V_MSG(nullptr,
+					vformat(R"(Node not found: "%s" (relative to "%s").)", p_path, desc));
+		}
+	}
+
+	return node;
+}
+
+/* Upstream lines 2271-2294 */
+void Node::set_owner(Node *p_owner) {
+	ERR_MAIN_THREAD_GUARD
+	if (data.owner) {
+		_clean_up_owner();
+	}
+
+	ERR_FAIL_COND(p_owner == this);
+
+	if (!p_owner) {
+		return;
+	}
+
+	bool owner_valid = p_owner->is_ancestor_of(this);
+
+	ERR_FAIL_COND_MSG(!owner_valid, "Invalid owner. Owner must be an ancestor in the tree.");
+
+	_set_owner_nocheck(p_owner);
+
+	if (data.unique_name_in_owner) {
+		_acquire_unique_name_in_owner();
+	}
+
+	_emit_editor_state_changed();
+}

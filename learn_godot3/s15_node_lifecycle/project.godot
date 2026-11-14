@@ -1,0 +1,6 @@
+config_version=4
+
+[application]
+
+config/name="Godot 3.6 S15 SceneTree 生命周期通知与回调顺序"
+run/main_scene="res://main.tscn"

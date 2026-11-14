@@ -1,0 +1,70 @@
+/* Godot 2.1 source excerpt.
+ * Upstream: engine/godot-2.1/scene/main/scene_main_loop.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 473-495 */
+bool SceneTree::iteration(float p_time) {
+
+	root_lock++;
+
+	current_frame++;
+
+	_flush_transform_notifications();
+
+	MainLoop::iteration(p_time);
+	fixed_process_time = p_time;
+
+	emit_signal("fixed_frame");
+
+	_notify_group_pause("fixed_process", Node::NOTIFICATION_FIXED_PROCESS);
+	_flush_ugc();
+	_flush_transform_notifications();
+	call_group(GROUP_CALL_REALTIME, "_viewports", "update_worlds");
+	root_lock--;
+
+	_flush_delete_queue();
+
+	return _quit;
+}
+
+/* Upstream lines 497-533 */
+bool SceneTree::idle(float p_time) {
+
+	//	print_line("ram: "+itos(OS::get_singleton()->get_static_memory_usage())+" sram: "+itos(OS::get_singleton()->get_dynamic_memory_usage()));
+	//	print_line("node count: "+itos(get_node_count()));
+	//	print_line("TEXTURE RAM: "+itos(VS::get_singleton()->get_render_info(VS::INFO_TEXTURE_MEM_USED)));
+
+	root_lock++;
+
+	MainLoop::idle(p_time);
+
+	idle_process_time = p_time;
+
+	emit_signal("idle_frame");
+
+	_flush_transform_notifications();
+
+	_notify_group_pause("idle_process", Node::NOTIFICATION_PROCESS);
+
+	Size2 win_size = Size2(OS::get_singleton()->get_video_mode().width, OS::get_singleton()->get_video_mode().height);
+	if (win_size != last_screen_size) {
+
+		last_screen_size = win_size;
+		_update_root_rect();
+
+		emit_signal("screen_resized");
+	}
+
+	_flush_ugc();
+	_flush_transform_notifications(); //transforms after world update, to avoid unnecesary enter/exit notifications
+	call_group(GROUP_CALL_REALTIME, "_viewports", "update_worlds");
+
+	root_lock--;
+
+	_flush_delete_queue();
+
+	return _quit;
+}

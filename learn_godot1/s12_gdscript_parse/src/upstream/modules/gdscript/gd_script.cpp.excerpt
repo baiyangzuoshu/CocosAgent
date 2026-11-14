@@ -1,0 +1,61 @@
+/* Godot 1.1 source excerpt.
+ * Upstream: engine/godot-1.1/modules/gdscript/gd_script.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1823-1875 */
+Error GDScript::reload() {
+
+
+	ERR_FAIL_COND_V(instances.size(),ERR_ALREADY_IN_USE);
+
+	String basedir=path;
+
+	if (basedir=="")
+		basedir=get_path();
+
+	if (basedir!="")
+		basedir=basedir.get_base_dir();
+
+
+
+
+	valid=false;
+	GDParser parser;
+	Error err = parser.parse(source,basedir,false,path);
+	if (err) {
+		if (ScriptDebugger::get_singleton()) {
+			GDScriptLanguage::get_singleton()->debug_break_parse(get_path(),parser.get_error_line(),"Parser Error: "+parser.get_error());
+		}
+		_err_print_error("GDScript::reload",path.empty()?"built-in":(const char*)path.utf8().get_data(),parser.get_error_line(),("Parse Error: "+parser.get_error()).utf8().get_data());
+		ERR_FAIL_V(ERR_PARSE_ERROR);
+	}
+
+	GDCompiler compiler;
+	err = compiler.compile(&parser,this);
+
+	if (err) {
+		if (ScriptDebugger::get_singleton()) {
+			GDScriptLanguage::get_singleton()->debug_break_parse(get_path(),compiler.get_error_line(),"Parser Error: "+compiler.get_error());
+		}
+		_err_print_error("GDScript::reload",path.empty()?"built-in":(const char*)path.utf8().get_data(),compiler.get_error_line(),("Compile Error: "+compiler.get_error()).utf8().get_data());
+		ERR_FAIL_V(ERR_COMPILATION_FAILED);
+	}
+
+	valid=true;
+
+	for(Map<StringName,Ref<GDScript> >::Element *E=subclasses.front();E;E=E->next()) {
+
+		_set_subclass_path(E->get(),path);
+	}
+
+#ifdef TOOLS_ENABLED
+	/*for (Set<PlaceHolderScriptInstance*>::Element *E=placeholders.front();E;E=E->next()) {
+
+		_update_placeholder(E->get());
+	}*/
+#endif
+	return OK;
+}

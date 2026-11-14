@@ -1,0 +1,16 @@
+/* Godot 2.1 source excerpt.
+ * Upstream: engine/godot-2.1/scene/main/node.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1977-1984 */
+void Node::queue_delete() {
+
+	if (is_inside_tree()) {
+		get_tree()->queue_delete(this);
+	} else {
+		SceneTree::get_singleton()->queue_delete(this);
+	}
+}

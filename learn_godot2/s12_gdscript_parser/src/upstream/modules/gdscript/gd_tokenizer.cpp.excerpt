@@ -1,0 +1,15 @@
+/* Godot 2.1 source excerpt.
+ * Upstream: engine/godot-2.1/modules/gdscript/gd_tokenizer.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 941-947 */
+GDTokenizerText::Token GDTokenizerText::get_token(int p_offset) const {
+	ERR_FAIL_COND_V(p_offset <= -MAX_LOOKAHEAD, TK_ERROR);
+	ERR_FAIL_COND_V(p_offset >= MAX_LOOKAHEAD, TK_ERROR);
+
+	int ofs = (TK_RB_SIZE + tk_rb_pos + p_offset - MAX_LOOKAHEAD - 1) % TK_RB_SIZE;
+	return tk_rb[ofs].type;
+}

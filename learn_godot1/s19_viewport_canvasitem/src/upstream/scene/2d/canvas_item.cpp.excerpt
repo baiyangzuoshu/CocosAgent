@@ -1,0 +1,62 @@
+/* Godot 1.1 source excerpt.
+ * Upstream: engine/godot-1.1/scene/2d/canvas_item.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 503-556 */
+void CanvasItem::_notification(int p_what) {
+
+
+	switch(p_what) {
+		case NOTIFICATION_ENTER_TREE: {
+
+			first_draw=true;
+			pending_children_sort=false;
+			if (get_parent()) {
+				CanvasItem *ci = get_parent()->cast_to<CanvasItem>();
+				if (ci)
+					C=ci->children_items.push_back(this);
+			}
+			_enter_canvas();
+			if (!block_transform_notify && !xform_change.in_list()) {
+				get_tree()->xform_change_list.add(&xform_change);
+			}
+		} break;
+		case NOTIFICATION_MOVED_IN_PARENT: {
+
+
+			if (group!="") {
+				get_tree()->call_group(SceneTree::GROUP_CALL_UNIQUE,group,"_raise_self");
+			} else {
+				CanvasItem *p = get_parent_item();
+				ERR_FAIL_COND(!p);
+				p->_queue_sort_children();
+			}
+
+
+		} break;
+		case NOTIFICATION_EXIT_TREE: {
+			if (xform_change.in_list())
+				get_tree()->xform_change_list.remove(&xform_change);
+			_exit_canvas();
+			if (C) {
+				get_parent()->cast_to<CanvasItem>()->children_items.erase(C);
+				C=NULL;
+			}
+		} break;
+		case NOTIFICATION_DRAW: {
+
+		} break;
+		case NOTIFICATION_TRANSFORM_CHANGED: {
+
+
+		} break;
+		case NOTIFICATION_VISIBILITY_CHANGED: {
+
+			emit_signal(SceneStringNames::get_singleton()->visibility_changed);
+		} break;
+
+	}
+}

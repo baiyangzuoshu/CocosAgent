@@ -1,0 +1,55 @@
+/* Godot 4.7 source excerpt.
+ * Upstream: engine/godot-4.7/modules/gdscript/gdscript_vm.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 499-545 */
+Variant GDScriptFunction::call(GDScriptInstance *p_instance, const Variant **p_args, int p_argcount, Callable::CallError &r_err, CallState *p_state) {
+	GodotProfileZoneScript(this, source, name, name, _initial_line);
+
+	OPCODES_TABLE;
+
+	if (!_code_ptr) {
+		return _get_default_variant_for_data_type(return_type);
+	}
+
+	r_err.error = Callable::CallError::CALL_OK;
+
+	static thread_local int call_depth = 0;
+	if (unlikely(++call_depth > MAX_CALL_DEPTH)) {
+		call_depth--;
+#ifdef DEBUG_ENABLED
+		String err_file;
+		if (p_instance && ObjectDB::get_instance(p_instance->owner_id) != nullptr && p_instance->script->is_valid() && !p_instance->script->path.is_empty()) {
+			err_file = p_instance->script->path;
+		} else if (_script) {
+			err_file = _script->path;
+		}
+		if (err_file.is_empty()) {
+			err_file = "<built-in>";
+		}
+		String err_func = name;
+		if (p_instance && ObjectDB::get_instance(p_instance->owner_id) != nullptr && p_instance->script->is_valid() && p_instance->script->local_name != StringName()) {
+			err_func = p_instance->script->local_name.operator String() + "." + err_func;
+		}
+		int err_line = _initial_line;
+		const char *err_text = "Stack overflow. Check for infinite recursion in your script.";
+		_err_print_error(err_func.utf8().get_data(), err_file.utf8().get_data(), err_line, err_text, false, ERR_HANDLER_SCRIPT);
+		GDScriptLanguage::get_singleton()->debug_break(err_text, false);
+#endif
+		return _get_default_variant_for_data_type(return_type);
+	}
+
+	Variant retvalue;
+	Variant *stack = nullptr;
+	Variant **instruction_args = nullptr;
+	int defarg = 0;
+
+	uint32_t alloca_size = 0;
+	GDScript *script;
+	int ip = 0;
+	int line = _initial_line;
+
+	if (p_state) {

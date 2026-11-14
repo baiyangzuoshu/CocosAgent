@@ -1,0 +1,87 @@
+/* Godot 3.6 source excerpt.
+ * Upstream: engine/godot-3.6/scene/main/node.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1323-1336 */
+void Node::add_child(Node *p_child, bool p_force_readable_name) {
+	ERR_FAIL_NULL(p_child);
+	ERR_FAIL_COND_MSG(p_child == this, vformat("Can't add child '%s' to itself.", p_child->get_name())); // adding to itself!
+	ERR_FAIL_COND_MSG(p_child->data.parent, vformat("Can't add child '%s' to '%s', already has a parent '%s'.", p_child->get_name(), get_name(), p_child->data.parent->get_name())); //Fail if node has a parent
+#ifdef DEBUG_ENABLED
+	ERR_FAIL_COND_MSG(p_child->is_a_parent_of(this), vformat("Can't add child '%s' to '%s' as it would result in a cyclic dependency since '%s' is already a parent of '%s'.", p_child->get_name(), get_name(), p_child->get_name(), get_name()));
+#endif
+	ERR_FAIL_COND_MSG(data.blocked > 0, "Parent node is busy setting up children, add_node() failed. Consider using call_deferred(\"add_child\", child) instead.");
+
+	/* Validate name */
+	_validate_child_name(p_child, p_force_readable_name);
+
+	_add_child_nocheck(p_child, p_child->data.name);
+}
+
+/* Upstream lines 1495-1519 */
+Node *Node::get_node(const NodePath &p_path) const {
+	Node *node = get_node_or_null(p_path);
+	if (unlikely(!node)) {
+		// Try to get a clear description of this node in the error message.
+		String desc;
+		if (is_inside_tree()) {
+			desc = get_path();
+		} else {
+			desc = get_name();
+			if (desc.empty()) {
+				desc = get_class();
+			}
+		}
+
+		if (p_path.is_absolute()) {
+			ERR_FAIL_V_MSG(nullptr,
+					vformat("(Node not found: \"%s\" (absolute path attempted from \"%s\").)", p_path, desc));
+		} else {
+			ERR_FAIL_V_MSG(nullptr,
+					vformat("(Node not found: \"%s\" (relative to \"%s\").)", p_path, desc));
+		}
+	}
+
+	return node;
+}
+
+/* Upstream lines 1706-1741 */
+void Node::set_owner(Node *p_owner) {
+	if (data.owner) {
+		if (data.unique_name_in_owner) {
+			_release_unique_name_in_owner();
+		}
+		data.owner->data.owned.erase(data.OW);
+		data.OW = nullptr;
+		data.owner = nullptr;
+	}
+
+	ERR_FAIL_COND(p_owner == this);
+
+	if (!p_owner) {
+		return;
+	}
+
+	Node *check = this->get_parent();
+	bool owner_valid = false;
+
+	while (check) {
+		if (check == p_owner) {
+			owner_valid = true;
+			break;
+		}
+
+		check = check->data.parent;
+	}
+
+	ERR_FAIL_COND(!owner_valid);
+
+	_set_owner_nocheck(p_owner);
+
+	if (data.unique_name_in_owner) {
+		_acquire_unique_name_in_owner();
+	}
+}

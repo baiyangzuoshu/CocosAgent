@@ -1,0 +1,25 @@
+/* Godot 3.6 source excerpt.
+ * Upstream: engine/godot-3.6/scene/main/scene_tree.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 422-424 */
+void SceneTree::call_group(const StringName &p_group, const StringName &p_function, VARIANT_ARG_DECLARE) {
+	call_group_flags(0, p_group, p_function, VARIANT_ARG_PASS);
+}
+
+/* Upstream lines 1047-1058 */
+void SceneTree::set_pause(bool p_enabled) {
+	if (p_enabled == pause) {
+		return;
+	}
+	pause = p_enabled;
+	NavigationServer::get_singleton()->set_active(!p_enabled);
+	PhysicsServer::get_singleton()->set_active(!p_enabled);
+	Physics2DServer::get_singleton()->set_active(!p_enabled);
+	if (get_root()) {
+		get_root()->propagate_notification(p_enabled ? Node::NOTIFICATION_PAUSED : Node::NOTIFICATION_UNPAUSED);
+	}
+}

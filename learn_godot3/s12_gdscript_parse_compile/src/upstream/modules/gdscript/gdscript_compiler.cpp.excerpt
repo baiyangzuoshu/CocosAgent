@@ -1,0 +1,40 @@
+/* Godot 3.6 source excerpt.
+ * Upstream: engine/godot-3.6/modules/gdscript/gdscript_compiler.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 2201-2232 */
+Error GDScriptCompiler::compile(const GDScriptParser *p_parser, GDScript *p_script, bool p_keep_state) {
+	err_line = -1;
+	err_column = -1;
+	error = "";
+	parser = p_parser;
+	main_script = p_script;
+	const GDScriptParser::Node *root = parser->get_parse_tree();
+	ERR_FAIL_COND_V(root->type != GDScriptParser::Node::TYPE_CLASS, ERR_INVALID_DATA);
+
+	source = p_script->get_path();
+
+	// The best fully qualified name for a base level script is its file path
+	p_script->fully_qualified_name = p_script->path;
+
+	// Create scripts for subclasses beforehand so they can be referenced
+	_make_scripts(p_script, static_cast<const GDScriptParser::ClassNode *>(root), p_keep_state);
+
+	p_script->_owner = nullptr;
+	Error err = _parse_class_level(p_script, static_cast<const GDScriptParser::ClassNode *>(root), p_keep_state);
+
+	if (err) {
+		return err;
+	}
+
+	err = _parse_class_blocks(p_script, static_cast<const GDScriptParser::ClassNode *>(root), p_keep_state);
+
+	if (err) {
+		return err;
+	}
+
+	return OK;
+}

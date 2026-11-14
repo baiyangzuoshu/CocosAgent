@@ -1,0 +1,90 @@
+/* Godot 4.7 source excerpt.
+ * Upstream: engine/godot-4.7/scene/main/node.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 669-725 */
+void Node::set_process_mode(ProcessMode p_mode) {
+	ERR_THREAD_GUARD
+	if (data.process_mode == p_mode) {
+		return;
+	}
+
+	if (!is_inside_tree()) {
+		data.process_mode = p_mode;
+		return;
+	}
+
+	bool prev_can_process = can_process();
+	bool prev_enabled = _is_enabled();
+
+	if (p_mode == PROCESS_MODE_INHERIT) {
+		if (data.parent) {
+			data.process_owner = data.parent->data.process_owner;
+		} else {
+			ERR_FAIL_MSG("The root node can't be set to Inherit process mode.");
+		}
+	} else {
+		data.process_owner = this;
+	}
+
+	data.process_mode = p_mode;
+
+	bool next_can_process = can_process();
+	bool next_enabled = _is_enabled();
+
+	int pause_notification = 0;
+
+	if (prev_can_process && !next_can_process) {
+		pause_notification = NOTIFICATION_PAUSED;
+	} else if (!prev_can_process && next_can_process) {
+		pause_notification = NOTIFICATION_UNPAUSED;
+	}
+
+	int enabled_notification = 0;
+
+	if (prev_enabled && !next_enabled) {
+		enabled_notification = NOTIFICATION_DISABLED;
+	} else if (!prev_enabled && next_enabled) {
+		enabled_notification = NOTIFICATION_ENABLED;
+	}
+
+	_propagate_process_owner(data.process_owner, pause_notification, enabled_notification);
+
+#ifdef TOOLS_ENABLED
+	// This is required for the editor to update the visibility of disabled nodes
+	// It's very expensive during runtime to change, so editor-only
+	if (Engine::get_singleton()->is_editor_hint()) {
+		data.tree->emit_signal(SNAME("tree_process_mode_changed"));
+	}
+
+	_emit_editor_state_changed();
+#endif
+}
+
+/* Upstream lines 2458-2480 */
+void Node::add_to_group(const StringName &p_identifier, bool p_persistent) {
+	ERR_THREAD_GUARD
+	ERR_FAIL_COND_MSG(p_identifier.is_empty(), vformat("Cannot add node '%s' to a group with an empty name.", get_name()));
+
+	if (data.grouped.has(p_identifier)) {
+		return;
+	}
+
+	GroupData gd;
+
+	if (data.tree) {
+		gd.group = data.tree->add_to_group(p_identifier, this);
+	} else {
+		gd.group = nullptr;
+	}
+
+	gd.persistent = p_persistent;
+
+	data.grouped[p_identifier] = gd;
+	if (p_persistent) {
+		_emit_editor_state_changed();
+	}
+}

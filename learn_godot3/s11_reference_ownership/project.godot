@@ -1,0 +1,6 @@
+config_version=4
+
+[application]
+
+config/name="Godot 3.6 S11 Reference 引用计数与 Resource 所有权"
+run/main_scene="res://main.tscn"

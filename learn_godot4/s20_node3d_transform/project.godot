@@ -1,0 +1,6 @@
+config_version=5
+
+[application]
+
+config/name="Godot 4.7 S20 Node3D 局部/全局变换与父级传播"
+run/main_scene="res://main.tscn"

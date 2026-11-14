@@ -1,0 +1,12 @@
+/* Godot 1.1 source excerpt.
+ * Upstream: engine/godot-1.1/core/object.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1556-1559 */
+void Object::call_deferred(const StringName& p_method,VARIANT_ARG_DECLARE) {
+
+	MessageQueue::get_singleton()->push_call(this,p_method,VARIANT_ARG_PASS);
+}

@@ -1,0 +1,157 @@
+/* Godot 4.7 source excerpt.
+ * Upstream: engine/godot-4.7/scene/main/node.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 68-147 */
+void Node::_notification(int p_notification) {
+	switch (p_notification) {
+		case NOTIFICATION_ACCESSIBILITY_INVALIDATE: {
+			if (data.accessibility_element.is_valid()) {
+				AccessibilityServer::get_singleton()->free_element(data.accessibility_element);
+				data.accessibility_element = RID();
+			}
+		} break;
+
+		case NOTIFICATION_ACCESSIBILITY_UPDATE: {
+			RID ae = get_accessibility_element();
+			ERR_FAIL_COND(ae.is_null());
+
+			AccessibilityServer::get_singleton()->update_set_name(ae, get_name());
+
+			// Node children.
+			if (!accessibility_override_tree_hierarchy()) {
+				for (int i = 0; i < get_child_count(); i++) {
+					Node *child_node = get_child(i);
+					Window *child_wnd = Object::cast_to<Window>(child_node);
+					if (child_wnd && !(child_wnd->is_visible() && (child_wnd->is_embedded() || child_wnd->is_popup()))) {
+						continue;
+					}
+					if (child_node->is_part_of_edited_scene()) {
+						continue;
+					}
+					AccessibilityServer::get_singleton()->update_add_child(ae, child_node->get_accessibility_element());
+				}
+			}
+		} break;
+
+		case NOTIFICATION_PROCESS: {
+			GDVIRTUAL_CALL(_process, get_process_delta_time());
+		} break;
+
+		case NOTIFICATION_PHYSICS_PROCESS: {
+			GDVIRTUAL_CALL(_physics_process, get_physics_process_delta_time());
+		} break;
+
+		case NOTIFICATION_ENTER_TREE: {
+			ERR_FAIL_NULL(get_viewport());
+			ERR_FAIL_NULL(data.tree);
+
+			if (data.tree->is_accessibility_supported() && !is_part_of_edited_scene()) {
+				data.tree->_accessibility_force_update();
+				data.tree->_accessibility_notify_change(this);
+				if (data.parent) {
+					data.tree->_accessibility_notify_change(data.parent);
+				} else {
+					data.tree->_accessibility_notify_change(get_window()); // Root node.
+				}
+			}
+
+			// Update process mode.
+			if (data.process_mode == PROCESS_MODE_INHERIT) {
+				if (data.parent) {
+					data.process_owner = data.parent->data.process_owner;
+				} else {
+					ERR_PRINT("The root node can't be set to Inherit process mode, reverting to Pausable instead.");
+					data.process_mode = PROCESS_MODE_PAUSABLE;
+					data.process_owner = this;
+				}
+			} else {
+				data.process_owner = this;
+			}
+
+			{ // Update threaded process mode.
+				if (data.process_thread_group == PROCESS_THREAD_GROUP_INHERIT) {
+					if (data.parent) {
+						data.process_thread_group_owner = data.parent->data.process_thread_group_owner;
+					}
+
+					if (data.process_thread_group_owner) {
+						data.process_group = data.process_thread_group_owner->data.process_group;
+					} else {
+						data.process_group = &data.tree->default_process_group;
+					}
+				} else {
+					data.process_thread_group_owner = this;
+					_add_process_group();
+
+/* Upstream lines 617-637 */
+void Node::set_physics_process(bool p_process) {
+	ERR_THREAD_GUARD
+	if (data.physics_process == p_process) {
+		return;
+	}
+
+	if (!is_inside_tree()) {
+		data.physics_process = p_process;
+		return;
+	}
+
+	if (_is_any_processing()) {
+		_remove_from_process_thread_group();
+	}
+
+	data.physics_process = p_process;
+
+	if (_is_any_processing()) {
+		_add_to_process_thread_group();
+	}
+}
+
+/* Upstream lines 1025-1045 */
+void Node::set_process(bool p_process) {
+	ERR_THREAD_GUARD
+	if (data.process == p_process) {
+		return;
+	}
+
+	if (!is_inside_tree()) {
+		data.process = p_process;
+		return;
+	}
+
+	if (_is_any_processing()) {
+		_remove_from_process_thread_group();
+	}
+
+	data.process = p_process;
+
+	if (_is_any_processing()) {
+		_add_to_process_thread_group();
+	}
+}
+
+/* Upstream lines 1151-1171 */
+void Node::set_process_priority(int p_priority) {
+	ERR_THREAD_GUARD
+	if (data.process_priority == p_priority) {
+		return;
+	}
+	if (!is_inside_tree()) {
+		// Not yet in the tree; trivial update.
+		data.process_priority = p_priority;
+		return;
+	}
+
+	if (_is_any_processing()) {
+		_remove_from_process_thread_group();
+	}
+
+	data.process_priority = p_priority;
+
+	if (_is_any_processing()) {
+		_add_to_process_thread_group();
+	}
+}

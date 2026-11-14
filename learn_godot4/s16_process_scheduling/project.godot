@@ -1,0 +1,6 @@
+config_version=5
+
+[application]
+
+config/name="Godot 4.7 S16 SceneTree process 调度与优先级"
+run/main_scene="res://main.tscn"

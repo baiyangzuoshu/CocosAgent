@@ -1,0 +1,151 @@
+/* Godot 4.7 source excerpt.
+ * Upstream: engine/godot-4.7/scene/main/node.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 323-339 */
+void Node::_propagate_ready() {
+	data.ready_notified = true;
+	data.blocked++;
+	for (KeyValue<StringName, Node *> &K : data.children) {
+		K.value->_propagate_ready();
+	}
+
+	data.blocked--;
+
+	notification(NOTIFICATION_POST_ENTER_TREE);
+
+	if (data.ready_first) {
+		data.ready_first = false;
+		notification(NOTIFICATION_READY);
+		emit_signal(SceneStringName(ready));
+	}
+}
+
+/* Upstream lines 341-389 */
+void Node::_propagate_enter_tree() {
+	// this needs to happen to all children before any enter_tree
+
+	if (data.parent) {
+		data.tree = data.parent->data.tree;
+		data.depth = data.parent->data.depth + 1;
+	} else {
+		data.depth = 1;
+	}
+
+	data.viewport = Object::cast_to<Viewport>(this);
+	if (!data.viewport && data.parent) {
+		data.viewport = data.parent->data.viewport;
+	}
+
+	for (KeyValue<StringName, GroupData> &E : data.grouped) {
+		E.value.group = data.tree->add_to_group(E.key, this);
+	}
+
+	notification(NOTIFICATION_ENTER_TREE);
+
+	GDVIRTUAL_CALL(_enter_tree);
+
+	emit_signal(SceneStringName(tree_entered));
+
+	data.tree->node_added(this);
+
+	if (data.parent) {
+		Variant c = this;
+		const Variant *cptr = &c;
+		data.parent->emit_signalp(SNAME("child_entered_tree"), &cptr, 1);
+	}
+
+	data.blocked++;
+	//block while adding children
+
+	for (KeyValue<StringName, Node *> &K : data.children) {
+		if (!K.value->is_inside_tree()) { // could have been added in enter_tree
+			K.value->_propagate_enter_tree();
+		}
+	}
+
+	data.blocked--;
+
+#ifdef DEBUG_ENABLED
+	SceneDebugger::add_to_cache(data.scene_file_path, this);
+#endif
+	// enter groups
+}
+
+/* Upstream lines 410-457 */
+void Node::_propagate_exit_tree() {
+	//block while removing children
+
+#ifdef DEBUG_ENABLED
+	if (!data.scene_file_path.is_empty()) {
+		// Only remove if file path is set (optimization).
+		SceneDebugger::remove_from_cache(data.scene_file_path, this);
+	}
+#endif
+	data.blocked++;
+
+	for (HashMap<StringName, Node *>::Iterator I = data.children.last(); I; --I) {
+		I->value->_propagate_exit_tree();
+	}
+
+	data.blocked--;
+
+	GDVIRTUAL_CALL(_exit_tree);
+
+	emit_signal(SceneStringName(tree_exiting));
+
+	notification(NOTIFICATION_EXIT_TREE, true);
+	if (data.tree) {
+		data.tree->node_removed(this);
+	}
+
+	if (data.parent) {
+		Variant c = this;
+		const Variant *cptr = &c;
+		data.parent->emit_signalp(SNAME("child_exiting_tree"), &cptr, 1);
+	}
+
+	// exit groups
+	for (KeyValue<StringName, GroupData> &E : data.grouped) {
+		data.tree->remove_from_group(E.key, this);
+		E.value.group = nullptr;
+	}
+
+	data.viewport = nullptr;
+
+	if (data.tree) {
+		data.tree->tree_changed();
+	}
+
+	data.ready_notified = false;
+	data.tree = nullptr;
+	data.depth = -1;
+}
+
+/* Upstream lines 1711-1733 */
+void Node::add_child(RequiredParam<Node> rp_child, bool p_force_readable_name, InternalMode p_internal) {
+	ERR_FAIL_COND_MSG(data.tree && !Thread::is_main_thread(), "Adding children to a node inside the SceneTree is only allowed from the main thread. Use call_deferred(\"add_child\",node).");
+
+	ERR_THREAD_GUARD
+	EXTRACT_PARAM_OR_FAIL(p_child, rp_child);
+	ERR_FAIL_COND_MSG(p_child == this, vformat("Can't add child '%s' to itself.", p_child->get_name())); // adding to itself!
+	ERR_FAIL_COND_MSG(p_child->data.parent, vformat("Can't add child '%s' to '%s', already has a parent '%s'.", p_child->get_name(), get_name(), p_child->data.parent->get_name())); //Fail if node has a parent
+#ifdef DEBUG_ENABLED
+	ERR_FAIL_COND_MSG(p_child->is_ancestor_of(this), vformat("Can't add child '%s' to '%s' as it would result in a cyclic dependency since '%s' is already a parent of '%s'.", p_child->get_name(), get_name(), p_child->get_name(), get_name()));
+#endif
+	ERR_FAIL_COND_MSG(data.blocked > 0, "Parent node is busy setting up children, `add_child()` failed. Consider using `add_child.call_deferred(child)` instead.");
+
+	_validate_child_name(p_child, p_force_readable_name);
+
+#ifdef DEBUG_ENABLED
+	if (p_child->data.owner && !p_child->data.owner->is_ancestor_of(p_child)) {
+		// Owner of p_child should be ancestor of p_child.
+		WARN_PRINT(vformat("Adding '%s' as child to '%s' will make owner '%s' inconsistent. Consider unsetting the owner beforehand.", p_child->get_name(), get_name(), p_child->data.owner->get_name()));
+	}
+#endif // DEBUG_ENABLED
+
+	_add_child_nocheck(p_child, p_child->data.name, p_internal);
+}

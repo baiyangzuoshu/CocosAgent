@@ -1,0 +1,174 @@
+/* Godot 4.7 source excerpt.
+ * Upstream: engine/godot-4.7/modules/gdscript/gdscript.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 737-902 */
+Error GDScript::reload(bool p_keep_state) {
+	if (reloading) {
+		return OK;
+	}
+	reloading = true;
+
+	bool has_instances;
+	{
+		MutexLock lock(GDScriptLanguage::singleton->mutex);
+
+		has_instances = instances.first() != nullptr;
+	}
+
+	// Check condition but reset flag before early return
+	if (!p_keep_state && has_instances) {
+		reloading = false; // Reset flag before returning
+
+		ERR_FAIL_V_MSG(ERR_ALREADY_IN_USE, "Cannot reload script while instances exist.");
+	}
+
+	String basedir = path;
+
+	if (basedir.is_empty()) {
+		basedir = get_path();
+	}
+
+	if (!basedir.is_empty()) {
+		basedir = basedir.get_base_dir();
+	}
+
+	// Loading a template, don't parse.
+#ifdef TOOLS_ENABLED
+	if (EditorPaths::get_singleton() && basedir.begins_with(EditorPaths::get_singleton()->get_project_script_templates_dir())) {
+		reloading = false;
+		return OK;
+	}
+#endif
+
+	{
+		String source_path = path;
+		if (source_path.is_empty()) {
+			source_path = get_path();
+		}
+		if (!source_path.is_empty()) {
+			if (GDScriptCache::get_cached_script(source_path).is_null()) {
+				MutexLock lock(GDScriptCache::singleton->mutex);
+				GDScriptCache::singleton->shallow_gdscript_cache[source_path] = Ref<GDScript>(this);
+			}
+			if (GDScriptCache::has_parser(source_path)) {
+				Error err = OK;
+				Ref<GDScriptParserRef> parser_ref = GDScriptCache::get_parser(source_path, GDScriptParserRef::EMPTY, err);
+				if (parser_ref.is_valid()) {
+					uint32_t source_hash;
+					if (!binary_tokens.is_empty()) {
+						source_hash = hash_djb2_buffer(binary_tokens.ptr(), binary_tokens.size());
+					} else {
+						source_hash = source.hash();
+					}
+					if (parser_ref->get_source_hash() != source_hash) {
+						GDScriptCache::remove_parser(source_path);
+					}
+				}
+			}
+		}
+	}
+
+	bool can_run = ScriptServer::is_scripting_enabled() || is_tool();
+
+#ifdef TOOLS_ENABLED
+	if (p_keep_state && can_run && is_valid()) {
+		_save_old_static_data();
+	}
+#endif
+
+	valid = false;
+	GDScriptParser parser;
+	Error err;
+	if (!binary_tokens.is_empty()) {
+		err = parser.parse_binary(binary_tokens, path);
+	} else {
+		err = parser.parse(source, path, false);
+	}
+	if (err) {
+		if (EngineDebugger::is_active()) {
+			GDScriptLanguage::get_singleton()->debug_break_parse(_get_debug_path(), parser.get_errors().front()->get().start_line, "Parser Error: " + parser.get_errors().front()->get().message);
+		}
+		// TODO: Show all error messages.
+		_err_print_error("GDScript::reload", path.is_empty() ? "built-in" : (const char *)path.utf8().get_data(), parser.get_errors().front()->get().start_line, ("Parse Error: " + parser.get_errors().front()->get().message).utf8().get_data(), false, ERR_HANDLER_SCRIPT);
+		reloading = false;
+		return ERR_PARSE_ERROR;
+	}
+
+	GDScriptAnalyzer analyzer(&parser);
+	err = analyzer.analyze();
+
+	if (err) {
+		if (EngineDebugger::is_active()) {
+			GDScriptLanguage::get_singleton()->debug_break_parse(_get_debug_path(), parser.get_errors().front()->get().start_line, "Parser Error: " + parser.get_errors().front()->get().message);
+		}
+
+		const List<GDScriptParser::ParserError>::Element *e = parser.get_errors().front();
+		while (e != nullptr) {
+			_err_print_error("GDScript::reload", path.is_empty() ? "built-in" : (const char *)path.utf8().get_data(), e->get().start_line, ("Parse Error: " + e->get().message).utf8().get_data(), false, ERR_HANDLER_SCRIPT);
+			e = e->next();
+		}
+		reloading = false;
+		return ERR_PARSE_ERROR;
+	}
+
+	can_run = ScriptServer::is_scripting_enabled() || parser.is_tool();
+
+	GDScriptCompiler compiler;
+	err = compiler.compile(&parser, this, p_keep_state);
+
+	if (err) {
+		// TODO: Provide the script function as the first argument.
+		_err_print_error("GDScript::reload", path.is_empty() ? "built-in" : (const char *)path.utf8().get_data(), compiler.get_error_line(), ("Compile Error: " + compiler.get_error()).utf8().get_data(), false, ERR_HANDLER_SCRIPT);
+		if (can_run) {
+			if (EngineDebugger::is_active()) {
+				GDScriptLanguage::get_singleton()->debug_break_parse(_get_debug_path(), compiler.get_error_line(), "Parser Error: " + compiler.get_error());
+			}
+			reloading = false;
+			return ERR_COMPILATION_FAILED;
+		} else {
+			reloading = false;
+			return err;
+		}
+	}
+
+#ifdef TOOLS_ENABLED
+	// Done after compilation because it needs the GDScript object's inner class GDScript objects,
+	// which are made by calling make_scripts() within compiler.compile() above.
+	GDScriptDocGen::generate_docs(this, parser.get_tree());
+#endif
+
+#ifdef DEBUG_ENABLED
+	for (const GDScriptWarning &warning : parser.get_warnings()) {
+		if (EngineDebugger::is_active()) {
+			Vector<ScriptLanguage::StackInfo> si;
+			// TODO: Provide the script function as the first argument.
+			EngineDebugger::get_script_debugger()->send_error("GDScript::reload", get_script_path(), warning.start_line, warning.get_name(), warning.get_message(), false, ERR_HANDLER_WARNING, si);
+		}
+	}
+#endif
+
+	if (can_run) {
+		err = _static_init();
+		if (err) {
+			return err;
+		}
+	}
+
+#ifdef TOOLS_ENABLED
+	if (can_run && p_keep_state) {
+		_restore_old_static_data();
+	}
+
+	if (p_keep_state) {
+		// Update the properties in the inspector.
+		update_exports();
+	}
+#endif
+
+	reloading = false;
+	return OK;
+}

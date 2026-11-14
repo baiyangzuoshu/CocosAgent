@@ -1,0 +1,53 @@
+/* Godot 2.1 source excerpt.
+ * Upstream: engine/godot-2.1/scene/main/node.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 359-382 */
+void Node::set_pause_mode(PauseMode p_mode) {
+
+	if (data.pause_mode == p_mode)
+		return;
+
+	bool prev_inherits = data.pause_mode == PAUSE_MODE_INHERIT;
+	data.pause_mode = p_mode;
+	if (!is_inside_tree())
+		return; //pointless
+	if ((data.pause_mode == PAUSE_MODE_INHERIT) == prev_inherits)
+		return; ///nothing changed
+
+	Node *owner = NULL;
+
+	if (data.pause_mode == PAUSE_MODE_INHERIT) {
+
+		if (data.parent)
+			owner = data.parent->data.pause_owner;
+	} else {
+		owner = this;
+	}
+
+	_propagate_pause_owner(owner);
+}
+
+/* Upstream lines 1184-1202 */
+void Node::add_to_group(const StringName &p_identifier, bool p_persistent) {
+
+	ERR_FAIL_COND(!p_identifier.operator String().length());
+
+	if (data.grouped.has(p_identifier))
+		return;
+
+	GroupData gd;
+
+	if (data.tree) {
+		gd.group = data.tree->add_to_group(p_identifier, this);
+	} else {
+		gd.group = NULL;
+	}
+
+	gd.persistent = p_persistent;
+
+	data.grouped[p_identifier] = gd;
+}

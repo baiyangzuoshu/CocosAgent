@@ -1,0 +1,156 @@
+/* Godot 3.6 source excerpt.
+ * Upstream: engine/godot-3.6/scene/3d/spatial.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 145-260 */
+void Spatial::_notification(int p_what) {
+	switch (p_what) {
+		case NOTIFICATION_ENTER_TREE: {
+			ERR_FAIL_COND(!get_tree());
+
+			Node *p = get_parent();
+			if (p) {
+				data.parent = Object::cast_to<Spatial>(p);
+			}
+
+			if (data.parent) {
+				data.C = data.parent->data.children.push_back(this);
+			} else {
+				data.C = nullptr;
+			}
+
+			if (data.toplevel && !Engine::get_singleton()->is_editor_hint()) {
+				if (data.parent) {
+					data.local_transform = data.parent->get_global_transform() * get_transform();
+					data.dirty = DIRTY_VECTORS; //global is always dirty upon entering a scene
+				}
+				data.toplevel_active = true;
+			}
+
+			if (data.merging_mode == MERGING_MODE_INHERIT) {
+				bool merging_allowed = true; // Root node default is for merging to be on
+				if (data.parent) {
+					merging_allowed = data.parent->is_merging_allowed();
+				}
+				_propagate_merging_allowed(merging_allowed);
+			}
+
+			data.dirty |= DIRTY_GLOBAL; //global is always dirty upon entering a scene
+			_notify_dirty();
+
+			notification(NOTIFICATION_ENTER_WORLD);
+
+		} break;
+		case NOTIFICATION_EXIT_TREE: {
+			notification(NOTIFICATION_EXIT_WORLD, true);
+			if (xform_change.in_list()) {
+				get_tree()->xform_change_list.remove(&xform_change);
+			}
+			if (data.C) {
+				data.parent->data.children.erase(data.C);
+			}
+			data.parent = nullptr;
+			data.C = nullptr;
+			data.toplevel_active = false;
+			_disable_client_physics_interpolation();
+		} break;
+		case NOTIFICATION_ENTER_WORLD: {
+			data.inside_world = true;
+			data.viewport = nullptr;
+			Node *parent = get_parent();
+			while (parent && !data.viewport) {
+				data.viewport = Object::cast_to<Viewport>(parent);
+				parent = parent->get_parent();
+			}
+
+			ERR_FAIL_COND(!data.viewport);
+
+			if (get_script_instance()) {
+				get_script_instance()->call_multilevel(SceneStringNames::get_singleton()->_enter_world, nullptr, 0);
+			}
+#ifdef TOOLS_ENABLED
+			if (Engine::get_singleton()->is_editor_hint() && get_tree()->is_node_being_edited(this)) {
+				//get_scene()->call_group(SceneMainLoop::GROUP_CALL_REALTIME,SceneStringNames::get_singleton()->_spatial_editor_group,SceneStringNames::get_singleton()->_request_gizmo,this);
+				get_tree()->call_group_flags(0, SceneStringNames::get_singleton()->_spatial_editor_group, SceneStringNames::get_singleton()->_request_gizmo, this);
+				if (!data.gizmo_disabled) {
+					if (data.gizmo.is_valid()) {
+						data.gizmo->create();
+						if (is_visible_in_tree()) {
+							data.gizmo->redraw();
+						}
+						data.gizmo->transform();
+					}
+				}
+			}
+#endif
+
+		} break;
+		case NOTIFICATION_EXIT_WORLD: {
+#ifdef TOOLS_ENABLED
+			if (data.gizmo.is_valid()) {
+				data.gizmo->free();
+				data.gizmo.unref();
+			}
+#endif
+
+			if (get_script_instance()) {
+				get_script_instance()->call_multilevel(SceneStringNames::get_singleton()->_exit_world, nullptr, 0);
+			}
+
+			data.viewport = nullptr;
+			data.inside_world = false;
+
+		} break;
+
+		case NOTIFICATION_TRANSFORM_CHANGED: {
+#ifdef TOOLS_ENABLED
+			if (data.gizmo.is_valid()) {
+				data.gizmo->transform();
+			}
+#endif
+		} break;
+		case NOTIFICATION_RESET_PHYSICS_INTERPOLATION: {
+			if (data.client_physics_interpolation_data) {
+				data.client_physics_interpolation_data->global_xform_prev = data.client_physics_interpolation_data->global_xform_curr;
+			}
+		} break;
+
+		default: {
+		}
+	}
+}
+
+/* Upstream lines 284-296 */
+void Spatial::set_transform(const Transform &p_transform) {
+	data.local_transform = p_transform;
+	data.dirty |= DIRTY_VECTORS;
+	data.dirty &= ~DIRTY_LOCAL;
+	_change_notify("translation");
+	_change_notify("rotation");
+	_change_notify("rotation_degrees");
+	_change_notify("scale");
+	_propagate_transform_changed(this);
+	if (data.notify_local_transform) {
+		notification(NOTIFICATION_LOCAL_TRANSFORM_CHANGED);
+	}
+}
+
+/* Upstream lines 298-302 */
+void Spatial::set_global_transform(const Transform &p_transform) {
+	Transform xform = (data.parent && !data.toplevel_active) ? data.parent->get_global_transform().affine_inverse() * p_transform : p_transform;
+
+	set_transform(xform);
+}
+
+/* Upstream lines 486-493 */
+void Spatial::set_translation(const Vector3 &p_translation) {
+	data.local_transform.origin = p_translation;
+	_change_notify("transform");
+	_propagate_transform_changed(this);
+	if (data.notify_local_transform) {
+		notification(NOTIFICATION_LOCAL_TRANSFORM_CHANGED);
+	}
+}

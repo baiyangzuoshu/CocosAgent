@@ -1,0 +1,98 @@
+/* Godot 2.1 source excerpt.
+ * Upstream: engine/godot-2.1/scene/main/scene_main_loop.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 141-218 */
+void SceneTree::call_group(uint32_t p_call_flags, const StringName &p_group, const StringName &p_function, VARIANT_ARG_DECLARE) {
+
+	Map<StringName, Group>::Element *E = group_map.find(p_group);
+	if (!E)
+		return;
+	Group &g = E->get();
+	if (g.nodes.empty())
+		return;
+
+	if (p_call_flags & GROUP_CALL_UNIQUE && !(p_call_flags & GROUP_CALL_REALTIME)) {
+
+		ERR_FAIL_COND(ugc_locked);
+
+		UGCall ug;
+		ug.call = p_function;
+		ug.group = p_group;
+
+		if (unique_group_calls.has(ug))
+			return;
+
+		VARIANT_ARGPTRS;
+
+		Vector<Variant> args;
+		for (int i = 0; i < VARIANT_ARG_MAX; i++) {
+			if (argptr[i]->get_type() == Variant::NIL)
+				break;
+			args.push_back(*argptr[i]);
+		}
+
+		unique_group_calls[ug] = args;
+		return;
+	}
+
+	_update_group_order(g);
+
+	Vector<Node *> nodes_copy = g.nodes;
+	Node **nodes = &nodes_copy[0];
+	int node_count = nodes_copy.size();
+
+	call_lock++;
+
+	if (p_call_flags & GROUP_CALL_REVERSE) {
+
+		for (int i = node_count - 1; i >= 0; i--) {
+
+			if (call_lock && call_skip.has(nodes[i]))
+				continue;
+
+			if (p_call_flags & GROUP_CALL_REALTIME) {
+				if (p_call_flags & GROUP_CALL_MULIILEVEL)
+					nodes[i]->call_multilevel(p_function, VARIANT_ARG_PASS);
+				else
+					nodes[i]->call(p_function, VARIANT_ARG_PASS);
+			} else
+				MessageQueue::get_singleton()->push_call(nodes[i], p_function, VARIANT_ARG_PASS);
+		}
+
+	} else {
+
+		for (int i = 0; i < node_count; i++) {
+
+			if (call_lock && call_skip.has(nodes[i]))
+				continue;
+
+			if (p_call_flags & GROUP_CALL_REALTIME) {
+				if (p_call_flags & GROUP_CALL_MULIILEVEL)
+					nodes[i]->call_multilevel(p_function, VARIANT_ARG_PASS);
+				else
+					nodes[i]->call(p_function, VARIANT_ARG_PASS);
+			} else
+				MessageQueue::get_singleton()->push_call(nodes[i], p_function, VARIANT_ARG_PASS);
+		}
+	}
+
+	call_lock--;
+	if (call_lock == 0)
+		call_skip.clear();
+}
+
+/* Upstream lines 776-785 */
+void SceneTree::set_pause(bool p_enabled) {
+
+	if (p_enabled == pause)
+		return;
+	pause = p_enabled;
+	PhysicsServer::get_singleton()->set_active(!p_enabled);
+	Physics2DServer::get_singleton()->set_active(!p_enabled);
+	if (get_root())
+		get_root()->propagate_notification(p_enabled ? Node::NOTIFICATION_PAUSED : Node::NOTIFICATION_UNPAUSED);
+}

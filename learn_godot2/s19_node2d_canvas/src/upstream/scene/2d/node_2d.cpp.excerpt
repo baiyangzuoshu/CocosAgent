@@ -1,0 +1,44 @@
+/* Godot 2.1 source excerpt.
+ * Upstream: engine/godot-2.1/scene/2d/node_2d.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 119-131 */
+void Node2D::_update_transform() {
+
+	Matrix32 mat(angle, pos);
+	_mat.set_rotation_and_scale(angle, _scale);
+	_mat.elements[2] = pos;
+
+	VisualServer::get_singleton()->canvas_item_set_transform(get_canvas_item(), _mat);
+
+	if (!is_inside_tree())
+		return;
+
+	_notify_transform();
+}
+
+/* Upstream lines 133-140 */
+void Node2D::set_pos(const Point2 &p_pos) {
+
+	if (_xform_dirty)
+		((Node2D *)this)->_update_xform_values();
+	pos = p_pos;
+	_update_transform();
+	_change_notify("transform/pos");
+}
+
+/* Upstream lines 272-282 */
+void Node2D::set_global_pos(const Point2 &p_pos) {
+
+	Matrix32 inv;
+	CanvasItem *pi = get_parent_item();
+	if (pi) {
+		inv = pi->get_global_transform().affine_inverse();
+		set_pos(inv.xform(p_pos));
+	} else {
+		set_pos(p_pos);
+	}
+}

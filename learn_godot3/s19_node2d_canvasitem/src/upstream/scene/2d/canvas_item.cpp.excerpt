@@ -1,0 +1,64 @@
+/* Godot 3.6 source excerpt.
+ * Upstream: engine/godot-3.6/scene/2d/canvas_item.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 583-638 */
+void CanvasItem::_notification(int p_what) {
+	switch (p_what) {
+		case NOTIFICATION_ENTER_TREE: {
+			ERR_FAIL_COND(!is_inside_tree());
+			first_draw = true;
+
+			Node *parent = get_parent();
+			if (parent) {
+				CanvasItem *ci = Object::cast_to<CanvasItem>(parent);
+				if (ci) {
+					C = ci->children_items.push_back(this);
+				}
+			}
+			_enter_canvas();
+			if (!block_transform_notify && !xform_change.in_list()) {
+				get_tree()->xform_change_list.add(&xform_change);
+			}
+
+			// If using physics interpolation, reset for this node only,
+			// as a helper, as in most cases, users will want items reset when
+			// adding to the tree.
+			// In cases where they move immediately after adding,
+			// there will be little cost in having two resets as these are cheap,
+			// and it is worth it for convenience.
+			// Do not propagate to children, as each child of an added branch
+			// receives its own NOTIFICATION_ENTER_TREE, and this would
+			// cause unnecessary duplicate resets.
+			if (is_physics_interpolated_and_enabled()) {
+				notification(NOTIFICATION_RESET_PHYSICS_INTERPOLATION);
+			}
+		} break;
+		case NOTIFICATION_EXIT_TREE: {
+			if (xform_change.in_list()) {
+				get_tree()->xform_change_list.remove(&xform_change);
+			}
+			_exit_canvas();
+			if (C) {
+				Object::cast_to<CanvasItem>(get_parent())->children_items.erase(C);
+				C = nullptr;
+			}
+			global_invalid = true;
+		} break;
+		case NOTIFICATION_RESET_PHYSICS_INTERPOLATION: {
+			if (is_visible_in_tree() && is_physics_interpolated()) {
+				VisualServer::get_singleton()->canvas_item_reset_physics_interpolation(canvas_item);
+			}
+		} break;
+
+		case NOTIFICATION_DRAW:
+		case NOTIFICATION_TRANSFORM_CHANGED: {
+		} break;
+		case NOTIFICATION_VISIBILITY_CHANGED: {
+			emit_signal(SceneStringNames::get_singleton()->visibility_changed);
+		} break;
+	}
+}

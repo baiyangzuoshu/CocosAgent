@@ -1,0 +1,51 @@
+/* Godot 4.7 source excerpt.
+ * Upstream: engine/godot-4.7/modules/gdscript/gdscript_compiler.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 3282-3324 */
+Error GDScriptCompiler::compile(const GDScriptParser *p_parser, GDScript *p_script, bool p_keep_state) {
+	err_line = -1;
+	err_column = -1;
+	error = "";
+	parser = p_parser;
+	main_script = p_script;
+	const GDScriptParser::ClassNode *root = parser->get_tree();
+
+	source = p_script->get_path();
+
+	ScriptLambdaInfo old_lambda_info = _get_script_lambda_replacement_info(p_script);
+
+	// Create scripts for subclasses beforehand so they can be referenced
+	make_scripts(p_script, root, p_keep_state);
+
+	main_script->_owner = nullptr;
+	Error err = _prepare_compilation(main_script, parser->get_tree(), p_keep_state);
+
+	if (err) {
+		return err;
+	}
+
+	err = _compile_class(main_script, root, p_keep_state);
+	if (err) {
+		return err;
+	}
+
+	ScriptLambdaInfo new_lambda_info = _get_script_lambda_replacement_info(p_script);
+
+	HashMap<GDScriptFunction *, GDScriptFunction *> func_ptr_replacements;
+	_get_function_ptr_replacements(func_ptr_replacements, old_lambda_info, &new_lambda_info);
+	main_script->_recurse_replace_function_ptrs(func_ptr_replacements);
+
+	if (has_static_data && !root->annotated_static_unload) {
+		GDScriptCache::add_static_script(p_script);
+	}
+
+	err = GDScriptCache::finish_compiling(main_script->path);
+	if (err) {
+		_set_error(R"(Failed to compile depended scripts.)", nullptr);
+	}
+	return err;
+}

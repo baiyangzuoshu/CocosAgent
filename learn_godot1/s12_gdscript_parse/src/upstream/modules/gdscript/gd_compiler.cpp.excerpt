@@ -1,0 +1,29 @@
+/* Godot 1.1 source excerpt.
+ * Upstream: engine/godot-1.1/modules/gdscript/gd_compiler.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 1668-1688 */
+Error GDCompiler::compile(const GDParser *p_parser,GDScript *p_script) {
+
+	err_line=-1;
+	err_column=-1;
+	error="";
+	parser=p_parser;
+	const GDParser::Node* root = parser->get_parse_tree();
+	ERR_FAIL_COND_V(root->type!=GDParser::Node::TYPE_CLASS,ERR_INVALID_DATA);
+
+	source=p_script->get_path();
+
+
+
+	Error err = _parse_class(p_script,NULL,static_cast<const GDParser::ClassNode*>(root));
+
+	if (err)
+		return err;
+
+	return OK;
+
+}

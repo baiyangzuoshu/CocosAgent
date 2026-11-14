@@ -1,0 +1,27 @@
+/* Godot 3.6 source excerpt.
+ * Upstream: engine/godot-3.6/modules/gdscript/gdscript_parser.cpp
+ * Verbatim line ranges from the local upstream snapshot.
+ * Study excerpt; not a standalone compilation unit.
+ * Copyright and license: see ../../../../../SOURCE_LICENSE.txt.
+ */
+
+/* Upstream lines 8844-8862 */
+Error GDScriptParser::parse(const String &p_code, const String &p_base_path, bool p_just_validate, const String &p_self_path, bool p_for_completion, Set<int> *r_safe_lines, bool p_dependencies_only) {
+	clear();
+
+	self_path = p_self_path;
+	GDScriptTokenizerText *tt = memnew(GDScriptTokenizerText);
+	tt->set_code(p_code);
+
+	validating = p_just_validate;
+	for_completion = p_for_completion;
+	dependencies_only = p_dependencies_only;
+#ifdef DEBUG_ENABLED
+	safe_lines = r_safe_lines;
+#endif // DEBUG_ENABLED
+	tokenizer = tt;
+	Error ret = _parse(p_base_path);
+	memdelete(tt);
+	tokenizer = nullptr;
+	return ret;
+}
