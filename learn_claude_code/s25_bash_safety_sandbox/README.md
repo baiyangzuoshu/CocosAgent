@@ -70,13 +70,13 @@ Sandbox 启用需要同时满足平台受支持、依赖检查通过、当前平
 在仓库根目录执行以下命令，只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/tools/BashTool/BashTool.tsx | sed -n '227,259p;524,541p;624,720p;826,898p'
-nl -ba engine/claude-code-analysis-main/src/tools/BashTool/bashPermissions.ts | sed -n '1270,1359p;1384,1453p;1663,1843p;1845,1973p;1973,2056p;2078,2128p'
-nl -ba engine/claude-code-analysis-main/src/tools/BashTool/shouldUseSandbox.ts | sed -n '12,31p;130,153p'
-nl -ba engine/claude-code-analysis-main/src/utils/bash/ast.ts | sed -n '375,445p'
-nl -ba engine/claude-code-analysis-main/src/utils/Shell.ts | sed -n '171,270p;380,397p'
-nl -ba engine/claude-code-analysis-main/src/utils/sandbox/sandbox-adapter.ts | sed -n '172,240p;459,547p;704,792p;927,936p'
-nl -ba engine/claude-code-analysis-main/src/tools/BashTool/commandSemantics.ts | sed -n '1,145p'
+nl -ba AI/claude-code-analysis-main/src/tools/BashTool/BashTool.tsx | sed -n '227,259p;524,541p;624,720p;826,898p'
+nl -ba AI/claude-code-analysis-main/src/tools/BashTool/bashPermissions.ts | sed -n '1270,1359p;1384,1453p;1663,1843p;1845,1973p;1973,2056p;2078,2128p'
+nl -ba AI/claude-code-analysis-main/src/tools/BashTool/shouldUseSandbox.ts | sed -n '12,31p;130,153p'
+nl -ba AI/claude-code-analysis-main/src/utils/bash/ast.ts | sed -n '375,445p'
+nl -ba AI/claude-code-analysis-main/src/utils/Shell.ts | sed -n '171,270p;380,397p'
+nl -ba AI/claude-code-analysis-main/src/utils/sandbox/sandbox-adapter.ts | sed -n '172,240p;459,547p;704,792p;927,936p'
+nl -ba AI/claude-code-analysis-main/src/tools/BashTool/commandSemantics.ts | sed -n '1,145p'
 ~~~
 
 ## 观察结果

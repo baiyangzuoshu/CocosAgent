@@ -110,15 +110,15 @@ REPL 在回合开始时从输入解析 token 目标（例如 `+500k` 或 `use 2M
 在仓库根目录执行以下命令，只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/query/tokenBudget.ts | sed -n '1,93p'
-nl -ba engine/claude-code-analysis-main/src/utils/tokenBudget.ts | sed -n '1,28p;66,74p'
-nl -ba engine/claude-code-analysis-main/src/bootstrap/state.ts | sed -n '704,743p'
-nl -ba engine/claude-code-analysis-main/src/screens/REPL.tsx | sed -n '2890,2898p'
-nl -ba engine/claude-code-analysis-main/src/utils/tokens.ts | sed -n '205,258p'
-nl -ba engine/claude-code-analysis-main/src/services/compact/autoCompact.ts | sed -n '28,145p;147,158p;160,239p;241,350p'
-nl -ba engine/claude-code-analysis-main/src/services/compact/microCompact.ts | sed -n '253,293p;402,530p'
-nl -ba engine/claude-code-analysis-main/src/services/compact/compact.ts | sed -n '299,338p;387,430p;596,748p'
-nl -ba engine/claude-code-analysis-main/src/query.ts | sed -n '164,178p;193,197p;268,291p;365,468p;470,550p;628,648p;1062,1184p;1185,1255p;1308,1358p'
+nl -ba AI/claude-code-analysis-main/src/query/tokenBudget.ts | sed -n '1,93p'
+nl -ba AI/claude-code-analysis-main/src/utils/tokenBudget.ts | sed -n '1,28p;66,74p'
+nl -ba AI/claude-code-analysis-main/src/bootstrap/state.ts | sed -n '704,743p'
+nl -ba AI/claude-code-analysis-main/src/screens/REPL.tsx | sed -n '2890,2898p'
+nl -ba AI/claude-code-analysis-main/src/utils/tokens.ts | sed -n '205,258p'
+nl -ba AI/claude-code-analysis-main/src/services/compact/autoCompact.ts | sed -n '28,145p;147,158p;160,239p;241,350p'
+nl -ba AI/claude-code-analysis-main/src/services/compact/microCompact.ts | sed -n '253,293p;402,530p'
+nl -ba AI/claude-code-analysis-main/src/services/compact/compact.ts | sed -n '299,338p;387,430p;596,748p'
+nl -ba AI/claude-code-analysis-main/src/query.ts | sed -n '164,178p;193,197p;268,291p;365,468p;470,550p;628,648p;1062,1184p;1185,1255p;1308,1358p'
 ~~~
 
 ## 观察结果

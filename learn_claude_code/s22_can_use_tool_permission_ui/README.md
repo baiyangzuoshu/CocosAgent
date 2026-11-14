@@ -75,14 +75,14 @@ Fallback 组件展示 Yes、No；允许展示永久选项时，还会提供 “Y
 在仓库根目录执行以下命令，只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/hooks/useCanUseTool.tsx | sed -n '27,183p'
-nl -ba engine/claude-code-analysis-main/src/hooks/toolPermission/PermissionContext.ts | sed -n '96,173p;216,347p;357,379p'
-nl -ba engine/claude-code-analysis-main/src/hooks/toolPermission/handlers/interactiveHandler.ts | sed -n '34,232p;234,298p;300,430p;433,536p'
-nl -ba engine/claude-code-analysis-main/src/hooks/toolPermission/handlers/coordinatorHandler.ts | sed -n '1,180p'
-nl -ba engine/claude-code-analysis-main/src/hooks/toolPermission/handlers/swarmWorkerHandler.ts | sed -n '1,160p'
-nl -ba engine/claude-code-analysis-main/src/components/permissions/PermissionRequest.tsx | sed -n '47,127p;146,216p'
-nl -ba engine/claude-code-analysis-main/src/components/permissions/FallbackPermissionRequest.tsx | sed -n '15,140p;150,205p;294,305p'
-nl -ba engine/claude-code-analysis-main/src/screens/REPL.tsx | sed -n '1101,1136p;2024,2035p;2382,2388p;4519,4525p'
+nl -ba AI/claude-code-analysis-main/src/hooks/useCanUseTool.tsx | sed -n '27,183p'
+nl -ba AI/claude-code-analysis-main/src/hooks/toolPermission/PermissionContext.ts | sed -n '96,173p;216,347p;357,379p'
+nl -ba AI/claude-code-analysis-main/src/hooks/toolPermission/handlers/interactiveHandler.ts | sed -n '34,232p;234,298p;300,430p;433,536p'
+nl -ba AI/claude-code-analysis-main/src/hooks/toolPermission/handlers/coordinatorHandler.ts | sed -n '1,180p'
+nl -ba AI/claude-code-analysis-main/src/hooks/toolPermission/handlers/swarmWorkerHandler.ts | sed -n '1,160p'
+nl -ba AI/claude-code-analysis-main/src/components/permissions/PermissionRequest.tsx | sed -n '47,127p;146,216p'
+nl -ba AI/claude-code-analysis-main/src/components/permissions/FallbackPermissionRequest.tsx | sed -n '15,140p;150,205p;294,305p'
+nl -ba AI/claude-code-analysis-main/src/screens/REPL.tsx | sed -n '1101,1136p;2024,2035p;2382,2388p;4519,4525p'
 ~~~
 
 ## 观察结果

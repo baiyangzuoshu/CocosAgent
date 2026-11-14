@@ -32,14 +32,14 @@ flowchart TD
 
 ## 源码对照
 
-- `engine/claude-code-analysis-main/src/main.tsx:1-20`：在完整 CLI 导入期间的顶层代码中启动 MDM 原始读取和 Keychain 预取；注释说明目标是让这些工作与剩余模块加载重叠。
-- `engine/claude-code-analysis-main/src/main.tsx:905-917`：`preAction` 等待 `ensureMdmSettingsLoaded()` 和 `ensureKeychainPrefetchCompleted()`，随后 `await init()`。
-- `engine/claude-code-analysis-main/src/entrypoints/init.ts:54-88`：`init` 由 `memoize` 包装；先启用配置，只应用信任建立前允许的环境变量，并配置额外 CA 证书和优雅退出。
-- `engine/claude-code-analysis-main/src/entrypoints/init.ts:90-132`：以不阻塞主流程的方式启动遥测、OAuth 账户信息、IDE/仓库检测，并准备远程设置和策略的加载 Promise。
-- `engine/claude-code-analysis-main/src/entrypoints/init.ts:134-183`：配置 mTLS 和全局 HTTP Agent，预连接 API；仅在远程环境下动态加载并等待上游代理启动，失败时记录并继续。
-- `engine/claude-code-analysis-main/src/entrypoints/init.ts:185-214`：设置 Windows Shell、注册 LSP 和团队清理函数，必要时创建 scratchpad，然后记录初始化完成。
-- `engine/claude-code-analysis-main/src/main.tsx:919-966`：`init()` 返回后设置进程标题、初始化日志 sinks、接入 `--plugin-dir`、运行迁移，并以不阻塞 action 的方式启动远程设置、策略和可选设置同步。
-- `engine/claude-code-analysis-main/src/entrypoints/init.ts:215-237`：配置解析错误在非交互模式打印到 stderr 并同步退出；交互模式动态打开配置错误对话框；其他错误重新抛出。
+- `AI/claude-code-analysis-main/src/main.tsx:1-20`：在完整 CLI 导入期间的顶层代码中启动 MDM 原始读取和 Keychain 预取；注释说明目标是让这些工作与剩余模块加载重叠。
+- `AI/claude-code-analysis-main/src/main.tsx:905-917`：`preAction` 等待 `ensureMdmSettingsLoaded()` 和 `ensureKeychainPrefetchCompleted()`，随后 `await init()`。
+- `AI/claude-code-analysis-main/src/entrypoints/init.ts:54-88`：`init` 由 `memoize` 包装；先启用配置，只应用信任建立前允许的环境变量，并配置额外 CA 证书和优雅退出。
+- `AI/claude-code-analysis-main/src/entrypoints/init.ts:90-132`：以不阻塞主流程的方式启动遥测、OAuth 账户信息、IDE/仓库检测，并准备远程设置和策略的加载 Promise。
+- `AI/claude-code-analysis-main/src/entrypoints/init.ts:134-183`：配置 mTLS 和全局 HTTP Agent，预连接 API；仅在远程环境下动态加载并等待上游代理启动，失败时记录并继续。
+- `AI/claude-code-analysis-main/src/entrypoints/init.ts:185-214`：设置 Windows Shell、注册 LSP 和团队清理函数，必要时创建 scratchpad，然后记录初始化完成。
+- `AI/claude-code-analysis-main/src/main.tsx:919-966`：`init()` 返回后设置进程标题、初始化日志 sinks、接入 `--plugin-dir`、运行迁移，并以不阻塞 action 的方式启动远程设置、策略和可选设置同步。
+- `AI/claude-code-analysis-main/src/entrypoints/init.ts:215-237`：配置解析错误在非交互模式打印到 stderr 并同步退出；交互模式动态打开配置错误对话框；其他错误重新抛出。
 
 ## 等待关系
 
@@ -58,10 +58,10 @@ flowchart TD
 在仓库根目录执行以下命令，核对预取位置、等待点和 `init()` 各阶段；不启动 CLI：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/main.tsx | sed -n '1,20p'
-nl -ba engine/claude-code-analysis-main/src/main.tsx | sed -n '905,967p'
-nl -ba engine/claude-code-analysis-main/src/entrypoints/init.ts | sed -n '54,238p'
-rg -n "void |await |memoize\(async|ConfigParseError" engine/claude-code-analysis-main/src/entrypoints/init.ts
+nl -ba AI/claude-code-analysis-main/src/main.tsx | sed -n '1,20p'
+nl -ba AI/claude-code-analysis-main/src/main.tsx | sed -n '905,967p'
+nl -ba AI/claude-code-analysis-main/src/entrypoints/init.ts | sed -n '54,238p'
+rg -n "void |await |memoize\(async|ConfigParseError" AI/claude-code-analysis-main/src/entrypoints/init.ts
 ~~~
 
 ## 观察结果

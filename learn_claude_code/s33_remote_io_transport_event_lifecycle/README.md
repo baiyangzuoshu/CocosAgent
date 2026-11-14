@@ -104,14 +104,14 @@ sequenceDiagram
 以下命令只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/cli/print.ts | sed -n '5199,5233p'
-nl -ba engine/claude-code-analysis-main/src/cli/remoteIO.ts | sed -n '44,172p;198,213p;231,254p'
-nl -ba engine/claude-code-analysis-main/src/cli/structuredIO.ts | sed -n '164,170p;222,255p'
-nl -ba engine/claude-code-analysis-main/src/cli/transports/transportUtils.ts | sed -n '8,44p'
-nl -ba engine/claude-code-analysis-main/src/cli/transports/WebSocketTransport.ts | sed -n '135,157p;574,634p'
-nl -ba engine/claude-code-analysis-main/src/cli/transports/HybridTransport.ts | sed -n '24,52p;117,152p;197,260p'
-nl -ba engine/claude-code-analysis-main/src/cli/transports/SSETransport.ts | sed -n '16,21p;231,269p;339,415p;425,465p;572,653p'
-nl -ba engine/claude-code-analysis-main/src/cli/transports/ccrClient.ts | sed -n '438,525p;677,723p;725,834p;960,997p'
+nl -ba AI/claude-code-analysis-main/src/cli/print.ts | sed -n '5199,5233p'
+nl -ba AI/claude-code-analysis-main/src/cli/remoteIO.ts | sed -n '44,172p;198,213p;231,254p'
+nl -ba AI/claude-code-analysis-main/src/cli/structuredIO.ts | sed -n '164,170p;222,255p'
+nl -ba AI/claude-code-analysis-main/src/cli/transports/transportUtils.ts | sed -n '8,44p'
+nl -ba AI/claude-code-analysis-main/src/cli/transports/WebSocketTransport.ts | sed -n '135,157p;574,634p'
+nl -ba AI/claude-code-analysis-main/src/cli/transports/HybridTransport.ts | sed -n '24,52p;117,152p;197,260p'
+nl -ba AI/claude-code-analysis-main/src/cli/transports/SSETransport.ts | sed -n '16,21p;231,269p;339,415p;425,465p;572,653p'
+nl -ba AI/claude-code-analysis-main/src/cli/transports/ccrClient.ts | sed -n '438,525p;677,723p;725,834p;960,997p'
 ~~~
 
 ## 观察结果

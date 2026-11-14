@@ -73,11 +73,11 @@ flowchart TD
 在仓库根目录执行以下命令，只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/services/api/withRetry.ts | sed -n '52,55p;127,168p;170,193p;316,383p;430,516p;789,797p'
-nl -ba engine/claude-code-analysis-main/src/services/api/claude.ts | sed -n '1776,1846p;2434,2461p;2464,2569p;2598,2659p'
-nl -ba engine/claude-code-analysis-main/src/query.ts | sed -n '650,742p;893,952p;1011,1051p;1484,1515p'
-nl -ba engine/claude-code-analysis-main/src/hooks/useCancelRequest.ts | sed -n '87,167p'
-nl -ba engine/claude-code-analysis-main/src/screens/REPL.tsx | sed -n '2106,2163p;2186,2202p;2920,2933p'
+nl -ba AI/claude-code-analysis-main/src/services/api/withRetry.ts | sed -n '52,55p;127,168p;170,193p;316,383p;430,516p;789,797p'
+nl -ba AI/claude-code-analysis-main/src/services/api/claude.ts | sed -n '1776,1846p;2434,2461p;2464,2569p;2598,2659p'
+nl -ba AI/claude-code-analysis-main/src/query.ts | sed -n '650,742p;893,952p;1011,1051p;1484,1515p'
+nl -ba AI/claude-code-analysis-main/src/hooks/useCancelRequest.ts | sed -n '87,167p'
+nl -ba AI/claude-code-analysis-main/src/screens/REPL.tsx | sed -n '2106,2163p;2186,2202p;2920,2933p'
 ~~~
 
 ## 观察结果

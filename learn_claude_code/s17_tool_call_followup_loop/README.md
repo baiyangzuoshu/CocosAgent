@@ -56,10 +56,10 @@ flowchart TD
 在仓库根目录执行以下命令，只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/query.ts | sed -n '551,568p;827,862p;1360,1409p;1484,1522p;1673,1728p'
-nl -ba engine/claude-code-analysis-main/src/services/tools/toolOrchestration.ts | sed -n '14,82p;91,115p;118,177p'
-nl -ba engine/claude-code-analysis-main/src/services/tools/toolExecution.ts | sed -n '337,410p;915,930p;995,1071p;1206,1222p;1290,1295p;1403,1473p'
-nl -ba engine/claude-code-analysis-main/src/services/tools/StreamingToolExecutor.ts | sed -n '34,76p;104,124p;407,489p'
+nl -ba AI/claude-code-analysis-main/src/query.ts | sed -n '551,568p;827,862p;1360,1409p;1484,1522p;1673,1728p'
+nl -ba AI/claude-code-analysis-main/src/services/tools/toolOrchestration.ts | sed -n '14,82p;91,115p;118,177p'
+nl -ba AI/claude-code-analysis-main/src/services/tools/toolExecution.ts | sed -n '337,410p;915,930p;995,1071p;1206,1222p;1290,1295p;1403,1473p'
+nl -ba AI/claude-code-analysis-main/src/services/tools/StreamingToolExecutor.ts | sed -n '34,76p;104,124p;407,489p'
 ~~~
 
 ## 观察结果

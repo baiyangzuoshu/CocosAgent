@@ -60,12 +60,12 @@ Remote 会话不经过本地 `StructuredIO` 的 pending map。远端通过 WebSo
 以下命令只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/entrypoints/sdk/controlSchemas.ts | sed -n '53,145p;578,619p'
-nl -ba engine/claude-code-analysis-main/src/cli/structuredIO.ts | sed -n '135,162p;333,456p;465,531p;533,658p'
-nl -ba engine/claude-code-analysis-main/src/cli/print.ts | sed -n '802,832p;2736,2762p;2813,2960p'
-nl -ba engine/claude-code-analysis-main/src/remote/RemoteSessionManager.ts | sed -n '143,212p;247,297p'
-nl -ba engine/claude-code-analysis-main/src/hooks/useRemoteSession.ts | sed -n '330,416p;568,583p'
-nl -ba engine/claude-code-analysis-main/src/remote/SessionsWebSocket.ts | sed -n '325,357p'
+nl -ba AI/claude-code-analysis-main/src/entrypoints/sdk/controlSchemas.ts | sed -n '53,145p;578,619p'
+nl -ba AI/claude-code-analysis-main/src/cli/structuredIO.ts | sed -n '135,162p;333,456p;465,531p;533,658p'
+nl -ba AI/claude-code-analysis-main/src/cli/print.ts | sed -n '802,832p;2736,2762p;2813,2960p'
+nl -ba AI/claude-code-analysis-main/src/remote/RemoteSessionManager.ts | sed -n '143,212p;247,297p'
+nl -ba AI/claude-code-analysis-main/src/hooks/useRemoteSession.ts | sed -n '330,416p;568,583p'
+nl -ba AI/claude-code-analysis-main/src/remote/SessionsWebSocket.ts | sed -n '325,357p'
 ~~~
 
 ## 观察结果

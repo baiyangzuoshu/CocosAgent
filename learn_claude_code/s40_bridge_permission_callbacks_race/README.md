@@ -65,12 +65,12 @@ flowchart LR
 以下命令只读取当前源码快照：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/hooks/useCanUseTool.tsx | sed -n '155,168p'
-nl -ba engine/claude-code-analysis-main/src/hooks/toolPermission/handlers/interactiveHandler.ts | sed -n '63,95p;130,230p;234,298p'
-nl -ba engine/claude-code-analysis-main/src/hooks/toolPermission/PermissionContext.ts | sed -n '63,94p'
-nl -ba engine/claude-code-analysis-main/src/bridge/bridgePermissionCallbacks.ts | sed -n '1,43p'
-nl -ba engine/claude-code-analysis-main/src/hooks/useReplBridge.tsx | sed -n '367,391p;538,585p'
-nl -ba engine/claude-code-analysis-main/src/bridge/bridgeMessaging.ts | sed -n '132,154p'
+nl -ba AI/claude-code-analysis-main/src/hooks/useCanUseTool.tsx | sed -n '155,168p'
+nl -ba AI/claude-code-analysis-main/src/hooks/toolPermission/handlers/interactiveHandler.ts | sed -n '63,95p;130,230p;234,298p'
+nl -ba AI/claude-code-analysis-main/src/hooks/toolPermission/PermissionContext.ts | sed -n '63,94p'
+nl -ba AI/claude-code-analysis-main/src/bridge/bridgePermissionCallbacks.ts | sed -n '1,43p'
+nl -ba AI/claude-code-analysis-main/src/hooks/useReplBridge.tsx | sed -n '367,391p;538,585p'
+nl -ba AI/claude-code-analysis-main/src/bridge/bridgeMessaging.ts | sed -n '132,154p'
 ~~~
 
 ## 观察结果

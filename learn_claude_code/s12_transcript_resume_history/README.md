@@ -75,19 +75,19 @@ flowchart TD
 在仓库根目录执行以下命令，只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/hooks/useLogMessages.ts | sed -n '19,26p;34,75p;91,118p'
-nl -ba engine/claude-code-analysis-main/src/QueryEngine.ts | sed -n '440,460p'
-nl -ba engine/claude-code-analysis-main/src/types/logs.ts | sed -n '8,17p;19,53p;221,231p;297,318p'
-nl -ba engine/claude-code-analysis-main/src/utils/sessionStorage.ts | sed -n '139,156p;198,229p;606,675p;841,860p;993,1083p;1128,1155p;1408,1449p;2572,2584p'
-nl -ba engine/claude-code-analysis-main/src/utils/sessionStorage.ts | sed -n '2069,2094p;2294,2355p;2940,3010p;3472,3498p;3614,3658p;3704,3728p'
-nl -ba engine/claude-code-analysis-main/src/utils/sessionStorage.ts | sed -n '4073,4108p;4975,5069p'
-nl -ba engine/claude-code-analysis-main/src/commands/resume/resume.tsx | sed -n '107,191p;194,270p'
-nl -ba engine/claude-code-analysis-main/src/utils/conversationRecovery.ts | sed -n '487,590p'
-nl -ba engine/claude-code-analysis-main/src/utils/sessionRestore.ts | sed -n '95,115p;409,493p'
-nl -ba engine/claude-code-analysis-main/src/screens/REPL.tsx | sed -n '1735,1742p;1799,1832p;1843,1865p;1877,1885p;1927,1939p;1277,1299p'
-nl -ba engine/claude-code-analysis-main/src/assistant/sessionHistory.ts | sed -n '30,87p'
-nl -ba engine/claude-code-analysis-main/src/hooks/useAssistantHistory.ts | sed -n '47,63p;143,190p'
-nl -ba engine/claude-code-analysis-main/src/remote/sdkMessageAdapter.ts | sed -n '1,80p'
+nl -ba AI/claude-code-analysis-main/src/hooks/useLogMessages.ts | sed -n '19,26p;34,75p;91,118p'
+nl -ba AI/claude-code-analysis-main/src/QueryEngine.ts | sed -n '440,460p'
+nl -ba AI/claude-code-analysis-main/src/types/logs.ts | sed -n '8,17p;19,53p;221,231p;297,318p'
+nl -ba AI/claude-code-analysis-main/src/utils/sessionStorage.ts | sed -n '139,156p;198,229p;606,675p;841,860p;993,1083p;1128,1155p;1408,1449p;2572,2584p'
+nl -ba AI/claude-code-analysis-main/src/utils/sessionStorage.ts | sed -n '2069,2094p;2294,2355p;2940,3010p;3472,3498p;3614,3658p;3704,3728p'
+nl -ba AI/claude-code-analysis-main/src/utils/sessionStorage.ts | sed -n '4073,4108p;4975,5069p'
+nl -ba AI/claude-code-analysis-main/src/commands/resume/resume.tsx | sed -n '107,191p;194,270p'
+nl -ba AI/claude-code-analysis-main/src/utils/conversationRecovery.ts | sed -n '487,590p'
+nl -ba AI/claude-code-analysis-main/src/utils/sessionRestore.ts | sed -n '95,115p;409,493p'
+nl -ba AI/claude-code-analysis-main/src/screens/REPL.tsx | sed -n '1735,1742p;1799,1832p;1843,1865p;1877,1885p;1927,1939p;1277,1299p'
+nl -ba AI/claude-code-analysis-main/src/assistant/sessionHistory.ts | sed -n '30,87p'
+nl -ba AI/claude-code-analysis-main/src/hooks/useAssistantHistory.ts | sed -n '47,63p;143,190p'
+nl -ba AI/claude-code-analysis-main/src/remote/sdkMessageAdapter.ts | sed -n '1,80p'
 ~~~
 
 ## 观察结果

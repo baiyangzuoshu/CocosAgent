@@ -79,12 +79,12 @@ handler 入队时保留原 UUID，并设置 `mode: 'prompt'`、`skipSlashCommand
 以下命令只读取当前源码快照：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/bridge/inboundMessages.ts | sed -n '21,80p'
-nl -ba engine/claude-code-analysis-main/src/bridge/inboundAttachments.ts | sed -n '31,175p'
-nl -ba engine/claude-code-analysis-main/src/hooks/useReplBridge.tsx | sed -n '172,221p'
-nl -ba engine/claude-code-analysis-main/src/utils/processUserInput/processUserInput.ts | sed -n '122,132p;422,453p'
-nl -ba engine/claude-code-analysis-main/src/commands.ts | sed -n '664,676p'
-nl -ba engine/claude-code-analysis-main/src/utils/messageQueueManager.ts | sed -n '534,547p'
+nl -ba AI/claude-code-analysis-main/src/bridge/inboundMessages.ts | sed -n '21,80p'
+nl -ba AI/claude-code-analysis-main/src/bridge/inboundAttachments.ts | sed -n '31,175p'
+nl -ba AI/claude-code-analysis-main/src/hooks/useReplBridge.tsx | sed -n '172,221p'
+nl -ba AI/claude-code-analysis-main/src/utils/processUserInput/processUserInput.ts | sed -n '122,132p;422,453p'
+nl -ba AI/claude-code-analysis-main/src/commands.ts | sed -n '664,676p'
+nl -ba AI/claude-code-analysis-main/src/utils/messageQueueManager.ts | sed -n '534,547p'
 ~~~
 
 ## 观察结果

@@ -85,14 +85,14 @@ flowchart TD
 在仓库根目录执行以下命令，只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/context.ts | sed -n '20,34p;36,111p;113,189p'
-nl -ba engine/claude-code-analysis-main/src/utils/claudemd.ts | sed -n '1,26p;790,846p;849,960p;979,1007p;1153,1194p'
-nl -ba engine/claude-code-analysis-main/src/constants/prompts.ts | sed -n '105,115p;444,577p'
-nl -ba engine/claude-code-analysis-main/src/constants/systemPromptSections.ts | sed -n '16,67p'
-nl -ba engine/claude-code-analysis-main/src/utils/systemPrompt.ts | sed -n '28,123p'
-nl -ba engine/claude-code-analysis-main/src/screens/REPL.tsx | sed -n '2767,2803p'
-nl -ba engine/claude-code-analysis-main/src/query.ts | sed -n '449,451p;650,666p'
-nl -ba engine/claude-code-analysis-main/src/utils/api.ts | sed -n '321,474p'
+nl -ba AI/claude-code-analysis-main/src/context.ts | sed -n '20,34p;36,111p;113,189p'
+nl -ba AI/claude-code-analysis-main/src/utils/claudemd.ts | sed -n '1,26p;790,846p;849,960p;979,1007p;1153,1194p'
+nl -ba AI/claude-code-analysis-main/src/constants/prompts.ts | sed -n '105,115p;444,577p'
+nl -ba AI/claude-code-analysis-main/src/constants/systemPromptSections.ts | sed -n '16,67p'
+nl -ba AI/claude-code-analysis-main/src/utils/systemPrompt.ts | sed -n '28,123p'
+nl -ba AI/claude-code-analysis-main/src/screens/REPL.tsx | sed -n '2767,2803p'
+nl -ba AI/claude-code-analysis-main/src/query.ts | sed -n '449,451p;650,666p'
+nl -ba AI/claude-code-analysis-main/src/utils/api.ts | sed -n '321,474p'
 ~~~
 
 ## 观察结果

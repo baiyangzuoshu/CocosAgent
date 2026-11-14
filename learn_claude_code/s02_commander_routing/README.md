@@ -33,14 +33,14 @@ flowchart TD
 
 ## 源码对照
 
-- `engine/claude-code-analysis-main/src/main.tsx:884-903`：`run()` 创建并配置 Commander 根命令。
-- `engine/claude-code-analysis-main/src/main.tsx:905-967`：注册根级 `preAction`，在 action 前完成公共准备。
-- `engine/claude-code-analysis-main/src/main.tsx:968-1006`：设置命令名称、说明、可选 `[prompt]`、帮助和大量根级选项，并定义默认 action。
-- `engine/claude-code-analysis-main/src/main.tsx:977-1000`：若干选项带有 choices、数值解析器或范围校验；比如预算参数会先转换并拒绝无效输入。
-- `engine/claude-code-analysis-main/src/main.tsx:3808-3812`：根命令注册 `--version` 和工作树选项。入口层只拦截独立版本参数，Commander 仍提供完整命令解析里的版本选项。
-- `engine/claude-code-analysis-main/src/main.tsx:3875-3890`：检测 `--print`。非 `cc://` URL 的 Print 路径直接解析并返回，跳过后续子命令注册。
-- `engine/claude-code-analysis-main/src/main.tsx:3892-3916`、`4100-4148`：注册 `mcp`、`auth`、`plugin` 等子命令，并连接相应 action 或注册函数。
-- `engine/claude-code-analysis-main/src/main.tsx:4503-4505`：常规路径完成子命令注册后调用 `program.parseAsync(process.argv)`。
+- `AI/claude-code-analysis-main/src/main.tsx:884-903`：`run()` 创建并配置 Commander 根命令。
+- `AI/claude-code-analysis-main/src/main.tsx:905-967`：注册根级 `preAction`，在 action 前完成公共准备。
+- `AI/claude-code-analysis-main/src/main.tsx:968-1006`：设置命令名称、说明、可选 `[prompt]`、帮助和大量根级选项，并定义默认 action。
+- `AI/claude-code-analysis-main/src/main.tsx:977-1000`：若干选项带有 choices、数值解析器或范围校验；比如预算参数会先转换并拒绝无效输入。
+- `AI/claude-code-analysis-main/src/main.tsx:3808-3812`：根命令注册 `--version` 和工作树选项。入口层只拦截独立版本参数，Commander 仍提供完整命令解析里的版本选项。
+- `AI/claude-code-analysis-main/src/main.tsx:3875-3890`：检测 `--print`。非 `cc://` URL 的 Print 路径直接解析并返回，跳过后续子命令注册。
+- `AI/claude-code-analysis-main/src/main.tsx:3892-3916`、`4100-4148`：注册 `mcp`、`auth`、`plugin` 等子命令，并连接相应 action 或注册函数。
+- `AI/claude-code-analysis-main/src/main.tsx:4503-4505`：常规路径完成子命令注册后调用 `program.parseAsync(process.argv)`。
 
 ## 分支观察
 
@@ -60,10 +60,10 @@ flowchart TD
 在仓库根目录执行以下命令，按行查看命令构造、Print 分支和最终解析点；这些命令只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/main.tsx | sed -n '902,970p'
-nl -ba engine/claude-code-analysis-main/src/main.tsx | sed -n '3873,3900p'
-nl -ba engine/claude-code-analysis-main/src/main.tsx | sed -n '4498,4506p'
-rg -n "program\.command\('(mcp|auth|plugin)'|parseAsync\(process\.argv\)" engine/claude-code-analysis-main/src/main.tsx
+nl -ba AI/claude-code-analysis-main/src/main.tsx | sed -n '902,970p'
+nl -ba AI/claude-code-analysis-main/src/main.tsx | sed -n '3873,3900p'
+nl -ba AI/claude-code-analysis-main/src/main.tsx | sed -n '4498,4506p'
+rg -n "program\.command\('(mcp|auth|plugin)'|parseAsync\(process\.argv\)" AI/claude-code-analysis-main/src/main.tsx
 ~~~
 
 ## 观察结果

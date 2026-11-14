@@ -61,13 +61,13 @@ flowchart TD
 在仓库根目录执行以下命令，只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/utils/messages.ts | sed -n '411,433p;460,523p;731,823p;1989,2001p;2269,2290p;3453,3472p;4335,4352p'
-nl -ba engine/claude-code-analysis-main/src/utils/attachments.ts | sed -n '440,510p;2937,2970p;3201,3210p'
-nl -ba engine/claude-code-analysis-main/src/components/Messages.tsx | sed -n '375,380p;496,520p;614,625p;699,701p'
-nl -ba engine/claude-code-analysis-main/src/components/MessageRow.tsx | sed -n '228,246p'
-nl -ba engine/claude-code-analysis-main/src/components/Message.tsx | sed -n '82,98p;98,156p;157,230p;231,310p;433,433p;483,523p;539,558p'
-nl -ba engine/claude-code-analysis-main/src/components/messages/AttachmentMessage.tsx | sed -n '126,166p;232,242p;312,354p'
-nl -ba engine/claude-code-analysis-main/src/components/messages/nullRenderingAttachments.ts | sed -n '14,70p'
+nl -ba AI/claude-code-analysis-main/src/utils/messages.ts | sed -n '411,433p;460,523p;731,823p;1989,2001p;2269,2290p;3453,3472p;4335,4352p'
+nl -ba AI/claude-code-analysis-main/src/utils/attachments.ts | sed -n '440,510p;2937,2970p;3201,3210p'
+nl -ba AI/claude-code-analysis-main/src/components/Messages.tsx | sed -n '375,380p;496,520p;614,625p;699,701p'
+nl -ba AI/claude-code-analysis-main/src/components/MessageRow.tsx | sed -n '228,246p'
+nl -ba AI/claude-code-analysis-main/src/components/Message.tsx | sed -n '82,98p;98,156p;157,230p;231,310p;433,433p;483,523p;539,558p'
+nl -ba AI/claude-code-analysis-main/src/components/messages/AttachmentMessage.tsx | sed -n '126,166p;232,242p;312,354p'
+nl -ba AI/claude-code-analysis-main/src/components/messages/nullRenderingAttachments.ts | sed -n '14,70p'
 ~~~
 
 ## 观察结果

@@ -61,19 +61,19 @@ flowchart TD
 在仓库根目录执行以下命令，只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/services/tools/toolExecution.ts | sed -n '614,730p;795,930p;995,1035p;1206,1222p'
-nl -ba engine/claude-code-analysis-main/src/utils/permissions/filesystem.ts | sed -n '1030,1135p;1205,1275p'
-nl -ba engine/claude-code-analysis-main/src/tools/FileReadTool/FileReadTool.ts | sed -n '227,331p;373,405p;418,495p;496,573p;652,718p;804,862p;865,876p;1019,1085p;1097,1145p'
-nl -ba engine/claude-code-analysis-main/src/tools/FileReadTool/limits.ts | sed -n '18,91p'
-nl -ba engine/claude-code-analysis-main/src/tools/FileWriteTool/FileWriteTool.ts | sed -n '56,89p;135,221p;223,337p;344,433p'
-nl -ba engine/claude-code-analysis-main/src/tools/FileEditTool/FileEditTool.ts | sed -n '86,136p;137,361p;387,495p;516,595p'
-nl -ba engine/claude-code-analysis-main/src/tools/FileEditTool/utils.ts | sed -n '73,93p;234,293p'
-nl -ba engine/claude-code-analysis-main/src/utils/diff.ts | sed -n '128,177p'
-nl -ba engine/claude-code-analysis-main/src/tools/FileReadTool/UI.tsx | sed -n '77,143p'
-nl -ba engine/claude-code-analysis-main/src/tools/FileWriteTool/UI.tsx | sed -n '362,404p'
-nl -ba engine/claude-code-analysis-main/src/tools/FileEditTool/UI.tsx | sed -n '77,91p'
-nl -ba engine/claude-code-analysis-main/src/components/StructuredDiffList.tsx | sed -n '1,29p'
-nl -ba engine/claude-code-analysis-main/src/components/StructuredDiff.tsx | sed -n '11,18p;50,65p;95,140p'
+nl -ba AI/claude-code-analysis-main/src/services/tools/toolExecution.ts | sed -n '614,730p;795,930p;995,1035p;1206,1222p'
+nl -ba AI/claude-code-analysis-main/src/utils/permissions/filesystem.ts | sed -n '1030,1135p;1205,1275p'
+nl -ba AI/claude-code-analysis-main/src/tools/FileReadTool/FileReadTool.ts | sed -n '227,331p;373,405p;418,495p;496,573p;652,718p;804,862p;865,876p;1019,1085p;1097,1145p'
+nl -ba AI/claude-code-analysis-main/src/tools/FileReadTool/limits.ts | sed -n '18,91p'
+nl -ba AI/claude-code-analysis-main/src/tools/FileWriteTool/FileWriteTool.ts | sed -n '56,89p;135,221p;223,337p;344,433p'
+nl -ba AI/claude-code-analysis-main/src/tools/FileEditTool/FileEditTool.ts | sed -n '86,136p;137,361p;387,495p;516,595p'
+nl -ba AI/claude-code-analysis-main/src/tools/FileEditTool/utils.ts | sed -n '73,93p;234,293p'
+nl -ba AI/claude-code-analysis-main/src/utils/diff.ts | sed -n '128,177p'
+nl -ba AI/claude-code-analysis-main/src/tools/FileReadTool/UI.tsx | sed -n '77,143p'
+nl -ba AI/claude-code-analysis-main/src/tools/FileWriteTool/UI.tsx | sed -n '362,404p'
+nl -ba AI/claude-code-analysis-main/src/tools/FileEditTool/UI.tsx | sed -n '77,91p'
+nl -ba AI/claude-code-analysis-main/src/components/StructuredDiffList.tsx | sed -n '1,29p'
+nl -ba AI/claude-code-analysis-main/src/components/StructuredDiff.tsx | sed -n '11,18p;50,65p;95,140p'
 ~~~
 
 ## 观察结果

@@ -81,11 +81,11 @@ sequenceDiagram
 在仓库根目录执行以下命令，只读取源码，不启动 CLI：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/main.tsx | sed -n '2211,2242p;2926,3041p;3720,3806p'
-nl -ba engine/claude-code-analysis-main/src/replLauncher.tsx | sed -n '7,22p'
-nl -ba engine/claude-code-analysis-main/src/interactiveHelpers.tsx | sed -n '94,103p'
-nl -ba engine/claude-code-analysis-main/src/screens/REPL.tsx | sed -n '526,570p;572,625p;1182,1202p;1310,1314p;3026,3141p'
-nl -ba engine/claude-code-analysis-main/src/hooks/useDeferredHookMessages.ts | sed -n '4,45p'
+nl -ba AI/claude-code-analysis-main/src/main.tsx | sed -n '2211,2242p;2926,3041p;3720,3806p'
+nl -ba AI/claude-code-analysis-main/src/replLauncher.tsx | sed -n '7,22p'
+nl -ba AI/claude-code-analysis-main/src/interactiveHelpers.tsx | sed -n '94,103p'
+nl -ba AI/claude-code-analysis-main/src/screens/REPL.tsx | sed -n '526,570p;572,625p;1182,1202p;1310,1314p;3026,3141p'
+nl -ba AI/claude-code-analysis-main/src/hooks/useDeferredHookMessages.ts | sed -n '4,45p'
 ~~~
 
 ## 观察结果

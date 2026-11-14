@@ -63,14 +63,14 @@ ToolSearch 的工具结果经 `mapToolResultToToolResultBlockParam()` 编码为 
 在仓库根目录执行以下命令，只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/Tool.ts | sed -n '15,21p;343,359p;362,405p;438,455p;697,791p'
-nl -ba engine/claude-code-analysis-main/src/tools.ts | sed -n '179,251p;254,267p;271,327p;329,389p'
-nl -ba engine/claude-code-analysis-main/src/hooks/useMergedTools.ts | sed -n '8,43p'
-nl -ba engine/claude-code-analysis-main/src/utils/api.ts | sed -n '119,265p'
-nl -ba engine/claude-code-analysis-main/src/tools/ToolSearchTool/prompt.ts | sed -n '27,51p;53,121p'
-nl -ba engine/claude-code-analysis-main/src/tools/ToolSearchTool/ToolSearchTool.ts | sed -n '21,47p;188,303p;304,335p;358,470p'
-nl -ba engine/claude-code-analysis-main/src/utils/toolSearch.ts | sed -n '154,198p;227,319p;368,460p;545,586p'
-nl -ba engine/claude-code-analysis-main/src/services/api/claude.ts | sed -n '1118,1177p;1231,1257p;1327,1342p'
+nl -ba AI/claude-code-analysis-main/src/Tool.ts | sed -n '15,21p;343,359p;362,405p;438,455p;697,791p'
+nl -ba AI/claude-code-analysis-main/src/tools.ts | sed -n '179,251p;254,267p;271,327p;329,389p'
+nl -ba AI/claude-code-analysis-main/src/hooks/useMergedTools.ts | sed -n '8,43p'
+nl -ba AI/claude-code-analysis-main/src/utils/api.ts | sed -n '119,265p'
+nl -ba AI/claude-code-analysis-main/src/tools/ToolSearchTool/prompt.ts | sed -n '27,51p;53,121p'
+nl -ba AI/claude-code-analysis-main/src/tools/ToolSearchTool/ToolSearchTool.ts | sed -n '21,47p;188,303p;304,335p;358,470p'
+nl -ba AI/claude-code-analysis-main/src/utils/toolSearch.ts | sed -n '154,198p;227,319p;368,460p;545,586p'
+nl -ba AI/claude-code-analysis-main/src/services/api/claude.ts | sed -n '1118,1177p;1231,1257p;1327,1342p'
 ~~~
 
 ## 观察结果

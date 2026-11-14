@@ -85,13 +85,13 @@ flowchart TD
 在仓库根目录执行以下命令，只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/Tool.ts | sed -n '394,410p'
-nl -ba engine/claude-code-analysis-main/src/tools/BashTool/BashTool.tsx | sed -n '434,441p'
-nl -ba engine/claude-code-analysis-main/src/tools/FileReadTool/FileReadTool.ts | sed -n '367,378p'
-nl -ba engine/claude-code-analysis-main/src/services/tools/toolOrchestration.ts | sed -n '8,116p;118,188p'
-nl -ba engine/claude-code-analysis-main/src/utils/generators.ts | sed -n '31,70p'
-nl -ba engine/claude-code-analysis-main/src/services/tools/StreamingToolExecutor.ts | sed -n '19,151p;153,260p;262,405p;407,530p'
-nl -ba engine/claude-code-analysis-main/src/query.ts | sed -n '550,569p;730,740p;825,860p;909,919p;1011,1029p;1380,1409p'
+nl -ba AI/claude-code-analysis-main/src/Tool.ts | sed -n '394,410p'
+nl -ba AI/claude-code-analysis-main/src/tools/BashTool/BashTool.tsx | sed -n '434,441p'
+nl -ba AI/claude-code-analysis-main/src/tools/FileReadTool/FileReadTool.ts | sed -n '367,378p'
+nl -ba AI/claude-code-analysis-main/src/services/tools/toolOrchestration.ts | sed -n '8,116p;118,188p'
+nl -ba AI/claude-code-analysis-main/src/utils/generators.ts | sed -n '31,70p'
+nl -ba AI/claude-code-analysis-main/src/services/tools/StreamingToolExecutor.ts | sed -n '19,151p;153,260p;262,405p;407,530p'
+nl -ba AI/claude-code-analysis-main/src/query.ts | sed -n '550,569p;730,740p;825,860p;909,919p;1011,1029p;1380,1409p'
 ~~~
 
 ## 观察结果

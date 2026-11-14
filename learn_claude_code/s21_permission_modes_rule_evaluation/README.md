@@ -84,14 +84,14 @@ flowchart TD
 在仓库根目录执行以下命令，只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/types/permissions.ts | sed -n '12,79p;420,455p'
-nl -ba engine/claude-code-analysis-main/src/utils/permissions/PermissionMode.ts | sed -n '13,121p'
-nl -ba engine/claude-code-analysis-main/src/main.tsx | sed -n '1389,1410p;1747,1755p'
-nl -ba engine/claude-code-analysis-main/src/utils/settings/constants.ts | sed -n '7,24p;155,167p'
-nl -ba engine/claude-code-analysis-main/src/utils/permissions/permissionsLoader.ts | sed -n '27,43p;85,145p'
-nl -ba engine/claude-code-analysis-main/src/utils/permissions/permissionRuleParser.ts | sed -n '18,32p;81,152p'
-nl -ba engine/claude-code-analysis-main/src/utils/permissions/permissionSetup.ts | sed -n '597,646p;689,810p;872,991p'
-nl -ba engine/claude-code-analysis-main/src/utils/permissions/permissions.ts | sed -n '109,131p;213,302p;1071,1156p;1158,1319p;1408,1471p'
+nl -ba AI/claude-code-analysis-main/src/types/permissions.ts | sed -n '12,79p;420,455p'
+nl -ba AI/claude-code-analysis-main/src/utils/permissions/PermissionMode.ts | sed -n '13,121p'
+nl -ba AI/claude-code-analysis-main/src/main.tsx | sed -n '1389,1410p;1747,1755p'
+nl -ba AI/claude-code-analysis-main/src/utils/settings/constants.ts | sed -n '7,24p;155,167p'
+nl -ba AI/claude-code-analysis-main/src/utils/permissions/permissionsLoader.ts | sed -n '27,43p;85,145p'
+nl -ba AI/claude-code-analysis-main/src/utils/permissions/permissionRuleParser.ts | sed -n '18,32p;81,152p'
+nl -ba AI/claude-code-analysis-main/src/utils/permissions/permissionSetup.ts | sed -n '597,646p;689,810p;872,991p'
+nl -ba AI/claude-code-analysis-main/src/utils/permissions/permissions.ts | sed -n '109,131p;213,302p;1071,1156p;1158,1319p;1408,1471p'
 ~~~
 
 ## 观察结果

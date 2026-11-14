@@ -66,10 +66,10 @@ CCRClient 构造时为 SSE event 注册 `received` callback。RemoteIO 另外接
 以下命令只读取当前源码快照：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/utils/sessionState.ts | sed -n '1,24p'
-nl -ba engine/claude-code-analysis-main/src/cli/transports/ccrClient.ts | sed -n '438,445p;448,500p;644,658p;960,968p'
-nl -ba engine/claude-code-analysis-main/src/bridge/remoteBridgeCore.ts | sed -n '422,447p;607,656p;671,679p;797,879p'
-nl -ba engine/claude-code-analysis-main/src/bridge/replBridgeTransport.ts | sed -n '49,64p;234,253p;324,332p'
+nl -ba AI/claude-code-analysis-main/src/utils/sessionState.ts | sed -n '1,24p'
+nl -ba AI/claude-code-analysis-main/src/cli/transports/ccrClient.ts | sed -n '438,445p;448,500p;644,658p;960,968p'
+nl -ba AI/claude-code-analysis-main/src/bridge/remoteBridgeCore.ts | sed -n '422,447p;607,656p;671,679p;797,879p'
+nl -ba AI/claude-code-analysis-main/src/bridge/replBridgeTransport.ts | sed -n '49,64p;234,253p;324,332p'
 ~~~
 
 ## 观察结果

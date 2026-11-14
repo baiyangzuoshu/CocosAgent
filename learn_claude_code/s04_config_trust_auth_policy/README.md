@@ -72,31 +72,31 @@ flowchart TD
 
 ## 源码对照
 
-- `engine/claude-code-analysis-main/src/entrypoints/init.ts:62-84`：启用配置后，信任前只应用安全环境变量。
-- `engine/claude-code-analysis-main/src/main.tsx:1800-1816`：在信任流程前读取本地 MCP 配置；注释将 MCP 资源预取明确延后。
-- `engine/claude-code-analysis-main/src/main.tsx:354-379`：系统上下文预取区分交互信任状态和 `--print` 非交互模式。
-- `engine/claude-code-analysis-main/src/main.tsx:2217-2242`：只在交互路径运行 `showSetupScreens()`。
-- `engine/claude-code-analysis-main/src/interactiveHelpers.tsx:125-170`：信任对话框与权限模式的关系；接受信任后设置会话状态、预取系统上下文并处理 MCP 与 CLAUDE.md 审批。
-- `engine/claude-code-analysis-main/src/interactiveHelpers.tsx:180-190`：信任后的完整环境变量应用和遥测初始化。
-- `engine/claude-code-analysis-main/src/components/TrustDialog/TrustDialog.tsx:157-179`：拒绝时退出；接受时主目录只记录会话信任，其他目录写入项目配置。
-- `engine/claude-code-analysis-main/src/utils/config.ts:674-742`：项目配置键、会话级信任检查、持久化配置与父目录遍历。
-- `engine/claude-code-analysis-main/src/main.tsx:2584-2597`、`engine/claude-code-analysis-main/src/utils/config.ts:697-742`：`--print` 的隐式信任路径和信任状态查询。
-- `engine/claude-code-analysis-main/src/utils/auth.ts:226-265`：API key 来源选择入口及 `--bare` 的限制。
-- `engine/claude-code-analysis-main/src/utils/auth.ts:351-378,538-603`：识别项目或本地设置中的 `apiKeyHelper`，以及执行和预取前的信任检查。
-- `engine/claude-code-analysis-main/src/services/policyLimits/index.ts:175-221,502-575`：策略资格、初次加载等待、未知策略默认值和失败处理。
-- `engine/claude-code-analysis-main/src/main.tsx:953-959,3401-3407`：策略后台加载，以及远程会话入口的等待和检查。
-- `engine/claude-code-analysis-main/src/main.tsx:2317-2321`：交互信任建立后（或非交互隐式信任路径）初始化 LSP 管理器。
+- `AI/claude-code-analysis-main/src/entrypoints/init.ts:62-84`：启用配置后，信任前只应用安全环境变量。
+- `AI/claude-code-analysis-main/src/main.tsx:1800-1816`：在信任流程前读取本地 MCP 配置；注释将 MCP 资源预取明确延后。
+- `AI/claude-code-analysis-main/src/main.tsx:354-379`：系统上下文预取区分交互信任状态和 `--print` 非交互模式。
+- `AI/claude-code-analysis-main/src/main.tsx:2217-2242`：只在交互路径运行 `showSetupScreens()`。
+- `AI/claude-code-analysis-main/src/interactiveHelpers.tsx:125-170`：信任对话框与权限模式的关系；接受信任后设置会话状态、预取系统上下文并处理 MCP 与 CLAUDE.md 审批。
+- `AI/claude-code-analysis-main/src/interactiveHelpers.tsx:180-190`：信任后的完整环境变量应用和遥测初始化。
+- `AI/claude-code-analysis-main/src/components/TrustDialog/TrustDialog.tsx:157-179`：拒绝时退出；接受时主目录只记录会话信任，其他目录写入项目配置。
+- `AI/claude-code-analysis-main/src/utils/config.ts:674-742`：项目配置键、会话级信任检查、持久化配置与父目录遍历。
+- `AI/claude-code-analysis-main/src/main.tsx:2584-2597`、`AI/claude-code-analysis-main/src/utils/config.ts:697-742`：`--print` 的隐式信任路径和信任状态查询。
+- `AI/claude-code-analysis-main/src/utils/auth.ts:226-265`：API key 来源选择入口及 `--bare` 的限制。
+- `AI/claude-code-analysis-main/src/utils/auth.ts:351-378,538-603`：识别项目或本地设置中的 `apiKeyHelper`，以及执行和预取前的信任检查。
+- `AI/claude-code-analysis-main/src/services/policyLimits/index.ts:175-221,502-575`：策略资格、初次加载等待、未知策略默认值和失败处理。
+- `AI/claude-code-analysis-main/src/main.tsx:953-959,3401-3407`：策略后台加载，以及远程会话入口的等待和检查。
+- `AI/claude-code-analysis-main/src/main.tsx:2317-2321`：交互信任建立后（或非交互隐式信任路径）初始化 LSP 管理器。
 
 ## 静态观察
 
 在仓库根目录执行以下命令，只检查源码，不启动 CLI：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/interactiveHelpers.tsx | sed -n '125,190p'
-nl -ba engine/claude-code-analysis-main/src/utils/config.ts | sed -n '674,760p'
-nl -ba engine/claude-code-analysis-main/src/utils/auth.ts | sed -n '226,265p;351,378p;538,603p'
-nl -ba engine/claude-code-analysis-main/src/services/policyLimits/index.ts | sed -n '175,221p;502,575p'
-rg -n "showSetupScreens|applyConfigEnvironmentVariables|allow_remote_sessions" engine/claude-code-analysis-main/src/main.tsx
+nl -ba AI/claude-code-analysis-main/src/interactiveHelpers.tsx | sed -n '125,190p'
+nl -ba AI/claude-code-analysis-main/src/utils/config.ts | sed -n '674,760p'
+nl -ba AI/claude-code-analysis-main/src/utils/auth.ts | sed -n '226,265p;351,378p;538,603p'
+nl -ba AI/claude-code-analysis-main/src/services/policyLimits/index.ts | sed -n '175,221p;502,575p'
+rg -n "showSetupScreens|applyConfigEnvironmentVariables|allow_remote_sessions" AI/claude-code-analysis-main/src/main.tsx
 ~~~
 
 ## 观察结果

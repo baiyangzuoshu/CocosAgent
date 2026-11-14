@@ -75,12 +75,12 @@ helper 先检查 transport。若它为 `null`，代码只记录“无法回应�
 以下命令只读取当前源码快照：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/bridge/bridgeMessaging.ts | sed -n '210,391p'
-nl -ba engine/claude-code-analysis-main/src/bridge/replBridge.ts | sed -n '1190,1201p;1332,1341p'
-nl -ba engine/claude-code-analysis-main/src/bridge/initReplBridge.ts | sed -n '397,451p'
-nl -ba engine/claude-code-analysis-main/src/bridge/remoteBridgeCore.ts | sed -n '120,130p;422,447p'
-nl -ba engine/claude-code-analysis-main/src/hooks/useReplBridge.tsx | sed -n '387,474p'
-nl -ba engine/claude-code-analysis-main/src/bridge/replBridgeTransport.ts | sed -n '336,352p'
+nl -ba AI/claude-code-analysis-main/src/bridge/bridgeMessaging.ts | sed -n '210,391p'
+nl -ba AI/claude-code-analysis-main/src/bridge/replBridge.ts | sed -n '1190,1201p;1332,1341p'
+nl -ba AI/claude-code-analysis-main/src/bridge/initReplBridge.ts | sed -n '397,451p'
+nl -ba AI/claude-code-analysis-main/src/bridge/remoteBridgeCore.ts | sed -n '120,130p;422,447p'
+nl -ba AI/claude-code-analysis-main/src/hooks/useReplBridge.tsx | sed -n '387,474p'
+nl -ba AI/claude-code-analysis-main/src/bridge/replBridgeTransport.ts | sed -n '336,352p'
 ~~~
 
 ## 观察结果

@@ -97,11 +97,11 @@ PostToolUse 还可附加上下文、报告阻塞或阻止后续继续。它们�
 在仓库根目录执行以下命令，只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/services/tools/toolExecution.ts | sed -n '337,489p;492,577p;599,733p;754,862p'
-nl -ba engine/claude-code-analysis-main/src/services/tools/toolExecution.ts | sed -n '909,1158p;1175,1223p;1271,1302p;1397,1588p;1589,1745p'
-nl -ba engine/claude-code-analysis-main/src/services/tools/toolHooks.ts | sed -n '35,190p;193,319p;332,433p;435,650p'
-nl -ba engine/claude-code-analysis-main/src/utils/hooks.ts | sed -n '3394,3540p'
-nl -ba engine/claude-code-analysis-main/src/services/tools/toolOrchestration.ts | sed -n '19,75p;118,177p'
+nl -ba AI/claude-code-analysis-main/src/services/tools/toolExecution.ts | sed -n '337,489p;492,577p;599,733p;754,862p'
+nl -ba AI/claude-code-analysis-main/src/services/tools/toolExecution.ts | sed -n '909,1158p;1175,1223p;1271,1302p;1397,1588p;1589,1745p'
+nl -ba AI/claude-code-analysis-main/src/services/tools/toolHooks.ts | sed -n '35,190p;193,319p;332,433p;435,650p'
+nl -ba AI/claude-code-analysis-main/src/utils/hooks.ts | sed -n '3394,3540p'
+nl -ba AI/claude-code-analysis-main/src/services/tools/toolOrchestration.ts | sed -n '19,75p;118,177p'
 ~~~
 
 ## 观察结果

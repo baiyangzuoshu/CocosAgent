@@ -97,14 +97,14 @@ poll 端的错误恢复与 transport 的自动重连是两套层次：成功 pol
 以下命令只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/bridge/replBridge.ts | sed -n '70,110p;228,260p;298,370p;381,490p'
-nl -ba engine/claude-code-analysis-main/src/bridge/replBridge.ts | sed -n '495,575p;887,963p;1008,1030p;1077,1208p;1208,1372p'
-nl -ba engine/claude-code-analysis-main/src/bridge/replBridge.ts | sed -n '1851,1971p;2138,2188p;2201,2392p'
-nl -ba engine/claude-code-analysis-main/src/bridge/replBridge.ts | sed -n '605,830p'
-nl -ba engine/claude-code-analysis-main/src/bridge/workSecret.ts | sed -n '1,32p;62,87p'
-nl -ba engine/claude-code-analysis-main/src/bridge/flushGate.ts | sed -n '1,71p'
-nl -ba engine/claude-code-analysis-main/src/bridge/capacityWake.ts | sed -n '1,56p'
-nl -ba engine/claude-code-analysis-main/src/bridge/replBridgeTransport.ts | sed -n '11,42p'
+nl -ba AI/claude-code-analysis-main/src/bridge/replBridge.ts | sed -n '70,110p;228,260p;298,370p;381,490p'
+nl -ba AI/claude-code-analysis-main/src/bridge/replBridge.ts | sed -n '495,575p;887,963p;1008,1030p;1077,1208p;1208,1372p'
+nl -ba AI/claude-code-analysis-main/src/bridge/replBridge.ts | sed -n '1851,1971p;2138,2188p;2201,2392p'
+nl -ba AI/claude-code-analysis-main/src/bridge/replBridge.ts | sed -n '605,830p'
+nl -ba AI/claude-code-analysis-main/src/bridge/workSecret.ts | sed -n '1,32p;62,87p'
+nl -ba AI/claude-code-analysis-main/src/bridge/flushGate.ts | sed -n '1,71p'
+nl -ba AI/claude-code-analysis-main/src/bridge/capacityWake.ts | sed -n '1,56p'
+nl -ba AI/claude-code-analysis-main/src/bridge/replBridgeTransport.ts | sed -n '11,42p'
 ~~~
 
 ## 观察结果

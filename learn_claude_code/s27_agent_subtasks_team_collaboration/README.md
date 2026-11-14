@@ -70,20 +70,20 @@ registerTask() 把 task state 写入 AppState.tasks 并发出任务开始事件�
 在仓库根目录执行以下命令，只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/tools/AgentTool/AgentTool.tsx | sed -n '239,316p;318,367p;555,635p;686,764p;765,832p;1205,1261p;1298,1340p'
-nl -ba engine/claude-code-analysis-main/src/tools/AgentTool/runAgent.ts | sed -n '347,375p;520,543p;697,715p;747,859p'
-nl -ba engine/claude-code-analysis-main/src/tools/AgentTool/agentToolUtils.ts | sed -n '276,355p'
-nl -ba engine/claude-code-analysis-main/src/utils/forkedAgent.ts | sed -n '345,455p'
-nl -ba engine/claude-code-analysis-main/src/Task.ts | sed -n '6,29p;44,57p;69,124p'
-nl -ba engine/claude-code-analysis-main/src/tasks.ts | sed -n '17,39p'
-nl -ba engine/claude-code-analysis-main/src/tasks/LocalAgentTask/LocalAgentTask.tsx | sed -n '466,514p;526,575p;657,680p'
-nl -ba engine/claude-code-analysis-main/src/utils/task/framework.ts | sed -n '44,117p'
-nl -ba engine/claude-code-analysis-main/src/tools/shared/spawnMultiAgent.ts | sed -n '840,938p;1040,1093p'
-nl -ba engine/claude-code-analysis-main/src/utils/swarm/spawnInProcess.ts | sed -n '104,204p;221,327p'
-nl -ba engine/claude-code-analysis-main/src/utils/swarm/inProcessRunner.ts | sed -n '870,920p;1159,1204p;1419,1515p'
-nl -ba engine/claude-code-analysis-main/src/tools/SendMessageTool/SendMessageTool.ts | sed -n '149,175p;741,825p'
-nl -ba engine/claude-code-analysis-main/src/utils/swarm/backends/InProcessBackend.ts | sed -n '145,180p'
-nl -ba engine/claude-code-analysis-main/src/utils/teammateMailbox.ts | sed -n '134,182p'
+nl -ba AI/claude-code-analysis-main/src/tools/AgentTool/AgentTool.tsx | sed -n '239,316p;318,367p;555,635p;686,764p;765,832p;1205,1261p;1298,1340p'
+nl -ba AI/claude-code-analysis-main/src/tools/AgentTool/runAgent.ts | sed -n '347,375p;520,543p;697,715p;747,859p'
+nl -ba AI/claude-code-analysis-main/src/tools/AgentTool/agentToolUtils.ts | sed -n '276,355p'
+nl -ba AI/claude-code-analysis-main/src/utils/forkedAgent.ts | sed -n '345,455p'
+nl -ba AI/claude-code-analysis-main/src/Task.ts | sed -n '6,29p;44,57p;69,124p'
+nl -ba AI/claude-code-analysis-main/src/tasks.ts | sed -n '17,39p'
+nl -ba AI/claude-code-analysis-main/src/tasks/LocalAgentTask/LocalAgentTask.tsx | sed -n '466,514p;526,575p;657,680p'
+nl -ba AI/claude-code-analysis-main/src/utils/task/framework.ts | sed -n '44,117p'
+nl -ba AI/claude-code-analysis-main/src/tools/shared/spawnMultiAgent.ts | sed -n '840,938p;1040,1093p'
+nl -ba AI/claude-code-analysis-main/src/utils/swarm/spawnInProcess.ts | sed -n '104,204p;221,327p'
+nl -ba AI/claude-code-analysis-main/src/utils/swarm/inProcessRunner.ts | sed -n '870,920p;1159,1204p;1419,1515p'
+nl -ba AI/claude-code-analysis-main/src/tools/SendMessageTool/SendMessageTool.ts | sed -n '149,175p;741,825p'
+nl -ba AI/claude-code-analysis-main/src/utils/swarm/backends/InProcessBackend.ts | sed -n '145,180p'
+nl -ba AI/claude-code-analysis-main/src/utils/teammateMailbox.ts | sed -n '134,182p'
 ~~~
 
 ## 观察结果

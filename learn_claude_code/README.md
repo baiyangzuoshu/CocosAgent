@@ -1,6 +1,6 @@
 # Claude Code 源码学习
 
-以 `engine/claude-code-analysis-main/src/` 为源码对象，按职责追踪 Claude Code CLI 的启动、交互、模型请求、工具执行和扩展系统。课程共 **41 课**，编号 `s00`–`s40`。
+以 `AI/claude-code-analysis-main/src/` 为源码对象，按职责追踪 Claude Code CLI 的启动、交互、模型请求、工具执行和扩展系统。课程共 **41 课**，编号 `s00`–`s40`。
 
 ## 学习方式
 
@@ -56,6 +56,6 @@
 
 ## 课程形式与证据边界
 
-`engine/claude-code-analysis-main/` 当前展开为源码目录，没有 `package.json` 等项目构建入口；Git 将 `src.zip` 标记为已删除。因此首轮课程采用静态源码跟读：结果描述源码中可确认的调用、状态和分支，不把它表述为 CLI 的运行时验收。后续若补齐可运行环境，再为适合的专题增加独立观察程序。
+`AI/claude-code-analysis-main/` 当前展开为源码目录，没有 `package.json` 等项目构建入口；Git 将 `src.zip` 标记为已删除。因此首轮课程采用静态源码跟读：结果描述源码中可确认的调用、状态和分支，不把它表述为 CLI 的运行时验收。后续若补齐可运行环境，再为适合的专题增加独立观察程序。
 
 每课沿用 `learn_3.8cocoscreator` 的组织原则：要理解的问题、源码入口、关键调用链、观察结果和范围说明；Claude Code 课的观察结果以源码证据和流程图为主。

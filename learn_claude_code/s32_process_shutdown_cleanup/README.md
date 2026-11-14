@@ -66,12 +66,12 @@ stdout/stderr 的 EPIPE 是另一种边界：`registerProcessOutputErrorHandlers
 以下命令只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/entrypoints/init.ts | sed -n '57,96p;185,200p'
-nl -ba engine/claude-code-analysis-main/src/main.tsx | sed -n '585,607p'
-nl -ba engine/claude-code-analysis-main/src/utils/cleanupRegistry.ts | sed -n '1,25p'
-nl -ba engine/claude-code-analysis-main/src/utils/gracefulShutdown.ts | sed -n '58,135p;193,232p;234,334p;336,359p;391,523p'
-nl -ba engine/claude-code-analysis-main/src/cli/print.ts | sed -n '959,974p;1020,1048p'
-nl -ba engine/claude-code-analysis-main/src/utils/process.ts | sed -n '1,15p'
+nl -ba AI/claude-code-analysis-main/src/entrypoints/init.ts | sed -n '57,96p;185,200p'
+nl -ba AI/claude-code-analysis-main/src/main.tsx | sed -n '585,607p'
+nl -ba AI/claude-code-analysis-main/src/utils/cleanupRegistry.ts | sed -n '1,25p'
+nl -ba AI/claude-code-analysis-main/src/utils/gracefulShutdown.ts | sed -n '58,135p;193,232p;234,334p;336,359p;391,523p'
+nl -ba AI/claude-code-analysis-main/src/cli/print.ts | sed -n '959,974p;1020,1048p'
+nl -ba AI/claude-code-analysis-main/src/utils/process.ts | sed -n '1,15p'
 ~~~
 
 ## 观察结果

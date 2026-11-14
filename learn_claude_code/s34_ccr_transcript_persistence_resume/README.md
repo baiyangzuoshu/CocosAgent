@@ -98,13 +98,13 @@ Print 每轮在 `finally` 中先 `await structuredIO.flushInternalEvents()`，�
 以下命令只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/hooks/useLogMessages.ts | sed -n '20,75p'
-nl -ba engine/claude-code-analysis-main/src/utils/sessionStorage.ts | sed -n '490,520p;993,1083p;1128,1265p;1302,1384p;1408,1462p'
-nl -ba engine/claude-code-analysis-main/src/utils/sessionStorage.ts | sed -n '1632,1723p'
-nl -ba engine/claude-code-analysis-main/src/cli/remoteIO.ts | sed -n '140,167p;217,219p'
-nl -ba engine/claude-code-analysis-main/src/cli/transports/ccrClient.ts | sed -n '789,834p;842,858p'
-nl -ba engine/claude-code-analysis-main/src/cli/structuredIO.ts | sed -n '189,196p'
-nl -ba engine/claude-code-analysis-main/src/cli/print.ts | sed -n '2448,2470p;5027,5103p'
+nl -ba AI/claude-code-analysis-main/src/hooks/useLogMessages.ts | sed -n '20,75p'
+nl -ba AI/claude-code-analysis-main/src/utils/sessionStorage.ts | sed -n '490,520p;993,1083p;1128,1265p;1302,1384p;1408,1462p'
+nl -ba AI/claude-code-analysis-main/src/utils/sessionStorage.ts | sed -n '1632,1723p'
+nl -ba AI/claude-code-analysis-main/src/cli/remoteIO.ts | sed -n '140,167p;217,219p'
+nl -ba AI/claude-code-analysis-main/src/cli/transports/ccrClient.ts | sed -n '789,834p;842,858p'
+nl -ba AI/claude-code-analysis-main/src/cli/structuredIO.ts | sed -n '189,196p'
+nl -ba AI/claude-code-analysis-main/src/cli/print.ts | sed -n '2448,2470p;5027,5103p'
 ~~~
 
 ## 观察结果

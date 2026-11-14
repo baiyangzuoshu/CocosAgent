@@ -32,12 +32,12 @@ flowchart TD
 
 ## 源码对照
 
-- `engine/claude-code-analysis-main/src/entrypoints/cli.tsx:1-26`：在 `main()` 前设置 Corepack、远程子进程堆上限和受构建特性控制的环境开关。
-- `engine/claude-code-analysis-main/src/entrypoints/cli.tsx:28-48`：`main()` 先取命令行参数；精确匹配单独的版本参数时直接打印并返回。该分支不会动态加载启动分析器。
-- `engine/claude-code-analysis-main/src/entrypoints/cli.tsx:50-245`：按参数和 `feature()` 结果分发提示词导出、浏览器/MCP、后台 Worker、远程控制、后台会话和其他专用入口。
-- `engine/claude-code-analysis-main/src/entrypoints/cli.tsx:247-285`：尝试提前接管 tmux 工作树路径；将 `--update`/`--upgrade` 改写成子命令，并在加载主模块之前设置 `--bare` 对应的环境变量。
-- `engine/claude-code-analysis-main/src/entrypoints/cli.tsx:287-302`：常规路径开始捕获早期输入，动态导入 `main.js` 并调用 `cliMain()`；文件末尾以 `void main()` 启动入口。
-- `engine/claude-code-analysis-main/src/main.tsx:585-586`、`851-855`：完整 CLI 的 `main()` 随后进入 `run()`。
+- `AI/claude-code-analysis-main/src/entrypoints/cli.tsx:1-26`：在 `main()` 前设置 Corepack、远程子进程堆上限和受构建特性控制的环境开关。
+- `AI/claude-code-analysis-main/src/entrypoints/cli.tsx:28-48`：`main()` 先取命令行参数；精确匹配单独的版本参数时直接打印并返回。该分支不会动态加载启动分析器。
+- `AI/claude-code-analysis-main/src/entrypoints/cli.tsx:50-245`：按参数和 `feature()` 结果分发提示词导出、浏览器/MCP、后台 Worker、远程控制、后台会话和其他专用入口。
+- `AI/claude-code-analysis-main/src/entrypoints/cli.tsx:247-285`：尝试提前接管 tmux 工作树路径；将 `--update`/`--upgrade` 改写成子命令，并在加载主模块之前设置 `--bare` 对应的环境变量。
+- `AI/claude-code-analysis-main/src/entrypoints/cli.tsx:287-302`：常规路径开始捕获早期输入，动态导入 `main.js` 并调用 `cliMain()`；文件末尾以 `void main()` 启动入口。
+- `AI/claude-code-analysis-main/src/main.tsx:585-586`、`851-855`：完整 CLI 的 `main()` 随后进入 `run()`。
 
 ## 分支观察
 
@@ -54,9 +54,9 @@ flowchart TD
 在仓库根目录执行以下命令，按代码顺序核对分支；它们只读取源码，不启动 CLI：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/entrypoints/cli.tsx | sed -n '28,72p'
-nl -ba engine/claude-code-analysis-main/src/entrypoints/cli.tsx | sed -n '247,302p'
-rg -n "feature\(|startCapturingEarlyInput|import\('../main.js'\)|await cliMain" engine/claude-code-analysis-main/src/entrypoints/cli.tsx
+nl -ba AI/claude-code-analysis-main/src/entrypoints/cli.tsx | sed -n '28,72p'
+nl -ba AI/claude-code-analysis-main/src/entrypoints/cli.tsx | sed -n '247,302p'
+rg -n "feature\(|startCapturingEarlyInput|import\('../main.js'\)|await cliMain" AI/claude-code-analysis-main/src/entrypoints/cli.tsx
 ~~~
 
 ## 观察结果

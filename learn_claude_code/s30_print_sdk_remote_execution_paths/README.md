@@ -89,13 +89,13 @@ REPL 检测到 `activeRemote.isRemoteMode` 后，普通文本和 prompt 型斜�
 以下命令只读取源码，核对本课调用链：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/cli/print.ts | sed -n '455,470p;863,974p;976,1010p;2145,2245p;2813,2828p;5199,5233p'
-nl -ba engine/claude-code-analysis-main/src/QueryEngine.ts | sed -n '176,212p;410,435p;675,716p;1248,1295p'
-nl -ba engine/claude-code-analysis-main/src/entrypoints/agentSdkTypes.ts | sed -n '112,122p;439,443p'
-nl -ba engine/claude-code-analysis-main/src/screens/REPL.tsx | sed -n '3410,3485p;3488,3495p'
-nl -ba engine/claude-code-analysis-main/src/remote/RemoteSessionManager.ts | sed -n '108,183p;216,242p'
-nl -ba engine/claude-code-analysis-main/src/hooks/useRemoteSession.ts | sed -n '156,190p;269,329p'
-nl -ba engine/claude-code-analysis-main/src/remote/sdkMessageAdapter.ts | sed -n '168,270p'
+nl -ba AI/claude-code-analysis-main/src/cli/print.ts | sed -n '455,470p;863,974p;976,1010p;2145,2245p;2813,2828p;5199,5233p'
+nl -ba AI/claude-code-analysis-main/src/QueryEngine.ts | sed -n '176,212p;410,435p;675,716p;1248,1295p'
+nl -ba AI/claude-code-analysis-main/src/entrypoints/agentSdkTypes.ts | sed -n '112,122p;439,443p'
+nl -ba AI/claude-code-analysis-main/src/screens/REPL.tsx | sed -n '3410,3485p;3488,3495p'
+nl -ba AI/claude-code-analysis-main/src/remote/RemoteSessionManager.ts | sed -n '108,183p;216,242p'
+nl -ba AI/claude-code-analysis-main/src/hooks/useRemoteSession.ts | sed -n '156,190p;269,329p'
+nl -ba AI/claude-code-analysis-main/src/remote/sdkMessageAdapter.ts | sed -n '168,270p'
 ~~~
 
 ## 观察结果

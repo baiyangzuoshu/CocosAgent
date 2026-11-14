@@ -66,29 +66,29 @@ Claude Code 会话中的 MCP 配置描述客户端要连接的 Server；`claude 
 
 ## 源码对照
 
-- `engine/claude-code-analysis-main/src/main.tsx:517-540,797-815`：依据参数和 TTY 状态设置交互性，并选择 `cli`、`sdk-cli` 或 `mcp` 入口标记。
-- `engine/claude-code-analysis-main/src/main.tsx:2217-2242`：交互路径创建 Ink root 并运行 setup screens。
-- `engine/claude-code-analysis-main/src/main.tsx:857-883`：Print 输入从 prompt、pipe 或 JSON stream 读取。
-- `engine/claude-code-analysis-main/src/main.tsx:1220-1252,1823-1858`：`--sdk-url` 默认格式、stream-json 配对条件及 Print 相关校验。
-- `engine/claude-code-analysis-main/src/main.tsx:2825-2859`：把非交互会话选项交给 `runHeadless()`。
-- `engine/claude-code-analysis-main/src/cli/print.ts:777-805,847-930`：headless 输入检查、SDK permission prompt 路由、流式消息写出和 text/json 收尾。
-- `engine/claude-code-analysis-main/src/cli/print.ts:5199-5232`：字符串 prompt 的结构化封装，以及 `StructuredIO` / `RemoteIO` 的选择。
-- `engine/claude-code-analysis-main/src/cli/remoteIO.ts:31-93,170-172`、`engine/claude-code-analysis-main/src/cli/transports/transportUtils.ts:8-44`：远程 I/O 连接与 WebSocket、Hybrid、SSE 传输选择。
-- `engine/claude-code-analysis-main/src/entrypoints/agentSdkTypes.ts:1-31,73-122`：SDK 类型导出与未实现的 API 函数体。
-- `engine/claude-code-analysis-main/src/main.tsx:3892-3908`、`engine/claude-code-analysis-main/src/cli/handlers/mcp.tsx:59-71`：`mcp serve` 命令到 handler 的分发。
-- `engine/claude-code-analysis-main/src/entrypoints/mcp.ts:1-39,47-105,110-195`：MCP Server 能力、工具请求处理和 stdio transport。
-- `engine/claude-code-analysis-main/src/main.tsx:2380-2412`：会话 MCP 配置分类，并把配置连接路径与 `mcp serve` 的服务器入口区分开。
+- `AI/claude-code-analysis-main/src/main.tsx:517-540,797-815`：依据参数和 TTY 状态设置交互性，并选择 `cli`、`sdk-cli` 或 `mcp` 入口标记。
+- `AI/claude-code-analysis-main/src/main.tsx:2217-2242`：交互路径创建 Ink root 并运行 setup screens。
+- `AI/claude-code-analysis-main/src/main.tsx:857-883`：Print 输入从 prompt、pipe 或 JSON stream 读取。
+- `AI/claude-code-analysis-main/src/main.tsx:1220-1252,1823-1858`：`--sdk-url` 默认格式、stream-json 配对条件及 Print 相关校验。
+- `AI/claude-code-analysis-main/src/main.tsx:2825-2859`：把非交互会话选项交给 `runHeadless()`。
+- `AI/claude-code-analysis-main/src/cli/print.ts:777-805,847-930`：headless 输入检查、SDK permission prompt 路由、流式消息写出和 text/json 收尾。
+- `AI/claude-code-analysis-main/src/cli/print.ts:5199-5232`：字符串 prompt 的结构化封装，以及 `StructuredIO` / `RemoteIO` 的选择。
+- `AI/claude-code-analysis-main/src/cli/remoteIO.ts:31-93,170-172`、`AI/claude-code-analysis-main/src/cli/transports/transportUtils.ts:8-44`：远程 I/O 连接与 WebSocket、Hybrid、SSE 传输选择。
+- `AI/claude-code-analysis-main/src/entrypoints/agentSdkTypes.ts:1-31,73-122`：SDK 类型导出与未实现的 API 函数体。
+- `AI/claude-code-analysis-main/src/main.tsx:3892-3908`、`AI/claude-code-analysis-main/src/cli/handlers/mcp.tsx:59-71`：`mcp serve` 命令到 handler 的分发。
+- `AI/claude-code-analysis-main/src/entrypoints/mcp.ts:1-39,47-105,110-195`：MCP Server 能力、工具请求处理和 stdio transport。
+- `AI/claude-code-analysis-main/src/main.tsx:2380-2412`：会话 MCP 配置分类，并把配置连接路径与 `mcp serve` 的服务器入口区分开。
 
 ## 静态观察
 
 在仓库根目录执行以下命令，只检查源码，不启动 CLI：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/main.tsx | sed -n '517,540p;797,815p;857,883p;1220,1252p;1823,1858p;2825,2859p;3892,3908p'
-nl -ba engine/claude-code-analysis-main/src/cli/print.ts | sed -n '777,805p;847,930p;5199,5232p'
-nl -ba engine/claude-code-analysis-main/src/cli/transports/transportUtils.ts | sed -n '8,44p'
-nl -ba engine/claude-code-analysis-main/src/entrypoints/agentSdkTypes.ts | sed -n '1,31p;73,122p'
-nl -ba engine/claude-code-analysis-main/src/entrypoints/mcp.ts | sed -n '47,105p;110,195p'
+nl -ba AI/claude-code-analysis-main/src/main.tsx | sed -n '517,540p;797,815p;857,883p;1220,1252p;1823,1858p;2825,2859p;3892,3908p'
+nl -ba AI/claude-code-analysis-main/src/cli/print.ts | sed -n '777,805p;847,930p;5199,5232p'
+nl -ba AI/claude-code-analysis-main/src/cli/transports/transportUtils.ts | sed -n '8,44p'
+nl -ba AI/claude-code-analysis-main/src/entrypoints/agentSdkTypes.ts | sed -n '1,31p;73,122p'
+nl -ba AI/claude-code-analysis-main/src/entrypoints/mcp.ts | sed -n '47,105p;110,195p'
 ~~~
 
 ## 观察结果

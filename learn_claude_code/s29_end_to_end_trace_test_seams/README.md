@@ -97,19 +97,19 @@ REPL 用 `for await...of query(...)` 消费生成出来的流事件与消息，�
 在仓库根目录执行以下命令，只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/entrypoints/cli.tsx | sed -n '287,299p'
-nl -ba engine/claude-code-analysis-main/src/main.tsx | sed -n '3797,3808p'
-nl -ba engine/claude-code-analysis-main/src/replLauncher.tsx | sed -n '12,22p'
-nl -ba engine/claude-code-analysis-main/src/screens/REPL.tsx | sed -n '2584,2640p;2661,2803p;2855,2930p;3488,3519p'
-nl -ba engine/claude-code-analysis-main/src/utils/handlePromptSubmit.ts | sed -n '120,171p;356,386p;396,470p;540,575p'
-nl -ba engine/claude-code-analysis-main/src/query.ts | sed -n '175,239p;241,280p;337,365p;412,468p'
-nl -ba engine/claude-code-analysis-main/src/query.ts | sed -n '650,735p;823,835p;1262,1285p'
-nl -ba engine/claude-code-analysis-main/src/query.ts | sed -n '1360,1409p;1500,1522p;1714,1728p'
-nl -ba engine/claude-code-analysis-main/src/query/deps.ts | sed -n '6,40p'
-nl -ba engine/claude-code-analysis-main/src/services/api/claude.ts | sed -n '752,779p'
-nl -ba engine/claude-code-analysis-main/src/services/tools/toolOrchestration.ts | sed -n '19,82p;118,150p'
-nl -ba engine/claude-code-analysis-main/src/services/tools/toolExecution.ts | sed -n '337,410p;599,680p;916,1005p;1206,1222p'
-nl -ba engine/claude-code-analysis-main/src/utils/messages.ts | sed -n '2930,3005p'
+nl -ba AI/claude-code-analysis-main/src/entrypoints/cli.tsx | sed -n '287,299p'
+nl -ba AI/claude-code-analysis-main/src/main.tsx | sed -n '3797,3808p'
+nl -ba AI/claude-code-analysis-main/src/replLauncher.tsx | sed -n '12,22p'
+nl -ba AI/claude-code-analysis-main/src/screens/REPL.tsx | sed -n '2584,2640p;2661,2803p;2855,2930p;3488,3519p'
+nl -ba AI/claude-code-analysis-main/src/utils/handlePromptSubmit.ts | sed -n '120,171p;356,386p;396,470p;540,575p'
+nl -ba AI/claude-code-analysis-main/src/query.ts | sed -n '175,239p;241,280p;337,365p;412,468p'
+nl -ba AI/claude-code-analysis-main/src/query.ts | sed -n '650,735p;823,835p;1262,1285p'
+nl -ba AI/claude-code-analysis-main/src/query.ts | sed -n '1360,1409p;1500,1522p;1714,1728p'
+nl -ba AI/claude-code-analysis-main/src/query/deps.ts | sed -n '6,40p'
+nl -ba AI/claude-code-analysis-main/src/services/api/claude.ts | sed -n '752,779p'
+nl -ba AI/claude-code-analysis-main/src/services/tools/toolOrchestration.ts | sed -n '19,82p;118,150p'
+nl -ba AI/claude-code-analysis-main/src/services/tools/toolExecution.ts | sed -n '337,410p;599,680p;916,1005p;1206,1222p'
+nl -ba AI/claude-code-analysis-main/src/utils/messages.ts | sed -n '2930,3005p'
 ~~~
 
 ## 观察结果

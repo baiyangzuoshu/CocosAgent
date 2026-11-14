@@ -69,9 +69,9 @@ API 的 `content_block_stop` 流事件在这个 handler 中不单独追加内容
 在仓库根目录执行以下命令，只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/query.ts | sed -n '551,560p;659,708p;709,863p;1380,1409p'
-nl -ba engine/claude-code-analysis-main/src/utils/messages.ts | sed -n '2930,3095p;1989,2001p;2056,2105p'
-nl -ba engine/claude-code-analysis-main/src/screens/REPL.tsx | sed -n '2584,2660p;2793,2803p'
+nl -ba AI/claude-code-analysis-main/src/query.ts | sed -n '551,560p;659,708p;709,863p;1380,1409p'
+nl -ba AI/claude-code-analysis-main/src/utils/messages.ts | sed -n '2930,3095p;1989,2001p;2056,2105p'
+nl -ba AI/claude-code-analysis-main/src/screens/REPL.tsx | sed -n '2584,2660p;2793,2803p'
 ~~~
 
 ## 观察结果

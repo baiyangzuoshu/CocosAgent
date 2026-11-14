@@ -65,15 +65,15 @@ flowchart TD
 在仓库根目录执行以下命令，只检查源码，不启动 CLI：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/state/AppStateStore.ts | sed -n '89,116p;454,511p'
-nl -ba engine/claude-code-analysis-main/src/state/store.ts | sed -n '1,34p'
-nl -ba engine/claude-code-analysis-main/src/state/AppState.tsx | sed -n '37,110p;126,179p'
-nl -ba engine/claude-code-analysis-main/src/components/App.tsx | sed -n '15,35p'
-nl -ba engine/claude-code-analysis-main/src/state/onChangeAppState.ts | sed -n '23,92p;94,170p'
-nl -ba engine/claude-code-analysis-main/src/utils/sessionState.ts | sed -n '30,83p;136,150p'
-nl -ba engine/claude-code-analysis-main/src/cli/remoteIO.ts | sed -n '159,167p'
-nl -ba engine/claude-code-analysis-main/src/cli/print.ts | sed -n '1052,1079p;5052,5060p'
-nl -ba engine/claude-code-analysis-main/src/main.tsx | sed -n '2652,2675p'
+nl -ba AI/claude-code-analysis-main/src/state/AppStateStore.ts | sed -n '89,116p;454,511p'
+nl -ba AI/claude-code-analysis-main/src/state/store.ts | sed -n '1,34p'
+nl -ba AI/claude-code-analysis-main/src/state/AppState.tsx | sed -n '37,110p;126,179p'
+nl -ba AI/claude-code-analysis-main/src/components/App.tsx | sed -n '15,35p'
+nl -ba AI/claude-code-analysis-main/src/state/onChangeAppState.ts | sed -n '23,92p;94,170p'
+nl -ba AI/claude-code-analysis-main/src/utils/sessionState.ts | sed -n '30,83p;136,150p'
+nl -ba AI/claude-code-analysis-main/src/cli/remoteIO.ts | sed -n '159,167p'
+nl -ba AI/claude-code-analysis-main/src/cli/print.ts | sed -n '1052,1079p;5052,5060p'
+nl -ba AI/claude-code-analysis-main/src/main.tsx | sed -n '2652,2675p'
 ~~~
 
 ## 观察结果

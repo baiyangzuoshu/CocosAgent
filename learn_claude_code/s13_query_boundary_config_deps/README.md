@@ -78,12 +78,12 @@ flowchart TD
 在仓库根目录执行以下命令，只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/query.ts | sed -n '181,239p;241,305p'
-nl -ba engine/claude-code-analysis-main/src/query/config.ts | sed -n '8,46p'
-nl -ba engine/claude-code-analysis-main/src/query/deps.ts | sed -n '8,40p'
-nl -ba engine/claude-code-analysis-main/src/QueryEngine.ts | sed -n '675,686p'
-nl -ba engine/claude-code-analysis-main/src/screens/REPL.tsx | sed -n '2780,2803p'
-nl -ba engine/claude-code-analysis-main/src/query.ts | sed -n '412,467p;555,590p;652,680p'
+nl -ba AI/claude-code-analysis-main/src/query.ts | sed -n '181,239p;241,305p'
+nl -ba AI/claude-code-analysis-main/src/query/config.ts | sed -n '8,46p'
+nl -ba AI/claude-code-analysis-main/src/query/deps.ts | sed -n '8,40p'
+nl -ba AI/claude-code-analysis-main/src/QueryEngine.ts | sed -n '675,686p'
+nl -ba AI/claude-code-analysis-main/src/screens/REPL.tsx | sed -n '2780,2803p'
+nl -ba AI/claude-code-analysis-main/src/query.ts | sed -n '412,467p;555,590p;652,680p'
 ~~~
 
 ## 观察结果

@@ -63,14 +63,14 @@ renderer 根据前一帧和当前帧参数使用屏幕缓冲；对备用屏幕�
 在仓库根目录执行以下命令，只读取源码，不启动 CLI：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/replLauncher.tsx | sed -n '12,22p'
-nl -ba engine/claude-code-analysis-main/src/interactiveHelpers.tsx | sed -n '94,103p'
-nl -ba engine/claude-code-analysis-main/src/components/App.tsx | sed -n '15,55p'
-nl -ba engine/claude-code-analysis-main/src/ink.ts | sed -n '12,31p'
-nl -ba engine/claude-code-analysis-main/src/ink/root.ts | sed -n '125,157p'
-nl -ba engine/claude-code-analysis-main/src/ink/ink.tsx | sed -n '233,269p;420,449p;585,595p;735,737p;1442,1454p'
-nl -ba engine/claude-code-analysis-main/src/ink/reconciler.ts | sed -n '247,315p;331,372p;391,459p'
-nl -ba engine/claude-code-analysis-main/src/ink/renderer.ts | sed -n '29,40p;48,82p;84,112p;129,177p'
+nl -ba AI/claude-code-analysis-main/src/replLauncher.tsx | sed -n '12,22p'
+nl -ba AI/claude-code-analysis-main/src/interactiveHelpers.tsx | sed -n '94,103p'
+nl -ba AI/claude-code-analysis-main/src/components/App.tsx | sed -n '15,55p'
+nl -ba AI/claude-code-analysis-main/src/ink.ts | sed -n '12,31p'
+nl -ba AI/claude-code-analysis-main/src/ink/root.ts | sed -n '125,157p'
+nl -ba AI/claude-code-analysis-main/src/ink/ink.tsx | sed -n '233,269p;420,449p;585,595p;735,737p;1442,1454p'
+nl -ba AI/claude-code-analysis-main/src/ink/reconciler.ts | sed -n '247,315p;331,372p;391,459p'
+nl -ba AI/claude-code-analysis-main/src/ink/renderer.ts | sed -n '29,40p;48,82p;84,112p;129,177p'
 ~~~
 
 ## 观察结果
@@ -81,4 +81,4 @@ nl -ba engine/claude-code-analysis-main/src/ink/renderer.ts | sed -n '29,40p;48,
 
 - 本课追踪交互主界面的树和一帧的渲染出口，不展开 REPL 子树中的每类消息组件、事件分发、滚动优化或 ANSI 编码细节。
 - Yoga 计算、React reconciler 与终端输出只根据源码调用关系描述；没有在目标终端中运行或验收。
-- 结论以当前 `engine/claude-code-analysis-main/src/` 静态源码快照为依据。
+- 结论以当前 `AI/claude-code-analysis-main/src/` 静态源码快照为依据。

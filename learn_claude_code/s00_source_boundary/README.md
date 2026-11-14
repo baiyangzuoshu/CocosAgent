@@ -1,6 +1,6 @@
 # 第 00 课：源码快照边界与整体分层
 
-**目标：** 确认 `engine/claude-code-analysis-main` 当前提供哪些源码和构建信息，并沿交互主链画出模块分层。先分清静态源码证据与运行时证据，避免把目录名当成完整架构。
+**目标：** 确认 `AI/claude-code-analysis-main` 当前提供哪些源码和构建信息，并沿交互主链画出模块分层。先分清静态源码证据与运行时证据，避免把目录名当成完整架构。
 
 ## 本课要回答的问题
 
@@ -14,17 +14,17 @@
 在仓库根目录执行：
 
 ~~~sh
-find engine/claude-code-analysis-main -maxdepth 1 -mindepth 1 -print | sort
-rg --files engine/claude-code-analysis-main/src | wc -l
-find engine/claude-code-analysis-main/src -mindepth 1 -maxdepth 1 -type d | sort
-git status --short -- engine/claude-code-analysis-main/src.zip
+find AI/claude-code-analysis-main -maxdepth 1 -mindepth 1 -print | sort
+rg --files AI/claude-code-analysis-main/src | wc -l
+find AI/claude-code-analysis-main/src -mindepth 1 -maxdepth 1 -type d | sort
+git status --short -- AI/claude-code-analysis-main/src.zip
 ~~~
 
 本次检查结果：
 
 - 目标目录展开后有 `src/` 和 `.DS_Store`，源码树有 **1902 个文件**。
 - 没有 `package.json`、锁文件、`tsconfig` 或目标目录 README，无法从当前目录恢复安装依赖和构建命令。
-- Git 将 `engine/claude-code-analysis-main/src.zip` 显示为已删除；本课按当前工作树记录这一点，不据此推断删除原因，也不恢复归档。
+- Git 将 `AI/claude-code-analysis-main/src.zip` 显示为已删除；本课按当前工作树记录这一点，不据此推断删除原因，也不恢复归档。
 
 目录结构包含 `entrypoints/`、`cli/`、`commands/`、`screens/`、`components/`、`state/`、`query/`、`services/`、`tools/`、`hooks/`、`plugins/`、`skills/`、`utils/` 等。目录名称只用于建立索引，职责关系仍要由调用代码验证。
 
@@ -46,12 +46,12 @@ flowchart LR
 
 ## 源码证据
 
-- `engine/claude-code-analysis-main/src/entrypoints/cli.tsx`：检查少量快速分支；常规路径动态加载 `main.tsx`。
-- `engine/claude-code-analysis-main/src/main.tsx`：设置 Commander 命令；常规会话路径可进入 `launchRepl`。
-- `engine/claude-code-analysis-main/src/replLauncher.tsx`：动态加载 `components/App.tsx` 和 `screens/REPL.tsx`。
-- `engine/claude-code-analysis-main/src/screens/REPL.tsx`：准备会话上下文并消费 `query()` 生成的事件。
-- `engine/claude-code-analysis-main/src/query.ts`：请求模型流；收到工具调用时，经工具编排产生结果并决定是否继续请求。
-- `engine/claude-code-analysis-main/src/query/deps.ts`、`engine/claude-code-analysis-main/src/services/tools/toolOrchestration.ts`：分别标出模型请求依赖和工具分发入口。
+- `AI/claude-code-analysis-main/src/entrypoints/cli.tsx`：检查少量快速分支；常规路径动态加载 `main.tsx`。
+- `AI/claude-code-analysis-main/src/main.tsx`：设置 Commander 命令；常规会话路径可进入 `launchRepl`。
+- `AI/claude-code-analysis-main/src/replLauncher.tsx`：动态加载 `components/App.tsx` 和 `screens/REPL.tsx`。
+- `AI/claude-code-analysis-main/src/screens/REPL.tsx`：准备会话上下文并消费 `query()` 生成的事件。
+- `AI/claude-code-analysis-main/src/query.ts`：请求模型流；收到工具调用时，经工具编排产生结果并决定是否继续请求。
+- `AI/claude-code-analysis-main/src/query/deps.ts`、`AI/claude-code-analysis-main/src/services/tools/toolOrchestration.ts`：分别标出模型请求依赖和工具分发入口。
 
 ## 观察结果
 

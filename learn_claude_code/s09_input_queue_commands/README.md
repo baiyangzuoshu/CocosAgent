@@ -67,18 +67,18 @@ flowchart TD
 在仓库根目录执行以下命令，只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/hooks/useInputBuffer.ts | sed -n '1,132p'
-nl -ba engine/claude-code-analysis-main/src/components/PromptInput/PromptInput.tsx | sed -n '832,901p;1300,1310p'
-nl -ba engine/claude-code-analysis-main/src/screens/REPL.tsx | sed -n '3142,3280p;3312,3355p;3859,3893p'
-nl -ba engine/claude-code-analysis-main/src/utils/handlePromptSubmit.ts | sed -n '227,350p;353,387p;448,496p'
-nl -ba engine/claude-code-analysis-main/src/utils/messageQueueManager.ts | sed -n '41,80p;123,193p;241,267p'
-nl -ba engine/claude-code-analysis-main/src/hooks/useCommandQueue.ts
-nl -ba engine/claude-code-analysis-main/src/hooks/useQueueProcessor.ts | sed -n '16,67p'
-nl -ba engine/claude-code-analysis-main/src/utils/queueProcessor.ts | sed -n '17,87p'
-nl -ba engine/claude-code-analysis-main/src/types/command.ts | sed -n '25,55p;144,215p'
-nl -ba engine/claude-code-analysis-main/src/commands.ts | sed -n '1,45p;688,719p'
-nl -ba engine/claude-code-analysis-main/src/utils/processUserInput/processUserInput.ts | sed -n '470,490p'
-nl -ba engine/claude-code-analysis-main/src/utils/processUserInput/processSlashCommand.tsx | sed -n '309,360p'
+nl -ba AI/claude-code-analysis-main/src/hooks/useInputBuffer.ts | sed -n '1,132p'
+nl -ba AI/claude-code-analysis-main/src/components/PromptInput/PromptInput.tsx | sed -n '832,901p;1300,1310p'
+nl -ba AI/claude-code-analysis-main/src/screens/REPL.tsx | sed -n '3142,3280p;3312,3355p;3859,3893p'
+nl -ba AI/claude-code-analysis-main/src/utils/handlePromptSubmit.ts | sed -n '227,350p;353,387p;448,496p'
+nl -ba AI/claude-code-analysis-main/src/utils/messageQueueManager.ts | sed -n '41,80p;123,193p;241,267p'
+nl -ba AI/claude-code-analysis-main/src/hooks/useCommandQueue.ts
+nl -ba AI/claude-code-analysis-main/src/hooks/useQueueProcessor.ts | sed -n '16,67p'
+nl -ba AI/claude-code-analysis-main/src/utils/queueProcessor.ts | sed -n '17,87p'
+nl -ba AI/claude-code-analysis-main/src/types/command.ts | sed -n '25,55p;144,215p'
+nl -ba AI/claude-code-analysis-main/src/commands.ts | sed -n '1,45p;688,719p'
+nl -ba AI/claude-code-analysis-main/src/utils/processUserInput/processUserInput.ts | sed -n '470,490p'
+nl -ba AI/claude-code-analysis-main/src/utils/processUserInput/processSlashCommand.tsx | sed -n '309,360p'
 ~~~
 
 ## 观察结果

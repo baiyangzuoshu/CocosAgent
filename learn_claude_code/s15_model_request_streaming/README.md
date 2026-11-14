@@ -81,13 +81,13 @@ flowchart LR
 在仓库根目录执行以下命令，只读取源码：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/query/deps.ts | sed -n '1,42p'
-nl -ba engine/claude-code-analysis-main/src/query.ts | sed -n '652,708p'
-nl -ba engine/claude-code-analysis-main/src/services/api/claude.ts | sed -n '676,780p;1017,1072p'
-nl -ba engine/claude-code-analysis-main/src/services/api/claude.ts | sed -n '1231,1380p;1538,1595p;1691,1728p'
-nl -ba engine/claude-code-analysis-main/src/services/api/claude.ts | sed -n '1776,1858p;1979,2053p;2171,2212p;2213,2304p;2808,2816p'
-nl -ba engine/claude-code-analysis-main/src/services/api/client.ts | sed -n '88,152p;153,220p;221,316p'
-nl -ba engine/claude-code-analysis-main/src/services/vcr.ts | sed -n '349,380p'
+nl -ba AI/claude-code-analysis-main/src/query/deps.ts | sed -n '1,42p'
+nl -ba AI/claude-code-analysis-main/src/query.ts | sed -n '652,708p'
+nl -ba AI/claude-code-analysis-main/src/services/api/claude.ts | sed -n '676,780p;1017,1072p'
+nl -ba AI/claude-code-analysis-main/src/services/api/claude.ts | sed -n '1231,1380p;1538,1595p;1691,1728p'
+nl -ba AI/claude-code-analysis-main/src/services/api/claude.ts | sed -n '1776,1858p;1979,2053p;2171,2212p;2213,2304p;2808,2816p'
+nl -ba AI/claude-code-analysis-main/src/services/api/client.ts | sed -n '88,152p;153,220p;221,316p'
+nl -ba AI/claude-code-analysis-main/src/services/vcr.ts | sed -n '349,380p'
 ~~~
 
 ## 观察结果

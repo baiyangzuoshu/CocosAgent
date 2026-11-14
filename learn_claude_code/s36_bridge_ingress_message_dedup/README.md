@@ -70,9 +70,9 @@ flowchart TD
 以下命令只读取当前源码快照：
 
 ~~~sh
-nl -ba engine/claude-code-analysis-main/src/bridge/bridgeMessaging.ts | sed -n '31,88p;124,208p;418,461p'
-nl -ba engine/claude-code-analysis-main/src/bridge/replBridge.ts | sed -n '500,528p;792,806p;1332,1341p;1694,1777p'
-nl -ba engine/claude-code-analysis-main/src/bridge/replBridgeTransport.ts | sed -n '23,42p'
+nl -ba AI/claude-code-analysis-main/src/bridge/bridgeMessaging.ts | sed -n '31,88p;124,208p;418,461p'
+nl -ba AI/claude-code-analysis-main/src/bridge/replBridge.ts | sed -n '500,528p;792,806p;1332,1341p;1694,1777p'
+nl -ba AI/claude-code-analysis-main/src/bridge/replBridgeTransport.ts | sed -n '23,42p'
 ~~~
 
 ## 观察结果
