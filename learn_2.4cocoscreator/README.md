@@ -15,7 +15,7 @@
 
 - [课程大纲](课程大纲.md)：完整阶段规划与源码文件索引。
 - [运行准备：浏览器宿主](web_host/README.md)：提供后续浏览器运行课使用的最小宿主，不计课次。
-- [第 0 课：`.meta` 元数据分析](s00_meta_analysis/README.md)：从贴图元数据追踪主资源和 SpriteFrame UUID。
+- [第 0 课：`.meta` 元数据与 UUID](s00_meta_analysis/README.md)：区分 Texture/SpriteFrame 身份，并观察复制、删除和重新导入时 UUID 的变化。
 - [第 1 课：模块装配](s01_module_assembly/README.md)：创建 cc 命名空间并注册第一个模块。
 - [第 2 课：游戏启动](s02_game_startup/README.md)：调用 cc.game.run() 并观察引擎启动事件。
 - [第 3 课：Director 初始化与主循环](s03_director_loop/README.md)：由 requestAnimationFrame 驱动 Director。
