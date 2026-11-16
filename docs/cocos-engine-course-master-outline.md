@@ -16,7 +16,7 @@
 
 ## 已完成阶段与后续专题
 
-第 1–101 课中各版本实际具备的主题均已落地。Spine 覆盖 Creator 2.4/3.8 和 Cocos2d-x 2.x/3.x/4.0；Cocos2d-x 1.x 快照没有 Spine 模块。Creator Web 资源导入、打包与运行时课程已完成第 89–94 课；Shader 编写与接入第 95–101 课已落地。
+第 1–102 课中各版本实际具备的主题均已落地。Spine 覆盖 Creator 2.4/3.8 和 Cocos2d-x 2.x/3.x/4.0；Cocos2d-x 1.x 快照没有 Spine 模块。Creator Web 资源导入、打包与运行时课程已完成第 89–94 课；Shader 编写与接入第 95–101 课已落地；第 102 课以 Creator 2.4.15 项目构建产物研究 Auto Atlas。
 
 | 阶段 | 课次范围 | 范围 | 阶段结果 |
 | --- | --- | --- | --- |
@@ -36,6 +36,7 @@
 | 二十：Spine 2D 骨骼动画 | 81–88（已完成） | 资源版本、数据与实例、轨道混合、骨骼更新、附件几何、渲染提交、事件与生命周期 | Creator 2.4/3.8 与 Cocos2d-x 2.x/3.x/4.0；1.x 快照无 Spine 模块 |
 | 二十一：Creator Web 资源导入与打包 | 89–94（已完成） | 构建产物、`.meta` 与 UUID、Asset、AssetManager、Bundle 索引、浏览器请求 | Creator 2.4 与 3.8 各有独立 TypeScript 课程代码；课程模型已构建，实际 Creator Network 观察步骤见 [Web 资源打包课程计划](cocos-web-build-course-plan.md) |
 | 二十二：Shader 编写与接入 | 95–101（已完成） | Shader 阶段、顶点输入与坐标、纹理采样、Uniform、透明混合、宏变体和 Sprite 接入 | Creator 2.4/3.8 与 Cocos2d-x 2.x/3.x/4.0 各走本版路径；1.x 固定管线，不安排 Shader 实现 |
+| 二十三：Auto Atlas 构建与 Runtime 接线 | 102（已完成） | `.pac` 范围与选项、引用筛选、图集输出、Bundle 资源记录、SpriteFrame UV | Creator 2.4.15；以 `2.4NewProject` 的现有 Web 构建静态证据为例，区分 Editor Builder 与 Runtime |
 
 ### 七：Action / Tween（第 30–34 课，第 30–34 课已完成）
 
@@ -149,7 +150,7 @@ Cocos2d-x 1.x–4.x 的第 10–13 课已覆盖场景访问、可见性/排序�
 
 ## 第 65 课之后课程与后续专题
 
-第 66–94 课均已按版本源码实现独立示例；Spine 课程覆盖 Creator 2.4/3.8 和 Cocos2d-x 2.x/3.x/4.0，Creator Web 资源专题覆盖现有 2.4 与 3.8 Web 构建输出。第 95–101 课 Shader 编写与接入已完成，五个具备可编程 Shader 的版本均有独立课程代码；Cocos2d-x 1.x 保持固定管线能力边界。相同课号只组织学习主题，不表示各版本使用相同 API。
+第 66–94 课均已按版本源码实现独立示例；Spine 课程覆盖 Creator 2.4/3.8 和 Cocos2d-x 2.x/3.x/4.0，Creator Web 资源专题覆盖现有 2.4 与 3.8 Web 构建输出。第 95–101 课 Shader 编写与接入已完成，五个具备可编程 Shader 的版本均有独立课程代码；Cocos2d-x 1.x 保持固定管线能力边界。第 102 课以 Creator 2.4.15 现有项目的 Auto Atlas Web 构建产物为依据。
 
 ### 十七：3D 物理深化（第 66–70 课，已完成）
 
@@ -244,6 +245,14 @@ Cocos2d-x 1.x–4.x 的第 10–13 课已覆盖场景访问、可见性/排序�
 
 五个具备可编程 Shader 的版本均已建立第 95–101 课独立代码和源码对照；Creator 示例运行 WebGL，Cocos2d-x 示例解释本代职责模型。Cocos2d-x 1.x 沿固定管线，不建立伪 Shader 实现。入口见 [Creator 2.4](../learn_2.4cocoscreator/README.md)、[Creator 3.8](../learn_3.8cocoscreator/README.md)、[Cocos2d-x 2.x](../learn_cocos2d-2x/README.md)、[3.x](../learn_cocos2d-3x/README.md)、[4.0](../learn_cocos2d-4x/README.md)。
 
+### 二十三：Auto Atlas 构建与 Runtime 接线（第 102 课，Creator 2.4.15）
+
+| 课 | 主题 | 核心问题 |
+| --- | --- | --- |
+| 102 | Auto Atlas 从编辑器配置进入 Web 产物，再由 Runtime 绘制 | Prefab 中 SpriteFrame UUID 如何映射到共享 PNG、帧矩形和 UV？未引用的图片为何不会进入本例图集？ |
+
+课程样例快照取自工作区的 `2.4NewProject/assets/Live/AutoAtlas.pac.meta`、`assets/BundleMain/UILive.prefab` 和 `build/web-mobile/assets/BundleMain/`。Creator 2.4.15 Runtime 源码用于解释 SpriteFrame 与 Sprite 的消费路径；完整 Editor Builder/MaxRects 实现不在本地 Runtime 快照中，因此不把配置和输出证据误写成已审阅 Builder 源码。
+
 ### 后续专题：平台与运行时专项
 
 第 50–53 课已覆盖通用构建、资源产物和启动交付。后续可按需要选择 Web、桌面、移动端或原生专项；开始前先选定引擎补丁版本、目标平台和工具链，再按实际源码与可运行证据确定主题，避免重复讲通用打包流程。
@@ -256,7 +265,7 @@ Cocos2d-x 1.x–4.x 的第 10–13 课已覆盖场景访问、可见性/排序�
 - 打包课程先固定引擎补丁版、目标平台、构建模式和工程身份；运行构建前核对工具链与 SDK，下载依赖、安装工具或改全局环境前先取得授权。
 - 构建日志、生成物检查和目标运行时验收分开记录；未实际构建的平台保持未验证状态。
 - 每个课程 README 记录本课目标、源码文件与关键函数、独立代码入口、可观察结果和简化点。
-- 第 66–80 课已完成：3D 物理、动画与 3D 粒子；Cocos2d-x 1.x/2.x 的能力边界分别按本地源码记录。第 81–88 课已完成 Spine 研究；Cocos2d-x 1.x 快照没有 Spine 模块，因此不创建伪课程。第 89–94 课 Creator Web 资源导入与打包已完成；第 95–101 课 Shader 编写与接入已完成，五个可编程 Shader 版本各有独立课程，1.x 保持固定管线能力边界。
+- 第 66–80 课已完成：3D 物理、动画与 3D 粒子；Cocos2d-x 1.x/2.x 的能力边界分别按本地源码记录。第 81–88 课已完成 Spine 研究；Cocos2d-x 1.x 快照没有 Spine 模块，因此不创建伪课程。第 89–94 课 Creator Web 资源导入与打包已完成；第 95–101 课 Shader 编写与接入已完成，五个可编程 Shader 版本各有独立课程，1.x 保持固定管线能力边界；第 102 课记录 Creator 2.4.15 Auto Atlas 构建产物与 Runtime 接线。
 
 ## 各版本课程入口
 

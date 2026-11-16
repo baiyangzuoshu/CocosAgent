@@ -242,7 +242,8 @@ learn_2.4cocoscreator/
 ├── s98_shader_uniforms/         # 第 98 课：自定义 Uniform 与材质参数
 ├── s99_alpha_blending/           # 第 99 课：Alpha、预乘色与混合
 ├── s100_shader_variants/         # 第 100 课：宏变体与平台边界
-└── s101_sprite_effect_debug/     # 第 101 课：Sprite 接入与调试
+├── s101_sprite_effect_debug/     # 第 101 课：Sprite 接入与调试
+└── s102_auto_atlas_build_pipeline/ # 第 102 课：Auto Atlas 构建与 Runtime 接线
 ~~~
 
 ## Spine 2D 骨骼动画（第 81–88 课）
@@ -309,8 +310,14 @@ Creator 课程以 Web 浏览器运行时为范围；每课代码独立，并标�
 - [第 100 课：宏变体与平台边界](s100_shader_variants/README.md)
 - [第 101 课：Sprite 接入与调试](s101_sprite_effect_debug/README.md)
 
+## Auto Atlas 构建与 Runtime 接线（第 102 课）
+
+以 2.4NewProject 的 UILive.prefab 和 web-mobile 构建为例，从 .pac 配置追到 Filter Unused、Bundle Config、共享 native 贴图、SpriteFrame 元数据和 Runtime UV。课程代码分析构建证据快照；Creator Editor Builder 不属于本地 Runtime 引擎快照。
+
+- [第 102 课：Auto Atlas 怎样把散图变成共享贴图](s102_auto_atlas_build_pipeline/README.md)
+
 ## 运行
 
-进入要学习的课程目录，按该课 README 中的命令运行。浏览器课有自己的 `deno.json`、`index.html` 和 `src/`；第 0 课是独立的元数据分析脚本。
+进入要学习的课程目录，按该课 README 中的命令运行。浏览器课有自己的 `deno.json`、`index.html` 和 `src/`；第 0 课和第 102 课是独立的数据分析脚本。
 
 课程讲义会列出对应的 Creator 源码路径，路径相对于仓库根目录。
