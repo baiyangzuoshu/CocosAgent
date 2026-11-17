@@ -22,6 +22,16 @@ SceneAsset → SpriteFrame → Texture2D
 
 因此本课不能把所有数字都当依赖。本地 `depend-util.js` 会递归检查序列化数据中的 UUID 引用；本课只取其中与图片有关的字段，避免把整份场景文件搬进示例。
 
+## Asset 是对象，不是磁盘文件
+
+`cc.Asset` 是资源加载后在 Runtime 中使用的对象基类。Creator 2.4.15 的 [CCAsset.js](../../engine/2.4.15engine/cocos2d/core/assets/CCAsset.js) 里，`_uuid` 标识对象身份；`_native` 描述对应的原生文件；`nativeUrl` 按 UUID、文件名和扩展名计算地址；`_nativeAsset` 保存解码后的底层对象。比如 PNG 可对应一个 SpriteFrame Asset 和一个 Texture2D Asset：它们是不同 UUID 的对象，Texture2D 还可能装有浏览器解码出的图片/纹理对象。
+
+Asset 依赖图回答“加载这个对象还需要哪些对象”；Bundle Config 与请求 URL 回答“Runtime 从哪里取到序列化内容或原生文件”。一个 import pack 可以含多个 Asset 条目，所以 Asset 数量、下载文件数和浏览器 GET 数不必相等。
+
+Asset 的 `refCount` 是引擎生命周期记账。`addRef()` 增加计数；`decRef()` 减少计数并默认把对象交给 `releaseManager` 尝试回收。它不等同于 JavaScript 变量数，也不等同于场景中引用该资源的节点数。强制释放、依赖释放和场景自动释放的差别见[资源身份、加载与释放研究](../../docs/2.x/04-assets-and-loading.md)。
+
+还有一个 2.4.15 的边界：`SceneAsset` 会被加载并返回给调用者，但 `utilities.js::cache()` 不把 SceneAsset 放进共享 `assetManager.assets` 缓存。不要把“Asset 对象存在”和“对象在通用缓存表中”当成同一件事。
+
 ## 按代码的执行顺序读
 
 1. `src/example-dependencies.ts` 里的 `serializedSpriteReference` 是从场景 Sprite 组件摘出的最小字段；`spriteFrameMeta` 是 `.meta` 中的纹理引用。

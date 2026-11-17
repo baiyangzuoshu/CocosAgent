@@ -274,9 +274,15 @@ HelloWorld.png.meta ┘        native：PNG 文件               场景使用 As
 | UUID | 资源的身份编号 | 场景引用的 SpriteFrame UUID |
 | config | 构建生成的索引表；告诉运行时 UUID 对应哪个 pack 或文件 | `assets/main/config.*.json` |
 | URL | 浏览器实际请求的文件地址 | import pack 地址、PNG 地址 |
-| Asset | 文件解析后在内存中供引擎使用的对象 | `SceneAsset`、`SpriteFrame`、`Texture2D` |
+| Asset | 文件解析后在内存中供引擎使用的对象；有 UUID、类型和自己的生命周期 | `SceneAsset`、`SpriteFrame`、`Texture2D` |
+| `cc.assetManager` | 单例加载协调者，组织 Bundle、请求管线、Downloader、Parser、缓存和释放 | 本例从 Bundle 路径加载场景 |
+| Bundle | 持有一份资源配置和基址；把相对路径/场景名交给 AssetManager 加载 | `main`、`resources` 或自定义 Bundle |
 
-阅读顺序是：89 先认输出文件；90 找 UUID 的来历；91 从场景引用画出依赖；92 看下载和创建 Asset 的职责；93 手动算出文件地址；94 把它们串起来，并在 Network 面板观察真实请求。每课的“课程代码”只演示本课负责的一步，真实字段来源和简化范围都写在课文里。
+把这 6 课分成两条相接的主线：**Asset 主线**看身份和依赖，90 追 `.meta` UUID，91 追场景如何引用 SpriteFrame/Texture2D 并认识 `cc.Asset`；**AssetManager 主线**看请求如何被编排，89 看构建输入输出，92 看 preload/load、文件缓存与对象创建，93 看 Bundle Config 如何把 UUID 变成 URL，94 把它们串起来观察 Network。第 9 课的同 UUID 缓存是起点；89–94 展开真实 Web 资源链路。
+
+两者关系可以这样读：Bundle/Config 解决“请求哪个 Asset、在哪里”，AssetManager 负责“如何取文件、解析、处理依赖、创建并缓存 Asset”，Asset 表示“加载完成后交给游戏使用的对象”。这几类对象不要混成一个“资源文件”。
+
+Creator 2.4.15 的 AssetManager 中还要把缓存分开：`assets` 保存适用的 Asset 对象，`files` 保存下载结果，`parsed` 保存解析结果，`bundles` 保存 Bundle 配置。`SceneAsset` 是一个例外：它会从场景加载 API 返回，但 `utilities.cache()` 不将它放入通用 `assets` 缓存。因此“Asset 对象数”不总等于 `assetManager.assets.size`。
 
 本版实际关系是：**`helloworld.fire` 引用 SpriteFrame；SpriteFrame 的 `rawTextureUuid` 再指向 Texture2D；构建把序列化数据放进 import pack，把 PNG 放进 native 文件。** 请先在 `2.4NewProject/assets/` 找源文件，再看 `2.4NewProject/build/web-mobile/` 的构建结果。课程代码中的日志是教学模型输出，不是 Creator 运行日志。
 
@@ -286,6 +292,8 @@ HelloWorld.png.meta ┘        native：PNG 文件               场景使用 As
 - 第 92 课回答“文件怎样变成并缓存为 Asset 对象”。
 - 第 93 课回答“Bundle Config 怎样把 UUID 变成 URL”。
 - 第 94 课把前面几步连起来，并教你在浏览器 Network 面板观察真实请求。
+
+第 92 课展示 `preloadAny` 和 `loadAny` 的管线差异；`addRef/decRef`、场景依赖、常驻节点和资源释放的完整 2.4.15 证据另见 [资源身份、加载与释放研究](../docs/2.x/04-assets-and-loading.md)。
 
 - [第 89 课：Web 构建产物地图](s89_web_build_output_map/README.md)
 - [第 90 课：`.meta` 与资源身份](s90_meta_asset_identity/README.md)

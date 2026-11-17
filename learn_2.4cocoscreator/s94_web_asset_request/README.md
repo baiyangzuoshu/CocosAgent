@@ -11,10 +11,10 @@
   → Fetcher 按 URL 取得文件
   → Parser 从 pack 中取出当前 UUID 的序列化条目
   → depend-util 找到 SpriteFrame / Texture2D UUID
-  → 递归创建 Texture2D、SpriteFrame、SceneAsset 并按 UUID 缓存
+  → 递归创建 Texture2D、SpriteFrame、SceneAsset；普通 Asset 按 UUID 缓存
 ```
 
-当前例子里的实际关系是：SceneAsset 和 SpriteFrame 在同一个 import pack；Texture2D 指向另一个 PNG 文件。因此最终是 **2 个文件 URL、3 个 Asset 对象**。
+当前例子里的实际关系是：SceneAsset 和 SpriteFrame 在同一个 import pack；Texture2D 指向另一个 PNG 文件。因此最终是 **2 个文件 URL、3 个 Asset 对象，其中 2 个进入通用 Asset 缓存**。Creator 2.4.15 的 utilities.cache 会跳过 SceneAsset；它仍会从 loadScene 返回，但不会因通用 Asset 缓存命中而复用。
 
 ## 从入口逐步追踪
 
@@ -38,7 +38,7 @@ import 文件里有多个 UUID 条目。Parser 按当前 RequestItem 的 UUID �
 
 ### 5. 依赖先完成，当前 Asset 后创建
 
-Loader 递归处理依赖，先得到 Texture2D，再得到 SpriteFrame，最后得到 SceneAsset；每个对象完成后放进 `assets`，键是 UUID。第二次加载同一场景时先检查 Asset 缓存，所以返回同一个 SceneAsset。
+Loader 递归处理依赖，先得到 Texture2D，再得到 SpriteFrame，最后得到 SceneAsset。Texture2D 和 SpriteFrame 进入通用 `assets` 缓存；SceneAsset 返回给 Bundle.loadScene 的调用者，但 Runtime 的 utilities.cache 会跳过它。重复请求 SpriteFrame 可命中 Asset 缓存；SceneAsset 是否同实例不能用来代表普通 Asset 缓存行为。
 
 ## 本课代码与源码职责对应
 
@@ -53,6 +53,10 @@ Loader 递归处理依赖，先得到 Texture2D，再得到 SpriteFrame，最后
 | `CCAsset.ts` | 课程中的最小 Asset 对象 | `assets/CCAsset.js` |
 
 这些源码文件都可从下方链接打开。课程结构保留“Bundle → Config → RequestItem → Fetch/Parse → Dependencies → Asset”的职责边界，只删去并发队列、错误重试、完整序列化兼容和网络实现。
+
+本课模型中，AssetManager.assets 只保存 Texture2D 和 SpriteFrame。SceneAsset 仍被反序列化并由 loadScene 返回，但 2.4.15 Runtime 的 utilities.cache() 会跳过场景资源；所以参与加载的 Asset 对象数是 3，通用对象缓存数是 2。课程里的缓存判断按此版本规则处理。
+
+本课代码通过 AssetRecord.type 字符串简化识别 SceneAsset；Runtime 使用 utilities.js 中的场景检测逻辑。
 
 ## 看代码结果时不要混淆两种证据
 
@@ -70,9 +74,10 @@ python3 -m http.server 8104 --bind 127.0.0.1
 - [Config 查表](../../engine/2.4.15engine/cocos2d/core/asset-manager/config.js) 与 [URL 生成](../../engine/2.4.15engine/cocos2d/core/asset-manager/urlTransformer.js)
 - [RequestItem](../../engine/2.4.15engine/cocos2d/core/asset-manager/request-item.js)、[fetch](../../engine/2.4.15engine/cocos2d/core/asset-manager/fetch.js)、[pack-manager](../../engine/2.4.15engine/cocos2d/core/asset-manager/pack-manager.js)
 - [依赖解析](../../engine/2.4.15engine/cocos2d/core/asset-manager/depend-util.js)、[load](../../engine/2.4.15engine/cocos2d/core/asset-manager/load.js)、[deserialize](../../engine/2.4.15engine/cocos2d/core/asset-manager/deserialize.js)
+- [缓存策略](../../engine/2.4.15engine/cocos2d/core/asset-manager/utilities.js)：utilities.cache() 将 SceneAsset 排除在共享 assets 缓存之外。
 
 ## 学完后自查
 
-不用看页面，按顺序讲出“场景路径、UUID、URL、文件、Asset”分别在何时出现。然后解释为什么两个 import Asset 可以共用一次文件下载，而 Asset 缓存仍然有两个对象。
+不用看页面，按顺序讲出“场景路径、UUID、URL、文件、Asset”分别在何时出现。再说清本例 3 个 Asset 对象与 2 个通用缓存对象的区别，以及为什么 SceneAsset 是例外。
 
 运行方式：在本课目录执行 `deno task check`、`deno task build`、`deno task serve`。

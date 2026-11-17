@@ -75,7 +75,12 @@ export class Loader {
     const asset = deserialize(uuid, record.type, data, this.trace);
     asset.onLoad();
     this.trace.push("Asset.onLoad " + record.type);
-    this.assets.set(uuid, asset);
+    if (asset.type === "SceneAsset") {
+      this.trace.push("SceneAsset 返回给调用方；不进入通用 Asset 缓存");
+    } else {
+      this.assets.set(uuid, asset);
+      this.trace.push("缓存 Asset " + asset.type);
+    }
     return { ...fetched, asset };
   }
 

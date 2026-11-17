@@ -7,7 +7,7 @@ import { createRequestItem } from "./request-item.ts";
 import { CCAsset } from "../assets/CCAsset.ts";
 import type { PipelineTask } from "./types.ts";
 
-/** load 阶段：取文件、解析条目、加载依赖，最后创建并缓存 Asset。 */
+/** load 阶段取文件、解析和加载依赖；创建 Asset 后按类型缓存，SceneAsset 除外。 */
 export class Loader {
   constructor(
     private readonly config: BundleConfig,
@@ -45,8 +45,12 @@ export class Loader {
 
     const asset = deserialize(request.uuid, request.record.type, data);
     asset.onLoad();
-    this.assets.set(request.uuid, asset);
-    this.trace.push("创建并缓存 Asset: " + asset.type + " " + asset.uuid);
+    if (asset.type === "SceneAsset") {
+      this.trace.push("创建 SceneAsset 并返回；不进入通用 Asset 缓存");
+    } else {
+      this.assets.set(request.uuid, asset);
+      this.trace.push("创建并缓存 Asset: " + asset.type + " " + asset.uuid);
+    }
     return { ...prepared, file, asset };
   }
 }

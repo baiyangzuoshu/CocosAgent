@@ -34,7 +34,7 @@
 | 十八：动画播放与状态 | 71–75（已完成） | 片段、播放、采样、事件、切换 | 六个版本独立实现，按各自帧动画、Action、Animation 或骨骼系统讲解 |
 | 十九：3D 粒子 | 76–80（已完成） | 发射、模拟、粒子模块、渲染和生命周期 | Creator 2.4/3.8 与 Cocos2d-x 3.x/4.0；x1/x2 无内置模块 |
 | 二十：Spine 2D 骨骼动画 | 81–88（已完成） | 资源版本、数据与实例、轨道混合、骨骼更新、附件几何、渲染提交、事件与生命周期 | Creator 2.4/3.8 与 Cocos2d-x 2.x/3.x/4.0；1.x 快照无 Spine 模块 |
-| 二十一：Creator Web 资源导入与打包 | 89–94（已完成） | 构建产物、`.meta` 与 UUID、Asset、AssetManager、Bundle 索引、浏览器请求 | Creator 2.4 与 3.8 各有独立 TypeScript 课程代码；课程模型已构建，实际 Creator Network 观察步骤见 [Web 资源打包课程计划](cocos-web-build-course-plan.md) |
+| 二十一：Creator Web 资源导入与打包 | 89–94（已完成） | Asset 身份/依赖；AssetManager 请求管线、分层缓存与释放；Bundle 索引、浏览器请求 | Creator 2.4 与 3.8 各有独立 TypeScript 课程代码；课程模型已构建，实际 Creator Network 观察步骤见 [Web 资源打包课程计划](cocos-web-build-course-plan.md) |
 | 二十二：Shader 编写与接入 | 95–101（已完成） | Shader 阶段、顶点输入与坐标、纹理采样、Uniform、透明混合、宏变体和 Sprite 接入 | Creator 2.4/3.8 与 Cocos2d-x 2.x/3.x/4.0 各走本版路径；1.x 固定管线，不安排 Shader 实现 |
 | 二十三：Auto Atlas 构建与 Runtime 接线 | 102（已完成） | `.pac` 范围与选项、引用筛选、图集输出、Bundle 资源记录、SpriteFrame UV | Creator 2.4.15；以 `2.4NewProject` 的现有 Web 构建静态证据为例，区分 Editor Builder 与 Runtime |
 
@@ -216,7 +216,7 @@ Cocos2d-x 1.x–4.x 的第 10–13 课已覆盖场景访问、可见性/排序�
 
 ### 二十一：Creator Web 资源导入、打包与运行时（第 89–94 课，已完成）
 
-两版 `NewProject` 已有 Web 构建输出。课程依次建立产物地图、`.meta` 资源身份、Asset 依赖、AssetManager 管线、Bundle 索引和请求职责模型；2.4 与 3.8 各有六课独立 TypeScript 代码。3.8 当前产物没有 `BundleMain`，课程不从目录 `.meta` 猜测原因。课程模型通过类型检查和构建；实际 Creator 浏览器 Network 观察按 README 操作，未将静态文件映射描述为浏览器实测。详见 [Creator Web 资源导入、打包与运行时课程计划](cocos-web-build-course-plan.md)。
+两版 `NewProject` 已有 Web 构建输出。课程按两条主线组织：Asset 身份与依赖，以及 AssetManager 的请求管线、文件/对象缓存和 Bundle 查找；最后将它们接到浏览器请求。2.4 与 3.8 各有六课独立 TypeScript 代码。Creator 2.4.15 的 Runtime 还会跳过 `SceneAsset` 的通用对象缓存，详细 2.4 引用计数与释放证据见 [资源身份、加载与释放研究](2.x/04-assets-and-loading.md)。3.8 当前产物没有 `BundleMain`，课程不从目录 `.meta` 猜测原因。课程模型通过类型检查和构建；实际 Creator 浏览器 Network 观察按 README 操作，未将静态文件映射描述为浏览器实测。详见 [Creator Web 资源导入、打包与运行时课程计划](cocos-web-build-course-plan.md)。
 
 ### 二十二：Shader 编写与接入（第 95–101 课，已完成）
 
