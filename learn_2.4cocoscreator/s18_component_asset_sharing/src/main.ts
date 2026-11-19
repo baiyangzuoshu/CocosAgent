@@ -23,7 +23,7 @@ const texture = { url: "memory://hero-atlas", width: 128, height: 64 } as unknow
 const frame = new SpriteFrame(texture, { x: 0, y: 0, width: 64, height: 64 });
 const templateSprite = new Sprite(body);
 templateSprite.setSpriteFrame(frame);
-body.setRenderComponent(templateSprite);
+body.setSprite(templateSprite);
 const prefab = new Prefab(prefabData);
 
 const enemyA = instantiate(prefab);
@@ -35,8 +35,8 @@ const logicB = enemyB._components[0] as EnemyLogic;
 logicA.hp = 60;
 const bodyA = enemyA.children[0] as Node;
 const bodyB = enemyB.children[0] as Node;
-const spriteA = bodyA.renderComponent as Sprite | null;
-const spriteB = bodyB.renderComponent as Sprite | null;
+const spriteA = bodyA.sprite;
+const spriteB = bodyB.sprite;
 if (!spriteA || !spriteB || !spriteA.spriteFrame || !spriteB.spriteFrame) {
   throw new Error("Prefab 副本缺少 Sprite 或 SpriteFrame");
 }

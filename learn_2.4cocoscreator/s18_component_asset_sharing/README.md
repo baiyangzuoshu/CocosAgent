@@ -24,7 +24,7 @@ Node/Component/Sprite 实例分别创建；Prefab 复制资源引用时，Sprite
 
 ## 模型化简化与 Creator Runtime 边界
 
-本课的 `CCNode._instantiate()` 手工复制组件和 Sprite，并把 `spriteFrame` 引用赋给新 Sprite；`EnemyLogic` 只演示数字字段，不覆盖嵌套对象、数组或序列化。内存 Texture2D 记录只满足本地 SpriteFrame 读取 URL/尺寸，不是 Creator 资产加载。Sprite 构造会创建课程 assembler，但没有活动场景、渲染帧、WebGL context、纹理上传或 draw；这不是完整 Runtime Prefab/AssetManager/Renderer 链路。
+本课的 `CCNode._instantiate()` 手工复制组件和 Sprite，并把 `spriteFrame` 引用赋给新 Sprite；`EnemyLogic` 只演示数字字段，不覆盖嵌套对象、数组或序列化。内存 Texture2D 记录只满足本地 SpriteFrame 读取 URL/尺寸，不是 Creator 资产加载。课程 Sprite 现在只保存 SpriteFrame 引用，不依赖 assembler/RenderComponent；本地内存 Texture2D 仅用于 UV 计算，未加载图片、创建 WebGL context、上传纹理或 draw；这不是完整 Runtime Prefab/AssetManager/Renderer 链路。
 
 ## 运行
 
