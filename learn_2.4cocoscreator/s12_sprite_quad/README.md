@@ -32,4 +32,4 @@ deno task build
 deno task serve
 ~~~
 
-打开 <http://localhost:8000>，观察画布中的四边形以及状态栏中的“4 个顶点、6 个索引、1 次 draw call”。
+打开 <http://localhost:8000>，观察画布中的四边形以及状态栏中的“4 个顶点、6 个索引、1 次 draw call”。本课入口只演示 Quad 生成与 WebGL 提交，不再复演组件调度、脏变换或资源缓存。

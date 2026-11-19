@@ -6,7 +6,8 @@ const status = document.querySelector<HTMLPreElement>("#status");
 const toggleParent = document.querySelector<HTMLButtonElement>("#toggle-parent");
 const toggleNodeActive = document.querySelector<HTMLButtonElement>("#toggle-node-active");
 const toggleComponentEnabled = document.querySelector<HTMLButtonElement>("#toggle-component-enabled");
-if (!status || !toggleParent || !toggleNodeActive || !toggleComponentEnabled) {
+const toggleCombined = document.querySelector<HTMLButtonElement>("#toggle-combined");
+if (!status || !toggleParent || !toggleNodeActive || !toggleComponentEnabled || !toggleCombined) {
   throw new Error("找不到状态区或生命周期控制按钮");
 }
 const NodeClass = cc.Node;
@@ -51,16 +52,17 @@ const render = (): void => {
   toggleParent.disabled = !logicA.started;
   toggleNodeActive.disabled = !logicA.started;
   toggleComponentEnabled.disabled = !logicA.started;
+  toggleCombined.disabled = !logicA.started;
   toggleParent.textContent = attached ? "移出场景（保留实例）" : "重新挂载 EnemyA";
   toggleNodeActive.textContent = enemyA.active ? "设 Node.active = false" : "设 Node.active = true";
   toggleComponentEnabled.textContent = logicA.enabled ? "设 Component.enabled = false" : "设 Component.enabled = true";
+  toggleCombined.textContent = logicA.enabled ? "组合：禁用后移出并重新挂载" : "组合：恢复组件";
   status.textContent = [
     `最近操作: ${lastOperation}`,
     `Node: parent=${enemyA.getParent()?.name ?? "null"}；active=${enemyA.active}；activeInHierarchy=${enemyA.activeInHierarchy}`,
     `Component: enabled=${logicA.enabled}；enabledInHierarchy=${logicA.enabledInHierarchy}`,
     `EnemyA callbacks: ${logicA.events || "等待"}`,
     `EnemyB（未操作对照）callbacks: ${logicB.events || "等待"}`,
-    `EnemyA.isValid: ${enemyA.isValid}`,
     "active 控制节点自身；enabled 控制组件自身；挂载状态影响 activeInHierarchy。观察 onEnable/onDisable 的变化与 onLoad/start 不重复。",
   ].join("\n");
 };
@@ -86,6 +88,20 @@ toggleComponentEnabled.addEventListener("click", () => {
   if (!logicA.started) return;
   logicA.enabled = !logicA.enabled;
   lastOperation = `切换 Component.enabled → ${logicA.enabled}`;
+  render();
+});
+
+toggleCombined.addEventListener("click", () => {
+  if (!logicA.started) return;
+  if (logicA.enabled) {
+    logicA.enabled = false;
+    if (enemyA.getParent() === scene) scene.removeChild(enemyA, false);
+    scene.addChild(enemyA);
+    lastOperation = "先 enabled=false，再移出并重新挂载；节点活动，但组件仍禁用";
+  } else {
+    logicA.enabled = true;
+    lastOperation = "enabled=true；节点仍挂在活动 Scene，组件重新启用";
+  }
   render();
 });
 

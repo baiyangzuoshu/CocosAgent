@@ -19,3 +19,5 @@ if (!subName || !subMeta) throw new Error("样例中没有子资源");
 console.log(`主资源: ${meta.importer} ${meta.uuid}`);
 console.log(`子资源: ${subName} / ${subMeta.importer} ${subMeta.uuid}`);
 console.log(`rawTextureUuid 指向主资源: ${subMeta.rawTextureUuid === meta.uuid}`);
+console.log(`主资源与子资源 UUID 不同: ${meta.uuid !== subMeta.uuid}`);
+console.log(`样例覆盖的子资源数量: ${Object.keys(meta.subMetas).length}`);

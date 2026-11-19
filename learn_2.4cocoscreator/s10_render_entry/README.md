@@ -4,7 +4,7 @@
 
 ## 本课增量
 
-Director 完成组件阶段后调用 Renderer；Renderer 把场景交给 RenderFlow。本课让页面显示进入流程的场景名，不遍历子节点、不生成绘制数据；节点遍历留到第 11 课。
+`game.run()` 完成启动后进入 Director 主循环；Director 每帧完成更新阶段，再调用 Renderer；Renderer 把活动场景交给 RenderFlow。本课让页面显示到达流程的场景名，不遍历子节点、不生成绘制数据；节点遍历留到第 11 课。启动链是观察渲染入口的必要前置条件，保留在本课入口中。
 
 ## 源码位置
 
@@ -18,11 +18,11 @@ Director 完成组件阶段后调用 Renderer；Renderer 把场景交给 RenderF
 
 ## 最小观察宿主
 
-最小 Director 帧循环将当前 Scene 交给 Renderer/RenderFlow，页面显示场景名到达渲染入口；本课不需要绘制结果。
+页面以 `game.run()` 启动课程引擎模型，在 `onStart` 中挂入活动 Scene；每帧经过 Director 后，由 Renderer/RenderFlow 接收该 Scene。页面只显示帧数和场景名，不混入组件生命周期或资源加载演示。
 
 ## 模型化简化与 Creator Runtime 边界
 
-省略 Canvas/WebGL 设备、模型收集、剔除、批处理和 GPU 提交；课程只验证场景到达 RenderFlow，不等同于实际场景遍历或浏览器绘制。
+保留 `game.run → EVENT_ENGINE_INITED → Director.init → requestAnimationFrame → mainLoop → Renderer → RenderFlow` 的启动到渲染入口链。省略真实初始化中的内建资源/设备创建细节，以及 Canvas/WebGL 设备、模型收集、剔除、批处理和 GPU 提交；课程只验证场景到达 RenderFlow，不等同于实际场景遍历或浏览器绘制。组件调度和 AssetManager 加载不属于本课观察范围。
 
 ## 运行
 

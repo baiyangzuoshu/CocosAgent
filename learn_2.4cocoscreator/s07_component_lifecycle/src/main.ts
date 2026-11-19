@@ -37,6 +37,7 @@ scene.addChild(player);
 const render = (): void => {
   status.textContent = [
     `Player.activeInHierarchy: ${player.activeInHierarchy}`,
+    `component.node === player: ${component.node === player}`,
     `回调顺序: ${component.events.join(" → ")}`,
     "onLoad 只在首次激活时调用；停用再启用会重复 onEnable。",
   ].join("\n");

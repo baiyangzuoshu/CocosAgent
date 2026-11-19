@@ -1,6 +1,4 @@
 import cc from "./index.ts";
-import Prefab from "./cocos2d/core/assets/CCPrefab.ts";
-import { instantiate } from "./cocos2d/core/platform/instantiate.ts";
 
 const status = document.querySelector<HTMLPreElement>("#status");
 const toggle = document.querySelector<HTMLButtonElement>("#toggle-enemy");
@@ -35,13 +33,10 @@ class EnemyLogic extends ComponentClass {
 }
 
 const scene = new SceneClass("MainScene");
-const prefabData = new NodeClass("Enemy");
-prefabData.addComponent(EnemyLogic);
-const prefab = new Prefab(prefabData);
-const enemyA = instantiate(prefab);
-const enemyB = instantiate(prefab);
-const logicA = enemyA._components[0] as EnemyLogic;
-const logicB = enemyB._components[0] as EnemyLogic;
+const enemyA = new NodeClass("EnemyA");
+const enemyB = new NodeClass("EnemyB");
+const logicA = enemyA.addComponent(EnemyLogic);
+const logicB = enemyB.addComponent(EnemyLogic);
 let destroyRequested = false;
 let beforeFlushRecorded = false;
 let afterFlushRecorded = false;

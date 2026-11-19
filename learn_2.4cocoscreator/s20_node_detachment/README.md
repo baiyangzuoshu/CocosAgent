@@ -12,7 +12,7 @@
 | `Component.enabled=false` | true | true | false | false | `onDisable` |
 | `removeChild(A,false)` | true | false | true | false | `onDisable` |
 
-恢复对应条件会再次 `onEnable`。重复移除/重新挂载不会再次调用 `onLoad` 或 `start`。也可以组合操作，观察组件 enabled 为 false 时重新挂载仍不会调度。
+恢复对应条件会再次 `onEnable`。重复移除/重新挂载不会再次调用 `onLoad` 或 `start`。组合按钮会先禁用组件，再移出并重新挂载节点；此时节点回到活动层级，但组件仍禁用，需再次点击恢复组件。
 
 ## 本课必须保留的机制
 
@@ -20,7 +20,7 @@ Node 自身 `active` 与继承后的 `activeInHierarchy` 是不同状态；Compo
 
 ## 最小观察宿主
 
-一个活动 Scene、一个 Director 帧循环、EnemyA 与未操作的 EnemyB 对照，以及分别控制 Node.active、Component.enabled、`removeChild(false)`/重新挂载的三个按钮。页面显示状态、最近操作和生命周期日志，不渲染 Sprite。
+一个活动 Scene、一个 Director 帧循环、EnemyA 与未操作的 EnemyB 对照，以及控制 Node.active、Component.enabled、`removeChild(false)`/重新挂载和组合状态的四个按钮。页面显示状态、最近操作和生命周期日志，不渲染 Sprite。
 
 ## Creator 2.4.15 源码对照
 

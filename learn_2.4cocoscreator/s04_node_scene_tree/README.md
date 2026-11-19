@@ -26,11 +26,11 @@ Scene: MainScene
 
 ## 观察结果
 
-页面显示场景树以及 `Player` 的父节点名称。
+页面显示场景树、`Player` 的父节点名称，以及它在父节点 `children` 中的位置，便于同时核对父引用与子数组的一致性。
 
 ## 本课必须保留的机制
 
-保留 `Scene → Node → BaseNode` 的继承/组成职责，以及父节点与子节点关系可以递归遍历成树。
+保留 `Scene → Node → BaseNode` 的继承/组成职责；添加子节点时同时建立父引用和父节点子数组，且 `children` 提供只读视图。页面递归遍历树，并交叉验证 `Player.parent` 与 `Canvas.children`。
 
 ## 最小观察宿主
 

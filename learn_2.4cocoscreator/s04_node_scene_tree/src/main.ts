@@ -39,6 +39,7 @@ function appendTree(node: TreeNode, depth = 0): void {
 
 appendTree(scene);
 const parentName = player.getParent()?.name ?? "无";
+const playerIndex = canvas.children.indexOf(player);
 
 const game = cc.game;
 const director = cc.director;
@@ -52,6 +53,7 @@ const showResult = (deltaTime: number): void => {
   status.textContent = [
     `帧数: ${director.totalFrames} · deltaTime: ${deltaTime.toFixed(4)}s`,
     `Player.parent: ${parentName}`,
+    `Player 在 Canvas.children 中的索引: ${playerIndex}`,
     ...lines,
   ].join("\n");
 };

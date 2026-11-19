@@ -13,11 +13,6 @@ if (!NodeClass || !SceneClass) {
   throw new Error("cc.Node 或 cc.Scene 没有完成注册");
 }
 
-type TreeNode = {
-  name: string;
-  children: readonly TreeNode[];
-};
-
 const scene = new SceneClass("MainScene");
 const canvas = new NodeClass("Canvas");
 const player = new NodeClass("Player");
@@ -33,16 +28,6 @@ canvas.addChild(player);
 player.addChild(weapon);
 scene.addChild(world);
 
-const lines: string[] = [];
-function appendTree(node: TreeNode, depth = 0): void {
-  lines.push(`${"  ".repeat(depth)}${node.name}`);
-  for (const child of node.children) {
-    appendTree(child, depth + 1);
-  }
-}
-
-appendTree(scene);
-const parentName = player.getParent()?.name ?? "无";
 const playerLocal = player.getPosition();
 const playerWorld = player.getWorldPosition();
 const weaponWorld = weapon.getWorldPosition();
@@ -58,11 +43,9 @@ if (!game || !director || !Director) {
 const showResult = (deltaTime: number): void => {
   status.textContent = [
     `帧数: ${director.totalFrames} · deltaTime: ${deltaTime.toFixed(4)}s`,
-    `Player.parent: ${parentName}`,
     `Player.local: (${playerLocal.x}, ${playerLocal.y})`,
     `Player.world: (${playerWorld.x}, ${playerWorld.y})`,
     `Weapon.world: (${weaponWorld.x}, ${weaponWorld.y})`,
-    ...lines,
   ].join("\n");
 };
 

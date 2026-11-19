@@ -32,4 +32,4 @@ deno task build
 deno task serve
 ~~~
 
-打开 <http://localhost:8000>。页面显示首帧的 `start → update → lateUpdate`，之后每帧重复后两项。
+打开 <http://localhost:8000>。页面显示首帧的 `start → update → lateUpdate`，之后每帧重复后两项。组件的 `onLoad/onEnable` 只用于沿用真实激活路径；本课页面只显示调度回调，避免把生命周期当成第二个观察目标。

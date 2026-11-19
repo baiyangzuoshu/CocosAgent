@@ -21,9 +21,10 @@
         <button id="toggle-node-active" type="button" disabled>等待 start</button>
         <button id="toggle-component-enabled" type="button" disabled>等待 start</button>
         <button id="toggle-parent" type="button" disabled>等待 start</button>
+        <button id="toggle-combined" type="button" disabled>等待 start</button>
       </div>
       <pre id="status">等待场景启动……</pre>
-      <p>先逐个操作，再组合操作：例如组件禁用后移除并重新挂载，查看 enabledInHierarchy 是否会变成 true。</p>
+      <p>组合按钮先禁用组件，再移出并重新挂载节点；节点回到活动层级后，组件仍保持禁用。再次点击才恢复组件。</p>
     </main>
     <script type="module" src="./dist/src/main.js"></script>
   </body>

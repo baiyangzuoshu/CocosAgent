@@ -33,4 +33,4 @@ deno task build
 deno task serve
 ~~~
 
-打开 <http://localhost:8000>，页面会显示 `onLoad → onEnable → onDisable → onEnable`。代码是本课独立快照，不依赖完整 Creator 工程。
+打开 <http://localhost:8000>，页面会显示 `onLoad → onEnable → onDisable → onEnable`，并验证 `component.node === player`。这同时观察组件挂载结果和节点激活生命周期。代码是本课独立快照，不依赖完整 Creator 工程。
