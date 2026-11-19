@@ -28,3 +28,15 @@ deno task serve
 ~~~
 
 打开 <http://localhost:8000>。
+
+## 本课必须保留的机制
+
+- `fitWidth`/`fitHeight` 选择适配策略，并由设计分辨率计算可见区域与屏幕/设计坐标关系。
+
+## 最小观察宿主
+
+- 浏览器页面用 CSS 矩形显示屏幕、视口和设计区域，调整窗口观察变化。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 这是 CSS 坐标示意，不创建 Creator Canvas 或 WebGL；只讲 `SHOW_ALL` 路径，不覆盖其他适配策略。

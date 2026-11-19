@@ -12,9 +12,17 @@
 - `engine/2.4.15engine/cocos2d/core/node-activator.js:313-350`、`:353-365`：激活组件时启用 Scheduler，反激活时停用。
 - `engine/2.4.15engine/cocos2d/core/CCDirector.js:842-858`：Director 每帧调用 start、update、lateUpdate 阶段。
 
-## 简化
+## 本课必须保留的机制
 
-保留 `Director → ComponentScheduler → Component` 的职责和阶段顺序。省略 executionOrder、编辑器异常包装、帧内新增组件的延迟处理、通用 invoker 优化和系统调度。
+保留 `Director → ComponentScheduler → Component` 的调度链与 `start → update → lateUpdate` 阶段顺序；`start` 每组件只执行一次，停用组件后续帧不再更新。
+
+## 最小观察宿主
+
+活动 Scene、一个带三个生命周期方法的组件和最小帧循环；页面日志显示首帧及后续帧的调用顺序。
+
+## 模型化简化与 Creator Runtime 边界
+
+保留调度职责和阶段顺序。省略 executionOrder、编辑器异常包装、帧内新增组件的延迟处理、通用 invoker 优化和系统调度；示例不包含 Creator 全部组件注册、优先级与系统更新阶段。
 
 ## 运行
 

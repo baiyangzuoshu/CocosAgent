@@ -33,3 +33,15 @@ deno task serve
 ~~~
 
 打开 <http://localhost:8000>，点击“启动动作”。
+
+## 本课必须保留的机制
+
+- `Tween.start` 将动作交给 `ActionManager`，Director/Scheduler 的帧更新推进 `Action.step`，完成动作会被移除。
+
+## 最小观察宿主
+
+- 页面按钮启动三步动作探针，帧循环逐步输出接力链。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 保留 Creator 2.4.15 更新链职责；Tween 属性构造和目标插值被压缩，没有运行完整 Creator Runtime。

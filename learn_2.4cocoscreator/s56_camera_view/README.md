@@ -27,3 +27,15 @@ deno task serve
 ~~~
 
 打开 `http://127.0.0.1:8000/s56_camera_view/`，输出应按 `Main`、`Overlay` 顺序显示两个 View。
+
+## 本课必须保留的机制
+
+- CameraComponent 注册 RendererCamera，ForwardRenderer 将相机参数整理成按顺序处理的 View。
+
+## 最小观察宿主
+
+- 页面输出 Main 与 Overlay 两个视口的优先级和处理顺序。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 只显示 View 组织关系；不创建真实相机矩阵、WebGL context 或完整渲染目标。

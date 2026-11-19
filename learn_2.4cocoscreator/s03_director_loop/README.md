@@ -30,9 +30,17 @@ requestAnimationFrame
 - src/cocos2d/core/CCGame.ts → engine/2.4.15engine/cocos2d/core/CCGame.js:364-376, 387-400, 625-651：发送引擎初始化事件，准备完成后启动帧循环，再通知游戏初始化完成。
 - src/cocos2d/core/event/event-target.ts → engine/2.4.15engine/cocos2d/core/event/event-target.js:201-203：once 注册一次性事件监听。
 
-## 本课简化
+## 本课必须保留的机制
 
-Director 只保存初始化状态、帧数和 deltaTime；mainLoop 不运行组件调度器或渲染。CCGame 使用浏览器原生 requestAnimationFrame，不处理编辑器分支、30 FPS 降频和暂停恢复。
+保留 Director 在 `EVENT_ENGINE_INITED` 后初始化，以及 `CCGame` 通过 `requestAnimationFrame` 将时间戳交给 `director.mainLoop(now)` 的帧驱动关系。
+
+## 最小观察宿主
+
+浏览器宿主启动 `game.run()` 并持续调用 Director 主循环，页面只显示帧数/时间状态。
+
+## 模型化简化与 Creator Runtime 边界
+
+Director 只保存初始化状态、帧数和 deltaTime；`mainLoop` 不运行组件调度器或渲染。CCGame 使用浏览器原生 requestAnimationFrame，不处理编辑器分支、30 FPS 降频和暂停恢复。这里只观察调度入口，不是完整 Creator 帧管线。
 
 ## 运行
 

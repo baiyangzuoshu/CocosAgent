@@ -27,3 +27,15 @@ deno task serve
 ~~~
 
 打开 http://127.0.0.1:8000/。日志应显示两种变体分别链接、重复请求命中缓存，以及 Renderer 写入 u_tint。
+
+## 本课必须保留的机制
+
+- ProgramLib 根据宏定义生成并缓存程序；Renderer 为当前程序写入 Uniform。
+
+## 最小观察宿主
+
+- 浏览器 WebGL 编译/链接两个宏变体、重复请求并设置 `u_tint`。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 有真实 WebGL 1 编译/链接与 Uniform 调用，但没有顶点 Buffer、InputAssembler 或 draw；宏缓存键简化为可读字符串。

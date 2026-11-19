@@ -15,9 +15,17 @@ ColliderComponent → BoxColliderComponent → CannonBoxShape；缩放换算由�
 
 前置课程：[第 66 课](<../s66_rigidbody_sync/README.md>)。
 
-## 独立代码与简化
+## 本课必须保留的机制
 
-独立代码：[课程实现](<src/cocos2d/core/3d/physics/framework/PhysicsStudy.ts>）。浏览器示例按职责模拟本版流程，不加载 Cannon 或 Builtin 物理后端。
+保留盒形尺寸乘节点缩放后换算为 half extents，以及 PhysicsMaterial 的摩擦系数等属性随形状接入的规则；这是本课观察的源码职责边界。
+
+## 最小观察宿主
+
+`src/main.ts` 只调用一次 `runLesson()` 并显示日志；无需场景、按钮或渲染循环。
+
+## 模型化简化与 Creator Runtime 边界
+
+独立代码：[课程实现](<src/cocos2d/core/3d/physics/framework/PhysicsStudy.ts>)。示例仅计算数值，不创建 Creator ColliderComponent、后端 Shape 或实际 PhysicsMaterial 资源；未实现组件启用时的 `PhysicsSystem → IPhysicsWorld.addShape → CannonWorld` 调用阶段，也不加载 Cannon/Builtin。
 
 ## 运行
 

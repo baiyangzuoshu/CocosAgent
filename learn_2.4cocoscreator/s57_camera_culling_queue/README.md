@@ -27,3 +27,15 @@ deno task serve
 ~~~
 
 打开 `http://127.0.0.1:8000/s57_camera_culling_queue/`，Main 只看到场景模型，Overlay 只看到 HUD；透明模型按远到近输出。
+
+## 本课必须保留的机制
+
+- Camera 的 `cullingMask` 过滤 Model，stage 分类收集绘制项，透明阶段按相机深度排序。
+
+## 最小观察宿主
+
+- Main/Overlay 两个视图过滤场景模型与 HUD，并列出透明项的排序结果。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 掩码、深度和绘制队列用标量数据模拟；不提交 WebGL 命令，也不调用 GPU。

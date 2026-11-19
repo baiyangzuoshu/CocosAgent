@@ -4,10 +4,29 @@ import type { CocosNamespace } from "../../../index.ts";
 
 export default class Component extends CCObject {
   node!: BaseNode;
+  private _enabled = true;
   private _loaded = false;
 
   constructor() {
     super();
+  }
+
+  get enabled(): boolean {
+    return this._enabled;
+  }
+
+  set enabled(value: boolean) {
+    value = !!value;
+    if (this._enabled === value) return;
+    this._enabled = value;
+    if (this.node?.activeInHierarchy) {
+      if (value) host.cc?.director?._compScheduler.enableComp(this);
+      else host.cc?.director?._compScheduler.disableComp(this);
+    }
+  }
+
+  get enabledInHierarchy(): boolean {
+    return this._enabled && !!this.node?.activeInHierarchy;
   }
 
   _instantiate(node: BaseNode): Component {
@@ -34,11 +53,11 @@ export default class Component extends CCObject {
       this._loaded = true;
       this.onLoad();
     }
-    host.cc?.director?._compScheduler.enableComp(this);
+    if (this._enabled) host.cc?.director?._compScheduler.enableComp(this);
   }
 
   _deactivate(): void {
-    host.cc?.director?._compScheduler.disableComp(this);
+    if (this._enabled) host.cc?.director?._compScheduler.disableComp(this);
   }
 }
 

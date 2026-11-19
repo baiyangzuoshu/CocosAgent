@@ -29,3 +29,15 @@ deno task serve
 ~~~
 
 打开 <http://localhost:8000>。
+
+## 本课必须保留的机制
+
+- 修饰器把归一化进度映射为 easing、重复局部进度或反向时间进度。
+
+## 最小观察宿主
+
+- 页面进度条随动作推进显示 Linear、EaseIn、Repeat 和 Reverse 的差异。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 仅演示标量进度变换；未实现完整 Tween 属性复制、引用计数、停止与组合更新路径。

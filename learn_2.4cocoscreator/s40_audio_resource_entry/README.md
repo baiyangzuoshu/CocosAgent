@@ -28,3 +28,15 @@ deno task serve
 ~~~
 
 打开 http://127.0.0.1:8000，点击“播放 AudioClip”。
+
+## 本课必须保留的机制
+
+- AudioClip 的 `nativeUrl` 交给 `audioEngine`，浏览器端由 HTMLAudioElement 发起实际播放。
+
+## 最小观察宿主
+
+- 用户点击按钮播放课程内的短 WAV，并观察播放调用链。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 浏览器音频是真实输出，但 HTMLAudioElement 替代引擎后端；未实现资源管理、解码模式、实例池或 native 平台。

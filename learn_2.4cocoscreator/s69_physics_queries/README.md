@@ -14,9 +14,17 @@ Physics3DManager.raycastClosest → IPhysicsWorld → CannonWorld → PhysicsRay
 
 前置课程：[第 68 课](<../s68_contact_filter/README.md>)。
 
-## 独立代码与简化
+## 本课必须保留的机制
 
-独立代码：[课程实现](<src/cocos2d/core/3d/physics/framework/PhysicsStudy.ts>）。浏览器示例按职责模拟本版流程，不加载 Cannon 或 Builtin 物理后端。
+保留最大距离和 trigger 查询选项对候选项的筛选、按距离返回最近命中，以及结果携带对象/距离/位置/法线的规则。
+
+## 最小观察宿主
+
+`src/main.ts` 只调用一次 `runLesson()` 并显示最近命中日志；无需场景、按钮或帧循环。
+
+## 模型化简化与 Creator Runtime 边界
+
+独立代码：[课程实现](<src/cocos2d/core/3d/physics/framework/PhysicsStudy.ts>)。候选项只是带标量距离的数组，示例排序后构造结果，不做射线几何求交或调用物理后端；省略 `Physics3DManager.raycastClosest → IPhysicsWorld.raycast → backend` 的 Runtime 查询阶段，也不加载 Cannon/Builtin。
 
 ## 运行
 

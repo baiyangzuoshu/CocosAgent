@@ -26,6 +26,18 @@
 
 版本要点：**Creator 2.4.15** 的课程目标是浏览器 WebGL 1。不把另一版的 Effect 语法、Shader API 或设备路径套进来。
 
+## 本课必须保留的机制
+
+保留 Pass 保存 Uniform 参数、同一 WebGLProgram 可对不同绘制分别设置 `u_tint`，Device 在 draw 时把参数写入当前程序。
+
+## 最小观察宿主
+
+浏览器 WebGL 1 使用两个 quad 和一个共享程序，分别提交蓝青色与橙色参数，观察同源 Shader 的不同输出。
+
+## 模型化简化与 Creator Runtime 边界
+
+课程 Pass/Device 是独立最小实现，只展示参数存储→绘制提交→`uniform4fv`；不实现 Creator 的完整材质序列化、Pass 状态切换、Renderer 排序与 GFX 状态管理。
+
 ## 运行
 
 ~~~sh

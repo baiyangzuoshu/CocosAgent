@@ -27,3 +27,15 @@ deno task serve
 ~~~
 
 打开 http://127.0.0.1:8000，比较 Closest/All、矩形查询结果和调试绘制调用。
+
+## 本课必须保留的机制
+
+- RayCast 与 AABB 查询由回调收集结果；Closest/All 策略和 debugDrawFlags 决定返回与绘制调用路径。
+
+## 最小观察宿主
+
+- 页面中的预设射线命中、矩形区域和日志用于比较查询结果及调试绘制链。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 命中结果和区域是固定数据；不运行 Box2D 查询，也不创建 Graphics 绘制。

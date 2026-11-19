@@ -14,9 +14,17 @@ AnimationState 处理时间事件和完成回调。
 
 前置主题：[动作与时间推进](../s34_action_modifiers/README.md)。
 
-## 独立代码与简化
+## 本课必须保留的机制
 
-[AnimationStudy.ts](<src/cocos2d/animation/AnimationStudy.ts>) 与 [入口](<src/main.ts>)。浏览器示例运行简化播放器，不读取 Creator 编辑器序列化的动画资源。
+保留事件时间窗口 `(previous, current]`：前一采样点之后、当前采样点及之前的事件各触发一次，并更新前一时间。
+
+## 最小观察宿主
+
+`src/main.ts` 一次调用 `runLesson()`，以固定 `0.2s→0.8s` 时间窗打印命中的事件；不需要场景或帧循环。
+
+## 模型化简化与 Creator Runtime 边界
+
+[AnimationStudy.ts](<src/cocos2d/animation/AnimationStudy.ts>) 只筛选静态事件数组，不维护动画轨道、循环边界或回调监听；未接入 Runtime `AnimationState` 在时间推进中派发事件并由 `CCAnimation`/游戏逻辑接收的阶段。
 
 ## 运行
 

@@ -26,6 +26,18 @@
 
 版本要点：**Creator 2.4.15** 的课程目标是浏览器 WebGL 1。不把另一版的 Effect 语法、Shader API 或设备路径套进来。
 
+## 本课必须保留的机制
+
+保留位置/UV/顶点色属性输入、`u_mvp` 变换至裁剪空间，以及顶点 Shader 把 UV/颜色经 varying 传递；本课片元只显示插值颜色，不采样 UV。
+
+## 最小观察宿主
+
+浏览器 WebGL 1 绘制一个三顶点渐变三角形；读取指定顶点经 MVP 后的坐标，并对照画面颜色插值。
+
+## 模型化简化与 Creator Runtime 边界
+
+使用独立 Shader/Device 和固定输入，不运行 Creator 场景、Sprite assembler、ProgramLib 全部宏变体或 GFX 状态；这是实际 WebGL 绘制的教学切片，不是 Creator Renderer。
+
 ## 运行
 
 ~~~sh

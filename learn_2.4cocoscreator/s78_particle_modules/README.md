@@ -14,9 +14,17 @@ ForceOvertime 与 ColorOvertime 等模块按系统归一化时间修改粒子。
 
 前置课程：[第 49 课：粒子绘制与结束](<../s49_particle_render_finish/README.md>)。
 
-## 独立代码与简化
+## 本课必须保留的机制
 
-[`src/cocos2d/core/3d/particle/ParticleStudy.ts`](<src/cocos2d/core/3d/particle/ParticleStudy.ts>) 与 [`src/main.ts`](<src/main.ts>)。浏览器示例只模拟粒子计数、更新与 Renderer 数据，不创建引擎 GPU 资源。
+保留归一化寿命 `age/lifetime` 作为模块输入，以及力、尺寸、颜色随粒子时间更新的职责区别。
+
+## 最小观察宿主
+
+[`src/main.ts`](<src/main.ts>) 一次调用 `runLesson()`，用单个粒子和固定 `dt` 打印速度、尺寸与颜色；无需场景或帧循环。
+
+## 模型化简化与 Creator Runtime 边界
+
+[`ParticleStudy.ts`](<src/cocos2d/core/3d/particle/ParticleStudy.ts>) 只计算一次标量例子，没有实际曲线、模块实例或 ParticleSystem3D 调度；未执行 Runtime 每帧按模块链更新粒子属性的阶段，也不创建 GPU 资源。
 
 ## 运行
 

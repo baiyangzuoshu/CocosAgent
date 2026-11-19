@@ -29,3 +29,15 @@ deno task serve
 ~~~
 
 打开 http://127.0.0.1:8000/，观察三角形子网格写入 MeshBuffer，线图元子网格 flush 后走 `_flushIA()`。
+
+## 本课必须保留的机制
+
+- MeshRendererAssembler 遍历子网格；兼容三角形批量写入 MeshBuffer，不兼容图元先 flush 再直接提交 InputAssembler。
+
+## 最小观察宿主
+
+- 页面以两个子网格日志展示合批与 `_flushIA()` 两条路径。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 保留 Mesh/MeshRenderer/assembler 职责，但 Renderer 只记日志，不创建 WebGL Buffer 或执行 draw。

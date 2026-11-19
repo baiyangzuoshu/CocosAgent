@@ -29,3 +29,15 @@ deno task serve
 ~~~
 
 打开 http://127.0.0.1:8000/。把 Sprite 尺寸改为 80 × 40 后，RenderFlow 只在顶点脏时让 assembler 重算数据。
+
+## 本课必须保留的机制
+
+- Sprite 尺寸变化标脏；RenderFlow 在渲染更新阶段调用 assembler 更新 RenderData。
+
+## 最小观察宿主
+
+- 页面尺寸控件改变 Sprite 尺寸，显示脏标记和重算后的固定顶点/索引数据。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 保留 RenderComponent/Assembler/RenderFlow/RenderData 职责但不创建 WebGL Buffer，不执行 GPU 绘制。

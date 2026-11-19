@@ -3,15 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>learn_2.4cocoscreator · 第 15 课</title>
-    <style>body{font:16px sans-serif;background:#171a24;color:#eee}main{max-width:720px;margin:2rem auto}canvas{touch-action:none;display:block;outline:1px solid #67718a;margin:1rem 0}</style>
+    <title>第 15 课：输入命中与目标回调</title>
+    <style>
+      :root { color-scheme: dark; font: 16px/1.55 system-ui, sans-serif; }
+      body { margin: 0; background: #171a24; color: #eee; }
+      main { max-width: 760px; margin: 2rem auto; padding: 0 1rem; }
+      .stage { position: relative; width: 320px; height: 200px; margin: 1rem 0; }
+      canvas { position: absolute; inset: 0; touch-action: none; outline: 1px solid #67718a; background: #263448; }
+      #hitbox { position: absolute; left: 132px; top: 72px; width: 56px; height: 56px; box-sizing: border-box; border: 2px solid #fde68a; display: grid; place-items: center; color: #fde68a; font: 11px/1.2 system-ui, sans-serif; pointer-events: none; }
+      pre { white-space: pre-wrap; background: #222a39; padding: 1rem; border-radius: .5rem; }
+      code { color: #fde68a; }
+    </style>
   </head>
   <body>
     <main>
-      <h1>learn_2.4cocoscreator</h1>
-      <h2>第 15 课：节点命中与事件回调</h2>
-      <canvas id="game" width="320" height="200"></canvas>
-      <pre id="status">正在载入 TypeScript……</pre>
+      <h1>第 15 课：输入命中与目标回调</h1>
+      <p>先在画布上点一下，再沿着 <code>输入点 → 中心原点 → AABB → 回调</code> 读状态。黄色方框是 56×56 CSS 命中范围示意，不是 Sprite。</p>
+      <div class="stage"><canvas id="game" width="320" height="200" aria-label="输入命中画布"></canvas><div id="hitbox">HitTarget</div></div>
+      <pre id="status">正在载入课程代码……</pre>
+      <p>点方框中心可命中；点方框外应显示“未命中”，且不会执行目标回调。</p>
     </main>
     <script type="module" src="./dist/src/main.js"></script>
   </body>

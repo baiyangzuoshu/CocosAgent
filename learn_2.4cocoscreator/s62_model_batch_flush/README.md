@@ -26,3 +26,15 @@ deno task serve
 ~~~
 
 打开 http://127.0.0.1:8000/。日志会显示相同材质先共用索引范围，再分别因缓冲容量、材质哈希和裁剪掩码变化结束批次。
+
+## 本课必须保留的机制
+
+- ModelBatcher 累积索引范围；材质哈希、cullingMask 或 MeshBuffer 容量变化时 flush 并提交 Model/InputAssembler。
+
+## 最小观察宿主
+
+- 页面日志比较同材质合批与三种 flush 边界。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 容量阈值缩小为 8 以便观察；只记录批次，不上传真实 GPU Buffer 或绘制。

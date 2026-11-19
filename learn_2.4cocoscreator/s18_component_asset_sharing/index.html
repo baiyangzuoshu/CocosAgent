@@ -3,16 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>learn_2.4cocoscreator · 第 16 课</title>
-    <style>body{font:16px sans-serif;background:#171a24;color:#eee}main{max-width:720px;margin:2rem auto}canvas{touch-action:none;display:block;outline:1px solid #67718a;margin:1rem 0}</style>
+    <title>第 18 课：组件副本与共享资源引用</title>
+    <style>
+      :root { color-scheme: dark; font: 16px/1.55 system-ui, sans-serif; }
+      body { margin: 0; background: #171a24; color: #eee; }
+      main { max-width: 820px; margin: 2rem auto; padding: 0 1rem; }
+      .columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .75rem; }
+      section { padding: .8rem 1rem; border: 1px solid #475569; border-radius: .5rem; background: #222a39; }
+      pre { white-space: pre-wrap; background: #111620; padding: 1rem; border-radius: .5rem; }
+    </style>
   </head>
   <body>
     <main>
-      <h1>learn_2.4cocoscreator</h1>
-      <h2>第 16 课：节点事件传播</h2>
-      <label><input id="stop" type="checkbox" /> 在 Branch 捕获阶段停止传播</label>
-      <canvas id="game" width="320" height="200"></canvas>
-      <pre id="status">正在载入 TypeScript……</pre>
+      <h1>第 18 课：组件副本与共享资源引用</h1>
+      <div class="columns">
+        <section><strong>每个实例私有</strong><br />Node · EnemyLogic · Sprite</section>
+        <section><strong>两个 Sprite 共同引用</strong><br />SpriteFrame · Texture2D</section>
+      </div>
+      <p>页面只打印对象身份与 UV。Texture2D 是尺寸桩，不是图片或 GPU 资源。</p>
+      <pre id="status">正在实例化对象……</pre>
     </main>
     <script type="module" src="./dist/src/main.js"></script>
   </body>

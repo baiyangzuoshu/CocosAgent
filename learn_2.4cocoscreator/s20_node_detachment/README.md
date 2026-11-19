@@ -1,27 +1,41 @@
-# 第 20 课：节点移除与重新挂载
+# 第 20 课：Node 与 Component 的启停
 
-**目标：** 观察实例离开活动场景时的停用，以及重新挂载时的启用。
+**问题：** Node.active、父节点挂载和 Component.enabled 是否是同一个开关？
 
-## 本课增量
+## 观察步骤
 
-第 19 课的 EnemyA 已执行 `onLoad → onEnable → start` 后，点击“移除 EnemyA”：组件记录 `onDisable`。再点击“重新挂载 EnemyA”：记录新的 `onEnable`，已执行过的 `onLoad` 和 `start` 不重复。EnemyB 保持在场景中。
+等 EnemyA 首次 `update` 后，分别切换三种状态：
 
-代码入口：[main.ts](src/main.ts)、[base-node.ts](src/cocos2d/core/utils/base-node.ts)、[node-activator.ts](src/cocos2d/core/node-activator.ts)。
+| 操作 | Node.active | activeInHierarchy | Component.enabled | enabledInHierarchy | 典型回调变化 |
+| --- | --- | --- | --- | --- | --- |
+| `Node.active=false` | false | false | true | false | `onDisable` |
+| `Component.enabled=false` | true | true | false | false | `onDisable` |
+| `removeChild(A,false)` | true | false | true | false | `onDisable` |
 
-## 源码位置
+恢复对应条件会再次 `onEnable`。重复移除/重新挂载不会再次调用 `onLoad` 或 `start`。也可以组合操作，观察组件 enabled 为 false 时重新挂载仍不会调度。
 
-- [base-node.js:709](../../engine/2.4.15engine/cocos2d/core/utils/base-node.js#L709)：`removeChild` 把子节点的父节点设为空；[base-node.js:1172](../../engine/2.4.15engine/cocos2d/core/utils/base-node.js#L1172) 按新父节点状态决定激活或停用。
-- [node-activator.js:203](../../engine/2.4.15engine/cocos2d/core/node-activator.js#L203)：递归停用子树中的组件。
-- [component-scheduler.js:424](../../engine/2.4.15engine/cocos2d/core/component-scheduler.js#L424)：派发 `onDisable` 并取消调度；[node-activator.js:329](../../engine/2.4.15engine/cocos2d/core/node-activator.js#L329) 保存首次加载标记。
+## 本课必须保留的机制
 
-## 简化与运行
+Node 自身 `active` 与继承后的 `activeInHierarchy` 是不同状态；Component 自身 `enabled` 与派生的 `enabledInHierarchy` 也不同。节点变为非活动层级或组件自身被禁用时，调度器调用 `onDisable`；恢复且两个条件都满足才 `onEnable`。`onLoad` 与 `start` 对该实例各执行一次。
 
-只实现 `removeChild(child, false)`，不实现 `cleanup=true` 的动作和事件清理，也不涉及销毁。按钮等第一次 `start` 后才可用。
+## 最小观察宿主
+
+一个活动 Scene、一个 Director 帧循环、EnemyA 与未操作的 EnemyB 对照，以及分别控制 Node.active、Component.enabled、`removeChild(false)`/重新挂载的三个按钮。页面显示状态、最近操作和生命周期日志，不渲染 Sprite。
+
+## Creator 2.4.15 源码对照
+
+- [base-node.js](../../engine/2.4.15engine/cocos2d/core/utils/base-node.js#L709-L710)：`removeChild` 改变父节点；[父节点变化后的激活判断](../../engine/2.4.15engine/cocos2d/core/utils/base-node.js#L1172-L1175)。
+- [node-activator.js](../../engine/2.4.15engine/cocos2d/core/node-activator.js#L203-L240)：停用节点树中的组件；[组件激活与加载标记](../../engine/2.4.15engine/cocos2d/core/node-activator.js#L313-L350)。
+- [CCComponent.js](../../engine/2.4.15engine/cocos2d/core/components/CCComponent.js#L149-L205)：自身 enabled 与 enabledInHierarchy；[component-scheduler.js](../../engine/2.4.15engine/cocos2d/core/component-scheduler.js#L404-L450)：调度器启停与回调。
+
+## 模型化简化与 Creator Runtime 边界
+
+只演示单个组件、一个场景节点及 `removeChild(child, false)`；不覆盖 cleanup=true 对动作/事件的清理、嵌套节点树、销毁、编辑器与完整 Creator Runtime。页面按钮是观察宿主。组件只有在节点处于活动层级且自身 enabled 时才进入本课调度模型。
+
+## 运行
 
 ~~~sh
 deno task check
 deno task build
 deno task serve
 ~~~
-
-打开 <http://localhost:8000>，依次点击移除和重新挂载，观察 EnemyA 的回调记录。

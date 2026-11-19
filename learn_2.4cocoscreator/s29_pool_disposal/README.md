@@ -12,9 +12,17 @@
 
 - 引擎 [clear()](<../../engine/2.4.15engine/extensions/ccpool/CCNodePool.js#L100>) 不表示关闭；本课在 [CCNodePool.js](<src/extensions/ccpool/CCNodePool.ts>) 增加 `dispose/isDisposed` 与接收结果。
 
-## 简化与运行
+## 本课必须保留的机制
 
-本目录是独立代码快照；引擎没有提供的策略由课程应用层实现。
+保留一次性 `dispose()` 清空池并进入终态；终态下 `put()` 被拒绝、`get()` 返回空，重复关闭不改变状态。
+
+## 最小观察宿主
+
+用一个池、一个待销毁节点、关闭按钮和状态日志观察清理前后及后续调用结果；Director 帧循环负责处理销毁队列。
+
+## 模型化简化与 Creator Runtime 边界
+
+`dispose/isDisposed` 是课程应用层扩展，不是引擎 NodePool 原生 API；本课只模型化关闭后的终态和拒绝策略，不包含引擎的完整资源析构。
 
 ~~~sh
 deno task check

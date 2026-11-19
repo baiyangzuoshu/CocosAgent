@@ -14,9 +14,17 @@ PhysicsSelector 选择 Builtin/Cannon；2.4 framework 没有引擎级 3D Constra
 
 前置课程：[第 69 课](<../s69_physics_queries/README.md>)。
 
-## 独立代码与简化
+## 本课必须保留的机制
 
-独立代码：[课程实现](<src/cocos2d/core/3d/physics/framework/PhysicsStudy.ts>). 本地快照没有 3D Constraint 组件；示例只列出 Physics3DManager 的后端选择和已存在接口，明确记录该功能边界。
+必须保留 Creator 2.4.15 的能力边界：PhysicsSelector 可选择 Builtin/Cannon，但本版 framework 没有引擎级 3D Constraint 组件；不能把其他版本或后端能力说成本版 Runtime API。
+
+## 最小观察宿主
+
+`src/main.ts` 只调用一次 `runLesson()` 并输出能力清单；无需场景、按钮或帧循环。
+
+## 模型化简化与 Creator Runtime 边界
+
+独立代码：[课程实现](<src/cocos2d/core/3d/physics/framework/PhysicsStudy.ts>)。`capabilities` 只是静态能力记录，不模拟约束，也不调用 `Director → Physics3DManager` 或任何物理后端；示例刻意不造出不存在的 Constraint API。
 
 ## 运行
 

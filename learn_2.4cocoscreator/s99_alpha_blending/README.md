@@ -26,6 +26,18 @@
 
 版本要点：**Creator 2.4.15** 的课程目标是浏览器 WebGL 1。不把另一版的 Effect 语法、Shader API 或设备路径套进来。
 
+## 本课必须保留的机制
+
+保留片元输出先进行 RGB 预乘，再使用 `ONE / ONE_MINUS_SRC_ALPHA` 混合；最终屏幕颜色由 Shader 输出与 Blend 状态共同决定。
+
+## 最小观察宿主
+
+浏览器 WebGL 1 同画布绘制两个相交半透明矩形，比较单色区和重叠区，并核对设置的 BlendFunc。
+
+## 模型化简化与 Creator Runtime 边界
+
+只实现本例的预乘颜色与单一 BlendFunc，不覆盖 Creator 完整 Pass/Blend 状态、颜色空间、透明排序或渲染目标；这是实际 WebGL 混合演示，不是 Creator 渲染实例。
+
 ## 运行
 
 ~~~sh

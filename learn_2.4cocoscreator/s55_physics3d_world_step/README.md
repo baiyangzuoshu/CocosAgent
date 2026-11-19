@@ -31,3 +31,15 @@ deno task serve
 ~~~
 
 页面显示每帧是否启用物理、固定步长及 World 调用顺序。
+
+## 本课必须保留的机制
+
+- Director 创建并调度 Physics3DManager；管理器把默认固定步长传给 PhysicsWorld 推进。
+
+## 最小观察宿主
+
+- 页面切换物理启用状态并记录每帧 `update` 与 World `step` 调用顺序。
+
+## 模型化简化与 Creator Runtime 边界
+
+- CannonWorld 只记录调用，不运行 Cannon/Builtin 后端、刚体、碰撞或求解。

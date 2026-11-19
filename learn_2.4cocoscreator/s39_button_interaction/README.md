@@ -30,3 +30,15 @@ deno task serve
 ~~~
 
 打开 <http://localhost:8000>。
+
+## 本课必须保留的机制
+
+- Button 接收已命中节点的触摸状态；结束时派发 `clickEvents`，取消时只复位，不触发点击。
+
+## 最小观察宿主
+
+- HTML 按钮的 Pointer Events 驱动状态和回调日志。
+
+## 模型化简化与 Creator Runtime 边界
+
+- Pointer Events 只模拟已命中节点事件；没有 Creator InputManager、完整事件传播、场景命中或引擎渲染。

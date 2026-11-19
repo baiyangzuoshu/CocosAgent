@@ -28,3 +28,15 @@ deno task serve
 ~~~
 
 打开 http://127.0.0.1:8000，观察 `ground` 与 `crate` 各自的 body type，以及 Collider 如何把形状和材质交给 body。
+
+## 本课必须保留的机制
+
+- Node 提供 RigidBody 的世界位置；同节点 Collider 把形状与材质转换成 fixture 并挂到 body。
+
+## 最小观察宿主
+
+- `ground` 与 `crate` 的初始化日志显示 body type 及 fixture 创建关系。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 物理后端被替身打印取代；没有重力、碰撞或 Box2D fixture 求解。

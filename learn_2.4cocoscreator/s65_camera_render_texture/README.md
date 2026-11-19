@@ -27,3 +27,15 @@ deno task serve
 ~~~
 
 打开 http://127.0.0.1:8000/，观察相机目标从屏幕切到 FrameBuffer，完成渲染后纹理交给 Sprite 采样。
+
+## 本课必须保留的机制
+
+- RenderTexture 提供颜色 Texture/FrameBuffer；Camera 把目标带入 View，渲染后 Sprite 采样该纹理。
+
+## 最小观察宿主
+
+- 页面按顺序显示相机目标切换、View 绘制与 Sprite 采样关系。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 仅呈现一次输出链路；不创建真实 GPU Texture、FrameBuffer 或完整相机渲染流程。

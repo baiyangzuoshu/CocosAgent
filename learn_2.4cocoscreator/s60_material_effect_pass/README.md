@@ -27,3 +27,15 @@ deno task serve
 ~~~
 
 打开 `http://127.0.0.1:8000/`。日志显示 EffectAsset 到 Pass 的对象关系，以及 WebGL 收到的混合状态。
+
+## 本课必须保留的机制
+
+- EffectAsset 解析 Technique/Pass；Material 选择 Pass，并把混合状态交给 WebGL 状态层。
+
+## 最小观察宿主
+
+- 页面显示对象关系和 WebGL blend-state 调用日志。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 覆盖材质/Pass 状态交接，不编译 Shader、不建立顶点输入、不发出绘制，也不是完整 GFX 后端。

@@ -12,9 +12,17 @@ Director 完成组件阶段后调用 Renderer；Renderer 把场景交给 RenderF
 - `engine/2.4.15engine/cocos2d/core/renderer/index.js:175-180`：Renderer 将活动场景交给 `_flow.render`。
 - `engine/2.4.15engine/cocos2d/core/renderer/render-flow.js:235-245`：RenderFlow 开始批处理、访问根节点并交给 ForwardRenderer。
 
-## 简化
+## 本课必须保留的机制
 
-保留 `Director → Renderer → RenderFlow` 调用顺序。省略 Canvas/WebGL 设备、模型收集、剔除、批处理和 GPU 提交；本课只观察场景到达 RenderFlow。
+保留每帧更新后 `Director → Renderer → RenderFlow` 的调用顺序，以及活动 Scene 作为 RenderFlow 输入的职责。
+
+## 最小观察宿主
+
+最小 Director 帧循环将当前 Scene 交给 Renderer/RenderFlow，页面显示场景名到达渲染入口；本课不需要绘制结果。
+
+## 模型化简化与 Creator Runtime 边界
+
+省略 Canvas/WebGL 设备、模型收集、剔除、批处理和 GPU 提交；课程只验证场景到达 RenderFlow，不等同于实际场景遍历或浏览器绘制。
 
 ## 运行
 

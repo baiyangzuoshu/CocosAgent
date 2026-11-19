@@ -71,6 +71,18 @@ load:    preprocess → load
 
 真实 Runtime 的文件缓存按 RequestItem.id（UUID 加 `@import`/`@native` 类型）组织；PackManager 会把一个下载到的 pack 拆成多个资源条目。本课为了讲清“下载文件”和“创建 Asset”的区别，按 URL 统计下载文件。两种缓存的键不同，不要把课程 Map 当成 Runtime 缓存实现。
 
+## 本课必须保留的机制
+
+保留 `preload: preprocess → fetch` 与 `load: preprocess → load/parse → dependencies → deserialize/cache` 的分界：文件准备完成不等于 Asset 已创建；SceneAsset 返回但不进入通用 Asset 缓存，普通 SpriteFrame/Texture2D 可复用。
+
+## 最小观察宿主
+
+以课程 AssetRecord/文件 Map 驱动页面连续执行 preload、load 和重复 SpriteFrame 请求；观察下载文件数、Asset 数、通用缓存数与对象身份。
+
+## 模型化简化与 Creator Runtime 边界
+
+pack/Asset 数据已简化为课堂 Map，课程按 URL 统计文件；Runtime 用 RequestItem.id 管文件缓存并由 utilities.js 判别 SceneAsset。课程不实现真实网络、二进制 pack、完整并发/错误重试和所有缓存策略，不能把示例 Map 当成 Creator AssetManager。
+
 ## 学完后自查
 
 为什么 preload 结束时没有 SceneAsset？为什么两个 import UUID 只产生一个文件 URL？用自己的话说出 `preprocess → fetch → parse/dependencies → deserialize/cache` 各负责哪一步。下一课单独手算 UUID 到 URL。

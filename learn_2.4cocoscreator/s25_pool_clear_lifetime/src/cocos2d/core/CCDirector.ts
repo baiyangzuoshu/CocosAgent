@@ -1,15 +1,15 @@
 import EventTarget from "./event/event-target.ts";
 import NodeActivator from "./node-activator.ts";
 import ComponentScheduler from "./component-scheduler.ts";
-import { renderer } from "./renderer/index.ts";
 import game from "./CCGame.ts";
 import CCObject from "./platform/CCObject.ts";
 import type Scene from "./CCScene.ts";
 import type { CocosNamespace } from "../../index.ts";
 
+/** Minimal frame host for object-pool lifecycle lessons; no renderer is loaded. */
 export default class Director extends EventTarget {
   static readonly EVENT_AFTER_UPDATE = "director_after_update";
-  static readonly EVENT_AFTER_DRAW = "director_after_draw";
+  static readonly EVENT_AFTER_FRAME = "director_after_frame";
 
   _initialized = false;
   _totalFrames = 0;
@@ -33,10 +33,7 @@ export default class Director extends EventTarget {
   }
 
   mainLoop(now: number): void {
-    if (!this._initialized) {
-      return;
-    }
-
+    if (!this._initialized) return;
     this._deltaTime = now > this._lastUpdate ? (now - this._lastUpdate) / 1000 : 0;
     this._lastUpdate = now;
     this._totalFrames++;
@@ -45,25 +42,12 @@ export default class Director extends EventTarget {
     this._compScheduler.lateUpdatePhase(this._deltaTime);
     this.emit(Director.EVENT_AFTER_UPDATE, this._deltaTime);
     CCObject._deferredDestroy();
-    renderer.render(this._scene, this._deltaTime);
-    this.emit(Director.EVENT_AFTER_DRAW, this._deltaTime);
+    this.emit(Director.EVENT_AFTER_FRAME, this._deltaTime);
   }
 
   runSceneImmediate(scene: Scene): void {
     this._scene = scene;
     scene._activate();
-  }
-
-  get lastRenderedSceneName(): string {
-    return renderer.lastRenderedSceneName;
-  }
-
-  get transformHistory(): readonly string[] {
-    return renderer.transformHistory;
-  }
-
-  get drawCallCount(): number {
-    return renderer.drawCallCount;
   }
 
   get totalFrames(): number {
@@ -76,10 +60,6 @@ interface CocosWindow extends Window {
 }
 
 const _global = window as CocosWindow;
-
-if (!_global.cc) {
-  throw new Error("cc must be initialized before CCDirector");
-}
-
+if (!_global.cc) throw new Error("cc must be initialized before CCDirector");
 _global.cc.Director = Director;
 _global.cc.director = new Director();

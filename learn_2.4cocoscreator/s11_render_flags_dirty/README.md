@@ -12,9 +12,17 @@
 - `engine/2.4.15engine/cocos2d/core/renderer/render-flow.js:35-49`：重算节点世界矩阵并清除脏位。
 - `engine/2.4.15engine/cocos2d/core/renderer/render-flow.js:85-110`：遍历子节点并传递祖先的变换脏位。
 
-## 简化
+## 本课必须保留的机制
 
-只实现平移和一个世界变换位；省略旋转、缩放、矩阵乘法、透明度、颜色和渲染组件数据更新。
+保留 `setPosition` 置 `WORLD_TRANSFORM` 脏位、RenderFlow 消费并清位，以及父节点变换脏状态传给受影响子节点。
+
+## 最小观察宿主
+
+场景树、Director/RenderFlow 观察循环和状态日志；按帧移动 Branch 并读取父子世界位置及是否重算。
+
+## 模型化简化与 Creator Runtime 边界
+
+只实现平移和一个世界变换位；省略旋转、缩放、矩阵乘法、透明度、颜色和渲染组件数据更新。本课记录渲染流程中的变换更新规则，不完整实现 Creator RenderFlow 或 GPU 绘制。
 
 ## 运行
 

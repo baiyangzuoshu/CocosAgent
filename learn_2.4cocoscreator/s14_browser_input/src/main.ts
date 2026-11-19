@@ -1,108 +1,38 @@
 import { CCInputManager } from "./cocos2d/core/platform/CCInputManager.ts";
 import type { InputPoint } from "./cocos2d/core/platform/input-point.ts";
-import cc from "./index.ts";
-import { CCAssetManager } from "./cocos2d/core/asset-manager/CCAssetManager.ts";
-import Sprite from "./cocos2d/core/components/CCSprite.ts";
-import SpriteFrame from "./cocos2d/core/assets/CCSpriteFrame.ts";
-import Texture2D from "./cocos2d/core/assets/CCTexture2D.ts";
 
 const status = document.querySelector<HTMLPreElement>("#status");
-if (!status) throw new Error("找不到页面状态节点 #status");
+const canvas = document.querySelector<HTMLCanvasElement>("#game");
+if (!status) throw new Error("找不到状态节点 #status");
+if (!canvas) throw new Error("找不到画布 #game");
 
-const NodeClass = cc.Node;
-const SceneClass = cc.Scene;
-const ComponentClass = cc.Component;
-const game = cc.game;
-const director = cc.director;
-const DirectorClass = cc.Director;
-if (!NodeClass || !SceneClass || !ComponentClass || !game || !director || !DirectorClass) {
-  throw new Error("引擎模块尚未完成注册");
-}
+const format = (value: number): string => value.toFixed(1);
 
-const scene = new SceneClass("MainScene");
-const branch = new NodeClass("Branch");
-branch.setPosition(10, 0);
-scene.addChild(branch);
+const showPoint = (point: InputPoint): void => {
+  const scale = `x: ${point.backingWidth} / ${format(point.rectWidth)} = ${format(point.scaleX)}；` +
+    `y: ${point.backingHeight} / ${format(point.rectHeight)} = ${format(point.scaleY)}`;
 
-class PlayerComponent extends ComponentClass {
-  readonly events: string[] = [];
-
-  override onLoad(): void { this.events.push("onLoad"); }
-  override onEnable(): void { this.events.push("onEnable"); }
-  override start(): void { this.events.push("start"); }
-  override update(deltaTime: number): void {
-    this.events.push(`update(${deltaTime.toFixed(3)})`);
-    if (director!.totalFrames === 2) branch.setPosition(20, 0);
-  }
-  override lateUpdate(deltaTime: number): void { this.events.push(`lateUpdate(${deltaTime.toFixed(3)})`); }
-}
-
-const player = new NodeClass("Player");
-player.setPosition(2, 3);
-const component = player.addComponent(PlayerComponent);
-branch.addChild(player);
-const sprite = new Sprite(player);
-player.setRenderComponent(sprite);
-
-let assetStatus = "资源请求中…";
-let inputStatus = "点击或触摸画布";
-const render = (): void => {
   status.textContent = [
-    `帧数: ${director.totalFrames}`,
-    `回调: ${component.events.slice(-6).join(" → ")}`,
-    "每帧顺序: start（一次）→ update → lateUpdate",
-    `渲染入口: Director.mainLoop → Renderer.render → RenderFlow.render → ${director.lastRenderedSceneName}`,
-    `Player 世界位置: ${JSON.stringify(player.getWorldPosition())}`,
-    `最近渲染脏标记: ${director.transformHistory.join("；")}`,
-    `几何提交: 4 个顶点、6 个索引、${director.drawCallCount} 次 draw call`,
-    assetStatus,
-    inputStatus,
+    `输入: ${point.source}；ID: ${point.id}`,
+    `浏览器 client（视口 CSS 像素）: (${format(point.clientX)}, ${format(point.clientY)})`,
+    `画布 CSS 区域: left=${format(point.rectLeft)} top=${format(point.rectTop)} ` +
+      `size=${format(point.rectWidth)}×${format(point.rectHeight)}`,
+    `画布内局部坐标（左上原点）: (${format(point.localX)}, ${format(point.localYTop)})`,
+    `换到左下原点: y=${format(point.rectHeight)} - ${format(point.localYTop)} = ${format(point.localYBottom)}`,
+    `backing-store / CSS 比例: ${scale}`,
+    `最终画布坐标（左下原点）: (${format(point.x)}, ${format(point.y)}) / ` +
+      `${point.backingWidth}×${point.backingHeight}`,
+    "公式: x=(clientX-rect.left)×canvas.width/rect.width",
+    "      y=(rect.bottom-clientY)×canvas.height/rect.height",
   ].join("\n");
 };
 
-const canvas = document.querySelector<HTMLCanvasElement>("#game");
-if (!canvas) throw new Error("找不到画布 #game");
-const onInput = (point: InputPoint): void => {
-  inputStatus = `输入: ${point.source} id=${point.id} 画布坐标=(${point.x.toFixed(1)}, ${point.y.toFixed(1)})`;
-  render();
-};
-new CCInputManager().registerSystemEvent(canvas, onInput);
+status.textContent = [
+  "点击或触摸画布后观察坐标换算：",
+  "1. clientX/Y 是浏览器视口中的 CSS 像素。",
+  "2. 减去画布 CSS 区域的位置，得到画布内局部坐标。",
+  "3. 按 backing-store/CSS 尺寸比例缩放，并把 Y 轴翻转为左下原点。",
+  "等待输入……",
+].join("\n");
 
-director.on(DirectorClass.EVENT_AFTER_DRAW, render);
-game.run({ frameRate: 60 }, () => director.runSceneImmediate(scene));
-
-const assetManager = new CCAssetManager();
-const uuid = "hero-uuid";
-const cachedBeforeFirstRequest = assetManager.assets.has(uuid);
-assetManager.loadAny(uuid, (firstError, firstAsset) => {
-  if (firstError || !firstAsset) {
-    assetStatus = `资源加载失败: ${firstError?.message ?? "未知错误"}`;
-    render();
-    return;
-  }
-
-  const texture = new Texture2D(firstAsset.data.textureUrl);
-  texture.load().then(() => {
-    const frame = new SpriteFrame(texture, firstAsset.data.rect);
-    sprite.setSpriteFrame(frame);
-    const cachedBeforeSecondRequest = assetManager.assets.has(uuid);
-    assetManager.loadAny(uuid, (secondError, secondAsset) => {
-      if (secondError || !secondAsset) {
-        assetStatus = `资源加载失败: ${secondError?.message ?? "未知错误"}`;
-      } else {
-        assetStatus = [
-          `接线: Asset → Texture2D → SpriteFrame → Sprite`,
-          `帧区域: ${frame.rect.width}×${frame.rect.height} / ${texture.width}×${texture.height}`,
-          `SpriteFrame UV: ${Array.from(frame.uv).map((value) => value.toFixed(2)).join(", ")}`,
-          `首次请求前有缓存: ${cachedBeforeFirstRequest}`,
-          `再次请求前有缓存: ${cachedBeforeSecondRequest}`,
-          `两次请求是同一对象: ${firstAsset === secondAsset}`,
-        ].join("\n");
-      }
-      render();
-    });
-  }).catch((error: unknown) => {
-    assetStatus = `贴图加载失败: ${error instanceof Error ? error.message : String(error)}`;
-    render();
-  });
-});
+new CCInputManager().registerSystemEvent(canvas, showPoint);

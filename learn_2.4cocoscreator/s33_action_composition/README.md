@@ -27,3 +27,15 @@ deno task serve
 ~~~
 
 打开 <http://localhost:8000>。
+
+## 本课必须保留的机制
+
+- `Sequence` 按时长切分串行进度；`Spawn` 并行运行分支，并用 `DelayTime` 补齐较短分支。
+
+## 最小观察宿主
+
+- 页面上的串行/并行时间线与帧进度显示各分支何时开始、结束。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 直接组合动作类；未实现完整 Tween 包装、easing、repeat、stop 与生命周期清理。

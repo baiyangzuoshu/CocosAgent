@@ -30,7 +30,17 @@ Creator 2.4 手册说明：新建 `.meta` 时会随机生成 UUID；`.meta` 由�
 
 三份 `.meta` 的图片尺寸和导入设置相同，两个层级的 UUID 都不同。这说明新建 `.meta` 时的 UUID 不是由图片内容或文件名固定算出的。若删除后又出现原 UUID，先确认旧 `.meta` 确实不存在、重新导入时没有把它一起复制回来；Creator 2.4 手册建议在操作系统文件管理器中改动资源前关闭编辑器。仅凭“UUID 相同”这一现象，不能断定 AssetDB 恢复旧数据的具体机制。
 
-**边界：** 本地 `engine/2.4.15engine/` 是 Runtime 快照，不包含 Creator 编辑器的 AssetDB 导入器实现。因此本课能依据官方手册说明“新建 `.meta` 时随机生成”，也能记录上述导入观察；但不能从这份 Runtime 源码断言具体随机数算法，或声称已经验证 AssetDB 如何检测并处理 UUID 碰撞。随机生成与碰撞处理是两个问题。
+## 本课必须保留的机制
+
+区分 Texture 顶层 UUID 与 SpriteFrame 子资源 UUID，并确认 `rawTextureUuid` 指回顶层 Texture；`.meta` 的 `ver` 也不能与 Creator 引擎版本混淆。
+
+## 最小观察宿主
+
+`deno task analyze` 读取从真实 `.meta` 抽取的字段子集，输出 UUID 关系和多次导入观察；无需启动浏览器 Runtime。
+
+## 模型化简化与 Creator Runtime 边界
+
+样例 JSON 不是可直接导入 Creator 的完整 `.meta`。本地 `engine/2.4.15engine/` 是 Runtime 快照，不包含 Creator 编辑器 AssetDB 导入器实现；可依据官方手册说明新建 `.meta` 时随机生成并记录导入观察，但不能断言随机算法或 AssetDB 如何检测/处理 UUID 碰撞。Runtime 不读取编辑器 `.meta`，构建过程会整理资源信息进运行时配置。
 
 ## 本课代码与源码位置
 

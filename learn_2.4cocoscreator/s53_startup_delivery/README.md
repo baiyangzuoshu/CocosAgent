@@ -30,3 +30,15 @@ deno task serve
 ~~~
 
 打开 http://127.0.0.1:8000 查看交付路径和启动顺序。
+
+## 本课必须保留的机制
+
+- `game.run` 准备完成后发出 `EVENT_GAME_INITED`，再调用 `onStart` 并由 Director 加载首场景。
+
+## 最小观察宿主
+
+- 页面按事件/回调顺序显示启动与交付路径。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 页面使用占位路径模拟发布策略；不加载 Creator 发布包或场景，也不验证网络与 HTTP 缓存。

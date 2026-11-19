@@ -13,9 +13,17 @@ ParticleSystem3DRenderer 把粒子交给 ParticleBatchModel 形成模型数据�
 
 前置课程：[第 49 课：粒子绘制与结束](<../s49_particle_render_finish/README.md>)。
 
-## 独立代码与简化
+## 本课必须保留的机制
 
-[`src/cocos2d/core/3d/particle/ParticleStudy.ts`](<src/cocos2d/core/3d/particle/ParticleStudy.ts>) 与 [`src/main.ts`](<src/main.ts>)。浏览器示例只模拟粒子计数、更新与 Renderer 数据，不创建引擎 GPU 资源。
+保留活动粒子逐个变成 billboard 四边形顶点，并由 `ParticleSystem3DRenderer` 汇入批次模型的概念链路。
+
+## 最小观察宿主
+
+[`src/main.ts`](<src/main.ts>) 一次调用 `runLesson()`，用两个数值粒子计算四角数量并写日志；没有场景、相机或渲染循环。
+
+## 模型化简化与 Creator Runtime 边界
+
+[`ParticleStudy.ts`](<src/cocos2d/core/3d/particle/ParticleStudy.ts>) 仅计算四边形坐标并打印批次路线，未实例化 ParticleSystem3DRenderer/ParticleBatchModel；省略实际 assembler、MeshBuffer 上传、RenderFlow 提交与 WebGL/GPU 绘制阶段，不创建 GPU 资源。
 
 ## 运行
 

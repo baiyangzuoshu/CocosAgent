@@ -39,6 +39,18 @@ subMetas.HelloWorld.rawTextureUuid
 
 `2.4NewProject/assets/BundleMain.meta` 中的 `isBundle` 是另一个例子：它是目录的编辑器配置，不是上面这张图的身份信息；生成的 Bundle config 才是 Runtime 的索引。
 
+## 本课必须保留的机制
+
+区分顶层 Texture2D UUID、SpriteFrame 子 UUID 与 `rawTextureUuid`：场景 Sprite 引用子资源，SpriteFrame 再指向底层贴图；`.meta` 的导入身份和构建后的 Runtime Config 不是同一份文件。
+
+## 最小观察宿主
+
+把真实 `.meta` 与 `helloworld.fire` 中的 UUID 字段作为证据，课程 `findSource()` 对手工摘录的顶层/子 UUID 查表并显示结果。
+
+## 模型化简化与 Creator Runtime 边界
+
+课程不导入 PNG、不解析完整 `.meta`、不启动 Editor AssetDB；TypeScript 只比较摘录字段。浏览器 Runtime 读取构建后的 Bundle Config，不会读取工程 `.meta`。
+
 ## 学完后自查
 
 闭上文件，回答：场景引用的 UUID 是 PNG 主 UUID 还是 SpriteFrame 子 UUID？`rawTextureUuid` 指向哪一个？下一课把这两种引用画成 Asset 依赖。

@@ -28,3 +28,15 @@ deno task serve
 ~~~
 
 打开 <http://localhost:8000>。
+
+## 本课必须保留的机制
+
+- Widget 根据父节点边缘、锚点和边距计算位置；resize 后由 WidgetManager 安排 `AFTER_UPDATE` 对齐。
+
+## 最小观察宿主
+
+- 浏览器中的比例图和 resize 操作显示右边距、垂直居中的重新计算结果。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 使用比例示意而非 Creator 场景节点；未覆盖目标节点、拉伸模式、编辑器序列化及完整 Widget 更新规则。

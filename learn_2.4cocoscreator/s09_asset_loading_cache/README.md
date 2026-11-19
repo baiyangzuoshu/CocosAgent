@@ -13,9 +13,17 @@
 - `engine/2.4.15engine/cocos2d/core/asset-manager/load.js:210-222`、`utilities.js:180-185`：加载完成后登记缓存。
 - `engine/2.4.15engine/cocos2d/core/assets/CCAsset.js`：资源对象基类。
 
-## 简化
+## 本课必须保留的机制
 
-示例只从本地 JSON 创建一个 `CCAsset`。省略 `.meta`/Bundle 配置、下载与反序列化管线、依赖图及引用计数；示例的 UUID 到文件映射由 `Config` 代替。
+保留按 UUID 检查 Asset 缓存：首次未命中创建并缓存 Asset，后续同 UUID 请求复用同一对象。
+
+## 最小观察宿主
+
+浏览器页面通过本地配置对同一 UUID 连续发起两次 load 请求，显示缓存命中状态和两次返回对象身份。
+
+## 模型化简化与 Creator Runtime 边界
+
+示例只从本地 JSON 创建一个 `CCAsset`。省略 `.meta`/Bundle 配置、下载与反序列化管线、依赖图及引用计数；示例的 UUID 到文件映射由 `Config` 代替。因此观察的是缓存规则模型，不是完整 AssetManager 请求管线。
 
 ## 运行
 

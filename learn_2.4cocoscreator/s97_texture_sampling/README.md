@@ -26,6 +26,18 @@ quad 是两个三角形组成的矩形，UV 从左下 (0,0) 到右上 (1,1)。ch
 
 版本要点：**Creator 2.4.15** 的课程目标是浏览器 WebGL 1。不把另一版的 Effect 语法、Shader API 或设备路径套进来。
 
+## 本课必须保留的机制
+
+保留 UV 随顶点输出、光栅化在片元间插值 `v_uv`、片元 Shader 用 `texture2D(u_texture, v_uv)` 采样纹理并输出颜色。
+
+## 最小观察宿主
+
+浏览器 WebGL 1 绘制带 2×2 棋盘贴图的 quad，对照每格颜色观察 UV 到采样结果的路径。
+
+## 模型化简化与 Creator Runtime 边界
+
+贴图与顶点输入是固定教学数据，Device/Shader 为独立实现；不运行 Creator 的 SpriteFrame、AssetManager、Renderer 或完整材质/纹理状态管理。画面是真实 WebGL 输出，但不是 Creator Runtime 输出。
+
 ## 运行
 
 ~~~sh

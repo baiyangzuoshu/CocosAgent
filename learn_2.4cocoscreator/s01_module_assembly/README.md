@@ -18,6 +18,18 @@ src/index.ts
 - engine/2.4.15engine/cocos2d/core/predefine.js：按顺序加载引擎模块。
 - engine/2.4.15engine/cocos2d/core/platform/CCMacro.js：向 cc.macro 注册常量。
 
+## 本课必须保留的机制
+
+先创建共享 `window.cc`/`cc.internal` 命名空间，再按顺序加载模块；模块通过导入副作用注册职责，不能在命名空间未就绪时提前注册。
+
+## 最小观察宿主
+
+浏览器入口依次加载 `index.ts → predefine.ts → CCMacro.ts`，页面只显示装配状态和 RAD 数值。
+
+## 模型化简化与 Creator Runtime 边界
+
+本课只保留两个宏常量，未装配完整 Creator 核心模块、平台系统或 Runtime 启动链；页面验证的是课程模块注册顺序，不是完整引擎实例。
+
 ## 观察结果
 
 页面显示“cc 模块已装配”以及 RAD 数值。先创建共享命名空间，再加载模块；模块通过导入副作用完成注册。这里只保留两个常量作为示例，其余宏和未涉及模块暂不加入。

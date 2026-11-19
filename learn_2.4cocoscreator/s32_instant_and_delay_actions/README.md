@@ -27,3 +27,15 @@ deno task serve
 ~~~
 
 打开 <http://localhost:8000>。
+
+## 本课必须保留的机制
+
+- `CallFunc` 在动作更新时即时执行；`DelayTime` 只推进经过时间，并在完成时从管理器移除。
+
+## 最小观察宿主
+
+- 页面分别启动即时回调与延迟探针，帧更新输出触发顺序和进度。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 示例独立展示两种动作职责，不构造 Tween 链，也不覆盖 Creator Runtime 的完整动作管理与清理路径。

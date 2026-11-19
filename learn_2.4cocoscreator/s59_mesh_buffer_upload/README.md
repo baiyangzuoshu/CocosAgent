@@ -27,3 +27,15 @@ deno task serve
 ~~~
 
 打开 http://127.0.0.1:8000/。日志能看到首次 bufferData 上传，以及 InputAssembler 持有的三角形索引数量。
+
+## 本课必须保留的机制
+
+- MeshBuffer 的活动顶点/索引区进入 VB/IB 上传；首次分配用 `bufferData`，后续更新可用 `bufferSubData`，InputAssembler 保存 Buffer 引用。
+
+## 最小观察宿主
+
+- 页面创建真实 WebGL Buffer 并记录上传调用和三角形索引数。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 这是实际浏览器 WebGL 上传的局部证据；顶点布局仅为 XY 示例，不包含 Shader 程序和 drawElements。

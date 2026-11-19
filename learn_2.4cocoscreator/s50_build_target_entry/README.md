@@ -27,3 +27,15 @@ deno task serve
 ~~~
 
 打开 `http://127.0.0.1:8000`，查看目标、宏和运行时设置分别输出。
+
+## 本课必须保留的机制
+
+- Web Desktop 目标选择影响构建宏；`CCGame.config` 的帧率/renderMode 是运行时配置，不是构建目标。
+
+## 最小观察宿主
+
+- 页面固定展示一个 Web Desktop profile，并分别列出宏和运行时设置。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 配置仅用于区分概念；不调用 Creator Editor Builder，也不实际生成构建产物。

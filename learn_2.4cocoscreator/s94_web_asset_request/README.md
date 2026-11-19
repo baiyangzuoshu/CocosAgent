@@ -76,6 +76,18 @@ python3 -m http.server 8104 --bind 127.0.0.1
 - [依赖解析](../../engine/2.4.15engine/cocos2d/core/asset-manager/depend-util.js)、[load](../../engine/2.4.15engine/cocos2d/core/asset-manager/load.js)、[deserialize](../../engine/2.4.15engine/cocos2d/core/asset-manager/deserialize.js)
 - [缓存策略](../../engine/2.4.15engine/cocos2d/core/asset-manager/utilities.js)：utilities.cache() 将 SceneAsset 排除在共享 assets 缓存之外。
 
+## 本课必须保留的机制
+
+保留 `Bundle → Config → RequestItem → Fetch/Parse → Dependencies → Asset` 的输入输出交接；一个 import pack 可服务多个 Asset，依赖先创建，SceneAsset 返回但跳过通用 assets 缓存。
+
+## 最小观察宿主
+
+浏览器页面调用课程 `manager.loadScene()`，以本地 AssetRecord/文件 Map 走完整模型并显示各阶段；`GET` 计数是 Fetcher 模拟。需要验证真实请求时按上文单独运行 `2.4NewProject/build/web-mobile/` 并查看 Network 面板。
+
+## 模型化简化与 Creator Runtime 边界
+
+课程只保留本场景所需字段和职责，按 `AssetRecord.type` 识别 SceneAsset，Fetcher 从 Map 取数据；省略真实网络、完整序列化兼容、并发队列、错误重试。页面计数不是浏览器 Network 证据，也不是完整 Creator AssetManager。
+
 ## 学完后自查
 
 不用看页面，按顺序讲出“场景路径、UUID、URL、文件、Asset”分别在何时出现。再说清本例 3 个 Asset 对象与 2 个通用缓存对象的区别，以及为什么 SceneAsset 是例外。

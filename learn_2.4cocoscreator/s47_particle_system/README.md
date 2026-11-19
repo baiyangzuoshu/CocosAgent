@@ -27,3 +27,15 @@ deno task serve
 ~~~
 
 打开 `http://127.0.0.1:8000`，观察配置、贴图和空模拟器列表分别从哪里进入组件。
+
+## 本课必须保留的机制
+
+- ParticleAsset 配置与 SpriteFrame 进入 ParticleSystem，并由 System 建立 Simulator；构造后活动列表为空。
+
+## 最小观察宿主
+
+- 页面显示内存配置、贴图引用和初始空模拟器列表。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 使用内存对象代替 plist/真实图片；本课不发射粒子、不创建对象池，也不调用 Creator Runtime 更新。

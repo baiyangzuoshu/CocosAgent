@@ -2,117 +2,51 @@ import { CCEventManager } from "./cocos2d/core/event-manager/CCEventManager.ts";
 import { CCInputManager } from "./cocos2d/core/platform/CCInputManager.ts";
 import type { InputPoint } from "./cocos2d/core/platform/input-point.ts";
 import cc from "./index.ts";
-import { CCAssetManager } from "./cocos2d/core/asset-manager/CCAssetManager.ts";
-import Sprite from "./cocos2d/core/components/CCSprite.ts";
-import SpriteFrame from "./cocos2d/core/assets/CCSpriteFrame.ts";
-import Texture2D from "./cocos2d/core/assets/CCTexture2D.ts";
 
 const status = document.querySelector<HTMLPreElement>("#status");
-if (!status) throw new Error("找不到页面状态节点 #status");
+const canvas = document.querySelector<HTMLCanvasElement>("#game");
+if (!status) throw new Error("找不到状态节点 #status");
+if (!canvas) throw new Error("找不到画布 #game");
 
 const NodeClass = cc.Node;
 const SceneClass = cc.Scene;
-const ComponentClass = cc.Component;
 const game = cc.game;
 const director = cc.director;
-const DirectorClass = cc.Director;
-if (!NodeClass || !SceneClass || !ComponentClass || !game || !director || !DirectorClass) {
-  throw new Error("引擎模块尚未完成注册");
+if (!NodeClass || !SceneClass || !game || !director) {
+  throw new Error("节点/场景/主循环模块尚未完成注册");
 }
 
-const scene = new SceneClass("MainScene");
-const branch = new NodeClass("Branch");
-branch.setPosition(10, 0);
-scene.addChild(branch);
+const scene = new SceneClass("InputScene");
+const target = new NodeClass("HitTarget");
+target.setPosition(0, 0);
+scene.addChild(target);
 
-class PlayerComponent extends ComponentClass {
-  readonly events: string[] = [];
-
-  override onLoad(): void { this.events.push("onLoad"); }
-  override onEnable(): void { this.events.push("onEnable"); }
-  override start(): void { this.events.push("start"); }
-  override update(deltaTime: number): void {
-    this.events.push(`update(${deltaTime.toFixed(3)})`);
-    if (director!.totalFrames === 2) branch.setPosition(20, 0);
-  }
-  override lateUpdate(deltaTime: number): void { this.events.push(`lateUpdate(${deltaTime.toFixed(3)})`); }
-}
-
-const player = new NodeClass("Player");
-player.setPosition(2, 3);
-const component = player.addComponent(PlayerComponent);
-branch.addChild(player);
-const sprite = new Sprite(player);
-player.setRenderComponent(sprite);
-
-let assetStatus = "资源请求中…";
-let inputStatus = "点击角色或画布空白处";
-let targetStatus = "等待节点事件";
 const eventManager = new CCEventManager();
-eventManager.addListener(player);
-player.onTouchStart(() => { targetStatus = "Player 收到 touch-start"; });
-const render = (): void => {
+eventManager.addListener(target);
+let callbackResult = "尚未触发目标回调";
+target.onTouchStart(() => { callbackResult = "HitTarget 收到 touch-start 回调"; });
+
+const onInput = (point: InputPoint): void => {
+  // s14 已演示 client → canvas backing-store；本课从 backing-store 点开始讲命中。
+  const worldX = point.x - canvas.width / 2;
+  const worldY = point.y - canvas.height / 2;
+  const targetPosition = target.getWorldPosition();
+  const dx = Math.abs(worldX - targetPosition.x);
+  const dy = Math.abs(worldY - targetPosition.y);
+  const insideAabb = target.activeInHierarchy && dx <= 28 && dy <= 28;
+  const hit = eventManager.dispatchTouchStart(worldX, worldY);
+  if (!hit) callbackResult = "本次未命中；没有派发 touch-start";
+
   status.textContent = [
-    `帧数: ${director.totalFrames}`,
-    `回调: ${component.events.slice(-6).join(" → ")}`,
-    "每帧顺序: start（一次）→ update → lateUpdate",
-    `渲染入口: Director.mainLoop → Renderer.render → RenderFlow.render → ${director.lastRenderedSceneName}`,
-    `Player 世界位置: ${JSON.stringify(player.getWorldPosition())}`,
-    `最近渲染脏标记: ${director.transformHistory.join("；")}`,
-    `几何提交: 4 个顶点、6 个索引、${director.drawCallCount} 次 draw call`,
-    assetStatus,
-    inputStatus,
-    targetStatus,
+    `输入: ${point.source}，id=${point.id}`,
+    `Backing-store 点: (${point.x.toFixed(1)}, ${point.y.toFixed(1)})，尺寸=${canvas.width}×${canvas.height}`,
+    `中心原点世界点: (${worldX.toFixed(1)}, ${worldY.toFixed(1)})`,
+    `HitTarget 世界中心: (${targetPosition.x.toFixed(1)}, ${targetPosition.y.toFixed(1)})`,
+    `本课 AABB 检查: |dx|=${dx.toFixed(1)}≤28 且 |dy|=${dy.toFixed(1)}≤28；activeInHierarchy=${target.activeInHierarchy}；预测=${insideAabb ? "命中" : "未命中"}`,
+    `CCEventManager.dispatchTouchStart: ${hit ? "命中并派发" : "无目标命中"}`,
+    `回调结果: ${callbackResult}`,
   ].join("\n");
 };
 
-const canvas = document.querySelector<HTMLCanvasElement>("#game");
-if (!canvas) throw new Error("找不到画布 #game");
-const onInput = (point: InputPoint): void => {
-  inputStatus = `输入: ${point.source} id=${point.id} 画布坐标=(${point.x.toFixed(1)}, ${point.y.toFixed(1)})`;
-  const x = point.x - canvas.width / 2;
-  const y = point.y - canvas.height / 2;
-  targetStatus = "未命中";
-  eventManager.dispatchTouchStart(x, y);
-  render();
-};
 new CCInputManager().registerSystemEvent(canvas, onInput);
-
-director.on(DirectorClass.EVENT_AFTER_DRAW, render);
 game.run({ frameRate: 60 }, () => director.runSceneImmediate(scene));
-
-const assetManager = new CCAssetManager();
-const uuid = "hero-uuid";
-const cachedBeforeFirstRequest = assetManager.assets.has(uuid);
-assetManager.loadAny(uuid, (firstError, firstAsset) => {
-  if (firstError || !firstAsset) {
-    assetStatus = `资源加载失败: ${firstError?.message ?? "未知错误"}`;
-    render();
-    return;
-  }
-
-  const texture = new Texture2D(firstAsset.data.textureUrl);
-  texture.load().then(() => {
-    const frame = new SpriteFrame(texture, firstAsset.data.rect);
-    sprite.setSpriteFrame(frame);
-    const cachedBeforeSecondRequest = assetManager.assets.has(uuid);
-    assetManager.loadAny(uuid, (secondError, secondAsset) => {
-      if (secondError || !secondAsset) {
-        assetStatus = `资源加载失败: ${secondError?.message ?? "未知错误"}`;
-      } else {
-        assetStatus = [
-          `接线: Asset → Texture2D → SpriteFrame → Sprite`,
-          `帧区域: ${frame.rect.width}×${frame.rect.height} / ${texture.width}×${texture.height}`,
-          `SpriteFrame UV: ${Array.from(frame.uv).map((value) => value.toFixed(2)).join(", ")}`,
-          `首次请求前有缓存: ${cachedBeforeFirstRequest}`,
-          `再次请求前有缓存: ${cachedBeforeSecondRequest}`,
-          `两次请求是同一对象: ${firstAsset === secondAsset}`,
-        ].join("\n");
-      }
-      render();
-    });
-  }).catch((error: unknown) => {
-    assetStatus = `贴图加载失败: ${error instanceof Error ? error.message : String(error)}`;
-    render();
-  });
-});

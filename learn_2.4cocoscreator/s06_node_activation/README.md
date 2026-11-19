@@ -14,9 +14,17 @@
 - `engine/2.4.15engine/cocos2d/core/CCScene.js:96-103`：Scene 把激活请求交给 Director 的 NodeActivator。
 - `engine/2.4.15engine/cocos2d/core/node-activator.js:160-200`、`engine/2.4.15engine/cocos2d/core/node-activator.js:244-258`：递归更新节点层级状态。
 
-## 简化
+## 本课必须保留的机制
 
-代码按源码职责增加 `NodeActivator`，并保留 `BaseNode → Scene → Director` 的调用关系。为便于每课独立运行，Director 直接提供 `runSceneImmediate()`；组件的 `__preload`、`onLoad`、`onEnable` 和反激活回调留到后续课程。
+保留 Scene 激活交给 Director/NodeActivator 后，沿节点树传播 `active` 与 `activeInHierarchy`；本地未激活的父节点阻止子树进入活动层级。
+
+## 最小观察宿主
+
+浏览器页面启动一个 Scene，设置 Canvas 未激活、World 激活，再读取 Player 的 `active` 与 `activeInHierarchy`。
+
+## 模型化简化与 Creator Runtime 边界
+
+代码按源码职责保留 `BaseNode → Scene → Director → NodeActivator` 调用关系；为独立运行由 Director 直接提供 `runSceneImmediate()`。组件的 `__preload`、`onLoad`、`onEnable` 和反激活回调留到后续课程，本课不实现组件生命周期调度。
 
 ## 运行
 

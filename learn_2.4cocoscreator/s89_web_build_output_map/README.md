@@ -44,6 +44,18 @@
 
 **证据边界：** 以上源码说明 Runtime 如何使用 config；它不包含完整 Editor Builder，所以本课不声称复刻了构建过程。
 
+## 本课必须保留的机制
+
+保留构建目录中页面入口、启动设置、Bundle Config、import pack 和 native 文件的角色区分；Config 是索引，不是资源内容，Asset 与下载文件也不能一一等同。
+
+## 最小观察宿主
+
+对照真实 `2.4NewProject/build/web-mobile/` 文件清单，并用 `example-build.ts → BundleOutputMap → main.ts` 将文件角色显示在页面；不需启动项目场景。
+
+## 模型化简化与 Creator Runtime 边界
+
+课程清单是手工摘录，页面只格式化并展示，不扫描磁盘、不发起加载、不执行 Editor Builder。Runtime 源码说明如何消费 Config；完整构建生成阶段不在本地 Runtime 快照内。
+
 ## 学完后自查
 
 不看课程代码，自己指出 `settings`、`config`、import pack、PNG 各在哪里。然后用一句话说明：哪个文件是“索引”，哪个文件才是“资源数据”？下一课从 `.meta` 找 UUID 的来历。

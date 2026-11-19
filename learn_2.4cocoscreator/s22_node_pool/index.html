@@ -3,18 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>learn_2.4cocoscreator · 第 22 课</title>
-    <style>body{font:16px sans-serif;background:#171a24;color:#eee}main{max-width:720px;margin:2rem auto}canvas{touch-action:none;display:block;outline:1px solid #67718a;margin:1rem 0}</style>
+    <title>第 22 课：NodePool 节点复用</title>
+    <style>body{font:16px sans-serif;background:#171a24;color:#eee}main{max-width:720px;margin:2rem auto}pre{white-space:pre-wrap;background:#222a39;padding:1rem}button{margin-right:.5rem}</style>
   </head>
   <body>
     <main>
-      <h1>learn_2.4cocoscreator</h1>
-      <h2>第 22 课：NodePool 节点复用</h2>
-      <label><input id="stop" type="checkbox" /> 在 Branch 捕获阶段停止传播</label>
-      <p><button id="pool-toggle" type="button" disabled>回收 EnemyA</button>
-      <button id="pool-clear" type="button" disabled>清空对象池</button></p>
-      <canvas id="game" width="320" height="200"></canvas>
-      <pre id="status">正在载入 TypeScript……</pre>
+      <h1>第 22 课：NodePool 节点复用</h1>
+      <p>等待 EnemyA 首次 start，再把它放入池、取回同一个节点或清池。</p>
+      <button id="pool-toggle" type="button" disabled>回收 EnemyA</button>
+      <button id="pool-clear" type="button" disabled>清空对象池</button>
+      <pre id="status">正在准备节点池……</pre>
     </main>
     <script type="module" src="./dist/src/main.js"></script>
   </body>

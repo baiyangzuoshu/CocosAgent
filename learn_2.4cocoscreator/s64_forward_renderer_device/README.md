@@ -24,4 +24,16 @@ deno task build
 deno task serve
 ~~~
 
-打开 http://127.0.0.1:8000/，观察阶段遍历后由 BaseRenderer 设置状态，并在 WebGL Device 层调用 drawElements。
+打开 http://127.0.0.1:8000/，观察阶段遍历后由 BaseRenderer 设置状态，并在 WebGL Device 层记录 drawElements 请求（非真实 GPU 调用）。
+
+## 本课必须保留的机制
+
+- ForwardRenderer 遍历绘制阶段，BaseRenderer 设置 Pass/InputAssembler，再把绘制请求交给 Device。
+
+## 最小观察宿主
+
+- 页面按调用顺序记录阶段遍历、状态设置与 Device 绘制请求。
+
+## 模型化简化与 Creator Runtime 边界
+
+- Device 仅记录 drawElements/drawArrays 请求，不调用真实 WebGL 或 GPU；此页不是完整 ForwardRenderer。

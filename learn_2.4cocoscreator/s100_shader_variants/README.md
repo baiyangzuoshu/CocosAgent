@@ -26,6 +26,18 @@
 
 版本要点：**Creator 2.4.15** 的课程目标是浏览器 WebGL 1。不把另一版的 Effect 语法、Shader API 或设备路径套进来。
 
+## 本课必须保留的机制
+
+保留宏和值组成变体缓存键、编译前注入 `#define`、不同宏组合生成不同 WebGLProgram，以及重复键复用缓存程序。
+
+## 最小观察宿主
+
+浏览器 WebGL 1 为左右两个 quad 请求两组 `USE_TINT` 宏，观察两个实际程序、颜色分支、重复请求缓存命中与当前 GLSL 版本。
+
+## 模型化简化与 Creator Runtime 边界
+
+只模拟本例宏键与分支，不覆盖 Creator 完整 ProgramLib 宏标准化、全部 shader chunks、驱动差异或其他图形后端；结论限定 WebGL 1，不外推到 WebGL2/Metal/WebGPU。
+
 ## 运行
 
 ~~~sh

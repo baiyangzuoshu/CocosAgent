@@ -14,9 +14,17 @@ ColliderComponent.on 注册 collision/trigger 回调；后端事件回到组件�
 
 前置课程：[第 67 课](<../s67_collider_shapes/README.md>)。
 
-## 独立代码与简化
+## 本课必须保留的机制
 
-独立代码：[课程实现](<src/cocos2d/core/3d/physics/framework/PhysicsStudy.ts>）。浏览器示例按职责模拟本版流程，不加载 Cannon 或 Builtin 物理后端。
+保留 group/mask 双向相交的过滤规则，以及通过 trigger 标志选择 `trigger-enter` 或 `collision-enter` 通知的职责划分。
+
+## 最小观察宿主
+
+`src/main.ts` 只调用一次 `runLesson()` 并显示结果；无需场景、按钮或帧循环。
+
+## 模型化简化与 Creator Runtime 边界
+
+独立代码：[课程实现](<src/cocos2d/core/3d/physics/framework/PhysicsStudy.ts>)。本例只检查一对手工构造的数据，不运行 broadphase、接触生成、后端碰撞步进或真实事件派发；省略 Creator Runtime `PhysicsSystem/Physics3DManager` 驱动后端并将接触回调路由到 ColliderComponent 的阶段，也不加载 Cannon/Builtin。
 
 ## 运行
 

@@ -13,9 +13,17 @@ AnimationCurves 按时间采样关键帧，再把结果写回目标属性。
 
 前置主题：[动作与时间推进](../s34_action_modifiers/README.md)。
 
-## 独立代码与简化
+## 本课必须保留的机制
 
-[AnimationStudy.ts](<src/cocos2d/animation/AnimationStudy.ts>) 与 [入口](<src/main.ts>)。浏览器示例运行简化播放器，不读取 Creator 编辑器序列化的动画资源。
+保留关键帧时间区间定位、线性插值，以及将采样值写回目标属性（示例名为 `target.position.x`）的职责关系。
+
+## 最小观察宿主
+
+`src/main.ts` 一次调用 `runLesson()`，固定在 `0.75s` 计算插值并输出到浏览器 `#log`；不需要场景或帧循环。
+
+## 模型化简化与 Creator Runtime 边界
+
+[AnimationStudy.ts](<src/cocos2d/animation/AnimationStudy.ts>) 只对三个数值关键帧做一次线性插值，不包含曲线采样、对象绑定或真实 Node 写回；未执行 Runtime `AnimationState` 驱动 `AnimationCurves` 并把结果应用到目标对象的帧更新阶段。
 
 ## 运行
 

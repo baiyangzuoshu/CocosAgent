@@ -67,6 +67,18 @@ Creator 2.4.15 引擎快照是 Runtime 源码，不包含完整 Editor Builder�
 
 共享纹理有利于相同材质状态下合批，但同一图集不保证整个 UI 只有一个 draw call；材质、渲染顺序、遮罩和缓冲区容量都可能形成批次边界。
 
+## 本课必须保留的机制
+
+保留 Editor 构建输入 `.pac`/Prefab 引用与输出 UUID/pack/共享 PNG 的证据链；Runtime 侧保留 `SpriteFrame` 读取 rect/rotated/size、连接 Texture2D、计算 UV，再由 Sprite assembler 写入顶点。
+
+## 最小观察宿主
+
+`deno task analyze` 读取课程保存的真实构建证据快照，打印候选图、Prefab 引用、Filter Unused 结果、UUID/帧矩形和共享纹理信息；无需启动 Creator 编辑器或 Web Runtime。
+
+## 模型化简化与 Creator Runtime 边界
+
+分析器只读取静态 fixture，不执行 Editor Builder，也不重建图集；本地 2.4.15 Runtime 快照只能解释输出如何被消费，不能证明 MaxRects 的具体实现。构建再次运行后需重新核对并更新证据快照。
+
 ## 运行课程分析器
 
 ```sh

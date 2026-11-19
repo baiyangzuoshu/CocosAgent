@@ -54,6 +54,18 @@
 - [urlTransformer.js](../../engine/2.4.15engine/cocos2d/core/asset-manager/urlTransformer.js)：看 `parse()` 怎样找资源地址、`combine()` 怎样组成 URL。
 - [helper.js](../../engine/2.4.15engine/cocos2d/core/asset-manager/helper.js)：搜索 `decodeUuid`。
 
+## 本课必须保留的机制
+
+保留 Config 的索引关系：scene path→`scenes` 下标→UUID，查询 `packs`/`versions`，再由 UUID、类型与版本后缀组成 import/native URL；UUID 是资源身份，URL 是文件地址。
+
+## 最小观察宿主
+
+使用当前真实 config 中的摘录表格，由 `Config` 和 `urlTransformer` 逐项打印场景、UUID、pack/version 与最终 URL，便于手工核对。
+
+## 模型化简化与 Creator Runtime 边界
+
+只摘录本例需要的字段，省略完整 Config 的重定向、扩展名规则和其他请求类型；课程不会真实请求文件。它展示查表/拼接规则，不等于完整 Runtime Config、URL 转换或 Downloader。
+
 ## 学完后自查
 
 不看课程输出，自己从 `scenes` 查到 pack UUID，再用 `versions.import` 拼出文件名。然后解释：为什么场景的 import pack URL 不等于场景 UUID？下一课会观察真实浏览器请求。

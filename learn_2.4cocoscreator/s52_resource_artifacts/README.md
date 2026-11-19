@@ -27,3 +27,15 @@ deno task serve
 ~~~
 
 打开 `http://127.0.0.1:8000` 查看 import 与 native 路径。
+
+## 本课必须保留的机制
+
+- Bundle 的 UUID 索引与版本信息参与 import/native 资源 URL 的组合。
+
+## 最小观察宿主
+
+- 页面使用示例 Bundle 记录显示两类路径的中间值。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 数据是占位结构；不解析 `.meta`、library 或 Builder 产物，也不执行 Runtime 下载。

@@ -1,19 +1,30 @@
 # 第 16 课：节点事件传播
 
-**目标：** 看清事件从根节点到目标，再沿父链返回的顺序。
+**问题：** 事件命中 Target 后，父链监听器按什么顺序收到它？
 
-## 本课增量
+## 观察步骤
 
-`Node.dispatchEvent` 沿父链派发事件。 点中 Player 后，依次显示 `MainScene capture → Branch capture → Player target → Branch bubble → MainScene bubble`。事件保存目标、当前节点和阶段；勾选页面选项可在 Branch 捕获时调用 `stopPropagation()`。
+1. 不勾选停止选项，点击 Target：应看到 `MainScene capture → Branch capture → Target target → Branch bubble → MainScene bubble`。
+2. 勾选后再点击：Branch 捕获回调调用 `stopPropagation()`，记录到此结束，Target 与外层冒泡节点不再收到事件。
+3. 对照每行：`target` 一直是 Target；`currentTarget` 随正在执行的监听节点变化。
 
-## 源码位置
+## 本课必须保留的机制
 
-- `engine/2.4.15engine/cocos2d/core/CCNode.js:620-675,2346-2350`：节点事件捕获、目标与冒泡的派发顺序。
-- `engine/2.4.15engine/cocos2d/core/event/event.js:90-101,137-150`：传播停止标记和方法。
+固定父链上的捕获（根到目标父节点）→目标→冒泡（目标父节点回根）顺序；每次调用更新 `currentTarget` 和本地模型的 `phase`；`stopPropagation()` 阻止后续节点继续收到事件。
 
-## 简化
+## 最小观察宿主
 
-只处理 touch-start 和固定的父链；支持停止后续节点传播。省略事件类型注册、立即停止同节点监听器、监听器移除、节点销毁和相机命中等细节。
+一个 canvas 输入面、一个 CSS Target 方框、固定父链 `MainScene → Branch → Target`、五个节点监听器和一个停止传播复选框。输入与 AABB 只负责确定事件目标；文本逐行显示传播记录。
+
+## Creator 2.4.15 源码对照
+
+- [CCNode.js 触摸命中](../../engine/2.4.15engine/cocos2d/core/CCNode.js#L462-L474)：命中后设置 touch-start 与 `bubbles` 并派发。
+- [CCNode.js 捕获/冒泡目标收集](../../engine/2.4.15engine/cocos2d/core/CCNode.js#L2455-L2484)：分别沿 parent 收集监听节点。
+- [event.js](../../engine/2.4.15engine/cocos2d/core/event/event.js#L134-L160)：`stopPropagation` 和立即停止标记是不同机制。
+
+## 模型化简化与 Creator Runtime 边界
+
+本地模型固定一条三节点父链，只演示 touch-start；本地属性名是 `phase`，不等同于 Creator Runtime 的完整事件对象与内部阶段编号。`stopPropagation()` 在本模型中于当前节点的回调列表执行完后才检查，不实现 `stopPropagationImmediate()`、监听器注册/移除、EventManager 的优先级/claim/swallow 或真实相机命中。本课讲 Node 事件派发，不实现浏览器 DOM 事件冒泡。
 
 ## 运行
 
@@ -22,5 +33,3 @@ deno task check
 deno task build
 deno task serve
 ~~~
-
-打开 <http://localhost:8000>，先点击角色观察完整路径，再勾选停止传播并再次点击。

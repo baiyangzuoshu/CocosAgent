@@ -50,6 +50,18 @@ Asset 的 `refCount` 是引擎生命周期记账。`addRef()` 增加计数；`de
 
 引擎对循环依赖、重复 UUID、native 依赖等还有处理。本课图只表达当前例子的两个 Asset 依赖。
 
+## 本课必须保留的机制
+
+保留 SceneAsset `__uuid__`→SpriteFrame、`rawTextureUuid`→Texture2D 两条依赖边；只把外部 Asset `__uuid__` 视作依赖，文件内部 `__id__` 不创建 Asset 依赖。
+
+## 最小观察宿主
+
+以摘录的场景 Sprite 字段和 `.meta` 字段构造小型依赖图，从 SceneAsset UUID 递归遍历并显示 SpriteFrame、Texture2D。
+
+## 模型化简化与 Creator Runtime 边界
+
+只处理当前例子的两个字段和两条边，不解析完整 `.fire`、不执行 Downloader/Loader，也不模拟循环、重复 UUID、native 依赖、请求 URL 或释放过程；课程依赖图不是 Runtime 加载器。
+
 ## 学完后自查
 
 如果删除 `rawTextureUuid` 这条边，为什么从场景递归就到不了 Texture2D？用一句话区分“Asset 依赖”和“请求文件”。下一课看 AssetManager 怎样执行这些依赖。

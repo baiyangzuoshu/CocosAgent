@@ -13,9 +13,17 @@
 - [CCNodePool.js:100](../../engine/2.4.15engine/extensions/ccpool/CCNodePool.js#L100)：`clear()` 销毁池内节点。
 - [CCNodePool.js:121](../../engine/2.4.15engine/extensions/ccpool/CCNodePool.js#L121)：`put()` 将节点无 cleanup 地移出父节点并存入池；[CCNodePool.js:147](../../engine/2.4.15engine/extensions/ccpool/CCNodePool.js#L147)：`get()` 从池中取回节点。
 
-## 简化与运行
+## 本课必须保留的机制
 
-只实现 `put/get/size/clear`，省略 `poolHandlerComp` 的 `unuse/reuse` 重置回调。池清空时调用 `destroy()`，实际销毁仍由 Director 帧末处理。
+保留 `put()` 用 `removeFromParent(false)` 暂存同一节点、`get()` 取回后重新挂载，以及 `clear()` 对池内节点请求销毁的区别；回收不会重复触发 `onLoad/start`。
+
+## 最小观察宿主
+
+一个场景节点、一组回收/取回/清池按钮和生命周期日志；不需要前课输入、贴图和 Sprite 渲染演示。
+
+## 模型化简化与 Creator Runtime 边界
+
+只实现 `put/get/size/clear`，省略 `poolHandlerComp` 的 `unuse/reuse` 重置回调。清池调用 `destroy()`；Director 在 update/lateUpdate 之后、render 之前处理延迟销毁。
 
 ~~~sh
 deno task check

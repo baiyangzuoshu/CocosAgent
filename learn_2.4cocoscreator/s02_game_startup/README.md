@@ -24,9 +24,17 @@ run()
 - src/cocos2d/core/CCGame.ts → engine/2.4.15engine/cocos2d/core/CCGame.js:364-400, 491-495, 654-685, 897：配置处理、启动流程、引擎初始化和 cc.game 注册。
 - src/cocos2d/core/event/event-target.ts → engine/2.4.15engine/cocos2d/core/event/event-target.js:59-62, 240，以及 engine/2.4.15engine/cocos2d/core/CCGame.js:403-404, 884-885：事件方法定义和混入。
 
-## 本课简化
+## 本课必须保留的机制
 
-课程代码同源码一样导出单例 game，并混入 EventTarget 方法。配置只保留 frameRate；prepare() 用微任务表示异步边界；_initEngine() 用标记代替渲染器和系统事件安装，_prepareFinished() 暂时省略内建资源初始化与主循环。EventTarget 用 Map 简化 CallbacksInvoker，只实现 on 和 emit。
+保留 `game.run → prepare → _prepareFinished → _initEngine → EVENT_ENGINE_INITED → EVENT_GAME_INITED → onStart` 的初始化先后关系，以及事件监听在初始化阶段的职责。
+
+## 最小观察宿主
+
+浏览器页面调用 `game.run()`，以启动事件日志观察顺序；不需要真实场景或绘制内容。
+
+## 模型化简化与 Creator Runtime 边界
+
+课程代码导出单例 `game` 并混入 EventTarget 方法。配置只保留 frameRate；`prepare()` 用微任务表示异步边界；`_initEngine()` 用标记代替渲染器和系统事件安装，`_prepareFinished()` 省略内建资源初始化与主循环。EventTarget 用 Map 简化 CallbacksInvoker，只实现 on/emit。
 
 ## 运行
 

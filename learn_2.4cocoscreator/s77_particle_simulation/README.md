@@ -13,9 +13,17 @@ ParticleSystem3D 推进粒子 age/remainingLifetime，并更新位置和存活�
 
 前置课程：[第 49 课：粒子绘制与结束](<../s49_particle_render_finish/README.md>)。
 
-## 独立代码与简化
+## 本课必须保留的机制
 
-[`src/cocos2d/core/3d/particle/ParticleStudy.ts`](<src/cocos2d/core/3d/particle/ParticleStudy.ts>) 与 [`src/main.ts`](<src/main.ts>)。浏览器示例只模拟粒子计数、更新与 Renderer 数据，不创建引擎 GPU 资源。
+保留每步推进粒子 `age`、按速度积分位置，以及超出 `lifetime` 后从存活集合移除的顺序。
+
+## 最小观察宿主
+
+[`src/main.ts`](<src/main.ts>) 一次调用 `runLesson()`，只做固定 `dt=0.2s` 的一步更新并打印存活数和位置；无需场景或帧循环。
+
+## 模型化简化与 Creator Runtime 边界
+
+[`ParticleStudy.ts`](<src/cocos2d/core/3d/particle/ParticleStudy.ts>) 只更新两个手工构造的数值粒子，不执行连续模拟或粒子池复用；未接入 Creator Runtime `ParticleSystem3D` 的每帧模拟、过期回收及其 Renderer 后续阶段，也不创建 GPU 资源。
 
 ## 运行
 

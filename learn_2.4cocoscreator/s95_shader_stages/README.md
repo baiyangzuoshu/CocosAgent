@@ -27,6 +27,18 @@ main.ts 创建 WebGL 1 上下文，输入一个三角形的三个二维顶点。
 
 版本要点：**Creator 2.4.15** 的课程目标是浏览器 WebGL 1。不把另一版的 Effect 语法、Shader API 或设备路径套进来。
 
+## 本课必须保留的机制
+
+保留 Effect 的 vertex/fragment 源码分离、两阶段分别编译并链接成 Program，以及顶点写入 `gl_Position`、片元产生最终颜色的职责。
+
+## 最小观察宿主
+
+浏览器 WebGL 1 context、三角形顶点和两段 Shader；观察实际编译/链接日志与青蓝三角形，不需 Creator Scene。
+
+## 模型化简化与 Creator Runtime 边界
+
+此课确实执行浏览器 WebGL 编译和绘制，但 EffectParser、Device 是课程独立实现，不启动 Creator Editor/引擎；不覆盖完整 Effect 语法、资源导入、Batcher 或 GFX 状态管理。
+
 ## 运行
 
 ~~~sh

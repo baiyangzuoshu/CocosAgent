@@ -14,9 +14,17 @@ Physics3DManager → RigidBodyComponent.onEnable → CannonRigidBody → 节点�
 
 前置课程：[第 55 课](<../s55_physics3d_world_step/README.md>)。
 
-## 独立代码与简化
+## 本课必须保留的机制
 
-独立代码：[课程实现](<src/cocos2d/core/3d/physics/framework/PhysicsStudy.ts>）。浏览器示例按职责模拟本版流程，不加载 Cannon 或 Builtin 物理后端。
+保留 `RigidBodyComponent.onEnable()` 将刚体注册到物理世界、物理步进结果写回节点，以及 `onDisable()` 将刚体移出世界的顺序。这是本课对应的 Creator 2.4.15 源码规则。
+
+## 最小观察宿主
+
+`src/main.ts` 只调用一次 `runLesson()`，把日志写入页面；无需场景、按钮或渲染循环。
+
+## 模型化简化与 Creator Runtime 边界
+
+独立代码：[课程实现](<src/cocos2d/core/3d/physics/framework/PhysicsStudy.ts>)。这里的 `world` 是 TypeScript 假对象，不运行 Cannon/Builtin 后端；课程展示注册→步进→节点回写→停用移除的规则，不接入 Creator Runtime 的 `Director → Physics3DManager.update → PhysicsWorld.step` 帧调用阶段，也不实际模拟刚体。
 
 ## 运行
 

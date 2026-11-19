@@ -28,3 +28,15 @@ deno task serve
 ~~~
 
 页面会读取 `release.json`，显示资源 URL、缓存策略、发布顺序和回滚目标。Nginx 示例见 [deploy/nginx.conf](deploy/nginx.conf)。
+
+## 本课必须保留的机制
+
+- 入口与发布指针短缓存/不缓存，版本化资源目录长期缓存；发布清单支持切换和回滚。
+
+## 最小观察宿主
+
+- 页面读取教学用 `release.json` 并展示 URL、缓存策略、发布顺序和回滚目标。
+
+## 模型化简化与 Creator Runtime 边界
+
+- `release.json` 与 Nginx 仅示意部署设计；不接入 Editor Builder、CDN 或真实缓存清除服务。

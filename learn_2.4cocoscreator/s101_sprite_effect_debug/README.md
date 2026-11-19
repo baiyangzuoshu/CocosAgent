@@ -28,6 +28,18 @@ Sprite 提供 6 个三角形顶点、UV、顶点色和单位矩阵；2×2 棋盘
 - [`forward-renderer.js`](../../engine/2.4.15engine/cocos2d/renderer/renderers/forward-renderer.js)：遍历当前渲染阶段。
 - [`device.js`](../../engine/2.4.15engine/cocos2d/renderer/gfx/device.js)：WebGL 1 程序和 draw 接口。
 
+## 本课必须保留的机制
+
+保留 Sprite 顶点/UV/纹理→Material/Effect→BaseRenderer→WebGLDevice 的职责链，Shader 计算 MVP 与纹理/颜色/Uniform，最终发出 draw。
+
+## 最小观察宿主
+
+浏览器 WebGL 1 绘制一个带棋盘纹理和 `u_tint` 的 quad Sprite；页面输出 Shader 编译、属性、纹理、Uniform 与 draw 的诊断线索。
+
+## 模型化简化与 Creator Runtime 边界
+
+画布执行真实 WebGL 编译和绘制，但 Sprite/Material/Renderer/Device 均是独立课程模型，不启动 Creator 引擎；不实现 Node/RenderFlow 遍历、完整 assembler/Batcher、AssetManager 或完整 GFX 状态机。
+
 ## 运行
 
 ~~~sh

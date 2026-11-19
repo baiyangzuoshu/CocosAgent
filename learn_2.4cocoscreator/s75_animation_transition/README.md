@@ -14,9 +14,17 @@ Animation.playAdditive 启动额外 AnimationState。
 
 前置主题：[动作与时间推进](../s34_action_modifiers/README.md)。
 
-## 独立代码与简化
+## 本课必须保留的机制
 
-[AnimationStudy.ts](<src/cocos2d/animation/AnimationStudy.ts>) 与 [入口](<src/main.ts>)。浏览器示例运行简化播放器，不读取 Creator 编辑器序列化的动画资源。
+保留基础动画状态与 additive 状态并存、各自具有权重的机制；源码主题是 `Animation.playAdditive` 启动额外 `AnimationState`，不是简单替换当前状态。
+
+## 最小观察宿主
+
+`src/main.ts` 一次调用 `runLesson()`，输出两个状态名称及权重；无需场景、交互或帧循环。
+
+## 模型化简化与 Creator Runtime 边界
+
+[AnimationStudy.ts](<src/cocos2d/animation/AnimationStudy.ts>) 仅用 Map 记录 base/additive 名称与权重，不推进时间、不采样动画、不计算混合后姿态；未执行 `CCAnimation.playAdditive` 创建并由 `AnimationManager` 更新多个状态的 Runtime 阶段。
 
 ## 运行
 

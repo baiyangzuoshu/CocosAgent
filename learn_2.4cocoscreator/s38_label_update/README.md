@@ -29,3 +29,15 @@ deno task serve
 ~~~
 
 打开 <http://localhost:8000>。
+
+## 本课必须保留的机制
+
+- 修改 `Label.string` 标记渲染数据脏；RenderFlow 后续调用 assembler 重建文字顶点数据。
+
+## 最小观察宿主
+
+- 文本输入框改变字符串，页面显示脏状态和模拟的刷新结果。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 固定字宽与 DOM 文本只用于观察更新时机；没有字体/字形缓存、RenderData 缓冲或 Canvas/WebGL 绘制。

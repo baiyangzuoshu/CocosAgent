@@ -27,3 +27,15 @@ deno task serve
 ~~~
 
 打开 http://127.0.0.1:8000，观察双向矩阵通过后才派发回调，且 `disabledOnce` 只阻止本步响应。
+
+## 本课必须保留的机制
+
+- collisionMatrix 双向过滤、fixture contact listener 登记、接触回调派发以及 `disabledOnce` 的单步效应。
+
+## 最小观察宿主
+
+- 页面预设的一对 Collider 和一次模拟接触展示矩阵判断与回调结果。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 仅模拟一次接触报告；不运行 Box2D 几何碰撞、接触生成或 PreSolve 求解。

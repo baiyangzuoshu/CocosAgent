@@ -27,3 +27,15 @@ deno task serve
 ~~~
 
 打开 `http://127.0.0.1:8000` 查看阶段顺序。
+
+## 本课必须保留的机制
+
+- Web 引擎构建由 Browserify 组织源码，构建宏参与裁剪，再经过压缩优化并写出 bundle。
+
+## 最小观察宿主
+
+- 页面按顺序显示构建阶段和输出文件名。
+
+## 模型化简化与 Creator Runtime 边界
+
+- 页面只报告流程，不运行 Browserify、Terser 或 Creator Builder，也不会生成真实引擎 bundle。
