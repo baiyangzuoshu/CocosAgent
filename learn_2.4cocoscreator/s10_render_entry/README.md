@@ -2,6 +2,27 @@
 
 **目标：** 看清每帧更新结束后，当前场景怎样进入 Web 渲染器。
 
+## 流程图
+
+```mermaid
+flowchart TD
+  A[Director 构造时监听 EVENT_ENGINE_INITED] --> B[game.run]
+  B --> C[初始化配置并 prepare]
+  C --> D[_prepareFinished]
+  D --> E[_initEngine 发出 EVENT_ENGINE_INITED]
+  E --> F[Director.init]
+  F --> G[_runMainLoop 安排 requestAnimationFrame]
+  G --> H[发出 EVENT_GAME_INITED 并调用 onStart]
+  H --> I[runSceneImmediate 设置活动 Scene]
+  G --> J[requestAnimationFrame 回调]
+  J --> K[Director.mainLoop]
+  K --> L[每帧更新阶段]
+  I --> L
+  L --> M[Renderer.render 活动 Scene]
+  M --> N[RenderFlow.render 接收 Scene]
+  N --> O[本课模型记录场景名，不遍历或绘制]
+```
+
 ## 本课增量
 
 `game.run()` 完成启动后进入 Director 主循环；Director 每帧完成更新阶段，再调用 Renderer；Renderer 把活动场景交给 RenderFlow。本课让页面显示到达流程的场景名，不遍历子节点、不生成绘制数据；节点遍历留到第 11 课。启动链是观察渲染入口的必要前置条件，保留在本课入口中。

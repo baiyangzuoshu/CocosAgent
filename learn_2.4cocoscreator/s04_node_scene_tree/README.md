@@ -2,6 +2,20 @@
 
 **目标：** 看清 Node 怎样通过父节点和子节点组成场景树。
 
+## 流程图
+
+```mermaid
+flowchart TD
+  A[Scene] --> B[继承 Node]
+  B --> C[继承 BaseNode]
+  C --> D[保存 parent / children]
+  E[addChild(child)] --> F{child 已有 parent?}
+  F -- 否 --> G[设置 child.parent]
+  G --> H[加入 parent.children]
+  H --> I[递归遍历得到场景树]
+  F -- 是 --> J[本课程模型拒绝重复挂载]
+```
+
 ## 本课增量
 
 本课新增 `BaseNode` 保存 `_parent`、`_children`，`Node` 继承 `BaseNode`，`Scene` 再继承 `Node`。页面创建一棵小树并递归显示层级。

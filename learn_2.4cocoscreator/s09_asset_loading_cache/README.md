@@ -2,6 +2,28 @@
 
 **目标：** 看清同一 UUID 的第二次请求怎样复用 Asset 对象。
 
+## 流程图
+
+```mermaid
+flowchart TD
+  A[第一次 loadAny UUID] --> B[LoadPipeline.load]
+  B --> C{UUID 缓存命中?}
+  C -- 是 --> D[queueMicrotask 排队返回缓存 Asset]
+  C -- 否 --> E[Config 按 UUID 查找文件信息]
+  E --> F{找到资源信息?}
+  F -- 否 --> G[回调加载错误]
+  F -- 是 --> H[fetch 并解析 JSON]
+  H --> I{请求与解析成功?}
+  I -- 否 --> G
+  I -- 是 --> J[创建 CCAsset]
+  J --> K[按 UUID 写入缓存]
+  K --> L[首次回调返回 Asset]
+  L --> M[第二次 loadAny 同一 UUID]
+  M --> B
+  D --> N[第二次回调]
+  N --> O[比较两次结果: 同一对象]
+```
+
 ## 本课增量
 
 `CCAssetManager.loadAny()` 把请求交给加载管线。管线先查 UUID 缓存；未命中时按配置取文件、解析并创建 `CCAsset`，再放进缓存。示例连续请求同一个 UUID，页面显示两次回调拿到同一对象。

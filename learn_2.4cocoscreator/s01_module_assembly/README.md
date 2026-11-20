@@ -2,6 +2,18 @@
 
 **目标：** 看清引擎入口如何先建立共享的 cc，再加载模块。
 
+## 流程图
+
+```mermaid
+flowchart TD
+  A[src/index.ts] --> B[创建或复用 window.cc]
+  B --> C[确保 cc.internal 存在]
+  C --> D[按顺序加载 core/predefine.ts]
+  D --> E[导入 CCMacro.ts]
+  E --> F[副作用注册 cc.macro.RAD / DEG]
+  F --> G[页面读取已装配的 RAD]
+```
+
 ## 本课增量
 
 src/index.ts 创建 window.cc 和 cc.internal，再按顺序加载 core/predefine.ts。predefine.ts 当前只加载 CCMacro.ts；该模块把 RAD、DEG 注册到 cc.macro。

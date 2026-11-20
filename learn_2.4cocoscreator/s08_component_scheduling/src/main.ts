@@ -1,7 +1,8 @@
 import cc from "./index.ts";
 
 const status = document.querySelector<HTMLPreElement>("#status");
-if (!status) throw new Error("找不到页面状态节点 #status");
+const toggleActive = document.querySelector<HTMLButtonElement>("#toggle-active");
+if (!status || !toggleActive) throw new Error("找不到状态节点或启停按钮");
 
 const NodeClass = cc.Node;
 const SceneClass = cc.Scene;
@@ -20,6 +21,7 @@ class PlayerComponent extends ComponentClass {
 
   override onLoad(): void { this.events.push("onLoad"); }
   override onEnable(): void { this.events.push("onEnable"); }
+  override onDisable(): void { this.events.push("onDisable"); }
   override start(): void {
     this.events.push("start");
     this.firstSchedule.push("start");
@@ -47,13 +49,22 @@ const component = player.addComponent(PlayerComponent);
 scene.addChild(player);
 
 const render = (): void => {
+  const hasStarted = component.firstSchedule.includes("start");
+  toggleActive.disabled = !hasStarted;
+  toggleActive.textContent = player.active ? "停用节点调度" : "重新启用节点调度";
   status.textContent = [
     `帧数: ${director.totalFrames}`,
+    `Player.active: ${player.active}`,
     `首次调度阶段（持续保留）: ${component.firstSchedule.join(" → ") || "等待"}`,
     `最近回调: ${component.events.slice(-6).join(" → ")}`,
     "每帧顺序: start（一次）→ update → lateUpdate",
   ].join("\n");
 };
+
+toggleActive.addEventListener("click", () => {
+  player.active = !player.active;
+  render();
+});
 
 director.on(DirectorClass.EVENT_AFTER_UPDATE, render);
 game.run({ frameRate: 60 }, () => director.runSceneImmediate(scene));

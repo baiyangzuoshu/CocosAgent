@@ -2,6 +2,20 @@
 
 **目标：** 看清 Director 启动场景时，NodeActivator 怎样把本地 `active` 状态传到节点树。
 
+## 流程图
+
+```mermaid
+flowchart TD
+  A[game.run 启动] --> B[Director.runSceneImmediate]
+  B --> C[Scene._activate]
+  C --> D[NodeActivator 递归访问节点]
+  D --> E{父节点在活动层级且本地 active?}
+  E -- 是 --> F[activeInHierarchy = true]
+  E -- 否 --> G[activeInHierarchy = false]
+  F --> H[继续处理子节点]
+  G --> H
+```
+
 ## 本课增量
 
 场景启动后，激活器从 Scene 根节点向下遍历。只有本地 `active` 为真的节点才会进入激活层级。示例把 Canvas 设为未激活，因此 Player 虽然本地 `active` 为真，`activeInHierarchy` 仍为假；同级的 World 保持激活。

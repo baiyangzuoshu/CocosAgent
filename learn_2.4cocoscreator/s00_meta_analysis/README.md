@@ -2,6 +2,21 @@
 
 **目标：** 从 Creator 2.4 的贴图 `.meta` 中区分 Texture 主资源和 SpriteFrame 子资源，并验证复制、删除和重新导入时身份如何变化。
 
+## 流程图
+
+```mermaid
+flowchart TD
+  A[读取真实贴图 .meta] --> B[查看顶层 Texture UUID]
+  A --> C[查看 subMetas SpriteFrame UUID]
+  C --> D[核对 rawTextureUuid 回指顶层 UUID]
+  B --> E[区分主资源与子资源身份]
+  D --> E
+  F[记录复制 删除 重新导入样本] --> G[比较各次 UUID]
+  G --> H[形成导入观察结论]
+  I[deno task analyze] --> J[输出精简样例中的 UUID 关系]
+  J -.不执行编辑器导入.-> H
+```
+
 ## 先看真实 `.meta`
 
 打开 `2.4NewProject/assets/Texture/HelloWorld.png.meta`，重点看这些字段：

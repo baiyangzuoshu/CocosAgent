@@ -2,6 +2,21 @@
 
 **目标：** 看清 Director 如何等待引擎初始化事件，以及浏览器帧回调如何进入 mainLoop。
 
+## 流程图
+
+```mermaid
+flowchart TD
+  A[创建 Director] --> B[once 监听 EVENT_ENGINE_INITED]
+  C[game.run 启动] --> D[_initEngine 发出 EVENT_ENGINE_INITED]
+  D --> B
+  B --> E[Director.init]
+  E --> F[_runMainLoop]
+  F --> G[requestAnimationFrame 提供时间戳]
+  G --> H[director.mainLoop(now)]
+  H --> I[更新帧数和 deltaTime]
+  I --> G
+```
+
 ## 本课增量
 
 Director 构造时用 once 监听 EVENT_ENGINE_INITED。CCGame 发出该事件后调用 Director.init()；准备完成后，CCGame 用 requestAnimationFrame 循环调用 director.mainLoop(now)。

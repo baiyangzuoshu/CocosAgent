@@ -2,6 +2,20 @@
 
 **目标：** 看清 cc.game.run() 怎样进入引擎初始化，并按顺序发出启动事件。
 
+## 流程图
+
+```mermaid
+flowchart TD
+  A[先注册启动事件监听] --> B[game.run(config, onStart)]
+  B --> C[_initConfig]
+  C --> D[prepare]
+  D --> E[_prepareFinished]
+  E --> F[_initEngine]
+  F --> G[EVENT_ENGINE_INITED]
+  G --> H[EVENT_GAME_INITED]
+  H --> I[onStart 回调]
+```
+
 ## 本课增量
 
 本课保留第 1 课代码，增加 EventTarget、CCGame 和 cocos2d/index.ts。页面显示启动事件顺序：

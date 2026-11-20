@@ -2,6 +2,22 @@
 
 **目标：** 看清组件怎样挂到 Node 上，以及节点激活时 `onLoad`、`onEnable`、`onDisable` 的调用关系。
 
+## 流程图
+
+```mermaid
+flowchart TD
+  A[BaseNode.addComponent] --> B[创建组件实例]
+  B --> C[绑定 component.node]
+  C --> D[节点进入活动层级]
+  D --> E{首次加载?}
+  E -- 是 --> F[onLoad 一次]
+  E -- 否 --> G[跳过 onLoad]
+  F --> H[onEnable]
+  G --> H
+  H --> I[节点停用: onDisable]
+  I --> J[再次启用: onEnable]
+```
+
 ## 本课增量
 
 `BaseNode.addComponent()` 创建组件、保存 `component.node`，并在节点已经激活时通知 `NodeActivator`。节点首次激活时调用 `onLoad`，随后调用 `onEnable`；节点停用时调用 `onDisable`，再次激活只重复 `onEnable`。
