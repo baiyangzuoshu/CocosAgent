@@ -36,4 +36,4 @@ deno task build
 deno task serve
 ~~~
 
-打开 <http://localhost:8000>，页面只显示 Canvas、Player、World 的 `active` 与 `activeInHierarchy` 对照。位置、世界坐标和树形文本都不属于本课观察目标。这是课程精简实现，不依赖完整 Creator 工程。
+打开 <http://localhost:8000>，页面只显示 Canvas、Player、Weapon、World 的 `active` 与 `activeInHierarchy` 对照。Weapon 用来观察 Canvas 未激活时整段后代分支都不会进入活动层级；位置、世界坐标和树形文本都不属于本课观察目标。这是课程精简实现，不依赖完整 Creator 工程。

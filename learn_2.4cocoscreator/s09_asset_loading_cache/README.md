@@ -23,7 +23,7 @@
 
 ## 模型化简化与 Creator Runtime 边界
 
-示例只从本地 JSON 创建一个 `CCAsset`。省略 `.meta`/Bundle 配置、下载与反序列化管线、依赖图及引用计数；示例的 UUID 到文件映射由 `Config` 代替。因此观察的是缓存规则模型，不是完整 AssetManager 请求管线。
+示例只从本地 JSON 创建一个 `CCAsset`。省略 `.meta`/Bundle 配置、依赖图及引用计数；示例的 UUID 到文件映射由 `Config` 代替，`fetch + response.json()` 只模型化下载和解析边界。因此观察的是缓存规则模型，不是完整 AssetManager 请求管线。课程快照只保留 AssetManager、Config、Cache 和 CCAsset，不装配场景、组件或 Director。
 
 ## 运行
 

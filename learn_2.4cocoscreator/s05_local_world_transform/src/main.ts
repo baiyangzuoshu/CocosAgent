@@ -40,9 +40,8 @@ if (!game || !director || !Director) {
   throw new Error("cc.game 或 cc.director 没有完成注册");
 }
 
-const showResult = (deltaTime: number): void => {
+const showResult = (): void => {
   status.textContent = [
-    `帧数: ${director.totalFrames} · deltaTime: ${deltaTime.toFixed(4)}s`,
     `Player.local: (${playerLocal.x}, ${playerLocal.y})`,
     `Player.world: (${playerWorld.x}, ${playerWorld.y})`,
     `Weapon.world: (${weaponWorld.x}, ${weaponWorld.y})`,
@@ -50,4 +49,4 @@ const showResult = (deltaTime: number): void => {
 };
 
 director.on(Director.EVENT_AFTER_UPDATE, showResult);
-game.run({ frameRate: 60 }, () => showResult(0));
+game.run({ frameRate: 60 }, showResult);

@@ -15,12 +15,30 @@ if (!NodeClass || !SceneClass || !ComponentClass || !game || !director || !Direc
 
 class PlayerComponent extends ComponentClass {
   readonly events: string[] = [];
+  readonly firstSchedule: string[] = [];
+  private firstUpdateSeen = false;
 
   override onLoad(): void { this.events.push("onLoad"); }
   override onEnable(): void { this.events.push("onEnable"); }
-  override start(): void { this.events.push("start"); }
-  override update(deltaTime: number): void { this.events.push(`update(${deltaTime.toFixed(3)})`); }
-  override lateUpdate(deltaTime: number): void { this.events.push(`lateUpdate(${deltaTime.toFixed(3)})`); }
+  override start(): void {
+    this.events.push("start");
+    this.firstSchedule.push("start");
+  }
+  override update(deltaTime: number): void {
+    const event = `update(${deltaTime.toFixed(3)})`;
+    this.events.push(event);
+    if (!this.firstUpdateSeen) {
+      this.firstUpdateSeen = true;
+      this.firstSchedule.push("update");
+    }
+  }
+  override lateUpdate(deltaTime: number): void {
+    const event = `lateUpdate(${deltaTime.toFixed(3)})`;
+    this.events.push(event);
+    if (this.firstSchedule.includes("update") && !this.firstSchedule.includes("lateUpdate")) {
+      this.firstSchedule.push("lateUpdate");
+    }
+  }
 }
 
 const scene = new SceneClass("MainScene");
@@ -31,7 +49,8 @@ scene.addChild(player);
 const render = (): void => {
   status.textContent = [
     `帧数: ${director.totalFrames}`,
-    `回调: ${component.events.slice(-6).join(" → ")}`,
+    `首次调度阶段（持续保留）: ${component.firstSchedule.join(" → ") || "等待"}`,
+    `最近回调: ${component.events.slice(-6).join(" → ")}`,
     "每帧顺序: start（一次）→ update → lateUpdate",
   ].join("\n");
 };

@@ -36,7 +36,7 @@ Creator 2.4 手册说明：新建 `.meta` 时会随机生成 UUID；`.meta` 由�
 
 ## 最小观察宿主
 
-`deno task analyze` 读取从真实 `.meta` 抽取的字段子集，输出 UUID 关系和多次导入观察；无需启动浏览器 Runtime。
+`deno task analyze` 读取从真实 `.meta` 抽取的字段子集，只输出主资源/子资源 UUID 关系和 `rawTextureUuid` 对照；无需启动浏览器 Runtime。上面的 `map_bg_1.png` 三次 UUID 表是此前记录的导入观察，不是脚本现场重新生成的结果。
 
 ## 模型化简化与 Creator Runtime 边界
 
