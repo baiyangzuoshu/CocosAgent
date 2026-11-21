@@ -31,7 +31,7 @@
 - [第 6 课：场景加载后的节点激活](s06_node_activation/README.md)：由 NodeActivator 递归更新节点的层级激活状态。
 - [第 7 课：组件挂载与生命周期](s07_component_lifecycle/README.md)：观察 `onLoad`、`onEnable`、`onDisable` 的调用顺序。
 - [第 8 课：组件每帧调度](s08_component_scheduling/README.md)：观察 `start`、`update`、`lateUpdate` 的阶段顺序。
-- [第 9 课：资源请求与缓存](s09_asset_loading_cache/README.md)：同一 UUID 的重复请求复用 Asset 对象。
+- [第 9 课：资源请求与缓存](s09_asset_loading_cache/README.md)：查看 Creator 2.4.15 Asset 子类索引，并观察类型化 JsonAsset 的 UUID 缓存复用。
 - [第 10 课：Director 到渲染流程](s10_render_entry/README.md)：活动场景进入 RenderFlow。
 - [第 11 课：渲染脏标记与世界变换](s11_render_flags_dirty/README.md)：只重算发生变化的节点。
 - [第 12 课：四边形几何与 WebGL 提交](s12_sprite_quad/README.md)：把节点组装成 4 个顶点、6 个索引并绘制。

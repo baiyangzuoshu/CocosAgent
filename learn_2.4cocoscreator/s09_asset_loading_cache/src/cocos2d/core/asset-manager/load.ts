@@ -1,4 +1,5 @@
 import { CCAsset, type AssetData } from "../assets/CCAsset.ts";
+import { JsonAsset } from "../assets/CCJsonAsset.ts";
 import { Cache } from "./cache.ts";
 import { Config } from "./config.ts";
 
@@ -29,7 +30,7 @@ export class LoadPipeline {
         return response.json() as Promise<AssetData>;
       })
       .then((data) => {
-        const asset = new CCAsset(uuid, data);
+        const asset = new JsonAsset(uuid, data);
         this._assets.add(uuid, asset);
         onComplete(null, asset);
       })

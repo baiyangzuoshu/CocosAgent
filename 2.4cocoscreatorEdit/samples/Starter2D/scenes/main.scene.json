@@ -1,0 +1,71 @@
+{
+  "format": "cocos-creator-lite-scene",
+  "schemaVersion": 1,
+  "name": "Main",
+  "designResolution": {
+    "width": 960,
+    "height": 640
+  },
+  "nodes": [
+    {
+      "id": "canvas",
+      "name": "Canvas",
+      "parentId": null,
+      "active": true,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1
+      },
+      "components": [
+        {
+          "type": "Canvas"
+        }
+      ]
+    },
+    {
+      "id": "hello-label",
+      "name": "HelloLabel",
+      "parentId": "canvas",
+      "active": true,
+      "transform": {
+        "x": 0,
+        "y": 100,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1
+      },
+      "components": [
+        {
+          "type": "Label",
+          "text": "Hello, Cocos Creator Lite!",
+          "fontSize": 52,
+          "color": "#f4f7fb"
+        }
+      ]
+    },
+    {
+      "id": "accent-sprite",
+      "name": "AccentSprite",
+      "parentId": "canvas",
+      "active": true,
+      "transform": {
+        "x": 0,
+        "y": -48,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1
+      },
+      "components": [
+        {
+          "type": "Sprite",
+          "width": 220,
+          "height": 90,
+          "color": "#57c7ff"
+        }
+      ]
+    }
+  ]
+}
