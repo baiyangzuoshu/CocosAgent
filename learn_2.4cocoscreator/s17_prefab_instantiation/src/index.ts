@@ -1,7 +1,17 @@
 import type Node from "./cocos2d/core/CCNode.ts";
+import type CCObject from "./cocos2d/core/platform/CCObject.ts";
+import type Component from "./cocos2d/core/components/CCComponent.ts";
 
 export interface CocosNamespace {
   Node?: typeof Node;
+  Object?: typeof CCObject;
+  Component?: typeof Component;
+  director?: {
+    _compScheduler?: {
+      enableComp(component: Component): void;
+      disableComp(component: Component): void;
+    };
+  };
 }
 
 interface CocosWindow extends Window {

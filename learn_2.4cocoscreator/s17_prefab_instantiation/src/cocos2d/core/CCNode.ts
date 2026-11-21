@@ -1,9 +1,12 @@
 import BaseNode from "./utils/base-node.ts";
+import Component from "./components/CCComponent.ts";
+import { cloneGraph } from "./platform/instantiate.ts";
 import type { CocosNamespace } from "../../index.ts";
 
-/** 第 17 课只保留节点名、本地位置与子节点复制；事件分发与渲染状态不在本课范围内。 */
+/** Detached-node clone model; scene activation and rendering are outside this lesson. */
 export default class Node extends BaseNode {
   private _position = { x: 0, y: 0 };
+  readonly _components: Component[] = [];
 
   setPosition(x: number, y: number): void {
     this._position.x = x;
@@ -14,13 +17,14 @@ export default class Node extends BaseNode {
     return { ...this._position };
   }
 
+  addComponent<T extends Component>(component: T): T {
+    component.node = this;
+    this._components.push(component);
+    return component;
+  }
+
   _instantiate(): Node {
-    const clone = new Node(this.name);
-    clone.setPosition(this._position.x, this._position.y);
-    for (const child of this.children) {
-      clone.addChild((child as Node)._instantiate());
-    }
-    return clone;
+    return cloneGraph(this);
   }
 }
 

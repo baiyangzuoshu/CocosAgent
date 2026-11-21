@@ -11,7 +11,7 @@ export interface GameObject extends EventTarget {
   config: GameConfig;
   onStart?: () => void;
   _prepared: boolean;
-  _rendererInitialized: boolean;
+  _engineInitialized: boolean;
   _paused: boolean;
   _intervalId?: number;
   run(config?: GameConfig, onStart?: () => void): void;
@@ -28,7 +28,7 @@ const game: GameObject = {
   config: { frameRate: 60 },
   _listeners: new Map(),
   _prepared: false,
-  _rendererInitialized: false,
+  _engineInitialized: false,
   _paused: true,
   _intervalId: undefined,
   on: EventTarget.prototype.on,
@@ -54,7 +54,7 @@ const game: GameObject = {
       return;
     }
 
-    // Model the asynchronous preparation boundary without loading engine assets.
+    // Model the asynchronous preparation boundary before the event demo starts.
     Promise.resolve().then(() => this._prepareFinished(callback));
   },
 
@@ -67,11 +67,11 @@ const game: GameObject = {
   },
 
   _initEngine() {
-    if (this._rendererInitialized) {
+    if (this._engineInitialized) {
       return;
     }
 
-    this._rendererInitialized = true;
+    this._engineInitialized = true;
     this.emit(this.EVENT_ENGINE_INITED);
   },
 

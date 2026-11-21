@@ -22,11 +22,11 @@ export default class Component extends CCObject {
       this._loaded = true;
       this.onLoad();
     }
-    host.cc?.director?._compScheduler.enableComp(this);
+    host.cc?.director?._compScheduler?.enableComp(this);
   }
 
   _deactivate(): void {
-    host.cc?.director?._compScheduler.disableComp(this);
+    host.cc?.director?._compScheduler?.disableComp(this);
   }
 }
 
