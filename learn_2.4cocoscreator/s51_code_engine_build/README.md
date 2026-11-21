@@ -28,6 +28,23 @@ deno task serve
 
 打开 `http://127.0.0.1:8000` 查看阶段顺序。
 
+## 为什么这样设计
+
+引擎源码打包和 Creator Editor 项目构建不是同一责任。`buildCocosJs` 聚焦模块入口、排除规则、宏裁剪和 bundle 输出；编辑器还负责资源与项目目标等流程。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[buildCocosJs 参数] --> B[入口/模块清单]
+ B --> C[Browserify 建立依赖图]
+ C --> D[排除默认/配置模块]
+ D --> E[应用构建宏]
+ E --> F[压缩与优化]
+ F --> G[写出 JavaScript bundle]
+ H[Creator Editor Builder] -.不在此源码流程.-> I[项目/资源/平台产物]
+```
+
 ## 本课必须保留的机制
 
 - Web 引擎构建由 Browserify 组织源码，构建宏参与裁剪，再经过压缩优化并写出 bundle。

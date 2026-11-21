@@ -27,6 +27,27 @@ deno task serve
 
 打开 http://127.0.0.1:8000/。日志会显示相同材质先共用索引范围，再分别因缓冲容量、材质哈希和裁剪掩码变化结束批次。
 
+## 为什么这样设计
+
+Batcher 把多个兼容组件合成较少的提交，但必须在材质、裁剪掩码或缓冲容量不兼容时切断当前批次；`flush` 是批处理正确性的边界。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[RenderFlow 遍历组件] --> B[RenderComponent._checkBacth]
+ B --> C{材质哈希/裁剪掩码变化?}
+ C -->|是| D[ModelBatcher.flush]
+ C -->|否| E[继续写当前批次]
+ D --> E
+ E --> F[MeshBuffer 检查容量]
+ F --> G{超过容量?}
+ G -->|是| H[上传/flush/切换 Buffer]
+ G -->|否| I[追加顶点与索引]
+ H --> I
+ I --> J[terminate flush 最后一批]
+```
+
 ## 本课必须保留的机制
 
 - ModelBatcher 累积索引范围；材质哈希、cullingMask 或 MeshBuffer 容量变化时 flush 并提交 Model/InputAssembler。

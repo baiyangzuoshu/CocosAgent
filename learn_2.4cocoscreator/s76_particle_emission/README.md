@@ -13,6 +13,24 @@ ParticleSystem3D 累积 rateOverTime，再按 emitter 形状创建粒子。
 
 前置课程：[第 49 课：粒子绘制与结束](<../s49_particle_render_finish/README.md>)。
 
+## 为什么这样设计
+
+ParticleSystem3D 统一管理发射速率和容量，Emitter 只决定新粒子的初始形状分布。把发射调度与形状采样分开，便于替换发射器而保留系统时钟。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[ParticleSystem3D.update dt] --> B[rateOverTime 累计发射额度]
+ B --> C[保留小数余量]
+ C --> D{达到整数粒子且未达 capacity?}
+ D -->|否| E[等待下一帧]
+ D -->|是| F[Emitter 按 Shape 采样初始位置/方向]
+ F --> G[初始化 Particle]
+ G --> H[加入存活集合]
+ H --> D
+```
+
 ## 本课必须保留的机制
 
 保留按 `rateOverTime × dt` 累积发射额度、保存小数余量，并受 `capacity` 限制的规则；不足一个粒子时不能丢掉余量。
@@ -23,7 +41,7 @@ ParticleSystem3D 累积 rateOverTime，再按 emitter 形状创建粒子。
 
 ## 模型化简化与 Creator Runtime 边界
 
-[`ParticleStudy.ts`](<src/cocos2d/core/3d/particle/ParticleStudy.ts>) 只模拟计数与容量，不创建 ParticleSystem3D、形状发射器或粒子数据；未接入 `Director → ParticleSystem3D.update → emitter` 的每帧发射阶段，也不创建 GPU 资源。
+课程代码实现发射速率的分数配额累积、容量限制、粒子数据创建和确定性的 Box 发射采样。它是独立 TypeScript 模型，不接入 `Director → ParticleSystem3D.update` 帧链，也不创建 GPU 资源。
 
 ## 运行
 

@@ -54,6 +54,24 @@
 - [urlTransformer.js](../../engine/2.4.15engine/cocos2d/core/asset-manager/urlTransformer.js)：看 `parse()` 怎样找资源地址、`combine()` 怎样组成 URL。
 - [helper.js](../../engine/2.4.15engine/cocos2d/core/asset-manager/helper.js)：搜索 `decodeUuid`。
 
+## 为什么这样设计
+
+Bundle Config 把逻辑资源身份映射到构建记录，URL Transformer 再根据导入数据或 native 文件选择不同基址、版本和扩展名。逻辑路径、UUID 与 HTTP URL 因而可以独立演进。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[Bundle name/path] --> B[Bundle Config 查路径]
+ B --> C[UUID/type/pack/version]
+ C --> D{import pack 还是 native?}
+ D -->|import| E[importBase + UUID 分片 + version]
+ D -->|native| F[nativeBase + 文件名/扩展名]
+ E --> G[RequestItem URL]
+ F --> G
+ G --> H[Downloader]
+```
+
 ## 本课必须保留的机制
 
 保留 Config 的索引关系：scene path→`scenes` 下标→UUID，查询 `packs`/`versions`，再由 UUID、类型与版本后缀组成 import/native URL；UUID 是资源身份，URL 是文件地址。

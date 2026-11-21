@@ -1,16 +1,39 @@
-export function runLesson (): string[] {
-    type Contact = { group: number; mask: number; trigger: boolean };
-    class BoxColliderComponent {
-        constructor (readonly name: string, readonly contact: Contact) {}
-        emit (event: string): string { return `${this.name}:${event}`; }
+type Contact = { group: number; mask: number; isTrigger: boolean };
+type ContactEvent = 'collision-enter' | 'trigger-enter';
+type Listener = (otherName: string, event: ContactEvent) => void;
+
+class ColliderComponent {
+    private readonly listeners: Listener[] = [];
+    constructor(readonly name: string, readonly contact: Contact) {}
+    onContact(listener: Listener): void { this.listeners.push(listener); }
+    dispatch(otherName: string, event: ContactEvent): void {
+        for (const listener of this.listeners) listener(otherName, event);
     }
-    const player = new BoxColliderComponent('Player', { group: 1, mask: 3, trigger: false });
-    const sensor = new BoxColliderComponent('Sensor', { group: 2, mask: 1, trigger: true });
-    const accepted = (player.contact.group & sensor.contact.mask) !== 0
-        && (sensor.contact.group & player.contact.mask) !== 0;
-    if (!accepted) return ['pair filtered'];
-    return [
-        `pair accepted = ${accepted}`,
-        player.emit(sensor.contact.trigger ? 'trigger-enter' : 'collision-enter'),
-    ];
+}
+
+function filtersPass(a: Contact, b: Contact): boolean {
+    return (a.group & b.mask) !== 0 && (b.group & a.mask) !== 0;
+}
+
+class ContactBridge {
+    report(a: ColliderComponent, b: ColliderComponent): string[] {
+        if (!filtersPass(a.contact, b.contact)) return ['pair filtered by group/mask'];
+        const event: ContactEvent = a.contact.isTrigger || b.contact.isTrigger ? 'trigger-enter' : 'collision-enter';
+        const log: string[] = [];
+        a.dispatch(b.name, event);
+        b.dispatch(a.name, event);
+        log.push(`backend contact -> ${event}`);
+        return log;
+    }
+}
+
+export function runLesson(): string[] {
+    const log: string[] = [];
+    const player = new ColliderComponent('Player', { group: 1, mask: 3, isTrigger: false });
+    const sensor = new ColliderComponent('Sensor', { group: 2, mask: 1, isTrigger: true });
+    player.onContact((other, event) => log.push(`Player received ${event} from ${other}`));
+    sensor.onContact((other, event) => log.push(`Sensor received ${event} from ${other}`));
+    const bridge = new ContactBridge();
+    log.push(...bridge.report(player, sensor));
+    return log;
 }

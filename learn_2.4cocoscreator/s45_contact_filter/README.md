@@ -28,6 +28,26 @@ deno task serve
 
 打开 http://127.0.0.1:8000，观察双向矩阵通过后才派发回调，且 `disabledOnce` 只阻止本步响应。
 
+## 为什么这样设计
+
+碰撞资格、事件订阅和碰撞响应分开管理：过滤器减少不需要的接触；只为订阅者登记 fixture；PreSolve 提供仅影响当前时间步的响应控制。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[Node group pair] --> B[collisionMatrix 双向检查]
+ B -->|拒绝| C[Box2D 不生成接触]
+ B -->|通过| D[categoryBits / maskBits]
+ D --> E[创建 Fixture]
+ E --> F{RigidBody listener enabled?}
+ F -->|否| G[不登记事件 fixture]
+ F -->|是| H[ContactListener 登记]
+ H --> I[接触回调派发]
+ I --> J[PreSolve 设置 disabledOnce]
+ J --> K[本次 SetEnabled false]
+```
+
 ## 本课必须保留的机制
 
 - collisionMatrix 双向过滤、fixture contact listener 登记、接触回调派发以及 `disabledOnce` 的单步效应。

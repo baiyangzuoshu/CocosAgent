@@ -9,6 +9,26 @@
 3. 点“销毁 EnemyB”：调用返回后 `isValid` 仍为 true。下一帧状态区保存两次快照：`EVENT_AFTER_UPDATE` 时队列尚未处理；`EVENT_AFTER_FRAME` 时课程销毁队列已处理，`onDisable → onDestroy` 完成且 `isValid=false`。
 4. 销毁请求一旦接受，按钮会立即禁用，避免重复请求覆盖观察结果。
 
+## 为什么这样设计
+
+销毁需要避开正在遍历和更新对象的阶段。`destroy()` 只登记请求，由 Director 在统一时点处理，这样回调顺序和层级清理由引擎集中控制。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+    A[业务调用 destroy] --> B[CCObject 入延迟队列]
+    B --> C[Director 运行 start/update]
+    C --> D[Scheduler 与 lateUpdate]
+    D --> E[deferredDestroy 处理队列]
+    E --> F[停用活动节点与组件]
+    F --> G[递归销毁子节点和组件]
+    G --> H[onDestroy]
+    H --> I[isValid 变为 false]
+    C --> J[removeFromParent false]
+    J --> K[节点离开层级但仍有效]
+```
+
 ## 本课必须保留的机制
 
 - `destroy()` 只把对象排入延迟队列，调用后对象仍有效；重复请求不会再次加入。

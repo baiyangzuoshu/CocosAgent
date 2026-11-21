@@ -71,6 +71,25 @@ load:    preprocess → load
 
 真实 Runtime 的文件缓存按 RequestItem.id（UUID 加 `@import`/`@native` 类型）组织；PackManager 会把一个下载到的 pack 拆成多个资源条目。本课为了讲清“下载文件”和“创建 Asset”的区别，按 URL 统计下载文件。两种缓存的键不同，不要把课程 Map 当成 Runtime 缓存实现。
 
+## 为什么这样设计
+
+`preload` 先准备请求与文件，`load` 才解析、反序列化并创建 Asset。拆成 pipeline stages 后，下载缓存和对象缓存可以分别复用，也能解释一个 pack 含多个 Asset。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[preloadAny input] --> B[preprocess UUID/RequestItem]
+ B --> C[fetch dependencies/files]
+ C --> D[文件缓存已就绪，尚无 Asset]
+ E[loadAny input] --> F[preprocess]
+ F --> G[fetch/parse import pack]
+ G --> H[deserialize Asset]
+ H --> I[递归 load dependencies]
+ I --> J[缓存适用 Asset 并返回]
+ J --> K[SceneAsset 返回但跳过共享 assets 缓存]
+```
+
 ## 本课必须保留的机制
 
 保留 `preload: preprocess → fetch` 与 `load: preprocess → load/parse → dependencies → deserialize/cache` 的分界：文件准备完成不等于 Asset 已创建；SceneAsset 返回但不进入通用 Asset 缓存，普通 SpriteFrame/Texture2D 可复用。

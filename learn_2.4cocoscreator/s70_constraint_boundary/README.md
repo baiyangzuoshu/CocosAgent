@@ -14,6 +14,23 @@ PhysicsSelector 选择 Builtin/Cannon；2.4 framework 没有引擎级 3D Constra
 
 前置课程：[第 69 课](<../s69_physics_queries/README.md>)。
 
+## 为什么这样设计
+
+后端选择器只负责选择已存在的物理实现，不代表公共框架自动拥有所有物理能力。明确接口缺失能防止把别的版本或后端特性误写成 Creator 2.4 API。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[构建/运行选择 Physics backend] --> B[PhysicsSelector]
+ B --> C{Builtin 或 Cannon?}
+ C --> D[创建可用 PhysicsWorld]
+ D --> E[刚体/碰撞体/查询接口]
+ E --> F[检查 framework 暴露的能力]
+ F --> G[2.4 无引擎级 3D Constraint component]
+ G --> H[不要虚构 Constraint Runtime API]
+```
+
 ## 本课必须保留的机制
 
 必须保留 Creator 2.4.15 的能力边界：PhysicsSelector 可选择 Builtin/Cannon，但本版 framework 没有引擎级 3D Constraint 组件；不能把其他版本或后端能力说成本版 Runtime API。

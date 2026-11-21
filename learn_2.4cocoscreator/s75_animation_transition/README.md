@@ -14,17 +14,34 @@ Animation.playAdditive 启动额外 AnimationState。
 
 前置主题：[动作与时间推进](../s34_action_modifiers/README.md)。
 
+## 为什么这样设计
+
+基础状态和 additive 状态分别保留自己的时间与权重，允许在当前动画上叠加额外变化；这和直接替换当前播放状态不同。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[CCAnimation.play] --> B[基础 AnimationState]
+ C[CCAnimation.playAdditive] --> D[额外 AnimationState]
+ B --> E[AnimationManager 更新各状态]
+ D --> E
+ E --> F[各自采样动画曲线]
+ F --> G[按 additive/weight 应用属性变化]
+ G --> H[形成组合后的目标姿态]
+```
+
 ## 本课必须保留的机制
 
 保留基础动画状态与 additive 状态并存、各自具有权重的机制；源码主题是 `Animation.playAdditive` 启动额外 `AnimationState`，不是简单替换当前状态。
 
 ## 最小观察宿主
 
-`src/main.ts` 一次调用 `runLesson()`，输出两个状态名称及权重；无需场景、交互或帧循环。
+`src/main.ts` 一次调用 `runLesson()`，输出 base 与 additive 状态的采样值、权重、时间和合成数值；无需场景或交互。
 
 ## 模型化简化与 Creator Runtime 边界
 
-[AnimationStudy.ts](<src/cocos2d/animation/AnimationStudy.ts>) 仅用 Map 记录 base/additive 名称与权重，不推进时间、不采样动画、不计算混合后姿态；未执行 `CCAnimation.playAdditive` 创建并由 `AnimationManager` 更新多个状态的 Runtime 阶段。
+课程代码保留一个 base 状态和多个 additive 状态，各自推进时间；示例将 base 采样值与按权重缩放的 additive 采样值相加，展示“叠加”对目标数值的影响。它用固定采样值替代真实曲线采样，不接入 Creator Runtime 的 `AnimationManager` 和属性曲线系统。
 
 ## 运行
 

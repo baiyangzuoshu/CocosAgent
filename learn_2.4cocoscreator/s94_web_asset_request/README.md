@@ -76,6 +76,25 @@ python3 -m http.server 8104 --bind 127.0.0.1
 - [依赖解析](../../engine/2.4.15engine/cocos2d/core/asset-manager/depend-util.js)、[load](../../engine/2.4.15engine/cocos2d/core/asset-manager/load.js)、[deserialize](../../engine/2.4.15engine/cocos2d/core/asset-manager/deserialize.js)
 - [缓存策略](../../engine/2.4.15engine/cocos2d/core/asset-manager/utilities.js)：utilities.cache() 将 SceneAsset 排除在共享 assets 缓存之外。
 
+## 为什么这样设计
+
+场景加载把逻辑场景名一路转换成 Bundle 记录、UUID、请求和依赖 Asset。让每层只传递自己的数据对象，AssetManager 才能复用下载、解析与反序列化流程。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[Director.loadScene path] --> B[Bundle.loadScene]
+ B --> C[Config 查 Scene UUID]
+ C --> D[RequestItem/URL]
+ D --> E[Downloader/PackManager 取 import pack]
+ E --> F[Parser + deserialize SceneAsset]
+ F --> G[解析外部 UUID 依赖]
+ G --> H[load SpriteFrame/Texture2D native]
+ H --> I[SceneAsset 回到 Director]
+ I --> J[runSceneImmediate]
+```
+
 ## 本课必须保留的机制
 
 保留 `Bundle → Config → RequestItem → Fetch/Parse → Dependencies → Asset` 的输入输出交接；一个 import pack 可服务多个 Asset，依赖先创建，SceneAsset 返回但跳过通用 assets 缓存。

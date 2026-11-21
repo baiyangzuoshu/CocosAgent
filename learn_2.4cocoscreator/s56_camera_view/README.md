@@ -28,6 +28,22 @@ deno task serve
 
 打开 `http://127.0.0.1:8000/s56_camera_view/`，输出应按 `Main`、`Overlay` 顺序显示两个 View。
 
+## 为什么这样设计
+
+CameraComponent 只负责组件侧属性和生命周期，RendererCamera 保存渲染所需状态，View 是排序和绘制阶段的工作单元。ForwardRenderer 按 View 处理，让多相机有统一输入格式。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[CameraComponent properties] --> B[同步到 RendererCamera]
+ B --> C[onEnable 注册到 renderer.scene]
+ C --> D[ForwardRenderer.extractView]
+ D --> E[归一化 viewport 转像素 View]
+ E --> F[按 priority 排序]
+ F --> G[逐个渲染 View]
+```
+
 ## 本课必须保留的机制
 
 - CameraComponent 注册 RendererCamera，ForwardRenderer 将相机参数整理成按顺序处理的 View。

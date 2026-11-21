@@ -11,6 +11,25 @@ setAnimation 替换指定播放单元，addAnimation 排队；mix 配置描述�
 - [Skeleton.js](../../engine/2.4.15engine/extensions/spine/Skeleton.js)：重点查看 setAnimation、addAnimation、setMix。
 - [track-entry-listeners.js](../../engine/2.4.15engine/extensions/spine/track-entry-listeners.js)：重点查看 TrackEntry 回调转发。
 
+## 为什么这样设计
+
+轨道负责动画的替换和排队，TrackEntry 保存一次播放配置；Mix 配置描述旧状态到新状态的过渡时长。显式状态对象让事件回调和混合权重可跟踪。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[setAnimation(track, clip)] --> B[替换轨道当前 TrackEntry]
+ C[addAnimation(track, clip, delay)] --> D[加入轨道队列]
+ B --> E[AnimationState.update]
+ D --> E
+ E --> F[当前 entry 推进时间]
+ F --> G{当前完成?}
+ G -->|否| F
+ G -->|是| H[激活队列下一项]
+ H --> I[按 Mix 配置过渡]
+```
+
 ## 本课必须保留的机制
 
 保留同一轨道中 `setAnimation` 替换当前项、`addAnimation` 排队后续项，以及 mix 时长描述切换过程的规则。
@@ -21,7 +40,7 @@ setAnimation 替换指定播放单元，addAnimation 排队；mix 配置描述�
 
 ## 模型化简化与 Creator Runtime 边界
 
-[`SpineStudy.ts`](<src/extensions/spine/SpineStudy.ts>) 仅打印一条手工构造的轨道/混合示例，不创建 Spine `AnimationState`、不推进时间、不触发 TrackEntry 回调；省略 Runtime 对轨道队列和 mix 时长的实际处理阶段。
+课程代码实现按轨道替换/排队、时间推进、混合进度和完成后激活下一项，并把当前项超时量带入队列项。它是独立状态机，不调用 Spine Runtime 的 `AnimationState` 或第三方轨道回调。
 
 ## 运行
 

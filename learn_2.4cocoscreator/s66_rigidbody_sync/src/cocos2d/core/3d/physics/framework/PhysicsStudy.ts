@@ -1,23 +1,48 @@
-export function runLesson (): string[] {
-    const log: string[] = [];
-    const bodies = new Set<string>();
-    const world = {
-        addBody (name: string): void { bodies.add(name); log.push(`world.add(${name})`); },
-        removeBody (name: string): void { bodies.delete(name); log.push(`world.remove(${name})`); },
-        step (): number { log.push(`Physics3DManager.step(1/60)`); return 4.25; },
-    };
-    class RigidBodyComponent {
-        nodeY = 2;
-        enabled = false;
-        constructor (readonly name: string) {}
-        onEnable (): void { this.enabled = true; world.addBody(this.name); }
-        syncPhysicsToNode (bodyY: number): void { this.nodeY = bodyY; log.push(`node.y = ${bodyY}`); }
-        onDisable (): void { this.enabled = false; world.removeBody(this.name); }
+type Vec3 = { x: number; y: number; z: number };
+type Body = { name: string; position: Vec3; velocity: Vec3 };
+
+class PhysicsWorld {
+    private readonly bodies = new Map<string, Body>();
+    addBody(body: Body): void { this.bodies.set(body.name, body); }
+    removeBody(name: string): void { this.bodies.delete(name); }
+    step(dt: number): void {
+        for (const body of this.bodies.values()) {
+            body.velocity.y -= 9.8 * dt;
+            body.position.x += body.velocity.x * dt;
+            body.position.y += body.velocity.y * dt;
+            body.position.z += body.velocity.z * dt;
+        }
     }
-    const body = new RigidBodyComponent('Crate');
+}
+
+class RigidBodyComponent {
+    private body: Body | null = null;
+    constructor(readonly name: string, private readonly world: PhysicsWorld, public nodePosition: Vec3) {}
+    onEnable(): void {
+        if (this.body) return;
+        this.body = { name: this.name, position: { ...this.nodePosition }, velocity: { x: 0, y: 0, z: 0 } };
+        this.world.addBody(this.body);
+    }
+    syncPhysicsToNode(): void {
+        if (this.body) this.nodePosition = { ...this.body.position };
+    }
+    onDisable(): void {
+        if (!this.body) return;
+        this.world.removeBody(this.body.name);
+        this.body = null;
+    }
+}
+
+export function runLesson(): string[] {
+    const log: string[] = [];
+    const world = new PhysicsWorld();
+    const body = new RigidBodyComponent('Crate', world, { x: 0, y: 2, z: 0 });
     body.onEnable();
-    body.syncPhysicsToNode(world.step());
+    log.push('onEnable: body registered');
+    world.step(1 / 60);
+    body.syncPhysicsToNode();
+    log.push(`after step: node.y=${body.nodePosition.y.toFixed(3)}`);
     body.onDisable();
-    log.push(`registered after disable = ${bodies.has(body.name)}`);
+    log.push('onDisable: body removed');
     return log;
 }

@@ -26,6 +26,24 @@
 
 版本要点：**Creator 2.4.15** 的课程目标是浏览器 WebGL 1。不把另一版的 Effect 语法、Shader API 或设备路径套进来。
 
+## 为什么这样设计
+
+顶点属性描述每个顶点携带的数据，MVP 把模型位置转换到裁剪空间；varying 再把顶点 UV/颜色交给光栅化插值。数据流分清后，才能判断坐标错误发生在哪个阶段。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[Vertex buffer: position/UV/color] --> B[attribute fetch]
+ B --> C[vertex shader]
+ C --> D[u_mvp * position]
+ D --> E[gl_Position clip space]
+ C --> F[varying UV/color]
+ E --> G[Rasterization]
+ F --> G
+ G --> H[per-fragment interpolated values]
+```
+
 ## 本课必须保留的机制
 
 保留位置/UV/顶点色属性输入、`u_mvp` 变换至裁剪空间，以及顶点 Shader 把 UV/颜色经 varying 传递；本课片元只显示插值颜色，不采样 UV。

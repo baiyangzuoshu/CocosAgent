@@ -26,6 +26,23 @@
 
 版本要点：**Creator 2.4.15** 的课程目标是浏览器 WebGL 1。不把另一版的 Effect 语法、Shader API 或设备路径套进来。
 
+## 为什么这样设计
+
+Shader 源码和材质参数分离，使同一个已编译 Program 能服务多个材质实例。Pass 保存参数，Renderer/Device 在当前绘制前写 Uniform，不必为每个颜色重编 Shader。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[Pass stores u_tint value] --> B[BaseRenderer selects Program]
+ B --> C[Device.useProgram]
+ A --> D[Renderer reads Pass property]
+ D --> E[Device.uniform4fv]
+ C --> F[draw quad]
+ E --> F
+ F --> G[shared Shader, different material output]
+```
+
 ## 本课必须保留的机制
 
 保留 Pass 保存 Uniform 参数、同一 WebGLProgram 可对不同绘制分别设置 `u_tint`，Device 在 draw 时把参数写入当前程序。

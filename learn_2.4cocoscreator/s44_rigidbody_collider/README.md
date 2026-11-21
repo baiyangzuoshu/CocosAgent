@@ -29,6 +29,25 @@ deno task serve
 
 打开 http://127.0.0.1:8000，观察 `ground` 与 `crate` 各自的 body type，以及 Collider 如何把形状和材质交给 body。
 
+## 为什么这样设计
+
+Node、RigidBody、Collider 与 Box2D 各有不同职责：Node 提供变换，RigidBody 建立刚体，Collider 把几何和材质变成 fixture，物理后端负责模拟。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[Node 世界变换] --> B[RigidBody.__init]
+ B --> C[生成 BodyDef]
+ C --> D[PhysicsManager]
+ D --> E[Box2D World.CreateBody]
+ F[同节点 Collider] --> G[查找 RigidBody]
+ G --> H[盒形转 PolygonShape]
+ H --> I[材质填入 FixtureDef]
+ I --> J[Body.CreateFixture]
+ J --> K[物理步进结果同步回 Node]
+```
+
 ## 本课必须保留的机制
 
 - Node 提供 RigidBody 的世界位置；同节点 Collider 把形状与材质转换成 fixture 并挂到 body。

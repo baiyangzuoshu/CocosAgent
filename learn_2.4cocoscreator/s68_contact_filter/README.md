@@ -14,6 +14,25 @@ ColliderComponent.on 注册 collision/trigger 回调；后端事件回到组件�
 
 前置课程：[第 67 课](<../s67_collider_shapes/README.md>)。
 
+## 为什么这样设计
+
+过滤、接触生成和脚本通知是不同阶段：先用 group/mask 排除不可能的组合，再让后端生成接触，最后按 trigger/collision 类型派发事件。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[Collider A group/mask] --> C{双向 group-mask 相交?}
+ B[Collider B group/mask] --> C
+ C -->|否| D[过滤接触对]
+ C -->|是| E[后端生成 Contact]
+ E --> F{是否 Trigger?}
+ F -->|是| G[trigger-enter/stay/exit]
+ F -->|否| H[collision-enter/stay/exit]
+ G --> I[ColliderComponent 派发]
+ H --> I
+```
+
 ## 本课必须保留的机制
 
 保留 group/mask 双向相交的过滤规则，以及通过 trigger 标志选择 `trigger-enter` 或 `collision-enter` 通知的职责划分。

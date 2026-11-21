@@ -28,6 +28,22 @@ deno task serve
 
 打开 `http://127.0.0.1:8000`，观察配置、贴图和空模拟器列表分别从哪里进入组件。
 
+## 为什么这样设计
+
+配置资源、组件和 Simulator 分层，使编辑器资产可序列化，而模拟器只持有运行所需参数和活动对象。System 预加载配置，但不会因此立即产生粒子。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[ParticleAsset 配置 + SpriteFrame] --> B[ParticleSystem.__preload]
+ B --> C[解析字典/发射器参数]
+ C --> D[载入贴图引用]
+ D --> E[初始化 Simulator]
+ E --> F[活动粒子列表为空]
+ E --> G[对象池待发射时再取对象]
+```
+
 ## 本课必须保留的机制
 
 - ParticleAsset 配置与 SpriteFrame 进入 ParticleSystem，并由 System 建立 Simulator；构造后活动列表为空。

@@ -27,6 +27,24 @@ main.ts 创建 WebGL 1 上下文，输入一个三角形的三个二维顶点。
 
 版本要点：**Creator 2.4.15** 的课程目标是浏览器 WebGL 1。不把另一版的 Effect 语法、Shader API 或设备路径套进来。
 
+## 为什么这样设计
+
+Effect 资源把顶点与片元两个编程阶段分开，WebGL 必须分别编译再链接成 Program。区分阶段能明确顶点数据转换与最终片元颜色的职责。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[Effect vertex source] --> B[compile vertex shader]
+ C[Effect fragment source] --> D[compile fragment shader]
+ B --> E[link WebGLProgram]
+ D --> E
+ E --> F[bind attributes/uniforms]
+ F --> G[提交 draw]
+ G --> H[Vertex stage gl_Position]
+ H --> I[Fragment stage output color]
+```
+
 ## 本课必须保留的机制
 
 保留 Effect 的 vertex/fragment 源码分离、两阶段分别编译并链接成 Program，以及顶点写入 `gl_Position`、片元产生最终颜色的职责。

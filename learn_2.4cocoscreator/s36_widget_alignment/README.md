@@ -29,6 +29,23 @@ deno task serve
 
 打开 <http://localhost:8000>。
 
+## 为什么这样设计
+
+Widget 将布局约束保存在组件上，WidgetManager 集中处理窗口变化和延迟对齐。这样尺寸变化不会要求每个业务组件自己订阅 resize 并计算锚点和边距。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+    A[窗口 resize] --> B[WidgetManager 通知受影响 Widget]
+    B --> C[Widget 标记待对齐]
+    C --> D[Director 到 AFTER_UPDATE]
+    D --> E[WidgetManager.align]
+    E --> F[读取父节点尺寸/锚点/边距]
+    F --> G[计算并写回子节点位置]
+    H[updateAlignment] --> E
+```
+
 ## 本课必须保留的机制
 
 - Widget 根据父节点边缘、锚点和边距计算位置；resize 后由 WidgetManager 安排 `AFTER_UPDATE` 对齐。

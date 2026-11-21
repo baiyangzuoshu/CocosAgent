@@ -26,6 +26,22 @@
 
 版本要点：**Creator 2.4.15** 的课程目标是浏览器 WebGL 1。不把另一版的 Effect 语法、Shader API 或设备路径套进来。
 
+## 为什么这样设计
+
+片元 Shader 决定源颜色，Blend 状态决定源与 framebuffer 目标颜色怎样组合。预乘 Alpha 规定 RGB 已乘过 Alpha，因此相应因子要用 `ONE`；两者必须配套。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[fragment shader straight RGB + alpha] --> B[premultiply rgb *= alpha]
+ B --> C[source color]
+ D[framebuffer destination color] --> E[Blend equation]
+ C --> E
+ F[Pass blendFunc ONE / ONE_MINUS_SRC_ALPHA] --> E
+ E --> G[write blended framebuffer color]
+```
+
 ## 本课必须保留的机制
 
 保留片元输出先进行 RGB 预乘，再使用 `ONE / ONE_MINUS_SRC_ALPHA` 混合；最终屏幕颜色由 Shader 输出与 Blend 状态共同决定。

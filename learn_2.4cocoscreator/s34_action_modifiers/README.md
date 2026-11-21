@@ -30,6 +30,25 @@ deno task serve
 
 打开 <http://localhost:8000>。
 
+## 为什么这样设计
+
+把时间变换封装为动作修饰器，可以复用同一个间隔动作并组合不同节奏，而不必在业务属性更新代码里重复实现 easing、循环或反向逻辑。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+    A[ActionInterval.step] --> B[归一化进度 t]
+    B --> C{修饰方式}
+    C -->|EaseIn| D[Math.pow t rate]
+    C -->|Repeat| E[切分周期并算局部进度]
+    C -->|ReverseTime| F[计算 1 - t]
+    D --> G[内层 update]
+    E --> G
+    F --> G
+    G --> H[写属性或观察进度]
+```
+
 ## 本课必须保留的机制
 
 - 修饰器把归一化进度映射为 easing、重复局部进度或反向时间进度。

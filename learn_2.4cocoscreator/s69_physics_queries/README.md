@@ -14,6 +14,23 @@ Physics3DManager.raycastClosest → IPhysicsWorld → CannonWorld → PhysicsRay
 
 前置课程：[第 68 课](<../s68_contact_filter/README.md>)。
 
+## 为什么这样设计
+
+管理器提供与后端无关的查询 API，World 负责射线求交，结果对象统一承载碰撞体、距离、命中位置和法线，调用方无需认识 Cannon 返回对象。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[Physics3DManager.raycastClosest] --> B[Ray + maxDistance/queryTrigger]
+ B --> C[IPhysicsWorld.raycast]
+ C --> D[CannonWorld 查询后端]
+ D --> E[筛触发器与距离范围]
+ E --> F[选择最近命中]
+ F --> G[填充 PhysicsRayResult]
+ G --> H[返回调用方]
+```
+
 ## 本课必须保留的机制
 
 保留最大距离和 trigger 查询选项对候选项的筛选、按距离返回最近命中，以及结果携带对象/距离/位置/法线的规则。

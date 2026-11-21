@@ -28,6 +28,24 @@ deno task serve
 
 打开 `http://127.0.0.1:8000/s57_camera_culling_queue/`，Main 只看到场景模型，Overlay 只看到 HUD；透明模型按远到近输出。
 
+## 为什么这样设计
+
+可见层过滤发生在收集绘制项之前，减少每台 Camera 的工作；opaque 与 transparent 分阶段处理，透明项再按深度排序以维持混合顺序。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[ForwardRenderer 当前 View] --> B[BaseRenderer 遍历 Models]
+ B --> C{modelMask & viewMask 非零?}
+ C -->|否| D[跳过 Model]
+ C -->|是| E[按 Pass.stage 加入 DrawItem]
+ E --> F{opaque 或 transparent?}
+ F -->|opaque| G[按收集顺序绘制]
+ F -->|transparent| H[计算 cameraDepth 并排序]
+ H --> I[远近顺序绘制]
+```
+
 ## 本课必须保留的机制
 
 - Camera 的 `cullingMask` 过滤 Model，stage 分类收集绘制项，透明阶段按相机深度排序。

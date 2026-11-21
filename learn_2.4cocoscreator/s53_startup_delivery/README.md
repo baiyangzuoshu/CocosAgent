@@ -31,6 +31,24 @@ deno task serve
 
 打开 http://127.0.0.1:8000 查看交付路径和启动顺序。
 
+## 为什么这样设计
+
+静态交付和 Runtime 启动分层：Web 服务器提供文件，`game.run` 装配运行时，应用回调选择首场景，Director 管场景切换。引擎本地源码不足以证明编辑器如何构建整套发布包。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[浏览器请求入口/Bundle 文件] --> B[静态站点返回产物]
+ B --> C[cc.game.run config/onStart]
+ C --> D[准备引擎与主循环]
+ D --> E[EVENT_GAME_INITED]
+ E --> F[调用 onStart]
+ F --> G[Director.loadScene]
+ G --> H[加载并运行首场景]
+ I[发布目录/缓存策略] -.部署层.-> A
+```
+
 ## 本课必须保留的机制
 
 - `game.run` 准备完成后发出 `EVENT_GAME_INITED`，再调用 `onStart` 并由 Director 加载首场景。

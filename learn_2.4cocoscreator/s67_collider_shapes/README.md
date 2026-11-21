@@ -15,6 +15,23 @@ ColliderComponent → BoxColliderComponent → CannonBoxShape；缩放换算由�
 
 前置课程：[第 66 课](<../s66_rigidbody_sync/README.md>)。
 
+## 为什么这样设计
+
+通用 Collider 保存尺寸/材质，具体 BoxCollider 负责把盒形转换成后端 half-extents；后端 Shape 与 PhysicsMaterial 分开，避免组件直接依赖 Cannon 的具体类。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[BoxColliderComponent size] --> B[读取 Node world scale]
+ B --> C[尺寸逐轴乘 scale]
+ C --> D[换算 half extents]
+ D --> E[CannonBoxShape]
+ F[PhysicsMaterial friction/restitution] --> G[映射后端 material]
+ E --> H[PhysicsWorld.addShape]
+ G --> H
+```
+
 ## 本课必须保留的机制
 
 保留盒形尺寸乘节点缩放后换算为 half extents，以及 PhysicsMaterial 的摩擦系数等属性随形状接入的规则；这是本课观察的源码职责边界。

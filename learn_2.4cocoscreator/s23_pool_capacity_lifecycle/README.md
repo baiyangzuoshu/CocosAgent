@@ -12,6 +12,27 @@
 
 Creator 2.4.15 [NodePool.put/get/clear](../../engine/2.4.15engine/extensions/ccpool/CCNodePool.js#L91)、[Prefab 实例化](../../engine/2.4.15engine/cocos2d/core/platform/instantiate.js)、[延迟销毁](../../engine/2.4.15engine/cocos2d/core/platform/CCObject.js)。
 
+## 为什么这样设计
+
+引擎只提供节点存取和 handler 回调；容量、预热、低水位补充属于调用方策略。把策略放在业务侧，池本身就不会替所有游戏决定内存和创建时机。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+    A[应用设置 maxSize/lowWater] --> B[预热: instantiate Prefab]
+    B --> C[NodePool.put]
+    D[请求节点] --> E{NodePool.get 命中?}
+    E -->|是| F[reuse 并挂回场景]
+    E -->|否| G[应用实例化新节点]
+    F --> H{池低于水位?}
+    G --> H
+    H -->|是| I[按批次补池但不超容量]
+    J[clear] --> K[对池内节点调用 destroy]
+    K --> L[清空池数组]
+    L --> M[Director 后续处理销毁队列]
+```
+
 ## 本课必须保留的机制
 
 保留 `unuse/reuse` 的时序、空池 `null` 兜底、调用方容量策略，以及清池与延迟销毁的区别。

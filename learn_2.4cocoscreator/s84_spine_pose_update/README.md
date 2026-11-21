@@ -11,6 +11,23 @@
 - [Skeleton.js](../../engine/2.4.15engine/extensions/spine/Skeleton.js)：重点查看 update、_updateRealtime、updateWorldTransform。
 - [spine.js](../../engine/2.4.15engine/extensions/spine/lib/spine.js)：重点查看 Bone.updateWorldTransform。
 
+## 为什么这样设计
+
+每帧先推进状态和应用时间线，再按骨骼父子顺序计算世界变换；约束在姿态数据上工作。保持阶段顺序，子骨骼和约束才能读取本帧最新局部姿态。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[Skeleton.update dt] --> B[AnimationState.update]
+ B --> C[AnimationState.apply timelines]
+ C --> D[Bone 局部属性写入]
+ D --> E[根骨骼优先递归更新世界矩阵]
+ E --> F[应用 IK/Transform 等约束]
+ F --> G[输出最终骨骼姿态]
+ G --> H[Assembler 读取姿态]
+```
+
 ## 本课必须保留的机制
 
 保留帧更新的职责顺序：推进 AnimationState、应用时间线、再计算骨骼世界变换；父子层级的局部变换需要组合成世界位置。
@@ -21,7 +38,7 @@
 
 ## 模型化简化与 Creator Runtime 边界
 
-[`SpineStudy.ts`](<src/extensions/spine/SpineStudy.ts>) 只打印调用顺序并相加两个局部 X 值，不执行 Skeleton/AnimationState、矩阵变换或约束求解；省略 2.4 Runtime `Skeleton.update → _updateRealtime → updateWorldTransform` 的逐帧阶段。README 对 3.8 `SkeletonSystem.postUpdate` 的描述是版本对照，不代表本例接入该系统。
+课程代码按父子层级组合位置、旋转和缩放，再运行一个示例旋转约束修正骨骼世界角度。它是二维教学变换，不包含 Spine 矩阵/skew/继承模式和完整约束求解，也不接入 2.4 的 `Skeleton.update → _updateRealtime → updateWorldTransform` 帧链；3.8 `SkeletonSystem.postUpdate` 只作版本对照。
 
 ## 运行
 

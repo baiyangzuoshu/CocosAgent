@@ -26,6 +26,25 @@ deno task serve
 
 打开 http://127.0.0.1:8000/，观察阶段遍历后由 BaseRenderer 设置状态，并在 WebGL Device 层记录 drawElements 请求（非真实 GPU 调用）。
 
+## 为什么这样设计
+
+ForwardRenderer 负责按阶段遍历，BaseRenderer 绑定当前 Pass、程序和输入，Device 适配到底层 WebGL。职责分层让上层不直接依赖浏览器绘制函数。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[ForwardRenderer stage] --> B[遍历 DrawItem]
+ B --> C[BaseRenderer._draw]
+ C --> D[设置 Pass 与 Program]
+ D --> E[绑定 InputAssembler/Buffer]
+ E --> F[应用绘制状态]
+ F --> G[Device.draw]
+ G --> H{有索引 Buffer?}
+ H -->|是| I[gl.drawElements]
+ H -->|否| J[gl.drawArrays]
+```
+
 ## 本课必须保留的机制
 
 - ForwardRenderer 遍历绘制阶段，BaseRenderer 设置 Pass/InputAssembler，再把绘制请求交给 Device。

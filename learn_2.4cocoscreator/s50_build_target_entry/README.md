@@ -28,6 +28,21 @@ deno task serve
 
 打开 `http://127.0.0.1:8000`，查看目标、宏和运行时设置分别输出。
 
+## 为什么这样设计
+
+构建目标和运行参数处于不同阶段：目标/模式影响构建宏，帧率和渲染模式在运行时读取。分开说明可以避免把 Editor 构建选项误当作游戏启动配置。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[Web Desktop + Debug/Release] --> B[构建工具生成宏]
+ B --> C[引擎模块裁剪/编译产物]
+ D[CCGame.config] --> E[运行时帧率/renderMode]
+ E --> F[游戏初始化]
+ G[Creator Editor Builder] -.仓库外证据边界.-> H[不能由本地引擎源码推断]
+```
+
 ## 本课必须保留的机制
 
 - Web Desktop 目标选择影响构建宏；`CCGame.config` 的帧率/renderMode 是运行时配置，不是构建目标。

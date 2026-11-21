@@ -29,6 +29,25 @@ deno task serve
 
 打开 http://127.0.0.1:8000，点击播放后试用暂停、恢复和停止。
 
+## 为什么这样设计
+
+一次播放实例用 `audioID` 标识，让暂停、恢复、停止和自然结束都作用于同一实例；结束回调负责把实例从活动表移除，避免组件只能操纵全局播放器。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+    A[play] --> B[创建 CCAudio 实例]
+    B --> C[登记 audioID 与实例]
+    C --> D[浏览器开始播放]
+    D --> E{pause / resume / stop / ended}
+    E -->|pause| F[暂停并抑制 ended 误报]
+    E -->|resume| D
+    E -->|stop| G[停止并回收实例]
+    E -->|ended| H[完成回调]
+    H --> G
+```
+
 ## 本课必须保留的机制
 
 - `audioID` 关联一次播放实例；暂停、恢复、停止及浏览器 `ended` 回调驱动该实例状态。

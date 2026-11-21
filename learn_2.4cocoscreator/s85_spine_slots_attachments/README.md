@@ -11,6 +11,22 @@ Skin 为 Slot 选择 Attachment，drawOrder 决定遍历顺序。
 - [Skeleton.js](../../engine/2.4.15engine/extensions/spine/Skeleton.js)：重点查看 setSkin、setSlotsToSetupPose。
 - [spine.js](../../engine/2.4.15engine/extensions/spine/lib/spine.js)：重点查看 drawOrder、Skin.getAttachment、Slot.setAttachment。
 
+## 为什么这样设计
+
+Skin 负责按 Slot 名称提供附件，Slot 保存当前附件；Skeleton 的 drawOrder 独立决定 Slot 遍历次序。内容选择与前后绘制顺序分开，换皮和排序就不会混为一件事。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[Skeleton.setSkin] --> B[Skin 按 slot/name 查 Attachment]
+ B --> C[Slot.setAttachment]
+ D[Skeleton.drawOrder] --> E[按顺序遍历 Slot]
+ C --> E
+ E --> F[Attachment 生成绘制数据]
+ F --> G[Assembler 按顺序提交]
+```
+
 ## 本课必须保留的机制
 
 保留 Skin 为 Slot 选择 Attachment，以及 `drawOrder` 决定 Slot 遍历顺序的关系；两者分别影响显示内容与绘制先后。
@@ -21,7 +37,7 @@ Skin 为 Slot 选择 Attachment，drawOrder 决定遍历顺序。
 
 ## 模型化简化与 Creator Runtime 边界
 
-[`SpineStudy.ts`](<src/extensions/spine/SpineStudy.ts>) 只使用普通对象和数组，不创建 Skin/Slot/Attachment，也不生成顶点；省略 Runtime `Skeleton` 应用 Skin、Attachment 并将 drawOrder 交给 Spine assembler 的阶段。
+课程代码实现 Skin 的附件映射、Slot 的当前附件选择、区域附件顶点生成和独立 drawOrder 排序。它用普通对象表达数据关系，不解析 Spine 文件，也不调用 Runtime Skeleton 或 assembler。
 
 ## 运行
 

@@ -28,6 +28,22 @@ deno task serve
 
 打开 `http://127.0.0.1:8000/`。日志显示 EffectAsset 到 Pass 的对象关系，以及 WebGL 收到的混合状态。
 
+## 为什么这样设计
+
+EffectAsset 描述可解析的 Technique 和 Pass，Material 保存具体实例与选择项，Pass 把资源声明的渲染状态交给 Renderer。这样通用资源定义与场景材质实例分开。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[EffectAsset 数据] --> B[effect-parser]
+ B --> C[Effect / Technique / Pass]
+ C --> D[Material 实例化 Effect]
+ D --> E[选择 Technique/Pass]
+ E --> F[BaseRenderer 应用 Pass 状态]
+ F --> G[WebGL blend/depth state]
+```
+
 ## 本课必须保留的机制
 
 - EffectAsset 解析 Technique/Pass；Material 选择 Pass，并把混合状态交给 WebGL 状态层。

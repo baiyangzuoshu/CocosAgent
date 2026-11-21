@@ -12,6 +12,24 @@
 
 Creator 2.4.15 的 [clear/put/get](../../engine/2.4.15engine/extensions/ccpool/CCNodePool.js#L100)。
 
+## 为什么这样设计
+
+池保存的是可再次挂载的同一个 Node。`removeFromParent(false)` 让节点退出活动层级并暂停组件调度，同时保留实例；`clear()` 才走销毁路径。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+    A[活动场景中的 Node] -->|put| B[removeFromParent false]
+    B --> C[NodePool 数组暂存]
+    C -->|get| D[取回同一 Node]
+    D --> E[重新 addChild]
+    E --> F[onEnable 恢复]
+    E --> G[start 不重复执行]
+    C -->|clear| H[destroy 请求]
+    H --> I[帧末延迟销毁]
+```
+
 ## 本课必须保留的机制
 
 保留同一节点的取出与回收、`removeFromParent(false)` 不清理节点状态，以及 `clear()` 触发销毁而非复用。

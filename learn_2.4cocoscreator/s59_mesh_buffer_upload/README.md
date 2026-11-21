@@ -28,6 +28,24 @@ deno task serve
 
 打开 http://127.0.0.1:8000/。日志能看到首次 bufferData 上传，以及 InputAssembler 持有的三角形索引数量。
 
+## 为什么这样设计
+
+CPU 侧 MeshBuffer 把多个 RenderData 整理为连续数据，再由独立 VB/IB 抽象处理容量和更新。InputAssembler 只描述这些 Buffer 如何组成绘制输入。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[RenderData 活动顶点/索引区] --> B[MeshBuffer.uploadData]
+ B --> C[生成 Float32Array / Uint16Array]
+ C --> D[VertexBuffer.update]
+ C --> E[IndexBuffer.update]
+ D --> F[gl.bufferData 或 bufferSubData]
+ E --> F
+ F --> G[InputAssembler 持有 VB/IB/primitiveType]
+ G --> H[供后续 draw 使用]
+```
+
 ## 本课必须保留的机制
 
 - MeshBuffer 的活动顶点/索引区进入 VB/IB 上传；首次分配用 `bufferData`，后续更新可用 `bufferSubData`，InputAssembler 保存 Buffer 引用。

@@ -30,6 +30,26 @@ deno task serve
 
 打开 http://127.0.0.1:8000/，观察三角形子网格写入 MeshBuffer，线图元子网格 flush 后走 `_flushIA()`。
 
+## 为什么这样设计
+
+MeshRendererAssembler 根据子网格逐项选择合批或直接提交，让兼容的三角形共享批次，同时保证不兼容图元/数据格式不会被错误拼接。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[MeshRendererAssembler.fillBuffers] --> B[遍历 subMeshes/subDatas]
+ B --> C[读取该子网格材质和图元]
+ C --> D{三角形且数据格式兼容且 autoBatch?}
+ D -->|是| E[重基址索引并写 MeshBuffer]
+ D -->|否| F[先 flush 当前批次]
+ F --> G[直接提交该 InputAssembler]
+ E --> H{还有子网格?}
+ G --> H
+ H -->|是| B
+ H -->|否| I[结束]
+```
+
 ## 本课必须保留的机制
 
 - MeshRendererAssembler 遍历子网格；兼容三角形批量写入 MeshBuffer，不兼容图元先 flush 再直接提交 InputAssembler。

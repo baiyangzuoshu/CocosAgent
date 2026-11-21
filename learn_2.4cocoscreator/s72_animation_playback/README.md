@@ -13,6 +13,26 @@ AnimationManager 每帧推进 AnimationState 时间，按循环模式处理结�
 
 前置主题：[动作与时间推进](../s34_action_modifiers/README.md)。
 
+## 为什么这样设计
+
+AnimationState 表示单次播放的时间、速度、循环和结束状态；AnimationManager 统一逐帧推进所有状态，组件不用自己创建帧计时器。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[CCAnimation.play] --> B[创建/取得 AnimationState]
+ B --> C[state.play]
+ C --> D[AnimationManager.addAnimation]
+ E[每帧 manager.update dt] --> F[state.update dt]
+ F --> G[时间推进/循环回绕]
+ G --> H{到达结束?}
+ H -->|循环| I[回到下一轮时间]
+ I --> F
+ H -->|否| J[保持 playing]
+ H -->|是| K[停止并标记 finished]
+```
+
 ## 本课必须保留的机制
 
 保留播放状态按时间推进、达到总循环时长后停止并标记结束的规则；源码还展示 AnimationManager 在每帧推进 AnimationState 的职责。
@@ -23,7 +43,7 @@ AnimationManager 每帧推进 AnimationState 时间，按循环模式处理结�
 
 ## 模型化简化与 Creator Runtime 边界
 
-[AnimationStudy.ts](<src/cocos2d/animation/AnimationStudy.ts>) 使用自定义 `AnimationState`，只按 `duration × loops` 截止，不执行真实暂停/循环回绕、关键帧采样或目标写回；未接入 Creator Runtime 的 `AnimationManager` 帧调度与状态更新阶段。
+课程代码包含可暂停/恢复的 `AnimationState`，跟踪累计时间与完成循环数，由 `AnimationManager` 遍历状态并推进时间。它不采样关键帧或写回真实 Node，也不接入 Creator Runtime 的帧调度。
 
 ## 运行
 

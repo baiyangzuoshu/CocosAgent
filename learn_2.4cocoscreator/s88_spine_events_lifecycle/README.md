@@ -12,6 +12,24 @@
 - [AttachUtil.js](../../engine/2.4.15engine/extensions/spine/AttachUtil.js)：重点查看 AttachUtil 的挂接和解绑。
 - [skeleton-cache.js](../../engine/2.4.15engine/extensions/spine/skeleton-cache.js)：重点查看 SkeletonCache.destroy。
 
+## 为什么这样设计
+
+TrackEntry 回调把动画语义交还游戏层，AttachUtil 和缓存管理负责节点退出后的解绑与资源关联清理。把通知和所有权清理拆开，能避免动画结束与节点销毁后残留监听。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[TrackEntry start/event/complete] --> B[listener bridge]
+ B --> C[Skeleton/CCAnimation 回调]
+ C --> D[游戏逻辑]
+ E[组件 onDisable/onDestroy] --> F[解绑 TrackEntry listeners]
+ F --> G[AttachUtil detach]
+ G --> H[断开 Skeleton/Attachment]
+ H --> I[SkeletonCache.destroy]
+ I --> J[释放实例关联缓存]
+```
+
 ## 本课必须保留的机制
 
 保留 TrackEntry 的 start/event/complete 回调返回游戏逻辑，以及节点退出时解绑监听、断开运行时实例并释放缓存关联的生命周期边界。
@@ -22,7 +40,7 @@
 
 ## 模型化简化与 Creator Runtime 边界
 
-[`SpineStudy.ts`](<src/extensions/spine/SpineStudy.ts>) 仅列出回调字符串并打印清理文字，不注册 TrackEntry listener，也不销毁 Skeleton/cache；省略 `setEventListener/setCompleteListener` 的实际回调转发及 `AttachUtil`/`SkeletonCache.destroy` 的退出清理阶段。
+课程代码注册 TrackEntry 事件/完成监听，向组件转发回调；销毁时清空监听、断开轨道引用并递减示例缓存引用计数，且销毁操作可重复调用。它不销毁真实 Skeleton/Atlas，不接入 `AttachUtil` 或 `SkeletonCache.destroy`。
 
 ## 运行
 

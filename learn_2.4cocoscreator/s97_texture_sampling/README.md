@@ -26,6 +26,22 @@ quad 是两个三角形组成的矩形，UV 从左下 (0,0) 到右上 (1,1)。ch
 
 版本要点：**Creator 2.4.15** 的课程目标是浏览器 WebGL 1。不把另一版的 Effect 语法、Shader API 或设备路径套进来。
 
+## 为什么这样设计
+
+UV 作为顶点 varying 在光栅化阶段插值，片元 Shader 再按插值坐标采样 Texture。把插值与采样分开可以判断纹理方向、过滤或颜色错误出在哪一段。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[Vertex UV] --> B[vertex shader varying v_uv]
+ B --> C[Rasterizer interpolates v_uv]
+ D[Texture upload + sampler state] --> E[texture2D(u_texture, v_uv)]
+ C --> E
+ E --> F[fragment color]
+ F --> G[framebuffer pixel]
+```
+
 ## 本课必须保留的机制
 
 保留 UV 随顶点输出、光栅化在片元间插值 `v_uv`、片元 Shader 用 `texture2D(u_texture, v_uv)` 采样纹理并输出颜色。

@@ -11,6 +11,26 @@ MeshAttachment 生成几何；Deform 修改顶点，Clipping 会生成裁剪后�
 - [spine-assembler.js](../../engine/2.4.15engine/extensions/spine/spine-assembler.js)：重点查看 updateRenderData、computeWorldVertices、clipTriangles。
 - [spine.js](../../engine/2.4.15engine/extensions/spine/lib/spine.js)：重点查看 MeshAttachment、SkeletonClipping。
 
+## 为什么这样设计
+
+网格附件负责拓扑和局部顶点，Deform 可按动画修改顶点，Clipping 再按裁剪多边形裁切三角形。先得到最终几何再上传，避免 GPU 收到未裁剪数据。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[MeshAttachment vertices/triangles] --> B[computeWorldVertices]
+ C[Deform timeline] --> D[修改加权/非加权顶点]
+ B --> E[得到世界顶点]
+ D --> E
+ E --> F{当前 Slot 开始 Clipping?}
+ F -->|是| G[SkeletonClipping.clipTriangles]
+ F -->|否| H[保留原三角形]
+ G --> I[最终顶点/索引]
+ H --> I
+ I --> J[写 RenderData/Buffer]
+```
+
 ## 本课必须保留的机制
 
 保留 MeshAttachment 提供顶点/三角形、Deform 修改顶点、Clipping 在上传前产生裁剪几何的先后关系。
@@ -21,7 +41,7 @@ MeshAttachment 生成几何；Deform 修改顶点，Clipping 会生成裁剪后�
 
 ## 模型化简化与 Creator Runtime 边界
 
-[`SpineStudy.ts`](<src/extensions/spine/SpineStudy.ts>) 只打印固定计数和概念文字，不计算世界顶点、不执行 deform 或裁剪；省略 `computeWorldVertices → SkeletonClipping.clipTriangles → buffer upload` 的真实 Runtime 几何阶段，也不创建 GPU Buffer。
+课程代码先将 deform 偏移和节点平移应用到 MeshAttachment 顶点，再按三角形索引组装世界几何，并用 Sutherland–Hodgman 矩形裁剪算法裁切三角形。矩形裁剪是为讲解裁剪顺序所作的简化，不等同于 Spine 的多边形 SkeletonClipping，也不生成 GPU Buffer。
 
 ## 运行
 

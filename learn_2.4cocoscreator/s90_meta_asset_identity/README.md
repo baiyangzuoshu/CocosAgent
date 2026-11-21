@@ -39,6 +39,22 @@ subMetas.HelloWorld.rawTextureUuid
 
 `2.4NewProject/assets/BundleMain.meta` 中的 `isBundle` 是另一个例子：它是目录的编辑器配置，不是上面这张图的身份信息；生成的 Bundle config 才是 Runtime 的索引。
 
+## 为什么这样设计
+
+导入阶段为主资源和子资源分配不同 UUID，场景序列化引用具体的子资源身份；底层 Texture UUID 再把 SpriteFrame 连到实际贴图。区分身份层级可避免把 PNG 文件名当作 Asset 身份。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[HelloWorld.png.meta 顶层 uuid] --> B[Texture2D 主资源身份]
+ C[meta.subMetas.HelloWorld.uuid] --> D[SpriteFrame 子资源身份]
+ E[meta.subMetas.rawTextureUuid] --> B
+ F[Scene Sprite _spriteFrame.__uuid__] --> D
+ B --> G[构建后的 native PNG]
+ H[.meta 工程导入数据] -.构建映射.-> I[Bundle Config Runtime UUID 索引]
+```
+
 ## 本课必须保留的机制
 
 区分顶层 Texture2D UUID、SpriteFrame 子 UUID 与 `rawTextureUuid`：场景 Sprite 引用子资源，SpriteFrame 再指向底层贴图；`.meta` 的导入身份和构建后的 Runtime Config 不是同一份文件。

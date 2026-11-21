@@ -44,8 +44,8 @@
 - [第 19 课：实例挂载与组件生命周期](s19_instance_lifecycle/README.md)：观察 Prefab 加入活动场景后触发组件回调。
 - [第 20 课：节点移除与重新挂载](s20_node_detachment/README.md)
 - [第 21 课：延迟销毁与 onDestroy](s21_deferred_destruction/README.md)
-- [第 22 课：NodePool 复用流程](s22_node_pool/README.md)：`put/get`、`unuse/reuse`、空池兜底与组件生命周期。
-- [第 23 课：容量策略与清池生命周期](s23_pool_capacity_lifecycle/README.md)：应用层容量/预热/补充，以及 `clear()` 与延迟销毁。
+- [第 22 课：NodePool 复用流程](s22_node_pool/README.md)：基础 `put/get/clear` 与节点生命周期。
+- [第 23 课：容量策略与清池生命周期](s23_pool_capacity_lifecycle/README.md)：`unuse/reuse`、空池兜底、应用层容量/预热/补充，以及延迟清池。
 - [第 24 课：对象池所有权与安全关闭](s24_pool_ownership_disposal/README.md)：LIFO、重复入池、跨池归属和关闭终态。
 - [第 30 课：动作更新链](s30_action_update_chain/README.md)
 - [第 31 课：时间进度与绝对目标插值](s31_absolute_position_interpolation/README.md)

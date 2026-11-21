@@ -29,6 +29,23 @@ deno task serve
 
 打开 <http://localhost:8000>。
 
+## 为什么这样设计
+
+Canvas 先把设计分辨率和适配意图交给 View；View 独立计算缩放、视口和可见区域。职责分开后，UI 使用设计坐标，平台窗口变化由 View 适配。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+    A[Canvas.fitWidth / fitHeight] --> B[applySettings 选择 ResolutionPolicy]
+    B --> C[View.setDesignResolutionSize]
+    C --> D[比较窗口与设计分辨率比例]
+    D --> E[计算 scaleX / scaleY]
+    E --> F[计算 viewport 与 visibleSize]
+    F --> G[Canvas Node 设为设计尺寸和中心]
+    G --> H[设计坐标经缩放/偏移映射到屏幕]
+```
+
 ## 本课必须保留的机制
 
 - `fitWidth`/`fitHeight` 选择适配策略，并由设计分辨率计算可见区域与屏幕/设计坐标关系。

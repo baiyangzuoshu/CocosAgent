@@ -31,6 +31,23 @@ deno task serve
 
 打开 <http://localhost:8000>。
 
+## 为什么这样设计
+
+Button 把低层节点触摸事件转换成按钮状态机和 clickEvents。按下、结束、取消分开处理，才能区分一次有效点击与被中断的触摸。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+    A[Node 命中并派发触摸] --> B[Button TOUCH_START]
+    B --> C[PRESSED 状态/过渡]
+    C --> D{TOUCH_END 还是 CANCEL?}
+    D -->|END| E[派发 clickEvents 与 Node click]
+    D -->|CANCEL| F[恢复状态但不点击]
+    E --> G[NORMAL]
+    F --> G
+```
+
 ## 本课必须保留的机制
 
 - Button 接收已命中节点的触摸状态；结束时派发 `clickEvents`，取消时只复位，不触发点击。

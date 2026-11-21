@@ -28,6 +28,26 @@ deno task serve
 
 打开 <http://localhost:8000>。
 
+## 为什么这样设计
+
+间隔动作保存起点和目标差值，再按统一时间进度计算属性值，避免每帧重复累加产生漂移；多个不同起点的目标因此都能到达同一绝对终点。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+    A[Tween.to 目标值] --> B[动作加入 ActionManager]
+    B --> C[startWithTarget 捕获起点]
+    C --> D[计算 end - start]
+    D --> E[step 累计 elapsed]
+    E --> F[progress = elapsed / duration]
+    F --> G[限制到 0..1]
+    G --> H[插值并写回属性]
+    H --> I{动作完成?}
+    I -->|否| E
+    I -->|是| J[写入终点并移除]
+```
+
 ## 本课必须保留的机制
 
 - 动作开始时读取节点当前位置，按经过时间比例插值到固定目标位置。

@@ -29,6 +29,22 @@ deno task serve
 
 打开 http://127.0.0.1:8000，启动循环背景音，再播放两路音效并拖动音量滑块。
 
+## 为什么这样设计
+
+背景音乐与音效分组管理，可以独立控制音量和停止范围。播放 ID 与 AudioClip 路径进一步支持单实例停止和资源级清理，不必误停另一类声音。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+    A[playMusic] --> B[音乐实例/音乐音量]
+    C[playEffect] --> D[音效实例集合/音效音量]
+    E[setMusicVolume] --> B
+    F[setEffectsVolume] --> D
+    G[stopAllEffects] --> H[停止音效但保留音乐 ID]
+    I[uncache AudioClip] --> J[按资源路径匹配并停止实例]
+```
+
 ## 本课必须保留的机制
 
 - 分开管理 music/effect 音量和播放 ID；停止音效不停止背景音乐，按 AudioClip uncache 时停止对应实例。

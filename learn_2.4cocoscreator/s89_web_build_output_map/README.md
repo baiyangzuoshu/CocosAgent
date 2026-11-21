@@ -44,6 +44,26 @@
 
 **证据边界：** 以上源码说明 Runtime 如何使用 config；它不包含完整 Editor Builder，所以本课不声称复刻了构建过程。
 
+## 为什么这样设计
+
+构建输出把入口、启动配置、资源索引和资源文件分开。先认清这些产物，才能在后续课程判断 Runtime 是查表、读 pack，还是请求 native 文件；源码快照本身并不包含完整 Builder。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[工程 assets/ + settings] --> B[Creator Editor Builder]
+ B --> C[index.html / engine scripts]
+ B --> D[settings: launchScene/bundleVers]
+ B --> E[Bundle config: UUID/path/pack/version]
+ B --> F[import pack]
+ B --> G[native files]
+ D --> H[Runtime 启动入口]
+ E --> I[Runtime 资源索引]
+ I --> F
+ I --> G
+```
+
 ## 本课必须保留的机制
 
 保留构建目录中页面入口、启动设置、Bundle Config、import pack 和 native 文件的角色区分；Config 是索引，不是资源内容，Asset 与下载文件也不能一一等同。

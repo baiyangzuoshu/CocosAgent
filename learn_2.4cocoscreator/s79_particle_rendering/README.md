@@ -13,6 +13,22 @@ ParticleSystem3DRenderer 把粒子交给 ParticleBatchModel 形成模型数据�
 
 前置课程：[第 49 课：粒子绘制与结束](<../s49_particle_render_finish/README.md>)。
 
+## 为什么这样设计
+
+模拟器只产生活动粒子状态，Renderer 才把它们转换成 billboard 顶点并组织批次。分离后，粒子模拟不必知道相机、材质和 GPU 缓冲细节。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[活动粒子状态] --> B[ParticleSystem3DRenderer]
+ B --> C[读取 position/size/rotation/color]
+ C --> D[生成 billboard 四角顶点]
+ D --> E[写 ParticleBatchModel]
+ E --> F[按材质/纹理批次聚合]
+ F --> G[送入后续渲染管线]
+```
+
 ## 本课必须保留的机制
 
 保留活动粒子逐个变成 billboard 四边形顶点，并由 `ParticleSystem3DRenderer` 汇入批次模型的概念链路。
@@ -23,7 +39,7 @@ ParticleSystem3DRenderer 把粒子交给 ParticleBatchModel 形成模型数据�
 
 ## 模型化简化与 Creator Runtime 边界
 
-[`ParticleStudy.ts`](<src/cocos2d/core/3d/particle/ParticleStudy.ts>) 仅计算四边形坐标并打印批次路线，未实例化 ParticleSystem3DRenderer/ParticleBatchModel；省略实际 assembler、MeshBuffer 上传、RenderFlow 提交与 WebGL/GPU 绘制阶段，不创建 GPU 资源。
+课程代码将每个粒子展开为带 UV/颜色的四边形顶点和 6 个索引，并按材质聚合批次。它不接入真实 assembler、MeshBuffer 上传、RenderFlow 或 WebGL 绘制，也不创建 GPU 资源。
 
 ## 运行
 

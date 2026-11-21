@@ -28,6 +28,24 @@ deno task serve
 
 打开 `http://127.0.0.1:8000` 查看 import 与 native 路径。
 
+## 为什么这样设计
+
+资源身份与文件 URL 分开：Bundle Config 负责把 UUID 映射到索引和版本，urlTransformer 再按 import/native 类型选基址和扩展名。这样同一身份可对应不同存储布局。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[加载 Bundle config] --> B[Config.init]
+ B --> C[UUID/path/version 索引]
+ D[资源请求] --> E[解析 UUID 与资源类型]
+ E --> F{import 还是 native?}
+ F -->|import| G[importBase + UUID 目录 + version]
+ F -->|native| H[nativeBase + 文件扩展名]
+ G --> I[资源文件 URL]
+ H --> I
+```
+
 ## 本课必须保留的机制
 
 - Bundle 的 UUID 索引与版本信息参与 import/native 资源 URL 的组合。

@@ -28,6 +28,26 @@ deno task serve
 
 打开 http://127.0.0.1:8000/。日志应显示两种变体分别链接、重复请求命中缓存，以及 Renderer 写入 u_tint。
 
+## 为什么这样设计
+
+Shader 模板与宏值会形成多个程序变体；ProgramLib 用宏键缓存已链接的程序，避免每个绘制项重复编译。Pass 属性随后按程序反射出的 Uniform 信息写入。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[ProgramLib.define shader template] --> B[getProgram macros]
+ B --> C[生成宏缓存 key]
+ C --> D{缓存命中?}
+ D -->|是| E[复用 GFX Program]
+ D -->|否| F[预处理并编译/链接 Shader]
+ F --> G[反射 attributes/Uniforms]
+ G --> H[缓存 Program]
+ E --> I[BaseRenderer 取 Pass 属性]
+ H --> I
+ I --> J[Device 写 Uniform]
+```
+
 ## 本课必须保留的机制
 
 - ProgramLib 根据宏定义生成并缓存程序；Renderer 为当前程序写入 Uniform。

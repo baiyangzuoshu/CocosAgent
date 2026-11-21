@@ -30,6 +30,23 @@ deno task serve
 
 打开 <http://localhost:8000>。
 
+## 为什么这样设计
+
+Label 的文本属性与 GPU 顶点数据分开维护。字符串变化先标脏，渲染阶段再重建文字几何，避免业务代码直接操作底层缓冲，也避免无变化时重复生成顶点。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+    A[设置 Label.string] --> B[比较新旧文本]
+    B -->|不同| C[setVertsDirty]
+    C --> D[登记待更新 Label]
+    D --> E[RenderFlow 遍历更新队列]
+    E --> F[LabelAssembler 重建文字数据]
+    F --> G[清除 dirty 标记]
+    G --> H[后续渲染提交]
+```
+
 ## 本课必须保留的机制
 
 - 修改 `Label.string` 标记渲染数据脏；RenderFlow 后续调用 assembler 重建文字顶点数据。

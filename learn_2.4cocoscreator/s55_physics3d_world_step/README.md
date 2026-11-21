@@ -32,6 +32,25 @@ deno task serve
 
 页面显示每帧是否启用物理、固定步长及 World 调用顺序。
 
+## 为什么这样设计
+
+Director 只在构建包含物理后端时装配 3D Manager；管理器处理开关和时间步进，具体 World 负责同步场景状态、调用后端并派发事件。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[构建宏选择物理后端] --> B[Director.sharedInit]
+ B --> C[创建 Physics3DManager]
+ C --> D[注册 Scheduler]
+ E[Manager.enabled] --> F[Physics3DManager.update]
+ F --> G[固定步长 accumulator/step]
+ G --> H[PhysicsWorld.step]
+ H --> I[后端同步场景到物理]
+ I --> J[Cannon/Builtin 推进]
+ J --> K[同步结果并派发物理事件]
+```
+
 ## 本课必须保留的机制
 
 - Director 创建并调度 Physics3DManager；管理器把默认固定步长传给 PhysicsWorld 推进。

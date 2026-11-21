@@ -28,6 +28,25 @@ deno task serve
 
 打开 http://127.0.0.1:8000，比较 Closest/All、矩形查询结果和调试绘制调用。
 
+## 为什么这样设计
+
+查询结果由 Box2D 回调收集，Manager 暴露稳定的 RayCast/AABB 接口；调试绘制复用 PhysicsWorld 的当前形状状态，便于检查模拟与查询使用的几何。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[PhysicsManager.rayCast] --> B[RayCastCallback]
+ B --> C[World.RayCast]
+ C --> D[按 Closest/Any/All 收集结果]
+ E[PhysicsManager.testAABB] --> F[AABBQueryCallback]
+ F --> G[World.QueryAABB]
+ G --> H[筛选碰撞体候选]
+ I[debugDrawFlags] --> J[创建 Graphics DebugDraw]
+ J --> K[物理步后 DrawDebugData]
+ K --> L[Graphics 绘制物理形状]
+```
+
 ## 本课必须保留的机制
 
 - RayCast 与 AABB 查询由回调收集结果；Closest/All 策略和 debugDrawFlags 决定返回与绘制调用路径。

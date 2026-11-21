@@ -30,6 +30,24 @@ deno task serve
 
 打开 http://127.0.0.1:8000/。把 Sprite 尺寸改为 80 × 40 后，RenderFlow 只在顶点脏时让 assembler 重算数据。
 
+## 为什么这样设计
+
+RenderData 是组件几何与批处理之间的边界。属性变化只设脏，RenderFlow 在绘制前统一调 assembler 更新，避免组件 setter 同步重建顶点。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[Sprite 尺寸/Frame 改变] --> B[setVertsDirty]
+ B --> C[节点标记 UPDATE_RENDER_DATA]
+ C --> D[RenderFlow 更新阶段]
+ D --> E[Assembler.updateRenderData]
+ E --> F[计算 quad 顶点与 UV]
+ F --> G[写入 RenderData]
+ G --> H[clear dirty]
+ H --> I[fillBuffers 交给 Batcher]
+```
+
 ## 本课必须保留的机制
 
 - Sprite 尺寸变化标脏；RenderFlow 在渲染更新阶段调用 assembler 更新 RenderData。

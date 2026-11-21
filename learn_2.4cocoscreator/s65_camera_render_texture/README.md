@@ -28,6 +28,24 @@ deno task serve
 
 打开 http://127.0.0.1:8000/，观察相机目标从屏幕切到 FrameBuffer，完成渲染后纹理交给 Sprite 采样。
 
+## 为什么这样设计
+
+RenderTexture 把相机输出改为可复用资源：Camera 只需携带目标 FrameBuffer，View/Renderer 负责绑定；之后 Sprite 把同一颜色纹理当采样输入。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[RenderTexture.initWithSize] --> B[创建颜色 Texture + FrameBuffer]
+ B --> C[Camera.targetTexture]
+ C --> D[RendererCamera 保存 FrameBuffer]
+ D --> E[提取 View 并携带目标]
+ E --> F[BaseRenderer 设置 FrameBuffer]
+ F --> G[Camera 绘制写入 Texture]
+ G --> H[SpriteFrame/ Sprite 引用 Texture]
+ H --> I[后续渲染采样]
+```
+
 ## 本课必须保留的机制
 
 - RenderTexture 提供颜色 Texture/FrameBuffer；Camera 把目标带入 View，渲染后 Sprite 采样该纹理。

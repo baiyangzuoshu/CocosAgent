@@ -13,6 +13,23 @@
 
 前置课程：[第 49 课：粒子绘制与结束](<../s49_particle_render_finish/README.md>)。
 
+## 为什么这样设计
+
+停止发射只改变生产状态，不应直接丢弃仍在飞行的粒子。系统等活动集合排空后再结束渲染和释放关联资源，保证停止效果自然收尾。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[stop emitting] --> B[关闭 emitter]
+ B --> C[继续更新现有粒子]
+ C --> D{alive count = 0?}
+ D -->|否| C
+ D -->|是| E[结束粒子系统]
+ E --> F[关闭/清理 Renderer 数据]
+ F --> G[满足资源释放条件]
+```
+
 ## 本课必须保留的机制
 
 保留停止新发射后继续推进既有粒子的寿命，并仅在存活集合清空后满足资源释放条件；停止发射不等于立即销毁系统。
@@ -23,7 +40,7 @@
 
 ## 模型化简化与 Creator Runtime 边界
 
-[`ParticleStudy.ts`](<src/cocos2d/core/3d/particle/ParticleStudy.ts>) 只推进一次，并以 `!emitting && alive.length === 0` 计算释放条件；本次样例仍有存活粒子，所以只展示尚未释放。它不实际释放任何资源，也不接入 Runtime ParticleSystem3D/Renderer 的停止、持续模拟和最终清理阶段，不创建 GPU 资源。
+课程代码停止发射后持续推进存活粒子，移除过期粒子，并在发射已停止且存活数归零时进入 released 终态。这个终态只表示生命周期状态，不接入 Runtime ParticleSystem3D/Renderer 的资源释放，也不创建 GPU 资源。
 
 ## 运行
 

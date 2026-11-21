@@ -50,6 +50,23 @@ Asset 的 `refCount` 是引擎生命周期记账。`addRef()` 增加计数；`de
 
 引擎对循环依赖、重复 UUID、native 依赖等还有处理。本课图只表达当前例子的两个 Asset 依赖。
 
+## 为什么这样设计
+
+依赖图表达 Asset 对象之间的引用关系，而非下载 URL 或文件数量。只把跨 Asset 的 `__uuid__` 当依赖，文件内 `__id__` 用来恢复同一序列化文件中的对象引用。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[SceneAsset serialized fields] --> B[读取外部 __uuid__]
+ B --> C[SceneAsset -> SpriteFrame]
+ D[SpriteFrame rawTextureUuid] --> E[SpriteFrame -> Texture2D]
+ C --> F[DependencyGraph]
+ E --> F
+ F --> G[从根 UUID 递归收集依赖]
+ H[文件内 __id__] --> I[只连接同文件对象，不建 Asset 边]
+```
+
 ## 本课必须保留的机制
 
 保留 SceneAsset `__uuid__`→SpriteFrame、`rawTextureUuid`→Texture2D 两条依赖边；只把外部 Asset `__uuid__` 视作依赖，文件内部 `__id__` 不创建 Asset 依赖。

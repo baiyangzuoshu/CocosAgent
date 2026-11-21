@@ -26,6 +26,25 @@
 
 版本要点：**Creator 2.4.15** 的课程目标是浏览器 WebGL 1。不把另一版的 Effect 语法、Shader API 或设备路径套进来。
 
+## 为什么这样设计
+
+宏在编译前选择 Shader 分支，宏组合形成 Program 变体键；ProgramLib 缓存已编译的组合，避免运行时重复编译。把宏放在编译阶段可同时控制代码和程序身份。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[Shader template + macro values] --> B[normalize macro set]
+ B --> C[build variant cache key]
+ C --> D{Program cache hit?}
+ D -->|yes| E[reuse WebGLProgram]
+ D -->|no| F[inject #define/preprocess]
+ F --> G[compile and link]
+ G --> H[cache under variant key]
+ E --> I[draw with selected variant]
+ H --> I
+```
+
 ## 本课必须保留的机制
 
 保留宏和值组成变体缓存键、编译前注入 `#define`、不同宏组合生成不同 WebGLProgram，以及重复键复用缓存程序。

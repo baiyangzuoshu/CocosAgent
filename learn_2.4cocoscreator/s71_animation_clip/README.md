@@ -13,6 +13,21 @@ CCAnimation 组件持有 AnimationClip 并创建可播放状态。
 
 前置主题：[动作与时间推进](../s34_action_modifiers/README.md)。
 
+## 为什么这样设计
+
+AnimationClip 保存可复用的时间线数据，CCAnimation 组件根据剪辑创建运行时状态；资源与一次播放状态分离，才能让剪辑被多个对象使用。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[AnimationClip 数据/曲线] --> B[CCAnimation.addClip]
+ B --> C[CCAnimation._createState]
+ C --> D[AnimationState 绑定目标/Clip]
+ D --> E[AnimationManager 登记状态]
+ E --> F[后续帧推进与采样]
+```
+
 ## 本课必须保留的机制
 
 保留 `CCAnimation` 持有 `AnimationClip` 并创建可播放状态这一资源到播放器的连接；课程关注的是 Clip 进入运行时的入口，而不只是时间数值。
@@ -23,7 +38,7 @@ CCAnimation 组件持有 AnimationClip 并创建可播放状态。
 
 ## 模型化简化与 Creator Runtime 边界
 
-[AnimationStudy.ts](<src/cocos2d/animation/AnimationStudy.ts>) 是静态数据模型，只打印 `{name, duration, keys}`，不解析 Creator 序列化资源，也不创建真实 `CCAnimation/AnimationState`。因此未执行资源加载后由 `CCAnimation` 接入并由 `AnimationManager` 推进状态的 Runtime 阶段。
+课程代码创建 `AnimationClip`、登记到 `CCAnimation`，再按 clip 名称创建带目标路径的 `AnimationState`，并检查无效 clip 名称。它不解析 Creator 序列化资源，也不接入真正的 `AnimationManager` 帧调度。
 
 ## 运行
 

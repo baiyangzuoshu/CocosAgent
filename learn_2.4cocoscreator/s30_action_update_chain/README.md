@@ -34,6 +34,25 @@ deno task serve
 
 打开 <http://localhost:8000>，点击“启动动作”。
 
+## 为什么这样设计
+
+Tween、动作执行和逐帧时钟分开，调用方只描述动作；ActionManager 管理目标与动作，Scheduler/Director 负责统一推进，完成后再集中移除。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+    A[Tween.start] --> B[构造最终 Action]
+    B --> C[ActionManager.addAction]
+    C --> D[保存目标并 startWithTarget]
+    E[Director.mainLoop] --> F[Scheduler.update]
+    F --> G[ActionManager.update]
+    G --> H[Action.step dt]
+    H --> I{isDone?}
+    I -->|否| G
+    I -->|是| J[stop 并移除 Action]
+```
+
 ## 本课必须保留的机制
 
 - `Tween.start` 将动作交给 `ActionManager`，Director/Scheduler 的帧更新推进 `Action.step`，完成动作会被移除。

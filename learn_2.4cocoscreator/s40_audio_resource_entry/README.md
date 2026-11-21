@@ -29,6 +29,22 @@ deno task serve
 
 打开 http://127.0.0.1:8000，点击“播放 AudioClip”。
 
+## 为什么这样设计
+
+AudioClip 保存资源侧的浏览器音频数据/地址，AudioSource 和 audioEngine 负责播放控制，底层播放器负责浏览器 API。拆层后可以替换浏览器或原生后端而保留上层组件接口。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+    A[AudioSource.clip] --> B[取得 AudioClip.nativeUrl/nativeAsset]
+    B --> C[CCAudioEngine.play]
+    C --> D[创建播放实例并分配 audioID]
+    D --> E[CCAudio 创建浏览器播放器]
+    E --> F[HTMLAudioElement.load/play]
+    F --> G[浏览器输出声音]
+```
+
 ## 本课必须保留的机制
 
 - AudioClip 的 `nativeUrl` 交给 `audioEngine`，浏览器端由 HTMLAudioElement 发起实际播放。

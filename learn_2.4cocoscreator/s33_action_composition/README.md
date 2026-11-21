@@ -28,6 +28,24 @@ deno task serve
 
 打开 <http://localhost:8000>。
 
+## 为什么这样设计
+
+组合动作把调度策略做成 Action 本身。`Sequence` 在一个总时长里切分子动作；`Spawn` 统一分支时长，让管理器仍只需更新一个组合动作。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+    A[Sequence 总进度] --> B{跨过子动作切分点?}
+    B -->|否| C[更新当前子动作]
+    B -->|是| D[结束前一子动作]
+    D --> E[启动并更新下一子动作]
+    F[Spawn 初始化分支] --> G[比较各分支时长]
+    G --> H[短分支串接 DelayTime 补齐]
+    H --> I[每帧同时 update 所有分支]
+    I --> J[最长分支结束时组合完成]
+```
+
 ## 本课必须保留的机制
 
 - `Sequence` 按时长切分串行进度；`Spawn` 并行运行分支，并用 `DelayTime` 补齐较短分支。

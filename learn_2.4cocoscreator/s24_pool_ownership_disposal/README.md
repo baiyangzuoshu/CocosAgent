@@ -12,6 +12,28 @@
 
 Creator 2.4.15 原生 [NodePool.get/put/clear](../../engine/2.4.15engine/extensions/ccpool/CCNodePool.js#L100) 提供单池存取与清池；全局所有权表和终态接口是本课新增的课程模型。
 
+## 为什么这样设计
+
+NodePool 原生实现只维护自己的数组，不负责跨池仲裁或关闭。显式记录所有权和终态，是应用层避免重复引用、误交接和关闭后误用的一种策略。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+    A[put(node)] --> B{池已关闭或 node 已归属?}
+    B -->|是| C[拒绝并返回 false]
+    B -->|否| D[登记 owner]
+    D --> E[unuse 后入池]
+    E --> F{get}
+    F --> G[尾部 pop: LIFO]
+    G --> H[释放 owner]
+    H --> I[调用 reuse]
+    J[dispose] --> K{已关闭?}
+    K -->|是| L[直接返回]
+    K -->|否| M[标记终态并 clear]
+    M --> N[后续 put 拒绝 / get 返回 null]
+```
+
 ## 本课必须保留的机制
 
 保留池尾 LIFO、同节点不重复入池、节点从一个池取出后才可交给另一池、关闭后拒绝操作，以及清池触发延迟销毁。

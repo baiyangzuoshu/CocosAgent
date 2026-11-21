@@ -28,6 +28,26 @@ deno task serve
 
 打开 <http://localhost:8000>。
 
+## 为什么这样设计
+
+即时动作与间隔动作都遵循 Action 接口，但时间语义不同：`CallFunc` 消耗零时长并执行一次，`DelayTime` 只由基类累计时长。统一接口让 ActionManager 无需区分动作类型。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+    A[ActionManager.update] --> B[CallFunc.step]
+    B --> C[update 触发回调一次]
+    C --> D[isDone 为 true]
+    D --> E[ActionManager 移除]
+    A --> F[DelayTime.step dt]
+    F --> G[ActionInterval 累计 elapsed]
+    G --> H[DelayTime.update 不改属性]
+    H --> I{到达 duration?}
+    I -->|否| F
+    I -->|是| E
+```
+
 ## 本课必须保留的机制
 
 - `CallFunc` 在动作更新时即时执行；`DelayTime` 只推进经过时间，并在完成时从管理器移除。

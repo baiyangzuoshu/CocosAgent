@@ -29,6 +29,26 @@ deno task serve
 
 打开 http://127.0.0.1:8000，启用物理后推进一帧，观察每帧步进次数和更新顺序。
 
+## 为什么这样设计
+
+Director 把物理管理器作为系统更新对象调度，固定步进器再把可变帧间隔转换为零次或多次固定物理步。物理开关和时间累积归 Manager 管，帧顺序由 Director 管。
+
+## 源码流程图
+
+```mermaid
+flowchart TD
+ A[Director.sharedInit] --> B[创建 PhysicsManager]
+ B --> C[注册到系统 Scheduler]
+ D[组件 update] --> E[Scheduler.update]
+ E --> F[PhysicsManager.update dt]
+ F --> G[累积时间 accumulator]
+ G --> H{累计时间 >= fixedStep?}
+ H -->|是| I[World.Step fixedStep]
+ I --> G
+ H -->|否| J[组件 lateUpdate]
+ J --> K[渲染]
+```
+
 ## 本课必须保留的机制
 
 - 首次启用时创建 World；Scheduler 驱动累积器按固定步长推进物理更新。
