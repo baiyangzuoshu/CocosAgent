@@ -1,4 +1,6 @@
-# 第 0 课：`.meta` 元数据与 UUID
+# 补充参考：`.meta` 元数据与 UUID
+
+> 本资料原为课程 0，现作为资源身份专题补充，不计入课程编号。Creator 2.4.15 的第 0 课现为引擎功能流程图索引。
 
 **目标：** 从 Creator 2.4 的贴图 `.meta` 中区分 Texture 主资源和 SpriteFrame 子资源，并验证复制、删除和重新导入时身份如何变化。
 
@@ -45,7 +47,7 @@ Creator 2.4 手册说明：新建 `.meta` 时会随机生成 UUID；`.meta` 由�
 
 三份 `.meta` 的图片尺寸和导入设置相同，两个层级的 UUID 都不同。这说明新建 `.meta` 时的 UUID 不是由图片内容或文件名固定算出的。若删除后又出现原 UUID，先确认旧 `.meta` 确实不存在、重新导入时没有把它一起复制回来；Creator 2.4 手册建议在操作系统文件管理器中改动资源前关闭编辑器。仅凭“UUID 相同”这一现象，不能断定 AssetDB 恢复旧数据的具体机制。
 
-## 本课必须保留的机制
+## 本资料必须保留的机制
 
 区分 Texture 顶层 UUID 与 SpriteFrame 子资源 UUID，并确认 `rawTextureUuid` 指回顶层 Texture；`.meta` 的 `ver` 也不能与 Creator 引擎版本混淆。
 
@@ -57,11 +59,11 @@ Creator 2.4 手册说明：新建 `.meta` 时会随机生成 UUID；`.meta` 由�
 
 样例 JSON 不是可直接导入 Creator 的完整 `.meta`。本地 `engine/2.4.15engine/` 是 Runtime 快照，不包含 Creator 编辑器 AssetDB 导入器实现；可依据官方手册说明新建 `.meta` 时随机生成并记录导入观察，但不能断言随机算法或 AssetDB 如何检测/处理 UUID 碰撞。Runtime 不读取编辑器 `.meta`，构建过程会整理资源信息进运行时配置。
 
-## 本课代码与源码位置
+## 本资料代码与源码位置
 
 运行样例会打印顶层 UUID、子资源 UUID，以及 `rawTextureUuid` 是否指回顶层资源。样例 JSON 是从真实 `.meta` 中抽取的字段子集，不是可直接导入 Creator 的完整文件。
 
-- `samples/HelloWorld.png.meta.sample.json`：本课读取的精简字段样例。
+- `samples/HelloWorld.png.meta.sample.json`：本资料读取的精简字段样例。
 - `docs/2.x/04-assets-and-loading.md:11-13`：记录 `HelloWorld.png.meta` 主 UUID、SpriteFrame 子 UUID 和 `rawTextureUuid`。
 - `engine/2.4.15engine/cocos2d/core/asset-manager/config.js:177-198`：Runtime Config 按路径查找构建后的资源信息；不是 `.meta` UUID 生成代码。
 - `engine/2.4.15engine/cocos2d/core/asset-manager/CCAssetManager.js:486-493`：`loadAny` 把请求交给 Asset Manager 管线。

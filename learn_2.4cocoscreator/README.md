@@ -6,7 +6,7 @@
 
 1. 按编号打开一课，先看本课要解决的问题。
 2. 对照课内列出的 Creator 2.4.15 源码位置。
-3. 直接运行本课目录里的独立代码。
+3. 按本课 README 运行独立代码，或完成指定的源码/证据观察步骤。
 4. 按本课说明观察命令行或页面结果。
 
 每课都应先看本课 README 中的三项边界说明，再读代码：
@@ -21,7 +21,8 @@
 
 - [课程大纲](课程大纲.md)：完整阶段规划与源码文件索引。
 - [运行准备：浏览器宿主](web_host/README.md)：提供后续浏览器运行课使用的最小宿主，不计课次。
-- [第 0 课：`.meta` 元数据与 UUID](s00_meta_analysis/README.md)：区分 Texture/SpriteFrame 身份，并观察复制、删除和重新导入时 UUID 的变化。
+- [第 0 课：Creator 2.4.15 引擎功能流程图索引](s00_engine_overview/README.md)：按模块装配、启动、场景、生命周期、资源、输入、绘制和销毁分别查看源码流程图。
+- [补充参考：资源元数据与 UUID](asset_meta_reference/README.md)：区分 Texture/SpriteFrame 身份，并观察复制、删除和重新导入时 UUID 的变化；不计入课次。
 - [第 1 课：模块装配](s01_module_assembly/README.md)：创建 cc 命名空间并注册第一个模块。
 - [第 2 课：游戏启动](s02_game_startup/README.md)：调用 cc.game.run() 并观察引擎启动事件。
 - [第 3 课：Director 初始化与主循环](s03_director_loop/README.md)：由 requestAnimationFrame 驱动 Director。
@@ -113,7 +114,8 @@ learn_2.4cocoscreator/
 ├── README.md                  # 课程入口
 ├── 课程大纲.md
 ├── web_host/                  # 浏览器宿主准备，不计课次
-├── s00_meta_analysis/         # 独立的第 0 课，分析 .meta 和 UUID
+├── s00_engine_overview/       # 第 0 课：源码级引擎功能流程图索引
+├── asset_meta_reference/      # 非编号补充：分析 .meta 和 UUID
 │   ├── README.md
 │   ├── deno.json
 │   ├── samples/
@@ -332,6 +334,6 @@ Creator 课程以 Web 浏览器运行时为范围；每课代码独立，并标�
 
 ## 运行
 
-进入要学习的课程目录，按该课 README 中的命令运行。浏览器课有自己的 `deno.json`、`index.html` 和 `src/`；第 0 课和第 102 课是独立的数据分析脚本。
+进入要学习的课程目录，按该课 README 中的步骤观察。浏览器课有自己的 `deno.json`、`index.html` 和 `src/`；第 0 课是静态源码功能流程图索引，资源元数据补充参考和第 102 课提供独立分析脚本。
 
 课程讲义会列出对应的 Creator 源码路径，路径相对于仓库根目录。
