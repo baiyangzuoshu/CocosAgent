@@ -5,16 +5,21 @@
 ## 流程图
 
 ```mermaid
-flowchart TD
-  A[创建 Director] --> B[once 监听 EVENT_ENGINE_INITED]
-  C[game.run 启动] --> D[_initEngine 发出 EVENT_ENGINE_INITED]
-  D --> B
-  B --> E[Director.init]
-  E --> F[_runMainLoop]
-  F --> G[requestAnimationFrame 提供时间戳]
-  G --> H[director.mainLoop(now)]
-  H --> I[更新帧数和 deltaTime]
-  I --> G
+graph TD
+  A["创建 Director"] --> B["注册一次性初始化监听"]
+  B --> C["调用 game.run"]
+  C --> D["CCGame 初始化引擎"]
+  D --> E["发出 EVENT_ENGINE_INITED"]
+  E --> F["调用 Director.init"]
+  B --> F
+  F --> G["CCGame 标记准备完成"]
+  G --> H["启动 _runMainLoop"]
+  H --> I["requestAnimationFrame 提供时间戳"]
+  I --> J["调用 director.mainLoop"]
+  J --> K["更新帧数和 deltaTime"]
+  K --> I
+  H --> L["发出 EVENT_GAME_INITED"]
+  L --> M["调用 onStart 回调"]
 ```
 
 ## 本课增量

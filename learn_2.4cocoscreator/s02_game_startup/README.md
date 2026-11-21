@@ -5,15 +5,15 @@
 ## 流程图
 
 ```mermaid
-flowchart TD
-  A[先注册启动事件监听] --> B[game.run(config, onStart)]
-  B --> C[_initConfig]
-  C --> D[prepare]
-  D --> E[_prepareFinished]
-  E --> F[_initEngine]
-  F --> G[EVENT_ENGINE_INITED]
-  G --> H[EVENT_GAME_INITED]
-  H --> I[onStart 回调]
+graph TD
+  A["注册启动事件监听"] --> B["调用 game.run"]
+  B --> C["执行 _initConfig"]
+  C --> D["执行 prepare"]
+  D --> E["执行 _prepareFinished"]
+  E --> F["执行 _initEngine"]
+  F --> G["发出 EVENT_ENGINE_INITED"]
+  G --> H["发出 EVENT_GAME_INITED"]
+  H --> I["调用 onStart 回调"]
 ```
 
 ## 本课增量

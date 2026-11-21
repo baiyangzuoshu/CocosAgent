@@ -1,6 +1,5 @@
 import EventTarget from "./event/event-target.ts";
 import NodeActivator from "./node-activator.ts";
-import ComponentScheduler from "./component-scheduler.ts";
 import game from "./CCGame.ts";
 import type Scene from "./CCScene.ts";
 import type { CocosNamespace } from "../../index.ts";
@@ -15,7 +14,6 @@ export default class Director extends EventTarget {
   _lastUpdate = 0;
   _deltaTime = 0;
   readonly _nodeActivator = new NodeActivator();
-  readonly _compScheduler = new ComponentScheduler();
   private _scene: Scene | null = null;
 
   constructor() {
@@ -36,9 +34,6 @@ export default class Director extends EventTarget {
     this._deltaTime = now > this._lastUpdate ? (now - this._lastUpdate) / 1000 : 0;
     this._lastUpdate = now;
     this._totalFrames++;
-    this._compScheduler.startPhase();
-    this._compScheduler.updatePhase(this._deltaTime);
-    this._compScheduler.lateUpdatePhase(this._deltaTime);
     this.emit(Director.EVENT_AFTER_UPDATE, this._deltaTime);
     this.emit(Director.EVENT_AFTER_FRAME, this._deltaTime);
   }

@@ -1,5 +1,4 @@
 import CCObject from "../platform/CCObject.ts";
-import type Component from "../components/CCComponent.ts";
 import type { CocosNamespace } from "../../../index.ts";
 
 export default class BaseNode extends CCObject {
@@ -7,7 +6,6 @@ export default class BaseNode extends CCObject {
   _children: BaseNode[] = [];
   _active = true;
   _activeInHierarchy = false;
-  _components: Component[] = [];
 
   constructor(public name = "New Node") {
     super();
@@ -76,15 +74,6 @@ export default class BaseNode extends CCObject {
     child.setParent(this);
   }
 
-  addComponent<T extends Component>(ComponentClass: new () => T): T {
-    const component = new ComponentClass();
-    component.node = this;
-    this._components.push(component);
-    if (this._activeInHierarchy) {
-      host.cc?.director?._nodeActivator.activateComp(component);
-    }
-    return component;
-  }
 }
 
 interface CocosWindow extends Window {

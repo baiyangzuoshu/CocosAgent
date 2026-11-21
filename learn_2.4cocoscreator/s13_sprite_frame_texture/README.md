@@ -2,6 +2,22 @@
 
 **目标：** 看清资源、贴图、SpriteFrame 和 Sprite 如何接成一条绘制数据链。
 
+## 流程图
+
+```mermaid
+flowchart TD
+  A["game.run 保留引擎启动链"] --> B["活动 Scene 进入每帧 RenderFlow"]
+  C["CCAssetManager.loadAny 请求 UUID"] --> D["读取资源 JSON 并创建 CCAsset"]
+  D --> E["Texture2D 加载浏览器图片"]
+  E --> F["SpriteFrame 用像素矩形计算 UV"]
+  F --> G["Sprite.setSpriteFrame 接入 Sprite"]
+  B --> H["RenderFlow 访问 Sprite 节点"]
+  G --> H
+  H --> I["assembler 将 UV 写入四角顶点"]
+  I --> J["片元 Shader 按 UV 采样贴图"]
+  J --> K["WebGL 提交纹理四边形"]
+```
+
 ## 本课增量
 
 Asset 描述图集区域；Texture2D 加载浏览器图片；SpriteFrame 把像素矩形换成 UV；Sprite 组装器把 UV 写入四边形顶点；WebGL shader 按 UV 采样贴图。示例只取 128×64 图集左侧 64×64 区域。

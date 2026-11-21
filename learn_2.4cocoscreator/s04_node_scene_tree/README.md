@@ -5,15 +5,15 @@
 ## 流程图
 
 ```mermaid
-flowchart TD
-  A[Scene] --> B[继承 Node]
-  B --> C[继承 BaseNode]
-  C --> D[保存 parent / children]
-  E[addChild(child)] --> F{child 已有 parent?}
-  F -- 否 --> G[设置 child.parent]
-  G --> H[加入 parent.children]
-  H --> I[递归遍历得到场景树]
-  F -- 是 --> J[本课程模型拒绝重复挂载]
+graph TD
+  A["Scene"] --> B["继承 Node"]
+  B --> C["继承 BaseNode"]
+  C --> D["保存 parent 和 children"]
+  E["调用 addChild"] --> F{"子节点已有 parent"}
+  F -->|否| G["设置子节点 parent"]
+  G --> H["加入 parent.children"]
+  H --> I["递归遍历得到场景树"]
+  F -->|是| J["本课程模型拒绝重复挂载"]
 ```
 
 ## 本课增量

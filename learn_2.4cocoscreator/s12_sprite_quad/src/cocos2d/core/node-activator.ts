@@ -1,4 +1,3 @@
-import type Component from "./components/CCComponent.ts";
 import type BaseNode from "./utils/base-node.ts";
 
 export default class NodeActivator {
@@ -12,9 +11,6 @@ export default class NodeActivator {
 
   private _activateNodeRecursively(node: BaseNode): void {
     node._setActiveInHierarchy(true);
-    for (const component of node._components) {
-      this.activateComp(component);
-    }
     for (const child of node.children) {
       if (child.active) {
         this._activateNodeRecursively(child);
@@ -22,15 +18,8 @@ export default class NodeActivator {
     }
   }
 
-  activateComp(component: Component): void {
-    component._activate();
-  }
-
   private _deactivateNodeRecursively(node: BaseNode): void {
     node._setActiveInHierarchy(false);
-    for (const component of node._components) {
-      component._deactivate();
-    }
     for (const child of node.children) {
       if (child.activeInHierarchy) {
         this._deactivateNodeRecursively(child);

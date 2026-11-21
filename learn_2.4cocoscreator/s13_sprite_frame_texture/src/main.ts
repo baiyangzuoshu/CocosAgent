@@ -9,88 +9,59 @@ if (!status) throw new Error("找不到页面状态节点 #status");
 
 const NodeClass = cc.Node;
 const SceneClass = cc.Scene;
-const ComponentClass = cc.Component;
 const game = cc.game;
 const director = cc.director;
 const DirectorClass = cc.Director;
-if (!NodeClass || !SceneClass || !ComponentClass || !game || !director || !DirectorClass) {
-  throw new Error("引擎模块尚未完成注册");
+if (!NodeClass || !SceneClass || !game || !director || !DirectorClass) {
+  throw new Error("节点、场景或引擎启动模块尚未注册");
 }
 
 const scene = new SceneClass("MainScene");
-const branch = new NodeClass("Branch");
-branch.setPosition(10, 0);
-scene.addChild(branch);
+const hero = new NodeClass("Hero");
+const sprite = new Sprite(hero);
+hero.setRenderComponent(sprite);
+scene.addChild(hero);
 
-class PlayerComponent extends ComponentClass {
-  readonly events: string[] = [];
+let assetStatus = "等待资源请求";
 
-  override onLoad(): void { this.events.push("onLoad"); }
-  override onEnable(): void { this.events.push("onEnable"); }
-  override start(): void { this.events.push("start"); }
-  override update(deltaTime: number): void {
-    this.events.push(`update(${deltaTime.toFixed(3)})`);
-    if (director!.totalFrames === 2) branch.setPosition(20, 0);
-  }
-  override lateUpdate(deltaTime: number): void { this.events.push(`lateUpdate(${deltaTime.toFixed(3)})`); }
-}
-
-const player = new NodeClass("Player");
-player.setPosition(2, 3);
-const component = player.addComponent(PlayerComponent);
-branch.addChild(player);
-const sprite = new Sprite(player);
-player.setRenderComponent(sprite);
-
-let assetStatus = "资源请求中…";
-const render = (): void => {
+const renderStatus = (): void => {
+  const frame = sprite.spriteFrame;
   status.textContent = [
-    `帧数: ${director.totalFrames}`,
-    `回调: ${component.events.slice(-6).join(" → ")}`,
-    "每帧顺序: start（一次）→ update → lateUpdate",
-    `渲染入口: Director.mainLoop → Renderer.render → RenderFlow.render → ${director.lastRenderedSceneName}`,
-    `Player 世界位置: ${JSON.stringify(player.getWorldPosition())}`,
-    `最近渲染脏标记: ${director.transformHistory.join("；")}`,
-    `几何提交: 4 个顶点、6 个索引、${director.drawCallCount} 次 draw call`,
-    assetStatus,
+    `活动场景: ${director.lastRenderedSceneName}`,
+    "职责链: Asset → Texture2D → SpriteFrame → Sprite",
+    `资源状态: ${assetStatus}`,
+    frame
+      ? `帧区域: ${frame.rect.width}×${frame.rect.height} / 贴图 ${frame.texture.width}×${frame.texture.height}`
+      : "帧区域: 等待 SpriteFrame",
+    frame
+      ? `SpriteFrame UV: ${Array.from(frame.uv).map((value) => value.toFixed(2)).join(", ")}`
+      : "SpriteFrame UV: 等待计算",
+    `WebGL draw call: ${director.drawCallCount}`,
   ].join("\n");
 };
 
-director.on(DirectorClass.EVENT_AFTER_DRAW, render);
+director.on(DirectorClass.EVENT_AFTER_DRAW, renderStatus);
+status.textContent = "game.run 正在启动引擎；资源加载后会接入 Sprite 并绘制贴图区域。";
 game.run({ frameRate: 60 }, () => director.runSceneImmediate(scene));
 
 const assetManager = new CCAssetManager();
-const uuid = "hero-uuid";
-const cachedBeforeFirstRequest = assetManager.assets.has(uuid);
-assetManager.loadAny(uuid, (firstError, firstAsset) => {
-  if (firstError || !firstAsset) {
-    assetStatus = `资源加载失败: ${firstError?.message ?? "未知错误"}`;
-    render();
+assetStatus = "AssetManager 正在按 UUID 请求 JSON";
+assetManager.loadAny("hero-uuid", (error, asset) => {
+  if (error || !asset) {
+    assetStatus = `资源加载失败: ${error?.message ?? "未知错误"}`;
+    renderStatus();
     return;
   }
 
-  const texture = new Texture2D(firstAsset.data.textureUrl);
+  const texture = new Texture2D(asset.data.textureUrl);
+  assetStatus = "Asset 已创建；Texture2D 正在加载图片";
   texture.load().then(() => {
-    const frame = new SpriteFrame(texture, firstAsset.data.rect);
+    const frame = new SpriteFrame(texture, asset.data.rect);
     sprite.setSpriteFrame(frame);
-    const cachedBeforeSecondRequest = assetManager.assets.has(uuid);
-    assetManager.loadAny(uuid, (secondError, secondAsset) => {
-      if (secondError || !secondAsset) {
-        assetStatus = `资源加载失败: ${secondError?.message ?? "未知错误"}`;
-      } else {
-        assetStatus = [
-          `接线: Asset → Texture2D → SpriteFrame → Sprite`,
-          `帧区域: ${frame.rect.width}×${frame.rect.height} / ${texture.width}×${texture.height}`,
-          `SpriteFrame UV: ${Array.from(frame.uv).map((value) => value.toFixed(2)).join(", ")}`,
-          `首次请求前有缓存: ${cachedBeforeFirstRequest}`,
-          `再次请求前有缓存: ${cachedBeforeSecondRequest}`,
-          `两次请求是同一对象: ${firstAsset === secondAsset}`,
-        ].join("\n");
-      }
-      render();
-    });
-  }).catch((error: unknown) => {
-    assetStatus = `贴图加载失败: ${error instanceof Error ? error.message : String(error)}`;
-    render();
+    assetStatus = `SpriteFrame 已接入: ${asset.data.name}`;
+    renderStatus();
+  }).catch((loadError: unknown) => {
+    assetStatus = `贴图加载失败: ${loadError instanceof Error ? loadError.message : String(loadError)}`;
+    renderStatus();
   });
 });

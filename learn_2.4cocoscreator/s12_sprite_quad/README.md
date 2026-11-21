@@ -2,6 +2,20 @@
 
 **目标：** 看清一个节点如何从四个顶点进入一次 WebGL 绘制。
 
+## 流程图
+
+```mermaid
+flowchart TD
+  A["game.run 启动"] --> B["Director.mainLoop 每帧运行"]
+  B --> C["Renderer 开始一帧"]
+  C --> D["RenderFlow 遍历活动 Scene"]
+  D --> E{"节点带 Sprite 吗?"}
+  E -->|是| F["Sprite assembler 更新几何"]
+  F --> G["生成 4 个位置顶点和 6 个索引"]
+  G --> H["ModelBatcher 写入 WebGL 缓冲区"]
+  H --> I["drawElements 提交一个 quad"]
+```
+
 ## 本课增量
 
 RenderFlow 遍历到带 Sprite 数据的节点后，组装器生成四个位置顶点和六个索引；ModelBatcher 将它们提交给 WebGL，页面画出一个彩色四边形。父节点移动时，四边形跟着移动。

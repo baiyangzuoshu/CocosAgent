@@ -2,6 +2,19 @@
 
 **问题：** 输入点已经换到画布 backing-store 坐标后，怎样决定哪个节点收到触摸？
 
+## 流程图
+
+```mermaid
+flowchart TD
+  A["浏览器 mouse 或 touchstart"] --> B["CCInputManager 换算 backing-store 坐标"]
+  B --> C["减画布半宽和半高得到中心原点点"]
+  C --> D["CCEventManager 遍历监听节点"]
+  D --> E{"节点 activeInHierarchy 且 AABB 命中?"}
+  E -->|是| F["派发 touch-start"]
+  F --> G["调用 HitTarget 回调"]
+  E -->|否| H["没有目标命中，不派发事件"]
+```
+
 ## 观察步骤
 
 1. 点击黄色 `HitTarget` 方框中心，观察坐标、AABB 判定、管理器结果和回调。

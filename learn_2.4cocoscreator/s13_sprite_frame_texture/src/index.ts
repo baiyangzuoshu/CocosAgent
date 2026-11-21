@@ -4,7 +4,6 @@ import type BaseNode from "./cocos2d/core/utils/base-node.ts";
 import type Director from "./cocos2d/core/CCDirector.ts";
 import type { GameObject } from "./cocos2d/core/CCGame.ts";
 import type Node from "./cocos2d/core/CCNode.ts";
-import type Component from "./cocos2d/core/components/CCComponent.ts";
 import type Scene from "./cocos2d/core/CCScene.ts";
 
 /**
@@ -24,7 +23,6 @@ export interface CocosNamespace {
   director?: Director;
   game?: GameObject;
   Node?: typeof Node;
-  Component?: typeof Component;
   Scene?: typeof Scene;
 }
 

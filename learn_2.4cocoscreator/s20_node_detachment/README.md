@@ -2,6 +2,25 @@
 
 **问题：** Node.active、父节点挂载和 Component.enabled 是否是同一个开关？
 
+## 流程图
+
+```mermaid
+flowchart TD
+  A["game.run 并激活 MainScene"] --> B["挂载 EnemyA 和 EnemyB"]
+  B --> C["首次激活：onLoad、onEnable；首帧 start"]
+  C --> D{"切换哪种状态?"}
+  D -->|Node.active false| E["activeInHierarchy 变 false，组件停用"]
+  D -->|Component.enabled false| F["节点仍活动，组件自身停用"]
+  D -->|removeChild false| G["解除 parent，保留实例并离开活动层级"]
+  E --> H["onDisable；移出更新调度"]
+  F --> H
+  G --> H
+  H --> I{"节点在活动层级且组件 enabled?"}
+  I -->|是| J["onEnable 并恢复更新"]
+  I -->|否| K["保持停用"]
+  J --> L["onLoad 和 start 不重复"]
+```
+
 ## 观察步骤
 
 等 EnemyA 首次 `update` 后，分别切换三种状态：

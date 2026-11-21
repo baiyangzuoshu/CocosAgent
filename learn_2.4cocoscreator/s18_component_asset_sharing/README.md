@@ -2,6 +2,20 @@
 
 **问题：** Prefab 实例化后，哪些对象是实例私有的，哪些资源仍被多个实例引用？
 
+## 流程图
+
+```mermaid
+flowchart TD
+  A["Prefab 模板含 Node、EnemyLogic 和 Sprite"] --> B["instantiate 两次"]
+  B --> C["各自复制 Node、Component 和 Sprite"]
+  C --> D["HP 等实例字段可分别修改"]
+  C --> E["SpriteFrame 引用沿用模板资源"]
+  E --> F["两个 Sprite 指向同一 SpriteFrame"]
+  F --> G["共享 Frame 仍指向同一 Texture2D"]
+  D --> H["对照对象身份与字段值"]
+  G --> H
+```
+
 ## 观察步骤
 
 - 两次实例化同一模板：Node、`EnemyLogic`、Sprite 与 Body 子节点各自独立。

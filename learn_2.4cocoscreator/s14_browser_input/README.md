@@ -2,6 +2,20 @@
 
 **目标：** 解释浏览器鼠标/触摸位置如何从视口坐标变成画布 backing-store 坐标，并理解 Y 轴方向为什么需要翻转。
 
+## 流程图
+
+```mermaid
+flowchart TD
+  A["鼠标按下或触摸开始"] --> B["读取 clientX 和 clientY"]
+  B --> C["getBoundingClientRect 测量 CSS 画布区域"]
+  C --> D["减去 rect.left 和 rect.top"]
+  D --> E["得到左上原点局部 x 和 y"]
+  C --> F["用 rect.bottom 减 clientY 翻转 Y 轴"]
+  E --> G["按 backing-store 与 CSS 尺寸比例缩放"]
+  F --> G
+  G --> H["输出画布坐标；不启动 Scene 或 Renderer"]
+```
+
 ## 先观察
 
 页面用一个空白 HTML canvas 接收鼠标按下和触摸开始。canvas 的 backing-store 固定为 `320×200`，CSS 展示宽度约为 `480px`；输入后，状态区逐项显示浏览器 `clientX/Y`、画布的 CSS 边界、画布内局部坐标、缩放比例和最终画布坐标。

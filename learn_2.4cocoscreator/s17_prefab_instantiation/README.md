@@ -2,6 +2,20 @@
 
 **问题：** 从一个 Prefab 模板实例化两次，哪些节点数据会变成独立副本？
 
+## 流程图
+
+```mermaid
+flowchart TD
+  A["Prefab.data 指向模板根节点"] --> B["instantiate(prefab)"]
+  B --> C["Prefab._instantiate 创建一次实例"]
+  C --> D["Node._instantiate 创建新节点"]
+  D --> E["复制名称和本地位置"]
+  E --> F["递归复制每个子节点"]
+  F --> G["clone.addChild 建立副本内部父子关系"]
+  G --> H["返回 detached 根节点，parent 仍为 null"]
+  H --> I["重复实例化得到另一棵独立节点树"]
+```
+
 ## 观察步骤
 
 - 查看模板 `Enemy → Body → Marker` 与两棵副本树。

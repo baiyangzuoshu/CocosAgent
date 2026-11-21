@@ -2,6 +2,21 @@
 
 **问题：** 为什么 Prefab 实例化之后没有生命周期回调，挂入活动场景后才有？
 
+## 流程图
+
+```mermaid
+flowchart TD
+  A["实例化 Prefab 得到 detached EnemyA 和 EnemyB"] --> B["挂载前：无 parent、无生命周期回调"]
+  C["game.run 完成引擎初始化"] --> D["Director 主循环准备就绪"]
+  D --> E["onStart 激活 MainScene"]
+  E --> F["Scene.addChild 挂载实例"]
+  B --> F
+  F --> G["NodeActivator 首次调用 onLoad"]
+  G --> H["启用组件并调用 onEnable"]
+  H --> I["首个调度帧先 start 再 update"]
+  I --> J["后续帧继续 update；A/B 实例各自记录"]
+```
+
 ## 观察步骤
 
 页面先保存实例化后的快照：parent 为 `null`、Node.active 为 true、activeInHierarchy 为 false、组件 enabled 为 true、enabledInHierarchy 为 false、回调为空。随后加入活动 Scene：观察 `onLoad → onEnable`；首个调度帧再观察 `start → update`。A/B 是独立组件实例。

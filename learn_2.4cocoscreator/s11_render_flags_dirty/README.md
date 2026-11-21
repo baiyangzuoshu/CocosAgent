@@ -2,6 +2,25 @@
 
 **目标：** 看清节点位置变化后，RenderFlow 如何只重算受影响的世界位置。
 
+## 流程图
+
+```mermaid
+flowchart TD
+  A["game.run 启动"] --> B["EVENT_ENGINE_INITED 后 Director.init"]
+  B --> C["requestAnimationFrame 驱动 mainLoop"]
+  A --> D["onStart 安装并激活 Scene"]
+  C --> E["RenderFlow 遍历活动 Scene"]
+  D --> E
+  E --> F{"节点或祖先带 WORLD_TRANSFORM 脏位?"}
+  F -->|是| G["父世界位置加当前本地位置"]
+  G --> H["写入世界位置并清除本节点脏位"]
+  H --> I["递归访问子节点并传递 changed"]
+  F -->|否| J["复用已缓存世界位置"]
+  J --> I
+  K["第 2 帧 setPosition Branch"] --> L["设置 WORLD_TRANSFORM 脏位"]
+  L --> E
+```
+
 ## 本课增量
 
 `setPosition` 设置 `WORLD_TRANSFORM` 脏位。RenderFlow 遍历场景树，重算带脏位的节点，并把父节点的变化传给子节点。示例第 2 帧移动 Branch，第 3 帧复用缓存。

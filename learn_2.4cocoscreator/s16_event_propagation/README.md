@@ -2,6 +2,21 @@
 
 **问题：** 事件命中 Target 后，父链监听器按什么顺序收到它？
 
+## 流程图
+
+```mermaid
+flowchart TD
+  A["输入命中 Target"] --> B["收集 MainScene 到 Target 的父链"]
+  B --> C["捕获阶段：MainScene 再到 Branch"]
+  C --> D{"Branch 调用了 stopPropagation 吗?"}
+  D -->|是| E["停止后续传播；Target 和冒泡节点不再收到"]
+  D -->|否| F["目标阶段：Target 监听器执行"]
+  F --> G["冒泡阶段：Branch 再到 MainScene"]
+  C --> H["currentTarget 随当前监听节点更新"]
+  F --> H
+  G --> H
+```
+
 ## 观察步骤
 
 1. 不勾选停止选项，点击 Target：应看到 `MainScene capture → Branch capture → Target target → Branch bubble → MainScene bubble`。
