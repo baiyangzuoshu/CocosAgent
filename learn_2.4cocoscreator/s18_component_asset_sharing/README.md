@@ -6,14 +6,17 @@
 
 ```mermaid
 flowchart TD
-  A["Prefab 模板含 Node、EnemyLogic 和 Sprite"] --> B["instantiate 两次"]
-  B --> C["各自复制 Node、Component 和 Sprite"]
-  C --> D["HP 等实例字段可分别修改"]
-  C --> E["SpriteFrame 引用沿用模板资源"]
-  E --> F["两个 Sprite 指向同一 SpriteFrame"]
-  F --> G["共享 Frame 仍指向同一 Texture2D"]
-  D --> H["对照对象身份与字段值"]
-  G --> H
+  A["Prefab._instantiate"] --> B["Node._instantiate"]
+  B --> C["instantiate._clone"]
+  C --> D["instantiateObj 复制对象图"]
+  D --> E{"当前对象是 Asset?"}
+  E -->|"是"| F["返回同一个 Asset"]
+  E -->|"否"| G["克隆对象与字段"]
+  G --> H["组件 node 引用映射到克隆 Node"]
+  F --> I["副本 Sprite 仍指向同一 SpriteFrame"]
+  H --> J["两份组件状态独立"]
+  I --> K["对照对象身份与字段值"]
+  J --> K
 ```
 
 ## 观察步骤
@@ -24,7 +27,7 @@ flowchart TD
 
 ## 本课必须保留的机制
 
-Node/Component/Sprite 实例分别创建；Prefab 复制资源引用时，SpriteFrame/Asset 不深拷贝，而由多个 Sprite 共享。改变 A 的简单组件字段不改变 B 的字段。
+保留 `Prefab._instantiate → Node._instantiate → instantiate._clone → instantiateObj` 的职责链。组件和 Sprite 都是 Component，因此随 Node 对象图克隆；组件的 `node` 引用通过对象映射指向克隆 Node。遇到 `cc.Asset` 时直接复用原对象，因此两个 Sprite 可以共享同一个 SpriteFrame/Texture2D。修改 A 的组件字段不改变 B。
 
 ## 最小观察宿主
 
@@ -32,13 +35,15 @@ Node/Component/Sprite 实例分别创建；Prefab 复制资源引用时，Sprite
 
 ## Creator 2.4.15 源码对照
 
-- [instantiate.js](../../engine/2.4.15engine/cocos2d/core/platform/instantiate.js#L223-L299)：递归克隆普通对象并保留 `cc.Asset` 引用。
-- [CCPrefab.js](../../engine/2.4.15engine/cocos2d/core/assets/CCPrefab.js#L167-L199)：Prefab 的实例化路径。
-- [CCSpriteFrame.js](../../engine/2.4.15engine/cocos2d/core/assets/CCSpriteFrame.js#L62-L65)：SpriteFrame 是 Asset；[CCSprite.js](../../engine/2.4.15engine/cocos2d/core/components/CCSprite.js#L195-L212) 持有 `spriteFrame`。
+- [CCPrefab.js](../../engine/2.4.15engine/cocos2d/core/assets/CCPrefab.js#L167-L199)：Prefab 选择实例化路径并调用模板节点。
+- [base-node.js](../../engine/2.4.15engine/cocos2d/core/utils/base-node.js#L1178-L1204)：Node 通过通用 `_clone` 建立副本，重置根 parent 并初始化。
+- [instantiate.js](../../engine/2.4.15engine/cocos2d/core/platform/instantiate.js#L123-L217)：`doInstantiate`/`enumerateObject` 复制对象图并维护临时对象映射。
+- [instantiate.js](../../engine/2.4.15engine/cocos2d/core/platform/instantiate.js#L223-L299)：`instantiateObj` 对 Asset、Node、Component、数组和其他对象分支处理。
+- [CCSpriteFrame.js](../../engine/2.4.15engine/cocos2d/core/assets/CCSpriteFrame.js#L62-L65)：SpriteFrame 继承 Asset；[CCSprite.js](../../engine/2.4.15engine/cocos2d/core/components/CCSprite.js#L195-L212) 中 Sprite 组件持有 `spriteFrame`。
 
 ## 模型化简化与 Creator Runtime 边界
 
-本课的 `CCNode._instantiate()` 手工复制组件和 Sprite，并把 `spriteFrame` 引用赋给新 Sprite；`EnemyLogic` 只演示数字字段，不覆盖嵌套对象、数组或序列化。内存 Texture2D 记录只满足本地 SpriteFrame 读取 URL/尺寸，不是 Creator 资产加载。课程 Sprite 现在只保存 SpriteFrame 引用，不依赖 assembler/RenderComponent；本地内存 Texture2D 仅用于 UV 计算，未加载图片、创建 WebGL context、上传纹理或 draw；这不是完整 Runtime Prefab/AssetManager/Renderer 链路。
+本课把克隆职责放在 `instantiate._clone()` / `instantiateObj()`，Node 与 Prefab 只负责调用该路径；Asset 在克隆器中直接返回原引用。为突出组件/资源所有权，仍省略 Creator 的 `cc.Class` 属性白名单、ValueType 专用复制、销毁对象过滤、完整 `_onBatchCreated`、Prefab JIT 和编辑器同步。Texture2D 仅是 URL/尺寸记录，不加载图片或创建 GPU 资源；本课不运行完整 AssetManager/Renderer Runtime。
 
 ## 运行
 

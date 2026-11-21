@@ -2,7 +2,7 @@ import cc from "./index.ts";
 import type Node from "./cocos2d/core/CCNode.ts";
 import Sprite from "./cocos2d/core/components/CCSprite.ts";
 import SpriteFrame from "./cocos2d/core/assets/CCSpriteFrame.ts";
-import type Texture2D from "./cocos2d/core/assets/CCTexture2D.ts";
+import Texture2D from "./cocos2d/core/assets/CCTexture2D.ts";
 import Prefab from "./cocos2d/core/assets/CCPrefab.ts";
 import { instantiate } from "./cocos2d/core/platform/instantiate.ts";
 
@@ -19,11 +19,10 @@ const body = new NodeClass("Body");
 prefabData.addChild(body);
 
 // 只给 SpriteFrame 提供 URL 与尺寸，不创建 HTMLImageElement 或 GPU 纹理。
-const texture = { url: "memory://hero-atlas", width: 128, height: 64 } as unknown as Texture2D;
+const texture = new Texture2D("memory://hero-atlas", 128, 64);
 const frame = new SpriteFrame(texture, { x: 0, y: 0, width: 64, height: 64 });
-const templateSprite = new Sprite(body);
+const templateSprite = body.addComponent(Sprite);
 templateSprite.setSpriteFrame(frame);
-body.setSprite(templateSprite);
 const prefab = new Prefab(prefabData);
 
 const enemyA = instantiate(prefab);
@@ -35,16 +34,17 @@ const logicB = enemyB._components[0] as EnemyLogic;
 logicA.hp = 60;
 const bodyA = enemyA.children[0] as Node;
 const bodyB = enemyB.children[0] as Node;
-const spriteA = bodyA.sprite;
-const spriteB = bodyB.sprite;
-if (!spriteA || !spriteB || !spriteA.spriteFrame || !spriteB.spriteFrame) {
+const spriteA = bodyA._components.find((component) => component instanceof Sprite) as Sprite | undefined;
+const spriteB = bodyB._components.find((component) => component instanceof Sprite) as Sprite | undefined;
+if (!spriteA?.spriteFrame || !spriteB?.spriteFrame) {
   throw new Error("Prefab 副本缺少 Sprite 或 SpriteFrame");
 }
 const frameA = spriteA.spriteFrame;
 const frameB = spriteB.spriteFrame;
-const uvText = Array.from(frameA.uv).map((value) => Number(value.toFixed(2))).join(", ");
+const uvText = Array.from(frameA.uv as Float32Array).map((value: number) => Number(value.toFixed(2))).join(", ");
 
 status.textContent = [
+  "克隆路径: Prefab._instantiate → Node._instantiate → instantiate._clone → instantiateObj",
   "对象副本与资源引用分开看：Node / Component / Sprite 是实例对象；SpriteFrame / Texture2D 是共享资源引用。",
   `Enemy Node 独立: ${enemyA !== enemyB}`,
   `EnemyLogic 独立: ${logicA !== logicB}；HP A/B=${logicA.hp}/${logicB.hp}`,

@@ -44,14 +44,9 @@
 - [第 19 课：实例挂载与组件生命周期](s19_instance_lifecycle/README.md)：观察 Prefab 加入活动场景后触发组件回调。
 - [第 20 课：节点移除与重新挂载](s20_node_detachment/README.md)
 - [第 21 课：延迟销毁与 onDestroy](s21_deferred_destruction/README.md)
-- [第 22 课：NodePool 节点复用](s22_node_pool/README.md)
-- [第 23 课：对象池复用与未命中兜底](s23_pool_reuse_flow/README.md)
-- [第 24 课：对象池容量与预热补充](s24_pool_capacity_strategy/README.md)
-- [第 25 课：清池与节点存活](s25_pool_clear_lifetime/README.md)
-- [第 26 课：对象池中的节点运行状态](s26_pool_runtime_lifecycle/README.md)
-- [第 27 课：取出顺序与重复入池保护](s27_pool_order_and_duplicates/README.md)
-- [第 28 课：节点池所有权与接收结果](s28_pool_ownership/README.md)
-- [第 29 课：对象池关闭与终态](s29_pool_disposal/README.md)
+- [第 22 课：NodePool 复用流程](s22_node_pool/README.md)：`put/get`、`unuse/reuse`、空池兜底与组件生命周期。
+- [第 23 课：容量策略与清池生命周期](s23_pool_capacity_lifecycle/README.md)：应用层容量/预热/补充，以及 `clear()` 与延迟销毁。
+- [第 24 课：对象池所有权与安全关闭](s24_pool_ownership_disposal/README.md)：LIFO、重复入池、跨池归属和关闭终态。
 - [第 30 课：动作更新链](s30_action_update_chain/README.md)
 - [第 31 课：时间进度与绝对目标插值](s31_absolute_position_interpolation/README.md)
 - [第 32 课：即时回调与延迟动作](s32_instant_and_delay_actions/README.md)
@@ -171,14 +166,9 @@ learn_2.4cocoscreator/
 ├── s19_instance_lifecycle/     # 实例挂载与组件生命周期
 ├── s20_node_detachment/        # 节点移除与重新挂载
 ├── s21_deferred_destruction/ # 延迟销毁与 onDestroy
-├── s22_node_pool/           # NodePool 节点复用
-├── s23_pool_reuse_flow/ # 对象池复用与未命中兜底
-├── s24_pool_capacity_strategy/ # 对象池容量与预热补充
-├── s25_pool_clear_lifetime/ # 清池与节点存活
-├── s26_pool_runtime_lifecycle/ # 对象池中的节点运行状态
-├── s27_pool_order_and_duplicates/ # 取出顺序与重复入池保护
-├── s28_pool_ownership/ # 节点池所有权与接收结果
-├── s29_pool_disposal/ # 对象池关闭与终态
+├── s22_node_pool/               # NodePool 基础复用与节点生命周期
+├── s23_pool_capacity_lifecycle/         # 容量策略与清池生命周期
+├── s24_pool_ownership_disposal/ # 所有权、LIFO 与安全关闭
 ├── s30_action_update_chain/ # Tween、ActionManager、Scheduler 和 Director 更新链
 ├── s31_absolute_position_interpolation/ # 时间进度与绝对目标插值
 ├── s32_instant_and_delay_actions/   # 即时回调与延迟动作

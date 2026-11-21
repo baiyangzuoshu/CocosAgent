@@ -1,32 +1,12 @@
 import BaseNode from "./utils/base-node.ts";
-import Sprite from "./components/CCSprite.ts";
+import { instantiate } from "./platform/instantiate.ts";
 import type { CocosNamespace } from "../../index.ts";
 
-/** 本课只保留 Prefab 树复制与 SpriteFrame 引用共享，不包含输入或渲染状态。 */
+/** Node delegates graph cloning to the same generic path used by Prefab. */
 export default class Node extends BaseNode {
-  private _sprite: Sprite | null = null;
-
-  setSprite(sprite: Sprite): void {
-    this._sprite = sprite;
-  }
-
-  get sprite(): Sprite | null {
-    return this._sprite;
-  }
-
   _instantiate(): Node {
-    const clone = new Node(this.name);
-    for (const component of this._components) {
-      clone._components.push(component._instantiate(clone));
-    }
-    if (this._sprite) {
-      const sprite = new Sprite(clone);
-      if (this._sprite.spriteFrame) sprite.setSpriteFrame(this._sprite.spriteFrame);
-      clone.setSprite(sprite);
-    }
-    for (const child of this.children) {
-      clone.addChild((child as Node)._instantiate());
-    }
+    const clone = instantiate._clone(this, this);
+    clone._parent = null;
     return clone;
   }
 }

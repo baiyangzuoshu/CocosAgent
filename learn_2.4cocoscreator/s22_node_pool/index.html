@@ -4,12 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>第 22 课：NodePool 节点复用</title>
-    <style>body{font:16px sans-serif;background:#171a24;color:#eee}main{max-width:720px;margin:2rem auto}pre{white-space:pre-wrap;background:#222a39;padding:1rem}button{margin-right:.5rem}</style>
+    <style>body{font:16px sans-serif;background:#171a24;color:#eee}main{max-width:720px;margin:2rem auto}pre{white-space:pre-wrap;background:#222a39;padding:1rem}button{margin:.25rem}</style>
   </head>
   <body>
     <main>
       <h1>第 22 课：NodePool 节点复用</h1>
-      <p>等待 EnemyA 首次 start，再把它放入池、取回同一个节点或清池。</p>
+      <p>把 EnemyA 放入池暂存，再取回同一节点或清空对象池。</p>
       <button id="pool-toggle" type="button" disabled>回收 EnemyA</button>
       <button id="pool-clear" type="button" disabled>清空对象池</button>
       <pre id="status">正在准备节点池……</pre>
