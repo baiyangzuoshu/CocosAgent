@@ -39,8 +39,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-课程代码用共享 `SkeletonData`/runtime cache 保存只读骨骼描述，并为不同实例分配各自的姿态与渲染数组，展示共享资源和实例状态的所有权边界。它不加载真实 Atlas/SkeletonData，也不调用 Spine Runtime 的 `getRuntimeData`。
-
+代码缓存只读 SkeletonData 解析结果，让两个实例共享骨骼/skin 模板；每个实例独立持有骨骼姿态、附件表和渲染顶点，并演示资源引用释放。它不加载真实 Atlas/SkeletonData；三种 cache mode 的帧缓存共享实现仍以本地 Skeleton.js/SkeletonCache 源码为准。
 ## 运行
 
 ~~~sh

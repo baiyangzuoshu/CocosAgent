@@ -39,8 +39,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-课程代码验证关键帧顺序，在相邻关键帧间插值，并由 `AnimationState` 将采样结果写入 `NodeTarget.position.x`。它使用课程自己的目标对象与线性曲线，不包含 Creator Runtime 的曲线类型、属性绑定解析和帧更新。
-
+代码在单调关键帧上二分查找采样区间，支持 linear/step/smooth，并将多个标量曲线写回具名目标属性；未知路径/属性会报错。Creator 2.4 曲线还支持更复杂的数据类型和组件属性绑定，本例不接入引擎绑定系统。
 ## 运行
 
 ~~~sh

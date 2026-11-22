@@ -17,12 +17,12 @@
 | 文件 | 打开后找什么 | 这一步说明什么 |
 | --- | --- | --- |
 | `index.html` | 页面加载的脚本入口 | 浏览器从哪个页面启动 |
-| `src/settings.f161e.js` | `launchScene`、`bundleVers` | 首场景工程路径；各 Bundle 配置文件的版本后缀 |
+| `src/settings.ebd7d.js` | `launchScene`、`bundleVers` | 首场景工程路径；各 Bundle 配置文件的版本后缀 |
 | `assets/main/config.a9f01.json` | `scenes`、`uuids`、`packs`、`versions` | 主 Bundle 的索引，不是场景内容本身 |
 | `assets/main/import/05/05dd1dc0e.29693.json` | 文件存在即可，本课先不拆内容 | 一个 import pack；里面可包含多个序列化资源 |
 | `assets/main/native/6a/6aa0aa6a-ebee-4155-a088-a687a6aadec4.a4b27.png` | 文件后缀 `.png` | 独立图片文件；下一课会追它的 UUID |
 
-在本次输出里，`launchScene` 是 `db://assets/Scene/helloworld.fire`；`bundleVers.main` 是 `a9f01`，所以运行时使用 `config.a9f01.json`。这里先记住这两个事实，场景索引到 pack 的具体计算留给第 93 课。
+在本次输出里，`launchScene` 是 `db://assets/Scene/helloworld.fire`；`bundleVers.main` 是 `a9f01`，`bundleVers.BundleMain` 是 `42389`，所以运行时分别使用对应的 `config.<hash>.json`。这里先记住这两个事实，场景索引到 pack 的具体计算留给第 93 课。
 
 ### `import` 和 `native` 是什么意思？
 
@@ -30,11 +30,11 @@
 
 ## 再读本课代码
 
-1. `src/example-build.ts` 是从当前构建目录抄出的文件清单。
-2. `src/cocos2d/core/asset-manager/BundleOutputMap.ts` 把每条清单格式化成“文件角色 + 路径”。
-3. `src/main.ts` 只负责把清单显示到页面。
+1. `src/example-build.ts` 是从当前构建目录核对后抄出的文件清单，并记录页面启动、引擎、Bundle config、脚本、import/native 之间的已知关系。
+2. `BundleOutputMap` 检查重复路径、缺失映射引用和必需入口，按角色分组，并生成目录树。
+3. `src/main.ts` 显示目录树、角色统计、引用校验结果和逐文件说明。
 
-这段代码**不扫描目录，也不构建项目**。你可以把 `example-build.ts` 的一条路径改错，页面仍会照样显示它；这正好说明课程模型只是“文件地图”，文件是否真实存在要回到 `build/web-mobile/` 核对。
+这段代码**不扫描目录，也不构建项目**。映射校验只能验证清单内部一致，不能证明磁盘文件存在；你仍需回到 `build/web-mobile/` 核对映射路径。构建哈希会随内容变化，清单只对应仓库中当前保存的构建快照。
 
 ## 对照 2.4.15 Runtime 源码
 

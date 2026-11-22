@@ -40,8 +40,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-课程代码实现按轨道替换/排队、时间推进、混合进度和完成后激活下一项，并把当前项超时量带入队列项。它是独立状态机，不调用 Spine Runtime 的 `AnimationState` 或第三方轨道回调。
-
+代码按 track 管理 TrackEntry，支持 set 替换、add 排队、loop 完成回调、mix duration 和过渡时间；超时切换时带入超出的 dt，且派发 start/complete/interrupt/dispose 观察事件。Spine 3.8 自带 AnimationState 的事件队列和 mix 链更完整，本模型保留主状态转移而不复制 Runtime。
 ## 运行
 
 ~~~sh

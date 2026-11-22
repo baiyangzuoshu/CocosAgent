@@ -38,8 +38,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-课程代码按父子层级组合位置、旋转和缩放，再运行一个示例旋转约束修正骨骼世界角度。它是二维教学变换，不包含 Spine 矩阵/skew/继承模式和完整约束求解，也不接入 2.4 的 `Skeleton.update → _updateRealtime → updateWorldTransform` 帧链；3.8 `SkeletonSystem.postUpdate` 只作版本对照。
-
+代码把每根骨骼局部旋转/缩放转成 2D 仿射矩阵，按父先子后的顺序组合世界矩阵，再在姿态更新后应用教学 aim constraint。Creator 2.4 直接委托 Spine 3.8 Skeleton.updateWorldTransform；本例矩阵继承与约束均是简化版，不替代 Runtime 的 skew、继承模式和真实 IK/TransformConstraint。
 ## 运行
 
 ~~~sh

@@ -43,8 +43,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-独立代码：[课程实现](<src/cocos2d/core/3d/physics/framework/PhysicsStudy.ts>)。本例只检查一对手工构造的数据，不运行 broadphase、接触生成、后端碰撞步进或真实事件派发；省略 Creator Runtime `PhysicsSystem/Physics3DManager` 驱动后端并将接触回调路由到 ColliderComponent 的阶段，也不加载 Cannon/Builtin。
-
+代码使用双向 `(group & other.mask) !== 0` 过滤接触对，并跨帧保留活动 pair，从而区分 collision/trigger 的 enter、stay、exit；事件桥将结果双向送到两个 Collider 监听器。后端接触生成、Creator 组件事件队列和完整碰撞回调参数仍由引擎实现。
 ## 运行
 
 ~~~sh

@@ -41,8 +41,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-独立代码：[课程实现](<src/cocos2d/core/3d/physics/framework/PhysicsStudy.ts>)。候选项只是带标量距离的数组，示例排序后构造结果，不做射线几何求交或调用物理后端；省略 `Physics3DManager.raycastClosest → IPhysicsWorld.raycast → backend` 的 Runtime 查询阶段，也不加载 Cannon/Builtin。
-
+代码分别暴露 all-hit 与 closest 查询：筛选 group、最大距离和 trigger，按距离排序，并填写命中点/法线；all-hit 通过游标复用结果对象，下一次查询会覆盖旧结果，调用方应及时读取。几何命中由候选集模拟，不做真实射线求交，不调用 Builtin/Cannon world。
 ## 运行
 
 ~~~sh

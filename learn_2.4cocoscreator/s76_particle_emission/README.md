@@ -41,8 +41,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-课程代码实现发射速率的分数配额累积、容量限制、粒子数据创建和确定性的 Box 发射采样。它是独立 TypeScript 模型，不接入 `Director → ParticleSystem3D.update` 帧链，也不创建 GPU 资源。
-
+代码实现可复现随机采样、Box/Sphere 发射形状、位置/方向、生命周期/速度随机范围、Burst、rateOverTime 小数配额和容量上限；容量溢出的当帧配额丢弃。真实 ParticleSystem3D 还包括更多 ShapeModule、渐变范围和粒子数据初始化，本例不注册 Director 更新。
 ## 运行
 
 ~~~sh

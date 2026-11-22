@@ -15,11 +15,11 @@ Web 静态站点提供入口页和构建产物；发布版本目录是缓存更�
 - [发布与原生平台的证据边界](../../docs/2.x/10-publishing-and-native.md#L1)：引擎源码不包含完整 Creator Builder。
 - 前置课：[第 52 课：资源处理与产物结构](../s52_resource_artifacts/README.md)。
 
-独立代码镜像 cocos2d/core/CCGame.ts、CCDirector.ts 的职责，并用 cocos2d/core/platform/WebRelease.ts 表达静态交付策略。
+独立代码镜像 `CCGame.run → _prepareFinished` 的配置、引擎初始化、内置资源、主循环、`EVENT_ENGINE_INITED`/`EVENT_GAME_INITED` 与 onStart 顺序。`EventTarget` 支持重复回调去重、once 和 off；Director 的 `loadScene → runSceneImmediate` 模型包括 Scene load/activate、常驻根节点重挂、旧场景销毁/自动释放标记和 launched 回调。`WebRelease.ts` 则单独表达静态交付策略。
 
 ## 简化范围
 
-入口页、生成脚本和资源目录只用占位路径；课程只模拟启动顺序，不加载实际 Creator 发布包、场景或网络资源。新版本目录是示例发布策略，不是引擎内置缓存功能。
+课程不加载实际 Creator 发布包、场景或网络资源。Scene、持久节点与资源释放均是职责模型，不创建 Node/SceneAsset，也不运行 AssetManager；新版本目录是示例发布策略，不是引擎内置缓存功能。
 
 ## 运行
 

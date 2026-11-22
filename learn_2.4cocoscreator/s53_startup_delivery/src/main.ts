@@ -14,5 +14,8 @@ write("Entry policy: " + release.entryPolicy);
 write("Versioned assets: " + release.assetBase + " (" + release.assetPolicy + ")");
 
 const director = new CCDirector(write);
-const game = new CCGame(write);
-game.run({ frameRate: 60 }, () => director.loadScene(release.startScene));
+director.addPersistRootNode("persistent-audio-root", "AudioManager");
+const game = new CCGame(write, (sceneName) => director.loadScene(sceneName, (scene) => write(`onLaunched: ${scene.name} is ${scene.lifecycle}`)));
+game.on("engine-inited", () => write("application listener: EVENT_ENGINE_INITED"), true);
+game.on("game-inited", () => write("application listener: EVENT_GAME_INITED"), true);
+game.run({ frameRate: 60, showFPS: true }, () => game.loadLaunchScene(release.startScene));

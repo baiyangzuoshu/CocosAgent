@@ -13,11 +13,11 @@
 - [Creator 发布与原生边界](../../docs/2.x/10-publishing-and-native.md#L1)：完整 Editor Builder 不在本地引擎源码中。
 - 前置课：[第 52 课：资源处理与产物结构](../s52_resource_artifacts/README.md)、[第 53 课：启动与交付](../s53_startup_delivery/README.md)。
 
-独立代码对应 `cocos2d/core/asset-manager/urlTransformer.ts` 的 URL 组合职责；`deploy/` 单独表示发布清单和 HTTP 缓存策略。
+独立代码对应 `urlTransformer.ts` 的 UUID/version URL 组合；`ReleasePublishPlan` 校验 releaseId/base、要求先上传再验证所有预期文件、只允许验证通过后切换 active，并限制回滚状态转换；`CachePolicy` 单独决定入口指针和不可变资源的 HTTP 缓存策略。页面加载教学 manifest 后模拟一条资源 URL 的 publish/verify/activate/rollback 状态路径。
 
 ## 简化范围
 
-`release.json` 和 Nginx 规则是教学用部署示例，不是 Creator 自动生成的产物。课程不接入真实 Builder、CDN 或缓存清除服务。
+`release.json` 和 Nginx 规则是教学用部署示例，不是 Creator 自动生成的产物。页面中的上传、验证和回滚只在内存中模拟，不访问 CDN、不修改真实部署指针，也不接入缓存清除服务。
 
 ## 运行
 

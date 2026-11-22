@@ -40,8 +40,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-课程代码解析版本号并比较导出数据与 Runtime 的主/次版本线，明确展示一个快速筛查规则。这个规则不能证明资源兼容；示例不解析 Skeleton JSON/Binary、不接入 Creator Engine，也不创建 Spine 网格或 GPU Buffer。
-
+代码分别检查 JSON/Binary 读取器是否存在、必要 skeleton payload/Atlas 是否具备，以及导出版本线是否符合内置 Runtime。Creator 2.4.15 本地 spine.js 标识 Runtime 3.8；本检查只是快速诊断，Binary 版本头用已解码字段替代真实解析，版本匹配也不能证明资源一定能读或功能完全兼容。
 ## 运行
 
 ~~~sh

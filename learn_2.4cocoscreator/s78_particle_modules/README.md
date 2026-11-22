@@ -42,8 +42,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-课程代码实现分段曲线采样、按归一化年龄施加随时间变化的力，并更新粒子尺寸和颜色通道。它以单个粒子演示模块职责，不接入 Runtime 粒子调度，也不创建 GPU 资源。
-
+代码以 normalized age 采样优化曲线/渐变：ForceOvertime 更新 X 轴加速度，VelocityOvertime 更新选中的 YZ 分量，SizeOvertime 与 ColorOvertime 写入后续渲染使用的尺寸和 RGBA。示例按明确的模块顺序处理单个粒子；Creator 2.4 还包含旋转、限速、纹理动画等专用模块，CurveRange 的随机范围在本例中固定化。
 ## 运行
 
 ~~~sh

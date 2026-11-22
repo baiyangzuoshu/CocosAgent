@@ -43,8 +43,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-课程代码包含可暂停/恢复的 `AnimationState`，跟踪累计时间与完成循环数，由 `AnimationManager` 遍历状态并推进时间。它不采样关键帧或写回真实 Node，也不接入 Creator Runtime 的帧调度。
-
+代码把 AnimationState 与 AnimationManager 分开，支持 play/pause/resume/stop、normal/loop/ping-pong、倍率和重复次数；大步长可跨多个循环边界，Manager 统一推进注册状态。没有实现 Creator 的全部 WrapMode 位组合、反向播放边界和曲线采样。
 ## 运行
 
 ~~~sh

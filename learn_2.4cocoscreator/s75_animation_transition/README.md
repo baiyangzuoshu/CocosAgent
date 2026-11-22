@@ -41,8 +41,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-课程代码保留一个 base 状态和多个 additive 状态，各自推进时间；示例将 base 采样值与按权重缩放的 additive 采样值相加，展示“叠加”对目标数值的影响。它用固定采样值替代真实曲线采样，不接入 Creator Runtime 的 `AnimationManager` 和属性曲线系统。
-
+代码保留一个 base 状态、可配置时长的 cross-fade 和多个 additive 状态；更新时分别推进时间并改变过渡权重，输出 base 加权混合值再叠加 additive。它使用固定标量 sample，不执行 Creator 的曲线采样、节点属性写回或动画状态混合的完整实现。
 ## 运行
 
 ~~~sh

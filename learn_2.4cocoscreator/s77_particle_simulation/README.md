@@ -41,8 +41,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-课程代码对存活粒子推进年龄与位置，将过期粒子移入回收数组，并报告存活数和回收数。回收数组只展示生命周期分流，不实现对象复用；模型也不接入 Creator Runtime `ParticleSystem3D` 或 Renderer，不创建 GPU 资源。
-
+代码按力更新速度、阻尼、再积分位置的顺序推进年龄与运动，超时粒子从活动列表移入池；之后 spawn 可复用记录。示例采用显式 Euler 和简单数组池，Creator 粒子模拟还运行多个 Animator 模块并使用自己的存储/回收路径。
 ## 运行
 
 ~~~sh

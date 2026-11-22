@@ -26,7 +26,7 @@ subMetas.HelloWorld.rawTextureUuid
 
 ## 本课代码实际做了什么
 
-打开 `src/example-meta.ts`，会看到同样三项字段被手工抄进 TypeScript。打开 `src/main.ts`：它拿场景中的 UUID 调用 `findSource()`。`AssetMeta.ts` 只做两次比较：先和顶层 `uuid` 比，再和每个子资源的 `uuid` 比。因此本例会把场景 UUID 识别为 `子资源 HelloWorld (sprite-frame)`。
+打开 `src/example-meta.ts`，会看到同样三项字段被手工抄进 TypeScript。`AssetMetaIndex` 将主资源和 subMeta 都登记到 UUID 索引，记录子资源所属主 UUID，并检查重复 UUID 与 `rawTextureUuid` 悬空引用；`src/main.ts` 用场景 UUID 查询结果，再报告 Bundle 目录标记。
 
 你可以把 `main.ts` 传入的 UUID 改成顶层 UUID，再运行页面；结果会变成 `主资源 texture`。这不是 Creator 正在导入 PNG，而是一个小型“UUID 属于谁”的查表练习。
 
@@ -65,7 +65,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-课程不导入 PNG、不解析完整 `.meta`、不启动 Editor AssetDB；TypeScript 只比较摘录字段。浏览器 Runtime 读取构建后的 Bundle Config，不会读取工程 `.meta`。
+课程不导入 PNG、不解析完整 `.meta`、不启动 Editor AssetDB；TypeScript 只索引手工摘录字段。浏览器 Runtime 读取构建后的 Bundle Config，不会读取工程 `.meta`。
 
 ## 学完后自查
 

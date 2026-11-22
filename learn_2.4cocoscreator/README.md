@@ -68,6 +68,8 @@
 - [第 48 课：粒子发射与逐帧模拟](s48_particle_simulation/README.md)
 - [第 49 课：粒子绘制与结束](s49_particle_render_finish/README.md)
 - [第 50 课：目标选择与构建入口](s50_build_target_entry/README.md)
+- [第 50_1 课：微信小游戏平台分支](s50_1_wechat_minigame/README.md)
+- [第 50_2 课：原生 JSB 平台](s50_2_native_jsb/README.md)
 - [第 51 课：代码与引擎构建](s51_code_engine_build/README.md)
 - [第 52 课：资源处理与产物结构](s52_resource_artifacts/README.md)
 - [第 53 课：启动与交付](s53_startup_delivery/README.md)
@@ -190,6 +192,8 @@ learn_2.4cocoscreator/
 ├── s48_particle_simulation/  # 第 48 课：粒子发射与逐帧模拟
 ├── s49_particle_render_finish/  # 第 49 课：粒子绘制与结束
 ├── s50_build_target_entry/  # 第 50 课：目标选择与构建入口
+├── s50_1_wechat_minigame/  # 第 50_1 课：微信小游戏平台分支
+├── s50_2_native_jsb/  # 第 50_2 课：原生 JSB 平台
 ├── s51_code_engine_build/  # 第 51 课：代码与引擎构建
 ├── s52_resource_artifacts/  # 第 52 课：资源处理与产物结构
 ├── s53_startup_delivery/  # 第 53 课：启动与交付

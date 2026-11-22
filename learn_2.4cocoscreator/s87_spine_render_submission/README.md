@@ -40,8 +40,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-课程代码合并相同纹理/材质的网格，将局部索引重映射到批次顶点数组，并在纹理或材质变化及结束时 flush。它不执行真实 assembler、MeshBuffer 上传、`Renderer._flush` 或 WebGL 绘制。
-
+代码严格按输入 drawOrder 复制顶点/颜色/索引，局部索引重基址，并在纹理、材质或容量边界 flush；记录裁剪标记和 slot 顺序。它模拟 assembler 缓冲组织，不调用真实 spine-assembler、MeshBuffer 上传、Renderer._flush 或 WebGL Device。
 ## 运行
 
 ~~~sh

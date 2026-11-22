@@ -39,8 +39,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-课程代码将每个粒子展开为带 UV/颜色的四边形顶点和 6 个索引，并按材质聚合批次。它不接入真实 assembler、MeshBuffer 上传、RenderFlow 或 WebGL 绘制，也不创建 GPU 资源。
-
+代码先剔除不可见粒子并按深度排序，再用 position/size/rotation 生成带 UV、light/dark tint 的四边形；批次在材质/容量边界 flush，索引按批次顶点基址重映射。仍未接入 Creator 的 ParticleSystem3DRenderer、RenderFlow、MeshBuffer 上传或 WebGL draw。
 ## 运行
 
 ~~~sh

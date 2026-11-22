@@ -41,8 +41,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-独立代码：[课程实现](<src/cocos2d/core/3d/physics/framework/PhysicsStudy.ts>)。这里的 `world` 是 TypeScript 假对象，不运行 Cannon/Builtin 后端；课程展示注册→步进→节点回写→停用移除的规则，不接入 Creator Runtime 的 `Director → Physics3DManager.update → PhysicsWorld.step` 帧调用阶段，也不实际模拟刚体。
-
+独立代码按组件生命周期建模：onEnable 幂等创建并登记 backend body；dynamic 只读物理结果回写节点，kinematic 将节点位置推给物理对象；onDisable 幂等移除。CannonWorld 演示重力步进，验证注册、步进、回写和清理。模型没有接入 Creator Director/Physics3DManager，也没有运行 Cannon/Builtin。
 ## 运行
 
 ~~~sh

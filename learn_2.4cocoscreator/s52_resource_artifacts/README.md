@@ -16,7 +16,9 @@ Bundle 配置保存 `importBase`、`nativeBase`、UUID、路径和版本信息�
 
 ## 简化范围
 
-示例用占位 UUID 和版本演示运行时 URL 规则，不声称这些是实际项目生成的文件名；不还原 `.meta` 导入、`library/` 生成或 Builder 打包步骤。
+课程代码实现 `Config.init` 的可观察子集：按 UUID 建 AssetInfo；将路径及类型写回 AssetInfo，并让同一路径的主资源优先于子资源；建立 Scene 名称索引；建立 pack 内容关系；把 import/native 版本对分别写入 `ver` 与 `nativeVer`；最后通过 `resolvePath` 和 `combineUrl` 查询。URL 组合区分 import/native 基址、版本、扩展名，并包含源码里 WeChat 对 `.ttf` 文件的特殊目录规则。页面显示索引状态和四种请求结果。
+
+示例 UUID、class id、版本和 pack 均为教学数据，不是实际构建输出。代码没有解析 `.meta`，也不读取 `library/`、请求真实 bundle config、展开 pack JSON 或启动 Editor Builder，因此只能证明本课实现覆盖的 Runtime 索引/地址规则。
 
 ## 运行
 
@@ -26,7 +28,7 @@ deno task build
 deno task serve
 ~~~
 
-打开 `http://127.0.0.1:8000` 查看 import 与 native 路径。
+打开 `http://127.0.0.1:8000` 查看 UUID/path/scene/pack/version 索引，再观察 import、native、字体和 path+type 查询的 URL。
 
 ## 为什么这样设计
 
@@ -52,8 +54,8 @@ flowchart TD
 
 ## 最小观察宿主
 
-- 页面使用示例 Bundle 记录显示两类路径的中间值。
+- 页面创建一份 BundleConfig 并显示四种查询的索引中间值与结果 URL。
 
 ## 模型化简化与 Creator Runtime 边界
 
-- 数据是占位结构；不解析 `.meta`、library 或 Builder 产物，也不执行 Runtime 下载。
+- Bundle 数据是显式示例记录；代码实现 Config 索引与 URL 组合子集，但不解析 `.meta`、library/Builder 产物，也不执行 Runtime 下载。

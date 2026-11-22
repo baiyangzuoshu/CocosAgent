@@ -38,8 +38,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-课程代码创建 `AnimationClip`、登记到 `CCAnimation`，再按 clip 名称创建带目标路径的 `AnimationState`，并检查无效 clip 名称。它不解析 Creator 序列化资源，也不接入真正的 `AnimationManager` 帧调度。
-
+代码校验 Clip 名称、时长、采样率和曲线关键帧范围；按路径分组属性轨道，创建 AnimationState 并把曲线绑定到示例根节点，同时列出事件键。它使用教学数据而不是 Creator 序列化反序列化器；实际 Animator 的目标查找和曲线类型更广。
 ## 运行
 
 ~~~sh

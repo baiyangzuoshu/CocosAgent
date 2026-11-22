@@ -40,8 +40,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-课程代码停止发射后持续推进存活粒子，移除过期粒子，并在发射已停止且存活数归零时进入 released 终态。这个终态只表示生命周期状态，不接入 Runtime ParticleSystem3D/Renderer 的资源释放，也不创建 GPU 资源。
-
+代码区分 playing/paused/stopped/released：暂停不推进，停止发射继续排空存活粒子，stopAndClear 立即清空，onDestroy 最终清理示例渲染资源并进入终态。该状态机说明 stop 与 destroy 的不同；不调用 Creator Renderer/粒子资源释放实现。
 ## 运行
 
 ~~~sh

@@ -26,7 +26,7 @@
 | 九：音频 | 40–42（第 40–42 课已完成） | 资源、播放生命周期、并发与音量控制 | 加载并播放音效或背景音，观察播放、停止和资源生命周期 |
 | 十：2D 物理 | 43–46（第 43–46 课已完成） | 物理世界、刚体与碰撞体、接触、查询与调试 | 让节点参与 2D 模拟并处理碰撞或查询结果 |
 | 十一：2D 粒子 | 47–49（第 47–49 课已完成） | 粒子系统创建、发射与模拟、渲染和结束 | 从配置生成粒子，观察其更新、绘制与回收 |
-| 十二：构建、打包与交付 | 50–53（第 50–53 课已完成） | 目标配置、代码/资源构建、产物结构、启动与交付 | 从工程配置追到可运行的 Web 目录或原生应用包 |
+| 十二：构建、打包与交付 | 50–53（第 50–53 课已完成；第 50_1/50_2 补充微信小游戏与原生 JSB） | Web 目标/模式、微信小游戏宏与运行时适配、原生 JSB 构建分支、代码/资源构建、产物结构、启动与交付 | 从工程配置追到 Web、小游戏和原生平台的各自构建/运行边界 |
 | 十三：Web 缓存与版本更新 | 54（第 54 课已完成） | 浏览器缓存重验证、版本化资源 URL、发布切换与回滚 | 让入口发现新版本，并复用不可变资源 |
 | 十四：Creator 3D 物理 | 55（第 55 课已完成） | Director 接入 3D 物理系统、World 固定步进 | 观察每帧时间如何变成物理子步 |
 | 十五：Creator 渲染系统深化 | 56–65（已完成） | Camera 与可见性、渲染数据、材质和着色器、缓冲区、2D 合批、3D 模型、管线提交与离屏渲染 | 2.4 用 Camera FrameBuffer；3.8 用 Camera/RenderWindow/GFX Framebuffer |
@@ -91,11 +91,12 @@ Cocos2d-x 使用本版本实际提供的 `Layer`、`Menu`、`Label` 或 `ui::Wid
 ### 十二：构建、打包与交付（第 50–53 课，已完成）
 
 1. **目标与构建入口（第 50 课已完成）**：先固定版本、目标平台、Debug/Release 模式和工程入口。六版独立示例：[Creator 2.4.15](../learn_2.4cocoscreator/s50_build_target_entry/README.md)、[Creator 3.8.7](../learn_3.8cocoscreator/s50_build_target_entry/README.md)、[Cocos2d-x 1.x](../learn_cocos2d-1x/s50_build_target_entry/README.md)、[2.x](../learn_cocos2d-2x/s50_build_target_entry/README.md)、[3.x](../learn_cocos2d-3x/s50_build_target_entry/README.md)、[4.x](../learn_cocos2d-4x/s50_build_target_entry/README.md)。Creator 3.8.7 只做源码映射和课程示例，不做编辑器构建/运行验收。
+   Creator 2.4.15 另外以补充课区分[微信小游戏宏与宿主适配](../learn_2.4cocoscreator/s50_1_wechat_minigame/README.md)和[原生 JSB 构建/运行分支](../learn_2.4cocoscreator/s50_2_native_jsb/README.md)，并标出引擎快照不包含完整 Editor Builder、小游戏适配器及 C++ 绑定的证据边界。
 2. **代码与引擎构建（第 51 课已完成）**：Creator 2.4.15 用 Browserify 等工具生成引擎 bundle；Creator 3.8.7 以内部构建常量选择运行时分支；Cocos2d-x 1.x–2.x 由 Make 生成引擎库并链接游戏，3.x–4.x 由 CMake 组织引擎和游戏目标。六版独立示例：[Creator 2.4.15](../learn_2.4cocoscreator/s51_code_engine_build/README.md)、[Creator 3.8.7](../learn_3.8cocoscreator/s51_code_engine_build/README.md)、[Cocos2d-x 1.x](../learn_cocos2d-1x/s51_code_engine_build/README.md)、[2.x](../learn_cocos2d-2x/s51_code_engine_build/README.md)、[3.x](../learn_cocos2d-3x/s51_code_engine_build/README.md)、[4.x](../learn_cocos2d-4x/s51_code_engine_build/README.md)。Creator 3.8.7 仅静态映射，不做编辑器构建或运行验收。
 3. **资源处理与产物结构（第 52 课已完成）**：Creator Bundle 元数据映射导入/原生文件地址；Cocos2d-x 1.x/2.x 从 `Resources` 与搜索路径定位文件，3.x 复制资源，4.x 通过同步目标更新运行目录。六版独立示例：[Creator 2.4.15](../learn_2.4cocoscreator/s52_resource_artifacts/README.md)、[Creator 3.8.7](../learn_3.8cocoscreator/s52_resource_artifacts/README.md)、[Cocos2d-x 1.x](../learn_cocos2d-1x/s52_resource_artifacts/README.md)、[2.x](../learn_cocos2d-2x/s52_resource_artifacts/README.md)、[3.x](../learn_cocos2d-3x/s52_resource_artifacts/README.md)、[4.x](../learn_cocos2d-4x/s52_resource_artifacts/README.md)。Creator 完整编辑器资源导入/构建流程不在本地引擎源码中；Creator 3.8.7 仅做静态映射。
 4. **启动与交付（第 53 课已完成）**：Creator 2.4 Web 从静态入口进入 cc.game.run，初始化回调加载启动场景；入口更新和版本化资源缓存属于部署策略。Creator 3.8.7 只静态映射 Game.init、Game.run 与首帧加载场景回调。Cocos2d-x 1.x–4.x 从平台 main 进入 Application，再由 AppDelegate 启动首个 Scene，原生 app 与资源随平台目标交付。六版独立示例：[Creator 2.4.15](../learn_2.4cocoscreator/s53_startup_delivery/README.md)、[Creator 3.8.7](../learn_3.8cocoscreator/s53_startup_delivery/README.md)、[Cocos2d-x 1.x](../learn_cocos2d-1x/s53_startup_delivery/README.md)、[2.x](../learn_cocos2d-2x/s53_startup_delivery/README.md)、[3.x](../learn_cocos2d-3x/s53_startup_delivery/README.md)、[4.x](../learn_cocos2d-4x/s53_startup_delivery/README.md)。
 
-Creator 2.4.15 首轮只研究与 Web 浏览器目标一致的构建输出。Creator 的完整 Editor Builder 不在本地引擎源码中；课程从公开构建入口、引擎宏/启动代码和可检查的输出分别说明证据，不能声称还原闭源 Builder 的全部步骤。Creator 3.8.7 暂列在总纲，当前不执行构建或实机验收。
+Creator 2.4.15 的第 50 课以 Web 配置为通用入口，补充课再分别研究微信小游戏与原生 JSB。Creator 的完整 Editor Builder 不在本地引擎源码中；小游戏适配器、原生 C++ 绑定和宿主也不完整，因此课程从公开构建入口、引擎宏/运行时分支和可检查产物说明证据，不能声称还原闭源 Builder 或完成目标平台验收。Creator 3.8.7 暂列在总纲，当前不执行构建或实机验收。
 
 ### 十三：Web 缓存与版本更新（第 54 课，已完成）
 
@@ -256,7 +257,7 @@ Cocos2d-x 1.x–4.x 的第 10–13 课已覆盖场景访问、可见性/排序�
 
 ### 后续专题：平台与运行时专项
 
-第 50–53 课已覆盖通用构建、资源产物和启动交付。后续可按需要选择 Web、桌面、移动端或原生专项；开始前先选定引擎补丁版本、目标平台和工具链，再按实际源码与可运行证据确定主题，避免重复讲通用打包流程。
+第 50–53 课及第 50_1/50_2 补充课已覆盖 Creator 2.4.15 的 Web 通用配置、微信小游戏与原生 JSB 关键分支、资源产物和启动交付。若扩展到其他平台或版本，仍需先选定引擎补丁版本、目标平台和工具链，再按实际源码与可运行证据确定主题。
 
 ## 课程落地规则
 

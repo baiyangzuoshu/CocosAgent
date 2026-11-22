@@ -41,8 +41,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-独立代码：[课程实现](<src/cocos2d/core/3d/physics/framework/PhysicsStudy.ts>)。`capabilities` 只是静态能力记录，不模拟约束，也不调用 `Director → Physics3DManager` 或任何物理后端；示例刻意不造出不存在的 Constraint API。
-
+代码现在是可执行的源码能力审计：按 Builtin/Cannon 分别列出该快照已暴露的刚体、碰撞体和查询入口及证据，并断言 3D Constraint component 不在框架能力集合。它不会模拟约束；结论来自 Creator 2.4.15 本地快照，不外推到其他版本或后端库内部 API。
 ## 运行
 
 ~~~sh

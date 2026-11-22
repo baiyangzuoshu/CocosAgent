@@ -42,8 +42,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-独立代码：[课程实现](<src/cocos2d/core/3d/physics/framework/PhysicsStudy.ts>)。示例仅计算数值，不创建 Creator ColliderComponent、后端 Shape 或实际 PhysicsMaterial 资源；未实现组件启用时的 `PhysicsSystem → IPhysicsWorld.addShape → CannonWorld` 调用阶段，也不加载 Cannon/Builtin。
-
+代码将 BoxCollider size 转成半 extents 并乘绝对节点缩放，中心偏移单独按缩放换算；材质摩擦/弹性和 trigger 响应随形状进入 Fixture；启用后的尺寸变更重建 backend shape。Sphere/capsule 用示意字段呈现，不是完整后端几何算法；未创建真实 Collider、SharedBody 或 Cannon Shape。
 ## 运行
 
 ~~~sh

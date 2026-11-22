@@ -41,8 +41,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-课程代码先将 deform 偏移和节点平移应用到 MeshAttachment 顶点，再按三角形索引组装世界几何，并用 Sutherland–Hodgman 矩形裁剪算法裁切三角形。矩形裁剪是为讲解裁剪顺序所作的简化，不等同于 Spine 的多边形 SkeletonClipping，也不生成 GPU Buffer。
-
+代码按 deform 和单骨骼变换求 mesh 顶点，裁剪三角形时同步插值 UV，再将多边形扇形三角化；clip end slot 会关闭裁剪。只支持凸裁剪多边形和单主骨权重；Creator 的 SkeletonClipping 对任意附件/裁剪数据有更完整的三角形裁切实现。
 ## 运行
 
 ~~~sh

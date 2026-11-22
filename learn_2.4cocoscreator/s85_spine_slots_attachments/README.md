@@ -37,8 +37,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-课程代码实现 Skin 的附件映射、Slot 的当前附件选择、区域附件顶点生成和独立 drawOrder 排序。它用普通对象表达数据关系，不解析 Spine 文件，也不调用 Runtime Skeleton 或 assembler。
-
+代码将 Skin 按 slot/name 保存附件，换 Skin 时尝试保留同名附件引用，支持 slot setup pose 和校验式 drawOrder 重排，再按绘制顺序输出非空附件。实际 Spine 还包含 default skin fallback、attachment 生命周期及多类 attachment 几何；示例不解析 Spine 文件。
 ## 运行
 
 ~~~sh

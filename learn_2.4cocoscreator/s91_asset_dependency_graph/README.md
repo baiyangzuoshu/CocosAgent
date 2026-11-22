@@ -46,7 +46,7 @@ Asset 的 `refCount` 是引擎生命周期记账。`addRef()` 增加计数；`de
 
 - [depend-util.js](../../engine/2.4.15engine/cocos2d/core/asset-manager/depend-util.js)：从 `parse()` 进入，继续看 `_parseDepsFromJson()` 如何递归收集引用。
 - [load.js](../../engine/2.4.15engine/cocos2d/core/asset-manager/load.js)：看 `loadDepends()` 如何把已发现的依赖加入加载流程。
-- [CCAsset.js](../../engine/2.4.15engine/cocos2d/core/assets/CCAsset.js)：Asset 自身的数据与引用计数；本课不模拟引用计数释放。
+- [CCAsset.js](../../engine/2.4.15engine/cocos2d/core/assets/CCAsset.js)：Asset 自身的数据与 `addRef/decRef`；课程示例显示计数与 `tryRelease` 调用边界，但不实现 releaseManager。
 
 引擎对循环依赖、重复 UUID、native 依赖等还有处理。本课图只表达当前例子的两个 Asset 依赖。
 
@@ -77,7 +77,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-只处理当前例子的两个字段和两条边，不解析完整 `.fire`、不执行 Downloader/Loader，也不模拟循环、重复 UUID、native 依赖、请求 URL 或释放过程；课程依赖图不是 Runtime 加载器。
+只处理当前例子的两个字段和两条边，不解析完整 `.fire`、不执行 Downloader/Loader，也不模拟循环、重复 UUID、native 依赖、请求 URL 或 releaseManager 的释放策略；课程依赖图不是 Runtime 加载器。
 
 ## 学完后自查
 

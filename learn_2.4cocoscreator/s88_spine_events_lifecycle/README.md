@@ -40,8 +40,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-课程代码注册 TrackEntry 事件/完成监听，向组件转发回调；销毁时清空监听、断开轨道引用并递减示例缓存引用计数，且销毁操作可重复调用。它不销毁真实 Skeleton/Atlas，不接入 `AttachUtil` 或 `SkeletonCache.destroy`。
-
+代码把 TrackEntry 的 event/complete/dispose 通知排队，并在 lateUpdate drain；onDisable 保留可重启实例，onDestroy 清监听、清事件队列并释放组件持有的引用。缓存引用只是讲解计数；Creator 的 Skeleton.js、AttachUtil、SkeletonCache 会按 REALTIME/SHARED_CACHE/PRIVATE_CACHE 执行不同实例和数据清理。
 ## 运行
 
 ~~~sh

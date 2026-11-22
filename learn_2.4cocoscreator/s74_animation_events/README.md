@@ -42,8 +42,7 @@ flowchart TD
 
 ## 模型化简化与 Creator Runtime 边界
 
-课程代码维护上一采样时间和监听器，只在事件时间跨越区间 `(previousTime, currentTime]` 时派发，并在播放到时长后触发完成回调。它不处理循环回绕，也不接入 Creator Runtime 的 `AnimationState`/`CCAnimation`。
-
+代码维护 elapsed 并以 `(previous,current]` 窗口检测事件，循环播放时拆分跨帧区间并按 loop 次数派发；非循环完成回调进入 Manager 队列后再统一 drain，避免混淆采样和回调时点。真实 AnimationManager/EventAnimCurve 还处理帧率、反向/WrapMode 等边界。
 ## 运行
 
 ~~~sh

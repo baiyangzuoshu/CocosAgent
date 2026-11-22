@@ -16,7 +16,11 @@
 
 ## 简化范围
 
-示例只打印构建阶段，不运行 Browserify、Terser 或 Creator Editor。入口/输出路径是占位符，因为 `buildCocosJs` 由调用方传入；本课不还原编辑器怎样选择项目入口。
+课程代码现已实现可观察的构建计划模型，而不是只打印预写阶段：`expandExcludedModules()` 按 `modules.json` 的依赖方向递归查找“依赖被排除模块”的模块，并用集合处理重复/循环；`createMacroTable()` 将 Web、debug/release、Runtime/minigame、物理后端折成 Creator 2.4 风格宏；`createEngineBundlePlan()` 把 entry、输出路径、排除文件、宏和每个 Gulp 阶段的输入/输出组织成结构化计划。页面比较 debug（含 sourcemap）和 release（无 sourcemap）两种计划。
+
+模型记录的源码职责：`buildCocosJs` 调用 `createBundler`，套用默认/调用者排除项，执行 Browserify bundle、`Utils.uglify('build', flags)`、Optimizejs、可选 sourcemap 写出，最后 `Gulp.dest(dirname(outputFile))`。模块示例是从 `modules.json` 结构裁剪出的少量记录，不是全量模块表。
+
+代码不运行 Browserify、Gulp 或 Creator Editor Builder，不读取本机完整 `modules.json`，也不生成引擎 bundle。默认入口是为页面观察设定的教学输入；真实 `buildCocosJs` 的入口和输出由调用方提供。完整 Editor Builder 如何选择项目入口仍在本地 Runtime 快照之外。
 
 ## 运行
 
@@ -51,8 +55,8 @@ flowchart TD
 
 ## 最小观察宿主
 
-- 页面按顺序显示构建阶段和输出文件名。
+- 页面分别显示 debug/release 的宏开关、反向依赖排除文件、各阶段输入/输出，以及可选 sourcemap。
 
 ## 模型化简化与 Creator Runtime 边界
 
-- 页面只报告流程，不运行 Browserify、Terser 或 Creator Builder，也不会生成真实引擎 bundle。
+- 页面运行的是构建计划模型，不运行 Browserify、Gulp 或 Creator Builder，也不会生成真实引擎 bundle。
