@@ -1,29 +1,3 @@
-/****************************************************************************
- Copyright (c) 2008-2010 Ricardo Quesada
- Copyright (c) 2011-2012 cocos2d-x.org
- Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
-
- http://www.cocos2d-x.org
-
- Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated documentation files (the "Software"), to deal
- in the Software without restriction, including without limitation the rights
- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- copies of the Software, and to permit persons to whom the Software is
- furnished to do so, subject to the following conditions:
-
- The above copyright notice and this permission notice shall be included in
- all copies or substantial portions of the Software.
-
- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- THE SOFTWARE.
- ****************************************************************************/
 
 const EventTarget = require('./event/event-target');
 const ComponentScheduler = require('./component-scheduler');
@@ -34,76 +8,6 @@ const renderer = require('./renderer');
 const eventManager = require('./event-manager');
 const Scheduler = require('./CCScheduler');
 
-//----------------------------------------------------------------------------------------------------------------------
-
-/**
- * !#en
- * <p>
- *    ATTENTION: USE cc.director INSTEAD OF cc.Director.<br/>
- *    cc.director is a singleton object which manage your game's logic flow.<br/>
- *    Since the cc.director is a singleton, you don't need to call any constructor or create functions,<br/>
- *    the standard way to use it is by calling:<br/>
- *      - cc.director.methodName(); <br/>
- *
- *    It creates and handle the main Window and manages how and when to execute the Scenes.<br/>
- *    <br/>
- *    The cc.director is also responsible for:<br/>
- *      - initializing the OpenGL context<br/>
- *      - setting the OpenGL pixel format (default on is RGB565)<br/>
- *      - setting the OpenGL buffer depth (default on is 0-bit)<br/>
- *      - setting the color for clear screen (default one is BLACK)<br/>
- *      - setting the projection (default one is 3D)<br/>
- *      - setting the orientation (default one is Portrait)<br/>
- *      <br/>
- *    <br/>
- *    The cc.director also sets the default OpenGL context:<br/>
- *      - GL_TEXTURE_2D is enabled<br/>
- *      - GL_VERTEX_ARRAY is enabled<br/>
- *      - GL_COLOR_ARRAY is enabled<br/>
- *      - GL_TEXTURE_COORD_ARRAY is enabled<br/>
- * </p>
- * <p>
- *   cc.director also synchronizes timers with the refresh rate of the display.<br/>
- *   Features and Limitations:<br/>
- *      - Scheduled timers & drawing are synchronizes with the refresh rate of the display<br/>
- *      - Only supports animation intervals of 1/60 1/30 & 1/15<br/>
- * </p>
- *
- * !#zh
- * <p>
- *     注意：用 cc.director 代替 cc.Director。<br/>
- *     cc.director 一个管理你的游戏的逻辑流程的单例对象。<br/>
- *     由于 cc.director 是一个单例，你不需要调用任何构造函数或创建函数，<br/>
- *     使用它的标准方法是通过调用：<br/>
- *       - cc.director.methodName();
- *     <br/>
- *     它创建和处理主窗口并且管理什么时候执行场景。<br/>
- *     <br/>
- *     cc.director 还负责：<br/>
- *      - 初始化 OpenGL 环境。<br/>
- *      - 设置OpenGL像素格式。(默认是 RGB565)<br/>
- *      - 设置OpenGL缓冲区深度 (默认是 0-bit)<br/>
- *      - 设置空白场景的颜色 (默认是 黑色)<br/>
- *      - 设置投影 (默认是 3D)<br/>
- *      - 设置方向 (默认是 Portrait)<br/>
- *    <br/>
- *    cc.director 设置了 OpenGL 默认环境 <br/>
- *      - GL_TEXTURE_2D   启用。<br/>
- *      - GL_VERTEX_ARRAY 启用。<br/>
- *      - GL_COLOR_ARRAY  启用。<br/>
- *      - GL_TEXTURE_COORD_ARRAY 启用。<br/>
- * </p>
- * <p>
- *   cc.director 也同步定时器与显示器的刷新速率。
- *   <br/>
- *   特点和局限性: <br/>
- *      - 将计时器 & 渲染与显示器的刷新频率同步。<br/>
- *      - 只支持动画的间隔 1/60 1/30 & 1/15。<br/>
- * </p>
- *
- * @class Director
- * @extends EventTarget
- */
 cc.Director = function () {
     EventTarget.call(this);
 
@@ -165,7 +69,81 @@ cc.Director.prototype = {
         this.sharedInit();
         return true;
     },
+    /*
+     * Run main loop of director
+     */
+    mainLoop: CC_EDITOR ? function (deltaTime, updateAnimate) {
+        this._deltaTime = deltaTime;
 
+        // Update
+        if (!this._paused) {
+            this.emit(cc.Director.EVENT_BEFORE_UPDATE, deltaTime);
+
+            this._compScheduler.startPhase();
+            this._compScheduler.updatePhase(deltaTime);
+
+            if (updateAnimate) {
+                this._scheduler.update(deltaTime);
+            }
+
+            this._compScheduler.lateUpdatePhase(deltaTime);
+
+            this.emit(cc.Director.EVENT_AFTER_UPDATE, deltaTime);
+        }
+
+        // Render
+        this.emit(cc.Director.EVENT_BEFORE_DRAW, deltaTime);
+        renderer.render(this._scene, deltaTime);
+
+        // After draw
+        this.emit(cc.Director.EVENT_AFTER_DRAW, deltaTime);
+
+        this._totalFrames++;
+
+    } : function (now) {
+        if (this._purgeDirectorInNextLoop) {
+            this._purgeDirectorInNextLoop = false;
+            this.purgeDirector();
+        }
+        else {
+            // calculate "global" dt
+            this.calculateDeltaTime(now);
+
+            const deltaTime = this._deltaTime;
+            // Update
+            if (!this._paused) {
+                // before update
+                this.emit(cc.Director.EVENT_BEFORE_UPDATE, deltaTime);
+
+                // Call start for new added components
+                this._compScheduler.startPhase();
+
+                // Update for components
+                this._compScheduler.updatePhase(deltaTime);
+                // Engine update with scheduler
+                this._scheduler.update(deltaTime);
+
+                // Late update for components
+                this._compScheduler.lateUpdatePhase(deltaTime);
+
+                // User can use this event to do things after update
+                this.emit(cc.Director.EVENT_AFTER_UPDATE, deltaTime);
+
+                // Destroy entities that have been removed recently
+                Obj._deferredDestroy();
+            }
+
+            // Render
+            this.emit(cc.Director.EVENT_BEFORE_DRAW, deltaTime);
+            renderer.render(this._scene, deltaTime);
+
+            // After draw
+            this.emit(cc.Director.EVENT_AFTER_DRAW, deltaTime);
+
+            eventManager.frameUpdateListeners();
+            this._totalFrames++;
+        }
+    },
     /*
      * Manage all init process shared between the web engine and jsb engine.
      * All platform independent init process should be occupied here.
@@ -477,6 +455,7 @@ cc.Director.prototype = {
         this._scene = scene;
 
         CC_BUILD && CC_DEBUG && console.time('Activate');
+        //激活场景
         scene._activate();
         CC_BUILD && CC_DEBUG && console.timeEnd('Activate');
 
@@ -835,81 +814,6 @@ cc.Director.prototype = {
     _resetDeltaTime () {
         this._lastUpdate = performance.now();
         this._deltaTime = 0;
-    },
-    /*
-     * Run main loop of director
-     */
-    mainLoop: CC_EDITOR ? function (deltaTime, updateAnimate) {
-        this._deltaTime = deltaTime;
-
-        // Update
-        if (!this._paused) {
-            this.emit(cc.Director.EVENT_BEFORE_UPDATE, deltaTime);
-
-            this._compScheduler.startPhase();
-            this._compScheduler.updatePhase(deltaTime);
-
-            if (updateAnimate) {
-                this._scheduler.update(deltaTime);
-            }
-
-            this._compScheduler.lateUpdatePhase(deltaTime);
-
-            this.emit(cc.Director.EVENT_AFTER_UPDATE, deltaTime);
-        }
-
-        // Render
-        this.emit(cc.Director.EVENT_BEFORE_DRAW, deltaTime);
-        renderer.render(this._scene, deltaTime);
-
-        // After draw
-        this.emit(cc.Director.EVENT_AFTER_DRAW, deltaTime);
-
-        this._totalFrames++;
-
-    } : function (now) {
-        if (this._purgeDirectorInNextLoop) {
-            this._purgeDirectorInNextLoop = false;
-            this.purgeDirector();
-        }
-        else {
-            // calculate "global" dt
-            this.calculateDeltaTime(now);
-
-            const deltaTime = this._deltaTime;
-            // Update
-            if (!this._paused) {
-                // before update
-                this.emit(cc.Director.EVENT_BEFORE_UPDATE, deltaTime);
-
-                // Call start for new added components
-                this._compScheduler.startPhase();
-
-                // Update for components
-                this._compScheduler.updatePhase(deltaTime);
-                // Engine update with scheduler
-                this._scheduler.update(deltaTime);
-
-                // Late update for components
-                this._compScheduler.lateUpdatePhase(deltaTime);
-
-                // User can use this event to do things after update
-                this.emit(cc.Director.EVENT_AFTER_UPDATE, deltaTime);
-
-                // Destroy entities that have been removed recently
-                Obj._deferredDestroy();
-            }
-
-            // Render
-            this.emit(cc.Director.EVENT_BEFORE_DRAW, deltaTime);
-            renderer.render(this._scene, deltaTime);
-
-            // After draw
-            this.emit(cc.Director.EVENT_AFTER_DRAW, deltaTime);
-
-            eventManager.frameUpdateListeners();
-            this._totalFrames++;
-        }
     },
 
     __fastOn: function (type, callback, target) {

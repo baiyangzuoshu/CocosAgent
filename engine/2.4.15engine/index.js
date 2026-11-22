@@ -26,7 +26,7 @@
 
 // PREDEFINE
 
-// window may be undefined when first load engine from editor
+// nodejs使用golbal,其他平台都是window
 var _global = typeof window === 'undefined' ? global : window;
 
 /**
@@ -57,8 +57,7 @@ if (!(CC_EDITOR && Editor.isMainProcess)) {
 
 require('./cocos2d/core/predefine');
 
-// LOAD COCOS2D ENGINE CODE
-
+//非编辑器加载引擎
 if (!(CC_EDITOR && Editor.isMainProcess)) {
     require('./cocos2d');
 }

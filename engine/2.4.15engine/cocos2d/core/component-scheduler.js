@@ -481,22 +481,6 @@ var ComponentScheduler = cc.Class({
 
         // Start components of new activated nodes during start
         this._startForNewComps();
-
-        // if (CC_PREVIEW) {
-        //     try {
-        //         this.startInvoker.invoke();
-        //     }
-        //     catch (e) {
-        //         // prevent start from getting into infinite loop
-        //         this.startInvoker._neg.array.length = 0;
-        //         this.startInvoker._zero.array.length = 0;
-        //         this.startInvoker._pos.array.length = 0;
-        //         throw e;
-        //     }
-        // }
-        // else {
-        //     this.startInvoker.invoke();
-        // }
     },
 
     updatePhase (dt) {

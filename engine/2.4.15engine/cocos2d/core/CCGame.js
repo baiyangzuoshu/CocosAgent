@@ -1,29 +1,3 @@
-/****************************************************************************
- Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
-
- https://www.cocos.com/
-
- Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
-
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
-
- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- THE SOFTWARE.
- ****************************************************************************/
-
 var EventTarget = require('./event/event-target');
 require('../audio/CCAudioEngine');
 const debug = require('./CCDebug');
@@ -41,84 +15,14 @@ const dynamicAtlasManager = require('../core/renderer/utils/dynamic-atlas/manage
  * @extends EventTarget
  */
 var game = {
-    /**
-     * !#en Event triggered when game hide to background.
-     * Please note that this event is not 100% guaranteed to be fired on Web platform,
-     * on native platforms, it corresponds to enter background event, os status bar or notification center may not trigger this event.
-     * !#zh 游戏进入后台时触发的事件。
-     * 请注意，在 WEB 平台，这个事件不一定会 100% 触发，这完全取决于浏览器的回调行为。
-     * 在原生平台，它对应的是应用被切换到后台事件，下拉菜单和上拉状态栏等不一定会触发这个事件，这取决于系统行为。
-     * @property EVENT_HIDE
-     * @type {String}
-     * @example
-     * cc.game.on(cc.game.EVENT_HIDE, function () {
-     *     cc.audioEngine.pauseMusic();
-     *     cc.audioEngine.pauseAllEffects();
-     * });
-     */
     EVENT_HIDE: "game_on_hide",
-
-    /**
-     * !#en Event triggered when game back to foreground
-     * Please note that this event is not 100% guaranteed to be fired on Web platform,
-     * on native platforms, it corresponds to enter foreground event.
-     * !#zh 游戏进入前台运行时触发的事件。
-     * 请注意，在 WEB 平台，这个事件不一定会 100% 触发，这完全取决于浏览器的回调行为。
-     * 在原生平台，它对应的是应用被切换到前台事件。
-     * @property EVENT_SHOW
-     * @constant
-     * @type {String}
-     */
     EVENT_SHOW: "game_on_show",
-
-    /**
-     * !#en Event triggered when game restart
-     * !#zh 调用restart后，触发事件。
-     * @property EVENT_RESTART
-     * @constant
-     * @type {String}
-     */
     EVENT_RESTART: "game_on_restart",
-
-    /**
-     * Event triggered after game inited, at this point all engine objects and game scripts are loaded
-     * @property EVENT_GAME_INITED
-     * @constant
-     * @type {String}
-     */
     EVENT_GAME_INITED: "game_inited",
-
-    /**
-     * Event triggered after engine inited, at this point you will be able to use all engine classes.
-     * It was defined as EVENT_RENDERER_INITED in cocos creator v1.x and renamed in v2.0
-     * @property EVENT_ENGINE_INITED
-     * @constant
-     * @type {String}
-     */
     EVENT_ENGINE_INITED: "engine_inited",
-    // deprecated
     EVENT_RENDERER_INITED: "engine_inited",
-
-    /**
-     * Web Canvas 2d API as renderer backend
-     * @property RENDER_TYPE_CANVAS
-     * @constant
-     * @type {Number}
-     */
     RENDER_TYPE_CANVAS: 0,
-    /**
-     * WebGL API as renderer backend
-     * @property RENDER_TYPE_WEBGL
-     * @constant
-     * @type {Number}
-     */
     RENDER_TYPE_WEBGL: 1,
-    /**
-     * OpenGL API as renderer backend
-     * @property RENDER_TYPE_OPENGL
-     * @constant
-     * @type {Number}
-     */
     RENDER_TYPE_OPENGL: 2,
 
     _persistRootNodes: {},
@@ -137,92 +41,14 @@ var game = {
     _lastTime: null,
     _frameTime: null,
 
-    /**
-     * !#en The outer frame of the game canvas, parent of game container.
-     * !#zh 游戏画布的外框，container 的父容器。
-     * @property frame
-     * @type {Object}
-     */
     frame: null,
-    /**
-     * !#en The container of game canvas.
-     * !#zh 游戏画布的容器。
-     * @property container
-     * @type {HTMLDivElement}
-     */
+    
     container: null,
-    /**
-     * !#en The canvas of the game.
-     * !#zh 游戏的画布。
-     * @property canvas
-     * @type {HTMLCanvasElement}
-     */
+   
     canvas: null,
 
-    /**
-     * !#en The renderer backend of the game.
-     * !#zh 游戏的渲染器类型。
-     * @property renderType
-     * @type {Number}
-     */
+    
     renderType: -1,
-
-    /**
-     * !#en
-     * The current game configuration, including:<br/>
-     * 1. debugMode<br/>
-     *      "debugMode" possible values :<br/>
-     *      0 - No message will be printed.                                                      <br/>
-     *      1 - cc.error, cc.assert, cc.warn, cc.log will print in console.                      <br/>
-     *      2 - cc.error, cc.assert, cc.warn will print in console.                              <br/>
-     *      3 - cc.error, cc.assert will print in console.                                       <br/>
-     *      4 - cc.error, cc.assert, cc.warn, cc.log will print on canvas, available only on web.<br/>
-     *      5 - cc.error, cc.assert, cc.warn will print on canvas, available only on web.        <br/>
-     *      6 - cc.error, cc.assert will print on canvas, available only on web.                 <br/>
-     * 2. showFPS<br/>
-     *      Left bottom corner fps information will show when "showFPS" equals true, otherwise it will be hide.<br/>
-     * 3. exposeClassName<br/>
-     *      Expose class name to chrome debug tools, the class intantiate performance is a little bit slower when exposed.<br/>
-     * 4. frameRate<br/>
-     *      "frameRate" set the wanted frame rate for your game, but the real fps depends on your game implementation and the running environment.<br/>
-     * 5. id<br/>
-     *      "gameCanvas" sets the id of your canvas element on the web page, it's useful only on web.<br/>
-     * 6. renderMode<br/>
-     *      "renderMode" sets the renderer type, only useful on web :<br/>
-     *      0 - Automatically chosen by engine<br/>
-     *      1 - Forced to use canvas renderer<br/>
-     *      2 - Forced to use WebGL renderer, but this will be ignored on mobile browsers<br/>
-     *<br/>
-     * Please DO NOT modify this object directly, it won't have any effect.<br/>
-     * !#zh
-     * 当前的游戏配置，包括：                                                                  <br/>
-     * 1. debugMode（debug 模式，但是在浏览器中这个选项会被忽略）                                <br/>
-     *      "debugMode" 各种设置选项的意义。                                                   <br/>
-     *          0 - 没有消息被打印出来。                                                       <br/>
-     *          1 - cc.error，cc.assert，cc.warn，cc.log 将打印在 console 中。                  <br/>
-     *          2 - cc.error，cc.assert，cc.warn 将打印在 console 中。                          <br/>
-     *          3 - cc.error，cc.assert 将打印在 console 中。                                   <br/>
-     *          4 - cc.error，cc.assert，cc.warn，cc.log 将打印在 canvas 中（仅适用于 web 端）。 <br/>
-     *          5 - cc.error，cc.assert，cc.warn 将打印在 canvas 中（仅适用于 web 端）。         <br/>
-     *          6 - cc.error，cc.assert 将打印在 canvas 中（仅适用于 web 端）。                  <br/>
-     * 2. showFPS（显示 FPS）                                                            <br/>
-     *      当 showFPS 为 true 的时候界面的左下角将显示 fps 的信息，否则被隐藏。              <br/>
-     * 3. exposeClassName                                                           <br/>
-     *      暴露类名让 Chrome DevTools 可以识别，如果开启会稍稍降低类的创建过程的性能，但对对象构造没有影响。 <br/>
-     * 4. frameRate (帧率)                                                              <br/>
-     *      “frameRate” 设置想要的帧率你的游戏，但真正的FPS取决于你的游戏实现和运行环境。      <br/>
-     * 5. id                                                                            <br/>
-     *      "gameCanvas" Web 页面上的 Canvas Element ID，仅适用于 web 端。                         <br/>
-     * 6. renderMode（渲染模式）                                                         <br/>
-     *      “renderMode” 设置渲染器类型，仅适用于 web 端：                              <br/>
-     *          0 - 通过引擎自动选择。                                                     <br/>
-     *          1 - 强制使用 canvas 渲染。
-     *          2 - 强制使用 WebGL 渲染，但是在部分 Android 浏览器中这个选项会被忽略。     <br/>
-     * <br/>
-     * 注意：请不要直接修改这个对象，它不会有任何效果。
-     * @property config
-     * @type {Object}
-     */
     config: null,
 
     /**
@@ -403,27 +229,6 @@ var game = {
     eventTargetOn: EventTarget.prototype.on,
     eventTargetOnce: EventTarget.prototype.once,
 
-    /**
-     * !#en
-     * Register an callback of a specific event type on the game object.
-     * This type of event should be triggered via `emit`.
-     * !#zh
-     * 注册 game 的特定事件类型回调。这种类型的事件应该被 `emit` 触发。
-     *
-     * @method on
-     * @param {String} type - A string representing the event type to listen for.
-     * @param {Function} callback - The callback that will be invoked when the event is dispatched.
-     *                              The callback is ignored if it is a duplicate (the callbacks are unique).
-     * @param {any} [callback.arg1] arg1
-     * @param {any} [callback.arg2] arg2
-     * @param {any} [callback.arg3] arg3
-     * @param {any} [callback.arg4] arg4
-     * @param {any} [callback.arg5] arg5
-     * @param {Object} [target] - The target (this object) to invoke the callback, can be null
-     * @return {Function} - Just returns the incoming callback so you can save the anonymous function easier.
-     * @typescript
-     * on<T extends Function>(type: string, callback: T, target?: any, useCapture?: boolean): T
-     */
     on (type, callback, target, once) {
         // Make sure EVENT_ENGINE_INITED and EVENT_GAME_INITED callbacks to be invoked
         if ((this._prepared && type === this.EVENT_ENGINE_INITED) ||
@@ -434,24 +239,7 @@ var game = {
             this.eventTargetOn(type, callback, target, once);
         }
     },
-    /**
-     * !#en
-     * Register an callback of a specific event type on the game object,
-     * the callback will remove itself after the first time it is triggered.
-     * !#zh
-     * 注册 game 的特定事件类型回调，回调会在第一时间被触发后删除自身。
-     *
-     * @method once
-     * @param {String} type - A string representing the event type to listen for.
-     * @param {Function} callback - The callback that will be invoked when the event is dispatched.
-     *                              The callback is ignored if it is a duplicate (the callbacks are unique).
-     * @param {any} [callback.arg1] arg1
-     * @param {any} [callback.arg2] arg2
-     * @param {any} [callback.arg3] arg3
-     * @param {any} [callback.arg4] arg4
-     * @param {any} [callback.arg5] arg5
-     * @param {Object} [target] - The target (this object) to invoke the callback, can be null
-     */
+    
     once (type, callback, target) {
         // Make sure EVENT_ENGINE_INITED and EVENT_GAME_INITED callbacks to be invoked
         if ((this._prepared && type === this.EVENT_ENGINE_INITED) ||
@@ -463,12 +251,6 @@ var game = {
         }
     },
 
-    /**
-     * !#en Prepare game.
-     * !#zh 准备引擎，请不要直接调用这个函数。
-     * @param {Function} cb
-     * @method prepare
-     */
     prepare (cb) {
         // Already prepared
         if (this._prepared) {
@@ -481,30 +263,12 @@ var game = {
         });
     },
 
-    /**
-     * !#en Run game with configuration object and onStart function.
-     * !#zh 运行游戏，并且指定引擎配置和 onStart 的回调。
-     * @method run
-     * @param {Object} config - Pass configuration object or onStart function
-     * @param {Function} onStart - function to be executed after game initialized
-     */
     run: function (config, onStart) {
         this._initConfig(config);
         this.onStart = onStart;
         this.prepare(game.onStart && game.onStart.bind(game));
     },
 
-//  @ Persist root node section
-    /**
-     * !#en
-     * Add a persistent root node to the game, the persistent node won't be destroyed during scene transition.<br/>
-     * The target node must be placed in the root level of hierarchy, otherwise this API won't have any effect.
-     * !#zh
-     * 声明常驻根节点，该节点不会被在场景切换中被销毁。<br/>
-     * 目标节点必须位于为层级的根节点，否则无效。
-     * @method addPersistRootNode
-     * @param {Node} node - The node to be made persistent
-     */
     addPersistRootNode: function (node) {
         if (!cc.Node.isNode(node) || !node.uuid) {
             cc.warnID(3800);
@@ -532,12 +296,6 @@ var game = {
         }
     },
 
-    /**
-     * !#en Remove a persistent root node.
-     * !#zh 取消常驻根节点。
-     * @method removePersistRootNode
-     * @param {Node} node - The node to be removed from persistent node list
-     */
     removePersistRootNode: function (node) {
         var id = node.uuid || '';
         if (node === this._persistRootNodes[id]) {
@@ -547,20 +305,10 @@ var game = {
         }
     },
 
-    /**
-     * !#en Check whether the node is a persistent root node.
-     * !#zh 检查节点是否是常驻根节点。
-     * @method isPersistRootNode
-     * @param {Node} node - The node to be checked
-     * @return {Boolean}
-     */
     isPersistRootNode: function (node) {
         return node._persistNode;
     },
 
-//@Private Methods
-
-//  @Time ticker section
     _setAnimFrame: function () {
         this._lastTime = performance.now();
         var frameRate = game.config.frameRate;

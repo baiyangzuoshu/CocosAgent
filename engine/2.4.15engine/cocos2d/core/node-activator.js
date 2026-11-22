@@ -308,6 +308,7 @@ var NodeActivator = cc.Class({
             if (deactivatedOnLoading) {
                 return;
             }
+            //注册进入组件调度
             cc.director._compScheduler.enableComp(comp, onEnableInvoker);
         }
     } : function (comp, preloadInvoker, onLoadInvoker, onEnableInvoker) {
