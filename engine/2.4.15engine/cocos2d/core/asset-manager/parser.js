@@ -399,28 +399,7 @@ var parser = {
         onComplete && onComplete(err, result);
     },
 
-    /*
-     * !#en
-     * Deserialize asset file
-     * 
-     * !#zh
-     * 反序列化资源文件
-     * 
-     * @method parseImport
-     * @param {Object} file - The serialized json
-     * @param {Object} options - Some optional paramters
-     * @param {Function} onComplete - Callback when finish parsing
-     * @param {Error} onComplete.err - The occurred error, null indicetes success
-     * @param {Asset} onComplete.asset - The parsed content
-     * 
-     * @example
-     * downloader.downloadFile('test.json', {responseType: 'json'}, null, (err, file) => {
-     *      parser.parseImport(file, null, (err, data) => console.log(err));
-     * });
-     * 
-     * @typescript
-     * parseImport (file: any, options: Record<string, any>, onComplete?: (err: Error, asset: cc.Asset) => void): void
-     */
+    //反序列化
     parseImport (file, options, onComplete) {
         if (!file) return onComplete && onComplete(new Error('Json is empty'));
         var result, err = null;
@@ -520,7 +499,7 @@ var parser = {
         }
     }
 };
-
+//解析类型
 var parsers = {
     '.png' : parser.parseImage,
     '.jpg' : parser.parseImage,
