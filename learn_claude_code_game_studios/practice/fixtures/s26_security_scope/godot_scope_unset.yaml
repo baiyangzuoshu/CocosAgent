@@ -1,8 +1,0 @@
-project:
-  name: Godot Scope Fixture
-  version: 1.0.0
-engine:
-  name: godot
-  language: gdscript
-platform:
-  targets: [desktop]
