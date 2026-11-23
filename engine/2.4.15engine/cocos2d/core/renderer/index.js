@@ -1,27 +1,4 @@
-/****************************************************************************
- Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
 
- https://www.cocos.com/
-
- Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
-
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
-
- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- THE SOFTWARE.
- ****************************************************************************/
 import gfx from '../../renderer/gfx';
 
 import InputAssembler from '../../renderer/core/input-assembler';
@@ -64,39 +41,13 @@ export default cc.renderer = {
     InputAssembler: InputAssembler,
     Pass: Pass,
 
-    /**
-     * !#en The render engine is available only after cc.game.EVENT_ENGINE_INITED event.<br/>
-     * Normally it will be inited as the webgl render engine, but in wechat open context domain,
-     * it will be inited as the canvas render engine. Canvas render engine is no longer available for other use case since v2.0.
-     * !#zh 基础渲染引擎对象只在 cc.game.EVENT_ENGINE_INITED 事件触发后才可获取。<br/>
-     * 大多数情况下，它都会是 WebGL 渲染引擎实例，但是在微信开放数据域当中，它会是 Canvas 渲染引擎实例。请注意，从 2.0 开始，我们在其他平台和环境下都废弃了 Canvas 渲染器。
-     * @property renderEngine
-     * @deprecated
-     * @type {Object}
-     */
     renderEngine: null,
 
-    /*
-     * !#en The canvas object which provides the rendering context
-     * !#zh 用于渲染的 Canvas 对象
-     * @property canvas
-     * @type {HTMLCanvasElement}
-     */
     canvas: null,
-    /*
-     * !#en The device object which provides device related rendering functionality, it divers for different render engine type.
-     * !#zh 提供设备渲染能力的对象，它对于不同的渲染环境功能也不相同。
-     * @property device
-     * @type {renderer.Device}
-     */
+   
     device: null,
     scene: null,
-    /**
-     * !#en The total draw call count in last rendered frame.
-     * !#zh 上一次渲染帧所提交的渲染批次总数。
-     * @property drawCalls
-     * @type {Number}
-     */
+    
     drawCalls: 0,
     // Render component handler
     _handle: null,

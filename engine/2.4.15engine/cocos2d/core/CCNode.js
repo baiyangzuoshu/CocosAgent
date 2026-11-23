@@ -1,34 +1,19 @@
-/****************************************************************************
- Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
-
- http://www.cocos2d-x.org
-
- Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated documentation files (the "Software"), to deal
- in the Software without restriction, including without limitation the rights
- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- copies of the Software, and to permit persons to whom the Software is
- furnished to do so, subject to the following conditions:
-
- The above copyright notice and this permission notice shall be included in
- all copies or substantial portions of the Software.
-
- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- THE SOFTWARE.
- ****************************************************************************/
-
 'use strict';
 
 import { Mat4, Vec2, Vec3, Quat, Trs } from './value-types';
 import { approx } from './value-types/utils'
-
+/**
+ * !#en
+ * Class of all entities in Cocos Creator scenes.<br/>
+ * For events supported by Node, please refer to {{#crossLink "Node.EventType"}}{{/crossLink}}
+ * !#zh
+ * Cocos Creator 场景中的所有节点类。<br/>
+ * 支持的节点事件，请参阅 {{#crossLink "Node.EventType"}}{{/crossLink}}。
+ * @class Node
+ * @extends _BaseNode
+ */
 const BaseNode = require('./utils/base-node');
+
 const PrefabHelper = require('./utils/prefab-helper');
 const nodeMemPool = require('./utils/trans-pool').NodeMemPool;
 const AffineTrans = require('./utils/affine-transform');
@@ -840,16 +825,8 @@ function mulMat2D (out, a, b) {
 
 const mulMat3D = Mat4.mul;
 
-/**
- * !#en
- * Class of all entities in Cocos Creator scenes.<br/>
- * For events supported by Node, please refer to {{#crossLink "Node.EventType"}}{{/crossLink}}
- * !#zh
- * Cocos Creator 场景中的所有节点类。<br/>
- * 支持的节点事件，请参阅 {{#crossLink "Node.EventType"}}{{/crossLink}}。
- * @class Node
- * @extends _BaseNode
- */
+
+
 let NodeDefines = {
     name: 'cc.Node',
     extends: BaseNode,
@@ -2004,52 +1981,6 @@ let NodeDefines = {
         return forDispatch;
     },
 
-    /**
-     * !#en
-     * Register a callback of a specific event type on Node.<br/>
-     * Use this method to register touch or mouse event permit propagation based on scene graph,<br/>
-     * These kinds of event are triggered with dispatchEvent, the dispatch process has three steps:<br/>
-     * 1. Capturing phase: dispatch in capture targets (`_getCapturingTargets`), e.g. parents in node tree, from root to the real target<br/>
-     * 2. At target phase: dispatch to the listeners of the real target<br/>
-     * 3. Bubbling phase: dispatch in bubble targets (`_getBubblingTargets`), e.g. parents in node tree, from the real target to root<br/>
-     * In any moment of the dispatching process, it can be stopped via `event.stopPropagation()` or `event.stopPropagationImmidiate()`.<br/>
-     * It's the recommended way to register touch/mouse event for Node,<br/>
-     * please do not use cc.eventManager directly for Node.<br/>
-     * You can also register custom event and use `emit` to trigger custom event on Node.<br/>
-     * For such events, there won't be capturing and bubbling phase, your event will be dispatched directly to its listeners registered on the same node.<br/>
-     * You can also pass event callback parameters with `emit` by passing parameters after `type`.
-     * !#zh
-     * 在节点上注册指定类型的回调函数，也可以设置 target 用于绑定响应函数的 this 对象。<br/>
-     * 鼠标或触摸事件会被系统调用 dispatchEvent 方法触发，触发的过程包含三个阶段：<br/>
-     * 1. 捕获阶段：派发事件给捕获目标（通过 `_getCapturingTargets` 获取），比如，节点树中注册了捕获阶段的父节点，从根节点开始派发直到目标节点。<br/>
-     * 2. 目标阶段：派发给目标节点的监听器。<br/>
-     * 3. 冒泡阶段：派发事件给冒泡目标（通过 `_getBubblingTargets` 获取），比如，节点树中注册了冒泡阶段的父节点，从目标节点开始派发直到根节点。<br/>
-     * 同时您可以将事件派发到父节点或者通过调用 stopPropagation 拦截它。<br/>
-     * 推荐使用这种方式来监听节点上的触摸或鼠标事件，请不要在节点上直接使用 cc.eventManager。<br/>
-     * 你也可以注册自定义事件到节点上，并通过 emit 方法触发此类事件，对于这类事件，不会发生捕获冒泡阶段，只会直接派发给注册在该节点上的监听器<br/>
-     * 你可以通过在 emit 方法调用时在 type 之后传递额外的参数作为事件回调的参数列表
-     * @method on
-     * @param {String|Node.EventType} type - A string representing the event type to listen for.<br>See {{#crossLink "Node/EventTyupe/POSITION_CHANGED"}}Node Events{{/crossLink}} for all builtin events.
-     * @param {Function} callback - The callback that will be invoked when the event is dispatched. The callback is ignored if it is a duplicate (the callbacks are unique).
-     * @param {Event|any} [callback.event] event or first argument when emit
-     * @param {any} [callback.arg2] arg2
-     * @param {any} [callback.arg3] arg3
-     * @param {any} [callback.arg4] arg4
-     * @param {any} [callback.arg5] arg5
-     * @param {Object} [target] - The target (this object) to invoke the callback, can be null
-     * @param {Boolean} [useCapture=false] - When set to true, the listener will be triggered at capturing phase which is ahead of the final target emit, otherwise it will be triggered during bubbling phase.
-     * @return {Function} - Just returns the incoming callback so you can save the anonymous function easier.
-     * @typescript
-     * on<T extends Function>(type: string, callback: T, target?: any, useCapture?: boolean): T
-     * @example
-     * this.node.on(cc.Node.EventType.TOUCH_START, this.memberFunction, this);  // if "this" is component and the "memberFunction" declared in CCClass.
-     * node.on(cc.Node.EventType.TOUCH_START, callback, this);
-     * node.on(cc.Node.EventType.TOUCH_MOVE, callback, this);
-     * node.on(cc.Node.EventType.TOUCH_END, callback, this);
-     * node.on(cc.Node.EventType.TOUCH_CANCEL, callback, this);
-     * node.on(cc.Node.EventType.ANCHOR_CHANGED, callback);
-     * node.on(cc.Node.EventType.COLOR_CHANGED, callback);
-     */
     on (type, callback, target, useCapture) {
         let forDispatch = this._checknSetupSysEvent(type);
         if (forDispatch) {
@@ -2083,28 +2014,6 @@ let NodeDefines = {
         }
     },
 
-    /**
-     * !#en
-     * Register an callback of a specific event type on the Node,
-     * the callback will remove itself after the first time it is triggered.
-     * !#zh
-     * 注册节点的特定事件类型回调，回调会在第一时间被触发后删除自身。
-     *
-     * @method once
-     * @param {String} type - A string representing the event type to listen for.
-     * @param {Function} callback - The callback that will be invoked when the event is dispatched.
-     *                              The callback is ignored if it is a duplicate (the callbacks are unique).
-     * @param {Event|any} [callback.event] event or first argument when emit
-     * @param {any} [callback.arg2] arg2
-     * @param {any} [callback.arg3] arg3
-     * @param {any} [callback.arg4] arg4
-     * @param {any} [callback.arg5] arg5
-     * @param {Object} [target] - The target (this object) to invoke the callback, can be null
-     * @typescript
-     * once<T extends Function>(type: string, callback: T, target?: any, useCapture?: boolean): T
-     * @example
-     * node.once(cc.Node.EventType.ANCHOR_CHANGED, callback);
-     */
     once (type, callback, target, useCapture) {
         let forDispatch = this._checknSetupSysEvent(type);
 

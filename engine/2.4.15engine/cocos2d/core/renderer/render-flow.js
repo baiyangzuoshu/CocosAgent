@@ -187,13 +187,14 @@ function init (node) {
 RenderFlow.flows = flows;
 RenderFlow.createFlow = createFlow;
 
-// validate whether render component is ready to be rendered.
+// 注册渲染校验
 let _validateList = [];
 RenderFlow.registerValidate = function (renderComp) {
     if (renderComp._inValidateList) return;
     _validateList.push(renderComp);
     renderComp._inValidateList =  true;
 };
+//检查组件是否需要渲染
 RenderFlow.validateRenderers = function () {
     for (let i = 0, l = _validateList.length; i < l; i++) {
         let renderComp = _validateList[i];
