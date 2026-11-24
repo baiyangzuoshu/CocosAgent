@@ -93,6 +93,7 @@ cc.Director.prototype = {
 
         // Render
         this.emit(cc.Director.EVENT_BEFORE_DRAW, deltaTime);
+        //渲染场景树
         renderer.render(this._scene, deltaTime);
 
         // After draw

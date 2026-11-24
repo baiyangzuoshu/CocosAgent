@@ -4,16 +4,6 @@ const debug = require('./CCDebug');
 const renderer = require('./renderer/index.js');
 const dynamicAtlasManager = require('../core/renderer/utils/dynamic-atlas/manager');
 
-/**
- * @module cc
- */
-
-/**
- * !#en An object to boot the game.
- * !#zh 包含游戏主体信息并负责驱动游戏的游戏对象。
- * @class Game
- * @extends EventTarget
- */
 var game = {
     EVENT_HIDE: "game_on_hide",
     EVENT_SHOW: "game_on_show",
@@ -51,23 +41,8 @@ var game = {
     renderType: -1,
     config: null,
 
-    /**
-     * !#en Callback when the scripts of engine have been load.
-     * !#zh 当引擎完成启动后的回调函数。
-     * @method onStart
-     * @type {Function}
-     */
     onStart: null,
 
-//@Public Methods
-
-//  @Game play control
-    /**
-     * !#en Set frame rate of game.
-     * !#zh 设置游戏帧率。
-     * @method setFrameRate
-     * @param {Number} frameRate
-     */
     setFrameRate: function (frameRate) {
         var config = this.config;
         config.frameRate = frameRate;
@@ -79,32 +54,14 @@ var game = {
         this._runMainLoop();
     },
 
-    /**
-     * !#en Get frame rate set for the game, it doesn't represent the real frame rate.
-     * !#zh 获取设置的游戏帧率（不等同于实际帧率）。
-     * @method getFrameRate
-     * @return {Number} frame rate
-     */
     getFrameRate: function () {
         return this.config.frameRate;
     },
 
-    /**
-     * !#en Run the game frame by frame.
-     * !#zh 执行一帧游戏循环。
-     * @method step
-     */
     step: function () {
         cc.director.mainLoop();
     },
 
-    /**
-     * !#en Pause the game main loop. This will pause:
-     * game logic execution, rendering process, event manager, background music and all audio effects.
-     * This is different with cc.director.pause which only pause the game logic execution.
-     * !#zh 暂停游戏主循环。包含：游戏逻辑，渲染，事件处理，背景音乐和所有音效。这点和只暂停游戏逻辑的 cc.director.pause 不同。
-     * @method pause
-     */
     pause: function () {
         if (this._paused) return;
         this._paused = true;
@@ -118,12 +75,6 @@ var game = {
         this._intervalId = 0;
     },
 
-    /**
-     * !#en Resume the game from pause. This will resume:
-     * game logic execution, rendering process, event manager, background music and all audio effects.
-     * !#zh 恢复游戏主循环。包含：游戏逻辑，渲染，事件处理，背景音乐和所有音效。
-     * @method resume
-     */
     resume: function () {
         if (!this._paused) return;
         this._paused = false;
@@ -136,21 +87,10 @@ var game = {
         this._runMainLoop();
     },
 
-    /**
-     * !#en Check whether the game is paused.
-     * !#zh 判断游戏是否暂停。
-     * @method isPaused
-     * @return {Boolean}
-     */
     isPaused: function () {
         return this._paused;
     },
 
-    /**
-     * !#en Restart game.
-     * !#zh 重新开始游戏
-     * @method restart
-     */
     restart: function () {
         cc.director.once(cc.Director.EVENT_AFTER_DRAW, function () {
             for (var id in game._persistRootNodes) {
@@ -176,16 +116,9 @@ var game = {
         });
     },
 
-    /**
-     * !#en End game, it will close the game window
-     * !#zh 退出游戏
-     * @method end
-     */
     end: function () {
         close();
     },
-
-//  @Game loading
 
     _initEngine () {
         if (this._rendererInitialized) {

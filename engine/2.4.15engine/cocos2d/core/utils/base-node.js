@@ -1,28 +1,3 @@
-/****************************************************************************
- Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
-
- https://www.cocos.com/
-
- Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
- worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
- not use Cocos Creator software for developing other software or tools that's
- used for developing games. You are not granted to publish, distribute,
- sublicense, and/or sell copies of Cocos Creator.
-
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
-
- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- THE SOFTWARE.
- ****************************************************************************/
 
 const Flags = require('../platform/CCObject').Flags;
 const misc = require('./misc');
@@ -1228,11 +1203,11 @@ var BaseNode = cc.Class({
             child._registerIfAttached(register);
         }
     },
-
+    //销毁
     _onPreDestroy () {
         var i, len;
 
-        // marked as destroying
+        // 销毁标记
         this._objFlags |= Destroying;
 
         // detach self and children from editor
@@ -1242,14 +1217,14 @@ var BaseNode = cc.Class({
             this._registerIfAttached(false);
         }
 
-        // destroy children
+        // 销毁子节点
         var children = this._children;
         for (i = 0, len = children.length; i < len; ++i) {
             // destroy immediate so its _onPreDestroy can be called
             children[i]._destroyImmediate();
         }
 
-        // destroy self components
+        // 销毁自己的组件组
         for (i = 0, len = this._components.length; i < len; ++i) {
             var component = this._components[i];
             // destroy immediate so its _onPreDestroy can be called
@@ -1269,7 +1244,7 @@ var BaseNode = cc.Class({
         }
 
         if (!destroyByParent) {
-            // remove from parent
+            // 从父结点删除自己
             if (parent) {
                 var childIndex = parent._children.indexOf(this);
                 parent._children.splice(childIndex, 1);

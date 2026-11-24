@@ -1,40 +1,6 @@
-/****************************************************************************
- Copyright (c) 2013-2016 Chukong Technologies Inc.
- Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
-
- https://www.cocos.com/
-
- Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated engine source code (the "Software"), a limited,
-  worldwide, royalty-free, non-assignable, revocable and non-exclusive license
- to use Cocos Creator solely to develop games on your target platforms. You shall
-  not use Cocos Creator software for developing other software or tools that's
-  used for developing games. You are not granted to publish, distribute,
-  sublicense, and/or sell copies of Cocos Creator.
-
- The software or tools in this License Agreement are licensed, not sold.
- Xiamen Yaji Software Co., Ltd. reserves all rights not expressly granted to you.
-
- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- THE SOFTWARE.
- ****************************************************************************/
-
 var js = require('../platform/js');
 
 /**
- * !#en
- * <p>
- *     The base class of event listener.                                                                        <br/>
- *     If you need custom listener which with different callback, you need to inherit this class.               <br/>
- *     For instance, you could refer to EventListenerAcceleration, EventListenerKeyboard,                       <br/>
- *      EventListenerTouchOneByOne, EventListenerCustom.
- * </p>
- *
  * !#zh
  * 封装用户的事件处理逻辑。
  * 注意：这是一个抽象类，开发者不应该直接实例化这个类，请参考 {{#crossLink "EventListener/create:method"}}cc.EventListener.create{{/crossLink}}。
@@ -64,182 +30,81 @@ cc.EventListener = function (type, listenerID, callback) {
 
 cc.EventListener.prototype = {
     constructor: cc.EventListener,
-    /*
-     * <p>
-     *     Sets paused state for the listener
-     *     The paused state is only used for scene graph priority listeners.
-     *     `EventDispatcher::resumeAllEventListenersForTarget(node)` will set the paused state to `true`,
-     *     while `EventDispatcher::pauseAllEventListenersForTarget(node)` will set it to `false`.
-     *     @note 1) Fixed priority listeners will never get paused. If a fixed priority doesn't want to receive events,
-     *              call `setEnabled(false)` instead.
-     *            2) In `Node`'s onEnter and onExit, the `paused state` of the listeners which associated with that node will be automatically updated.
-     * </p>
-     * @param {Boolean} paused
-     * @private
-     */
+   
     _setPaused: function (paused) {
         this._paused = paused;
     },
 
-    /*
-     * Checks whether the listener is paused.
-     * @returns {Boolean}
-     * @private
-     */
+   
     _isPaused: function () {
         return this._paused;
     },
 
-    /*
-     * Marks the listener was registered by EventDispatcher.
-     * @param {Boolean} registered
-     * @private
-     */
+   
     _setRegistered: function (registered) {
         this._registered = registered;
     },
 
-    /*
-     * Checks whether the listener was registered by EventDispatcher
-     * @returns {Boolean}
-     * @private
-     */
+   
     _isRegistered: function () {
         return this._registered;
     },
 
-    /*
-     * Gets the type of this listener
-     * @note It's different from `EventType`, e.g. TouchEvent has two kinds of event listeners - EventListenerOneByOne, EventListenerAllAtOnce
-     * @returns {Number}
-     * @private
-     */
+   
     _getType: function () {
         return this._type;
     },
 
-    /*
-     *  Gets the listener ID of this listener
-     *  When event is being dispatched, listener ID is used as key for searching listeners according to event type.
-     * @returns {String}
-     * @private
-     */
+  
     _getListenerID: function () {
         return this._listenerID;
     },
 
-    /*
-     * Sets the fixed priority for this listener
-     *  @note This method is only used for `fixed priority listeners`, it needs to access a non-zero value. 0 is reserved for scene graph priority listeners
-     * @param {Number} fixedPriority
-     * @private
-     */
+   
     _setFixedPriority: function (fixedPriority) {
         this._fixedPriority = fixedPriority;
     },
 
-    /*
-     * Gets the fixed priority of this listener
-     * @returns {Number} 0 if it's a scene graph priority listener, non-zero for fixed priority listener
-     * @private
-     */
+   
     _getFixedPriority: function () {
         return this._fixedPriority;
     },
 
-    /*
-     * Sets scene graph priority for this listener
-     * @param {cc.Node} node
-     * @private
-     */
+   
     _setSceneGraphPriority: function (node) {
         this._target = node;
         this._node = node;
     },
 
-    /*
-     * Gets scene graph priority of this listener
-     * @returns {cc.Node} if it's a fixed priority listener, non-null for scene graph priority listener
-     * @private
-     */
+  
     _getSceneGraphPriority: function () {
         return this._node;
     },
 
-    /**
-     * !#en Checks whether the listener is available.
-     * !#zh 检测监听器是否有效
-     * @method checkAvailable
-     * @returns {Boolean}
-     */
+   
     checkAvailable: function () {
         return this._onEvent !== null;
     },
 
-    /**
-     * !#en Clones the listener, its subclasses have to override this method.
-     * !#zh 克隆监听器,它的子类必须重写此方法。
-     * @method clone
-     * @returns {EventListener}
-     */
+   
     clone: function () {
         return null;
     },
 
-    /**
-     *  !#en Enables or disables the listener
-     *  !#zh 启用或禁用监听器。
-     *  @method setEnabled
-     *  @param {Boolean} enabled
-     *  @note Only listeners with `enabled` state will be able to receive events.
-     *          When an listener was initialized, it's enabled by default.
-     *          An event listener can receive events when it is enabled and is not paused.
-     *          paused state is always false when it is a fixed priority listener.
-     */
+   
     setEnabled: function(enabled){
         this._isEnabled = enabled;
     },
 
-    /**
-     * !#en Checks whether the listener is enabled
-     * !#zh 检查监听器是否可用。
-     * @method isEnabled
-     * @returns {Boolean}
-     */
+   
     isEnabled: function(){
         return this._isEnabled;
     },
 
-    /*
-     * <p>Currently JavaScript Bindings (JSB), in some cases, needs to use retain and release. This is a bug in JSB,
-     * and the ugly workaround is to use retain/release. So, these 2 methods were added to be compatible with JSB.
-     * This is a hack, and should be removed once JSB fixes the retain/release bug<br/>
-     * You will need to retain an object if you created a listener and haven't added it any target node during the same frame.<br/>
-     * Otherwise, JSB's native autorelease pool will consider this object a useless one and release it directly,<br/>
-     * when you want to use it later, a "Invalid Native Object" error will be raised.<br/>
-     * The retain function can increase a reference count for the native object to avoid it being released,<br/>
-     * you need to manually invoke release function when you think this object is no longer needed, otherwise, there will be memory learks.<br/>
-     * retain and release function call should be paired in developer's game code.</p>
-     *
-     * @method retain
-     * @see cc.EventListener#release
-     */
+   
     retain:function () {
     },
-    /*
-     * <p>Currently JavaScript Bindings (JSB), in some cases, needs to use retain and release. This is a bug in JSB,
-     * and the ugly workaround is to use retain/release. So, these 2 methods were added to be compatible with JSB.
-     * This is a hack, and should be removed once JSB fixes the retain/release bug<br/>
-     * You will need to retain an object if you created a listener and haven't added it any target node during the same frame.<br/>
-     * Otherwise, JSB's native autorelease pool will consider this object a useless one and release it directly,<br/>
-     * when you want to use it later, a "Invalid Native Object" error will be raised.<br/>
-     * The retain function can increase a reference count for the native object to avoid it being released,<br/>
-     * you need to manually invoke release function when you think this object is no longer needed, otherwise, there will be memory learks.<br/>
-     * retain and release function call should be paired in developer's game code.</p>
-     *
-     * @method release
-     * @see cc.EventListener#retain
-     */
+   
     release:function () {
     }
 };
