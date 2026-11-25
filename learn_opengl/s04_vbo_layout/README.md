@@ -45,7 +45,7 @@ cmake --build build
 
 ## 跟着代码走
 
-示例代码在 [`src/main.cpp`](src/main.cpp)，构建配置在 [`CMakeLists.txt`](CMakeLists.txt)。
+程序入口和帧循环在 [`src/main.cpp`](src/main.cpp)，交错/分离布局、缓冲创建和顶点更新接口与实现分别在 [`src/vertex_buffers.h`](src/vertex_buffers.h)、[`src/vertex_buffers.cpp`](src/vertex_buffers.cpp)，shader program 在 [`src/shader_program.cpp`](src/shader_program.cpp)，构建配置见 [`CMakeLists.txt`](CMakeLists.txt)。
 
 ### 交错布局
 

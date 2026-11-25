@@ -25,7 +25,11 @@ else()
     message(FATAL_ERROR "GLAD package was found but did not define a supported target")
 endif()
 
-add_executable(learn_opengl_s05_ebo src/main.cpp)
+add_executable(learn_opengl_s05_ebo
+    src/main.cpp
+    src/indexed_mesh.cpp
+    src/shader_program.cpp
+)
 target_link_libraries(learn_opengl_s05_ebo
     PRIVATE
         OpenGL::GL

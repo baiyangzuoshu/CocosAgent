@@ -30,7 +30,7 @@ cmake --build build
 
 ## 跟着代码走
 
-示例代码在 [`src/main.cpp`](src/main.cpp)，构建配置在 [`CMakeLists.txt`](CMakeLists.txt)。
+程序入口、输入和每帧 View 更新在 [`src/main.cpp`](src/main.cpp)，相机矩阵类型与运算接口和实现分别在 [`src/camera_matrix.h`](src/camera_matrix.h)、[`src/camera_matrix.cpp`](src/camera_matrix.cpp)，shader program 在 [`src/shader_program.cpp`](src/shader_program.cpp)，构建配置见 [`CMakeLists.txt`](CMakeLists.txt)。
 
 ### 相机矩阵的逆
 

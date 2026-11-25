@@ -1,108 +1,18 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
-#include <cstddef>
 #include <iostream>
-#include <string>
+
+#include "shader_program.h"
+#include "triangle_mesh.h"
 
 namespace {
 
 constexpr int kWindowWidth = 800;
 constexpr int kWindowHeight = 600;
 
-// 每个顶点位置直接作为裁剪空间坐标；颜色沿顶点管线传给片段着色器。
-const char* kVertexShaderSource = R"glsl(
-#version 330 core
-layout (location = 0) in vec3 aPosition;
-layout (location = 1) in vec3 aColor;
-
-out vec3 vertexColor;
-
-void main() {
-    gl_Position = vec4(aPosition, 1.0);
-    vertexColor = aColor;
-}
-)glsl";
-
-// 一个片段一个输出颜色。三角形内部的 vertexColor 由光栅化阶段插值。
-const char* kFragmentShaderSource = R"glsl(
-#version 330 core
-in vec3 vertexColor;
-out vec4 fragmentColor;
-
-void main() {
-    fragmentColor = vec4(vertexColor, 1.0);
-}
-)glsl";
-
 void framebufferSizeCallback(GLFWwindow*, int width, int height) {
     glViewport(0, 0, width, height);
-}
-
-// 编译一个 shader 阶段；失败时输出驱动提供的诊断日志。
-GLuint compileShader(GLenum type, const char* source) {
-    const GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &source, nullptr);
-    glCompileShader(shader);
-
-    GLint compiled = GL_FALSE;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
-    if (compiled == GL_FALSE) {
-        GLint logLength = 0;
-        glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLength);
-        if (logLength > 0) {
-            std::string log(static_cast<std::size_t>(logLength), '\0');
-            GLsizei written = 0;
-            glGetShaderInfoLog(shader, logLength, &written, log.data());
-            log.resize(static_cast<std::size_t>(written));
-            std::cerr << "Shader compilation failed:\n" << log << '\n';
-        }
-        glDeleteShader(shader);
-        return 0;
-    }
-
-    return shader;
-}
-
-// 把顶点阶段和片段阶段链接成一次绘制可使用的 program。
-GLuint createProgram() {
-    const GLuint vertexShader = compileShader(GL_VERTEX_SHADER, kVertexShaderSource);
-    if (vertexShader == 0) {
-        return 0;
-    }
-
-    const GLuint fragmentShader = compileShader(GL_FRAGMENT_SHADER, kFragmentShaderSource);
-    if (fragmentShader == 0) {
-        glDeleteShader(vertexShader);
-        return 0;
-    }
-
-    const GLuint program = glCreateProgram();
-    glAttachShader(program, vertexShader);
-    glAttachShader(program, fragmentShader);
-    glLinkProgram(program);
-
-    GLint linked = GL_FALSE;
-    glGetProgramiv(program, GL_LINK_STATUS, &linked);
-    if (linked == GL_FALSE) {
-        GLint logLength = 0;
-        glGetProgramiv(program, GL_INFO_LOG_LENGTH, &logLength);
-        if (logLength > 0) {
-            std::string log(static_cast<std::size_t>(logLength), '\0');
-            GLsizei written = 0;
-            glGetProgramInfoLog(program, logLength, &written, log.data());
-            log.resize(static_cast<std::size_t>(written));
-            std::cerr << "Shader program link failed:\n" << log << '\n';
-        }
-        glDeleteProgram(program);
-        glDeleteShader(vertexShader);
-        glDeleteShader(fragmentShader);
-        return 0;
-    }
-
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
-    return program;
 }
 
 } // namespace
@@ -149,43 +59,12 @@ int main() {
     glfwGetFramebufferSize(window, &framebufferWidth, &framebufferHeight);
     framebufferSizeCallback(window, framebufferWidth, framebufferHeight);
 
-    // 3. 每个顶点包含位置 xyz 和颜色 rgb，共六个 float。
-    const float vertices[] = {
-        // position             // color
-        -0.65F, -0.55F, 0.0F,    1.0F, 0.2F, 0.2F,
-         0.65F, -0.55F, 0.0F,    0.2F, 1.0F, 0.3F,
-         0.00F,  0.65F, 0.0F,    0.2F, 0.4F, 1.0F,
-    };
-
-    GLuint vertexArray = 0;
-    GLuint vertexBuffer = 0;
-    glGenVertexArrays(1, &vertexArray);
-    glGenBuffers(1, &vertexBuffer);
-
-    // VBO 保存顶点字节；VAO 记录位置和颜色的读取布局。
-    glBindVertexArray(vertexArray);
-    glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    constexpr GLsizei kStride = 6 * static_cast<GLsizei>(sizeof(float));
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, kStride, nullptr);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(
-        1,
-        3,
-        GL_FLOAT,
-        GL_FALSE,
-        kStride,
-        reinterpret_cast<void*>(3 * sizeof(float))
-    );
-    glEnableVertexAttribArray(1);
-    glBindVertexArray(0);
+    lesson::TriangleMesh triangleMesh = lesson::createTriangleMesh();
 
     // 4. 准备两个 shader 阶段组成的绘制程序。
-    const GLuint program = createProgram();
+    const GLuint program = lesson::createProgram();
     if (program == 0) {
-        glDeleteBuffers(1, &vertexBuffer);
-        glDeleteVertexArrays(1, &vertexArray);
+        lesson::destroyTriangleMesh(&triangleMesh);
         glfwDestroyWindow(window);
         glfwTerminate();
         return 1;
@@ -201,7 +80,7 @@ int main() {
         glClear(GL_COLOR_BUFFER_BIT);
 
         glUseProgram(program);
-        glBindVertexArray(vertexArray);
+        glBindVertexArray(triangleMesh.vertexArray);
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
         glfwSwapBuffers(window);
@@ -209,8 +88,7 @@ int main() {
     }
 
     glDeleteProgram(program);
-    glDeleteBuffers(1, &vertexBuffer);
-    glDeleteVertexArrays(1, &vertexArray);
+    lesson::destroyTriangleMesh(&triangleMesh);
     glfwDestroyWindow(window);
     glfwTerminate();
     return 0;

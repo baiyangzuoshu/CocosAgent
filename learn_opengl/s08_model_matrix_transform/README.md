@@ -24,7 +24,7 @@ cmake --build build
 
 ## 跟着代码走
 
-示例代码在 [`src/main.cpp`](src/main.cpp)，构建配置在 [`CMakeLists.txt`](CMakeLists.txt)。
+程序入口与每帧 Model 更新在 [`src/main.cpp`](src/main.cpp)，矩阵类型和 T/R/S 运算接口与实现分别在 [`src/model_matrix.h`](src/model_matrix.h)、[`src/model_matrix.cpp`](src/model_matrix.cpp)，shader program 在 [`src/shader_program.cpp`](src/shader_program.cpp)，构建配置见 [`CMakeLists.txt`](CMakeLists.txt)。
 
 ### 顶点留在局部坐标
 

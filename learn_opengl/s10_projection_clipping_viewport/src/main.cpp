@@ -1,13 +1,19 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
-#include <algorithm>
 #include <array>
-#include <cmath>
 #include <cstddef>
 #include <iostream>
 #include <string>
 #include <vector>
+
+#include "projection_matrix.h"
+#include "shader_program.h"
+#include "viewport.h"
+
+using namespace lesson;
+
+lesson::ViewportState gViewport;
 
 namespace {
 
@@ -18,72 +24,12 @@ constexpr float kFarPlane = 10.0F;
 constexpr float kPerspectiveFovRadians = 0.78539816339F;
 constexpr float kOrthographicHeight = 4.0F;
 
-struct Mat4 {
-    std::array<float, 16> values{};
-
-    float& at(std::size_t row, std::size_t column) {
-        return values[column * 4 + row];
-    }
-};
-
 struct Vertex {
     float position[3];
     float color[3];
 };
 
-const char* kVertexShaderSource = R"glsl(
-#version 330 core
-layout (location = 0) in vec3 aPosition;
-layout (location = 1) in vec3 aColor;
-
-uniform mat4 uProjection;
-out vec3 vertexColor;
-
-void main() {
-    gl_Position = uProjection * vec4(aPosition, 1.0);
-    vertexColor = aColor;
-}
-)glsl";
-
-const char* kFragmentShaderSource = R"glsl(
-#version 330 core
-in vec3 vertexColor;
-out vec4 fragmentColor;
-
-void main() {
-    fragmentColor = vec4(vertexColor, 1.0);
-}
-)glsl";
-
-int gFramebufferWidth = 0;
-int gFramebufferHeight = 0;
-int gViewportWidth = 0;
-int gViewportHeight = 0;
-bool gSquareViewport = false;
 bool gPerspectiveProjection = true;
-
-Mat4 perspectiveMatrix(float verticalFovRadians, float aspect, float nearPlane, float farPlane) {
-    Mat4 result{};
-    const float scale = 1.0F / std::tan(verticalFovRadians * 0.5F);
-    result.at(0, 0) = scale / aspect;
-    result.at(1, 1) = scale;
-    result.at(2, 2) = (farPlane + nearPlane) / (nearPlane - farPlane);
-    result.at(2, 3) = (2.0F * farPlane * nearPlane) / (nearPlane - farPlane);
-    result.at(3, 2) = -1.0F;
-    return result;
-}
-
-Mat4 orthographicMatrix(float height, float aspect, float nearPlane, float farPlane) {
-    Mat4 result{};
-    const float halfHeight = height * 0.5F;
-    const float halfWidth = halfHeight * aspect;
-    result.at(0, 0) = 1.0F / halfWidth;
-    result.at(1, 1) = 1.0F / halfHeight;
-    result.at(2, 2) = -2.0F / (farPlane - nearPlane);
-    result.at(2, 3) = -(farPlane + nearPlane) / (farPlane - nearPlane);
-    result.at(3, 3) = 1.0F;
-    return result;
-}
 
 Vertex makeVertex(float x, float y, float z, const std::array<float, 3>& color) {
     return { { x, y, z }, { color[0], color[1], color[2] } };
@@ -110,39 +56,11 @@ void addQuad(
     vertices.push_back(makeVertex(left, top, z, color));
 }
 
-void applyViewport() {
-    if (gFramebufferWidth <= 0 || gFramebufferHeight <= 0) {
-        gViewportWidth = 0;
-        gViewportHeight = 0;
-        glViewport(0, 0, 0, 0);
-        return;
-    }
-
-    int x = 0;
-    int y = 0;
-    gViewportWidth = gFramebufferWidth;
-    gViewportHeight = gFramebufferHeight;
-    if (gSquareViewport) {
-        const int side = std::min(gFramebufferWidth, gFramebufferHeight);
-        x = (gFramebufferWidth - side) / 2;
-        y = (gFramebufferHeight - side) / 2;
-        gViewportWidth = side;
-        gViewportHeight = side;
-    }
-    glViewport(x, y, gViewportWidth, gViewportHeight);
-}
-
 void updateWindowTitle(GLFWwindow* window) {
     const char* projection = gPerspectiveProjection ? "Perspective" : "Orthographic";
-    const char* viewport = gSquareViewport ? "Square viewport" : "Full viewport";
+    const char* viewport = gViewport.square ? "Square viewport" : "Full viewport";
     const std::string title = std::string("Learn OpenGL - ") + projection + " / " + viewport;
     glfwSetWindowTitle(window, title.c_str());
-}
-
-void framebufferSizeCallback(GLFWwindow*, int width, int height) {
-    gFramebufferWidth = width;
-    gFramebufferHeight = height;
-    applyViewport();
 }
 
 void keyCallback(GLFWwindow* window, int key, int, int action, int) {
@@ -155,74 +73,9 @@ void keyCallback(GLFWwindow* window, int key, int, int action, int) {
     } else if (key == GLFW_KEY_O) {
         gPerspectiveProjection = false;
     } else if (key == GLFW_KEY_V) {
-        gSquareViewport = !gSquareViewport;
-        applyViewport();
+        lesson::toggleSquareViewport(&gViewport);
     }
     updateWindowTitle(window);
-}
-
-GLuint compileShader(GLenum type, const char* source) {
-    const GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &source, nullptr);
-    glCompileShader(shader);
-
-    GLint compiled = GL_FALSE;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
-    if (compiled == GL_FALSE) {
-        GLint logLength = 0;
-        glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLength);
-        if (logLength > 1) {
-            std::string log(static_cast<std::size_t>(logLength), '\0');
-            GLsizei written = 0;
-            glGetShaderInfoLog(shader, logLength, &written, log.data());
-            log.resize(static_cast<std::size_t>(written));
-            std::cerr << "Shader compilation failed:\n" << log << '\n';
-        }
-        glDeleteShader(shader);
-        return 0;
-    }
-
-    return shader;
-}
-
-GLuint createProgram() {
-    const GLuint vertexShader = compileShader(GL_VERTEX_SHADER, kVertexShaderSource);
-    if (vertexShader == 0) {
-        return 0;
-    }
-
-    const GLuint fragmentShader = compileShader(GL_FRAGMENT_SHADER, kFragmentShaderSource);
-    if (fragmentShader == 0) {
-        glDeleteShader(vertexShader);
-        return 0;
-    }
-
-    const GLuint program = glCreateProgram();
-    glAttachShader(program, vertexShader);
-    glAttachShader(program, fragmentShader);
-    glLinkProgram(program);
-
-    GLint linked = GL_FALSE;
-    glGetProgramiv(program, GL_LINK_STATUS, &linked);
-    if (linked == GL_FALSE) {
-        GLint logLength = 0;
-        glGetProgramiv(program, GL_INFO_LOG_LENGTH, &logLength);
-        if (logLength > 1) {
-            std::string log(static_cast<std::size_t>(logLength), '\0');
-            GLsizei written = 0;
-            glGetProgramInfoLog(program, logLength, &written, log.data());
-            log.resize(static_cast<std::size_t>(written));
-            std::cerr << "Program link failed:\n" << log << '\n';
-        }
-        glDeleteProgram(program);
-        glDeleteShader(vertexShader);
-        glDeleteShader(fragmentShader);
-        return 0;
-    }
-
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
-    return program;
 }
 
 } // namespace
@@ -261,12 +114,8 @@ int main() {
         return 1;
     }
 
-    glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
+    lesson::initializeViewport(window, &gViewport);
     glfwSetKeyCallback(window, keyCallback);
-    int framebufferWidth = 0;
-    int framebufferHeight = 0;
-    glfwGetFramebufferSize(window, &framebufferWidth, &framebufferHeight);
-    framebufferSizeCallback(window, framebufferWidth, framebufferHeight);
     updateWindowTitle(window);
 
     const std::array<float, 3> nearColor{ 0.12F, 0.68F, 1.0F };
@@ -313,7 +162,7 @@ int main() {
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-    const GLuint program = createProgram();
+    const GLuint program = lesson::createProgram();
     if (program == 0) {
         glDeleteBuffers(1, &vertexBuffer);
         glDeleteVertexArrays(1, &vertexArray);
@@ -338,11 +187,11 @@ int main() {
             glfwSetWindowShouldClose(window, GLFW_TRUE);
         }
 
-        if (gViewportHeight <= 0) {
+        if (gViewport.viewportHeight <= 0) {
             glfwPollEvents();
             continue;
         }
-        const float aspect = static_cast<float>(gViewportWidth) / static_cast<float>(gViewportHeight);
+        const float aspect = lesson::viewportAspect(gViewport);
         const Mat4 projection = gPerspectiveProjection
             ? perspectiveMatrix(kPerspectiveFovRadians, aspect, kNearPlane, kFarPlane)
             : orthographicMatrix(kOrthographicHeight, aspect, kNearPlane, kFarPlane);

@@ -32,7 +32,7 @@ cmake --build build
 
 ## 跟着代码走
 
-示例代码在 [`src/main.cpp`](src/main.cpp)，构建配置在 [`CMakeLists.txt`](CMakeLists.txt)。顶点位置已经处在相机坐标中，本课只计算 Projection 矩阵，不重复实现 Model 和 View。
+程序入口和投影切换在 [`src/main.cpp`](src/main.cpp)，透视/正交矩阵接口与实现分别在 [`src/projection_matrix.h`](src/projection_matrix.h)、[`src/projection_matrix.cpp`](src/projection_matrix.cpp)，视口状态接口与实现分别在 [`src/viewport.h`](src/viewport.h)、[`src/viewport.cpp`](src/viewport.cpp)，shader program 在 [`src/shader_program.cpp`](src/shader_program.cpp)，构建配置见 [`CMakeLists.txt`](CMakeLists.txt)。顶点位置已经处在相机坐标中，本课只计算 Projection 矩阵，不重复实现 Model 和 View。
 
 ### 投影到裁剪空间
 

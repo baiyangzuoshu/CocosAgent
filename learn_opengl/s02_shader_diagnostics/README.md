@@ -61,7 +61,7 @@ cmake --build build
 
 ## 跟着代码走
 
-示例代码在 [`src/main.cpp`](src/main.cpp)，构建配置在 [`CMakeLists.txt`](CMakeLists.txt)。
+程序入口、窗口和空 VAO 在 [`src/main.cpp`](src/main.cpp)，编译/链接错误模式及驱动日志接口与实现分别在 [`src/shader_diagnostics.h`](src/shader_diagnostics.h)、[`src/shader_diagnostics.cpp`](src/shader_diagnostics.cpp)，构建配置见 [`CMakeLists.txt`](CMakeLists.txt)。
 
 1. `compileShader` 调用 `glCreateShader`、`glShaderSource` 和 `glCompileShader`。
 2. 随后查询 `GL_COMPILE_STATUS`。失败时调用 `glGetShaderInfoLog` 读取驱动诊断，并返回空句柄。

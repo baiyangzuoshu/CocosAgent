@@ -36,7 +36,7 @@ cmake --build build
 
 ## 跟着代码走
 
-示例代码在 [`src/main.cpp`](src/main.cpp)，构建配置在 [`CMakeLists.txt`](CMakeLists.txt)。
+程序入口和帧循环在 [`src/main.cpp`](src/main.cpp)，位置/颜色 attribute 与 VAO 配置接口和实现分别在 [`src/vertex_input.h`](src/vertex_input.h)、[`src/vertex_input.cpp`](src/vertex_input.cpp)，shader program 在 [`src/shader_program.cpp`](src/shader_program.cpp)，构建配置见 [`CMakeLists.txt`](CMakeLists.txt)。
 
 1. 顶点 shader 声明 `layout(location = 0) in vec3 aPosition` 和 `layout(location = 1) in vec3 aColor`。
 2. `positionBuffer` 保存三个顶点的位置，`colorBuffer` 保存对应颜色。

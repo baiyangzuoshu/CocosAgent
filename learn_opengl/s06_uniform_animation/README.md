@@ -37,7 +37,7 @@ cmake --build build
 
 ## 跟着代码走
 
-示例代码在 [`src/main.cpp`](src/main.cpp)，构建配置在 [`CMakeLists.txt`](CMakeLists.txt)。
+程序入口与逐帧 uniform 更新在 [`src/main.cpp`](src/main.cpp)，静态三角形缓冲接口与实现分别在 [`src/triangle_mesh.h`](src/triangle_mesh.h)、[`src/triangle_mesh.cpp`](src/triangle_mesh.cpp)，动画 shader/program 在 [`src/shader_program.cpp`](src/shader_program.cpp)，构建配置见 [`CMakeLists.txt`](CMakeLists.txt)。
 
 ### 声明 uniform
 

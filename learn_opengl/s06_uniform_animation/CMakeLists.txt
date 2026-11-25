@@ -25,7 +25,11 @@ else()
     message(FATAL_ERROR "GLAD package was found but did not define a supported target")
 endif()
 
-add_executable(learn_opengl_s06_uniform src/main.cpp)
+add_executable(learn_opengl_s06_uniform
+    src/main.cpp
+    src/triangle_mesh.cpp
+    src/shader_program.cpp
+)
 target_link_libraries(learn_opengl_s06_uniform
     PRIVATE
         OpenGL::GL

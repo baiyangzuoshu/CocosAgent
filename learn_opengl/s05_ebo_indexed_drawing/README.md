@@ -45,7 +45,7 @@ cmake --build build
 
 ## 跟着代码走
 
-示例代码在 [`src/main.cpp`](src/main.cpp)，构建配置在 [`CMakeLists.txt`](CMakeLists.txt)。
+程序入口和 `glDrawElements` 调用在 [`src/main.cpp`](src/main.cpp)，顶点/EBO 数据及网格资源生命周期接口与实现分别在 [`src/indexed_mesh.h`](src/indexed_mesh.h)、[`src/indexed_mesh.cpp`](src/indexed_mesh.cpp)，shader program 在 [`src/shader_program.cpp`](src/shader_program.cpp)，构建配置见 [`CMakeLists.txt`](CMakeLists.txt)。
 
 ### 创建 EBO
 

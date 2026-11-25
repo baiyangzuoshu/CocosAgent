@@ -36,7 +36,7 @@ cmake --build build
 
 ## 跟着代码走
 
-示例代码在 [`src/main.cpp`](src/main.cpp)，构建配置在 [`CMakeLists.txt`](CMakeLists.txt)。
+程序入口与逐步变换过程在 [`src/main.cpp`](src/main.cpp)，齐次向量和矩阵接口与运算实现分别在 [`src/matrix_math.h`](src/matrix_math.h)、[`src/matrix_math.cpp`](src/matrix_math.cpp)，shader program 在 [`src/shader_program.cpp`](src/shader_program.cpp)，构建配置见 [`CMakeLists.txt`](CMakeLists.txt)。
 
 ### 齐次坐标
 

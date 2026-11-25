@@ -38,7 +38,7 @@ cmake --build build
 
 ## 跟着代码走
 
-示例代码在 [`src/main.cpp`](src/main.cpp)，构建配置在 [`CMakeLists.txt`](CMakeLists.txt)。建议按下面顺序读，不必一开始记住每个 OpenGL 名称。
+程序入口和帧循环在 [`src/main.cpp`](src/main.cpp)，三角形数据/VAO/VBO 接口与实现分别在 [`src/triangle_mesh.h`](src/triangle_mesh.h)、[`src/triangle_mesh.cpp`](src/triangle_mesh.cpp)，shader program 接口与实现分别在 [`src/shader_program.h`](src/shader_program.h)、[`src/shader_program.cpp`](src/shader_program.cpp)，构建配置见 [`CMakeLists.txt`](CMakeLists.txt)。建议按下面顺序读，不必一开始记住每个 OpenGL 名称。
 
 ### 1. 创建窗口和 OpenGL 上下文
 

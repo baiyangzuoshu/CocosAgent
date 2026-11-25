@@ -6,122 +6,22 @@
 #include <cstddef>
 #include <iomanip>
 #include <iostream>
-#include <string>
 #include <vector>
+
+#include "matrix_math.h"
+#include "shader_program.h"
+
+using namespace lesson;
 
 namespace {
 
 constexpr int kWindowWidth = 800;
 constexpr int kWindowHeight = 600;
 
-struct Vec4 {
-    float x;
-    float y;
-    float z;
-    float w;
-};
-
-struct Mat4 {
-    std::array<float, 16> elements{};
-
-    float& at(std::size_t row, std::size_t column) {
-        return elements[column * 4 + row];
-    }
-
-    float at(std::size_t row, std::size_t column) const {
-        return elements[column * 4 + row];
-    }
-};
-
 struct Vertex {
     float position[3];
     float color[3];
 };
-
-const char* kVertexShaderSource = R"glsl(
-#version 330 core
-layout (location = 0) in vec3 aPosition;
-layout (location = 1) in vec3 aColor;
-
-out vec3 vertexColor;
-
-void main() {
-    gl_Position = vec4(aPosition, 1.0);
-    vertexColor = aColor;
-}
-)glsl";
-
-const char* kFragmentShaderSource = R"glsl(
-#version 330 core
-in vec3 vertexColor;
-out vec4 fragmentColor;
-
-void main() {
-    fragmentColor = vec4(vertexColor, 1.0);
-}
-)glsl";
-
-Mat4 identityMatrix() {
-    Mat4 result{};
-    for (std::size_t index = 0; index < 4; ++index) {
-        result.at(index, index) = 1.0F;
-    }
-    return result;
-}
-
-Mat4 scaleMatrix(float x, float y, float z) {
-    Mat4 result = identityMatrix();
-    result.at(0, 0) = x;
-    result.at(1, 1) = y;
-    result.at(2, 2) = z;
-    return result;
-}
-
-Mat4 rotationZ90Matrix() {
-    Mat4 result = identityMatrix();
-    result.at(0, 0) = 0.0F;
-    result.at(0, 1) = -1.0F;
-    result.at(1, 0) = 1.0F;
-    result.at(1, 1) = 0.0F;
-    return result;
-}
-
-Mat4 translationMatrix(float x, float y, float z) {
-    Mat4 result = identityMatrix();
-    result.at(0, 3) = x;
-    result.at(1, 3) = y;
-    result.at(2, 3) = z;
-    return result;
-}
-
-Mat4 multiply(const Mat4& left, const Mat4& right) {
-    Mat4 result{};
-    for (std::size_t row = 0; row < 4; ++row) {
-        for (std::size_t column = 0; column < 4; ++column) {
-            for (std::size_t inner = 0; inner < 4; ++inner) {
-                result.at(row, column) += left.at(row, inner) * right.at(inner, column);
-            }
-        }
-    }
-    return result;
-}
-
-Vec4 transform(const Mat4& matrix, const Vec4& vector) {
-    const float input[4] = { vector.x, vector.y, vector.z, vector.w };
-    float output[4] = {};
-    for (std::size_t row = 0; row < 4; ++row) {
-        for (std::size_t column = 0; column < 4; ++column) {
-            output[row] += matrix.at(row, column) * input[column];
-        }
-    }
-    return { output[0], output[1], output[2], output[3] };
-}
-
-void printVector(const char* label, const Vec4& vector) {
-    std::cout << label << " = ("
-              << vector.x << ", " << vector.y << ", "
-              << vector.z << ", " << vector.w << ")\n";
-}
 
 Vertex makeVertex(float x, float y, const std::array<float, 3>& color) {
     return { { x, y, 0.0F }, { color[0], color[1], color[2] } };
@@ -142,70 +42,6 @@ void addLine(
 void framebufferSizeCallback(GLFWwindow*, int width, int height) {
     const int side = std::min(width, height);
     glViewport((width - side) / 2, (height - side) / 2, side, side);
-}
-
-GLuint compileShader(GLenum type, const char* source) {
-    const GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &source, nullptr);
-    glCompileShader(shader);
-
-    GLint compiled = GL_FALSE;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
-    if (compiled == GL_FALSE) {
-        GLint logLength = 0;
-        glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLength);
-        if (logLength > 1) {
-            std::string log(static_cast<std::size_t>(logLength), '\0');
-            GLsizei written = 0;
-            glGetShaderInfoLog(shader, logLength, &written, log.data());
-            log.resize(static_cast<std::size_t>(written));
-            std::cerr << "Shader compilation failed:\n" << log << '\n';
-        }
-        glDeleteShader(shader);
-        return 0;
-    }
-
-    return shader;
-}
-
-GLuint createProgram() {
-    const GLuint vertexShader = compileShader(GL_VERTEX_SHADER, kVertexShaderSource);
-    if (vertexShader == 0) {
-        return 0;
-    }
-
-    const GLuint fragmentShader = compileShader(GL_FRAGMENT_SHADER, kFragmentShaderSource);
-    if (fragmentShader == 0) {
-        glDeleteShader(vertexShader);
-        return 0;
-    }
-
-    const GLuint program = glCreateProgram();
-    glAttachShader(program, vertexShader);
-    glAttachShader(program, fragmentShader);
-    glLinkProgram(program);
-
-    GLint linked = GL_FALSE;
-    glGetProgramiv(program, GL_LINK_STATUS, &linked);
-    if (linked == GL_FALSE) {
-        GLint logLength = 0;
-        glGetProgramiv(program, GL_INFO_LOG_LENGTH, &logLength);
-        if (logLength > 1) {
-            std::string log(static_cast<std::size_t>(logLength), '\0');
-            GLsizei written = 0;
-            glGetProgramInfoLog(program, logLength, &written, log.data());
-            log.resize(static_cast<std::size_t>(written));
-            std::cerr << "Program link failed:\n" << log << '\n';
-        }
-        glDeleteProgram(program);
-        glDeleteShader(vertexShader);
-        glDeleteShader(fragmentShader);
-        return 0;
-    }
-
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
-    return program;
 }
 
 } // namespace
@@ -332,7 +168,7 @@ int main() {
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-    const GLuint program = createProgram();
+    const GLuint program = lesson::createProgram();
     if (program == 0) {
         glDeleteBuffers(1, &vertexBuffer);
         glDeleteVertexArrays(1, &vertexArray);
