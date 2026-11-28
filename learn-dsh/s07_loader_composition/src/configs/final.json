@@ -1,4 +1,0 @@
-[
-  { "id": "logger", "name": "logger" },
-  { "id": "metrics", "name": "metrics", "config": { "label": "request" } }
-]

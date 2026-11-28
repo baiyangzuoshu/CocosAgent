@@ -358,6 +358,7 @@ var BaseNode = cc.Class({
             value.emit && value.emit(CHILD_ADDED, this);
             value._renderFlag |= RenderFlow.FLAG_CHILDREN;
         }
+        //
         if (oldParent) {
             if (!(oldParent._objFlags & Destroying)) {
                 var removeAt = oldParent._children.indexOf(this);
@@ -1083,7 +1084,7 @@ var BaseNode = cc.Class({
     _onSetParent (value) {},
     _onPostActivated () {},
     _onBatchCreated (dontSyncChildPrefab) {},
-
+    //
     _onHierarchyChanged (oldParent) {
         var newParent = this._parent;
         if (this._persistNode && !(newParent instanceof cc.Scene)) {
@@ -1146,6 +1147,7 @@ var BaseNode = cc.Class({
 
         var shouldActiveNow = this._active && !!(newParent && newParent._activeInHierarchy);
         if (this._activeInHierarchy !== shouldActiveNow) {
+            //激活节点
             cc.director._nodeActivator.activateNode(this, shouldActiveNow);
         }
     },

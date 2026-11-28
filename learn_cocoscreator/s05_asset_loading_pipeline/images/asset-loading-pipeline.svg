@@ -1,0 +1,183 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1510" viewBox="0 0 1680 1510" role="img" aria-labelledby="title desc">
+  <title id="title">Creator 2.4.15 资源加载管线</title>
+  <desc id="desc">对比早期 CCLoader 与 LoadingItems 和 Creator 2.4.15 的 cc.loader 兼容层、AssetManager Task、URL 转换、fetch/parse 子管线及完成回调。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L10,5 L0,10 z" fill="#526277"/></marker>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L10,5 L0,10 z" fill="#2f6fae"/></marker>
+    <marker id="arrowPurple" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L10,5 L0,10 z" fill="#7657b5"/></marker>
+    <marker id="arrowGreen" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L10,5 L0,10 z" fill="#37855f"/></marker>
+    <marker id="arrowOrange" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L10,5 L0,10 z" fill="#b9681d"/></marker>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; fill: #17263b; }
+      .title { font-size: 31px; font-weight: 700; }
+      .subtitle { font-size: 15px; fill: #526277; }
+      .lane { font-size: 17px; font-weight: 700; }
+      .step { font-size: 14px; font-weight: 700; fill: #fff; }
+      .head { font-size: 16px; font-weight: 700; }
+      .body { font-size: 13px; fill: #34465d; }
+      .small { font-size: 11px; fill: #526277; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; fill: #26364b; }
+      .card { fill: #fff; stroke: #cbd6e2; stroke-width: 1.5; }
+      .blue { fill: #eef6ff; stroke: #91b8df; stroke-width: 1.5; }
+      .green { fill: #edf8f2; stroke: #8fc3a3; stroke-width: 1.5; }
+      .warm { fill: #fff5e9; stroke: #e2ae76; stroke-width: 1.5; }
+      .purple { fill: #f4f0ff; stroke: #b9a9e0; stroke-width: 1.5; }
+      .old { fill: #fff9ef; stroke: #cf9c60; stroke-width: 1.5; stroke-dasharray: 7 5; }
+      .line { fill: none; stroke: #526277; stroke-width: 2.1; marker-end: url(#arrow); }
+      .lineBlue { fill: none; stroke: #2f6fae; stroke-width: 2.1; marker-end: url(#arrowBlue); }
+      .linePurple { fill: none; stroke: #7657b5; stroke-width: 2.1; marker-end: url(#arrowPurple); }
+      .lineGreen { fill: none; stroke: #37855f; stroke-width: 2.1; marker-end: url(#arrowGreen); }
+      .lineOrange { fill: none; stroke: #b9681d; stroke-width: 2.1; marker-end: url(#arrowOrange); }
+    </style>
+  </defs>
+  <rect width="1680" height="1510" fill="#f6f8fb"/>
+  <text x="58" y="56" class="title">资源加载：从 cc.loader 入口到 AssetManager Task</text>
+  <text x="58" y="84" class="subtitle">Creator 2.4.15 Web 运行时 · 旧 API 兼容层 → 路径解析 → fetch / parse → 依赖与结果回传</text>
+
+  <rect x="58" y="107" width="1564" height="102" rx="12" class="old"/>
+  <text x="82" y="137" class="head">文章里的早期架构（用于历史对照）</text>
+  <rect x="82" y="151" width="207" height="42" rx="8" fill="#fff" stroke="#cf9c60"/><text x="185" y="177" text-anchor="middle" class="mono">CCLoader / Pipeline</text>
+  <path d="M289 172 H323" class="lineOrange"/>
+  <rect x="334" y="151" width="196" height="42" rx="8" fill="#fff" stroke="#cf9c60"/><text x="432" y="177" text-anchor="middle" class="mono">LoadingItems</text>
+  <path d="M530 172 H564" class="lineOrange"/>
+  <rect x="575" y="151" width="176" height="42" rx="8" fill="#fff" stroke="#cf9c60"/><text x="663" y="177" text-anchor="middle" class="mono">AssetLoader</text>
+  <path d="M751 172 H785" class="lineOrange"/>
+  <rect x="796" y="151" width="170" height="42" rx="8" fill="#fff" stroke="#cf9c60"/><text x="881" y="177" text-anchor="middle" class="mono">Downloader</text>
+  <path d="M966 172 H1000" class="lineOrange"/>
+  <rect x="1011" y="151" width="145" height="42" rx="8" fill="#fff" stroke="#cf9c60"/><text x="1084" y="177" text-anchor="middle" class="mono">Loader</text>
+  <text x="1190" y="163" class="small">2.4.15 已移除 LoadingItems；</text>
+  <text x="1190" y="183" class="small">cc.loader 仅保留兼容入口</text>
+
+  <text x="58" y="250" class="lane">一、旧 API 将路径请求接入当前 AssetManager</text>
+  <rect x="58" y="269" width="370" height="126" rx="12" class="blue"/>
+  <circle cx="88" cy="301" r="16" fill="#2f6fae"/><text x="88" y="306" text-anchor="middle" class="step">1</text>
+  <text x="117" y="306" class="head">cc.loader.loadRes()</text>
+  <text x="82" y="341" class="mono">strip extension</text>
+  <text x="82" y="369" class="mono">→ cc.resources.load(path, ...)</text>
+
+  <path d="M428 332 H468" class="lineBlue"/>
+  <rect x="478" y="269" width="370" height="126" rx="12" class="blue"/>
+  <circle cx="508" cy="301" r="16" fill="#2f6fae"/><text x="508" y="306" text-anchor="middle" class="step">2</text>
+  <text x="537" y="306" class="head">resources Bundle.load()</text>
+  <text x="502" y="341" class="mono">RequestType.PATH</text>
+  <text x="502" y="369" class="body">bundle = "resources" → loadAny()</text>
+
+  <path d="M848 332 H888" class="lineBlue"/>
+  <rect x="898" y="269" width="360" height="126" rx="12" class="purple"/>
+  <circle cx="928" cy="301" r="16" fill="#7657b5"/><text x="928" y="306" text-anchor="middle" class="step">3</text>
+  <text x="957" y="306" class="head">AssetManager.loadAny()</text>
+  <text x="922" y="341" class="mono">new Task(input, callbacks, options)</text>
+  <text x="922" y="369" class="body">asyncify 包装完成回调</text>
+
+  <path d="M1258 332 H1298" class="linePurple"/>
+  <rect x="1308" y="269" width="314" height="126" rx="12" class="purple"/>
+  <circle cx="1338" cy="301" r="16" fill="#7657b5"/><text x="1338" y="306" text-anchor="middle" class="step">4</text>
+  <text x="1367" y="306" class="head">normal pipeline</text>
+  <text x="1332" y="345" class="mono">[preprocess, load]</text>
+  <text x="1332" y="373" class="small">Task 沿 pipe 链逐段推进</text>
+
+  <text x="58" y="437" class="lane">二、预处理把 PATH 变成带 URL 的 RequestItem</text>
+  <rect x="58" y="456" width="322" height="174" rx="12" class="purple"/>
+  <circle cx="88" cy="488" r="16" fill="#7657b5"/><text x="88" y="493" text-anchor="middle" class="step">5</text>
+  <text x="117" y="493" class="head">preprocess</text>
+  <text x="82" y="530" class="mono">transformPipeline.sync()</text>
+  <text x="82" y="558" class="body">转换选项并生成请求描述</text>
+  <text x="82" y="600" class="small">此阶段同步完成 URL 转换</text>
+
+  <path d="M380 543 H420" class="line"/>
+  <rect x="430" y="456" width="410" height="174" rx="12" class="green"/>
+  <circle cx="460" cy="488" r="16" fill="#37855f"/><text x="460" y="493" text-anchor="middle" class="step">6</text>
+  <text x="489" y="493" class="head">urlTransformer.parse</text>
+  <text x="454" y="530" class="mono">Bundle Config.getInfoWithPath()</text>
+  <text x="454" y="558" class="body">PATH → RequestItem(uuid / info)</text>
+  <text x="454" y="600" class="small">检查资源路径和 Bundle redirect</text>
+
+  <path d="M840 543 H880" class="lineGreen"/>
+  <rect x="890" y="456" width="370" height="174" rx="12" class="green"/>
+  <circle cx="920" cy="488" r="16" fill="#37855f"/><text x="920" y="493" text-anchor="middle" class="step">7</text>
+  <text x="949" y="493" class="head">urlTransformer.combine</text>
+  <text x="914" y="530" class="mono">base + uuid + ver + ext</text>
+  <text x="914" y="558" class="body">按 import / native 选择资源基址</text>
+  <text x="914" y="600" class="small">URL 进入下一层 load pipe</text>
+
+  <path d="M1260 543 H1300" class="lineGreen"/>
+  <rect x="1310" y="456" width="312" height="174" rx="12" class="card"/>
+  <text x="1334" y="491" class="head">当前请求上下文</text>
+  <text x="1334" y="529" class="mono">uuid · info · config</text>
+  <text x="1334" y="557" class="mono">url · ext · options</text>
+  <text x="1334" y="600" class="small">不是旧版 AssetTable / LoadingItem</text>
+
+  <text x="58" y="675" class="lane">三、load 为每个请求创建子 Task，执行 fetch → parse</text>
+  <rect x="58" y="695" width="310" height="182" rx="12" class="purple"/>
+  <circle cx="88" cy="727" r="16" fill="#7657b5"/><text x="88" y="732" text-anchor="middle" class="step">8</text>
+  <text x="117" y="732" class="head">load() 扇出请求</text>
+  <text x="82" y="771" class="mono">forEach(RequestItem)</text>
+  <text x="82" y="800" class="body">Task.create({input: item})</text>
+  <text x="82" y="829" class="mono">loadOneAssetPipeline.async()</text>
+  <text x="82" y="857" class="small">共享进度与依赖排除表</text>
+
+  <path d="M368 786 H408" class="line"/>
+  <rect x="418" y="695" width="390" height="182" rx="12" class="blue"/>
+  <circle cx="448" cy="727" r="16" fill="#2f6fae"/><text x="448" y="732" text-anchor="middle" class="step">9</text>
+  <text x="477" y="732" class="head">fetch：文件 / Asset 缓存</text>
+  <text x="442" y="771" class="mono">命中 → 直接推进</text>
+  <text x="442" y="800" class="body">未命中 → PackManager.load()</text>
+  <text x="442" y="829" class="body">Downloader 下载，或解包取文件</text>
+  <text x="442" y="857" class="small">相同下载 ID 可共享在途回调</text>
+
+  <path d="M808 786 H848" class="lineBlue"/>
+  <rect x="858" y="695" width="418" height="182" rx="12" class="green"/>
+  <circle cx="888" cy="727" r="16" fill="#37855f"/><text x="888" y="732" text-anchor="middle" class="step">10</text>
+  <text x="917" y="732" class="head">parse：native / import</text>
+  <text x="882" y="771" class="mono">native → Parser(ext)</text>
+  <text x="882" y="800" class="mono">import → deserialize + loadDepends</text>
+  <text x="882" y="829" class="body">递归依赖、设置属性、Asset.onLoad</text>
+  <text x="882" y="857" class="small">UUID 排除表协调重复项与循环依赖</text>
+
+  <path d="M1276 786 H1316" class="lineGreen"/>
+  <rect x="1326" y="695" width="296" height="182" rx="12" class="warm"/>
+  <text x="1350" y="732" class="head">每项输出</text>
+  <text x="1350" y="771" class="mono">RequestItem.content</text>
+  <text x="1350" y="800" class="body">错误或资源结果</text>
+  <text x="1350" y="829" class="body">进度 finish / total</text>
+  <text x="1350" y="857" class="small">汇入外层 load Task</text>
+
+  <text x="58" y="924" class="lane">四、汇总资源并把完成回调交还调用方</text>
+  <rect x="58" y="944" width="420" height="152" rx="12" class="warm"/>
+  <circle cx="88" cy="976" r="16" fill="#b9681d"/><text x="88" y="981" text-anchor="middle" class="step">11</text>
+  <text x="117" y="981" class="head">gatherAsset + Pipeline 回传</text>
+  <text x="82" y="1018" class="mono">单项请求 → 单 Asset</text>
+  <text x="82" y="1046" class="mono">多项请求 → Asset[]</text>
+  <text x="82" y="1077" class="small">错误走 task.onComplete(err)</text>
+
+  <path d="M478 1020 H528" class="lineOrange"/>
+  <rect x="538" y="944" width="460" height="152" rx="12" class="purple"/>
+  <circle cx="568" cy="976" r="16" fill="#7657b5"/><text x="568" y="981" text-anchor="middle" class="step">12</text>
+  <text x="597" y="981" class="head">asyncify(onComplete)</text>
+  <text x="562" y="1018" class="mono">callInNextTick(callback)</text>
+  <text x="562" y="1046" class="body">完成回调在下一 tick 调用</text>
+  <text x="562" y="1077" class="small">临时保护 Asset 引用，回调后释放保护</text>
+
+  <path d="M998 1020 H1048" class="linePurple"/>
+  <rect x="1058" y="944" width="564" height="152" rx="12" class="blue"/>
+  <text x="1082" y="981" class="head">回到用户回调</text>
+  <text x="1082" y="1018" class="mono">complete(err, asset) 或 complete(err, assets)</text>
+  <text x="1082" y="1046" class="body">外层 loadAny 对单项/数组结果有不同形状</text>
+  <text x="1082" y="1077" class="small">不等同于旧版 LoadingItems 的 allComplete 实现</text>
+
+  <text x="58" y="1145" class="lane">版本边界：文章可作阅读方法，运行行为以本地 2.4.15 源码为准</text>
+  <rect x="58" y="1165" width="1564" height="175" rx="13" class="card"/>
+  <line x1="840" y1="1186" x2="840" y2="1318" stroke="#cbd6e2" stroke-width="1.5"/>
+  <text x="86" y="1203" class="head">文章中的旧链</text>
+  <text x="86" y="1238" class="body">CCLoader → Pipeline / LoadingItems → AssetLoader / Downloader / Loader</text>
+  <text x="86" y="1270" class="small">从旧 API 与队列对象追到 pipe 的执行、缓存和完成通知</text>
+  <text x="866" y="1203" class="head">Creator 2.4.15 实际链</text>
+  <text x="866" y="1238" class="body">cc.loader 兼容层 → Bundle / AssetManager.Task → preprocess + load</text>
+  <text x="866" y="1270" class="small">LoadingItems 已移除；旧 AssetLoader / md5Pipe 合并到 transformPipeline</text>
+  <text x="86" y="1310" class="mono">cc.loader.load() 是另一路 URL/native 适配，不要与 loadRes() 的 PATH 入口混为一谈</text>
+
+  <rect x="58" y="1370" width="1564" height="76" rx="12" fill="#e8eef6"/>
+  <text x="82" y="1402" class="head">结构重点</text>
+  <text x="195" y="1402" class="body">外层管线处理请求集；内层单项管线处理文件与解析；依赖会创建嵌套 Task，并共享进度状态。</text>
+  <text x="82" y="1428" class="small">依据：Creator 2.4.15 Web 静态源码。类型 Parser、平台 Downloader、AssetBundle 构建与原生后端不在本图展开。</text>
+</svg>

@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1160" viewBox="0 0 1500 1160" role="img" aria-labelledby="title desc">
+  <title id="title">Cocos Creator 2.4.15 组件调度</title>
+  <desc id="desc">展示节点激活和 enabled setter 两条入口，如何汇入 ComponentScheduler，进入 start、update、lateUpdate 队列，如何处理帧中启停和迭代器删除。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L10,5 L0,10 z" fill="#526277"/></marker>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L10,5 L0,10 z" fill="#2f6fae"/></marker>
+    <marker id="arrowWarm" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L10,5 L0,10 z" fill="#b9681d"/></marker>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; fill: #16243a; }
+      .title { font-size: 30px; font-weight: 700; }
+      .subtitle { font-size: 15px; fill: #526277; }
+      .lane { font-size: 16px; font-weight: 700; }
+      .step { font-size: 13px; font-weight: 700; fill: #fff; }
+      .head { font-size: 16px; font-weight: 700; }
+      .body { font-size: 13px; fill: #33445a; }
+      .small { font-size: 11px; fill: #526277; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; fill: #26364b; }
+      .card { fill: #fff; stroke: #cad5e2; stroke-width: 1.5; }
+      .blue { fill: #eef6ff; stroke: #91b8df; stroke-width: 1.5; }
+      .warm { fill: #fff5e9; stroke: #e2ae76; stroke-width: 1.5; }
+      .green { fill: #edf8f2; stroke: #8fc3a3; stroke-width: 1.5; }
+      .line { fill: none; stroke: #526277; stroke-width: 2; marker-end: url(#arrow); }
+      .lineBlue { fill: none; stroke: #2f6fae; stroke-width: 2.2; marker-end: url(#arrowBlue); }
+      .lineWarm { fill: none; stroke: #b9681d; stroke-width: 2.2; marker-end: url(#arrowWarm); }
+    </style>
+  </defs>
+  <rect width="1500" height="1160" fill="#f6f8fb"/>
+  <text x="54" y="58" class="title">组件调度：注册、排序与帧内变更</text>
+  <text x="54" y="84" class="subtitle">Creator 2.4.15 Web 运行时 · ComponentScheduler 生命周期队列与 Director 帧阶段</text>
+
+  <text x="54" y="120" class="lane">组件进入调度器：两条入口汇合</text>
+  <rect x="54" y="138" width="430" height="104" rx="12" class="blue"/>
+  <circle cx="82" cy="167" r="15" fill="#2f6fae"/><text x="82" y="172" text-anchor="middle" class="step">1</text>
+  <text x="108" y="171" class="head">节点激活</text>
+  <text x="78" y="200" class="mono">activateNode：递归激活后调用 onEnable 队列</text>
+  <text x="78" y="223" class="body">调度回调排在节点树激活之后</text>
+
+  <rect x="54" y="264" width="430" height="88" rx="12" class="card"/>
+  <circle cx="82" cy="293" r="15" fill="#526277"/><text x="82" y="298" text-anchor="middle" class="step">3</text>
+  <text x="108" y="297" class="head">活动节点的 enabled setter</text>
+  <text x="78" y="327" class="mono">enabled = true → enableComp(comp)</text>
+
+  <rect x="545" y="196" width="410" height="114" rx="12" class="warm"/>
+  <circle cx="574" cy="227" r="15" fill="#b9681d"/><text x="574" y="232" text-anchor="middle" class="step">2</text>
+  <text x="600" y="231" class="head">activateComp → enableComp</text>
+  <text x="570" y="263" class="mono">enableComp(comp, onEnableInvoker)</text>
+  <text x="570" y="288" class="body">enabled setter 是另一入口；激活路径传入 onEnableInvoker</text>
+
+  <path d="M484 190 H520 V224 H540" class="lineBlue"/>
+  <path d="M484 308 H520 V284 H540" class="line"/>
+  <path d="M750 310 V374" class="lineWarm"/>
+
+  <rect x="370" y="382" width="760" height="100" rx="12" class="warm"/>
+  <circle cx="400" cy="413" r="15" fill="#b9681d"/><text x="400" y="418" text-anchor="middle" class="step">4</text>
+  <text x="426" y="417" class="head">enableComp：排队或同步执行 onEnable</text>
+  <text x="395" y="449" class="mono">有 invoker → 入队；无 invoker → onEnable() → _onEnabled()</text>
+  <text x="395" y="471" class="small">激活队列执行时，invokeOnEnable 会在回调后检查节点仍激活</text>
+
+  <path d="M750 482 V508" class="lineWarm"/>
+  <rect x="370" y="516" width="760" height="82" rx="12" class="warm"/>
+  <circle cx="400" cy="546" r="15" fill="#b9681d"/><text x="400" y="551" text-anchor="middle" class="step">5</text>
+  <text x="426" y="550" class="head">invokeOnEnable：执行排队的 onEnable 回调</text>
+  <text x="395" y="581" class="body">回调返回后检查节点仍激活，再进入 _onEnabled()</text>
+
+  <path d="M750 598 V610" class="lineBlue"/>
+  <rect x="370" y="618" width="760" height="78" rx="12" class="blue"/>
+  <circle cx="400" cy="648" r="15" fill="#2f6fae"/><text x="400" y="653" text-anchor="middle" class="step">6</text>
+  <text x="426" y="652" class="head">_onEnabled：恢复普通 Scheduler 目标并记录状态</text>
+  <text x="395" y="681" class="mono">_updating ? _deferredComps.push(comp) : _scheduleImmediate(comp)</text>
+
+  <path d="M750 696 V709 H380 V725" class="lineBlue"/>
+  <path d="M750 709 H1070 V725" class="lineBlue"/>
+  <rect x="74" y="732" width="610" height="146" rx="12" class="card"/>
+  <circle cx="104" cy="763" r="15" fill="#526277"/><text x="104" y="768" text-anchor="middle" class="step">7</text>
+  <text x="130" y="767" class="head">立即登记组件实际定义的回调</text>
+  <text x="100" y="801" class="mono">startInvoker ← 未启动且有 start()</text>
+  <text x="100" y="830" class="mono">updateInvoker ← 有 update()</text>
+  <text x="100" y="859" class="mono">lateUpdateInvoker ← 有 lateUpdate()</text>
+
+  <rect x="722" y="732" width="704" height="146" rx="12" class="blue"/>
+  <circle cx="752" cy="763" r="15" fill="#2f6fae"/><text x="752" y="768" text-anchor="middle" class="step">8</text>
+  <text x="778" y="767" class="head">invoker 类型</text>
+  <text x="748" y="800" class="mono">start: OneOffInvoker   update / lateUpdate: ReusableInvoker</text>
+  <circle cx="752" cy="840" r="15" fill="#2f6fae"/><text x="752" y="845" text-anchor="middle" class="step">9</text>
+  <text x="778" y="844" class="body">执行序：_neg → _zero → _pos；非零序按 executionOrder、_id 排列</text>
+  <text x="778" y="866" class="small">_zero 默认组按追加顺序；onDisable / onDestroy 不受 executionOrder 影响</text>
+
+  <path d="M380 878 V890 H720 V900" class="line"/>
+  <path d="M1070 878 V890 H720 V900" class="line"/>
+  <text x="54" y="897" class="lane">Director 的每帧调用与调度队列变化</text>
+  <rect x="54" y="910" width="1372" height="86" rx="12" class="blue"/>
+  <circle cx="84" cy="941" r="15" fill="#2f6fae"/><text x="84" y="946" text-anchor="middle" class="step">10</text>
+  <text x="110" y="945" class="head">Director.mainLoop（未暂停时）</text>
+  <text x="86" y="978" class="mono">startPhase → updatePhase → Scheduler.update → lateUpdatePhase</text>
+  <text x="820" y="978" class="small">普通 Scheduler 负责 schedule() 计时回调，不是组件 update invoker</text>
+
+  <path d="M720 996 V1008 H270 V1018" class="lineBlue"/>
+  <path d="M720 1008 H740 V1018" class="lineBlue"/>
+  <path d="M720 1008 H1190 V1018" class="lineWarm"/>
+  <rect x="54" y="1024" width="430" height="78" rx="12" class="green"/>
+  <circle cx="84" cy="1053" r="15" fill="#39845d"/><text x="84" y="1058" text-anchor="middle" class="step">11</text>
+  <text x="110" y="1057" class="head">start 阶段新增</text>
+  <text x="80" y="1085" class="body">补排队并调用 start，可赶上本帧 update</text>
+
+  <rect x="510" y="1024" width="460" height="78" rx="12" class="green"/>
+  <circle cx="540" cy="1053" r="15" fill="#39845d"/><text x="540" y="1058" text-anchor="middle" class="step">12</text>
+  <text x="566" y="1057" class="head">update / lateUpdate 阶段新增</text>
+  <text x="536" y="1085" class="body">本帧末 start；update / lateUpdate 下一帧</text>
+
+  <rect x="996" y="1024" width="430" height="78" rx="12" class="warm"/>
+  <circle cx="1026" cy="1053" r="15" fill="#b9681d"/><text x="1026" y="1058" text-anchor="middle" class="step">13</text>
+  <text x="1052" y="1057" class="head">disableComp → _onDisabled</text>
+  <text x="1022" y="1085" class="body">onDisable 后移除 deferred 或 invoker 项</text>
+
+  <text x="54" y="1136" class="small">14 · MutableForwardIterator.removeAt 删除队列项时修正 iterator.i；帧内调度处理的是组件队列，不是场景树。</text>
+</svg>

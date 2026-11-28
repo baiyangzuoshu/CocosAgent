@@ -1,6 +1,0 @@
-{
-  "tasks": {
-    "check": "deno check src/main.ts",
-    "run": "deno run --allow-run=/bin/bash src/main.ts"
-  }
-}

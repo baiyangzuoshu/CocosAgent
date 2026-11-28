@@ -1,7 +1,0 @@
-{
-  "format": "cocos-creator-lite-project",
-  "schemaVersion": 1,
-  "name": "Starter2D",
-  "engineVersion": "2.4.15",
-  "mainScene": "scenes/main.scene.json"
-}

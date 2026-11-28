@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1160" viewBox="0 0 1440 1160" role="img" aria-labelledby="title desc">
+  <title id="title">Creator 2.4.15 节点销毁调用链</title>
+  <desc id="desc">从 BaseNode.destroy 开始，立即设置待销毁并同步停用组件，然后由 Director 在更新后渲染前处理销毁队列，递归清理子节点和组件，最后设置 Destroyed。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#526277"/>
+    </marker>
+    <marker id="arrowWarm" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#bf6d1d"/>
+    </marker>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; fill: #152238; }
+      .title { font-size: 30px; font-weight: 700; }
+      .subtitle { font-size: 16px; fill: #526277; }
+      .bannerTitle { fill: #fff; }
+      .bannerSub { fill: #d5dfeb; }
+      .lane { font-size: 17px; font-weight: 700; letter-spacing: .4px; }
+      .step { font-size: 13px; font-weight: 700; fill: #fff; }
+      .head { font-size: 17px; font-weight: 700; }
+      .body { font-size: 14px; fill: #33445a; }
+      .small { font-size: 12px; fill: #526277; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; fill: #26364b; }
+      .code { fill: #fff; stroke: #cfdae6; stroke-width: 1.5; }
+      .warm { fill: #fff5e9; stroke: #e7ad70; stroke-width: 1.5; }
+      .cool { fill: #eef6ff; stroke: #8bb8e7; stroke-width: 1.5; }
+      .final { fill: #edf8f2; stroke: #83c2a0; stroke-width: 1.5; }
+      .line { fill: none; stroke: #526277; stroke-width: 2; marker-end: url(#arrow); }
+      .lineWarm { fill: none; stroke: #bf6d1d; stroke-width: 2.4; marker-end: url(#arrowWarm); }
+      .divider { stroke: #dbe3ec; stroke-width: 1; stroke-dasharray: 5 7; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="1160" fill="#f6f8fb"/>
+  <text x="56" y="62" class="title">节点销毁：同步停用与延迟清理</text>
+  <text x="56" y="91" class="subtitle">Creator 2.4.15 Web 运行时 · 源码调用顺序 · 同步阶段用暖色，延迟阶段用蓝色</text>
+
+  <rect x="56" y="116" width="1328" height="66" rx="13" fill="#18283e"/>
+  <circle cx="86" cy="149" r="16" fill="#3c5878"/><text x="86" y="154" text-anchor="middle" class="step">1</text>
+  <text x="116" y="145" class="bannerTitle" style="font-size:17px;font-weight:700">BaseNode.destroy()</text>
+  <text x="116" y="166" class="bannerSub" style="font-size:13px">先请求 CCObject 销毁；首次请求成功后，再将 active 设为 false</text>
+
+  <path d="M720 182 V205" class="line"/>
+  <rect x="400" y="210" width="640" height="88" rx="12" class="warm"/>
+  <circle cx="432" cy="239" r="15" fill="#bf6d1d"/><text x="432" y="244" text-anchor="middle" class="step">2</text>
+  <text x="460" y="242" class="head">CCObject.destroy()</text>
+  <text x="460" y="266" class="mono">ToDestroy = true  →  objectsToDestroy.push(this)</text>
+  <text x="460" y="286" class="small">这是销毁请求入队；对象此时尚未完成清理</text>
+
+  <path d="M720 298 V323 H370 V342" class="lineWarm"/>
+  <rect x="72" y="348" width="596" height="178" rx="14" class="warm"/>
+  <text x="96" y="379" class="lane" style="fill:#9a5414">立即发生 · 停用分支</text>
+  <circle cx="108" cy="418" r="15" fill="#bf6d1d"/><text x="108" y="423" text-anchor="middle" class="step">3</text>
+  <text x="136" y="423" class="mono">active = false</text>
+  <path d="M370 430 V449" class="lineWarm"/>
+  <circle cx="108" cy="474" r="15" fill="#bf6d1d"/><text x="108" y="479" text-anchor="middle" class="step">4</text>
+  <text x="136" y="479" class="mono">NodeActivator.activateNode(node, false)</text>
+  <text x="96" y="510" class="small">仅当父节点存在且处于激活层级时，setter 才进入激活器。</text>
+
+  <path d="M370 526 V550" class="lineWarm"/>
+  <rect x="72" y="556" width="596" height="205" rx="14" class="warm"/>
+  <circle cx="108" cy="590" r="15" fill="#bf6d1d"/><text x="108" y="595" text-anchor="middle" class="step">5</text>
+  <text x="136" y="595" class="mono">_deactivateNodeRecursively(node)</text>
+  <text x="100" y="628" class="body">先标记节点未激活，再停用自身组件，随后递归活动子节点。</text>
+  <path d="M108 645 V670" class="lineWarm"/>
+  <circle cx="108" cy="695" r="15" fill="#bf6d1d"/><text x="108" y="700" text-anchor="middle" class="step">6</text>
+  <text x="136" y="700" class="mono">disableComp(component)</text>
+  <text x="136" y="726" class="body">已调用 onEnable 且存在 onDisable 时，同步调用 onDisable。</text>
+  <text x="96" y="750" class="small">因此 onDisable 与队列清理不是同一时机。</text>
+
+  <path d="M720 298 V323 H1070 V342" class="line"/>
+  <rect x="704" y="348" width="664" height="178" rx="14" class="cool"/>
+  <text x="730" y="379" class="lane" style="fill:#285d91">之后处理 · 正常帧路径</text>
+  <text x="730" y="413" class="body">Director.mainLoop() 未暂停时依次完成：</text>
+  <text x="730" y="440" class="mono">update → Scheduler → lateUpdate → EVENT_AFTER_UPDATE</text>
+  <path d="M1034 453 V471" class="line"/>
+  <circle cx="746" cy="493" r="15" fill="#3979b8"/><text x="746" y="498" text-anchor="middle" class="step">7</text>
+  <text x="774" y="498" class="mono">Obj._deferredDestroy()</text>
+  <text x="1026" y="498" class="small">随后才 renderer.render()</text>
+
+  <path d="M1036 526 V550" class="line"/>
+  <rect x="704" y="556" width="664" height="205" rx="14" class="cool"/>
+  <circle cx="746" cy="591" r="15" fill="#3979b8"/><text x="746" y="596" text-anchor="middle" class="step">8</text>
+  <text x="774" y="596" class="mono">deferredDestroy()</text>
+  <text x="730" y="627" class="body">开始时保存 deleteCount，只遍历这段队列范围。</text>
+  <text x="730" y="652" class="body">销毁回调中新入队的对象留给后续一次队列处理。</text>
+  <path d="M1036 667 V688" class="line"/>
+  <circle cx="746" cy="715" r="15" fill="#3979b8"/><text x="746" y="720" text-anchor="middle" class="step">9</text>
+  <text x="774" y="720" class="mono">obj._destroyImmediate()</text>
+  <text x="730" y="747" class="small">进入对象的 _onPreDestroy()；返回后才执行最终对象标记。</text>
+
+  <path d="M1036 761 V785 H720 V804" class="line"/>
+  <rect x="72" y="812" width="1296" height="272" rx="14" class="code"/>
+  <text x="100" y="845" class="lane">递归清理与最终状态</text>
+
+  <rect x="100" y="867" width="350" height="93" rx="10" class="cool"/>
+  <circle cx="128" cy="896" r="14" fill="#3979b8"/><text x="128" y="901" text-anchor="middle" class="step">10</text>
+  <text x="154" y="901" class="mono">CCNode._onPreDestroy()</text>
+  <text x="124" y="930" class="body">先调用 _onPreDestroyBase()</text>
+  <text x="124" y="949" class="small">进入 BaseNode 清理</text>
+
+  <path d="M450 913 H480" class="line"/>
+  <rect x="490" y="867" width="400" height="93" rx="10" class="cool"/>
+  <circle cx="518" cy="896" r="14" fill="#3979b8"/><text x="518" y="901" text-anchor="middle" class="step">11</text>
+  <text x="544" y="901" class="mono">BaseNode._onPreDestroy()</text>
+  <text x="514" y="930" class="body">子节点 → 当前节点组件</text>
+  <text x="514" y="949" class="small">之后清事件、常驻引用并从父节点移除</text>
+
+  <path d="M890 913 H920" class="line"/>
+  <rect x="930" y="867" width="400" height="93" rx="10" class="cool"/>
+  <circle cx="958" cy="896" r="14" fill="#3979b8"/><text x="958" y="901" text-anchor="middle" class="step">12</text>
+  <text x="984" y="901" class="mono">CCComponent._onPreDestroy()</text>
+  <text x="954" y="930" class="body">清调度与监听，调用 destroyComp()</text>
+  <text x="954" y="949" class="small">返回后从所属节点移除组件</text>
+
+  <path d="M1130 960 V983 H720 V997" class="line"/>
+  <rect x="490" y="1000" width="400" height="66" rx="10" class="warm"/>
+  <circle cx="518" cy="1033" r="14" fill="#bf6d1d"/><text x="518" y="1038" text-anchor="middle" class="step">13</text>
+  <text x="544" y="1038" class="mono">destroyComp() → 条件调用 onDestroy()</text>
+
+  <path d="M490 1033 H430" class="line"/>
+  <rect x="100" y="1000" width="320" height="66" rx="10" class="final"/>
+  <circle cx="128" cy="1033" r="14" fill="#33835b"/><text x="128" y="1038" text-anchor="middle" class="step">14</text>
+  <text x="154" y="1038" class="mono">返回后：_destruct() → Destroyed</text>
+
+  <text x="72" y="1125" class="small">销毁请求已入队 ≠ 对象已销毁 · cc.isValid(obj, true) 会把 ToDestroy 视为无效</text>
+</svg>
